@@ -90,8 +90,36 @@ Field paths were read from the real catalog, not guessed. What `flatten()` store
 | `name` | 5,280 | Read from the product name ("1 l", "7X1,2KG"). A guess: check before relying on it. |
 | `None` | 1,829 | Unknown. |
 
+## Search
+
+`store.search.search_products(db, query, filters, limit)` implements `search_products`
+from `docs/contract.md` on one Atlas Search index, `products_search`. Its definition is
+`store/search_index.json` (1 KB; the free tier allows 3 indexes of 3 KB each).
+`python -m store.loader` creates it; Atlas then builds it in under a minute.
+
+```python
+from store.search import search_products
+
+search_products(db, "lactose free milk 1 l")            # the 1 l lactose-free milks first
+search_products(db, "oat drink", {"exclude_allergens": ["gluten"]})
+search_products(db, "", {"require_labels": ["EU_ORGANIC_FARMING"], "temperature": "frozen"})
+```
+
+- Text runs over the English, Finnish and Swedish names (each with its own analyzer)
+  and the brand, and tolerates one typo.
+- Ranking: products with every query word in one name come first, then products of the
+  size written in the query ("1 l", "500 g"), then plain relevance.
+- `exclude_allergens` takes names or GS1 codes and removes CONTAINS and MAY_CONTAIN.
+  Products without allergen data stay, with the reason `allergen data missing`;
+  `allergen_strictness: "strict"` removes them too. A misspelt allergen is an error.
+- Every row has `score` and `match_reasons`, and never the `raw` record.
+- Known limit: Finnish and Swedish compound words are not split, so `maito` does not
+  find `kevytmaitojuoma`. English queries find those products through the English name.
+
 ## Tests
 
 - Offline: `python -m unittest discover -s store/tests -t . -v`. Fixtures are synthetic.
 - Against the real cluster, in a throwaway database that is dropped afterwards:
   `STORE_LIVE_TESTS=1 python -m unittest store.tests.test_live -v`.
+- Search acceptance, read-only on the loaded catalog:
+  `STORE_LIVE_TESTS=1 python -m unittest store.tests.test_search_live -v`.

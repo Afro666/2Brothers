@@ -15,6 +15,9 @@ test = ["mongomock>=4.1,<5"]
 two-brothers-mcp = "gateway.mcp_server:main"
 two-brothers-agent = "agent.__main__:main"
 
+[tool.setuptools.package-data]
+store = ["*.json"]
+
 [tool.setuptools.packages.find]
 include = ["gateway*", "agent*", "store*"]
 exclude = ["*.tests*"]

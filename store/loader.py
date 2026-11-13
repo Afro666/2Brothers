@@ -1,7 +1,8 @@
 """Load the Valio catalog into MongoDB: `python -m store.loader [--dir vendor/valio]`.
 
 Reads the three files downloaded from the Valio API (see store/README.md), flattens
-every product, upserts in batches and creates the indexes. Safe to run again.
+every product, upserts in batches and creates the indexes, including the Atlas
+Search index. Safe to run again.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from pathlib import Path
 
 from store.db import ensure_indexes, get_db
 from store.products import flatten, upsert_products
+from store.search import ensure_search_index
 
 PREFIX = "valio_aimo_junction26_"
 
@@ -50,6 +52,7 @@ def main() -> None:
     megabytes = (stats["dataSize"] + stats["indexSize"]) / 1e6
     print(f"upserted {count} products; products in {db.name}: {db.products.count_documents({})}")
     print(f"data + indexes: {megabytes:.0f} MB of the 512 MB free tier")
+    print(f"search index: {ensure_search_index(db)}")
 
 
 if __name__ == "__main__":
