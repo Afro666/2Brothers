@@ -154,6 +154,9 @@ def _demand(db, source: str, match: dict, product_id: str, start, end) -> list[d
         "history": (db.kitchen_stock, {"$add": ["$used", "$short"]}),
         "forecast": (db.forecasts, "$need"),
     }[source]
+    if source == "history":
+        # A stock count alone (no usage) is unknown demand, not zero demand.
+        match = {**match, "used": {"$exists": True, "$ne": None}}
     rows = collection.aggregate([
         {"$match": {**match, "meta.product_id": str(product_id),
                     "ts": {"$gte": _day(start), "$lte": _day(end, end=True)}}},
