@@ -123,6 +123,20 @@ def create_app(gateway: Gateway | None = None) -> FastAPI:
     def get_order(kitchen_id: str, order_id: str, who: Principal = Depends(principal)):
         return gw().get_order(kitchen_id, order_id)
 
+    @app.get(k + "/forecast-accuracy")
+    def forecast_accuracy(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        q = request.query_params
+        if not q.get("from") or not q.get("to"):
+            raise GatewayError(422, "INVALID_REQUEST", "from and to (YYYY-MM-DD) are required")
+        return gw().forecast_accuracy(kitchen_id, q["from"], q["to"])
+
+    @app.get(k + "/forecast")
+    def forecast(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        q = request.query_params
+        if not q.get("from") or not q.get("to"):
+            raise GatewayError(422, "INVALID_REQUEST", "from and to (YYYY-MM-DD) are required")
+        return gw().forecast(kitchen_id, q["from"], q["to"])
+
     @app.get(k + "/audit")
     def audit(kitchen_id: str, who: Principal = Depends(principal)):
         return {"events": gw().audit_log(kitchen_id)}

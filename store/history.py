@@ -132,15 +132,41 @@ def consenting_kitchens(db, supplier_id: str) -> list[str]:
 
 # Demand
 
-def save_forecasts(db, rows: list[dict]) -> int:
-    """Rows from the engine: `kitchen_id`, `product_id`, `date`, `need`, `unit`, `why`."""
+def save_forecasts(db, rows: list[dict], collection: str = "forecasts") -> int:
+    """Rows from the engine: `kitchen_id`, `product_id`, `date`, `need`, `unit`, `why`.
+
+    Optional `method` and `made_on` (the day the forecast was made) let a past forecast be
+    compared with what really happened. `collection="forecast_baseline"` keeps a comparison
+    method out of `forecasts`, which the Valio demand view sums.
+    """
+    if collection not in ("forecasts", "forecast_baseline"):
+        raise ValueError("collection must be forecasts or forecast_baseline")
     docs = [{"ts": _day(row["date"]),
              "meta": {"kitchen_id": row["kitchen_id"], "product_id": row["product_id"]},
-             "need": Decimal(str(row["need"])), "unit": row["unit"], "why": row.get("why")}
+             "need": Decimal(str(row["need"])), "unit": row["unit"], "why": row.get("why"),
+             "method": row.get("method"), "made_on": row.get("made_on")}
             for row in rows]
-    if docs:
-        db.forecasts.insert_many(docs)
+    for start in range(0, len(docs), 5000):
+        db[collection].insert_many(docs[start:start + 5000], ordered=False)
     return len(docs)
+
+
+def forecast_vs_actual(db, kitchen_id: str, start, end, collection: str = "forecasts") -> list[tuple]:
+    """(product_id, day, predicted, actual) for days that have both a forecast and a count.
+
+    Actual demand is used + short (what the kitchen needed, also during a stock-out).
+    """
+    if collection not in ("forecasts", "forecast_baseline"):
+        raise ValueError("collection must be forecasts or forecast_baseline")
+    window = {"meta.kitchen_id": kitchen_id, "ts": {"$gte": _day(start), "$lte": _day(end, end=True)}}
+    predicted = {(d["meta"]["product_id"], d["ts"].date()): float(str(d["need"]))
+                 for d in db[collection].find(window)}
+    out = []
+    for d in db.kitchen_stock.find({**window, "used": {"$exists": True, "$ne": None}}):
+        key = (d["meta"]["product_id"], d["ts"].date())
+        if key in predicted:
+            out.append((key[0], key[1], predicted[key], float(d["used"]) + float(d.get("short") or 0)))
+    return out
 
 
 def _day(value, end: bool = False) -> datetime:

@@ -31,3 +31,5 @@ One line each: `YYYY-MM-DD HH:MM – who – decision – why`.
 - 2026-11-14 00:40 – Aron – Deferred until the end-to-end demo works: #131 settings UI, #132 learning data, #134 weather, #135 harvest calendar, #136 forecast backtest – none of them scores before the demo runs.
 - 2026-11-14 00:40 – Aron – Keep the Context.dev recall monitor (#138), turn docs/scenarios.md S01–S13 into one command with a pass table, and add ElevenLabs voice approval – one small proof per side prize; robustness is 15% of the Valio score.
 - 2026-11-14 00:40 – Aron – Demo: Aron presents; Tymon builds a brag repo about the project with Fable 5.2 – one voice on stage, the repo shows the work.
+- 2026-11-14 – Aron – Auto-approve becomes an option, off by default, earned after a learning period of kitchen decisions (about 4 weeks); substitutes, unknown stock, allergens and over-budget always need a person – the tool should learn from the kitchen before it decides alone.
+- 2026-11-14 – Aron – Demo data is synthetic, back to August and 4 weeks ahead, and the forecast must prove itself against what happened (#275) – Valio will not give enough real data.
