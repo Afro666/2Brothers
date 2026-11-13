@@ -1,0 +1,34 @@
+{
+  "analyzer": "lucene.standard",
+  "mappings": {
+    "dynamic": false,
+    "fields": {
+      "names": {
+        "type": "document",
+        "fields": {
+          "en": {"type": "string", "analyzer": "lucene.english"},
+          "fi": {"type": "string", "analyzer": "lucene.finnish"},
+          "sv": {"type": "string", "analyzer": "lucene.swedish"}
+        }
+      },
+      "brand": {"type": "string"},
+      "allergens": {
+        "type": "document",
+        "fields": {
+          "contains": {"type": "token"},
+          "may_contain": {"type": "token"},
+          "undeclared": {"type": "token"}
+        }
+      },
+      "allergen_data_known": {"type": "boolean"},
+      "labels": {"type": "token"},
+      "temperature": {"type": "token"},
+      "category": {"type": "token"},
+      "supplier_id": {"type": "token"},
+      "net_content": {
+        "type": "document",
+        "fields": {"value": {"type": "number"}, "unit": {"type": "token"}}
+      }
+    }
+  }
+}
