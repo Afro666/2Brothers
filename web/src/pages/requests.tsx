@@ -16,11 +16,16 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatEur } from "@/lib/format";
 import type { ChefRequest } from "@/types";
+import { LiveBuyerRequests } from "@/pages/live-buyer";
 
 type ProposalState =
   { status: "idle" } | { status: "loading" } | { status: "ready"; request: ChefRequest; proposal: ChefProposal };
 
 export function RequestsPage() {
+  return import.meta.env.VITE_LIVE_BUYER === "true" ? <LiveBuyerRequests /> : <DemoRequestsPage />;
+}
+
+function DemoRequestsPage() {
   const api = useApi();
   const [state, setState] = useState<ProposalState>({ status: "idle" });
   const [preferred, setPreferred] = useState<string | null>(null);
