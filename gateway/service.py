@@ -251,6 +251,10 @@ class Gateway:
             raise GatewayError(409, "TOTAL_MISMATCH", "the price or stock moved; look at the new total",
                                expected_total=fresh["simulation"]["expected_total"])
         sim = stored["simulation"]
+        # A person's consent is not supplier stock confirmation. Keep unknown
+        # lines visible in proposals, but never record a placed order for them.
+        if any(line.get("unknown_stock") is not False for line in sim["lines"]):
+            raise GatewayError(409, "STOCK_UNKNOWN", "supplier stock must be confirmed before placement")
         payload = {"offer_id": stored["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}
         order, created = orders.record_attempt(
             self.db, kitchen_id=kitchen_id, idempotency_key=key, offer_id=stored["offer_id"],
