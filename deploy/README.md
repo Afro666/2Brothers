@@ -37,8 +37,9 @@ GitHub secrets (repo settings, names only here):
 ```
 apt-get update && apt-get install -y docker.io docker-compose-v2 git
 git clone https://github.com/Afro666/2Brothers.git /opt/2brothers
-printf 'SITE_ADDRESS="%s"\n' "<ip-with-dashes>.sslip.io, http://<ip>" > /opt/2brothers/.env
-echo 'command="/opt/2brothers/deploy/update.sh",no-port-forwarding,no-agent-forwarding,no-pty <deploy public key>' >> /root/.ssh/authorized_keys
+install -m 600 /dev/null /opt/2brothers/.env
+printf 'SITE_ADDRESS="%s"\n' "<ip-with-dashes>.sslip.io, http://<ip>" >> /opt/2brothers/.env
+echo 'restrict,command="/opt/2brothers/deploy/update.sh" <deploy public key>' >> /root/.ssh/authorized_keys
 ```
 
 Ports 22, 80 and 443 must be open.
@@ -49,4 +50,4 @@ Ports 22, 80 and 443 must be open.
 - On the server: `docker compose -f /opt/2brothers/deploy/compose.yaml ps` and
   `... logs web`.
 - Try the image locally: `docker build -t web web` then
-  `docker run -p 8080:80 -e SITE_ADDRESS=:80 -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" web`.
+  `docker run -p 8080:80 -e SITE_ADDRESS=:80 web`.

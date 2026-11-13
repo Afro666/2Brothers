@@ -5,6 +5,8 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Caddy serves the built files; its config is mounted by deploy/compose.yaml.
+# Caddy serves the built files. Its config is in the image, so a config change
+# rebuilds the image and the container is recreated with it.
 FROM docker.io/library/caddy:2-alpine
+COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv

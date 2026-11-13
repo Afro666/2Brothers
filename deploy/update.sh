@@ -15,7 +15,10 @@ if ! git merge-base --is-ancestor "$sha" origin/main; then
 	echo "$sha is not on main" >&2
 	exit 2
 fi
-git checkout --quiet --detach "$sha"
+# This checkout is only for deploys: drop anything that is not the commit
+# (ignored files such as .env stay), so the image is built from the commit alone.
+git checkout --quiet --force --detach "$sha"
+git clean --quiet -fd
 
 docker compose --env-file /opt/2brothers/.env -f deploy/compose.yaml up -d --build --remove-orphans
 docker image prune -f >/dev/null

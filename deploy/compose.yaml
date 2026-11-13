@@ -10,7 +10,6 @@ services:
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Caddy keeps its HTTPS certificates here; losing it re-requests them.
       - caddy_data:/data
 
