@@ -25,6 +25,7 @@
       "temperature": {"type": "token"},
       "category": {"type": "token"},
       "supplier_id": {"type": "token"},
+      "kitchen_id": {"type": "token"},
       "net_content": {
         "type": "document",
         "fields": {"value": {"type": "number"}, "unit": {"type": "token"}}
