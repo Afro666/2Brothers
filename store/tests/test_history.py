@@ -9,19 +9,19 @@ import tempfile
 import unittest
 from uuid import uuid4
 
-from store import history
+from store import audit, history
 
 try:
     import mongomock
 except ImportError:  # the `test` extra is not installed
     mongomock = None
 
-KITCHENS = ("K01", "K02", "K03")
+KITCHENS = ("K01", "K02", "K03", "K04")
 DAYS = ("2026-08-17", "2026-08-18", "2026-08-19")
 
 
 def write_history(directory: Path) -> None:
-    """Three kitchens, three days, one product: each kitchen uses 10 L and is 2 L short."""
+    """Four kitchens, three days, one product: each kitchen uses 10 L and is 2 L short."""
     def ts(day, hour):
         return {"$date": f"{day}T{hour:02d}:00:00Z"}
     files = {
@@ -60,7 +60,7 @@ class PureTests(unittest.TestCase):
 @unittest.skipUnless(mongomock, "install the test extra: pip install -e '.[test]'")
 class ConsentTests(unittest.TestCase):
     def setUp(self):
-        self.db = mongomock.MongoClient()["test"]
+        self.db = mongomock.MongoClient(tz_aware=True)["test"]
 
     def test_consent_is_active_only_while_shared_and_not_revoked(self):
         history.set_sharing(self.db, "K01", "valio_aimo", True, "user-1")
@@ -76,6 +76,22 @@ class ConsentTests(unittest.TestCase):
         self.assertIsNone(again["revoked_at"])
         self.assertEqual(again["scope"], "forecast_only")
         self.assertEqual(len(history.list_sharing(self.db, "K02")), 2)
+
+    def test_every_consent_change_is_in_the_audit_log_with_who_and_when(self):
+        history.set_sharing(self.db, "K01", "valio_aimo", True, "user-1")
+        history.set_sharing(self.db, "K01", "valio_aimo", True, "user-9")   # already shared
+        history.set_sharing(self.db, "K01", "valio_aimo", False, "user-2")
+        history.set_sharing(self.db, "K01", "valio_aimo", False, "user-9")  # already revoked
+        history.set_sharing(self.db, "K07", "valio_aimo", False, "user-9")  # never shared
+        entries = audit.list_events(self.db, kitchen_id="K01")
+        self.assertEqual([(e["event"]["type"], e["event"]["user"]) for e in entries],
+                         [("share_granted", "user-1"), ("share_revoked", "user-2")])
+        self.assertEqual(entries[0]["event"]["supplier_id"], "valio_aimo")
+        self.assertEqual(entries[0]["event"]["scope"], "forecast_only")
+        self.assertIsNotNone(entries[0]["stored_at"])
+        self.assertTrue(audit.verify_chain(self.db)["ok"])
+        self.assertEqual(history.list_sharing(self.db, "K01")[0]["revoked_by"], "user-2")
+        self.assertEqual(history.list_sharing(self.db, "K07"), [])
         with self.assertRaises(ValueError):
             history.set_sharing(self.db, "K01", "valio_aimo", True, "")
 
@@ -109,9 +125,9 @@ class LiveHistoryTests(unittest.TestCase):
             first = history.load_history(self.db, Path(tmp))
             second = history.load_history(self.db, Path(tmp))  # loading again must not duplicate
         self.assertEqual(first, second)
-        self.assertEqual(first, {"kitchens": 3, "kitchen_stock": 9, "covers": 9,
-                                 "orders_history": 3, "deliveries": 3})
-        self.assertEqual(self.db.kitchen_stock.count_documents({}), 9)
+        self.assertEqual(first, {"kitchens": 4, "kitchen_stock": 12, "covers": 12,
+                                 "orders_history": 4, "deliveries": 4})
+        self.assertEqual(self.db.kitchen_stock.count_documents({}), 12)
         self.assertEqual(self.db.kitchen_stock.options()["timeseries"]["timeField"], "ts")
         self.assertEqual(self.db.orders_history.find_one()["total_eur"], Decimal("30.5"))
 
@@ -123,9 +139,12 @@ class LiveHistoryTests(unittest.TestCase):
         self.assertEqual(history.supplier_demand(self.db, "valio_aimo", "900001", DAYS[0], DAYS[2]), [])
         history.set_sharing(self.db, "K01", "valio_aimo", True, "user-1")
         history.set_sharing(self.db, "K02", "valio_aimo", True, "user-2")
+        # Two kitchens are not an aggregate: a supplier could work out each one's demand.
+        self.assertEqual(history.supplier_demand(self.db, "valio_aimo", "900001", DAYS[0], DAYS[2]), [])
+        history.set_sharing(self.db, "K03", "valio_aimo", True, "user-3")
         shared = history.supplier_demand(self.db, "valio_aimo", "900001", DAYS[0], DAYS[2])
         self.assertEqual([(row["date"], row["demand"], row["kitchens"]) for row in shared],
-                         [(day, 24.0, 2) for day in DAYS])
+                         [(day, 36.0, 3) for day in DAYS])  # K04 did not consent
         self.assertNotIn("kitchen_id", shared[0])
 
         history.save_forecasts(self.db, [{"kitchen_id": k, "product_id": "900001",
@@ -134,7 +153,7 @@ class LiveHistoryTests(unittest.TestCase):
         forecast = history.supplier_demand(self.db, "valio_aimo", "900001", "2026-11-16",
                                            "2026-11-16", source="forecast")
         self.assertEqual([(row["demand"], row["kitchens"]) for row in forecast],
-                         [(Decimal("29.0"), 2)])
+                         [(Decimal("43.5"), 3)])
 
 
 if __name__ == "__main__":
