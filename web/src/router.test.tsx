@@ -1,18 +1,11 @@
-import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { createAppRouter } from "@/router";
+import { renderApp } from "@/test/render";
 
 async function renderAt(path: string) {
-  const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
-  render(
-    <TooltipProvider>
-      <RouterProvider router={router} />
-    </TooltipProvider>,
-  );
+  renderApp(path);
 }
 
 describe("application routes", () => {
