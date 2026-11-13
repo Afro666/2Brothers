@@ -1,0 +1,9 @@
+# SITE_ADDRESS comes from the server's .env. A host name gets HTTPS
+# automatically; ":80" or "http://<ip>" stays plain HTTP.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	root * /srv
+	# The web app routes in the browser: unknown paths get index.html.
+	try_files {path} /index.html
+	file_server
+}
