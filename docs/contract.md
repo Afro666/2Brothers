@@ -114,8 +114,8 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 | `search_products` | POST `/tools/search_products` | `query: string`, `filters: object` | `products: object[]` |
 | `get_offer` | POST `/tools/get_offer` | `product_ids: string[]`, `requested_date: YYYY-MM-DD`, `need_id: string` | `offer_id`, `valid_until`, `lines: object[]` |
 | `simulate_order` | POST `/tools/simulate_order` | `offer_id: string` | `offer_id`, `expected_total`, `currency`, `mandate: object`, `lines: object[]` |
-| `place_order` | POST `/tools/place_order` | `offer_id`, `expected_total: decimal string`, `idempotency_key` | `order_id`, `outcome`, `status` |
-| `request_approval` | POST `/tools/request_approval` | `offer_id: string` | `approval_id`, `status: PENDING` |
+| `place_order` | POST `/tools/place_order` | `offer_id`, `expected_total: decimal string`, `idempotency_key: string` | `order_id`, `outcome`, `status` |
+| `request_approval` | POST `/tools/request_approval` | `offer_id: string`, `idempotency_key: string` | `approval_id`, `status: PENDING` |
 | `get_order_status` | GET `/tools/get_order_status` | `order_id: string` | `order_id`, `status`, `outcome` |
 | `get_audit_log` | GET `/tools/get_audit_log` | `run_id: string` | `events: object[]` |
 
@@ -163,8 +163,11 @@ until an authorized human acts through the approval UI, outside these tools.
 Only `CONFIRMED` means an order is known to have been placed in our gateway.
 `NOT_SENT` may be retried explicitly; the other failure outcomes require status
 reconciliation or human intervention. All mutation requests carry stable
-idempotency keys; `request_approval` uses `Idempotency-Key` in its HTTP header,
-while `place_order` carries it in the JSON body. Replays return the stored result;
+idempotency keys: both `request_approval` and `place_order` require a nonempty
+`idempotency_key` string in the JSON body, scoped to the authenticated kitchen
+and operation. The `Idempotency-Key` HTTP header is not a supported alternative.
+The approval adapter generates this field; it is not an extra model argument.
+Replays return the stored result;
 key reuse with a different payload is rejected. Adapters never automatically
 retry either mutation after an ambiguous transport failure.
 
