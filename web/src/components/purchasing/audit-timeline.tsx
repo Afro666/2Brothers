@@ -13,7 +13,9 @@ import {
 import { formatDateTime } from "@/lib/format";
 import type { AuditEvent, AuditKind } from "@/types";
 
-const KIND_META: Record<AuditKind, { label: string; icon: LucideIcon }> = {
+type KindMeta = { label: string; icon: LucideIcon };
+
+const KIND_META: Record<AuditKind, KindMeta> = {
   request: { label: "Request", icon: ChefHat },
   search: { label: "Search", icon: Search },
   offer: { label: "Offer", icon: Tag },
@@ -43,8 +45,13 @@ export function AuditTimeline({ events }: { events: AuditEvent[] }) {
   return (
     <ol className="relative space-y-5 border-l pl-6">
       {sorted.map((e) => {
-        const meta = KIND_META[e.kind];
+        // The gateway may send kinds or actors the web types do not know yet.
+        const meta = (KIND_META as Partial<Record<string, KindMeta>>)[e.kind] ?? {
+          label: e.kind,
+          icon: ClipboardList,
+        };
         const Icon = meta.icon;
+        const actor = (ACTOR_LABEL as Partial<Record<string, string>>)[e.actor] ?? e.actor;
         return (
           <li key={e.id} className="relative" data-kind={e.kind}>
             <span className="absolute top-0 -left-[2.3rem] flex size-7 items-center justify-center rounded-full border bg-background">
@@ -57,7 +64,7 @@ export function AuditTimeline({ events }: { events: AuditEvent[] }) {
               <span>·</span>
               <span>{meta.label}</span>
               <span>·</span>
-              <span>{ACTOR_LABEL[e.actor]}</span>
+              <span>{actor}</span>
               {e.orderId ? (
                 <>
                   <span>·</span>
