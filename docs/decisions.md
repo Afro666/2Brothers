@@ -17,5 +17,5 @@ One line each: `YYYY-MM-DD HH:MM – who – decision – why`.
 - 2026-11-13 23:00 – Aron – Multi-supplier, own products, recipes, menu and week planning, future demand from the menu plan – a kitchen buys from more than Valio and plans by menu.
 - 2026-11-13 23:30 – Aron – Tymon deploys the app as Docker containers on the Verda instance through GitHub Actions – he already has that pipeline.
 - 2026-11-13 23:30 – Aron – The agent is called "Buyer".
-- 2026-11-13 23:30 – Aron – Our own API for kitchens and suppliers (docs/api.md); approve is human-only, never the agent's token – trust rule.
+- 2026-11-13 23:30 – Aron – Our own API for kitchens and suppliers (docs/contract.md, "Product API"); approve is human-only, never the agent's token – trust rule.
 - 2026-11-13 23:45 – Aron – AfterQuery dropped; we stay with Valio only. `env/` stays as the synthetic history generator – one main track per project on the form.
