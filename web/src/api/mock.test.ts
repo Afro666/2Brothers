@@ -154,4 +154,11 @@ describe("mock API proposal changes", () => {
       ),
     ).rejects.toMatchObject({ code: "ALREADY_DECIDED" });
   });
+
+  it("refuses changes to an order that has no approval", async () => {
+    const api = createMockApi();
+    await expect(
+      api.changeProposal("ORD-1042", { type: "SET_QUANTITY", productId: "463335", quantity: 2 }, "human"),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
 });
