@@ -355,22 +355,6 @@ outcomes mean three things: `NOT_SENT` retry is safe, `UNCONFIRMED` a human chec
 
 ## Reason codes
 
-| Code | Meaning |
-|---|---|
-| CLOSING_PASSED | `closingTime` is before now for this delivery |
-| STOCK_UNKNOWN | availability is a sentinel (999999 or 9999999999) |
-| PARTIAL_STOCK | less available than needed |
-| SUBSTITUTE_NEEDS_OK / SUBSTITUTE_FAT_LEVEL | a substitute changes the product; a human agrees |
-| ALLERGEN_RULE | a kitchen allergen rule refuses a product |
-| ALLERGEN_DATA_MISSING | no allergen data; treated as unknown |
-| OVER_BUDGET_WARNING | total is above the kitchen's budget warning (a human approves every order anyway) |
-| LOT_SIZE_ROUNDED | quantity rounded up to `allowedLotSize` or pack |
-| EVENT_LINE | one-off demand, kept out of the base forecast |
-| MOV_PADDED | lines pulled forward to reach free delivery |
-| TOTAL_MISMATCH | gateway total differs from the figure the human approved |
-| STANDING_ORDER_DRIFT | standing order no longer matches usage |
-| STOCK_COUNT_MISSING | kitchen stock count is empty |
-| STOCKOUT_ADJUSTED | demand scaled up for days out of stock |
-| POSITION_OK / COVER_CEILING | on hand + on order is enough / more would exceed cover |
-| PACK_SIZE_DERIVED | pack size derived because the pack data is missing or wrong |
-| UNCONFIRMED | the send may have landed; a human checks |
+The reason codes and the `place_order` outcomes are defined in `docs/contract.md`
+(sections "Reason codes" and "place_order outcomes"). The cases above use those exact
+strings.
