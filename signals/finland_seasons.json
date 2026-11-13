@@ -1,0 +1,272 @@
+{
+  "region": "FI",
+  "retrieved_on": "2026-11-13",
+  "resolution": "month; boundary months may only be partly seasonal",
+  "items": [
+    {
+      "id": "strawberry",
+      "aliases": [
+        "strawberry",
+        "strawberries",
+        "mansikka",
+        "mansikat",
+        "jordgubbe",
+        "jordgubbar"
+      ],
+      "kind": "produce",
+      "harvest_months": [
+        7,
+        8
+      ],
+      "peak_months": [
+        7
+      ],
+      "storage_months": [],
+      "sources": [
+        "https://satokausi.fi/raaka-aineet/mansikka/"
+      ],
+      "notes": "July peak; August also in season. Early crops and location vary."
+    },
+    {
+      "id": "early_potato",
+      "aliases": [
+        "new potato",
+        "new potatoes",
+        "early potato",
+        "early potatoes",
+        "varhaisperuna",
+        "varhaisperunat",
+        "f?rskpotatis"
+      ],
+      "kind": "produce",
+      "harvest_months": [
+        6,
+        7
+      ],
+      "peak_months": [],
+      "storage_months": [],
+      "sources": [
+        "https://www.martat.fi/wp-content/uploads/2017/05/Martat_peruna2017_lores-Parasta-perunasta-arkeen-ja-juhlaan-vihkonen.pdf"
+      ],
+      "notes": "Approximate midsummer harvest, not the year-round storage-potato season. Finnish uusi peruna is deliberately not an alias."
+    },
+    {
+      "id": "chanterelle",
+      "aliases": [
+        "chanterelle",
+        "chanterelles",
+        "kantarelli",
+        "kantarellit",
+        "kantarell"
+      ],
+      "kind": "produce",
+      "harvest_months": [
+        6,
+        7,
+        8,
+        9
+      ],
+      "peak_months": [
+        8
+      ],
+      "storage_months": [],
+      "sources": [
+        "https://satokausi.fi/raaka-aineet/kantarelli/",
+        "https://www.arktisetaromit.fi/en/natural-products/mushrooms/wild-mushrooms/chanterelle/"
+      ],
+      "notes": "Late June to September; August peak. Partial boundary months included."
+    },
+    {
+      "id": "cabbage",
+      "aliases": [
+        "white cabbage",
+        "cabbage",
+        "ker?kaali",
+        "valkokaali",
+        "vitk?l"
+      ],
+      "kind": "produce",
+      "harvest_months": [
+        8,
+        9
+      ],
+      "peak_months": [],
+      "storage_months": [],
+      "sources": [
+        "https://www.kotipuutarha.fi/sadonkorjuukalenteri/"
+      ],
+      "notes": "Head cabbage harvest; does not cover kale, fermented cabbage or all varieties."
+    },
+    {
+      "id": "carrot",
+      "aliases": [
+        "carrot",
+        "carrots",
+        "porkkana",
+        "porkkanat",
+        "morot",
+        "mor?tter"
+      ],
+      "kind": "produce",
+      "harvest_months": [
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "peak_months": [
+        7,
+        8,
+        9
+      ],
+      "storage_months": [
+        1,
+        2,
+        3,
+        4,
+        11,
+        12
+      ],
+      "sources": [
+        "https://satokausi.fi/raaka-aineet/porkkana/"
+      ],
+      "notes": "Storage availability is separate from fresh harvest timing."
+    },
+    {
+      "id": "beetroot",
+      "aliases": [
+        "beetroot",
+        "beet",
+        "beets",
+        "punajuuri",
+        "punajuuret",
+        "punajuurikas",
+        "r?dbeta",
+        "r?dbetor"
+      ],
+      "kind": "produce",
+      "harvest_months": [
+        7,
+        8,
+        9
+      ],
+      "peak_months": [],
+      "storage_months": [],
+      "sources": [
+        "https://www.kotipuutarha.fi/sadonkorjuukalenteri/"
+      ],
+      "notes": "Late July to September depending on sowing; no narrower peak established."
+    },
+    {
+      "id": "bilberry",
+      "aliases": [
+        "bilberry",
+        "bilberries",
+        "mustikka",
+        "mustikat",
+        "bl?b?r"
+      ],
+      "kind": "produce",
+      "harvest_months": [
+        7,
+        8,
+        9
+      ],
+      "peak_months": [],
+      "storage_months": [],
+      "sources": [
+        "https://www.arktisetaromit.fi/en/natural-products/berries/wild-berries/bilberry/"
+      ],
+      "notes": "Best picking late July to early September; no narrower peak assigned. Cultivated blueberry is a different ingredient."
+    },
+    {
+      "id": "lingonberry",
+      "aliases": [
+        "lingonberry",
+        "lingonberries",
+        "puolukka",
+        "puolukat",
+        "lingon"
+      ],
+      "kind": "produce",
+      "harvest_months": [
+        8,
+        9,
+        10
+      ],
+      "peak_months": [],
+      "storage_months": [],
+      "sources": [
+        "https://www.arktisetaromit.fi/en/natural-products/berries/wild-berries/lingonberry/"
+      ],
+      "notes": "Picking late August to early October; partial boundary months included."
+    },
+    {
+      "id": "perch",
+      "aliases": [
+        "perch",
+        "ahven",
+        "abborre"
+      ],
+      "kind": "wild_fish",
+      "harvest_months": [
+        4,
+        5,
+        9,
+        10
+      ],
+      "peak_months": [],
+      "storage_months": [],
+      "sources": [
+        "https://prokala.fi/wp-content/uploads/2021/07/kalenteri-printable-3.pdf"
+      ],
+      "notes": "Wild catch season, not a freshness guarantee or permission to fish."
+    },
+    {
+      "id": "burbot",
+      "aliases": [
+        "burbot",
+        "made",
+        "lake"
+      ],
+      "kind": "wild_fish",
+      "harvest_months": [
+        1,
+        2,
+        3,
+        11,
+        12
+      ],
+      "peak_months": [],
+      "storage_months": [],
+      "sources": [
+        "https://prokala.fi/wp-content/uploads/2021/07/kalenteri-printable-3.pdf"
+      ],
+      "notes": "Wild catch season; applies across the year boundary. No peak freshness claim."
+    },
+    {
+      "id": "vendace",
+      "aliases": [
+        "vendace",
+        "muikku",
+        "sikl?ja"
+      ],
+      "kind": "wild_fish",
+      "harvest_months": [
+        1,
+        2,
+        3,
+        8,
+        9,
+        10
+      ],
+      "peak_months": [],
+      "storage_months": [],
+      "sources": [
+        "https://prokala.fi/wp-content/uploads/2021/07/kalenteri-printable-3.pdf"
+      ],
+      "notes": "Wild catch season; farmed and preserved fish are excluded."
+    }
+  ]
+}
