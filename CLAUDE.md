@@ -32,6 +32,15 @@ Codex reads `AGENTS.md`, which points here. One rule set for all agents.
 
 See `docs/plan.md` for the full architecture and timeline.
 
+## Status board
+
+- Board: https://github.com/users/Afro666/projects/1 (every issue is on it).
+- Start of every session: `gh issue list --assignee @me` and take the top one.
+- Starting an issue: comment "started", then open a draft PR early with `Closes #<n>`.
+- A merged PR closes its issue; the board moves it to Done by itself.
+- Database: **MongoDB Atlas** (decided 2026-11-13). Access goes through one repository
+  module, so no other code talks to Mongo directly.
+
 ## Contracts
 
 - Interfaces between areas live in `docs/contract.md` (API routes, message
