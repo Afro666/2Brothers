@@ -137,7 +137,7 @@ describe("mock API proposal changes", () => {
   it("resimulates totals and MOV from line prices and tax rates", async () => {
     const api = createMockApi();
     const result = await api.changeProposal(
-      approval.orderId,
+      unknownApproval.orderId,
       {
         type: "SET_QUANTITY",
         productId: "463335",
