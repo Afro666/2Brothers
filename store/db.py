@@ -29,6 +29,7 @@ class _DecimalCodec(TypeCodec):
 
 CODEC = CodecOptions(type_registry=TypeRegistry([_DecimalCodec()]), tz_aware=True)
 _client: MongoClient | None = None
+_indexed: set[str] = set()  # databases whose indexes this process has ensured
 
 
 def get_db(name: str | None = None) -> Database:
@@ -41,8 +42,14 @@ def get_db(name: str | None = None) -> Database:
             raise RuntimeError("MONGODB_URI is required; put it in .env")
         _client = MongoClient(uri, serverSelectionTimeoutMS=15000)
     if name:
-        return _client.get_database(name, codec_options=CODEC)
-    return _client.get_default_database(default=DEFAULT_DB, codec_options=CODEC)
+        db = _client.get_database(name, codec_options=CODEC)
+    else:
+        db = _client.get_default_database(default=DEFAULT_DB, codec_options=CODEC)
+    # Idempotency keys and event ids rely on unique indexes: ensure them once per database.
+    if db.name not in _indexed:
+        ensure_indexes(db)
+        _indexed.add(db.name)
+    return db
 
 
 def ensure_indexes(db: Database) -> None:

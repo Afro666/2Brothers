@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate, formatDateTime, formatEur } from "@/lib/format";
+import { formatDate, formatDateTime, formatEur, isUnknownStock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
 import type { ApprovalRequest, Order } from "@/types";
@@ -56,11 +56,17 @@ export function ApprovalCard({
   const [showOrder, setShowOrder] = useState(false);
   const reasonId = useId();
   const pending = status === "PENDING";
+  const stockMessage = !order || order.lines.length === 0
+    ? "Order details are unavailable. Reload them before approving."
+    : order.lines.some((line) => isUnknownStock(line.offer.availableAmount))
+      ? "Waiting for supplier stock confirmation. You can review or reject this proposal; approval is available once stock is confirmed."
+      : null;
 
   // The status changes only after the gateway confirms. If the call fails
   // (price moved, expected_total mismatch, network), the card stays PENDING
   // and shows the error, so nobody believes an order went through.
   async function decide(next: "APPROVED" | "REJECTED", call: () => void | Promise<void>) {
+    if (next === "APPROVED" && stockMessage) return;
     setBusy(true);
     setError(null);
     try {
@@ -106,6 +112,11 @@ export function ApprovalCard({
             ))}
           </ul>
         </section>
+        {pending && stockMessage ? (
+          <p className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.warning)}>
+            {stockMessage}
+          </p>
+        ) : null}
         {order ? (
           <section className="space-y-3 border-t pt-4">
             <Button
@@ -137,7 +148,7 @@ export function ApprovalCard({
               <X aria-hidden />
               Reject
             </Button>
-            <Button disabled={busy} onClick={() => setOpen("approve")}>
+            <Button disabled={busy || !!stockMessage} onClick={() => setOpen("approve")}>
               <Check aria-hidden />
               Approve {formatEur(request.totalInclVat)} incl VAT
             </Button>
@@ -168,7 +179,7 @@ export function ApprovalCard({
           </DialogHeader>
           <DialogFooter>
             <Button
-              disabled={busy}
+              disabled={busy || !!stockMessage}
               onClick={() =>
                 decide("APPROVED", () =>
                   onApprove?.({

@@ -34,7 +34,7 @@ export function ApprovalTile({ api }: { api: Api }) {
             <div className="space-y-2">
               <p className="text-3xl font-semibold tabular-nums">{pending.length}</p>
               <p className="text-sm">{oldest?.summary}</p>
-              <p className="text-sm font-medium">{formatEur(oldest?.totalInclVat ?? null)} incl VAT</p>
+              <p className="text-sm font-medium tabular-nums">{formatEur(oldest?.totalInclVat ?? null)} incl VAT</p>
             </div>
           );
         }}
@@ -115,7 +115,7 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
           ) : (
             <ul className="space-y-3 text-sm">
               {unknown.map((item) => (
-                <li key={item.productId} className="flex justify-between gap-3">
+                <li key={item.productId} className="flex justify-between gap-3 tabular-nums">
                   <span>{item.productName}</span>
                   <span className="text-muted-foreground">not counted</span>
                 </li>
@@ -127,7 +127,7 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
                 </li>
               ))}
               {short.map((item) => (
-                <li key={item.productId} className="flex justify-between gap-3">
+                <li key={item.productId} className="flex justify-between gap-3 tabular-nums">
                   <span>{item.productName}</span>
                   <span className="text-destructive">
                     short by {formatNumber((needed.get(item.productId) ?? 0) - item.onHand - item.onOrder)} {item.unit}

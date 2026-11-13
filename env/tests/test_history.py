@@ -83,6 +83,13 @@ class HistoryTest(unittest.TestCase):
         self.assertGreater(short / (used + short), 0.5)
         self.assertEqual(rows["orders"], [])
 
+    def test_same_covers_under_every_policy(self):
+        with tempfile.TemporaryDirectory() as other:
+            generate(Path(other), seed=7, kitchens=20, weeks=3, policy="do-nothing")
+            theirs = (Path(other) / "covers.jsonl").read_text(encoding="utf-8")
+        ours = (self.out / "covers.jsonl").read_text(encoding="utf-8")
+        self.assertEqual(theirs, ours)
+
 
 if __name__ == "__main__":
     unittest.main()

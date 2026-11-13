@@ -1,5 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { useApi } from "@/api";
 import type { Draft } from "@/api/types";
@@ -94,11 +95,11 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
             <CardContent className="space-y-2 pt-6">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <h3 className="font-medium">{first.productName}</h3>
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium tabular-nums">
                   {formatNumber(total)} {first.unit} total
                 </p>
               </div>
-              <ul className="space-y-1 text-sm text-muted-foreground">
+              <ul className="space-y-1 text-sm tabular-nums text-muted-foreground">
                 {dates.flatMap((date) =>
                   productLines
                     .filter((line) => line.date === date)
@@ -210,6 +211,7 @@ export function PlannerPage() {
       setDraft(null);
       menu.reload();
       demand.reload();
+      toast.success("Week saved");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -228,7 +230,7 @@ export function PlannerPage() {
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold">Planner</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Plan upcoming needs from menus, covers, and delivery dates.
+            Plan the week's menus and covers. The needs below come from this plan.
           </p>
         </header>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -288,7 +290,7 @@ export function PlannerPage() {
                             <div className="flex justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="font-medium">{entry.meal}</p>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-sm tabular-nums text-muted-foreground">
                                   {recipe?.name ?? "Recipe unavailable"} · {formatNumber(entry.covers)} covers
                                 </p>
                               </div>
@@ -299,6 +301,7 @@ export function PlannerPage() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  className="text-danger hover:text-danger"
                                   onClick={() =>
                                     setDraft((current) => (current ?? saved).filter((item) => item.id !== entry.id))
                                   }
@@ -332,10 +335,10 @@ export function PlannerPage() {
               {demand.status === "error" ? <ErrorState message={demand.error.message} onRetry={demand.reload} /> : null}
               {demand.status === "ready" ? <DemandList lines={demand.data} dates={dates} /> : null}
               <div className="flex flex-wrap gap-4 text-sm">
-                <Link to="/stock" className="font-medium underline underline-offset-4">
+                <Link to="/stock" className="font-medium text-primary underline underline-offset-4">
                   Check stock
                 </Link>
-                <Link to="/requests" className="font-medium underline underline-offset-4">
+                <Link to="/requests" className="font-medium text-primary underline underline-offset-4">
                   Ask the Buyer for an order
                 </Link>
               </div>

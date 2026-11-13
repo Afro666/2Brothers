@@ -68,6 +68,7 @@ describe("HomePage", () => {
           date: "2026-11-16",
           forecastDemand: 10,
           kitchens: 1,
+          byKitchen: [{ kitchenId: "K01", kitchenName: "School 1 Tampere", demand: 10 }],
           available: 0,
           risk: "SHORT",
           suggestedBuy: 10,

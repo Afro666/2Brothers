@@ -106,6 +106,24 @@ class ConsentTests(unittest.TestCase):
         self.assertEqual(history.list_sharing(self.db, "K01")[0]["granted_by"], "synthetic-seed")
 
 
+@unittest.skipUnless(mongomock, "install the test extra: pip install -e '.[test]'")
+class DemandTests(unittest.TestCase):
+    def setUp(self):
+        self.db = mongomock.MongoClient(tz_aware=True)["test"]
+
+    def test_a_stock_count_alone_is_not_a_demand_day(self):
+        meta = {"kitchen_id": "K01", "product_id": "900001"}
+        self.db.kitchen_stock.insert_many([
+            {"ts": datetime(2026, 8, 17, 22, tzinfo=timezone.utc), "meta": meta, "unit": "L",
+             "on_hand": 5.0, "used": 10.0, "short": 2.0},
+            # A manual/POS count on a day with no history row: only on_hand.
+            {"ts": datetime(2026, 8, 18, 9, tzinfo=timezone.utc), "meta": meta, "unit": "L",
+             "on_hand": 7.0, "source": "manual"}])
+        rows = history.kitchen_demand(self.db, "K01", "900001", DAYS[0], DAYS[1])
+        self.assertEqual([(row["date"], row["demand"], row["kitchens"]) for row in rows],
+                         [(DAYS[0], 12.0, 1)])
+
+
 @unittest.skipUnless(os.environ.get("STORE_LIVE_TESTS") == "1", "set STORE_LIVE_TESTS=1")
 class LiveHistoryTests(unittest.TestCase):
     """Time-series collections need a real MongoDB: a throwaway database, dropped after."""

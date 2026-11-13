@@ -99,6 +99,10 @@ def create_app(gateway: Gateway | None = None) -> FastAPI:
     def get_proposal(kitchen_id: str, proposal_id: str, who: Principal = Depends(principal)):
         return gw().get_proposal(kitchen_id, proposal_id)
 
+    @app.get(k + "/proposals/{proposal_id}/addable")
+    def addable(kitchen_id: str, proposal_id: str, who: Principal = Depends(principal)):
+        return gw().addable(kitchen_id, proposal_id)
+
     @app.post(k + "/proposals/{proposal_id}/approve")
     async def approve(kitchen_id: str, proposal_id: str, request: Request, who: Principal = Depends(principal)):
         return gw().approve(kitchen_id, proposal_id, await body(request), human=who.human)

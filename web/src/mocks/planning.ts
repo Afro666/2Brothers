@@ -101,56 +101,56 @@ export const planningMenu: MenuPlanEntry[] = [
   {
     id: "MENU-1",
     date: "2026-11-16",
-    meal: "lunch",
+    meal: "Lunch",
     recipeId: "REC-SALMON-SOUP",
     covers: 160,
   },
   {
     id: "MENU-2",
     date: "2026-11-16",
-    meal: "dessert",
+    meal: "Dessert",
     recipeId: "REC-RICE-PUDDING",
     covers: 180,
   },
   {
     id: "MENU-3",
     date: "2026-11-16",
-    meal: "breakfast",
+    meal: "Breakfast",
     recipeId: "REC-COFFEE-SERVICE",
     covers: 120,
   },
   {
     id: "MENU-4",
     date: "2026-11-17",
-    meal: "lunch",
+    meal: "Lunch",
     recipeId: "REC-SALMON-SOUP",
     covers: 140,
   },
   {
     id: "MENU-5",
     date: "2026-11-17",
-    meal: "dessert",
+    meal: "Dessert",
     recipeId: "REC-RICE-PUDDING",
     covers: 140,
   },
   {
     id: "MENU-6",
     date: "2026-11-18",
-    meal: "breakfast",
+    meal: "Breakfast",
     recipeId: "REC-COFFEE-SERVICE",
     covers: 90,
   },
   {
     id: "MENU-7",
     date: "2026-11-18",
-    meal: "lunch",
+    meal: "Lunch",
     recipeId: "REC-SALMON-SOUP",
     covers: 180,
   },
   {
     id: "MENU-8",
     date: "2026-11-18",
-    meal: "dessert",
+    meal: "Dessert",
     recipeId: "REC-RICE-PUDDING",
     covers: 100,
   },
@@ -238,6 +238,13 @@ export const planningSharing: SharingConsent[] = [
 ];
 
 const baseDemand: Array<Omit<SupplierDemandRow, "risk" | "suggestedBuy">> = [];
+const kitchenNames = [
+  ["K01", "K01 School 1 Tampere"],
+  ["K04", "K04 Hotel Aurora Helsinki"],
+  ["K07", "K07 Hospital kitchen Turku"],
+  ["K12", "K12 Campus kitchen Espoo"],
+  ["K18", "K18 Care home Oulu"],
+] as const;
 const demandSeed = [
   ["462775", "Arla lactose-free milk", "L", 51],
   ["462921", "Valio Eila organic milk", "L", null],
@@ -248,13 +255,25 @@ const demandSeed = [
 
 for (const date of ["2026-11-16", "2026-11-17", "2026-11-18"]) {
   for (const [index, [productId, productName, unit, available]] of demandSeed.entries()) {
+    const forecastDemand = 220 + index * 35;
+    const kitchenCount = 3 + (index % 2);
+    const basePerKitchen = Math.floor((forecastDemand / kitchenCount) * 100) / 100;
+    const byKitchen = Array.from({ length: kitchenCount }, (_, kitchenIndex) => ({
+      kitchenId: kitchenNames[kitchenIndex][0],
+      kitchenName: kitchenNames[kitchenIndex][1],
+      demand:
+        kitchenIndex === kitchenCount - 1
+          ? Math.round((forecastDemand - basePerKitchen * (kitchenCount - 1)) * 100) / 100
+          : basePerKitchen,
+    }));
     baseDemand.push({
       productId,
       productName,
       unit,
       date,
-      forecastDemand: 220 + index * 35,
-      kitchens: 3 + (index % 2),
+      forecastDemand: byKitchen.reduce((sum, kitchen) => sum + kitchen.demand, 0),
+      kitchens: byKitchen.length,
+      byKitchen,
       available,
     });
   }

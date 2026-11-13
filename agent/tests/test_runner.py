@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from uuid import NAMESPACE_URL, uuid5
 
 import httpx
 from mcp.shared.memory import create_connected_server_and_client_session
@@ -100,6 +101,38 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
             orders = [r for r in mock.requests if r.url.path == "/tools/place_order"]
             if orders:
                 self.assertNotEqual(json.loads(orders[0].content)["idempotency_key"], "model-key")
+
+    async def test_place_order_schema_hides_key_and_runner_supplies_it(self):
+        class ApprovedGateway(MockGateway):
+            def __call__(self, request):
+                if request.url.path == "/tools/place_order":
+                    self.requests.append(request)
+                    return httpx.Response(200, json={"order_id": "order-1", "outcome": "CONFIRMED", "status": "PLACED"})
+                return super().__call__(request)
+        seen = {}
+
+        class Capturing(Scripted):
+            async def complete(self, messages, tools):
+                seen.update({t["function"]["name"]: t["function"]["parameters"] for t in tools})
+                return await super().complete(messages, tools)
+        steps = milk_steps()[:3] + [tool("place_order", offer_id="milk-offer-1", expected_total="149.02")]
+        mock = ApprovedGateway()
+        gateway = GatewayClient(transport=httpx.MockTransport(mock))
+        try:
+            async with create_connected_server_and_client_session(build_server(gateway)) as session:
+                buyer = Buyer(Capturing(steps), session, gateway, need_id="milk-need-1", requested_date="2026-11-16",
+                    run_id="test-run", approval_lookup=lambda offer_id: {"approval_id": "a-1", "offer_id": offer_id,
+                        "status": "APPROVED", "decided_by": "chef-1", "decided_at": "2026-11-01T10:00:00Z"})
+                result = await buyer.run("milk")
+        finally:
+            await gateway.close()
+        schema = seen["place_order"]
+        self.assertEqual(set(schema["properties"]), {"offer_id", "expected_total"})
+        self.assertNotIn("idempotency_key", schema.get("required", []))
+        self.assertEqual(result["status"], "ORDER_PLACED")
+        orders = [r for r in mock.requests if r.url.path == "/tools/place_order"]
+        expected = str(uuid5(NAMESPACE_URL, "test-run:milk-offer-1"))
+        self.assertEqual(json.loads(orders[0].content)["idempotency_key"], expected)
 
     async def test_place_order_requires_a_complete_matching_human_decision(self):
         approved = {"approval_id": "approval-1", "offer_id": "milk-offer-1", "status": "APPROVED",
@@ -243,6 +276,22 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
                     for text in value if isinstance(value, list) else [value]:
                         self.assertNotIn(str(text), feedback["content"])
 
+    async def test_three_consecutive_read_rejections_stop_the_run(self):
+        invalid = tool("get_audit_log", run_id="other-run")
+        result, buyer, mock = await self.run_case([invalid] * 3 + milk_steps())
+        self.assertEqual(result["status"], "CANNOT_FULFIL")
+        self.assertEqual(result["reason"], "Repeated policy rejections")
+        self.assertEqual(len(buyer.model.messages), 3)
+        self.assertEqual(len(mock.events), 6)
+        self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
+
+    async def test_successful_call_resets_read_rejection_count(self):
+        invalid = tool("get_audit_log", run_id="other-run")
+        steps = milk_steps()
+        result, buyer, mock = await self.run_case(
+            [invalid, invalid, steps[0], invalid, invalid] + steps[1:])
+        self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
+
     async def test_malformed_read_arguments_can_be_corrected(self):
         invalid = tool("search_products", query="milk", filters={})
         invalid["tool_calls"][0]["function"]["arguments"] = "{not-json"
@@ -319,13 +368,15 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(buyer.model.messages), 2)
         self.assertEqual(len(mock.events), 4)
         batch = {"role": "assistant", "content": None, "tool_calls": []}
+        valid = milk_steps()[0]
         for index in range(31):
-            call = deepcopy(invalid["tool_calls"][0]); call["id"] = f"call-{index}"
+            # Alternate with valid reads so the rejection cap never trips first.
+            call = deepcopy((valid if index % 2 else invalid)["tool_calls"][0]); call["id"] = f"call-{index}"
             batch["tool_calls"].append(call)
         result, buyer, mock = await self.run_case([batch], max_steps=1)
         self.assertIn("Tool call limit", result["reason"])
         self.assertEqual(len(mock.events), 60)
-        self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
+        self.assertEqual(len([r for r in mock.requests if r.url.path == "/tools/search_products"]), 15)
 
     async def test_rejected_mutation_still_stops_without_model_correction(self):
         for name in ["place_order", "request_approval"]:

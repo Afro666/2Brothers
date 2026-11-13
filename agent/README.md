@@ -1,7 +1,8 @@
 # Nemotron buyer (#22)
 
 Install from the repository root: `python -m pip install -e .`. The CLI loads the
-root `.env` without overwriting exported variables. `VERDA_INFERENCE_KEY` selects
+root `.env` without overwriting exported variables. Copy `.env.example` to `.env`
+and fill in `VERDA_INFERENCE_KEY`, which selects
 the shared Verda Nemotron 3.5 Super VL endpoint. Never use cloud credentials or
 the separate project inference key for this endpoint.
 

@@ -41,6 +41,8 @@ class ValioTests(unittest.TestCase):
             data["products"][0][field] = value
             result = self.client(lambda *args: data).availability(["462775"], "2026-11-16")
             self.assertFalse(result["products"][0]["scheduleLines"][0]["orderable"])
+            if field == "closingTime":
+                self.assertIsNone(result["products"][0]["cutoff_passed"])
 
     def test_available_date_must_be_valid_and_no_later_than_requested(self):
         now = datetime(2026, 11, 13, tzinfo=timezone.utc)
@@ -153,6 +155,11 @@ class ValioTests(unittest.TestCase):
     def test_naive_time_is_helsinki_in_summer_and_winter(self):
         self.assertEqual(closing_time("2026-07-01T12:00:00").utcoffset(), timedelta(hours=3))
         self.assertEqual(closing_time("2026-11-01T12:00:00").utcoffset(), timedelta(hours=2))
+
+    def test_offset_without_colon_parses_on_python_310(self):
+        self.assertEqual(closing_time("2026-11-15T17:00:00+0200").utcoffset(), timedelta(hours=2))
+        self.assertEqual(closing_time("2026-11-15T17:00:00-0530").utcoffset(), -timedelta(hours=5, minutes=30))
+        self.assertEqual(closing_time("2026-11-15T17:00:00Z").utcoffset(), timedelta(0))
 
     def test_invalid_inputs_never_send_a_request(self):
         client = self.client(lambda *args: self.fail("unexpected request"))

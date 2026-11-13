@@ -99,8 +99,12 @@ def _row(c: Candidate, params: KitchenParams) -> AddableRow:
     position = Decimal(str(plan.numbers["position"]))
     daily = Decimal(str(item.daily_demand))
     days = None if unknown or daily <= 0 else (position / daily).quantize(Decimal("0.1"), ROUND_HALF_UP)
-    timing = _timing(plan.urgency, days)
     qty, unit = plan.quantity, plan.unit
+    timing = _timing(plan.urgency, days)
+    if qty > 0 and timing > Timing.THIS_WEEK:
+        # The engine wants an order (e.g. safety stock above the position with no recent
+        # use, #242): that is due now, never "this month" or "no action".
+        timing = Timing.THIS_WEEK
     if unknown:
         why = f"Stock count missing: count it first. Sized as if empty: {_n(qty)} {unit}."
     elif qty > 0:

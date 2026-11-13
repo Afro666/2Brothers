@@ -86,7 +86,7 @@ function Proposal({
     <section aria-label="Proposal" className="space-y-6">
       <div className="space-y-1">
         <h2 className="text-lg font-semibold">Proposal for "{request.text}"</h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm tabular-nums text-muted-foreground">
           Needed by {formatDate(request.deliveryDate)}
           {request.covers == null ? null : ` · ${request.covers} covers`}
         </p>
@@ -99,7 +99,7 @@ function Proposal({
             <StatusBadge status={order.status} />
             <UrgencyBadge urgency={order.urgency} />
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm tabular-nums text-muted-foreground">
             Delivery {formatDate(order.deliveryDate)} · {formatEur(order.totalExVat)} ex VAT ·{" "}
             {formatEur(order.totalInclVat)} incl VAT
           </p>
@@ -133,7 +133,7 @@ function Proposal({
           <AlertDescription>
             <p>
               This order is not placed yet: a human must approve it first.{" "}
-              <Link to="/approvals" className="font-medium underline underline-offset-4">
+              <Link to="/approvals" className="font-medium text-primary underline underline-offset-4">
                 Review it in Approvals
               </Link>
               .

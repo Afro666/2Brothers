@@ -63,6 +63,17 @@ def money(value):
         raise PolicyError("Gateway total is invalid") from None
 
 
+def model_schema(name, schema):
+    """Hide runner-owned fields (place_order's idempotency_key) from the model."""
+    if name != "place_order":
+        return schema
+    schema = dict(schema)
+    schema["properties"] = {k: v for k, v in schema.get("properties", {}).items() if k != "idempotency_key"}
+    if "required" in schema:
+        schema["required"] = [k for k in schema["required"] if k != "idempotency_key"]
+    return schema
+
+
 def unpack(result):
     if result.isError:
         raise GatewayError("MCP tool failed; reconcile any mutation before retrying")
@@ -119,6 +130,9 @@ class Buyer:
     def authorize(self, name, args, schemas):
         if name not in TOOLS or name not in schemas:
             raise PolicyError("Tool is not allowed")
+        if name == "place_order" and isinstance(args, dict):
+            # The runner owns the idempotency key; ignore any model-sent value.
+            args.pop("idempotency_key", None)
         schema = {**schemas[name], "additionalProperties": False}
         try:
             validate(args, schema)
@@ -203,12 +217,13 @@ class Buyer:
 
     async def run(self, request):
         tools = [t for t in (await self.session.list_tools()).tools if t.name in TOOLS]
-        schemas = {t.name: t.inputSchema for t in tools}
+        schemas = {t.name: model_schema(t.name, t.inputSchema) for t in tools}
         definitions = [{"type": "function", "function": {
-            "name": t.name, "description": t.description, "parameters": t.inputSchema}} for t in tools]
+            "name": t.name, "description": t.description, "parameters": schemas[t.name]}} for t in tools]
         messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": json.dumps({
             "request": request, "need_id": self.need_id, "requested_date": self.requested_date, "run_id": self.run_id})}]
         count = 0
+        rejections = 0  # consecutive read-only policy rejections
         for _ in range(self.max_steps):
             try:
                 message = await self.model.complete(messages, definitions)
@@ -266,12 +281,16 @@ class Buyer:
                     return self.final("CANNOT_FULFIL", "Audit unavailable; human reconciliation required", reconciliation_required=True)
                 if error:
                     if policy_rejected and name in READ_ONLY_TOOLS:
+                        rejections += 1
+                        if rejections >= 3:
+                            return self.final("CANNOT_FULFIL", "Repeated policy rejections")
                         messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
                             "error": {"code": "POLICY_REJECTED", "message": error,
                                       "reason_code": reason_code.value,
                                       "retryable": True}})})
                         continue
                     return self.final("CANNOT_FULFIL", error, reconciliation_required=bool(self.mutations))
+                rejections = 0
                 if name == "request_approval":
                     if result.get("status") == "PENDING" and result.get("approval_id"):
                         sim = self.simulations[args["offer_id"]]

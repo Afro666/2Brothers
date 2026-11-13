@@ -242,7 +242,7 @@ export function CatalogPage() {
             </div>
             <ul className="grid gap-4 md:grid-cols-2">
               {results.map((product) => (
-                <li key={product.id}>
+                <li key={product.id} className="tabular-nums">
                   <ProductCard product={product} />
                 </li>
               ))}
