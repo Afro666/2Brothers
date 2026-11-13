@@ -92,7 +92,8 @@ def unpack(result):
 
 class Buyer:
     def __init__(self, model, session, audit_gateway, *, need_id, requested_date,
-                 max_steps=12, run_id=None, trace_path=None, now=None, approval_lookup=None):
+                 max_steps=12, run_id=None, trace_path=None, now=None, approval_lookup=None,
+                 catalog_lookup=None, allergen_policy=None, substitute_planner=None):
         if not 1 <= max_steps <= 30:
             raise ValueError("max_steps must be between 1 and 30")
         self.model, self.session, self.audit_gateway = model, session, audit_gateway
@@ -106,6 +107,10 @@ class Buyer:
         self.products, self.offers, self.simulations = set(), {}, {}
         self.mutations, self.orders = set(), set()
         self.events = []
+        self.catalog_lookup, self.allergen_policy = catalog_lookup, allergen_policy
+        self.substitute_planner = substitute_planner
+        self.offer_products, self.substitute_options, self.assessed_offers = {}, [], set()
+        self.model_tool_calls = self.host_tool_calls = 0
 
     async def audit(self, event):
         record = {"event_id": str(uuid4()), "run_id": self.run_id, **event}
@@ -147,6 +152,14 @@ class Buyer:
                 raise PolicyError("Offer must use the application's trusted date", PolicyReason.DATE_MISMATCH)
             if not set(args["product_ids"]).issubset(self.products):
                 raise PolicyError("Products must come from a catalog search", PolicyReason.UNKNOWN_ID)
+            if self.allergen_policy and any(not self.allergen_policy.allowed(self.catalog_lookup(pid))
+                                           for pid in args['product_ids']):
+                raise PolicyError("Kitchen allergen rules refuse this product")
+        if name == 'search_products' and self.allergen_policy:
+            filters = args.setdefault('filters', {})
+            filters['exclude_allergens'] = list(set(filters.get('exclude_allergens', [])) | set(self.allergen_policy.excluded))
+            if self.allergen_policy.excluded:
+                filters['allergen_strictness'] = 'strict'
         if name in {"simulate_order", "request_approval", "place_order"}:
             offer = self.offers.get(args["offer_id"])
             if not offer:
@@ -162,6 +175,9 @@ class Buyer:
             sim = self.simulations.get(offer_id)
             if not sim:
                 raise PolicyError("Simulate the offer before any mutation")
+            if self.allergen_policy and any(not self.allergen_policy.allowed(self.catalog_lookup(line['product_id']))
+                                           for line in sim.get('lines', [])):
+                raise PolicyError('Kitchen allergen rules refuse the simulated basket')
             verdict = sim["mandate"]["verdict"]
             if verdict != "NEEDS_APPROVAL":
                 raise PolicyError("Mutation is not permitted by the simulated mandate")
@@ -179,9 +195,13 @@ class Buyer:
 
     def accept(self, name, args, result):
         if name == "search_products":
+            if self.allergen_policy:
+                result['products'] = [p for p in result['products']
+                                      if self.allergen_policy.allowed(self.catalog_lookup(p['product_id']))]
             self.products.update(p["product_id"] for p in result["products"])
         elif name == "get_offer":
             self.offers[result["offer_id"]] = result
+            self.offer_products[result['offer_id']] = list(args['product_ids'])
         elif name == "simulate_order":
             if result.get("offer_id") != args["offer_id"] or result.get("currency") != "EUR":
                 raise PolicyError("Simulation does not match the offer or currency")
@@ -215,7 +235,26 @@ class Buyer:
             raise PolicyError("Recorded human approval is required for this offer") from None
 
     def final(self, status, reason, **extra):
+        if self.substitute_options:
+            extra['substitute_options'] = self.substitute_options
         return {"status": status, "reason": reason, "run_id": self.run_id, **extra}
+
+    async def read_for_substitutes(self, name, args, schemas):
+        if name not in {'search_products', 'get_offer', 'simulate_order'} or self.model_tool_calls + self.host_tool_calls >= 30:
+            raise PolicyError('Substitute read budget reached')
+        self.host_tool_calls += 1
+        self.authorize(name, args, schemas)
+        await self.audit({'type': 'tool_call_started', 'tool': name, 'arguments': args, 'result': {}})
+        try:
+            result = unpack(await self.session.call_tool(name, args))
+            self.accept(name, args, result)
+        except Exception:
+            await self.audit({'type': 'tool_call_finished', 'tool': name, 'arguments': args,
+                              'result': {'error': 'Substitute read failed'}})
+            raise PolicyError('Substitute read failed') from None
+        summary = {'offer_id': result['offer_id']} if isinstance(result.get('offer_id'), str) else {}
+        await self.audit({'type': 'tool_call_finished', 'tool': name, 'arguments': args, 'result': summary})
+        return result
 
     async def run(self, request):
         tools = [t for t in (await self.session.list_tools()).tools if t.name in TOOLS]
@@ -239,7 +278,8 @@ class Buyer:
                 return self.final("CANNOT_FULFIL", "Model returned invalid tool calls")
             for call in calls:
                 count += 1
-                if count > 30:
+                self.model_tool_calls = count
+                if count + self.host_tool_calls > 30:
                     return self.final("CANNOT_FULFIL", "Tool call limit reached")
                 name, args, error, result = "invalid", {}, None, {}
                 policy_rejected = False
@@ -293,6 +333,16 @@ class Buyer:
                         continue
                     return self.final("CANNOT_FULFIL", error, reconciliation_required=bool(self.mutations))
                 rejections = 0
+                if (name == 'simulate_order' and self.substitute_planner
+                        and args['offer_id'] not in self.assessed_offers
+                        and set(result['mandate'].get('reason_codes', [])) &
+                        {'PARTIAL_STOCK', 'CLOSING_PASSED', 'STOCK_UNKNOWN'}):
+                    self.assessed_offers.add(args['offer_id'])
+                    try:
+                        self.substitute_options = await self.substitute_planner.plan(
+                            self, result, lambda name, args: self.read_for_substitutes(name, args, schemas))
+                    except (PolicyError, AuditError):
+                        return self.final('CANNOT_FULFIL', 'Substitute assessment unavailable; no approval dispatched')
                 if name == "request_approval":
                     if result.get("status") == "PENDING" and result.get("approval_id"):
                         sim = self.simulations[args["offer_id"]]

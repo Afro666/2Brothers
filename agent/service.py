@@ -15,6 +15,8 @@ from agent.model import Nemotron
 from agent.runner import Buyer
 from gateway.mcp_server import GatewayClient, build_server
 from store import agent_runs
+from store import buyer_context
+from agent.substitutes import AllergenPolicy, SubstitutePlanner
 from store.orders import IdempotencyConflict
 
 
@@ -74,9 +76,14 @@ class BuyerWorker:
             nonlocal model, buyer
             stored = await self.gateway.request('POST', f'/v1/kitchens/{kitchen_id}/needs', payload=need)
             model = self.model_factory()
+            exclusions = buyer_context.excluded_allergens(self.db, kitchen_id)
+            policy = AllergenPolicy(tuple(exclusions)) if exclusions is not None else None
+            lookup = lambda pid: buyer_context.product(self.db, kitchen_id, pid)
             async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
                 buyer = Buyer(model, session, self.gateway, need_id=stored['need_id'],
-                              requested_date=need['requested_date'], run_id=row['_id'], max_steps=12, now=self.now)
+                              requested_date=need['requested_date'], run_id=row['_id'], max_steps=12, now=self.now,
+                              catalog_lookup=lookup, allergen_policy=policy,
+                              substitute_planner=SubstitutePlanner(lookup, policy) if policy else None)
                 outcome = await buyer.run(need['text'])
             if outcome['status'] != 'SENT_FOR_APPROVAL':
                 raise WorkerError(503, 'BUYER_INCOMPLETE', fallback_safe=not buyer.mutations)
@@ -84,6 +91,9 @@ class BuyerWorker:
             result = next((p for p in proposals['proposals'] if p.get('approval_id') == outcome['approval_id']), None)
             if result is None:
                 raise WorkerError(503, 'BUYER_RECONCILIATION_REQUIRED')
+            if outcome.get('substitute_options'):
+                buyer_context.save_options(self.db, kitchen_id, result['proposal_id'], outcome['substitute_options'])
+                result['substitute_options'] = outcome['substitute_options']
             return {**result, 'buyer_run_id': row['_id'], 'buyer_model': 'nemotron-3.5-super-vl'}
         try:
             result = await asyncio.wait_for(execute(), timeout=self.timeout)

@@ -211,6 +211,7 @@ class Gateway:
     def _proposal_out(self, doc: dict) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
         return {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
+                "substitute_options": doc.get('substitute_options', []),
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
                 **offer["simulation"],
