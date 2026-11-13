@@ -6,12 +6,15 @@ build-backend = "setuptools.build_meta"
 name = "two-brothers"
 version = "0.1.0"
 requires-python = ">=3.10"
-dependencies = ["tzdata>=2025.2", "httpx>=0.28,<1", "mcp>=1.26,<2", "jsonschema>=4.23,<5", "python-dotenv>=1,<2"]
+dependencies = ["tzdata>=2025.2", "httpx>=0.28,<1", "mcp>=1.26,<2", "jsonschema>=4.23,<5", "python-dotenv>=1,<2", "pymongo>=4.6,<5"]
+
+[project.optional-dependencies]
+test = ["mongomock>=4.1,<5"]
 
 [project.scripts]
 two-brothers-mcp = "gateway.mcp_server:main"
 two-brothers-agent = "agent.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["gateway*", "agent*"]
+include = ["gateway*", "agent*", "store*"]
 exclude = ["*.tests*"]

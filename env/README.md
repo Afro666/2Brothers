@@ -10,6 +10,8 @@ Python 3.10+, standard library only.
 | `sim.py` | stock in lots with shelf life (FIFO), deliveries with shortages, guests eating |
 | `policies.py` | ordering policies: `reference` (engine stand-in), `do-nothing` |
 | `history.py` | 20 kitchens x 12 weeks of history as JSON Lines |
+| `week.py` | Kitchen Week RL env: one kitchen, one week, mandate, reward |
+| `run.py` | runs a policy through Kitchen Week and prints the score |
 
 ## Synthetic history
 
@@ -41,6 +43,48 @@ Dates are MongoDB Extended JSON (`{"$date": "...Z"}`). Time-series collections u
 | `products.jsonl` | product | `product_id`, `name`, `unit`, `pack`, `sales_unit`, `price_eur`, `shelf_life_days`, `abc` |
 | `recipes.jsonl` | recipe | `recipe`, `per_cover{product_id: qty}` |
 
-Seed 1 summary: weekday averages M 198 / T 225 / W 230 / T 242 / F 260 / S 165 / S 115
-covers per kitchen; 2.4% of demand short (mostly in week 1 while opening stock settles),
-0.3% waste overall, 3.7–5.6% for mince and salmon (4-day shelf life).
+Seed 1 summary: weekday averages M 198 / T 225 / W 230 / T 242 / F 260 / S 164 / S 114
+covers per kitchen; 2.8% of demand short (mostly in week 1 while opening stock settles),
+0.5% waste overall, most of it mince and salmon (4-day shelf life).
+
+## Kitchen Week (RL env)
+
+```
+python -m env.run --policy reference --seed 1                # score + breakdown + events
+python -m env.run --policy all --seeds 20 --kitchen hotel    # baselines, mean and sd
+python -m env.run --policy reference --seed 1 --json
+```
+
+One kitchen (`--kitchen restaurant|hotel|school|hospital`, picked by seed), Mon 2026-11-16
+to Sun 2026-11-22. `KitchenWeek.reset()` returns the Sunday 14:00 observation; each
+`step(action)` places the order for tomorrow, then simulates tomorrow. 7 steps.
+
+- **Action:** `{"order": {product_id: sales_units}, "request_approval": bool, "stop": bool}`.
+  Orders only count when tomorrow is a delivery day (`obs["order_for"]`).
+- **Observation:** stock with lots and last-use days, open orders, products with pack and
+  price, 7-day cover forecast with menu, recipes, mandate rules, Valio notices, yesterday.
+- **Mid-week stock-out:** Valio cannot deliver one of the two most-used A products
+  Wednesday to Friday, announced in `obs["valio_notices"]`.
+- **Mandate:** order total over `auto_limit` needs `request_approval` (else penalty 300,
+  still sent); over `hard_cap` it is never sent (penalty 50, plus 300 if approval was
+  not asked, so skipping approval never pays); a product not on
+  the kitchen's list is refused (penalty 50). Under `mov` (EUR 200) costs a 45 fee.
+
+**Reward** = revenue − food cost − waste − excess stock − delivery fees − stock-out
+penalty − mandate penalty. Revenue per cover is the menu-price share of these
+ingredients (ingredients ≈ 35%). A cover is lost when an A ingredient of its dish is
+missing (B/C missing: a quarter); a lost cover also costs 50% goodwill. Excess stock =
+stock value left above the opening stock, in full for shelf life ≤ 7 days, else 25%.
+Under-order (`stockout_days`, `lost_covers`) and over-order (`wasted_qty`, `waste`) are
+reported separately.
+
+Baselines (20 seeds, mean score EUR; sd is about 30–40% of the mean, so compare means
+over many seeds):
+
+| policy | restaurant | hotel | school | hospital |
+|---|---|---|---|---|
+| `reference` (engine, reads notices) | 4314 | 5871 | 10001 | 9434 |
+| `ignore-notices` (engine, blind to the stock-out) | 3193 | 3840 | 6950 | 5737 |
+| `over-order` (3x, never asks approval) | 3578 | 4182 | 2081 | 4351 |
+| `stop-early` (stops after Tuesday) | 775 | 239 | 1781 | -1505 |
+| `do-nothing` | 185 | -1571 | -5962 | -5784 |

@@ -42,6 +42,57 @@ class ValioTests(unittest.TestCase):
             result = self.client(lambda *args: data).availability(["462775"], "2026-11-16")
             self.assertFalse(result["products"][0]["scheduleLines"][0]["orderable"])
 
+    def test_available_date_must_be_valid_and_no_later_than_requested(self):
+        now = datetime(2026, 11, 13, tzinfo=timezone.utc)
+        for available, expected in [("2026-11-16", True), ("2026-11-15", True),
+                                    ("2026-11-17", False), (None, False),
+                                    ("", False), ("2026-02-30", False), (17, False)]:
+            with self.subTest(available=available):
+                data = fixture("availability")
+                data["products"][0]["scheduleLines"][0]["availableDate"] = available
+                client = self.client(lambda *args: data, now=lambda: now)
+                result = client.availability(["462775"], "2026-11-16")
+                line = result["products"][0]["scheduleLines"][0]
+                self.assertEqual(line["orderable"], expected)
+                self.assertEqual(line["availableDate"], available)
+
+    def test_missing_available_date_is_not_orderable(self):
+        data = fixture("availability")
+        del data["products"][0]["scheduleLines"][0]["availableDate"]
+        now = datetime(2026, 11, 13, tzinfo=timezone.utc)
+        result = self.client(lambda *args: data, now=lambda: now).availability(["462775"], "2026-11-16")
+        self.assertFalse(result["products"][0]["scheduleLines"][0]["orderable"])
+
+    def test_unknown_stock_stays_visible_but_unconfirmed_with_future_cutoff(self):
+        now = datetime(2026, 11, 13, tzinfo=timezone.utc)
+        for model in ["Terminal", "Stock"]:
+            for amount in [999999, 9999999999, None]:
+                with self.subTest(model=model, amount=amount):
+                    data = fixture("availability")
+                    original = data["products"][0]
+                    original["logisticModel"] = model
+                    original["scheduleLines"][0]["availableAmount"] = amount
+                    result = self.client(lambda *args: data, now=lambda: now).availability(["462775"], "2026-11-16")
+                    self.assertEqual(len(result["products"]), len(data["products"]))
+                    product = result["products"][0]
+                    self.assertEqual(product["productId"], "462775")
+                    self.assertFalse(product["cutoff_passed"])
+                    self.assertEqual(len(product["scheduleLines"]), 1)
+                    line = product["scheduleLines"][0]
+                    self.assertIsNone(line["availableAmount"])
+                    self.assertTrue(line["unknown_stock"])
+                    self.assertFalse(line["orderable"])
+
+    def test_confirmed_zero_stock_is_unavailable_not_unknown(self):
+        data = fixture("availability")
+        data["products"][0]["scheduleLines"][0]["availableAmount"] = 0
+        now = datetime(2026, 11, 13, tzinfo=timezone.utc)
+        result = self.client(lambda *args: data, now=lambda: now).availability(["462775"], "2026-11-16")
+        line = result["products"][0]["scheduleLines"][0]
+        self.assertEqual(line["availableAmount"], 0)
+        self.assertFalse(line["unknown_stock"])
+        self.assertFalse(line["orderable"])
+
     def test_1001_products_are_chunked_with_auth_and_user_agent(self):
         calls = []
         def transport(path, payload, headers):

@@ -39,8 +39,13 @@ class MockGateway:
             key = request.headers.get("Idempotency-Key")
             if not key:
                 return httpx.Response(422, json={"error": {"code": "MISSING_IDEMPOTENCY_KEY"}})
-            self.approvals[key] = {"approval_id": "milk-approval-1", "status": "PENDING"}
-            return httpx.Response(200, json=self.approvals[key])
+            if key in self.approvals:
+                if self.approvals[key]["body"] != body:
+                    return httpx.Response(409, json={"error": {"code": "IDEMPOTENCY_CONFLICT"}})
+                return httpx.Response(200, json=self.approvals[key]["result"])
+            self.approvals[key] = {"body": deepcopy(body),
+                                   "result": {"approval_id": "milk-approval-1", "status": "PENDING"}}
+            return httpx.Response(200, json=self.approvals[key]["result"])
         if path == "/tools/place_order":
             return httpx.Response(403, json={"error": {"code": "NEEDS_APPROVAL"}})
         if path == "/tools/get_order_status":
