@@ -62,3 +62,31 @@ retry, or replay behavior.
 
 Tests use an actual SDK MCP client and HTTP mock transport, plus a subprocess
 stdio handshake. Run the same unittest command above after installing the project.
+
+## HTTP gateway (#19)
+
+`gateway/app.py` (FastAPI) serves the contract routes; the logic is in
+`gateway/service.py`. Run locally: `two-brothers-gateway` (port 8000), with
+`VALIO_API_KEY`, `MONGODB_URI`, `GATEWAY_AGENT_TOKEN` and `GATEWAY_HUMAN_TOKEN` set.
+
+The milk flow, end to end:
+
+1. `POST /v1/kitchens/{k}/proposals` with `product_ids`, `quantity`, `unit`,
+   `requested_date`, `idempotency_key`: live Valio price and stock, the engine sizes
+   every line, a 15-minute offer snapshot is stored, an approval is opened (PENDING).
+2. `GET /v1/kitchens/{k}/proposals/{id}`: lines with `why`, `expected_total`, mandate
+   reasons and warnings, excluded products, a cheaper alternative if there is one.
+3. `POST .../approve` with the `expected_total` the person saw (human token + `X-User`
+   only). The gateway re-reads live prices and stock: if anything moved, 409
+   `TOTAL_MISMATCH` with the new total, and nothing is placed. Otherwise the attempt is
+   written first, then the order (outcome `CONFIRMED`, status `SENT`: placed in our
+   gateway; Valio has no order endpoint). A replay returns the same order.
+4. `GET .../orders`, `GET .../audit`: the order and every step.
+
+Buyer agent routes: `POST /v1/kitchens/{k}/needs` (the app stores the need), then
+`/tools/get_offer` (the model picks products; the gateway sizes them from the need),
+`/tools/simulate_order`, `/tools/request_approval`. `/tools/place_order` only returns
+an order a person already approved; otherwise 403 `NEEDS_APPROVAL`.
+
+Image: `docker build -f gateway/Dockerfile .` (context is the repo root).
+Tests: `python -m pytest gateway/tests/test_gateway_app.py`.

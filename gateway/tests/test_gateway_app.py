@@ -1,0 +1,182 @@
+"""End-to-end milk flow through the HTTP gateway: test database, recorded Valio answers."""
+
+from copy import deepcopy
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+
+import pytest
+
+mongomock = pytest.importorskip("mongomock")
+pytest.importorskip("fastapi")
+from fastapi.testclient import TestClient  # noqa: E402
+
+from gateway.app import create_app  # noqa: E402
+from gateway.service import Gateway  # noqa: E402
+from gateway.valio_client import ValioClient  # noqa: E402
+
+FIX = Path(__file__).parent / "fixtures"
+NOW = datetime(2026, 11, 13, 20, 10, tzinfo=timezone.utc)   # 22:10 Helsinki
+HUMAN = {"Authorization": "Bearer human-test-token", "X-User": "aron"}
+AGENT = {"Authorization": "Bearer agent-test-token"}
+K = "/v1/kitchens/demo-kitchen"
+
+RAW = {
+    "462775": {"id": "462775", "salesUnit": "ST", "baseUnit": "ST", "allowedLotSize": 0.01,
+               "units": [{"unitId": "KI", "sizeInBaseUnits": 12.0}, {"unitId": "ST", "sizeInBaseUnits": 1.0}]},
+    "462921": {"id": "462921", "salesUnit": "KI", "baseUnit": "ST", "allowedLotSize": 0.01,
+               "units": [{"unitId": "KI", "sizeInBaseUnits": 5.0}, {"unitId": "ST", "sizeInBaseUnits": 1.0}]},
+    "463335": {"id": "463335", "salesUnit": "ST", "baseUnit": "ST", "allowedLotSize": 0.01,
+               "units": [{"unitId": "KI", "sizeInBaseUnits": 5.0}, {"unitId": "ST", "sizeInBaseUnits": 1.0}]},
+}
+
+
+class FakeValio:
+    """Serves the recorded fixtures; `bump` moves a price to test TOTAL_MISMATCH."""
+
+    def __init__(self):
+        self.price_data = json.loads((FIX / "price.json").read_text())
+        self.avail_data = json.loads((FIX / "availability.json").read_text())
+
+    def transport(self, path, payload, headers):
+        data = self.price_data if path == "/api/price" else self.avail_data
+        out = deepcopy(data)
+        out["products"] = [p for p in out["products"] if p["productId"] in payload["products"]]
+        return out
+
+    def bump(self, pid, value):
+        for p in self.price_data["products"]:
+            if p["productId"] == pid:
+                p["catalogPrice"]["value"] = value
+                p["comparisonPrice"]["value"] = value
+
+
+@pytest.fixture()
+def env(monkeypatch):
+    monkeypatch.setenv("GATEWAY_HUMAN_TOKEN", "human-test-token")
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    db = mongomock.MongoClient(tz_aware=True)["test"]
+    for pid, raw in RAW.items():
+        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
+    fake = FakeValio()
+    valio = ValioClient("test-not-a-real-key", transport=fake.transport, ttl=0, now=lambda: NOW)
+    gw = Gateway(db, valio, now=lambda: NOW)
+    return TestClient(create_app(gw)), fake, db
+
+
+def milk(client, key="p1"):
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775", "462921", "463335"], "quantity": "1000", "unit": "L",
+        "requested_date": "2026-11-16", "idempotency_key": key, "text": "1000 L lactose-free milk by Monday"})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_milk_proposal_numbers_come_from_the_engine(env):
+    client, _, _ = env
+    p = milk(client)
+    assert p["status"] == "READY"
+    assert [(ln["product_id"], ln["quantity"]) for ln in p["lines"]] == [("462775", "51"), ("463335", "949")]
+    assert p["total_ex_vat"] == "1459.67"
+    assert p["mandate"]["verdict"] == "NEEDS_APPROVAL"
+    assert "CLOSING_PASSED" in p["mandate"]["reason_codes"]
+    assert {e["product_id"] for e in p["excluded"]} == {"462921"}
+    assert p["lines"][1]["unknown_stock"] is True
+    assert p["delivery_fee"] is None and p["mov_gap"] is None   # terms not set: unknown, not zero
+    assert p["alternative"]["total_ex_vat"] == "1400.00"
+
+
+def test_replay_returns_same_proposal_and_reuse_is_refused(env):
+    client, _, _ = env
+    a, b = milk(client), milk(client)
+    assert a["proposal_id"] == b["proposal_id"]
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "10", "unit": "L", "requested_date": "2026-11-16",
+        "idempotency_key": "p1"})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+
+
+def test_agent_cannot_approve(env):
+    client, _, _ = env
+    p = milk(client)
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=AGENT,
+                    json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
+    assert r.status_code == 403 and r.json()["error"]["code"] == "HUMAN_SESSION_REQUIRED"
+    r = client.post("/tools/place_order", headers=AGENT, json={
+        "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"})
+    assert r.status_code == 403 and r.json()["error"]["code"] == "NEEDS_APPROVAL"
+
+
+def test_no_token_no_access(env):
+    client, _, _ = env
+    assert client.get(K + "/orders").status_code == 401
+    assert client.get(K + "/orders", headers={"Authorization": "Bearer wrong"}).status_code == 401
+
+
+def test_human_approves_order_is_placed_once(env):
+    client, _, db = env
+    p = milk(client)
+    body = {"expected_total": p["expected_total"], "idempotency_key": "a1"}
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
+    assert r.status_code == 200, r.text
+    order = r.json()
+    assert order["outcome"] == "CONFIRMED" and order["status"] == "SENT"
+    again = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
+    assert again.json()["order_id"] == order["order_id"]
+    assert db.orders.count_documents({}) == 1
+    assert client.get(f"{K}/proposals/{p['proposal_id']}", headers=AGENT).json()["status"] == "APPROVED"
+    tool = client.post("/tools/place_order", headers=AGENT, json={
+        "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"})
+    assert tool.status_code == 200 and tool.json()["order_id"] == order["order_id"]
+    kinds = [e["kind"] for e in client.get(K + "/audit", headers=AGENT).json()["events"]]
+    assert kinds == ["proposal_created", "order_placed"]
+
+
+def test_price_moved_is_total_mismatch_and_nothing_is_placed(env):
+    client, fake, db = env
+    p = milk(client)
+    fake.bump("463335", 1.47)
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                    json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "TOTAL_MISMATCH"
+    assert r.json()["error"]["expected_total"] != p["expected_total"]
+    assert db.orders.count_documents({}) == 0
+    fresh = client.get(f"{K}/proposals/{p['proposal_id']}", headers=HUMAN).json()
+    ok = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                     json={"expected_total": fresh["expected_total"], "idempotency_key": "a2"})
+    assert ok.status_code == 200, ok.text
+
+
+def test_wrong_total_from_the_client_is_refused(env):
+    client, _, db = env
+    p = milk(client)
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                    json={"expected_total": "1.00", "idempotency_key": "a1"})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "TOTAL_MISMATCH"
+    assert db.orders.count_documents({}) == 0
+
+
+def test_reject_records_reason(env):
+    client, _, db = env
+    p = milk(client)
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/reject", headers=HUMAN, json={"reason": "too much", "idempotency_key": "r1"})
+    assert r.json()["status"] == "REJECTED"
+    assert db.approvals.find_one({})["status"] == "REJECTED"
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                    json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
+    assert r.status_code == 409
+
+
+def test_agent_tool_flow_need_offer_simulate_request_approval(env):
+    client, _, _ = env
+    need = client.post(K + "/needs", headers=AGENT, json={"quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
+    offer = client.post("/tools/get_offer", headers=AGENT, json={"need_id": need["need_id"], "product_ids": ["462775"]}).json()
+    assert offer["lines"][0]["quantity"] == "51"   # the gateway sizes it from the need, not the model
+    sim = client.post("/tools/simulate_order", headers=AGENT, json={"offer_id": offer["offer_id"]}).json()
+    assert sim["expected_total"] == offer["expected_total"]
+    req = client.post("/tools/request_approval", headers=AGENT, json={"offer_id": offer["offer_id"], "idempotency_key": "k1"})
+    assert req.json()["status"] == "PENDING"
+    again = client.post("/tools/request_approval", headers=AGENT, json={"offer_id": offer["offer_id"], "idempotency_key": "k1"})
+    assert again.json()["approval_id"] == req.json()["approval_id"]
+    bad = client.post("/tools/get_offer", headers=AGENT, json={"need_id": "nope", "product_ids": ["462775"]})
+    assert bad.status_code == 422
