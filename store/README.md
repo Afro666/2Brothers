@@ -37,7 +37,7 @@ The database is the one named in the URI, else `two_brothers`.
 | `approvals` | `store.orders` | `PENDING` until a human decides, once. There is no auto-approve. |
 | `audit_log` | `store.audit` | Insert-only and hash-chained. `_id` is the sequence number. |
 | `kitchen_stock`, `covers`, `orders_history`, `deliveries`, `forecasts`, `kitchens`, `sharing` | `store.history` | Time series and consent; see below. |
-| `suppliers`, `recipes`, `menu_plans` | `store.repository` | Kitchen data (#81). `Repository.own_products` reads and writes own products in `products`, in the contract's own-product shape. |
+| `suppliers`, `recipes`, `menu_plans` | `store.repository` | Kitchen data in the contract's data shapes; see below. Own products are rows in `products`. |
 
 Money is `Decimal` in Python and `Decimal128` in Mongo; the wire format is a decimal
 string. `store.orders` refuses binary floats and the unknown-stock sentinels
@@ -90,6 +90,34 @@ Field paths were read from the real catalog, not guessed. What `flatten()` store
 | `base_unit` | 1,106 | Sold by weight: one base unit is one kilogram. |
 | `name` | 5,280 | Read from the product name ("1 l", "7X1,2KG"). A guess: check before relying on it. |
 | `None` | 1,829 | Unknown. |
+
+## Kitchen data
+
+`store.repository.Repository` keeps suppliers, recipes, menu plans and own products in
+the shapes of `docs/contract.md` ("Data shapes"). Every method takes the kitchen first
+and every query carries it, so one kitchen never reads or changes another kitchen's
+rows. Money and quantities go in as decimal strings and come out as `Decimal`.
+
+```python
+from store.repository import Repository
+
+repo = Repository(db)
+repo.suppliers.create("k1", {"supplier_id": "sup-valio", "name": "Valio Aimo",
+                             "adapter": "valio_api",
+                             "terms": {"free_delivery_threshold_eur": "300.00"}})
+repo.suppliers.update("k1", "sup-valio", {"terms": {"delivery_fee_eur": "25.00"}})  # other terms stay
+repo.recipes.create("k1", {"name": "Carrot soup", "ingredients": [
+    {"product_id": "460708", "qty_per_portion": "0.100", "unit": "KG", "yield_pct": "85"}]})
+repo.menu_plans.put("k1", "2026-W47", [
+    {"date": "2026-11-16", "meal": "lunch", "recipe_id": "rec-soup-1", "covers": 180}])
+repo.own_products.create("k1", {"name": "Rye loaf 800 g", "unit": "ST", "supplier_id": "sup-bakery",
+                                "base_unit": "KG", "pack_size_in_base_units": "0.8",
+                                "unit_price_eur": "4.20"})   # allergen_data defaults to UNKNOWN
+```
+
+`suppliers`, `recipes` and `own_products` have `create`, `get`, `list`, `update`, `delete`;
+`menu_plans` has `put` (replaces the week), `get`, `list`, `delete`. A supplier term that
+was never set is `None`: unknown, never zero.
 
 ## Search
 
