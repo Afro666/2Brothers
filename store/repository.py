@@ -1,35 +1,37 @@
-"""Kitchen data in MongoDB. The connection lives in `store.db`.
+"""Kitchen data in MongoDB, in the shapes of docs/contract.md ("Data shapes").
 
-Collections (shapes from issue #72):
-- suppliers: name, adapter (valio_api|manual|csv), free_delivery_threshold_eur,
-  delivery_fee_eur, order_days, cutoff_time, lead_time_days. Terms are user-set;
-  missing terms stay None, no default comes from Valio.
-- own products: rows in `products` with `source: "own"` and a `kitchen_id`, in the
-  common product row shape, so search covers them. `Repository.own_products` takes
-  and returns the contract's "Own product" shape.
-- recipes: name, items [{product_id, qty_per_portion}].
-- menu_plans: date (YYYY-MM-DD), meal, recipe_id, covers.
+- suppliers: `supplier_id`, `name`, `adapter`, `terms`. Terms are user-set; a missing
+  term stays None (unknown, never zero) and no default comes from Valio.
+- recipes: `recipe_id`, `name`, `portions`, `ingredients`.
+- menu plans: one document per kitchen and ISO week, replaced as a whole.
+- own products: rows in `products` with `source: "own"`, in the common product row
+  shape, so search covers them. They go in and out in the "Own product" shape.
 
-Documents use a string `id` (stored as Mongo `_id`). Functions return plain dicts.
+Every method takes the kitchen first, and every query carries it: one kitchen never
+reads or changes another kitchen's rows. Money and quantities are decimal strings on
+the wire and `Decimal` here; a binary float is refused. The connection lives in
+`store.db`.
 """
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal, InvalidOperation
 import os
+import re
 import uuid
-from typing import Any, Callable
+from typing import Callable
 
 from bson.decimal128 import Decimal128
 
 ADAPTERS = ("valio_api", "manual", "csv")
-SUPPLIER_TERMS = (
-    "free_delivery_threshold_eur",
-    "delivery_fee_eur",
-    "order_days",
-    "cutoff_time",
-    "lead_time_days",
-)
+WEEKDAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+MEALS = ("breakfast", "lunch", "dinner", "other")
+KITCHEN_UNITS = ("L", "KG", "PCS")
+SUPPLIER_TERMS = ("free_delivery_threshold_eur", "delivery_fee_eur", "order_days",
+                  "cutoff_time", "lead_time_days", "discount_tiers")
+_CLOCK = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+_WEEK = re.compile(r"\d{4}-W(0[1-9]|[1-4]\d|5[0-3])")
 
 
 def connect(db_name: str | None = None):
@@ -45,13 +47,6 @@ def _require(doc: dict, *fields: str) -> None:
         raise ValueError(f"missing fields: {', '.join(missing)}")
 
 
-def _check_supplier(doc: dict, partial: bool) -> None:
-    if not partial:
-        _require(doc, "name", "adapter")
-    if "adapter" in doc and doc["adapter"] not in ADAPTERS:
-        raise ValueError(f"adapter must be one of {ADAPTERS}")
-
-
 def _decimal(value, field: str) -> Decimal | None:
     """Decimal strings on the wire, `Decimal` in the store, never a binary float."""
     if value is None:
@@ -65,6 +60,99 @@ def _decimal(value, field: str) -> Decimal | None:
     if not number.is_finite() or number < 0:
         raise ValueError(f"{field} must be a nonnegative number")
     return number
+
+
+def _count(value, field: str, minimum: int = 0) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise ValueError(f"{field} must be an integer of at least {minimum}")
+    return value
+
+
+def _to_store(value):
+    """Decimal128 explicitly: a caller may pass a database without the store codec."""
+    if isinstance(value, dict):
+        return {key: _to_store(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_to_store(item) for item in value]
+    return Decimal128(value) if isinstance(value, Decimal) else value
+
+
+def _from_store(value):
+    if isinstance(value, dict):
+        return {key: _from_store(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_from_store(item) for item in value]
+    return value.to_decimal() if isinstance(value, Decimal128) else value
+
+
+def supplier_fields(data: dict) -> dict:
+    """Validate a supplier body. Any term may be missing or null: unknown, never zero."""
+    _require(data, "name", "adapter")
+    if data["adapter"] not in ADAPTERS:
+        raise ValueError(f"adapter must be one of {ADAPTERS}")
+    terms = data.get("terms") or {}
+    unknown = set(terms) - set(SUPPLIER_TERMS)
+    if unknown:
+        raise ValueError(f"unknown terms: {sorted(unknown)}")
+    days = terms.get("order_days")
+    if days is not None and (not isinstance(days, list) or set(days) - set(WEEKDAYS)):
+        raise ValueError(f"order_days must be a list of {WEEKDAYS}")
+    cutoff = terms.get("cutoff_time")
+    if cutoff is not None and not _CLOCK.fullmatch(str(cutoff)):
+        raise ValueError("cutoff_time must be HH:MM")
+    lead = terms.get("lead_time_days")
+    tiers = []
+    for tier in terms.get("discount_tiers") or []:
+        _require(tier, "min_qty", "unit", "unit_price_eur")
+        tiers.append({"product_id": tier.get("product_id"),  # None: every product
+                      "min_qty": _decimal(tier["min_qty"], "min_qty"), "unit": tier["unit"],
+                      "unit_price_eur": _decimal(tier["unit_price_eur"], "unit_price_eur")})
+    return {"name": str(data["name"]).strip(), "adapter": data["adapter"], "terms": {
+        "free_delivery_threshold_eur": _decimal(terms.get("free_delivery_threshold_eur"),
+                                                "free_delivery_threshold_eur"),
+        "delivery_fee_eur": _decimal(terms.get("delivery_fee_eur"), "delivery_fee_eur"),
+        "order_days": days, "cutoff_time": cutoff,
+        "lead_time_days": None if lead is None else _count(lead, "lead_time_days"),
+        "discount_tiers": tiers}}
+
+
+def recipe_fields(data: dict) -> dict:
+    """Validate a recipe body: products x quantity per portion, with an optional yield."""
+    _require(data, "name")
+    ingredients = []
+    for item in data.get("ingredients") or []:
+        _require(item, "product_id", "qty_per_portion", "unit")
+        quantity = _decimal(item["qty_per_portion"], "qty_per_portion")
+        if quantity <= 0:
+            raise ValueError("qty_per_portion must be positive")
+        if item["unit"] not in KITCHEN_UNITS:
+            raise ValueError(f"unit must be one of {KITCHEN_UNITS}")
+        usable = _decimal(item.get("yield_pct"), "yield_pct")  # None means 100
+        if usable is not None and not 0 < usable <= 100:
+            raise ValueError("yield_pct must be above 0 and at most 100")
+        ingredients.append({"product_id": str(item["product_id"]), "qty_per_portion": quantity,
+                            "unit": item["unit"], "yield_pct": usable})
+    return {"name": str(data["name"]).strip(),
+            "portions": _count(data.get("portions", 1), "portions", 1),
+            "ingredients": ingredients}
+
+
+def menu_days(week: str, days: list) -> list[dict]:
+    """Validate the days of one ISO week (`YYYY-Www`). Every date must fall in that week."""
+    if not _WEEK.fullmatch(str(week)):
+        raise ValueError("week must look like 2026-W47")
+    checked = []
+    for day in days or []:
+        _require(day, "date", "meal", "recipe_id")
+        iso = date.fromisoformat(str(day["date"])).isocalendar()
+        if f"{iso.year}-W{iso.week:02d}" != week:
+            raise ValueError(f"{day['date']} is not in week {week}")
+        if day["meal"] not in MEALS:
+            raise ValueError(f"meal must be one of {MEALS}")
+        checked.append({"date": str(day["date"]), "meal": day["meal"],
+                        "recipe_id": str(day["recipe_id"]),
+                        "covers": _count(day.get("covers"), "covers")})
+    return checked
 
 
 def own_product_row(data: dict, product_id: str) -> dict:
@@ -130,105 +218,123 @@ def own_product_out(row: dict | None) -> dict | None:
     }
 
 
+def _merge(current: dict, changes: dict, fixed: tuple) -> dict:
+    """Changes over the current row. A nested object (supplier `terms`) merges one
+    level deep, so changing one term does not wipe the others. `fixed` keys stay."""
+    merged = dict(current)
+    for key, value in changes.items():
+        if key in fixed:
+            continue
+        both = isinstance(value, dict) and isinstance(current.get(key), dict)
+        merged[key] = {**current[key], **value} if both else value
+    return merged
+
+
+class _Collection:
+    """Kitchen-scoped CRUD. `_id` is `<kitchen_id>:<id>`, so ids only need to be unique
+    inside one kitchen (two kitchens may both call a supplier `valio_aimo`)."""
+
+    def __init__(self, coll, id_key: str, fields: Callable[[dict], dict]):
+        self._coll, self._id_key, self._fields = coll, id_key, fields
+
+    def _out(self, doc: dict | None) -> dict | None:
+        if doc is None:
+            return None
+        doc = _from_store(doc)
+        doc.pop("_id")
+        return doc
+
+    def create(self, kitchen_id: str, data: dict) -> dict:
+        doc_id = str(data.get(self._id_key) or uuid.uuid4().hex[:12])
+        doc = {"_id": f"{kitchen_id}:{doc_id}", "kitchen_id": kitchen_id, self._id_key: doc_id,
+               **self._fields(data)}
+        self._coll.insert_one(_to_store(doc))
+        return self._out(doc)
+
+    def get(self, kitchen_id: str, doc_id: str) -> dict | None:
+        return self._out(self._coll.find_one({"_id": f"{kitchen_id}:{doc_id}"}))
+
+    def list(self, kitchen_id: str) -> list[dict]:
+        return [self._out(doc) for doc in self._coll.find({"kitchen_id": kitchen_id}).sort("_id")]
+
+    def update(self, kitchen_id: str, doc_id: str, changes: dict) -> dict | None:
+        current = self.get(kitchen_id, doc_id)
+        if current is None:
+            return None
+        merged = _merge(current, changes, ("kitchen_id", self._id_key))
+        doc = {"_id": f"{kitchen_id}:{doc_id}", "kitchen_id": kitchen_id, self._id_key: doc_id,
+               **self._fields(merged)}
+        self._coll.replace_one({"_id": doc["_id"]}, _to_store(doc))
+        return self._out(doc)
+
+    def delete(self, kitchen_id: str, doc_id: str) -> bool:
+        return self._coll.delete_one({"_id": f"{kitchen_id}:{doc_id}"}).deleted_count == 1
+
+
+class _MenuPlans:
+    """One document per kitchen and ISO week; `put` replaces the whole week."""
+
+    def __init__(self, coll):
+        self._coll = coll
+
+    def put(self, kitchen_id: str, week: str, days: list) -> dict:
+        doc = {"_id": f"{kitchen_id}:{week}", "kitchen_id": kitchen_id, "week": week,
+               "days": menu_days(week, days)}
+        self._coll.replace_one({"_id": doc["_id"]}, doc, upsert=True)
+        return {key: value for key, value in doc.items() if key != "_id"}
+
+    def get(self, kitchen_id: str, week: str) -> dict | None:
+        return self._coll.find_one({"_id": f"{kitchen_id}:{week}"}, {"_id": 0})
+
+    def list(self, kitchen_id: str) -> list[dict]:
+        return list(self._coll.find({"kitchen_id": kitchen_id}, {"_id": 0}).sort("week", 1))
+
+    def delete(self, kitchen_id: str, week: str) -> bool:
+        return self._coll.delete_one({"_id": f"{kitchen_id}:{week}"}).deleted_count == 1
+
+
 class _OwnProducts:
     """Own products live in `products`; this keeps the CRUD the other collections have."""
 
     def __init__(self, products):
         self._coll = products
 
-    def create(self, data: dict) -> dict:
-        row = own_product_row(data, data.get("product_id") or f"own-{uuid.uuid4().hex[:12]}")
+    def _query(self, kitchen_id: str, product_id: str) -> dict:
+        return {"_id": product_id, "source": "own", "kitchen_id": kitchen_id}
+
+    def create(self, kitchen_id: str, data: dict) -> dict:
+        row = own_product_row({**data, "kitchen_id": kitchen_id},
+                              data.get("product_id") or f"own-{uuid.uuid4().hex[:12]}")
         self._coll.insert_one(row)
         return own_product_out(row)
 
-    def get(self, product_id: str) -> dict | None:
-        return own_product_out(self._coll.find_one({"_id": product_id, "source": "own"}))
+    def get(self, kitchen_id: str, product_id: str) -> dict | None:
+        return own_product_out(self._coll.find_one(self._query(kitchen_id, product_id)))
 
-    def list(self, **filters: Any) -> list[dict]:
-        """Filter by `kitchen_id` and/or `supplier_id`."""
-        unknown = set(filters) - {"kitchen_id", "supplier_id"}
-        if unknown:
-            raise ValueError(f"unknown filters: {sorted(unknown)}")
-        rows = self._coll.find({**filters, "source": "own"}).sort("_id")
-        return [own_product_out(row) for row in rows]
+    def list(self, kitchen_id: str, supplier_id: str | None = None) -> list[dict]:
+        query = {"source": "own", "kitchen_id": kitchen_id}
+        if supplier_id is not None:
+            query["supplier_id"] = supplier_id
+        return [own_product_out(row) for row in self._coll.find(query).sort("_id")]
 
-    def update(self, product_id: str, changes: dict) -> dict | None:
-        current = self.get(product_id)
+    def update(self, kitchen_id: str, product_id: str, changes: dict) -> dict | None:
+        current = self.get(kitchen_id, product_id)
         if current is None:
             return None
-        merged = {**current, **{k: v for k, v in changes.items()
-                                if k not in ("product_id", "kitchen_id")}}
-        row = own_product_row(merged, product_id)
-        self._coll.replace_one({"_id": product_id, "source": "own"}, row)
+        row = own_product_row(_merge(current, changes, ("product_id", "kitchen_id")), product_id)
+        self._coll.replace_one(self._query(kitchen_id, product_id), row)
         return own_product_out(row)
 
-    def delete(self, product_id: str) -> bool:
-        return self._coll.delete_one({"_id": product_id, "source": "own"}).deleted_count == 1
-
-
-def _check_recipe(doc: dict, partial: bool) -> None:
-    if not partial:
-        _require(doc, "name")
-    for item in doc.get("items", []):
-        _require(item, "product_id", "qty_per_portion")
-        if item["qty_per_portion"] <= 0:
-            raise ValueError("qty_per_portion must be > 0")
-
-
-def _check_menu_plan(doc: dict, partial: bool) -> None:
-    if not partial:
-        _require(doc, "date", "meal", "recipe_id", "covers")
-    if "covers" in doc and (not isinstance(doc["covers"], int) or doc["covers"] < 0):
-        raise ValueError("covers must be an int >= 0")
-
-
-class _Collection:
-    def __init__(self, coll, check: Callable[[dict, bool], None], defaults: dict):
-        self._coll = coll
-        self._check = check
-        self._defaults = defaults
-
-    @staticmethod
-    def _out(doc: dict | None) -> dict | None:
-        if doc is None:
-            return None
-        doc = dict(doc)
-        doc["id"] = doc.pop("_id")
-        return doc
-
-    def create(self, data: dict) -> dict:
-        doc = {**self._defaults, **{k: v for k, v in data.items() if k not in ("id", "_id")}}
-        self._check(doc, False)
-        doc["_id"] = data.get("id") or uuid.uuid4().hex
-        self._coll.insert_one(doc)
-        return self._out(doc)
-
-    def get(self, doc_id: str) -> dict | None:
-        return self._out(self._coll.find_one({"_id": doc_id}))
-
-    def list(self, **filters: Any) -> list[dict]:
-        return [self._out(d) for d in self._coll.find(filters).sort("_id")]
-
-    def update(self, doc_id: str, changes: dict) -> dict | None:
-        changes = {k: v for k, v in changes.items() if k not in ("id", "_id")}
-        self._check(changes, True)
-        if not changes:
-            return self.get(doc_id)
-        result = self._coll.update_one({"_id": doc_id}, {"$set": changes})
-        return self.get(doc_id) if result.matched_count else None
-
-    def delete(self, doc_id: str) -> bool:
-        return self._coll.delete_one({"_id": doc_id}).deleted_count == 1
+    def delete(self, kitchen_id: str, product_id: str) -> bool:
+        return self._coll.delete_one(self._query(kitchen_id, product_id)).deleted_count == 1
 
 
 class Repository:
-    """CRUD for suppliers, own products, recipes and menu plans."""
+    """Suppliers, own products, recipes and menu plans of a kitchen."""
 
     def __init__(self, db=None):
         db = db if db is not None else connect()
-        self.suppliers = _Collection(
-            db["suppliers"], _check_supplier, {t: None for t in SUPPLIER_TERMS}
-        )
+        self.suppliers = _Collection(db["suppliers"], "supplier_id", supplier_fields)
+        self.recipes = _Collection(db["recipes"], "recipe_id", recipe_fields)
+        self.menu_plans = _MenuPlans(db["menu_plans"])
         self.own_products = _OwnProducts(db["products"])
-        self.recipes = _Collection(db["recipes"], _check_recipe, {"items": []})
-        self.menu_plans = _Collection(db["menu_plans"], _check_menu_plan, {})

@@ -88,8 +88,8 @@ class OwnProductSearch(unittest.TestCase):
             raise unittest.SkipTest("the search index is still building; run again in a minute")
         kitchen, word = f"test-kitchen-{uuid4().hex[:8]}", f"zyx{uuid4().hex[:8]}"
         repo = Repository(db)
-        product = repo.own_products.create({
-            "kitchen_id": kitchen, "name": f"Testi {word} loaf 800 g", "unit": "ST",
+        product = repo.own_products.create(kitchen, {
+            "name": f"Testi {word} loaf 800 g", "unit": "ST",
             "supplier_id": "test-supplier", "base_unit": "KG", "pack_size_in_base_units": "0.8",
             "unit_price_eur": "4.20", "allergen_data": "ENTERED",
             "allergens": [{"code": "AW", "level": "CONTAINS"}]})
@@ -109,4 +109,4 @@ class OwnProductSearch(unittest.TestCase):
             milk = search_products(db, "lactose free milk 1 l", limit=5, kitchen_id=kitchen)
             self.assertEqual(len(milk), 5)  # the catalog is still there for a kitchen
         finally:
-            self.assertTrue(repo.own_products.delete(product["product_id"]))
+            self.assertTrue(repo.own_products.delete(kitchen, product["product_id"]))
