@@ -3,6 +3,7 @@
 node_modules/
 __pycache__/
 *.egg-info/
+/.local/
 .venv/
 /dist/
 /build/
