@@ -22,6 +22,7 @@ from pymongo.errors import DuplicateKeyError
 from engine import AddableRow, Candidate, Item, KitchenParams, Offer, pack_info, plan_request, rank_addable
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
+from gateway.decision import decision_summary
 from store import audit, orders
 from store.audit import canonical
 from store.history import current_stock
@@ -203,6 +204,8 @@ class Gateway:
         self._audit(kitchen_id, "proposal_created", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], expected_total=sim["expected_total"],
                     verdict=sim["mandate"]["verdict"])
+        self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
+                    offer_id=offer["offer_id"], summary=self._summary(request, sim)["text"])
         return self._proposal_out(doc)
 
     def _proposal_out(self, doc: dict) -> dict:
@@ -210,7 +213,14 @@ class Gateway:
         return {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
-                **offer["simulation"]}
+                **offer["simulation"],
+                "decision_summary": self._summary(doc["request"], offer["simulation"])}
+
+    def _summary(self, request: dict, sim: dict) -> dict:
+        ids = {ln["product_id"] for ln in sim.get("lines") or []} | {e["product_id"] for e in sim.get("excluded") or []}
+        names = {d["_id"]: (d.get("names") or {}).get("en")
+                 for d in self.db.products.find({"_id": {"$in": sorted(ids)}}, {"names": 1})}
+        return decision_summary(request, sim, names)
 
     def get_proposal(self, kitchen_id: str, proposal_id: str) -> dict:
         doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id})
@@ -399,6 +409,8 @@ class Gateway:
         self.db.proposals.update_one({"_id": doc["_id"]}, {"$set": {"approval_id": approval["approval_id"]}})
         self._audit(kitchen_id, "approval_requested", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], expected_total=sim["expected_total"])
+        self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
+                    offer_id=offer["offer_id"], summary=self._summary(offer["request"], sim)["text"])
         return {"approval_id": approval["approval_id"], "proposal_id": doc["_id"], "status": "PENDING"}
 
     def tool_place_order(self, kitchen_id: str, body: dict) -> dict:

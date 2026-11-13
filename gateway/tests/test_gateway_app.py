@@ -132,7 +132,7 @@ def test_human_approves_order_is_placed_once(env):
         "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"})
     assert tool.status_code == 200 and tool.json()["order_id"] == order["order_id"]
     kinds = [e["kind"] for e in client.get(K + "/audit", headers=AGENT).json()["events"]]
-    assert kinds == ["proposal_created", "order_placed"]
+    assert kinds == ["proposal_created", "decision_summary", "order_placed"]
 
 
 def test_second_approve_with_other_key_during_first_places_one_order(env):
