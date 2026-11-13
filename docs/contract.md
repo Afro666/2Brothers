@@ -578,6 +578,48 @@ replaces it.
 - Every grant writes an audit event `share_granted`; every revoke writes `share_revoked`.
   Each carries `kitchen_id`, `supplier_id`, `scope`, the user and the time.
 
+## Daily weather and holiday signals
+
+`signals.weather` writes `daily_signals` through `store.signals`; forecast/engine
+consumers read through that repository, not MongoDB directly. Each snapshot has
+84 completed local days before `as_of`, and 14 days starting at `as_of`.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `kitchen_id` | string | Kitchen scope; callers supply the authenticated kitchen. |
+| `date`, `as_of` | `YYYY-MM-DD` strings | Signal day and issue date, in the kitchen timezone. |
+| `country`, `timezone` | strings | Holiday country (demo: `FI`) and IANA zone (`Europe/Helsinki`). |
+| `latitude`, `longitude` | numbers | Requested kitchen coordinates, degrees. |
+| `kind` | `model_history` or `forecast` | History before `as_of`; forecast on/after it. |
+| `weather.temperature_2m_max`, `weather.temperature_2m_min` | number or null | Daily maximum/minimum, degrees Celsius. |
+| `weather.precipitation_sum` | number or null | Daily precipitation, millimetres. |
+| `weather.weather_code` | number or null | WMO weather code. |
+| `weather_complete` | boolean | True only when all four weather fields are non-null. |
+| `is_weekend`, `is_public_holiday` | booleans | Separate calendar flags; neither implies a demand adjustment. |
+| `holiday_names` | string[] | Public holiday names in English; empty on ordinary days. |
+| `units` | object | Weather field keys mapped to `°C`, `°C`, `mm`, `wmo code`, respectively. |
+| `weather_source`, `holiday_source` | strings | `Open-Meteo` and `python-holidays/<installed-version>`. |
+| `source_url` | URL string | Weather request, including location, timezone and date window. |
+| `fetched_at` | ISO 8601 timestamp with offset | When this snapshot was collected. |
+
+These physical measurements use JSON numbers, not the decimal money strings used
+by purchasing. Null is unknown, never zero. Past weather is archived **model
+output**, not station observations or a historical forecast as issued then.
+
+The unique key is `(kitchen_id, date, as_of)`. Recollection on one issue date
+updates that vintage; a new issue date retains earlier vintages. Read exactly
+one issue date with:
+
+```python
+store.signals.list_daily(db, kitchen_id, start: date, end: date, *, as_of: date)
+```
+
+Returns a list of the rows above, sorted by `date`, without MongoDB `_id`.
+`start` and `end` are inclusive Python `datetime.date` values; `as_of` is required.
+Missing days remain missing, with no forward-fill or substitution from another
+vintage. Backtests must respect `fetched_at`: today's historical model rows are
+not evidence that those values were available to the buyer in the past.
+
 ## Reason codes
 
 Engine, gateway, web and agent use exactly these strings in `mandate.reason_codes`,
