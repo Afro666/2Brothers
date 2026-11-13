@@ -23,6 +23,17 @@ recomputed even on cache hits. Missing cutoffs or stock never produce an
 Later dates remain visible in the response for proposing a different delivery,
 but must not be treated as fulfilment of the original deadline.
 
+Unknown-stock policy (#48): `orderable` means the upstream data confirms a line
+can fulfil the requested delivery, not whether it may appear in a proposal.
+Terminal and Stock products with either sentinel remain in the returned
+`products`/`scheduleLines`, with `availableAmount: null`, `unknown_stock: true`
+and `orderable: false`, even with a future cutoff. Catalog discovery and proposal
+screens must keep these products visible and label the quantity as unconfirmed;
+they must not discard a product simply because this flag is false. A human can
+review the proposal, but supplier confirmation is required before placement.
+Allergen, delivery cutoff and other refusal guards still apply. A missing stock
+value is treated the same way; measured zero stock is unavailable, not unknown.
+
 Run offline tests: `python -m unittest discover -s gateway/tests -v`.
 Fixtures are small responses recorded from the challenge API, without credentials.
 
