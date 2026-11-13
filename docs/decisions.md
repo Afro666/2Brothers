@@ -8,3 +8,6 @@ One line each: `YYYY-MM-DD HH:MM – who – decision – why`.
 - 2026-11-13 21:15 – Aron – Status lives on the GitHub board (users/Afro666/projects/1) – one place for 3 people and their agents.
 - 2026-11-13 22:00 – team – Two-sided product: kitchen stock integration + Valio demand view from shared forecasts – Valio stand: they want to give the tool to customers and see what to buy.
 - 2026-11-13 22:00 – team – Deploy the app on a Verda CPU instance, MongoDB stays on Atlas – fits the Verda track.
+- 2026-11-13 23:30 – Aron – Tymon deploys the app as Docker containers on the Verda instance – he owns the stack end to end.
+- 2026-11-13 23:30 – Aron – The agent is called "Buyer"; the AfterQuery env shows where a frontier Buyer without the engine fails (docs/afterquery.md) – the gap is the entry.
+- 2026-11-13 23:30 – Aron – Our own API for kitchens and suppliers (docs/api.md); approve is human-only, never the agent's token – trust rule.
