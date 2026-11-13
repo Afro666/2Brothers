@@ -72,3 +72,41 @@ class SearchAcceptance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(os.environ.get("STORE_LIVE_TESTS") == "1", "set STORE_LIVE_TESTS=1")
+class OwnProductSearch(unittest.TestCase):
+    """Writes one own product for a made-up kitchen and removes it again."""
+
+    def test_an_own_product_is_found_by_its_kitchen_only(self):
+        import time
+        from uuid import uuid4
+        from store.repository import Repository
+
+        db = get_db()
+        if ensure_search_index(db) != "READY":
+            raise unittest.SkipTest("the search index is still building; run again in a minute")
+        kitchen, word = f"test-kitchen-{uuid4().hex[:8]}", f"zyx{uuid4().hex[:8]}"
+        repo = Repository(db)
+        product = repo.own_products.create({
+            "kitchen_id": kitchen, "name": f"Testi {word} loaf 800 g", "unit": "ST",
+            "supplier_id": "test-supplier", "base_unit": "KG", "pack_size_in_base_units": "0.8",
+            "unit_price_eur": "4.20", "allergen_data": "ENTERED",
+            "allergens": [{"code": "AW", "level": "CONTAINS"}]})
+        try:
+            for _ in range(30):  # Atlas Search indexes new rows within seconds
+                rows = search_products(db, word, kitchen_id=kitchen)
+                if rows:
+                    break
+                time.sleep(2)
+            self.assertEqual([row["product_id"] for row in rows], [product["product_id"]])
+            self.assertEqual(rows[0]["source"], "own")
+            self.assertEqual(rows[0]["net_content"], {"value": 0.8, "unit": "KG"})
+            self.assertEqual(search_products(db, word), [])
+            self.assertEqual(search_products(db, word, kitchen_id="another-kitchen"), [])
+            self.assertEqual(search_products(db, word, {"exclude_allergens": ["gluten"]},
+                                             kitchen_id=kitchen), [])
+            milk = search_products(db, "lactose free milk 1 l", limit=5, kitchen_id=kitchen)
+            self.assertEqual(len(milk), 5)  # the catalog is still there for a kitchen
+        finally:
+            self.assertTrue(repo.own_products.delete(product["product_id"]))
