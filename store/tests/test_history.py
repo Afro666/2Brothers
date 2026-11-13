@@ -138,14 +138,20 @@ class LiveHistoryTests(unittest.TestCase):
 
         self.assertEqual(history.supplier_demand(self.db, "valio_aimo", "900001", DAYS[0], DAYS[2]), [])
         history.set_sharing(self.db, "K01", "valio_aimo", True, "user-1")
+        one = history.supplier_demand(self.db, "valio_aimo", "900001", DAYS[0], DAYS[0])
+        self.assertEqual([(row["demand"], row["kitchens"]) for row in one], [(12.0, 1)])  # no floor
         history.set_sharing(self.db, "K02", "valio_aimo", True, "user-2")
-        # Two kitchens are not an aggregate: a supplier could work out each one's demand.
-        self.assertEqual(history.supplier_demand(self.db, "valio_aimo", "900001", DAYS[0], DAYS[2]), [])
         history.set_sharing(self.db, "K03", "valio_aimo", True, "user-3")
+        history.set_sharing(self.db, "K03", "valio_aimo", False, "user-3")  # K03 changes its mind
         shared = history.supplier_demand(self.db, "valio_aimo", "900001", DAYS[0], DAYS[2])
         self.assertEqual([(row["date"], row["demand"], row["kitchens"]) for row in shared],
-                         [(day, 36.0, 3) for day in DAYS])  # K04 did not consent
-        self.assertNotIn("kitchen_id", shared[0])
+                         [(day, 24.0, 2) for day in DAYS])
+        # Consenting kitchens are named; K03 (revoked) and K04 (never shared) appear nowhere.
+        self.assertEqual(shared[0]["by_kitchen"], [
+            {"kitchen_id": "K01", "kitchen_name": "Test kitchen K01", "demand": 12.0},
+            {"kitchen_id": "K02", "kitchen_name": "Test kitchen K02", "demand": 12.0}])
+        self.assertNotIn("by_kitchen", history.kitchen_demand(self.db, "K01", "900001",
+                                                              DAYS[0], DAYS[0])[0])
 
         history.save_forecasts(self.db, [{"kitchen_id": k, "product_id": "900001",
                                           "date": "2026-11-16", "need": "14.5", "unit": "L",
@@ -153,7 +159,7 @@ class LiveHistoryTests(unittest.TestCase):
         forecast = history.supplier_demand(self.db, "valio_aimo", "900001", "2026-11-16",
                                            "2026-11-16", source="forecast")
         self.assertEqual([(row["demand"], row["kitchens"]) for row in forecast],
-                         [(Decimal("43.5"), 3)])
+                         [(Decimal("29.0"), 2)])
 
 
 if __name__ == "__main__":
