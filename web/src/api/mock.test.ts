@@ -80,6 +80,20 @@ describe("mock API product search", () => {
   });
 });
 
+describe("mock API products by id", () => {
+  it("returns the catalog products in the requested order's place and leaves unknown ids out", async () => {
+    const api = createMockApi();
+    const found = await api.getProducts(["462775", "missing", "463335"]);
+
+    expect(found.map((product) => product.id)).toEqual(["462775", "463335"]);
+    expect(found[0].names.en).toBe("Arla 1 L lactose free fat free UHT milk drink");
+  });
+
+  it("returns nothing for an empty list", async () => {
+    expect(await createMockApi().getProducts([])).toEqual([]);
+  });
+});
+
 describe("mock API product search filters", () => {
   it("removes products with no allergen data only when the search is strict", async () => {
     const api = createMockApi();
