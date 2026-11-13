@@ -7,3 +7,4 @@ __pycache__/
 /build/
 .DS_Store
 /vendor/valio/
+/.claude/worktrees/

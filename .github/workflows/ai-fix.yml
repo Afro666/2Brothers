@@ -46,13 +46,24 @@ jobs:
           [ "$author" = "github-actions[bot]" ] && exit 0
           echo "Issue is not from the team. Skipping."; exit 1
 
+      - name: Skip if a fix PR is already open
+        id: open
+        run: |
+          n=$(gh pr list --head "ai-fix/$ISSUE" --state open --json number --jq 'length')
+          if [ "$n" != "0" ]; then
+            gh issue comment "$ISSUE" --body "A fix PR for this issue is already open (branch ai-fix/$ISSUE). Not starting a second run."
+            echo "skip=yes" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Git identity and branch
+        if: steps.open.outputs.skip != 'yes'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "ai-fix/$ISSUE"
 
       - name: Fix with Opus
+        if: steps.open.outputs.skip != 'yes'
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -75,9 +86,11 @@ jobs:
               `gh issue comment ${{ env.ISSUE }} --body "..."`.
 
       - name: Push, open PR, auto-merge, start review
+        if: steps.open.outputs.skip != 'yes'
         run: |
           if [ "$(git rev-list --count origin/main..HEAD)" = "0" ]; then echo "No commits. Nothing to open."; exit 0; fi
-          git push -u origin "ai-fix/$ISSUE"
+          # bot-owned branch; a stale one from an earlier failed run is replaced
+          git push --force -u origin "ai-fix/$ISSUE"
           title=$(gh issue view "$ISSUE" --json title --jq .title)
           url=$(gh pr create --base main --head "ai-fix/$ISSUE" --title "fix: $title" --body "Closes #$ISSUE. Opened by the Opus fix agent.")
           pr=${url##*/}

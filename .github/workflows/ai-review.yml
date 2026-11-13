@@ -95,6 +95,17 @@ jobs:
             gh workflow run ai-fix.yml -f issue="$n" && echo "fix agent started for #$n" || echo "could not start fix agent for #$n"
           done
 
+      - name: Hand a blocked fix-agent PR to a human
+        if: always() && steps.facts.outputs.issues == 'no'
+        run: |
+          v=$(tr -d '[:space:]' < verdict.txt 2>/dev/null || echo NONE)
+          [ "$v" = "PASS" ] && exit 0
+          head=$(gh pr view "$PR" --json headRefName --jq .headRefName)
+          issue=${head#ai-fix/}
+          gh pr close "$PR" --comment "Opus review: $v. Closing this fix-agent PR; the issue goes back to a human (label todo)."
+          gh issue edit "$issue" --remove-label ai-fix --add-label todo --add-assignee Afro666 || true
+          gh issue comment "$issue" --body "The fix agent's PR #$PR was blocked by the Opus review ($v). Handed to a human: see the review comment on #$PR." || true
+
       - name: Enforce verdict
         run: |
           test -f verdict.txt || { echo "No verdict written"; exit 1; }
