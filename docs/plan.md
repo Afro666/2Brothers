@@ -6,23 +6,21 @@ Status: draft, 2026-11-13 (before the opening). Owner: Aron.
 
 A restaurant's purchasing agent orders from Valio Aimo through a **trusted agent gateway**:
 the numbers come from a proven purchasing engine, the model chooses and explains, a human
-approves what is outside the mandate, and every step is in an audit log. We also ship the
-same world as an **RL environment** that shows where frontier agents fail at these decisions.
+approves what is outside the mandate, and every step is in an audit log. 
 
 ## Challenges we enter
 
 | Challenge | Role | Why it fits |
 |---|---|---|
 | **Valio Aimo – Trusted Trade Agents** (€4k) | **Main** | The whole product. |
-| AfterQuery – Break the Agent (€3k) | Second main, *only if Junction allows two* | Same world as a test bench; ask the info desk. |
-| Verda Compute Track ($10k credits) | Tech | Host Nemotron + fine-tune a small model on env rollouts. |
+| Verda Compute Track ($10k credits) | Tech | Host Nemotron and the app (Docker, deployed by GitHub Actions). |
 | NVIDIA Nemotron (RTX 5080) | Tech | Nemotron 3.5 Super VL is the buyer agent; VL reads delivery notes / menus. |
 | Context.dev – Fully Structured Web (€750) | Tech | Live food-recall and price monitors trigger re-plans. |
-| Aiven (€1k) or MongoDB Atlas (kit) | Tech | Audit log + order store. Aiven pays more. |
+| MongoDB Atlas (kit) | Tech | Suppliers, menus, history, audit log, order store. |
 | OpenAI – Best Use of Codex ($10k credits) | Tech | Maciek builds with Codex; log how. |
 | Entire (projector) | Tech | Our agent workflow. |
 
-Skip: Cala (founders/investors, no fit), Gemini/Gemma (we are on Nemotron), Solana.
+Skip: AfterQuery (dropped 2026-11-13 23:45: we stay with Valio), Cala, Aiven, CRACI, Gemini/Gemma, Solana.
 
 ## Valio Aimo scoring → what we build
 
@@ -113,24 +111,13 @@ question, answered from both sides.
 
 Data we must generate: synthetic order and stock history for ~20 kitchens (hotel, school,
 hospital, restaurant) over ~12 weeks, using real catalog products. The Kitchen Week sim
-(below) produces it, so one generator serves the demo, the forecasts and the RL env.
+(`env/`, below) produces it, so one generator serves the demo and the forecasts.
 Store history in MongoDB time-series collections.
 
-## The RL environment ("Kitchen Week", for AfterQuery)
+## Synthetic kitchen history (`env/`)
 
-- One simulated week of a restaurant, seeded: guests per day (weather/events), recipes,
-  stock with shelf life, Valio offers with lead times, a mid-week stock-out, MOV, approval rules.
-- Actions (MCP tools): the same gateway tools + `check_stock`, `forecast`, `wait_until`.
-- **Reward** = guest revenue served − food cost − waste − delivery fees
-  − stock-out penalty (lost covers) − large penalty for allergen violations or orders outside
-  the mandate. Lessons from the engine's backtests: report under-order (stock-out days) and
-  over-order (waste) as separate numbers too, and measure run-to-run noise first.
-- **Reference run** = the deterministic engine above. Classic purchasing logic should beat a
-  frontier LLM that guesses quantities. That gap is the point.
-- Do-nothing → no food, every cover lost, very negative. Stop-early → later days unserved.
-  Ordering everything → waste and the mandate penalty. Skipping approval → penalty.
-- Stretch (tiebreaker + Verda): fine-tune a small Nemotron on the reference trajectories on
-  Verda GPUs and show it closes part of the gap.
+AfterQuery is dropped (2026-11-13 23:45). The `env/` simulator stays as the generator of
+synthetic kitchen history (orders, stock, covers) for the forecast and the Valio demand view.
 
 ## Team split
 
@@ -138,21 +125,19 @@ Store history in MongoDB time-series collections.
 |---|---|---|
 | Aron | `gateway/` + `engine/` (Python, FastAPI, MCP) | wrap the Valio mock API; simulate + place_order with guards |
 | Tymon | `web/` (approval inbox, audit log, chef view; mobile-friendly) | screens on mock JSON from `docs/contract.md` |
-| Maciek (Codex) | `agent/` + `env/` (Nemotron on Verda, RL env) | Nemotron tool-calling loop against the gateway; env skeleton |
+| Maciek (Codex) | `agent/` + `env/` (Nemotron Buyer on Verda, history generator) | Nemotron tool-calling loop against the gateway |
 
 ## Timeline
 
-- Fri 18:00–21:00: opening, Valio + AfterQuery + Verda booths, get resources, **preliminary
+- Fri 18:00–21:00: opening, Valio + Verda booths, get resources, **preliminary
   submission by 23:59**.
 - Fri night: contract in `docs/contract.md`, skeletons, first end-to-end call to Valio mock.
 - Sat 12:00: **happy path works end to end** (milk example).
-- Sat 20:00: exceptions (partial stock, substitution, allergens), audit log UI, env baselines.
+- Sat 20:00: exceptions (partial stock, substitution, allergens), audit log UI, menu planner.
 - Sun 04:00: feature freeze. Then demo script, video, submission texts.
 - Sun 10:00: final submission.
 
 ## Open questions (ask at the booths)
 
-1. Junction info desk: can one project enter two main challenges (Valio + AfterQuery)?
-2. Valio: API docs and base URL (portal), rate limits, are recipes/allergens in the catalog?
-3. AfterQuery: harness format (Harbor + OpenCode over MCP), is a scripted reference allowed?
-4. Verda: which Nemotron endpoint/model name, and GPU access for fine-tuning.
+1. Valio: API docs and base URL (portal), rate limits, are recipes/allergens in the catalog?
+2. Verda: which Nemotron endpoint/model name, and GPU access for fine-tuning.

@@ -28,7 +28,7 @@ Codex reads `AGENTS.md`, which points here. One rule set for all agents.
 |---|---|---|
 | `gateway/` + `engine/` | Aron | MCP + OpenAPI gateway over Valio's mock API; purchasing engine (quantities, MOV, guards) |
 | `web/` | Tymon | Approval inbox, audit log, chef/buyer view; mobile-friendly |
-| `agent/` + `env/` | Maciek | Nemotron 3.5 Super VL buyer agent on Verda; RL env ("Kitchen Week") |
+| `agent/` + `env/` | Maciek | Nemotron 3.5 Super VL Buyer agent on Verda; synthetic kitchen history (`env/`) |
 
 See `docs/plan.md` for the full architecture and timeline.
 
