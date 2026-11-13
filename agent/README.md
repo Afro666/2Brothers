@@ -69,3 +69,9 @@ Verified live-model smoke test (2026-11-13): Nemotron selected `search_products`
 → `get_offer` → `simulate_order` → `request_approval` against the explicit mock
 gateway. The final result was `SENT_FOR_APPROVAL`, with eight structural audit
 events and a local JSONL trace. No live purchase or MongoDB write was performed.
+
+Recovery smoke test (2026-11-13, #67): an injected search call missing `filters`
+was rejected before dispatch. Live Nemotron corrected it from the sanitized
+feedback, then completed the milk proposal flow with `SENT_FOR_APPROVAL`.
+The mock received one valid search and recorded ten audit events, including the
+rejection. No live purchase or MongoDB write was performed.
