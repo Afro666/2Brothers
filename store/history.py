@@ -14,14 +14,18 @@ import argparse
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from pathlib import Path
+from uuid import uuid4
 
 from bson import json_util
 
+from store import audit
 from store.db import get_db
 
 SERIES = {"stock": "kitchen_stock", "covers": "covers", "orders": "orders_history",
           "deliveries": "deliveries"}
 _JSON = json_util.DEFAULT_JSON_OPTIONS.with_options(tz_aware=True)
+# A sum over fewer kitchens would show a supplier one kitchen's own demand.
+MIN_KITCHENS = 3
 
 
 def ensure_history_collections(db) -> None:
@@ -74,17 +78,38 @@ def load_history(db, directory: Path) -> dict[str, int]:
 # Consent: one record per kitchen and supplier (contract: "Consent record").
 
 def set_sharing(db, kitchen_id: str, supplier_id: str, share_forecast: bool,
-                granted_by: str) -> dict:
-    """Grant or revoke forecast sharing. `granted_by` is a human user, never the Buyer."""
-    if not granted_by:
-        raise ValueError("granted_by is required")
+                user: str) -> dict | None:
+    """Grant or revoke forecast sharing. `user` is a human, never the Buyer or an API key.
+
+    Every real change writes an audit entry (`share_granted` / `share_revoked`) with who
+    and when. Asking for the state that already holds changes nothing and logs nothing.
+    """
+    if not user:
+        raise ValueError("user is required")
+    key = {"kitchen_id": kitchen_id, "supplier_id": supplier_id}
+    current = db.sharing.find_one(key, {"_id": 0})
+    active = bool(current and current["share_forecast"] and current["revoked_at"] is None)
+    if active == bool(share_forecast):
+        return current
     now = datetime.now(timezone.utc)
-    change = ({"share_forecast": True, "granted_at": now, "granted_by": granted_by,
+    change = ({"share_forecast": True, "granted_at": now, "granted_by": user,
                "revoked_at": None} if share_forecast
-              else {"share_forecast": False, "revoked_at": now})
-    db.sharing.update_one({"kitchen_id": kitchen_id, "supplier_id": supplier_id},
-                          {"$set": {**change, "scope": "forecast_only"}}, upsert=True)
-    return db.sharing.find_one({"kitchen_id": kitchen_id, "supplier_id": supplier_id}, {"_id": 0})
+              else {"share_forecast": False, "revoked_at": now, "revoked_by": user})
+
+    def log() -> None:
+        audit.append_event(
+            db, {"event_id": uuid4().hex, **key, "scope": "forecast_only", "user": user,
+                 "type": "share_granted" if share_forecast else "share_revoked"},
+            server={"kitchen_id": kitchen_id, "principal": user})
+
+    # A grant is logged before it takes effect and a revoke after it: if the second
+    # write fails, the kitchen is never sharing without an audit entry.
+    if share_forecast:
+        log()
+    db.sharing.update_one(key, {"$set": {**change, "scope": "forecast_only"}}, upsert=True)
+    if not share_forecast:
+        log()
+    return db.sharing.find_one(key, {"_id": 0})
 
 
 def seed_sharing(db, kitchen_ids: list[str], supplier_id: str) -> list[str]:
@@ -150,13 +175,15 @@ def kitchen_demand(db, kitchen_id: str, product_id: str, start, end,
 
 
 def supplier_demand(db, supplier_id: str, product_id: str, start, end,
-                    source: str = "history") -> list[dict]:
+                    source: str = "history", min_kitchens: int = MIN_KITCHENS) -> list[dict]:
     """Daily demand summed over the kitchens that share their forecast with this supplier.
 
-    The rows say how many kitchens the sum covers, never which ones.
+    The rows say how many kitchens the sum covers, never which ones. A day backed by
+    fewer than `min_kitchens` kitchens is left out: it would not be an aggregate.
     """
     kitchens = consenting_kitchens(db, supplier_id)
-    return _demand(db, source, {"meta.kitchen_id": {"$in": kitchens}}, product_id, start, end)
+    rows = _demand(db, source, {"meta.kitchen_id": {"$in": kitchens}}, product_id, start, end)
+    return [row for row in rows if row["kitchens"] >= min_kitchens]
 
 
 def main() -> None:
