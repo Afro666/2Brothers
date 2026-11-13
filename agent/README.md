@@ -28,6 +28,21 @@ exact totals and one attempt per mutation. It generates stable order keys and
 never exposes approve, cancel, release or quantity-changing tools. The gateway
 must enforce all checks again. Unknown or malformed responses stop the run.
 
+Every order requires recorded human approval (#144, contract #143). Accepted
+mandate verdicts are `NEEDS_APPROVAL` and `REFUSED` only. The CLI requests a human
+decision and stops; it has no approval lookup and cannot place an order.
+
+An authenticated host that resumes approved work may supply the synchronous
+`Buyer(..., approval_lookup=...)` callback. It must fetch the stored approval
+through `store`, scoped to the authenticated kitchen and requested offer. The
+callback is application configuration, never a model argument or tool. Buyer
+requires a matching offer, `APPROVED` status, nonempty approval/decider IDs and a
+timezone-aware decision timestamp no later than now. Missing, pending, rejected
+or invalid records and lookup failures deny placement. The offer must still be
+valid, the exact total must still match simulation, and the gateway must verify
+the stored human decision again before committing. Buyer never records a human
+decision itself or treats a warning as approval.
+
 Read-only policy recovery (#67): when the buyer rejects `search_products`,
 `get_offer`, `simulate_order`, `get_order_status` or `get_audit_log` before
 dispatch, it audits the attempt and returns a fixed `POLICY_REJECTED` tool error
