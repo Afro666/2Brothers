@@ -24,13 +24,13 @@ Codex reads `AGENTS.md`, which points here. One rule set for all agents.
 
 ## Areas (who owns which folder)
 
-Filled in after the idea is picked. Until then, ask before you create a top-level folder.
-
 | Folder | Owner | What |
 |---|---|---|
-| `TBD` | Aron | |
-| `TBD` | Tymon | |
-| `TBD` | Maciek | |
+| `gateway/` + `engine/` | Aron | MCP + OpenAPI gateway over Valio's mock API; purchasing engine (quantities, MOV, guards) |
+| `web/` | Tymon | Approval inbox, audit log, chef/buyer view; mobile-friendly |
+| `agent/` + `env/` | Maciek | Nemotron 3.5 Super VL buyer agent on Verda; RL env ("Kitchen Week") |
+
+See `docs/plan.md` for the full architecture and timeline.
 
 ## Contracts
 
@@ -48,3 +48,16 @@ Filled in after the idea is picked. Until then, ask before you create a top-leve
 - A decision that other people must know goes in `docs/decisions.md`:
   one line, the date and time, who, and why.
 - Before a large change, read `docs/decisions.md` so you do not undo a choice.
+
+## Multi-model coding (optional, per person)
+
+- Codex CLI can run as a worker your Claude session delegates to. Plain `codex` uses
+  OpenAI/ChatGPT (the Junction $100 credit, login via `codex login`). `codex --profile
+  verda-kimi` and `codex --profile verda-deepseek` route to Kimi K3.1 Pro / DeepSeek V4.1
+  Flash on Verda's shared inference credits (same `VERDA_API_KEY`, different `model`).
+- Setup is per-machine: `~/.codex/config.toml` + `~/.codex/verda-kimi.config.toml` +
+  `~/.codex/verda-deepseek.config.toml`, your own ChatGPT login and `VERDA_API_KEY` in your
+  local `.env`. None of this is committed.
+- When set up, your Claude session can pick whichever of the three fits a subtask (Kimi for
+  harder/agentic work, DeepSeek Flash for cheap bulk work, Codex for general tasks), review
+  the result, and apply it itself — Claude stays the one writing files.
