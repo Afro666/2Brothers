@@ -69,6 +69,8 @@ Each entry requires `productId`, `salesBlock`, and `scheduleLines`;
 `closingTime` and `logisticModel` may be absent or null.
 
 - `closingTime` is the order cut-off for delivery on `availableDate`.
+  If `closingTime` is at or before now, that delivery cannot be fulfilled even
+  when `availableDate` matches the request. Interpret timestamps in Helsinki.
 - A product-level or schedule-level `salesBlock: true` means it cannot be ordered.
 - `scheduleLines` is empty when the product cannot currently be delivered on any
   date; otherwise the challenge returns exactly one line.
@@ -76,8 +78,26 @@ Each entry requires `productId`, `salesBlock`, and `scheduleLines`;
   `availableDate` may be absent or null. Its value is the earliest available date
   and can differ from the requested date.
 - `availableAmount` is expressed in `salesUnit`. Zero means unavailable.
-- Stock quantities are known. Terminal products use `999999` as an unknown-quantity
-  sentinel; this must not be presented as measured stock.
+- Both `999999` and `9999999999` are unknown-stock sentinels for any product type,
+  including Terminal and Stock. Neither is a measured quantity. Missing or null
+  stock also means unknown, not zero.
+
+#### Gateway availability normalization
+
+The raw Valio API above does not provide the following derived flags. The gateway
+adapter normalizes each schedule line with a sentinel, missing or null amount to
+`availableAmount: null`, `unknown_stock: true`, and `orderable: false`. This rule
+applies to both Terminal and Stock products even when their cutoff is in the
+future. Measured zero remains zero: unavailable, but not unknown.
+
+The adapter retains these products and schedule lines. UI and agent consumers
+must keep them visible in proposals, labelled as unconfirmed stock, rather than
+hide them because `orderable` is false. `orderable` describes confirmed upstream
+fulfilment for the requested deadline; it is not permission to show a proposal
+or consent to place an order. Supplier availability must be confirmed before
+placement; human approval alone does not confirm stock. Cutoff, delivery-date,
+sales-block and other refusal guards still apply. A true flag likewise does not
+bypass the required human approval or the gateway's placement checks.
 
 ### Static datasets
 
