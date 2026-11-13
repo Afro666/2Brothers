@@ -171,6 +171,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("private-rejected-query", feedback["content"])
         self.assertEqual([e["type"] for e in buyer.events[:2]], ["tool_call_started", "tool_call_finished"])
         self.assertIn("error", buyer.events[1]["result"])
+        self.assertEqual(buyer.events[1]["result"]["reason_code"], "SCHEMA_INVALID")
 
     async def test_all_read_only_policy_rejections_can_recover_without_dispatch(self):
         cases = []
@@ -209,6 +210,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len([r for r in mock.requests if r.url.path == "/tools/search_products"]), 1)
         self.assertNotIn("not-json", buyer.model.messages[1][-1]["content"])
         self.assertEqual(json.loads(buyer.model.messages[1][-1]["content"])["error"]["reason_code"], "MALFORMED_JSON")
+        self.assertEqual(buyer.events[1]["result"]["reason_code"], "MALFORMED_JSON")
 
     async def test_invalid_offer_reason_never_echoes_expiry_text(self):
         class InvalidExpiry(MockGateway):
