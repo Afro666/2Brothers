@@ -371,6 +371,41 @@ Order `status` is the supplier side of the order: `SENT`, `CONFIRMED`, `PARTIAL`
 interfaces": `CONFIRMED`, `NOT_SENT`, `UNCONFIRMED`, `SENT_READ_FAILED`. An outcome of
 `NOT_SENT` means no order exists at the supplier, so it has no order `status`.
 
+### Chef substitute choices
+
+A proposal may include `substitute_options` (default `[]`), up to three distinct
+engine-backed baskets considered after partial stock, unknown stock or a passed
+cutoff. Supplier-linked alternatives are considered before catalog fallback.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `tier` | `good`, `better`, `best` | Presentation order; not a guarantee that an option is superior. Fewer choices are allowed. |
+| `source` | `original`, `supplier`, `catalog` | Requested basket, supplier link, or catalog fallback. |
+| `offer_id` | string | This option's stored engine offer; refresh if expired. |
+| `expected_total`, `currency` | decimal string, `EUR` | Exact simulated total for this basket. |
+| `lines` | offer-line array | Engine-owned `product_id`, decimal-string `quantity`, `unit`, `why`, `unknown_stock`. |
+| `why` | string | Short deterministic explanation, including unknown stock/allergen data. |
+| `requires_chef_approval` | `true` | Choices never select, approve or place themselves. |
+| `stock_confirmed` | boolean | False if any line has unconfirmed stock. Approval cannot override it. |
+| `allergen_data_known` | boolean | False if any retained original line has unknown allergen data; never label it safe. |
+
+Options use the same trusted need/date. A partial-stock option can combine the
+original and substitute products so the engine converts the gap by base unit,
+not by assuming supplier packs are interchangeable. A candidate that the engine
+excludes (cutoff, wrong unit, etc.) is not offered. Selecting a preference is not
+an applied edit: re-simulate the selected basket and obtain human approval to its
+exact total through the existing workflow before placement.
+
+The trusted worker reads `kitchen_settings.excluded_allergens` through `store`:
+an explicit string array of supported allergen names/GS1 codes, including `[]`
+when the kitchen explicitly has no exclusions. Missing/malformed policy disables
+automatic substitute assessment. The model cannot supply or relax this policy.
+AW expands to the individual gluten cereals; GO oats remain distinct.
+CONTAINS, MAY_CONTAIN and UNDECLARED matches are refused. Unknown allergen data
+is excluded for substitutes and for restricted kitchens. An unrestricted
+kitchen's specifically requested original may remain visible as unknown for
+chef review. Own-product lookups remain scoped to that kitchen.
+
 ### Supplier side
 
 **We call them (adapter contract).** Each supplier is one adapter with the same five
