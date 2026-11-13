@@ -160,7 +160,7 @@ export function KitPage() {
 
         <Section id="approvals" title="ApprovalCard" usedIn="Approvals: the human's inbox">
           <div className="max-w-2xl">
-            <ApprovalCard request={approval} />
+            <ApprovalCard request={approval} order={orders.needsApproval} />
           </div>
         </Section>
 

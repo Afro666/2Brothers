@@ -5,12 +5,30 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
 
+function withConfirmedStock() {
+  const api = createMockApi();
+  const getOrder = api.getOrder;
+  api.getOrder = async (id) => {
+    const order = structuredClone(await getOrder(id));
+    order.lines.forEach((line) => { line.offer.availableAmount = line.quantity; });
+    return order;
+  };
+  return api;
+}
+
 describe("ApprovalsPage", () => {
+  it("keeps the milk proposal visible while awaiting stock confirmation", async () => {
+    renderApp("/approvals", createMockApi());
+    expect(await screen.findByRole("heading", { name: "Waiting for you (1)" })).toBeVisible();
+    expect(await screen.findByText(/Waiting for supplier stock confirmation/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
+  });
   beforeEach(() => localStorage.clear());
 
   it("shows the pending approval and its total, then reloads it under Decided", async () => {
     const user = userEvent.setup();
-    const api = createMockApi();
+    const api = withConfirmedStock();
     renderApp("/approvals", api);
 
     expect(await screen.findByRole("heading", { name: "Waiting for you (1)" })).toBeInTheDocument();
@@ -33,7 +51,7 @@ describe("ApprovalsPage", () => {
 
   it("keeps the approval waiting and shows the gateway error", async () => {
     const user = userEvent.setup();
-    const api = createMockApi();
+    const api = withConfirmedStock();
     api.failNextApprove("TOTAL_MISMATCH", "The total moved.");
     renderApp("/approvals", api);
 
