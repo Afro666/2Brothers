@@ -478,6 +478,34 @@ class Gateway:
         rows = rank_addable(candidates, self._params(kitchen_id))
         return {"proposal_id": proposal_id, "rows": [_addable_out(r) for r in rows], "skipped": skipped}
 
+    # ---- forecasts: prove the prediction (#275) ---------------------------------------
+
+    def forecast_accuracy(self, kitchen_id: str, start: str, end: str) -> dict:
+        """Past forecasts (as made the Monday before) against what the kitchen really needed."""
+        from engine.forecast import accuracy, accuracy_by_week
+        from store.history import forecast_vs_actual
+        d0, d1 = date.fromisoformat(start), date.fromisoformat(end)
+        if d1 < d0 or (d1 - d0).days > 400:
+            raise GatewayError(422, "INVALID_REQUEST", "from must be before to, at most 400 days")
+        out = {"kitchen_id": kitchen_id, "from": start, "to": end, "methods": {}}
+        for method, collection in (("engine", "forecasts"), ("weekday-average", "forecast_baseline")):
+            pairs = forecast_vs_actual(self.db, kitchen_id, d0, d1, collection)
+            out["methods"][method] = {"total": accuracy(pairs), "weeks": accuracy_by_week(pairs)}
+        return out
+
+    def forecast(self, kitchen_id: str, start: str, end: str) -> dict:
+        """The engine's forecast per product and day (future days: made today)."""
+        d0, d1 = date.fromisoformat(start), date.fromisoformat(end)
+        if d1 < d0 or (d1 - d0).days > 120:
+            raise GatewayError(422, "INVALID_REQUEST", "from must be before to, at most 120 days")
+        lo = datetime.combine(d0, datetime.min.time(), tzinfo=timezone.utc)
+        hi = datetime.combine(d1, datetime.max.time(), tzinfo=timezone.utc)
+        rows = self.db.forecasts.find({"meta.kitchen_id": kitchen_id, "ts": {"$gte": lo, "$lte": hi}}).sort("ts", 1)
+        return {"kitchen_id": kitchen_id, "lines": [
+            {"product_id": r["meta"]["product_id"], "date": r["ts"].date().isoformat(),
+             "need": f"{Decimal(str(r['need'])).normalize():f}", "unit": r["unit"],
+             "made_on": r.get("made_on"), "why": r.get("why")} for r in rows]}
+
     def audit_log(self, kitchen_id: str) -> list[dict]:
         return [{"seq": e["seq"], **e["event"], "at": e["server"].get("at")}
                 for e in audit.list_events(self.db, kitchen_id=kitchen_id)]
