@@ -209,6 +209,7 @@ class Buyer:
         messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": json.dumps({
             "request": request, "need_id": self.need_id, "requested_date": self.requested_date, "run_id": self.run_id})}]
         count = 0
+        rejections = 0  # consecutive read-only policy rejections
         for _ in range(self.max_steps):
             try:
                 message = await self.model.complete(messages, definitions)
@@ -266,12 +267,16 @@ class Buyer:
                     return self.final("CANNOT_FULFIL", "Audit unavailable; human reconciliation required", reconciliation_required=True)
                 if error:
                     if policy_rejected and name in READ_ONLY_TOOLS:
+                        rejections += 1
+                        if rejections >= 3:
+                            return self.final("CANNOT_FULFIL", "Repeated policy rejections")
                         messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
                             "error": {"code": "POLICY_REJECTED", "message": error,
                                       "reason_code": reason_code.value,
                                       "retryable": True}})})
                         continue
                     return self.final("CANNOT_FULFIL", error, reconciliation_required=bool(self.mutations))
+                rejections = 0
                 if name == "request_approval":
                     if result.get("status") == "PENDING" and result.get("approval_id"):
                         sim = self.simulations[args["offer_id"]]

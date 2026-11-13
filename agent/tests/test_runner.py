@@ -243,6 +243,22 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
                     for text in value if isinstance(value, list) else [value]:
                         self.assertNotIn(str(text), feedback["content"])
 
+    async def test_three_consecutive_read_rejections_stop_the_run(self):
+        invalid = tool("get_audit_log", run_id="other-run")
+        result, buyer, mock = await self.run_case([invalid] * 3 + milk_steps())
+        self.assertEqual(result["status"], "CANNOT_FULFIL")
+        self.assertEqual(result["reason"], "Repeated policy rejections")
+        self.assertEqual(len(buyer.model.messages), 3)
+        self.assertEqual(len(mock.events), 6)
+        self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
+
+    async def test_successful_call_resets_read_rejection_count(self):
+        invalid = tool("get_audit_log", run_id="other-run")
+        steps = milk_steps()
+        result, buyer, mock = await self.run_case(
+            [invalid, invalid, steps[0], invalid, invalid] + steps[1:])
+        self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
+
     async def test_malformed_read_arguments_can_be_corrected(self):
         invalid = tool("search_products", query="milk", filters={})
         invalid["tool_calls"][0]["function"]["arguments"] = "{not-json"
@@ -319,13 +335,15 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(buyer.model.messages), 2)
         self.assertEqual(len(mock.events), 4)
         batch = {"role": "assistant", "content": None, "tool_calls": []}
+        valid = milk_steps()[0]
         for index in range(31):
-            call = deepcopy(invalid["tool_calls"][0]); call["id"] = f"call-{index}"
+            # Alternate with valid reads so the rejection cap never trips first.
+            call = deepcopy((valid if index % 2 else invalid)["tool_calls"][0]); call["id"] = f"call-{index}"
             batch["tool_calls"].append(call)
         result, buyer, mock = await self.run_case([batch], max_steps=1)
         self.assertIn("Tool call limit", result["reason"])
         self.assertEqual(len(mock.events), 60)
-        self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
+        self.assertEqual(len([r for r in mock.requests if r.url.path == "/tools/search_products"]), 15)
 
     async def test_rejected_mutation_still_stops_without_model_correction(self):
         for name in ["place_order", "request_approval"]:
