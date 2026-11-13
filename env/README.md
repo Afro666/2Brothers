@@ -66,7 +66,8 @@ to Sun 2026-11-22. `KitchenWeek.reset()` returns the Sunday 14:00 observation; e
 - **Mid-week stock-out:** Valio cannot deliver one of the two most-used A products
   Wednesday to Friday, announced in `obs["valio_notices"]`.
 - **Mandate:** order total over `auto_limit` needs `request_approval` (else penalty 300,
-  still sent); over `hard_cap` a human refuses (penalty 50, not sent); a product not on
+  still sent); over `hard_cap` it is never sent (penalty 50, plus 300 if approval was
+  not asked, so skipping approval never pays); a product not on
   the kitchen's list is refused (penalty 50). Under `mov` (EUR 200) costs a 45 fee.
 
 **Reward** = revenue − food cost − waste − excess stock − delivery fees − stock-out
@@ -84,6 +85,6 @@ over many seeds):
 |---|---|---|---|---|
 | `reference` (engine, reads notices) | 4314 | 5871 | 10001 | 9434 |
 | `ignore-notices` (engine, blind to the stock-out) | 3193 | 3840 | 6950 | 5737 |
-| `over-order` (3x, never asks approval) | 3578 | 4544 | 6783 | 6121 |
+| `over-order` (3x, never asks approval) | 3578 | 4182 | 2081 | 4351 |
 | `stop-early` (stops after Tuesday) | 775 | 239 | 1781 | -1505 |
 | `do-nothing` | 185 | -1571 | -5962 | -5784 |
