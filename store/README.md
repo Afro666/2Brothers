@@ -149,9 +149,10 @@ from store import history
 
 history.kitchen_demand(db, "K01", "463171", "2026-11-02", "2026-11-08")
 # [{"product_id": "463171", "date": "2026-11-02", "unit": "L", "demand": 117.1, "kitchens": 1}, ...]
-history.set_sharing(db, "K01", "valio_aimo", True, granted_by="user-42")   # a human grants
+history.set_sharing(db, "K01", "valio_aimo", True, user="user-42")   # a human grants; audited
 history.supplier_demand(db, "valio_aimo", "463171", "2026-11-02", "2026-11-08")
-# the same rows, summed over the kitchens with active consent; never which kitchens
+# the same rows, summed over the kitchens with active consent; never which kitchens,
+# and no row backed by fewer than 3 kitchens
 ```
 
 Demand from history is what the kitchen used plus what it could not serve (`used` +
