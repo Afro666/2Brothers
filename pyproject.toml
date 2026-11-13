@@ -18,6 +18,7 @@ two-brothers-agent = "agent.__main__:main"
 
 [tool.setuptools.package-data]
 store = ["*.json"]
+signals = ["*.json"]
 
 [tool.setuptools.packages.find]
 include = ["gateway*", "agent*", "store*", "signals*"]
