@@ -134,7 +134,7 @@ class Buyer:
                 expiry = datetime.fromisoformat(offer["valid_until"].replace("Z", "+00:00"))
                 if expiry.tzinfo is None or expiry <= self.now():
                     raise ValueError()
-            except (KeyError, TypeError, ValueError):
+            except (KeyError, TypeError, ValueError, AttributeError):
                 raise PolicyError("Offer is expired or has no valid expiry", PolicyReason.OFFER_INVALID) from None
         if name in {"place_order", "request_approval"}:
             offer_id = args["offer_id"]

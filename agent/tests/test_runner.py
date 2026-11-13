@@ -10,7 +10,7 @@ import httpx
 from mcp.shared.memory import create_connected_server_and_client_session
 
 from agent.model import ModelError, Nemotron
-from agent.runner import Buyer
+from agent.runner import Buyer, PolicyError, PolicyReason
 from gateway.mcp_server import GatewayClient, build_server
 from gateway.mock_gateway import MockGateway
 
@@ -166,6 +166,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(feedback["tool_call_id"], invalid["tool_calls"][0]["id"])
         error = json.loads(feedback["content"])["error"]
         self.assertEqual(error["code"], "POLICY_REJECTED")
+        self.assertEqual(error["reason_code"], "SCHEMA_INVALID")
         self.assertTrue(error["retryable"])
         self.assertNotIn("private-rejected-query", feedback["content"])
         self.assertEqual([e["type"] for e in buyer.events[:2]], ["tool_call_started", "tool_call_finished"])
@@ -173,21 +174,32 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_all_read_only_policy_rejections_can_recover_without_dispatch(self):
         cases = []
-        for change in [{"need_id": "other"}, {"requested_date": "2026-11-17"}, {"product_ids": ["invented"]}]:
+        for change, reason in [({"need_id": "other"}, "NEED_MISMATCH"),
+                               ({"requested_date": "2026-11-17"}, "DATE_MISMATCH"),
+                               ({"product_ids": ["invented"]}, "UNKNOWN_ID")]:
             args = {"product_ids": ["462775"], "requested_date": "2026-11-16", "need_id": "milk-need-1", **change}
-            cases.append((milk_steps()[:1], tool("get_offer", **args), milk_steps()[1:], "/tools/get_offer", 1))
+            cases.append((milk_steps()[:1], tool("get_offer", **args), milk_steps()[1:], "/tools/get_offer", 1, reason))
         cases.extend([
-            (milk_steps()[:2], tool("simulate_order", offer_id="invented"), milk_steps()[2:], "/tools/simulate_order", 1),
-            ([], tool("get_order_status", order_id="other-order"), milk_steps(), "/tools/get_order_status", 0),
-            ([], tool("get_audit_log", run_id="other-run"), milk_steps(), "/tools/get_audit_log", 0),
+            (milk_steps()[:2], tool("simulate_order", offer_id="invented"), milk_steps()[2:], "/tools/simulate_order", 1, "UNKNOWN_ID"),
+            ([], tool("get_order_status", order_id="other-order"), milk_steps(), "/tools/get_order_status", 0, "UNKNOWN_ID"),
+            ([], tool("get_audit_log", run_id="other-run"), milk_steps(), "/tools/get_audit_log", 0, "RUN_MISMATCH"),
         ])
-        for prefix, invalid, suffix, path, dispatched in cases:
+        for prefix, invalid, suffix, path, dispatched, reason in cases:
             with self.subTest(tool=invalid["tool_calls"][0]["function"]):
                 result, buyer, mock = await self.run_case(prefix + [invalid] + suffix)
                 self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
                 self.assertEqual(len([r for r in mock.requests if r.url.path == path]), dispatched)
                 feedback = buyer.model.messages[len(prefix) + 1][-1]
-                self.assertEqual(json.loads(feedback["content"])["error"]["code"], "POLICY_REJECTED")
+                error = json.loads(feedback["content"])["error"]
+                self.assertEqual(error["code"], "POLICY_REJECTED")
+                self.assertEqual(error["reason_code"], reason)
+                self.assertEqual(buyer.events[2 * len(prefix) + 1]["result"]["reason_code"], reason)
+                rejected_args = json.loads(invalid["tool_calls"][0]["function"]["arguments"])
+                for key, value in rejected_args.items():
+                    # Even trusted values and field names are absent from the fixed error.
+                    self.assertNotIn(key, feedback["content"])
+                    for text in value if isinstance(value, list) else [value]:
+                        self.assertNotIn(str(text), feedback["content"])
 
     async def test_malformed_read_arguments_can_be_corrected(self):
         invalid = tool("search_products", query="milk", filters={})
@@ -196,6 +208,53 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
         self.assertEqual(len([r for r in mock.requests if r.url.path == "/tools/search_products"]), 1)
         self.assertNotIn("not-json", buyer.model.messages[1][-1]["content"])
+        self.assertEqual(json.loads(buyer.model.messages[1][-1]["content"])["error"]["reason_code"], "MALFORMED_JSON")
+
+    async def test_invalid_offer_reason_never_echoes_expiry_text(self):
+        class InvalidExpiry(MockGateway):
+            def __init__(self, expiry):
+                super().__init__(); self.expiry = expiry
+            def __call__(self, request):
+                response = super().__call__(request)
+                if request.url.path == "/tools/get_offer":
+                    data = response.json(); data["valid_until"] = self.expiry
+                    if self.expiry == "__missing__":
+                        del data["valid_until"]
+                    return httpx.Response(200, json=data)
+                return response
+        for expiry in ["2000-01-01T00:00:00Z", "private-upstream-expiry-marker", None, "__missing__", 42, "2099-01-01T00:00:00"]:
+            with self.subTest(expiry=expiry):
+                steps = milk_steps()[:3] + [{"role": "assistant", "content": "stop"}]
+                result, buyer, mock = await self.run_case(steps, InvalidExpiry(expiry))
+                self.assertEqual(result["status"], "CANNOT_FULFIL")
+                feedback = buyer.model.messages[3][-1]["content"]
+                self.assertEqual(json.loads(feedback)["error"]["reason_code"], "OFFER_INVALID")
+                self.assertNotIn(str(expiry), feedback)
+                self.assertNotIn("/tools/simulate_order", [r.url.path for r in mock.requests])
+
+    async def test_bad_json_type_or_missing_arguments_uses_safe_schema_code(self):
+        for arguments in [{"private-model-marker": True}, None]:
+            invalid = tool("search_products", query="milk", filters={})
+            if arguments is None:
+                del invalid["tool_calls"][0]["function"]["arguments"]
+            else:
+                invalid["tool_calls"][0]["function"]["arguments"] = arguments
+            result, buyer, mock = await self.run_case([invalid] + milk_steps())
+            self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
+            feedback = buyer.model.messages[1][-1]["content"]
+            self.assertEqual(json.loads(feedback)["error"]["reason_code"], "SCHEMA_INVALID")
+            self.assertNotIn("private-model-marker", feedback)
+
+    async def test_exception_text_and_non_enum_codes_cannot_enter_feedback(self):
+        with self.assertRaises(ValueError):
+            PolicyError("message", "private-unapproved-code")
+        with patch.object(Buyer, "authorize", side_effect=PolicyError("private-exception-marker")):
+            result, buyer, mock = await self.run_case([milk_steps()[0], {"role": "assistant", "content": "stop"}])
+        feedback = buyer.model.messages[1][-1]["content"]
+        self.assertEqual(json.loads(feedback)["error"]["reason_code"], PolicyReason.POLICY_VIOLATION.value)
+        self.assertNotIn("private-exception-marker", feedback)
+        self.assertNotIn("private-exception-marker", json.dumps(buyer.events))
+        self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
 
     async def test_rejected_read_in_a_batch_keeps_tool_results_paired(self):
         invalid = tool("search_products", query="milk")
