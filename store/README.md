@@ -128,6 +128,7 @@ history (20 kitchens, 12 weeks) with:
 ```bash
 python -m env.history --seed 1     # writes env/out/history/*.jsonl (git-ignored)
 python -m store.history            # about one minute; safe to run again
+python -m store.history --share-with valio_aimo   # demo: 16 of the 20 kitchens consent
 ```
 
 | Collection | One row per | From |
@@ -155,7 +156,9 @@ history.supplier_demand(db, "valio_aimo", "463171", "2026-11-02", "2026-11-08")
 
 Demand from history is what the kitchen used plus what it could not serve (`used` +
 `short`). Pass `source="forecast"` to read the engine's `forecasts` instead. A supplier
-sees nothing until a kitchen shares: no consent is seeded.
+sees nothing until a kitchen shares. `--share-with` seeds demo consent for four in five
+synthetic kitchens, recorded as granted by `synthetic-seed`; every fifth is held back so
+the consent rule shows.
 
 ## Tests
 
