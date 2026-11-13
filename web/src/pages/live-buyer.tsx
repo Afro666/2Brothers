@@ -5,6 +5,7 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { ChefRequestBox } from "@/components/purchasing/chef-request-box";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { formatEur } from "@/lib/format";
 import type { ChefRequest } from "@/types";
 
@@ -15,6 +16,8 @@ interface Proposal {
   total_ex_vat: string;
   buyer_model: string;
   lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
+  substitute_options?: { tier: string; expected_total: string; why: string; stock_confirmed: boolean;
+    allergen_data_known: boolean; requires_chef_approval: true; lines: Proposal['lines'] }[];
 }
 
 function proposal(value: unknown): Proposal {
@@ -28,6 +31,14 @@ function proposal(value: unknown): Proposal {
   }
   mapMoney(row.expected_total);
   mapMoney(row.total_ex_vat);
+  if (row.substitute_options !== undefined) {
+    if (!Array.isArray(row.substitute_options) || row.substitute_options.length > 3) throw new Error("Invalid substitute choices.");
+    for (const option of row.substitute_options) {
+      if (!option || !['good', 'better', 'best'].includes(option.tier) || typeof option.why !== 'string' ||
+          option.requires_chef_approval !== true || !Array.isArray(option.lines)) throw new Error("Invalid substitute choice.");
+      mapMoney(option.expected_total);
+    }
+  }
   return row;
 }
 
@@ -36,6 +47,7 @@ export function LiveBuyerRequests() {
   const keys = useRef(new Map<string, string>());
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<Proposal | null>(null);
+  const [preferred, setPreferred] = useState<string | null>(null);
 
   async function submit(request: ChefRequest) {
     const identity = JSON.stringify([request.text.trim(), request.deliveryDate]);
@@ -48,6 +60,7 @@ export function LiveBuyerRequests() {
     }
     setPending(true);
     setResult(null);
+    setPreferred(null);
     try {
       const kitchen = import.meta.env.VITE_GATEWAY_KITCHEN_ID || "demo-kitchen";
       const response = await gatewayRequest("/api", `/v1/kitchens/${encodeURIComponent(kitchen)}/proposals`, {
@@ -83,6 +96,22 @@ export function LiveBuyerRequests() {
                 </li>
               ))}</ul>
               <p>No order has been placed. This proposal and the Buyer’s steps are recorded for human review.</p>
+              {result.substitute_options?.length ? (
+                <section className="space-y-3" aria-label="Chef substitute choices">
+                  <h2 className="font-semibold">Other baskets for the chef to consider</h2>
+                  {result.substitute_options.map((option) => (
+                    <div key={option.tier} className="space-y-2 rounded-md border p-3">
+                      <p className="font-medium">{option.tier} · {formatEur(mapMoney(option.expected_total))}</p>
+                      <p>{option.why}</p>
+                      <p>{option.lines.map((line) => `${line.quantity} ${line.unit} of ${line.product_id}`).join('; ')}</p>
+                      <Button variant="outline" aria-pressed={preferred === option.tier} onClick={() => setPreferred(option.tier)}>
+                        Prefer {option.tier}
+                      </Button>
+                    </div>
+                  ))}
+                  {preferred ? <p role="status">Preferred: {preferred}. This preference has not changed or approved an order. Re-simulate the chosen basket before human approval.</p> : null}
+                </section>
+              ) : null}
             </CardContent>
           </Card>
         ) : null}

@@ -20,6 +20,18 @@ describe('live Buyer request page', () => {
   beforeEach(() => vi.stubEnv('VITE_LIVE_BUYER', 'true'));
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
+  it('shows engine-backed chef options as preferences without applying a mutation', async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ ...ready, substitute_options: [{
+      tier: 'better', expected_total: '1329.04', why: 'Supplier-linked substitute sized by the engine.',
+      stock_confirmed: false, allergen_data_known: false, requires_chef_approval: true, lines: ready.lines,
+    }] })));
+    vi.stubGlobal('fetch', fetch);
+    const user = await fill();
+    await user.click(await screen.findByRole('button', { name: 'Prefer better' }));
+    expect(screen.getByText(/This preference has not changed or approved an order/)).toBeVisible();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('sends the request to the real gateway without a browser key and shows exact returned figures', async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify(ready)));
     vi.stubGlobal('fetch', fetch);
