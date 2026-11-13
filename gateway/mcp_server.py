@@ -36,10 +36,11 @@ def _error_code(response: httpx.Response) -> str | None:
 
 
 class GatewayClient:
-    def __init__(self, base_url: str | None = None, *, transport=None):
+    def __init__(self, base_url: str | None = None, *, transport=None, token=None):
         self.http = httpx.AsyncClient(
             base_url=(base_url or os.environ.get("GATEWAY_BASE_URL", "http://127.0.0.1:8000")).rstrip("/"),
             timeout=20, transport=transport, follow_redirects=False, trust_env=False,
+            headers={"Authorization": "Bearer " + token} if token else {},
         )
 
     async def close(self):

@@ -33,6 +33,21 @@ services:
       GATEWAY_AGENT_TOKEN: ${GATEWAY_AGENT_TOKEN:?set GATEWAY_AGENT_TOKEN in .env}
       GATEWAY_HUMAN_TOKEN: ${GATEWAY_HUMAN_TOKEN:?set GATEWAY_HUMAN_TOKEN in .env}
       GATEWAY_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}
+      BUYER_WORKER_URL: http://buyer:8001
+
+  # Internal worker: no human token, upstream Valio key or published port.
+  buyer:
+    build:
+      context: ..
+      dockerfile: gateway/Dockerfile
+    command: ["two-brothers-buyer-worker"]
+    restart: unless-stopped
+    environment:
+      VERDA_INFERENCE_KEY: ${VERDA_INFERENCE_KEY:?set VERDA_INFERENCE_KEY in .env}
+      MONGODB_URI: ${MONGODB_URI:?set MONGODB_URI in .env}
+      GATEWAY_AGENT_TOKEN: ${GATEWAY_AGENT_TOKEN:?set GATEWAY_AGENT_TOKEN in .env}
+      GATEWAY_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}
+      GATEWAY_BASE_URL: http://gateway:8000
 
 volumes:
   caddy_data:

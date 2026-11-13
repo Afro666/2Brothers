@@ -49,7 +49,7 @@ def principal(request: Request) -> Principal:
     raise GatewayError(401, "UNAUTHENTICATED", "a valid bearer token is required")
 
 
-def create_app(gateway: Gateway | None = None) -> FastAPI:
+def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     app = FastAPI(title="Trusted Kitchen Buyer gateway", version="0.1.0")
     state: dict[str, Gateway] = {}
 
@@ -89,7 +89,11 @@ def create_app(gateway: Gateway | None = None) -> FastAPI:
 
     @app.post(k + "/proposals")
     async def create_proposal(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
-        return gw().create_proposal(kitchen_id, await body(request), who.name)
+        data = await body(request)
+        if 'text' in data and 'product_ids' not in data:
+            from gateway.buyer_worker import run_buyer
+            return await (buyer_worker or run_buyer)(kitchen_id, data)
+        return gw().create_proposal(kitchen_id, data, who.name)
 
     @app.get(k + "/proposals")
     def list_proposals(kitchen_id: str, who: Principal = Depends(principal)):
