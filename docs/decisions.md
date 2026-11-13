@@ -15,3 +15,4 @@ One line each: `YYYY-MM-DD HH:MM – who – decision – why`.
 - 2026-11-13 23:00 – Aron – No auto-approve: the agent proposes every order, a human approves it – trust; the buyer stays in control.
 - 2026-11-13 23:00 – Aron – Supplier terms (MOV, delivery fee, order days, cut-off) are user-set per supplier; demo values are placeholders – they differ per client and supplier.
 - 2026-11-13 23:00 – Aron – Multi-supplier, own products, recipes, menu and week planning, future demand from the menu plan – a kitchen buys from more than Valio and plans by menu.
+- 2026-11-13 23:00 – Tymon, #24 – `store/` is the one package that talks to MongoDB (sync `pymongo`); money is `Decimal` in Python and `Decimal128` in Mongo; the audit log is insert-only and hash-chained – gateway and agent import `store`, so the database can be swapped in one place and an audit entry cannot be changed unnoticed.
