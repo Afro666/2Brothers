@@ -46,7 +46,7 @@ export const planningOwnProducts: OwnProduct[] = [
   {
     id: "OWN-RYE",
     name: "Rye bread loaf",
-    unit: "loaf",
+    unit: "PCS",
     packSize: 1,
     priceEur: 4.2,
     supplierId: "SUP-BAKERY",
@@ -55,7 +55,7 @@ export const planningOwnProducts: OwnProduct[] = [
   {
     id: "OWN-BUN",
     name: "Cinnamon bun",
-    unit: "each",
+    unit: "PCS",
     packSize: 1,
     priceEur: 2.1,
     supplierId: "SUP-BAKERY",
@@ -84,7 +84,7 @@ export const planningRecipes: Recipe[] = [
     items: [
       { productId: "OWN-SALMON", productName: "Salmon fillet", unit: "KG", qtyPerPortion: 0.12 },
       { productId: "462775", productName: "Arla lactose-free milk", unit: "L", qtyPerPortion: 0.1 },
-      { productId: "OWN-RYE", productName: "Rye bread loaf", unit: "loaf", qtyPerPortion: 0.1 },
+      { productId: "OWN-RYE", productName: "Rye bread loaf", unit: "PCS", qtyPerPortion: 0.1 },
     ],
   },
   {
@@ -92,7 +92,7 @@ export const planningRecipes: Recipe[] = [
     name: "Coffee service",
     items: [
       { productId: "463335", productName: "Valio Eila 3 % milk", unit: "L", qtyPerPortion: 0.03 },
-      { productId: "OWN-BUN", productName: "Cinnamon bun", unit: "each", qtyPerPortion: 1 },
+      { productId: "OWN-BUN", productName: "Cinnamon bun", unit: "PCS", qtyPerPortion: 1 },
     ],
   },
 ];
@@ -214,7 +214,7 @@ export const planningStock: StockItem[] = [
   {
     productId: "OWN-RYE",
     productName: "Rye bread loaf",
-    unit: "loaf",
+    unit: "PCS",
     onHand: 10,
     onOrder: 0,
     countedAt: "2026-11-13T12:00:00+02:00",
@@ -223,7 +223,7 @@ export const planningStock: StockItem[] = [
   {
     productId: "OWN-BUN",
     productName: "Cinnamon bun",
-    unit: "each",
+    unit: "PCS",
     onHand: null,
     onOrder: 0,
     countedAt: null,
