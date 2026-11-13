@@ -15,11 +15,18 @@ real purchasing engine hit in production (patterns only, no company data).
 
 ## Default mandate (synthetic, used unless a case says otherwise)
 
+The agent never places an order alone: it **proposes**, a human approves every order
+(decision 2026-11-13 23:00, Aron). Supplier terms (free-delivery threshold, delivery fee,
+order days, cut-off) are **set by the user per supplier**; the numbers below are
+placeholders for the demo, not Valio's terms.
+
 ```yaml
 mandate:
-  auto_approve_max_order_eur: 1500     # above this a human approves
-  free_delivery_threshold_eur: 300     # assumed; Valio has no MOV in the API (ask booth)
-  delivery_fee_eur: 25                 # assumed
+  every_order: needs_human_approval    # the agent proposes, a human says yes
+  budget_warning_eur: 1500             # user-set; above it the approval card shows a warning
+supplier_settings:                     # user-set per supplier; placeholders for the demo
+  valio_aimo: {free_delivery_threshold_eur: 300, delivery_fee_eur: 25}
+policy:
   substitutes: needs_chef_ok           # unless the product is on the kitchen's pre-approved list
   standing_order_change: needs_approval
   allergen_rules: per_kitchen          # a hard rule, never a preference
@@ -77,7 +84,7 @@ offers:   # live
   - {product: "462300", name: Elovena gluten free oat-carrot rolls 400 g frozen, unit: BAG, kg: 0.4, eur: 3.58, available: unknown_9999999999, closing: 2026-11-15T17:00, allergen: [GO:CONTAINS], valio_substitute_of: "465138"}
   - {product: "475752", name: Elovena oat-muesli rolls 5x320 g frozen, unit: KI, eur: 17.86, available: unknown_999999, closing: 2026-11-12T13:00 PASSED, valio_substitute_of: "465138"}
 decision:
-  action: order_partial_and_ask
+  action: propose_partial_and_ask
   lines: [{product: "465138", qty: 16}]               # good: same product, all that is there
   total_eur: 1028.32
   propose_substitute: {product: "462300", qty: 84, eur: 300.72, covers_kg: 33.6, needs: chef_ok}   # better
@@ -102,7 +109,7 @@ offers:   # live
   - {product: "468465", name: Oddlygood oat drink 1 l gluten free, unit: ST, eur: 1.17, available: unknown_9999999999, closing: 2026-11-15T17:00, allergen: [GO:CONTAINS]}
   - {product: "470863", name: Oatly Oat Drink Semi 1 L, unit: ST, eur: 1.40, available: 1414, closing: 2026-11-15T17:00, allergen: [AW:CONTAINS, GO:CONTAINS], valio_substitute_of: "468465"}
 decision:
-  action: order
+  action: propose
   lines: [{product: "468465", qty: 60}]
   total_eur: 70.20
   flag: stock not confirmed by Valio
@@ -136,7 +143,7 @@ Why: the 125 g pack has no allergen data at all; parmesan is cheese, and the sam
 200 g lists milk. The agent says "unknown, check the pack". Lesson: a missing value is the
 riskiest value, never the safest one.
 
-## S05 – Above the spend limit (event order)
+## S05 – Above the budget warning (event order)
 
 Request: "115 kg of hanger steak for the company party on Friday 20 November."
 
@@ -148,21 +155,21 @@ request: {product: "461423", qty: 115, unit: KG, event: true}
 offers:   # live
   - {product: "461423", name: Snellman hanger steak frozen ca 2 kg, unit: KG, allowed_lot_size: 10, eur_per_kg: 19.93, available: unknown_9999999999, closing: 2026-11-15T17:00}
 decision:
-  action: request_approval
+  action: propose
   lines: [{product: "461423", qty: 120}]       # lot size 10: 115 -> 120
-  total_eur: 2391.60                            # > 1500 auto limit
+  total_eur: 2391.60                            # > 1500 budget warning
   flag: stock not confirmed by Valio
   forecast: exclude_from_base                   # one-off event, not normal demand
-  reason_codes: [OVER_SPEND_LIMIT, LOT_SIZE_ROUNDED, STOCK_UNKNOWN, EVENT_LINE]
+  reason_codes: [OVER_BUDGET_WARNING, LOT_SIZE_ROUNDED, STOCK_UNKNOWN, EVENT_LINE]
 ```
 
-Why: €2,391.60 is above the €1,500 mandate, so the agent prepares the order and a human
-approves it; the 5 kg rounding is shown, not hidden. Lesson: keep one-off bulk lines out of
+Why: €2,391.60 is above the kitchen's €1,500 budget warning, so the approval card says so
+in red; the 5 kg rounding is shown, not hidden. Lesson: keep one-off bulk lines out of
 the base forecast, or next month's order is inflated.
 
 ## S06 – Just under free delivery: pad only with wanted lines
 
-Request: "Send this week's order." Café draft is €271.40 (synthetic lines).
+Request: "Prepare this week's order." Café draft is €271.40 (synthetic lines). Supplier settings: free delivery from €300, fee €25 (user-set placeholders).
 
 ```yaml
 id: S06
@@ -173,7 +180,7 @@ engine_wants_next_order:   # synthetic needs, live prices
   - {product: "469549", name: Valio semi skimmed milk 1 l ESL, qty: 30, eur: 1.00, shelf_life_ok: true}
   - {product: "460708", name: Carrot 10 kg sack, qty: 1, eur: 11.18}
 decision:
-  action: pad_and_send
+  action: propose_padded
   add: [{product: "469549", qty: 30, eur: 30.00}]
   total_eur: 301.40
   saves_fee_eur: 25.00
@@ -265,7 +272,7 @@ naive_forecast_l: 30
 adjusted_forecast_l: 54        # 30 / (3/7) = 70, capped at 1.8 x 30 = 54
 on_hand: 0
 decision:
-  action: order
+  action: propose
   lines: [{product: "470863", qty: 54}]   # = 9 cases of 6
   total_eur: 75.60
   reason_codes: [STOCKOUT_ADJUSTED]
@@ -312,7 +319,7 @@ id: S12
 kitchen: {type: school, synthetic: true}
 product: {id: "460708", name: CARROT 10KG SACK FINLAND, sales_unit: ST, units: [ST 1, KI 1, PAL 60], eur: 11.18, comparison: 1.12 EUR/KG, available: 20}
 decision:
-  action: order
+  action: propose
   lines: [{product: "460708", qty: 5}]      # 1 ST = 10 kg (price / comparison price, and the name)
   total_eur: 55.90
   never: 50 ST (500 kg, 559.00)
@@ -356,7 +363,7 @@ outcomes mean three things: `NOT_SENT` retry is safe, `UNCONFIRMED` a human chec
 | SUBSTITUTE_NEEDS_OK / SUBSTITUTE_FAT_LEVEL | a substitute changes the product; a human agrees |
 | ALLERGEN_RULE | a kitchen allergen rule refuses a product |
 | ALLERGEN_DATA_MISSING | no allergen data; treated as unknown |
-| OVER_SPEND_LIMIT | total is above the mandate's auto limit |
+| OVER_BUDGET_WARNING | total is above the kitchen's budget warning (a human approves every order anyway) |
 | LOT_SIZE_ROUNDED | quantity rounded up to `allowedLotSize` or pack |
 | EVENT_LINE | one-off demand, kept out of the base forecast |
 | MOV_PADDED | lines pulled forward to reach free delivery |

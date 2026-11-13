@@ -8,3 +8,6 @@ One line each: `YYYY-MM-DD HH:MM – who – decision – why`.
 - 2026-11-13 21:15 – Aron – Status lives on the GitHub board (users/Afro666/projects/1) – one place for 3 people and their agents.
 - 2026-11-13 22:00 – team – Two-sided product: kitchen stock integration + Valio demand view from shared forecasts – Valio stand: they want to give the tool to customers and see what to buy.
 - 2026-11-13 22:00 – team – Deploy the app on a Verda CPU instance, MongoDB stays on Atlas – fits the Verda track.
+- 2026-11-13 23:00 – Aron – No auto-approve: the agent proposes every order, a human approves it – trust; the buyer stays in control.
+- 2026-11-13 23:00 – Aron – Supplier terms (MOV, delivery fee, order days, cut-off) are user-set per supplier; demo values are placeholders – they differ per client and supplier.
+- 2026-11-13 23:00 – Aron – Multi-supplier, own products, recipes, menu and week planning, future demand from the menu plan – a kitchen buys from more than Valio and plans by menu.
