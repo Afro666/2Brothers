@@ -41,6 +41,18 @@ See `docs/plan.md` for the full architecture and timeline.
 - Database: **MongoDB Atlas** (decided 2026-11-13). Access goes through one repository
   module, so no other code talks to Mongo directly.
 
+## Cleanup (keep GitHub lean)
+
+- When your PR is merged: delete its branch (local and remote) and remove its worktree.
+  `gh pr merge --auto --squash --delete-branch` removes the remote branch; then
+  `git checkout main`, `git pull --prune`, `git branch -D <branch>`, `git worktree remove <path>`.
+- Squash merges do not show as "merged" in `git branch --merged`: check the PR state
+  (`gh pr list --state all --head <branch>`) before deleting.
+- An issue that is done is closed. A PR that is abandoned is closed with a reason.
+- Never delete a branch or worktree that has an open PR or belongs to someone else.
+- The `cleanup` workflow runs hourly: it deletes merged `ai-fix/*` branches and closes
+  their issues (merges by the bot do not trigger GitHub's own branch delete or `Closes #`).
+
 ## Contracts
 
 - Interfaces between areas live in `docs/contract.md` (API routes, message

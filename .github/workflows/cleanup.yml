@@ -1,0 +1,41 @@
+name: cleanup
+
+# Merges done by the bot (auto-merge enabled with GITHUB_TOKEN) do not delete the
+# ai-fix/* branch and do not close the linked issue. This job does both.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Delete merged ai-fix branches and close their issues
+        run: |
+          # only PRs merged in the last 3 hours, so an issue someone reopened later stays open
+          gh pr list -R "$REPO" --state merged --limit 100 --json number,headRefName,mergedAt \
+            --jq '.[] | select(.headRefName | startswith("ai-fix/")) | select((.mergedAt | fromdateiso8601) > (now - 10800)) | "\(.number) \(.headRefName)"' |
+          while read -r pr head; do
+            issue=${head#ai-fix/}
+            if gh api "repos/$REPO/branches/$head" >/dev/null 2>&1; then
+              open=$(gh pr list -R "$REPO" --head "$head" --state open --json number --jq 'length')
+              if [ "$open" = "0" ]; then
+                gh api -X DELETE "repos/$REPO/git/refs/heads/$head" && echo "deleted branch $head (PR #$pr)"
+              fi
+            fi
+            state=$(gh issue view "$issue" -R "$REPO" --json state --jq .state 2>/dev/null || echo NONE)
+            if [ "$state" = "OPEN" ]; then
+              gh issue close "$issue" -R "$REPO" -c "Fixed by #$pr (merged)." && echo "closed issue #$issue"
+            fi
+          done
