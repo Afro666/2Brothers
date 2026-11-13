@@ -72,6 +72,19 @@ class RepositoryTest(unittest.TestCase):
         self.assertTrue(self.repo.own_products.delete(p["id"]))
         self.assertEqual(self.repo.own_products.list(), [])
 
+    def test_own_product_scoped_to_kitchen(self):
+        p = self.repo.own_products.create(
+            {"name": "Rye bread", "unit": "kg", "supplier_id": "s1", "kitchen_id": "k1"}
+        )
+        own = self.repo.own_products
+        self.assertIsNone(own.get(p["id"], kitchen_id="k2"))
+        self.assertIsNone(own.update(p["id"], {"price_eur": 1.0}, kitchen_id="k2"))
+        self.assertIsNone(own.update(p["id"], {}, kitchen_id="k2"))
+        self.assertFalse(own.delete(p["id"], kitchen_id="k2"))
+        self.assertEqual(own.get(p["id"]), p)  # untouched
+        self.assertEqual(own.get(p["id"], kitchen_id="k1"), p)
+        self.assertTrue(own.delete(p["id"], kitchen_id="k1"))
+
     def test_recipe_crud(self):
         r = self.repo.recipes.create(
             {"name": "Porridge",

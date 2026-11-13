@@ -93,22 +93,32 @@ class _Collection:
         self._coll.insert_one(doc)
         return self._out(doc)
 
-    def get(self, doc_id: str) -> dict | None:
-        return self._out(self._coll.find_one({"_id": doc_id}))
+    @staticmethod
+    def _key(doc_id: str, kitchen_id: str | None) -> dict:
+        """Filter by id; with kitchen_id, another kitchen's row acts as missing."""
+        key = {"_id": doc_id}
+        if kitchen_id is not None:
+            key["kitchen_id"] = kitchen_id
+        return key
+
+    def get(self, doc_id: str, *, kitchen_id: str | None = None) -> dict | None:
+        return self._out(self._coll.find_one(self._key(doc_id, kitchen_id)))
 
     def list(self, **filters: Any) -> list[dict]:
         return [self._out(d) for d in self._coll.find(filters).sort("_id")]
 
-    def update(self, doc_id: str, changes: dict) -> dict | None:
+    def update(
+        self, doc_id: str, changes: dict, *, kitchen_id: str | None = None
+    ) -> dict | None:
         changes = {k: v for k, v in changes.items() if k not in ("id", "_id")}
         self._check(changes, True)
         if not changes:
-            return self.get(doc_id)
-        result = self._coll.update_one({"_id": doc_id}, {"$set": changes})
-        return self.get(doc_id) if result.matched_count else None
+            return self.get(doc_id, kitchen_id=kitchen_id)
+        result = self._coll.update_one(self._key(doc_id, kitchen_id), {"$set": changes})
+        return self.get(doc_id, kitchen_id=kitchen_id) if result.matched_count else None
 
-    def delete(self, doc_id: str) -> bool:
-        return self._coll.delete_one({"_id": doc_id}).deleted_count == 1
+    def delete(self, doc_id: str, *, kitchen_id: str | None = None) -> bool:
+        return self._coll.delete_one(self._key(doc_id, kitchen_id)).deleted_count == 1
 
 
 class Repository:
