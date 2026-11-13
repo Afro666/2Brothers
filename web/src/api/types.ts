@@ -16,6 +16,7 @@ import type {
   ProductLabel,
   SupplierDemandRow,
   SubstituteOption,
+  KitchenSettings,
 } from "@/types";
 
 /** Who a decision is recorded as in the audit log. */
@@ -81,6 +82,8 @@ export interface Api {
   getSharing(): Promise<SharingConsent[]>;
   setSharing(supplierId: string, shared: boolean, actor: AuditActor): Promise<SharingConsent[]>;
   getSupplierDemand(from: string, to: string): Promise<SupplierDemandRow[]>;
+  getKitchenSettings(): Promise<KitchenSettings>;
+  saveKitchenSettings(settings: KitchenSettings, actor: AuditActor): Promise<KitchenSettings>;
 }
 
 /** A gateway error: `code` is the contract's error code, e.g. `TOTAL_MISMATCH`. */

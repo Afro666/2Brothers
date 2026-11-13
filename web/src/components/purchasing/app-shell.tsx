@@ -9,6 +9,7 @@ import {
   Menu,
   Package,
   ScrollText,
+  Settings,
   ShoppingBasket,
   TrendingUp,
   Truck,
@@ -47,6 +48,7 @@ export const KITCHEN_NAV: NavItem[] = [
   { id: "suppliers", label: "Suppliers", href: "/suppliers", icon: Truck },
   { id: "products", label: "Products", href: "/products", icon: ShoppingBasket },
   { id: "catalog", label: "Catalog", href: "/catalog", icon: BookOpen },
+  { id: "settings", label: "Settings", href: "/settings", icon: Settings },
   AUDIT,
 ];
 
