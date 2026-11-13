@@ -15,26 +15,22 @@
 		reverse_proxy gateway:8000
 	}
 
-	# The screens and the API they call sit behind one shared demo password.
+	# No password on the screens (Tymon, 2026-11-14): anyone with the link can use
+	# the demo, including approving its orders.
+	# The gateway's human token is added here, on the server, so it never
+	# reaches a browser. The web app says who is acting in X-User.
+	handle_path /api/* {
+		@anonymous not header X-User *
+		request_header @anonymous X-User demo-visitor
+		reverse_proxy gateway:8000 {
+			header_up Authorization "Bearer {$GATEWAY_HUMAN_TOKEN}"
+		}
+	}
+
 	handle {
-		basic_auth {
-			{$SITE_USER} {$SITE_PASSWORD_HASH}
-		}
-
-		# The gateway's human token is added here, on the server, so it never
-		# reaches a browser. The web app says who is acting in X-User.
-		handle_path /api/* {
-			reverse_proxy gateway:8000 {
-				header_up Authorization "Bearer {$GATEWAY_HUMAN_TOKEN}"
-				header_up X-User {http.auth.user.id}
-			}
-		}
-
-		handle {
-			root * /srv
-			# The web app routes in the browser: unknown paths get index.html.
-			try_files {path} /index.html
-			file_server
-		}
+		root * /srv
+		# The web app routes in the browser: unknown paths get index.html.
+		try_files {path} /index.html
+		file_server
 	}
 }
