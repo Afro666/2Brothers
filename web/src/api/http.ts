@@ -35,19 +35,11 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
  * every method says so instead of guessing a shape.
  */
 export function createHttpApi(_baseUrl: string): Api {
-  const notInContract = async (): Promise<never> => {
-    throw new ApiError("NOT_IN_CONTRACT", "The gateway contract does not define this route yet.");
-  };
-  return {
-    listApprovals: notInContract,
-    getApproval: notInContract,
-    approve: notInContract,
-    reject: notInContract,
-    listOrders: notInContract,
-    getOrder: notInContract,
-    listAudit: notInContract,
-    submitChefRequest: notInContract,
-    searchProducts: notInContract,
-    getMandate: notInContract,
-  };
+  return new Proxy({} as Api, {
+    get() {
+      return async () => {
+        throw new ApiError("NOT_SERVED", "The gateway does not serve this yet.");
+      };
+    },
+  });
 }
