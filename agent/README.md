@@ -55,3 +55,8 @@ Offline checks: `python -m unittest discover -s agent/tests -v`.
 - Offline tests cover unsafe attempted actions and incomplete transport outcomes;
   the live-model mock-gateway smoke test checks actual Nemotron tool selection.
 - Real gateway integration and database-backed audit remain separate dependencies.
+
+Verified live-model smoke test (2026-11-13): Nemotron selected `search_products`
+→ `get_offer` → `simulate_order` → `request_approval` against the explicit mock
+gateway. The final result was `SENT_FOR_APPROVAL`, with eight structural audit
+events and a local JSONL trace. No live purchase or MongoDB write was performed.

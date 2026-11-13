@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import json
+import os
 from pathlib import Path
 import re
 from uuid import uuid4, uuid5, NAMESPACE_URL
@@ -73,6 +74,14 @@ class Buyer:
 
     async def audit(self, event):
         record = {"event_id": str(uuid4()), "run_id": self.run_id, **event}
+        # Do not persist arbitrary model-authored search strings or filter values.
+        if record["tool"] == "search_products":
+            record["arguments"] = {"query_present": bool(record["arguments"].get("query"))}
+        serialized = json.dumps(record)
+        for key, value in os.environ.items():
+            if len(value) >= 8 and any(part in key.upper() for part in ("KEY", "TOKEN", "PASSWORD", "SECRET", "URI")):
+                serialized = serialized.replace(json.dumps(value)[1:-1], "[REDACTED]")
+        record = json.loads(serialized)
         try:
             receipt = await self.audit_gateway.request("POST", "/audit/events", payload=record)
             if receipt.get("stored") is not True or receipt.get("event_id") != record["event_id"]:
@@ -174,13 +183,15 @@ class Buyer:
                     return self.final("CANNOT_FULFIL", "Tool call limit reached")
                 name, args, error, result = "invalid", {}, None, {}
                 try:
+                    if not isinstance(call.get("id"), str) or not call["id"]:
+                        raise PolicyError("Tool call requires an ID")
                     name = call["function"]["name"]
                     args = json.loads(call["function"]["arguments"])
                     self.authorize(name, args, schemas)
-                except (KeyError, TypeError, ValueError, PolicyError):
+                except (KeyError, TypeError, ValueError, AttributeError, PolicyError):
                     error = "Rejected by buyer policy; no gateway tool dispatched"
                     args = {}
-                    name = name if name in TOOLS else "invalid"
+                    name = name if isinstance(name, str) and name in TOOLS else "invalid"
                 try:
                     await self.audit({"type": "tool_call_started", "tool": name, "arguments": args, "result": {}})
                     if not error:
@@ -189,7 +200,7 @@ class Buyer:
                         try:
                             result = unpack(await self.session.call_tool(name, args))
                             self.accept(name, args, result)
-                        except (GatewayError, PolicyError, KeyError, TypeError, ValueError):
+                        except Exception:
                             error = "Tool failed or returned invalid data; reconcile any mutation before retrying"
                     # Persist only bounded structural facts; never raw upstream text or errors.
                     summary = {k: result[k] for k in ("offer_id", "order_id", "approval_id", "status", "outcome")

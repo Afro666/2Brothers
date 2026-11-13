@@ -1,0 +1,187 @@
+from copy import deepcopy
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+import httpx
+from mcp.shared.memory import create_connected_server_and_client_session
+
+from agent.model import ModelError, Nemotron
+from agent.runner import Buyer
+from gateway.mcp_server import GatewayClient, build_server
+from gateway.mock_gateway import MockGateway
+
+
+def tool(name, **args):
+    return {"role": "assistant", "content": None, "tool_calls": [{"id": "call-" + name,
+        "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}]}
+
+
+def milk_steps():
+    return [tool("search_products", query="lactose-free milk 1 L", filters={}),
+            tool("get_offer", product_ids=["462775"], requested_date="2026-11-16", need_id="milk-need-1"),
+            tool("simulate_order", offer_id="milk-offer-1"),
+            tool("request_approval", offer_id="milk-offer-1")]
+
+
+class Scripted:
+    def __init__(self, steps):
+        self.steps = iter(steps)
+
+    async def complete(self, messages, tools):
+        return deepcopy(next(self.steps))
+
+
+class BuyerTests(unittest.IsolatedAsyncioTestCase):
+    async def run_case(self, steps, mock=None, **kwargs):
+        mock = mock or MockGateway()
+        gateway = GatewayClient(transport=httpx.MockTransport(mock))
+        try:
+            async with create_connected_server_and_client_session(build_server(gateway)) as session:
+                buyer = Buyer(Scripted(steps), session, gateway, need_id="milk-need-1", requested_date="2026-11-16", **kwargs)
+                result = await buyer.run("1,000 L of lactose-free milk by Monday")
+                return result, buyer, mock
+        finally:
+            await gateway.close()
+
+    async def test_milk_end_to_end_with_audited_trace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace = Path(directory) / "trace.jsonl"
+            result, buyer, mock = await self.run_case(milk_steps(), trace_path=trace)
+            self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
+            self.assertIn("Only 51 L", result["reason"])
+            self.assertEqual(result["approval_id"], "milk-approval-1")
+            self.assertEqual(len(mock.events), 8)
+            self.assertEqual(len(trace.read_text().splitlines()), 8)
+            paths = [r.url.path for r in mock.requests]
+            self.assertEqual(paths[:3], ["/audit/events", "/tools/search_products", "/audit/events"])
+            self.assertNotIn("/tools/place_order", paths)
+
+    async def test_cannot_approve_or_invent_quantities(self):
+        for call in [tool("approve_order", approval_id="anything"),
+                     tool("get_offer", product_ids=["462775"], requested_date="2026-11-16", need_id="milk-need-1", quantity=1000)]:
+            result, buyer, mock = await self.run_case([call])
+            self.assertEqual(result["status"], "CANNOT_FULFIL")
+            self.assertEqual(len(mock.events), 2)
+            self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
+
+    async def test_trusted_need_date_and_catalog_product_enforced(self):
+        for change in [{"need_id": "other"}, {"requested_date": "2026-11-17"}, {"product_ids": ["invented"]}]:
+            args = {"product_ids": ["462775"], "requested_date": "2026-11-16", "need_id": "milk-need-1", **change}
+            result, buyer, mock = await self.run_case([milk_steps()[0], tool("get_offer", **args)])
+            self.assertEqual(result["status"], "CANNOT_FULFIL")
+            self.assertFalse(any(r.url.path == "/tools/get_offer" for r in mock.requests))
+
+    async def test_no_order_before_simulation_or_without_approval(self):
+        order = tool("place_order", offer_id="milk-offer-1", expected_total="149.02", idempotency_key="model-key")
+        for steps in [milk_steps()[:2] + [order], milk_steps()[:3] + [order]]:
+            result, buyer, mock = await self.run_case(steps)
+            self.assertEqual(result["status"], "CANNOT_FULFIL")
+            self.assertNotIn("/tools/place_order", [r.url.path for r in mock.requests])
+
+    async def test_auto_order_exact_total_and_generated_key(self):
+        class AutoGateway(MockGateway):
+            @staticmethod
+            def simulation():
+                value = MockGateway.simulation()
+                value["mandate"] = {"verdict": "AUTO", "reasons": []}
+                return value
+            def __call__(self, request):
+                if request.url.path == "/tools/place_order":
+                    self.requests.append(request)
+                    return httpx.Response(200, json={"order_id": "order-1", "outcome": "CONFIRMED", "status": "PLACED"})
+                return super().__call__(request)
+        for total, expected in [("149.03", "CANNOT_FULFIL"), ("149.02", "ORDER_PLACED")]:
+            steps = milk_steps()[:3] + [tool("place_order", offer_id="milk-offer-1", expected_total=total, idempotency_key="model-key")]
+            result, buyer, mock = await self.run_case(steps, AutoGateway(), run_id="test-run")
+            self.assertEqual(result["status"], expected)
+            orders = [r for r in mock.requests if r.url.path == "/tools/place_order"]
+            if orders:
+                self.assertNotEqual(json.loads(orders[0].content)["idempotency_key"], "model-key")
+
+    async def test_expired_offer_stops_before_simulation(self):
+        class Expired(MockGateway):
+            def __call__(self, request):
+                response = super().__call__(request)
+                if request.url.path == "/tools/get_offer":
+                    value = response.json(); value["valid_until"] = "2000-01-01T00:00:00Z"
+                    return httpx.Response(200, json=value)
+                return response
+        result, buyer, mock = await self.run_case(milk_steps(), Expired())
+        self.assertEqual(result["status"], "CANNOT_FULFIL")
+        self.assertNotIn("/tools/simulate_order", [r.url.path for r in mock.requests])
+
+    async def test_audit_failure_prevents_tool_dispatch(self):
+        class NoAudit(MockGateway):
+            def __call__(self, request):
+                if request.url.path == "/audit/events":
+                    return httpx.Response(503, json={})
+                return super().__call__(request)
+        result, buyer, mock = await self.run_case(milk_steps(), NoAudit())
+        self.assertEqual(mock.requests, [])
+        self.assertTrue(result["reconciliation_required"])
+
+    async def test_finish_audit_failure_after_mutation_never_resends(self):
+        class FailAfterApproval(MockGateway):
+            def __call__(self, request):
+                if request.url.path == "/audit/events" and self.approvals:
+                    return httpx.Response(503, json={})
+                return super().__call__(request)
+        result, buyer, mock = await self.run_case(milk_steps(), FailAfterApproval())
+        self.assertEqual(result["status"], "CANNOT_FULFIL")
+        self.assertTrue(result["reconciliation_required"])
+        self.assertEqual(len([r for r in mock.requests if r.url.path == "/tools/request_approval"]), 1)
+
+    async def test_steps_bounded_and_model_claims_do_not_prove_order(self):
+        result, _, _ = await self.run_case(milk_steps(), max_steps=2)
+        self.assertEqual(result["status"], "CANNOT_FULFIL")
+        result, _, _ = await self.run_case([{"role": "assistant", "content": "Order placed!"}])
+        self.assertEqual(result["status"], "CANNOT_FULFIL")
+
+    async def test_search_text_is_not_written_to_audit(self):
+        result, buyer, mock = await self.run_case([tool("search_products", query="private-search-text", filters={})], max_steps=1)
+        self.assertNotIn("private-search-text", json.dumps(list(mock.events.values())))
+
+    async def test_malformed_tool_name_is_audited_without_dispatch(self):
+        call = tool("search_products", query="milk", filters={})
+        call["tool_calls"][0]["function"]["name"] = ["invalid"]
+        result, buyer, mock = await self.run_case([call])
+        self.assertEqual(result["status"], "CANNOT_FULFIL")
+        self.assertEqual(len(mock.events), 2)
+        self.assertEqual(buyer.events[0]["tool"], "invalid")
+
+
+class ModelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_retry_then_success(self):
+        calls, delays = [], []
+        def handler(request):
+            calls.append(request)
+            if len(calls) < 3:
+                return httpx.Response(503)
+            return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": "ok"}}]})
+        async def sleep(delay):
+            delays.append(delay)
+        with patch.dict(os.environ, {"VERDA_INFERENCE_KEY": "not-a-real-secret"}):
+            model = Nemotron(transport=httpx.MockTransport(handler), sleep=sleep)
+        try:
+            self.assertEqual((await model.complete([], []))["content"], "ok")
+            self.assertEqual(delays, [0.5, 1.0])
+        finally:
+            await model.close()
+
+    async def test_401_not_retried_or_leaked(self):
+        calls = []
+        def handler(request):
+            calls.append(1)
+            return httpx.Response(401, text="not-a-real-secret")
+        with patch.dict(os.environ, {"VERDA_INFERENCE_KEY": "not-a-real-secret"}):
+            model = Nemotron(transport=httpx.MockTransport(handler))
+        try:
+            with self.assertRaisesRegex(ModelError, "^Nemotron HTTP 401$"):
+                await model.complete([], [])
+            self.assertEqual(len(calls), 1)
+        finally:
+            await model.close()
