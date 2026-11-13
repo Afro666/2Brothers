@@ -111,6 +111,7 @@ class ValioClient:
 
     def availability(self, products: list[str], requested_date: str | date) -> dict:
         result = self._products("/api/availability", products, requested_date)
+        requested = date.fromisoformat(str(requested_date))
         for product in result["products"]:
             try:
                 cutoff = closing_time(product.get("closingTime"))
@@ -119,6 +120,10 @@ class ValioClient:
             product["closingTime"] = cutoff.isoformat() if cutoff else None
             product["cutoff_passed"] = cutoff <= self._now() if cutoff else None
             for line in product.get("scheduleLines", []):
+                try:
+                    available = date.fromisoformat(line.get("availableDate"))
+                except (ValueError, TypeError):
+                    available = None
                 amount = line.get("availableAmount")
                 unknown = amount is None or amount in (999999, 9999999999)
                 line["unknown_stock"] = unknown
@@ -127,6 +132,7 @@ class ValioClient:
                 line["orderable"] = bool(
                     not product.get("salesBlock") and not line.get("salesBlock")
                     and product["cutoff_passed"] is False
-                    and line.get("availableDate") and not unknown and amount > 0
+                    and available is not None and available <= requested
+                    and not unknown and amount > 0
                 )
         return result

@@ -19,6 +19,9 @@ Do not use this retry policy for gateway order placement. Check each price row's
 `unknown_stock: true`. `closingTime` includes a timezone; `cutoff_passed` is
 recomputed even on cache hits. Missing cutoffs or stock never produce an
 `orderable: true` result. This is a preliminary upstream check, not mandate consent.
+`orderable` also requires a valid `availableDate` no later than the requested date.
+Later dates remain visible in the response for proposing a different delivery,
+but must not be treated as fulfilment of the original deadline.
 
 Run offline tests: `python -m unittest discover -s gateway/tests -v`.
 Fixtures are small responses recorded from the challenge API, without credentials.
