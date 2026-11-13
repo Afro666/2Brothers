@@ -84,13 +84,8 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["status"], "CANNOT_FULFIL")
             self.assertNotIn("/tools/place_order", [r.url.path for r in mock.requests])
 
-    async def test_auto_order_exact_total_and_generated_key(self):
-        class AutoGateway(MockGateway):
-            @staticmethod
-            def simulation():
-                value = MockGateway.simulation()
-                value["mandate"] = {"verdict": "AUTO", "reasons": []}
-                return value
+    async def test_human_approved_order_exact_total_and_generated_key(self):
+        class ApprovedGateway(MockGateway):
             def __call__(self, request):
                 if request.url.path == "/tools/place_order":
                     self.requests.append(request)
@@ -98,7 +93,9 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
                 return super().__call__(request)
         for total, expected in [("149.03", "CANNOT_FULFIL"), ("149.02", "ORDER_PLACED")]:
             steps = milk_steps()[:3] + [tool("place_order", offer_id="milk-offer-1", expected_total=total, idempotency_key="model-key")]
-            result, buyer, mock = await self.run_case(steps, AutoGateway(), run_id="test-run")
+            result, buyer, mock = await self.run_case(steps, ApprovedGateway(), run_id="test-run",
+                approval_lookup=lambda offer_id: {"approval_id": "human-approval-1", "offer_id": offer_id,
+                    "status": "APPROVED", "decided_by": "chef-1", "decided_at": "2026-11-01T10:00:00Z"})
             self.assertEqual(result["status"], expected)
             orders = [r for r in mock.requests if r.url.path == "/tools/place_order"]
             if orders:
