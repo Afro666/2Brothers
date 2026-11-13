@@ -2,6 +2,8 @@
 
 One line each: `YYYY-MM-DD HH:MM – who – decision – why`.
 
+- 2026-11-13 21:39 – Maciek (Codex), #67 – Return sanitized, audited pre-dispatch rejections of known read-only tools to the model for correction within existing budgets; mutation errors, gateway/response failures, invalid call IDs/names and audit failures still stop – recover from argument mistakes without weakening purchase or audit guards.
+
 - 2026-11-13 21:27 – Maciek (Codex), #48 – Unknown stock remains visible for proposals but is not orderable until supplier availability is confirmed; human approval alone does not confirm stock – neither 999999 nor 9999999999 is a measured quantity, and the engine must not promise unverified fulfilment.
 
 - 2026-11-13 – team – Work through GitHub issues and PRs, one owner per task – avoid conflicts between 3 people and 4 agents.

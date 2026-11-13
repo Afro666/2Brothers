@@ -30,8 +30,10 @@ def milk_steps():
 class Scripted:
     def __init__(self, steps):
         self.steps = iter(steps)
+        self.messages = []
 
     async def complete(self, messages, tools):
+        self.messages.append(deepcopy(messages))
         return deepcopy(next(self.steps))
 
 
@@ -151,6 +153,119 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         result, buyer, mock = await self.run_case([call])
         self.assertEqual(result["status"], "CANNOT_FULFIL")
         self.assertEqual(len(mock.events), 2)
+        self.assertEqual(buyer.events[0]["tool"], "invalid")
+
+    async def test_read_schema_rejection_is_audited_and_corrected_to_approval(self):
+        invalid = tool("search_products", query="private-rejected-query")  # missing filters
+        result, buyer, mock = await self.run_case([invalid] + milk_steps())
+        self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
+        self.assertEqual(len(mock.events), 10)
+        self.assertEqual(len([r for r in mock.requests if r.url.path == "/tools/search_products"]), 1)
+        feedback = buyer.model.messages[1][-1]
+        self.assertEqual(feedback["role"], "tool")
+        self.assertEqual(feedback["tool_call_id"], invalid["tool_calls"][0]["id"])
+        error = json.loads(feedback["content"])["error"]
+        self.assertEqual(error["code"], "POLICY_REJECTED")
+        self.assertTrue(error["retryable"])
+        self.assertNotIn("private-rejected-query", feedback["content"])
+        self.assertEqual([e["type"] for e in buyer.events[:2]], ["tool_call_started", "tool_call_finished"])
+        self.assertIn("error", buyer.events[1]["result"])
+
+    async def test_all_read_only_policy_rejections_can_recover_without_dispatch(self):
+        cases = []
+        for change in [{"need_id": "other"}, {"requested_date": "2026-11-17"}, {"product_ids": ["invented"]}]:
+            args = {"product_ids": ["462775"], "requested_date": "2026-11-16", "need_id": "milk-need-1", **change}
+            cases.append((milk_steps()[:1], tool("get_offer", **args), milk_steps()[1:], "/tools/get_offer", 1))
+        cases.extend([
+            (milk_steps()[:2], tool("simulate_order", offer_id="invented"), milk_steps()[2:], "/tools/simulate_order", 1),
+            ([], tool("get_order_status", order_id="other-order"), milk_steps(), "/tools/get_order_status", 0),
+            ([], tool("get_audit_log", run_id="other-run"), milk_steps(), "/tools/get_audit_log", 0),
+        ])
+        for prefix, invalid, suffix, path, dispatched in cases:
+            with self.subTest(tool=invalid["tool_calls"][0]["function"]):
+                result, buyer, mock = await self.run_case(prefix + [invalid] + suffix)
+                self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
+                self.assertEqual(len([r for r in mock.requests if r.url.path == path]), dispatched)
+                feedback = buyer.model.messages[len(prefix) + 1][-1]
+                self.assertEqual(json.loads(feedback["content"])["error"]["code"], "POLICY_REJECTED")
+
+    async def test_malformed_read_arguments_can_be_corrected(self):
+        invalid = tool("search_products", query="milk", filters={})
+        invalid["tool_calls"][0]["function"]["arguments"] = "{not-json"
+        result, buyer, mock = await self.run_case([invalid] + milk_steps())
+        self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
+        self.assertEqual(len([r for r in mock.requests if r.url.path == "/tools/search_products"]), 1)
+        self.assertNotIn("not-json", buyer.model.messages[1][-1]["content"])
+
+    async def test_rejected_read_in_a_batch_keeps_tool_results_paired(self):
+        invalid = tool("search_products", query="milk")
+        valid = milk_steps()[0]
+        batch = {"role": "assistant", "content": None, "tool_calls": [
+            {**invalid["tool_calls"][0], "id": "bad-read"},
+            {**valid["tool_calls"][0], "id": "good-read"}]}
+        result, buyer, mock = await self.run_case([batch] + milk_steps()[1:])
+        self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
+        messages = buyer.model.messages[1]
+        self.assertEqual([m["tool_call_id"] for m in messages[-2:]], ["bad-read", "good-read"])
+        self.assertIn("error", json.loads(messages[-2]["content"]))
+        self.assertIn("products", json.loads(messages[-1]["content"]))
+
+    async def test_read_policy_recovery_respects_step_and_call_limits(self):
+        invalid = tool("search_products", query="milk")
+        result, buyer, mock = await self.run_case([invalid] * 3, max_steps=2)
+        self.assertIn("Step limit", result["reason"])
+        self.assertEqual(len(buyer.model.messages), 2)
+        self.assertEqual(len(mock.events), 4)
+        batch = {"role": "assistant", "content": None, "tool_calls": []}
+        for index in range(31):
+            call = deepcopy(invalid["tool_calls"][0]); call["id"] = f"call-{index}"
+            batch["tool_calls"].append(call)
+        result, buyer, mock = await self.run_case([batch], max_steps=1)
+        self.assertIn("Tool call limit", result["reason"])
+        self.assertEqual(len(mock.events), 60)
+        self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
+
+    async def test_rejected_mutation_still_stops_without_model_correction(self):
+        for name in ["place_order", "request_approval"]:
+            invalid = tool(name, offer_id="invented", expected_total="149.02", idempotency_key="key") if name == "place_order" else tool(name, offer_id="invented")
+            result, buyer, mock = await self.run_case([invalid] + milk_steps())
+            self.assertEqual(result["status"], "CANNOT_FULFIL")
+            self.assertEqual(len(buyer.model.messages), 1)
+            self.assertEqual(len(mock.events), 2)
+            self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
+
+    async def test_rejection_finish_audit_failure_prevents_recovery(self):
+        class FailSecondAudit(MockGateway):
+            def __call__(self, request):
+                if request.url.path == "/audit/events" and self.events:
+                    return httpx.Response(503, json={})
+                return super().__call__(request)
+        result, buyer, mock = await self.run_case([tool("search_products", query="milk")] + milk_steps(), FailSecondAudit())
+        self.assertTrue(result["reconciliation_required"])
+        self.assertEqual(len(buyer.model.messages), 1)
+        self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
+
+    async def test_read_transport_and_invalid_response_failures_are_not_recovered(self):
+        class BadGateway(MockGateway):
+            def __init__(self, response):
+                super().__init__(); self.response = response
+            def __call__(self, request):
+                if request.url.path == "/tools/search_products":
+                    self.requests.append(request)
+                    return self.response
+                return super().__call__(request)
+        for response in [httpx.Response(503, json={}), httpx.Response(200, json={"products": None})]:
+            result, buyer, mock = await self.run_case(milk_steps(), BadGateway(response))
+            self.assertEqual(result["status"], "CANNOT_FULFIL")
+            self.assertEqual(len(buyer.model.messages), 1)
+            self.assertEqual(len(mock.events), 2)
+
+    async def test_missing_call_id_still_stops_and_does_not_recover(self):
+        invalid = tool("search_products", query="milk", filters={})
+        del invalid["tool_calls"][0]["id"]
+        result, buyer, mock = await self.run_case([invalid] + milk_steps())
+        self.assertEqual(result["status"], "CANNOT_FULFIL")
+        self.assertEqual(len(buyer.model.messages), 1)
         self.assertEqual(buyer.events[0]["tool"], "invalid")
 
 
