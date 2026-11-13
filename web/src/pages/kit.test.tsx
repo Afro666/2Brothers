@@ -1,6 +1,5 @@
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -69,15 +68,12 @@ describe("/kit", () => {
     expect(within(catalog).getAllByText("Contains").length).toBeGreaterThan(0);
   });
 
-  it("approves the exact expected total", async () => {
-    const user = userEvent.setup();
+  it("keeps the unknown-stock example waiting for supplier confirmation", async () => {
     await renderKit();
     const approvals = screen.getByRole("region", { name: "ApprovalCard" });
-    await user.click(within(approvals).getByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
-    expect(within(dialog).getByText(/exactly €1,947\.50 ex VAT \(€2,210\.41 incl VAT\)/)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
-    expect(within(approvals).getByRole("status")).toHaveTextContent("Approved: €1,947.50 ex VAT");
+    expect(within(approvals).getByText(/Waiting for supplier stock confirmation/)).toBeVisible();
+    expect(within(approvals).getByRole("button", { name: /^Approve/ })).toBeDisabled();
+    expect(within(approvals).getByRole("button", { name: "Reject" })).toBeEnabled();
   });
 
   it("lists the audit steps oldest first", async () => {
