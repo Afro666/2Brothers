@@ -51,9 +51,11 @@ def ensure_indexes(db: Database) -> None:
                   "allergens.may_contain", "temperature", "supplier_id"):
         db.products.create_index(field)
     db.offers.create_index("fetched_at")
-    db.orders.create_index("idempotency_key", unique=True)
-    db.approvals.create_index("idempotency_key", unique=True)
+    # The contract scopes idempotency keys to the kitchen and the operation.
+    for collection in (db.orders, db.approvals):
+        collection.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
     # audit_log: `_id` is the sequence number, so the chain is linear by construction.
     db.audit_log.create_index("event.event_id", unique=True)
     db.audit_log.create_index("event.run_id")
     db.audit_log.create_index("event.order_id")
+    db.audit_log.create_index("server.kitchen_id")

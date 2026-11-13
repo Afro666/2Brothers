@@ -20,3 +20,4 @@ One line each: `YYYY-MM-DD HH:MM – who – decision – why`.
 - 2026-11-13 23:30 – Aron – The agent is called "Buyer".
 - 2026-11-13 23:30 – Aron – Our own API for kitchens and suppliers (docs/contract.md, "Product API"); approve is human-only, never the agent's token – trust rule.
 - 2026-11-13 23:45 – Aron – AfterQuery dropped; we stay with Valio only. `env/` stays as the synthetic history generator – one main track per project on the form.
+- 2026-11-13 23:20 – Tymon, #24 – Catalog rules in `store.products.flatten`: a size read from the product name is stored but flagged `net_content_source: "name"`; the GS1 level `UNDECLARED` is its own list `allergens.undeclared` and never counts as free-from; `temperatureCondition` 5, 6 and 9 stay unknown until Valio explains them; idempotency keys are unique per kitchen – 30% of products have no measured size, and an unknown value must never look safe.

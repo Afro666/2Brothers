@@ -88,10 +88,12 @@ def append_event(db, event: dict, server: dict | None = None) -> dict:
     raise RuntimeError("audit log append kept losing the race; nothing was stored")
 
 
-def list_events(db, *, run_id: str | None = None, order_id: str | None = None,
-                limit: int = 1000) -> list[dict]:
-    """Entries in chain order, optionally for one agent run or one order."""
+def list_events(db, *, kitchen_id: str | None = None, run_id: str | None = None,
+                order_id: str | None = None, limit: int = 1000) -> list[dict]:
+    """Entries in chain order, optionally for one kitchen, agent run or order."""
     query = {}
+    if kitchen_id is not None:
+        query["server.kitchen_id"] = kitchen_id
     if run_id is not None:
         query["event.run_id"] = run_id
     if order_id is not None:
