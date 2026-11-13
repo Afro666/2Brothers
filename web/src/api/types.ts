@@ -13,6 +13,7 @@ import type {
   SharingConsent,
   StockItem,
   Supplier,
+  ProductLabel,
   SupplierDemandRow,
   SubstituteOption,
 } from "@/types";
@@ -27,9 +28,17 @@ export interface StockCount {
   onHand: number | null;
 }
 
+export type ProductTemperature = "ambient" | "chilled" | "frozen";
+
 export interface ProductSearchFilters {
   /** GS1 allergen codes, e.g. `AM` milk. CONTAINS and MAY_CONTAIN both exclude. */
   excludedAllergens?: string[];
+  /** When true, a product with no allergen data is removed too (unknown, not safe). */
+  strictAllergens?: boolean;
+  /** Products must carry every one of these labels. */
+  requiredLabels?: ProductLabel[];
+  /** A product with no temperature data never matches a temperature filter. */
+  temperature?: ProductTemperature;
 }
 
 /** What the agent proposes for one chef request. */
