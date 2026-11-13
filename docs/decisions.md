@@ -33,3 +33,4 @@ One line each: `YYYY-MM-DD HH:MM – who – decision – why`.
 - 2026-11-14 00:40 – Aron – Demo: Aron presents; Tymon builds a brag repo about the project with Fable 5.2 – one voice on stage, the repo shows the work.
 - 2026-11-14 – Aron – Auto-approve becomes an option, off by default, earned after a learning period of kitchen decisions (about 4 weeks); substitutes, unknown stock, allergens and over-budget always need a person – the tool should learn from the kitchen before it decides alone.
 - 2026-11-14 – Aron – Demo data is synthetic, back to August and 4 weeks ahead, and the forecast must prove itself against what happened (#275) – Valio will not give enough real data.
+- 2026-11-14 – Tymon – Demo site has no password (#339): judges open it directly; /api/* acts as demo-visitor with the server-side human token; /gateway/* and /mcp still need a bearer token. Cost: anyone with the link can create and approve demo proposals.
