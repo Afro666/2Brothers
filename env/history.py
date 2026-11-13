@@ -60,10 +60,12 @@ def supplier_fill(rng: random.Random):
 
 
 def simulate_kitchen(kitchen, start: date, days: int, seed: int, policy) -> dict:
-    rng = random.Random(f"history-{seed}-{kitchen.id}")
+    # Separate streams: demand (opening stock, covers, recipe noise) must not depend on
+    # which lines the policy orders, so every policy sees the same guests.
+    rng = random.Random(f"history-{seed}-{kitchen.id}-demand")
     state = KitchenState(kitchen)
     forecast = Forecaster(kitchen)
-    fill = supplier_fill(rng)
+    fill = supplier_fill(random.Random(f"history-{seed}-{kitchen.id}-supply"))
     rows = defaultdict(list)
 
     # Opening stock: 2-5 days of expected use, partly aged.
