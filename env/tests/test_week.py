@@ -82,6 +82,13 @@ class KitchenWeekTest(unittest.TestCase):
         env.step({"order": {"999999": 1}})
         self.assertEqual(env.score.refused, 1)
 
+    def test_invalid_quantity_refused(self):
+        env, obs = self._env_on_order_day()
+        pid = next(iter(obs["products"]))
+        env.step({"order": {pid: "abc"}})
+        self.assertEqual(env.score.refused, 1)
+        self.assertEqual(env.score.mandate_penalty, env.rules.refused_penalty)
+
     def test_stockout_is_announced_and_never_delivered(self):
         env = KitchenWeek(seed=1)
         obs = env.reset()
