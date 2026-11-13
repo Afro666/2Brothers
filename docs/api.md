@@ -18,8 +18,9 @@ Suppliers (Valio, others)         <--orders, demand-----         |              
 ## Auth and the trust rule
 
 - Every organisation (kitchen or supplier) gets API keys with scopes.
-- Scopes: `kitchen:read`, `kitchen:write` (stock, menus, products, suppliers),
-  `kitchen:propose`, `kitchen:approve`, `supplier:read-orders`, `supplier:confirm`,
+- Scopes: `kitchen:read` (every GET on the kitchen side, including products, recipes
+  and suppliers), `kitchen:write` (POST, PUT, DELETE on stock, menus, products, recipes,
+  suppliers), `kitchen:propose`, `kitchen:approve`, `supplier:read-orders`, `supplier:confirm`,
   `supplier:demand`.
 - **`kitchen:approve` is only on a human user session**, never on an API key or the
   agent's MCP token. The Buyer can propose; it cannot approve. That is the product's trust
