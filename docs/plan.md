@@ -84,7 +84,9 @@ Patterns only, no data. Source: the engine's code and docs (read 2026-11-13).
 - `place_order` takes `expected_total`; the gateway refuses with `TOTAL_MISMATCH` if price
   or stock moved since the simulate (tolerance €0.005).
 - Idempotency: an attempt row is written *before* the backend call, plus a payload hash and
-  an `Idempotency-Key`. A replay returns the stored result.
+  an `idempotency_key` field in the JSON body (scoped to the kitchen and operation; the
+  `Idempotency-Key` header is not supported, see `docs/contract.md`). A replay returns the
+  stored result; key reuse with a different payload is rejected.
 - Three failure outcomes, each with a different meaning:
   `NOT_SENT` (safe to retry), `UNCONFIRMED` (a human checks; blocks the order),
   `SENT_READ_FAILED` (it landed; re-read, never resend). POSTs are never auto-retried.
