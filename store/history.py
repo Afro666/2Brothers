@@ -87,6 +87,15 @@ def set_sharing(db, kitchen_id: str, supplier_id: str, share_forecast: bool,
     return db.sharing.find_one({"kitchen_id": kitchen_id, "supplier_id": supplier_id}, {"_id": 0})
 
 
+def seed_sharing(db, kitchen_ids: list[str], supplier_id: str) -> list[str]:
+    """Demo data: four in five synthetic kitchens share their forecast, every fifth
+    does not, so the consent rule is visible. Recorded as granted by `synthetic-seed`."""
+    sharing = [kitchen for index, kitchen in enumerate(sorted(kitchen_ids)) if index % 5 != 4]
+    for kitchen in sharing:
+        set_sharing(db, kitchen, supplier_id, True, "synthetic-seed")
+    return sharing
+
+
 def list_sharing(db, kitchen_id: str) -> list[dict]:
     return list(db.sharing.find({"kitchen_id": kitchen_id}, {"_id": 0}).sort("supplier_id", 1))
 
@@ -153,9 +162,16 @@ def supplier_demand(db, supplier_id: str, product_id: str, start, end,
 def main() -> None:
     parser = argparse.ArgumentParser(description="Load the synthetic kitchen history.")
     parser.add_argument("--dir", type=Path, default=Path("env/out/history"))
+    parser.add_argument("--share-with", metavar="SUPPLIER_ID",
+                        help="demo: let four in five of these kitchens share with this supplier")
     args = parser.parse_args()
-    for name, count in load_history(get_db(), args.dir).items():
+    db = get_db()
+    for name, count in load_history(db, args.dir).items():
         print(f"{name}: {count} rows")
+    if args.share_with:
+        kitchens = [row["kitchen_id"] for row in _rows(args.dir / "kitchens.jsonl")]
+        sharing = seed_sharing(db, kitchens, args.share_with)
+        print(f"sharing with {args.share_with}: {len(sharing)} of {len(kitchens)} kitchens")
 
 
 if __name__ == "__main__":

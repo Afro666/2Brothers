@@ -79,6 +79,16 @@ class ConsentTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             history.set_sharing(self.db, "K01", "valio_aimo", True, "")
 
+    def test_demo_seed_leaves_every_fifth_kitchen_out(self):
+        kitchens = [f"K{n:02d}" for n in range(1, 21)]
+        sharing = history.seed_sharing(self.db, kitchens, "valio_aimo")
+        self.assertEqual(len(sharing), 16)
+        consenting = history.consenting_kitchens(self.db, "valio_aimo")
+        self.assertEqual(consenting, sharing)
+        for held_back in ("K05", "K10", "K15", "K20"):
+            self.assertNotIn(held_back, consenting)
+        self.assertEqual(history.list_sharing(self.db, "K01")[0]["granted_by"], "synthetic-seed")
+
 
 @unittest.skipUnless(os.environ.get("STORE_LIVE_TESTS") == "1", "set STORE_LIVE_TESTS=1")
 class LiveHistoryTests(unittest.TestCase):
