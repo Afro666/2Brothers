@@ -1,17 +1,38 @@
 name: two-brothers
 
+# Values come from the server's /opt/2brothers/.env (see deploy/README.md).
+# A missing required value stops the deploy instead of starting something open.
+
 services:
   web:
     build: ../web
     restart: unless-stopped
+    depends_on:
+      - gateway
     ports:
       - "80:80"
       - "443:443"
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      SITE_USER: ${SITE_USER:?set SITE_USER in .env}
+      SITE_PASSWORD_HASH: ${SITE_PASSWORD_HASH:?set SITE_PASSWORD_HASH in .env}
+      GATEWAY_HUMAN_TOKEN: ${GATEWAY_HUMAN_TOKEN:?set GATEWAY_HUMAN_TOKEN in .env}
     volumes:
       # Caddy keeps its HTTPS certificates here; losing it re-requests them.
       - caddy_data:/data
+
+  # Reached only through the web container (no published port).
+  gateway:
+    build:
+      context: ..
+      dockerfile: gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      VALIO_API_KEY: ${VALIO_API_KEY:?set VALIO_API_KEY in .env}
+      MONGODB_URI: ${MONGODB_URI:?set MONGODB_URI in .env}
+      GATEWAY_AGENT_TOKEN: ${GATEWAY_AGENT_TOKEN:?set GATEWAY_AGENT_TOKEN in .env}
+      GATEWAY_HUMAN_TOKEN: ${GATEWAY_HUMAN_TOKEN:?set GATEWAY_HUMAN_TOKEN in .env}
+      GATEWAY_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}
 
 volumes:
   caddy_data:

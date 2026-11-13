@@ -7,18 +7,33 @@ is on `main`, checks it out in `/opt/2brothers`, and runs Docker Compose
 (`deploy/compose.yaml`). The server builds the images itself; there is no
 registry.
 
-Today the stack is one container: Caddy serving the built web app. The
-gateway container and the `/api` route are added when the gateway has an HTTP
-server. MongoDB stays on Atlas.
+The stack is two containers. `web` is Caddy: it serves the built web app and is the only
+thing reachable from outside. `gateway` is the FastAPI gateway (`gateway/Dockerfile`),
+reached only through Caddy. MongoDB stays on Atlas.
+
+| Path | Who | Protection |
+|---|---|---|
+| `/api/ping` | monitors | none; answers `{"status":"ok"}` |
+| `/gateway/*` | the Buyer agent, other services | the caller's own bearer token, checked by the gateway |
+| `/api/*` | the web app | the shared demo password; Caddy adds the gateway's human token on the server, so it never reaches a browser. The web app names the person in `X-User`. |
+| everything else | the screens | the shared demo password |
 
 ## Settings
 
-Server file `/opt/2brothers/.env` (not in git; keys such as `MONGODB_URI` go
-here later, never in an image):
+Server file `/opt/2brothers/.env` (mode 600, not in git; never in an image):
 
 ```
 SITE_ADDRESS="<ip-with-dashes>.sslip.io, http://<ip>"
+SITE_USER=<demo user name>
+SITE_PASSWORD_HASH='<bcrypt hash from: docker run --rm caddy:2-alpine caddy hash-password --plaintext "<password>">'
+GATEWAY_HUMAN_TOKEN=<long random string>
+GATEWAY_AGENT_TOKEN=<another long random string; give this one to the Buyer agent>
+VALIO_API_KEY=<key>
+MONGODB_URI="<Atlas connection string>"
 ```
+
+Keep the single quotes around the hash: it contains `$` signs. Compose refuses to start
+when a required value is missing.
 
 A host name gets HTTPS from Caddy automatically; `sslip.io` gives the IP a
 host name without buying a domain. The `http://<ip>` part keeps plain HTTP on
