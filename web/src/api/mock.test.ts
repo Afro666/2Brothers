@@ -119,3 +119,39 @@ describe("mock API product search filters", () => {
     expect(combined).toEqual([]);
   });
 });
+
+describe("mock API proposal changes", () => {
+  it("resimulates totals and MOV from line prices and tax rates", async () => {
+    const api = createMockApi();
+    const result = await api.changeProposal(
+      approval.orderId,
+      {
+        type: "SET_QUANTITY",
+        productId: "463335",
+        quantity: 900,
+      },
+      "human",
+    );
+
+    expect(result.order.totalExVat).toBe(1845);
+    expect(result.order.totalInclVat).toBe(2094.08);
+    expect(result.order.mov.current).toBe(1845);
+    expect(result.approval).toMatchObject({ totalExVat: 1845, totalInclVat: 2094.08, lineCount: 1 });
+  });
+
+  it("only allows proposal changes while its approval is pending", async () => {
+    const api = createMockApi();
+    await api.approve(DECISION, "human");
+    await expect(
+      api.changeProposal(
+        approval.orderId,
+        {
+          type: "SET_QUANTITY",
+          productId: "463335",
+          quantity: 900,
+        },
+        "human",
+      ),
+    ).rejects.toMatchObject({ code: "ALREADY_DECIDED" });
+  });
+});
