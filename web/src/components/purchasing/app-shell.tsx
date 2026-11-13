@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 
+import { ThemePicker } from "@/components/purchasing/theme-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -134,6 +135,15 @@ function RolePicker() {
   );
 }
 
+/** Display choices at the foot of the nav; the language choice goes in here too. */
+function ShellFooter() {
+  return (
+    <div className="mt-auto space-y-4 border-t pt-4">
+      <ThemePicker />
+    </div>
+  );
+}
+
 function Brand() {
   return (
     <span className="flex items-center gap-2 font-semibold">
@@ -162,6 +172,7 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
         <Brand />
         <RolePicker />
         <NavList items={nav} activeId={current} />
+        <ShellFooter />
       </aside>
 
       <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top,0px))] items-center gap-3 border-b bg-background/95 pt-[env(safe-area-inset-top,0px)] pr-[calc(1rem+env(safe-area-inset-right,0px))] pl-[calc(1rem+env(safe-area-inset-left,0px))] backdrop-blur md:hidden">
@@ -178,9 +189,10 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
             </SheetTitle>
             <SheetDescription className="sr-only">Main navigation</SheetDescription>
           </SheetHeader>
-          <div className="space-y-6 px-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4">
             <RolePicker />
             <NavList items={nav} activeId={current} onNavigate={() => setOpen(false)} />
+            <ShellFooter />
           </div>
         </SheetContent>
       </Sheet>

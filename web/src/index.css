@@ -1,9 +1,13 @@
 /*
  * Design tokens: a neutral palette plus four semantic tones.
  * Components read only these names (bg-background, text-danger …),
- * never a raw colour. Dark mode follows the OS setting.
+ * never a raw colour. The theme is `data-theme` on <html>, set by the
+ * inline script in index.html and then by src/lib/theme.tsx.
  */
 @import "tailwindcss";
+
+/* Tailwind's `dark:` utilities follow the attribute, not the device. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 :root {
   color-scheme: light;
@@ -38,37 +42,35 @@
   --info-surface: oklch(0.96 0.03 250);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: #7fc08a;
-    --primary-foreground: #0b1f10;
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.72 0 0);
-    --accent: #243c29;
-    --accent-foreground: #a4d5ab;
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 12%);
-    --input: oklch(1 0 0 / 18%);
-    --ring: #7fc08a;
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: #7fc08a;
+  --primary-foreground: #0b1f10;
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.72 0 0);
+  --accent: #243c29;
+  --accent-foreground: #a4d5ab;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 18%);
+  --ring: #7fc08a;
 
-    --success: oklch(0.78 0.14 150);
-    --success-surface: oklch(0.29 0.06 150);
-    --warning: oklch(0.84 0.13 80);
-    --warning-surface: oklch(0.31 0.06 70);
-    --danger: oklch(0.75 0.16 25);
-    --danger-surface: oklch(0.3 0.08 25);
-    --info: oklch(0.78 0.11 250);
-    --info-surface: oklch(0.3 0.06 250);
-  }
+  --success: oklch(0.78 0.14 150);
+  --success-surface: oklch(0.29 0.06 150);
+  --warning: oklch(0.84 0.13 80);
+  --warning-surface: oklch(0.31 0.06 70);
+  --danger: oklch(0.75 0.16 25);
+  --danger-surface: oklch(0.3 0.08 25);
+  --info: oklch(0.78 0.11 250);
+  --info-surface: oklch(0.3 0.06 250);
 }
 
 @theme inline {
