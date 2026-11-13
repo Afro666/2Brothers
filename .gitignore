@@ -2,6 +2,7 @@
 .env.local
 node_modules/
 __pycache__/
+*.egg-info/
 .venv/
 /dist/
 /build/
