@@ -213,7 +213,7 @@ third top-level field.
 | `require_labels` | string[] | Label ids such as `EU_ORGANIC_FARMING`; the product must carry all of them. |
 | `temperature` | `"ambient"`, `"chilled"` or `"frozen"` | Storage class. |
 | `category` | string | The 5-character category code. |
-| `pack_size` | `{value: number, unit}` | Net content of one base unit; `unit` is `l`, `dl`, `cl`, `ml`, `kg` or `g`. A hard filter. |
+| `pack_size` | `{value: number, unit}` | Net content of one base unit; `unit` is `L`, `DL`, `CL`, `ML`, `KG` or `G` (upper or lower case is accepted). A hard filter. |
 | `supplier_id` | string | Only this supplier's products. |
 
 Allergen names are the 14 EU allergens: `gluten` (AW), `crustaceans` (AC), `eggs`
@@ -227,7 +227,7 @@ When `pack_size` is absent, a size written in the query ("milk 1 l", "500 g") is
 read from the text and only raises the rank of products with that size.
 
 Response: `products`, best match first. Each row is the product row below plus
-`score` (number) and `match_reasons` (short strings, for example `"size 1 l matches"`,
+`score` (number) and `match_reasons` (short strings, for example `"size 1 L matches"`,
 `"allergen data missing"`, `"size read from the name"`).
 
 Product row (the catalog row from the shared repository, without the raw record):
@@ -243,7 +243,7 @@ Product row (the catalog row from the shared repository, without the raw record)
 | `base_unit`, `sales_unit` | string | Valio unit codes: `ST` piece, `KI` case, `KG`. |
 | `units` | `{unit, size_in_base_units, gtin}[]` | Pack hierarchy, in base units. |
 | `lot_size` | number or null | Order in multiples of this many sales units; null means no rule. |
-| `net_content` | `{value, unit}` or null | Of one base unit, in `l` or `kg`. A case of 12 x 1 l is 1 l. |
+| `net_content` | `{value, unit}` or null | Of one base unit, in `L` or `KG` (see "Units" below). A case of 12 x 1 L is 1 L. |
 | `net_content_source` | string or null | `synkka` (measured piece), `synkka_case` (measured case, divided), `base_unit` (sold by weight), `name` (read from the product name: a guess, verify before relying on it). |
 | `allergens` | `{contains, may_contain, undeclared}` | Lists of GS1 codes. `undeclared` is the supplier's "not declared" level; it is not a free-from claim. |
 | `allergen_data_known` | boolean | False on 46% of the Valio catalog. False means unknown: show "unknown", never "none". |
@@ -373,6 +373,20 @@ A supplier only sees demand from kitchens whose `/sharing` consent names it.
 
 Proposed for the routes above. Quantities are decimal strings in the stated `unit`.
 `null` means unknown, never zero.
+
+**Units.** There are two unit lists, both upper-case, and a field uses exactly one:
+
+- **Kitchen units: `L`, `KG`, `PCS`.** Used by every `unit` in stock counts, stock,
+  demand and supplier demand rows, by recipe `unit`, and by `net_content.unit` in the
+  product row (`L` or `KG` only). They match Valio's `comparisonUnit`. A product with a
+  net content is counted in that unit (milk in `L`); a product without one is counted
+  in `PCS`, which is one base unit. Rows for the same product always use the same unit,
+  so quantities can be summed across kitchens. A request with another spelling
+  (`l`, `Litre`, `kg`) is a 422, never silently converted.
+- **Supplier unit codes: `ST`, `KI`, `KG`, `BAG` ...** Used by offer and order lines
+  (`unit`), `base_unit`, `sales_unit`, `units[]` and discount tiers. They name a pack,
+  not a measure. To go from supplier units to kitchen units, multiply the quantity in
+  base units by `net_content.value`.
 
 `POST /v1/kitchens/{kitchen_id}/stock-counts`
 
