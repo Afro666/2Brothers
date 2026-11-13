@@ -24,8 +24,6 @@ from store.db import get_db
 SERIES = {"stock": "kitchen_stock", "covers": "covers", "orders": "orders_history",
           "deliveries": "deliveries"}
 _JSON = json_util.DEFAULT_JSON_OPTIONS.with_options(tz_aware=True)
-# A sum over fewer kitchens would show a supplier one kitchen's own demand.
-MIN_KITCHENS = 3
 
 
 def ensure_history_collections(db) -> None:
@@ -150,7 +148,7 @@ def _day(value, end: bool = False) -> datetime:
 
 
 def _demand(db, source: str, match: dict, product_id: str, start, end) -> list[dict]:
-    """Per day: summed demand and how many kitchens it covers."""
+    """Per day: each kitchen's demand, their sum and how many kitchens it covers."""
     collection, quantity = {
         # What the kitchen needed that day: what it used plus what it could not serve.
         "history": (db.kitchen_stock, {"$add": ["$used", "$short"]}),
@@ -160,30 +158,47 @@ def _demand(db, source: str, match: dict, product_id: str, start, end) -> list[d
         {"$match": {**match, "meta.product_id": str(product_id),
                     "ts": {"$gte": _day(start), "$lte": _day(end, end=True)}}},
         {"$group": {"_id": {"date": {"$dateToString": {"format": "%Y-%m-%d", "date": "$ts"}},
-                            "unit": "$unit"},
-                    "demand": {"$sum": quantity}, "kitchens": {"$addToSet": "$meta.kitchen_id"}}},
-        {"$sort": {"_id.date": 1}},
+                            "unit": "$unit", "kitchen_id": "$meta.kitchen_id"},
+                    "demand": {"$sum": quantity}}},
+        {"$sort": {"_id.date": 1, "_id.kitchen_id": 1}},
     ])
-    return [{"product_id": str(product_id), "date": row["_id"]["date"], "unit": row["_id"]["unit"],
-             "demand": row["demand"], "kitchens": len(row["kitchens"])} for row in rows]
+    days: dict = {}
+    for row in rows:
+        key = row["_id"]
+        day = days.setdefault((key["date"], key["unit"]), {
+            "product_id": str(product_id), "date": key["date"], "unit": key["unit"],
+            "demand": 0, "kitchens": 0, "by_kitchen": []})
+        day["demand"] += row["demand"]
+        day["kitchens"] += 1
+        day["by_kitchen"].append({"kitchen_id": key["kitchen_id"], "demand": row["demand"]})
+    return list(days.values())
 
 
 def kitchen_demand(db, kitchen_id: str, product_id: str, start, end,
                    source: str = "history") -> list[dict]:
     """One kitchen's daily demand for one product, `start` to `end` inclusive."""
-    return _demand(db, source, {"meta.kitchen_id": kitchen_id}, product_id, start, end)
+    rows = _demand(db, source, {"meta.kitchen_id": kitchen_id}, product_id, start, end)
+    return [{key: value for key, value in row.items() if key != "by_kitchen"} for row in rows]
 
 
 def supplier_demand(db, supplier_id: str, product_id: str, start, end,
-                    source: str = "history", min_kitchens: int = MIN_KITCHENS) -> list[dict]:
-    """Daily demand summed over the kitchens that share their forecast with this supplier.
+                    source: str = "history") -> list[dict]:
+    """Daily demand of the kitchens that share their forecast with this supplier.
 
-    The rows say how many kitchens the sum covers, never which ones. A day backed by
-    fewer than `min_kitchens` kitchens is left out: it would not be an aggregate.
+    Each row has the sum and `by_kitchen`: every consenting kitchen by id and name with
+    its own demand. The kitchen agreed to be named when it shared (the consent text says
+    so), so there is no minimum group size. A kitchen without active consent appears
+    nowhere: not in the sum, not in the list.
     """
     kitchens = consenting_kitchens(db, supplier_id)
+    names = {kitchen["_id"]: kitchen.get("name")
+             for kitchen in db.kitchens.find({"_id": {"$in": kitchens}}, {"name": 1})}
     rows = _demand(db, source, {"meta.kitchen_id": {"$in": kitchens}}, product_id, start, end)
-    return [row for row in rows if row["kitchens"] >= min_kitchens]
+    for row in rows:
+        row["by_kitchen"] = [{"kitchen_id": entry["kitchen_id"],
+                              "kitchen_name": names.get(entry["kitchen_id"]),
+                              "demand": entry["demand"]} for entry in row["by_kitchen"]]
+    return rows
 
 
 def main() -> None:
