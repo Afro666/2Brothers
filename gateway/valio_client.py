@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 import json
 import math
 import os
+import re
 import time
 from typing import Callable
 from urllib.error import HTTPError, URLError
@@ -22,7 +23,8 @@ def closing_time(value: str | None) -> datetime | None:
     """Interpret naive upstream timestamps in Helsinki, preserving explicit offsets."""
     if not value:
         return None
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    value = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", value.replace("Z", "+00:00"))
+    parsed = datetime.fromisoformat(value)
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=ZoneInfo("Europe/Helsinki"))
 
 
