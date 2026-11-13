@@ -4,6 +4,8 @@ import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
 import {
   approval as seedApproval,
+  confirmedDemoApproval,
+  confirmedDemoOrder,
   auditEvents,
   mandate,
   offers,
@@ -41,14 +43,8 @@ export interface MockApi extends Api {
 
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
 export function createMockApi(): MockApi {
-  let approval: ApprovalRequest = { ...seedApproval, reasons: [...seedApproval.reasons] };
-  const orderCopies = Object.fromEntries(
-    Object.entries(seedOrders).map(([key, order]) => [
-      key,
-      { ...order, lines: [...order.lines], mov: { ...order.mov } },
-    ]),
-  ) as Record<string, Order>;
-  const proposalOrder = orderCopies.needsApproval;
+  const approvals = new Map([confirmedDemoApproval, seedApproval].map((row) => [row.id, structuredClone(row)]));
+  const demoOrders = new Map([...Object.values(seedOrders), confirmedDemoOrder].map((row) => [row.id, structuredClone(row)]));
   const audit: AuditEvent[] = [...auditEvents];
   const feedback: FeedbackRow[] = [];
   let nextFailure: ApiError | null = null;
@@ -62,13 +58,15 @@ export function createMockApi(): MockApi {
   };
 
   function pendingApproval(id: string): ApprovalRequest {
-    if (id !== approval.id) throw new ApiError("NOT_FOUND", `Approval ${id} was not found.`);
+    const approval = approvals.get(id);
+    if (!approval) throw new ApiError("NOT_FOUND", `Approval ${id} was not found.`);
     if (approval.status !== "PENDING") throw new ApiError("ALREADY_DECIDED", `Approval ${id} is already decided.`);
     return approval;
   }
 
-  function decide(status: "APPROVED" | "REJECTED", actor: AuditActor, summary: string, reason: string | null) {
-    approval = { ...approval, status };
+  function decide(current: ApprovalRequest, status: "APPROVED" | "REJECTED", actor: AuditActor, summary: string, reason: string | null) {
+    const approval = { ...current, status };
+    approvals.set(approval.id, approval);
     audit.push({
       id: `EV-${audit.length + 1}`,
       at: new Date().toISOString(),
@@ -93,6 +91,7 @@ export function createMockApi(): MockApi {
   }
 
   function appendChange(
+    orderId: string,
     kind: FeedbackRow["kind"],
     productId: string,
     from: number | null,
@@ -104,7 +103,7 @@ export function createMockApi(): MockApi {
       id: `FB-${feedback.length + 1}`,
       at: new Date().toISOString(),
       actor,
-      orderId: proposalOrder.id,
+      orderId,
       productId,
       kind,
       from,
@@ -118,11 +117,11 @@ export function createMockApi(): MockApi {
       actor,
       summary,
       reason: summary,
-      orderId: proposalOrder.id,
+      orderId,
     });
   }
 
-  function resimulate(lines: OrderLine[]): Order {
+  function resimulate(lines: OrderLine[], proposalOrder: Order): Order {
     let exVat = 0;
     let inclVat = 0;
     for (const line of lines) {
@@ -152,10 +151,11 @@ export function createMockApi(): MockApi {
     },
 
     async listApprovals() {
-      return [approval];
+      return [...approvals.values()];
     },
     async getApproval(id) {
-      if (id !== approval.id) throw new ApiError("NOT_FOUND", `Approval ${id} was not found.`);
+      const approval = approvals.get(id);
+      if (!approval) throw new ApiError("NOT_FOUND", `Approval ${id} was not found.`);
       return approval;
     },
     async approve(decision, actor) {
@@ -171,20 +171,27 @@ export function createMockApi(): MockApi {
       ) {
         throw new ApiError("TOTAL_MISMATCH", "The order total changed since you read it.");
       }
-      return decide(
-        "APPROVED",
-        actor,
-        `Approved ${current.orderId}`,
+      const order = demoOrders.get(current.orderId)!;
+      if (order.lines.some((line) => isUnknownStock(line.offer.availableAmount))) {
+        throw new ApiError("STOCK_UNKNOWN", "Waiting for supplier stock confirmation.");
+      }
+      demoOrders.set(order.id, { ...order, status: "PLACED" });
+      const decided = decide(
+        current, "APPROVED", actor, `Approved ${current.orderId}`,
         `Approved exactly ${formatEur(current.totalExVat)} ex VAT (${formatEur(current.totalInclVat)} incl VAT).`,
       );
+      audit.push({ id: `EV-${audit.length + 1}`, at: new Date().toISOString(), kind: "order", actor: "gateway",
+        orderId: order.id, summary: `Placed ${order.id}`, reason: "Human approved the exact simulated demo total; stock was measured." });
+      return decided;
     },
     async reject(approvalId, reason, actor) {
       const current = pendingApproval(approvalId);
-      return decide("REJECTED", actor, `Rejected ${current.orderId}`, reason.trim() || null);
+      return decide(current, "REJECTED", actor, `Rejected ${current.orderId}`, reason.trim() || null);
     },
 
     async listAddableProducts(orderId, query = "") {
-      if (orderId !== proposalOrder.id) throw new ApiError("NOT_FOUND", `Order ${orderId} was not found.`);
+      const proposalOrder = demoOrders.get(orderId);
+      if (!proposalOrder) throw new ApiError("NOT_FOUND", `Order ${orderId} was not found.`);
       const words = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
       const existing = new Set(proposalOrder.lines.map((line) => line.product.id));
       const ranked: AddableProduct[] = (Object.entries(products) as [keyof typeof products, Product][])
@@ -214,7 +221,9 @@ export function createMockApi(): MockApi {
       return ranked;
     },
     async changeProposal(orderId, change: ProposalChange, actor) {
-      if (orderId !== proposalOrder.id) throw new ApiError("NOT_FOUND", `Order ${orderId} was not found.`);
+      const proposalOrder = demoOrders.get(orderId);
+      if (!proposalOrder) throw new ApiError("NOT_FOUND", `Order ${orderId} was not found.`);
+      const approval = [...approvals.values()].find((row) => row.orderId === orderId)!;
       pendingApproval(approval.id);
       if (change.type !== "REMOVE_LINE" && (!Number.isInteger(change.quantity) || change.quantity < 1)) {
         throw new ApiError("INVALID", "Quantity must be a whole number of at least 1.");
@@ -261,21 +270,22 @@ export function createMockApi(): MockApi {
         kind = "LINE_ADDED";
         summary = `Added ${change.productId} with quantity ${change.quantity}`;
       }
-      const next = resimulate(lines);
+      const next = resimulate(lines, proposalOrder);
       Object.assign(proposalOrder, next);
-      approval = { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length };
-      appendChange(kind, change.productId, from, to, actor, summary);
-      return { order: proposalOrder, approval };
+      const nextApproval = { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length };
+      approvals.set(approval.id, nextApproval);
+      appendChange(proposalOrder.id, kind, change.productId, from, to, actor, summary);
+      return { order: proposalOrder, approval: nextApproval };
     },
     async listFeedback(filter) {
       return filter?.orderId ? feedback.filter((row) => row.orderId === filter.orderId) : [...feedback];
     },
 
     async listOrders() {
-      return Object.values(orderCopies);
+      return [...demoOrders.values()];
     },
     async getOrder(id) {
-      const found = Object.values(orderCopies).find((order) => order.id === id);
+      const found = demoOrders.get(id);
       if (!found) throw new ApiError("NOT_FOUND", `Order ${id} was not found.`);
       return found;
     },
@@ -283,7 +293,7 @@ export function createMockApi(): MockApi {
       return filter?.orderId ? audit.filter((event) => event.orderId === filter.orderId) : [...audit];
     },
     async submitChefRequest() {
-      return { order: proposalOrder, substitutes, approval };
+      return { order: demoOrders.get(seedApproval.orderId)!, substitutes, approval: approvals.get(seedApproval.id)! };
     },
     async searchProducts(query, filters = {}) {
       const words = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);

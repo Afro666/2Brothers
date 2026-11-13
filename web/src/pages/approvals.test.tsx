@@ -21,10 +21,10 @@ function withConfirmedStock() {
 describe("ApprovalsPage", () => {
   it("keeps the milk proposal visible while awaiting stock confirmation", async () => {
     renderApp("/approvals", createMockApi());
-    expect(await screen.findByRole("heading", { name: "Waiting for you (1)" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Waiting for you (2)" })).toBeVisible();
     expect(await screen.findByText(/Waiting for supplier stock confirmation/)).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
+    expect(screen.getAllByRole("button", { name: /^Approve/ }).filter((button) => button.hasAttribute("disabled"))).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Reject" })[0]).toBeEnabled();
   });
   beforeEach(() => localStorage.clear());
 
@@ -33,20 +33,20 @@ describe("ApprovalsPage", () => {
     const api = withConfirmedStock();
     renderApp("/approvals", api);
 
-    expect(await screen.findByRole("heading", { name: "Waiting for you (1)" })).toBeInTheDocument();
-    expect(screen.getByText("€2,210.41")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    expect(await screen.findByRole("heading", { name: "Waiting for you (2)" })).toBeInTheDocument();
+    expect(screen.getByText("€148.76")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Approve €148\.76 incl VAT/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
-    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
     expect(await screen.findByRole("heading", { name: "Decided" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Waiting for you (0)" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Waiting for you (1)" })).toBeInTheDocument();
     await waitFor(async () => {
       const events = await api.listAudit();
       expect(events.filter((event) => event.kind === "approval").at(-1)).toMatchObject({
         actor: "human",
-        orderId: "ORD-1043",
-        summary: "Approved ORD-1043",
+        orderId: "ORD-1044",
+        summary: "Approved ORD-1044",
       });
     });
   });
@@ -57,12 +57,12 @@ describe("ApprovalsPage", () => {
     api.failNextApprove("TOTAL_MISMATCH", "The total moved.");
     renderApp("/approvals", api);
 
-    await user.click(await screen.findByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    await user.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
-    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The total moved.");
-    expect(screen.getByRole("heading", { name: "Waiting for you (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Waiting for you (2)" })).toBeInTheDocument();
   });
 
   it("records a rejection reason in the audit log", async () => {
@@ -70,7 +70,7 @@ describe("ApprovalsPage", () => {
     const api = createMockApi();
     renderApp("/approvals", api);
 
-    await user.click(await screen.findByRole("button", { name: "Reject" }));
+    await user.click((await screen.findAllByRole("button", { name: "Reject" }))[1]);
     const dialog = await screen.findByRole("dialog", { name: "Reject this order?" });
     await user.type(within(dialog).getByRole("textbox", { name: "Reason (optional)" }), "Too much milk");
     await user.click(within(dialog).getByRole("button", { name: "Reject" }));
@@ -89,7 +89,7 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
 
-    const button = await screen.findByRole("button", { name: "Show order lines" });
+    const button = (await screen.findAllByRole("button", { name: "Show order lines" }))[1];
     expect(button).toHaveAttribute("aria-expanded", "false");
     await user.click(button);
 
