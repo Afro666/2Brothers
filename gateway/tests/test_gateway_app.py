@@ -12,7 +12,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from gateway.app import create_app  # noqa: E402
-from gateway.service import Gateway  # noqa: E402
+from gateway.service import Gateway, GatewayError  # noqa: E402
 from gateway.valio_client import ValioClient  # noqa: E402
 
 FIX = Path(__file__).parent / "fixtures"
@@ -37,8 +37,11 @@ class FakeValio:
     def __init__(self):
         self.price_data = json.loads((FIX / "price.json").read_text())
         self.avail_data = json.loads((FIX / "availability.json").read_text())
+        self.hook = None   # called before each Valio answer (to test races)
 
     def transport(self, path, payload, headers):
+        if self.hook:
+            self.hook()
         data = self.price_data if path == "/api/price" else self.avail_data
         out = deepcopy(data)
         out["products"] = [p for p in out["products"] if p["productId"] in payload["products"]]
@@ -130,6 +133,34 @@ def test_human_approves_order_is_placed_once(env):
     assert tool.status_code == 200 and tool.json()["order_id"] == order["order_id"]
     kinds = [e["kind"] for e in client.get(K + "/audit", headers=AGENT).json()["events"]]
     assert kinds == ["proposal_created", "order_placed"]
+
+
+def test_second_approve_with_other_key_during_first_places_one_order(env):
+    client, fake, db = env
+    p = milk(client)
+    url = f"{K}/proposals/{p['proposal_id']}/approve"
+    other_tab = Gateway(db, ValioClient("test-not-a-real-key", transport=fake.transport, ttl=0, now=lambda: NOW),
+                        now=lambda: NOW)
+    second = []
+
+    def racing():
+        # The first approve has claimed the proposal and is in its live re-check.
+        if second:
+            return
+        second.append(None)
+        try:
+            other_tab.approve("demo-kitchen", p["proposal_id"],
+                              {"expected_total": p["expected_total"], "idempotency_key": "a2"}, human="tymon")
+        except GatewayError as exc:
+            second[0] = exc
+
+    fake.hook = racing
+    first = client.post(url, headers=HUMAN, json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
+    assert first.status_code == 200, first.text
+    assert isinstance(second[0], GatewayError), "the second approve must be refused"
+    assert second[0].status == 409 and second[0].code == "NOT_PENDING"
+    assert db.orders.count_documents({}) == 1
+    assert db.proposals.find_one({"_id": p["proposal_id"]})["status"] == "APPROVED"
 
 
 def test_price_moved_is_total_mismatch_and_nothing_is_placed(env):

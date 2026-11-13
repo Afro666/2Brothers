@@ -232,17 +232,37 @@ class Gateway:
         doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id})
         if doc is None:
             raise GatewayError(404, "PROPOSAL_NOT_FOUND", "no such proposal")
-        if doc["status"] == "APPROVED" and doc.get("order_id"):
-            order = orders.get_order(self.db, doc["order_id"])
-            if order["idempotency_key"] == key:
-                return {"proposal_id": proposal_id, **self._order_out(order)}
-            raise GatewayError(409, "NOT_PENDING", "this proposal is already approved")
         if doc["status"] != "READY":
-            raise GatewayError(409, "NOT_PENDING", f"proposal is {doc['status']}")
+            return self._approved_or_conflict(kitchen_id, proposal_id, key)
         stored = orders.get_offer(self.db, doc["offer_id"])
         if Decimal(str(seen)) - Decimal(stored["simulation"]["expected_total"]) != 0:
             raise GatewayError(409, "TOTAL_MISMATCH", "this is not the total of the proposal",
                                expected_total=stored["simulation"]["expected_total"])
+        # Claim the proposal atomically: one proposal places at most one order, even when
+        # two approvals with different keys arrive together (double click, two tabs).
+        claimed = self.db.proposals.find_one_and_update(
+            {"_id": proposal_id, "kitchen_id": kitchen_id, "status": "READY", "offer_id": stored["offer_id"]},
+            {"$set": {"status": "APPROVING", "approving_key": key}})
+        if claimed is None:
+            return self._approved_or_conflict(kitchen_id, proposal_id, key)
+        try:
+            return self._place(kitchen_id, proposal_id, doc, stored, seen, key, human)
+        except BaseException:
+            self.db.proposals.update_one({"_id": proposal_id, "status": "APPROVING", "approving_key": key},
+                                         {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
+            raise
+
+    def _approved_or_conflict(self, kitchen_id: str, proposal_id: str, key: str) -> dict:
+        """Not READY: replay the order placed with this key, else 409 NOT_PENDING."""
+        doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id}) or {}
+        if doc.get("status") == "APPROVED" and doc.get("order_id"):
+            order = orders.get_order(self.db, doc["order_id"])
+            if order["idempotency_key"] == key:
+                return {"proposal_id": proposal_id, **self._order_out(order)}
+            raise GatewayError(409, "NOT_PENDING", "this proposal is already approved")
+        raise GatewayError(409, "NOT_PENDING", f"proposal is {doc.get('status')}")
+
+    def _place(self, kitchen_id: str, proposal_id: str, doc: dict, stored: dict, seen, key: str, human: str) -> dict:
         # Live re-check: price or stock may have moved since the human looked.
         fresh = self._quote(kitchen_id, doc["request"])
         new_total = Decimal(fresh["simulation"]["expected_total"])
@@ -273,6 +293,9 @@ class Gateway:
                                          {"$set": {"status": "APPROVED", "order_id": order["order_id"]}})
             self._audit(kitchen_id, "order_placed", human, proposal_id=proposal_id,
                         order_id=order["order_id"], expected_total=sim["expected_total"])
+        else:   # the key already placed an order: nothing new placed here, release the claim
+            self.db.proposals.update_one({"_id": proposal_id, "status": "APPROVING", "approving_key": key},
+                                         {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
         return {"proposal_id": proposal_id, **self._order_out(order)}
 
     def reject(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None) -> dict:
