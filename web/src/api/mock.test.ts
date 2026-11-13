@@ -66,3 +66,56 @@ describe("mock API product search", () => {
     expect(withoutMilk[0].allergens).toBeNull();
   });
 });
+
+describe("mock API product search filters", () => {
+  it("removes products with no allergen data only when the search is strict", async () => {
+    const api = createMockApi();
+    const lenient = await api.searchProducts("milk", { excludedAllergens: ["AM"] });
+    const strict = await api.searchProducts("milk", { excludedAllergens: ["AM"], strictAllergens: true });
+    const strictOnly = await api.searchProducts("milk", { strictAllergens: true });
+
+    expect(lenient.map((product) => product.id)).toEqual(["464179"]);
+    expect(strict).toEqual([]);
+    expect(strictOnly.map((product) => product.id)).not.toContain("464179");
+    expect(strictOnly).toHaveLength(4);
+  });
+
+  it("keeps only products that carry every required label", async () => {
+    const api = createMockApi();
+    const organic = await api.searchProducts("", { requiredLabels: ["EU_ORGANIC_FARMING"] });
+    const swan = await api.searchProducts("milk", { requiredLabels: ["GOODS_FROM_FINLAND_BLUE_SWAN"] });
+    const both = await api.searchProducts("", {
+      requiredLabels: ["EU_ORGANIC_FARMING", "GOODS_FROM_FINLAND_BLUE_SWAN"],
+    });
+
+    expect(organic.map((product) => product.id)).toEqual(["462921"]);
+    expect(swan.map((product) => product.id)).toEqual(["462921", "463038", "463335"]);
+    expect(both.map((product) => product.id)).toEqual(["462921"]);
+  });
+
+  it("filters by temperature and never matches products without temperature data", async () => {
+    const api = createMockApi();
+    const ambient = await api.searchProducts("", { temperature: "ambient" });
+    const chilled = await api.searchProducts("", { temperature: "chilled" });
+    const frozen = await api.searchProducts("", { temperature: "frozen" });
+
+    expect(ambient.map((product) => product.id)).toEqual(["462775"]);
+    expect(chilled.map((product) => product.id)).toEqual(["462921", "463038", "463335"]);
+    expect(frozen).toEqual([]);
+    expect(chilled.map((product) => product.id)).not.toContain("464179");
+  });
+
+  it("lists every product for an empty query and combines filters", async () => {
+    const api = createMockApi();
+    const all = await api.searchProducts("");
+    const combined = await api.searchProducts("", {
+      excludedAllergens: ["AM"],
+      strictAllergens: true,
+      requiredLabels: ["GOODS_FROM_FINLAND_BLUE_SWAN"],
+      temperature: "chilled",
+    });
+
+    expect(all).toHaveLength(5);
+    expect(combined).toEqual([]);
+  });
+});
