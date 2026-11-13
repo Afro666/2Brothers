@@ -60,6 +60,16 @@ class RepositoryTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.repo.suppliers.create({"adapter": "manual"})
 
+    def test_create_duplicate_id_raises_value_error(self):
+        self.repo.suppliers.create({"id": "s1", "name": "Farm", "adapter": "manual"})
+        with self.assertRaises(ValueError):
+            self.repo.suppliers.create({"id": "s1", "name": "Farm", "adapter": "manual"})
+        own = {"product_id": "own-1", "kitchen_id": "k1", "name": "Loaf", "unit": "ST",
+               "supplier_id": "s1"}
+        self.repo.own_products.create(own)
+        with self.assertRaises(ValueError):
+            self.repo.own_products.create(own)
+
     def test_own_product_crud_allergens_unknown_by_default(self):
         sup = self.repo.suppliers.create({"name": "Farm", "adapter": "manual"})
         p = self.repo.own_products.create(

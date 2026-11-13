@@ -21,6 +21,7 @@ import uuid
 from typing import Any, Callable
 
 from bson.decimal128 import Decimal128
+from pymongo.errors import DuplicateKeyError
 
 ADAPTERS = ("valio_api", "manual", "csv")
 SUPPLIER_TERMS = (
@@ -138,7 +139,10 @@ class _OwnProducts:
 
     def create(self, data: dict) -> dict:
         row = own_product_row(data, data.get("product_id") or f"own-{uuid.uuid4().hex[:12]}")
-        self._coll.insert_one(row)
+        try:
+            self._coll.insert_one(row)
+        except DuplicateKeyError:
+            raise ValueError(f"product_id {row['_id']} already exists") from None
         return own_product_out(row)
 
     def get(self, product_id: str) -> dict | None:
@@ -200,7 +204,10 @@ class _Collection:
         doc = {**self._defaults, **{k: v for k, v in data.items() if k not in ("id", "_id")}}
         self._check(doc, False)
         doc["_id"] = data.get("id") or uuid.uuid4().hex
-        self._coll.insert_one(doc)
+        try:
+            self._coll.insert_one(doc)
+        except DuplicateKeyError:
+            raise ValueError(f"id {doc['_id']} already exists") from None
         return self._out(doc)
 
     def get(self, doc_id: str) -> dict | None:
