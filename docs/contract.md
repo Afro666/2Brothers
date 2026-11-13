@@ -140,6 +140,14 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 | `get_order_status` | GET `/tools/get_order_status` | `order_id: string` | `order_id`, `status`, `outcome` |
 | `get_audit_log` | GET `/tools/get_audit_log` | `run_id: string` | `events: object[]` |
 
+**Remote MCP (#280).** The same seven tools are also served over MCP streamable HTTP at
+`POST /mcp` (stateless, JSON responses), same names, arguments and results as above.
+Only the agent bearer token (`Authorization: Bearer <agent token>`) is accepted; any
+other caller, the human token included, gets `401 UNAUTHENTICATED` with
+`WWW-Authenticate: Bearer`. Each call runs the `/tools/*` route above with the agent
+principal, so every refusal and audit entry is the same. There is no approve, reject or
+cancel tool.
+
 The trusted application/engine creates `need_id` before invoking the buyer agent.
 The gateway loads quantities from that stored need; neither `get_offer` nor
 `simulate_order` accepts quantities invented by the model. Offer lines include
