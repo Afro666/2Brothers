@@ -56,7 +56,7 @@ class SearchQueryTests(unittest.TestCase):
         self.assertIn({"equals": {"path": "temperature", "value": "frozen"}}, filters)
         self.assertIn({"equals": {"path": "category", "value": "10400"}}, filters)
         self.assertIn({"equals": {"path": "supplier_id", "value": "valio_aimo"}}, filters)
-        self.assertEqual(sum(f["equals"]["path"] == "labels" for f in filters), 2)
+        self.assertEqual(sum(f.get("equals", {}).get("path") == "labels" for f in filters), 2)
 
     def test_explicit_pack_size_filters_and_a_size_in_the_text_only_boosts(self):
         explicit = compound("milk 1 l", {"pack_size": {"value": 500, "unit": "ml"}})
@@ -66,9 +66,19 @@ class SearchQueryTests(unittest.TestCase):
         self.assertAlmostEqual(size[1]["range"]["lte"], 0.505)
         self.assertEqual(explicit["must"][0]["text"]["query"], "milk")
         from_text = compound("milk 1 l")
-        self.assertNotIn("filter", from_text)
+        self.assertEqual(len(from_text["filter"]), 1)  # only the kitchen scope
         boosts = [c for c in from_text["should"] if "compound" in c]
         self.assertEqual(boosts[0]["compound"]["filter"][1]["range"]["path"], "net_content.value")
+
+    def test_search_sees_the_catalog_and_only_the_asking_kitchens_own_products(self):
+        catalog = {"compound": {"must": [{"exists": {"path": "supplier_id"}}],
+                                "mustNot": [{"exists": {"path": "kitchen_id"}}]}}
+        anonymous = compound("bread")["filter"][-1]["compound"]
+        self.assertEqual(anonymous, {"should": [catalog], "minimumShouldMatch": 1})
+        scoped = build_pipeline("bread", kitchen_id="k1")[0]["$search"]["compound"]["filter"][-1]
+        self.assertEqual(scoped["compound"]["should"],
+                         [catalog, {"equals": {"path": "kitchen_id", "value": "k1"}}])
+        self.assertEqual(scoped["compound"]["minimumShouldMatch"], 1)
 
     def test_text_tolerates_one_typo_over_three_languages_and_brand(self):
         text = compound("maito")["must"][0]["text"]

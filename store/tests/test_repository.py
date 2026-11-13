@@ -4,6 +4,7 @@ Set MONGODB_TEST_URI to run against a real MongoDB (a throwaway database is crea
 and dropped). Without it the tests use mongomock, an in-memory MongoDB.
 """
 
+from decimal import Decimal
 import os
 import unittest
 import uuid
@@ -62,15 +63,62 @@ class RepositoryTest(unittest.TestCase):
     def test_own_product_crud_allergens_unknown_by_default(self):
         sup = self.repo.suppliers.create({"name": "Farm", "adapter": "manual"})
         p = self.repo.own_products.create(
-            {"name": "Rye bread", "unit": "kg", "pack_size": 2, "price_eur": 6.5,
+            {"kitchen_id": "k1", "name": " Rye sourdough loaf 800 g ", "unit": "ST",
+             "base_unit": "KG", "pack_size_in_base_units": "0.8", "unit_price_eur": "4.20",
              "supplier_id": sup["id"]}
         )
-        self.assertIsNone(p["allergens"])  # unknown, not free-from
-        p = self.repo.own_products.update(p["id"], {"allergens": ["gluten"]})
-        self.assertEqual(p["allergens"], ["gluten"])
-        self.assertEqual(self.repo.own_products.list(supplier_id=sup["id"]), [p])
-        self.assertTrue(self.repo.own_products.delete(p["id"]))
+        self.assertTrue(p["product_id"].startswith("own-"))
+        self.assertEqual(p["name"], "Rye sourdough loaf 800 g")
+        self.assertEqual(p["allergen_data"], "UNKNOWN")  # unknown, not free-from
+        self.assertEqual(p["allergens"], [])
+        self.assertEqual(p["unit_price_eur"], Decimal("4.20"))
+        self.assertEqual((p["base_unit"], p["pack_size_in_base_units"]), ("KG", Decimal("0.8")))
+
+        p = self.repo.own_products.update(p["product_id"], {
+            "allergen_data": "ENTERED", "kitchen_id": "k2",  # the kitchen cannot be changed
+            "allergens": [{"code": "aw", "level": "CONTAINS"}, {"code": "AS", "level": "MAY_CONTAIN"}]})
+        self.assertEqual(p["allergens"], [{"code": "AW", "level": "CONTAINS"},
+                                          {"code": "AS", "level": "MAY_CONTAIN"}])
+        self.assertEqual((p["allergen_data"], p["kitchen_id"]), ("ENTERED", "k1"))
+        self.assertEqual(self.repo.own_products.get(p["product_id"]), p)
+        self.assertEqual(self.repo.own_products.list(kitchen_id="k1", supplier_id=sup["id"]), [p])
+        self.assertEqual(self.repo.own_products.list(kitchen_id="k2"), [])
+        self.assertIsNone(self.repo.own_products.update("own-missing", {"name": "x"}))
+        self.assertTrue(self.repo.own_products.delete(p["product_id"]))
         self.assertEqual(self.repo.own_products.list(), [])
+
+    def test_own_product_is_stored_as_a_common_product_row(self):
+        from store.repository import own_product_row
+        row = own_product_row({"kitchen_id": "k1", "name": "Oat cookie", "unit": "PAK",
+                               "supplier_id": "s1", "allergen_data": "ENTERED",
+                               "allergens": [{"code": "GO", "level": "CONTAINS"},
+                                             {"code": "GO", "level": "MAY_CONTAIN"}]}, "own-1")
+        self.assertEqual((row["_id"], row["source"], row["kitchen_id"]), ("own-1", "own", "k1"))
+        self.assertEqual(row["names"], {"en": "Oat cookie", "fi": "Oat cookie", "sv": "Oat cookie"})
+        self.assertEqual(row["allergens"], {"contains": ["GO"], "may_contain": [], "undeclared": []})
+        self.assertTrue(row["allergen_data_known"])
+        self.assertFalse(row["no_declarable_allergens"])
+        self.assertIsNone(row["net_content"])
+        entered_none = own_product_row({"kitchen_id": "k1", "name": "Salt", "unit": "ST",
+                                        "supplier_id": "s1", "allergen_data": "ENTERED"}, "own-2")
+        self.assertTrue(entered_none["no_declarable_allergens"])
+        unknown = own_product_row({"kitchen_id": "k1", "name": "Mystery", "unit": "ST",
+                                   "supplier_id": "s1"}, "own-3")
+        self.assertFalse(unknown["allergen_data_known"])
+        self.assertFalse(unknown["no_declarable_allergens"])
+
+    def test_own_product_validation(self):
+        good = {"kitchen_id": "k1", "name": "Loaf", "unit": "ST", "supplier_id": "s1"}
+        for bad in ({"unit_price_eur": 4.2}, {"unit_price_eur": "-1"}, {"unit_price_eur": "cheap"},
+                    {"base_unit": "KG"}, {"base_unit": "kg", "pack_size_in_base_units": "1"},
+                    {"base_unit": "KG", "pack_size_in_base_units": "0"},
+                    {"allergen_data": "NONE"}, {"allergens": ["gluten"]},
+                    {"allergens": [{"code": "AW", "level": "FREE_FROM"}]},
+                    {"kitchen_id": None}, {"name": ""}):
+            with self.assertRaises((ValueError, TypeError), msg=bad):
+                self.repo.own_products.create({**good, **bad})
+        with self.assertRaises(ValueError):
+            self.repo.own_products.list(name="Loaf")
 
     def test_recipe_crud(self):
         r = self.repo.recipes.create(

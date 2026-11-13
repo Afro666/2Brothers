@@ -87,8 +87,13 @@ def _size_clause(size: dict) -> dict:
                    "gte": size["value"] * 0.99, "lte": size["value"] * 1.01}}]}}
 
 
-def build_pipeline(query: str, filters: dict | None = None, limit: int = 20) -> list[dict]:
-    """The aggregation pipeline for one search. Pure, so it can be tested offline."""
+def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
+                   kitchen_id: str | None = None) -> list[dict]:
+    """The aggregation pipeline for one search. Pure, so it can be tested offline.
+
+    Catalog rows have no `kitchen_id`; an own product belongs to one kitchen. A search
+    sees the catalog plus the asking kitchen's own products, never another kitchen's.
+    """
     filters = dict(filters or {})
     unknown = set(filters) - {"exclude_allergens", "allergen_strictness", "require_labels",
                               "temperature", "category", "pack_size", "supplier_id"}
@@ -102,6 +107,12 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20) -> 
 
     text, text_size = parse_query(query)
     compound: dict = {"filter": [], "mustNot": [], "should": []}
+    catalog = {"compound": {"must": [{"exists": {"path": "supplier_id"}}],
+                            "mustNot": [{"exists": {"path": "kitchen_id"}}]}}
+    scope = [catalog]
+    if kitchen_id is not None:
+        scope.append({"equals": {"path": "kitchen_id", "value": str(kitchen_id)}})
+    scope_clause = {"compound": {"should": scope, "minimumShouldMatch": 1}}
     for path in ("temperature", "category", "supplier_id"):
         if filters.get(path) is not None:
             compound["filter"].append({"equals": {"path": path, "value": str(filters[path])}})
@@ -136,6 +147,7 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20) -> 
                         "score": {"boost": {"value": 3}}}}]
     elif not compound["filter"] and not compound["mustNot"]:
         raise ValueError("give a query or at least one filter")
+    compound["filter"].append(scope_clause)
     compound = {key: value for key, value in compound.items() if value}
     return [
         {"$search": {"index": INDEX_NAME, "compound": compound}},
@@ -166,9 +178,13 @@ def _reasons(doc: dict, text: str, size: dict | None, codes: list[str]) -> list[
     return reasons
 
 
-def search_products(db, query: str = "", filters: dict | None = None, limit: int = 20) -> list[dict]:
-    """Best match first. Each row is the product row plus `score` and `match_reasons`."""
-    pipeline = build_pipeline(query, filters, limit)
+def search_products(db, query: str = "", filters: dict | None = None, limit: int = 20,
+                    kitchen_id: str | None = None) -> list[dict]:
+    """Best match first. Each row is the product row plus `score` and `match_reasons`.
+
+    Pass the authenticated `kitchen_id` to include that kitchen's own products.
+    """
+    pipeline = build_pipeline(query, filters, limit, kitchen_id)
     text, text_size = parse_query(query)
     filters = filters or {}
     size = (_size(filters["pack_size"]["value"], filters["pack_size"]["unit"])
@@ -183,10 +199,14 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
 
 
 def ensure_search_index(db) -> str:
-    """Create the Atlas Search index when it is missing. Returns its status."""
+    """Create the Atlas Search index, or update it when the committed definition
+    changed. Returns its status; Atlas builds in the background until `READY`."""
+    definition = json.loads(Path(__file__).with_name("search_index.json").read_text())
     existing = list(db.products.list_search_indexes(INDEX_NAME))
     if not existing:
-        definition = json.loads(Path(__file__).with_name("search_index.json").read_text())
         db.products.create_search_index(SearchIndexModel(definition=definition, name=INDEX_NAME))
-        return "CREATED"  # Atlas builds it in the background; it is queryable when READY
+        return "CREATED"
+    if existing[0].get("latestDefinition") != definition:
+        db.products.update_search_index(INDEX_NAME, definition)
+        return "UPDATING"
     return existing[0].get("status", "UNKNOWN")

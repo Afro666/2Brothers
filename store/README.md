@@ -31,13 +31,13 @@ The database is the one named in the URI, else `two_brothers`.
 
 | Collection | Module | Notes |
 |---|---|---|
-| `products` | `store.products` | `_id` is the product code (a string). Every row has `source` (`valio` today) and `supplier_id`, so supplier price lists and own products can share the collection and its search index. |
+| `products` | `store.products` | `_id` is the product code (a string). One collection and one search index for every source: `source` is `valio` (the catalog) or `own` (a kitchen's own product, with its `kitchen_id`). |
 | `offers` | `store.orders` | Price and availability snapshots with `fetched_at`. Never updated, never expired. |
 | `orders` | `store.orders` | The attempt row is written before any send. Unique `(kitchen_id, idempotency_key)`. |
 | `approvals` | `store.orders` | `PENDING` until a human decides, once. There is no auto-approve. |
 | `audit_log` | `store.audit` | Insert-only and hash-chained. `_id` is the sequence number. |
 | `kitchen_stock`, `covers`, `orders_history`, `deliveries`, `forecasts`, `kitchens`, `sharing` | `store.history` | Time series and consent; see below. |
-| `suppliers`, `own_products`, `recipes`, `menu_plans` | `store.repository` | Kitchen data (#81). Own products are still a separate collection here. |
+| `suppliers`, `recipes`, `menu_plans` | `store.repository` | Kitchen data (#81). `Repository.own_products` reads and writes own products in `products`, in the contract's own-product shape. |
 
 Money is `Decimal` in Python and `Decimal128` in Mongo; the wire format is a decimal
 string. `store.orders` refuses binary floats and the unknown-stock sentinels
@@ -114,6 +114,9 @@ search_products(db, "", {"require_labels": ["EU_ORGANIC_FARMING"], "temperature"
   Products without allergen data stay, with the reason `allergen data missing`;
   `allergen_strictness: "strict"` removes them too. A misspelt allergen is an error.
 - Every row has `score` and `match_reasons`, and never the `raw` record.
+- Pass the authenticated kitchen as `kitchen_id=` to include that kitchen's own products.
+  A search never returns another kitchen's own products; without `kitchen_id` it
+  returns the catalog only.
 - Known limit: Finnish and Swedish compound words are not split, so `maito` does not
   find `kevytmaitojuoma`. English queries find those products through the English name.
 
