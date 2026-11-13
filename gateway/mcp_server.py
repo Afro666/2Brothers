@@ -5,6 +5,7 @@ import argparse
 from datetime import date
 from decimal import Decimal
 import os
+import re
 from typing import Annotated
 from uuid import NAMESPACE_URL, uuid5
 
@@ -18,6 +19,20 @@ Identifier = Annotated[str, Field(min_length=1, max_length=200)]
 
 class GatewayError(RuntimeError):
     pass
+
+
+_ERROR_CODE = re.compile(r"[A-Z_]{1,40}")
+
+
+def _error_code(response: httpx.Response) -> str | None:
+    """Return the gateway's short error.code, or None. Never the raw body."""
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    error = body.get("error") if isinstance(body, dict) else None
+    code = error.get("code") if isinstance(error, dict) else None
+    return code if isinstance(code, str) and _ERROR_CODE.fullmatch(code) else None
 
 
 class GatewayClient:
@@ -37,7 +52,9 @@ class GatewayClient:
             # No automatic retries: a mutation might have reached the gateway.
             raise GatewayError("Gateway transport failure; reconcile mutation status before retrying") from None
         if response.is_error or response.is_redirect:
-            raise GatewayError(f"Gateway HTTP {response.status_code}; check status before retrying mutations")
+            code = _error_code(response) if response.is_error else None
+            status = f"{response.status_code} {code}" if code else str(response.status_code)
+            raise GatewayError(f"Gateway HTTP {status}; check status before retrying mutations")
         try:
             result = response.json()
         except ValueError:

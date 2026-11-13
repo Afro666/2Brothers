@@ -40,6 +40,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                 refused = await session.call_tool("place_order", {
                     "offer_id": offer["offer_id"], "expected_total": "149.02", "idempotency_key": "test-order"})
                 self.assertTrue(refused.isError)
+                self.assertIn("NEEDS_APPROVAL", refused.content[0].text)
         finally:
             await gateway.close()
 
@@ -120,6 +121,23 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(calls), 1)
         finally:
             await gateway.close()
+
+    async def test_unknown_or_non_json_error_bodies_give_generic_message(self):
+        bodies = [
+            httpx.Response(500, text="secret <html>"),
+            httpx.Response(500, json={"error": {"code": "lower-case secret"}}),
+            httpx.Response(500, json={"error": "NEEDS_APPROVAL"}),
+            httpx.Response(500, json=["NEEDS_APPROVAL"]),
+        ]
+        for response in bodies:
+            gateway = GatewayClient(transport=httpx.MockTransport(lambda request, r=response: r))
+            try:
+                with self.assertRaises(GatewayError) as caught:
+                    await gateway.request("POST", "/tools/place_order", payload={})
+                self.assertEqual(str(caught.exception),
+                                 "Gateway HTTP 500; check status before retrying mutations")
+            finally:
+                await gateway.close()
 
     async def test_stdio_entrypoint(self):
         params = StdioServerParameters(command=sys.executable, args=["-m", "gateway.mcp_server", "--mock"])
