@@ -1,5 +1,6 @@
 import type { Api, AuditActor } from "@/api/types";
 import { ApiError } from "@/api/types";
+import { createPlanningMock } from "@/api/mock-planning";
 import { approval as seedApproval, auditEvents, mandate, orders, products, substitutes } from "@/mocks/milk-case";
 import { formatEur } from "@/lib/format";
 import type { ApprovalRequest, AuditEvent, Product } from "@/types";
@@ -36,6 +37,13 @@ export function createMockApi(): MockApi {
   }
 
   return {
+    ...createPlanningMock((event) => {
+      audit.push({
+        ...event,
+        id: `EV-${audit.length + 1}`,
+        at: new Date().toISOString(),
+      });
+    }),
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
     },

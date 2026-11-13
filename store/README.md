@@ -70,7 +70,7 @@ Field paths were read from the real catalog, not guessed. What `flatten()` store
 | `brand` | `synkkaData.brand` | Trimmed; `None` on about 18%. |
 | `category`, `vendor`, `country` | `category`, `vendorName`, `countryOfOrigin` | Category is a 5-character code; the data has no category names. |
 | `base_unit`, `sales_unit`, `units[]`, `lot_size` | `baseUnit`, `salesUnit`, `units[]`, `allowedLotSize` | `units[]` is the pack hierarchy in base units. `lot_size` is `None` when the catalog says 0.01. |
-| `net_content {value, unit}` | see below | Per base unit, in `l` or `kg`. |
+| `net_content {value, unit}` | see below | Per base unit, in `L` or `KG` (the contract's kitchen units). |
 | `allergens.contains / may_contain / undeclared` | `classifications[name=allergen].values[] {id, unit}` | GS1 codes. `UNDECLARED` is its own list and never counts as free-from. `X99` ("no declarable allergens") is not an allergen: it sets `no_declarable_allergens`. |
 | `allergen_data_known` | allergen or free-from values exist | False on 46% of the catalog. False means unknown, never allergen-free. |
 | `free_from` | `classifications[name=nonAllergen]` | A code that is also under contains / may contain is dropped: the riskier statement wins. |

@@ -10,7 +10,7 @@ import unittest
 from store.db import get_db
 from store.search import ensure_search_index, search_products
 
-ONE_LITRE = {"value": 1.0, "unit": "l"}
+ONE_LITRE = {"value": 1.0, "unit": "L"}
 
 
 @unittest.skipUnless(os.environ.get("STORE_LIVE_TESTS") == "1", "set STORE_LIVE_TESTS=1")
@@ -28,7 +28,7 @@ class SearchAcceptance(unittest.TestCase):
             self.assertEqual(row["net_content"], ONE_LITRE, row["names"])
             self.assertTrue(row["lactose_free"], row["names"])
             self.assertIn("milk", row["names"]["en"].lower())
-            self.assertIn("size 1 l matches", row["match_reasons"])
+            self.assertIn("size 1 L matches", row["match_reasons"])
             self.assertNotIn("raw", row)
             self.assertIsInstance(row["product_id"], str)
 
@@ -67,7 +67,7 @@ class SearchAcceptance(unittest.TestCase):
             self.assertEqual(row["temperature"], "frozen")
         sized = search_products(self.db, "butter", {"pack_size": {"value": 500, "unit": "g"}})
         self.assertTrue(sized)
-        self.assertTrue(all(row["net_content"] == {"value": 0.5, "unit": "kg"} for row in sized))
+        self.assertTrue(all(row["net_content"] == {"value": 0.5, "unit": "KG"} for row in sized))
 
 
 if __name__ == "__main__":
