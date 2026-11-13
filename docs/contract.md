@@ -347,6 +347,7 @@ IDs) apply here too. Base path: `/v1`.
 | GET | `/stock` | `kitchen:read` | Current stock and position (on hand + on order). |
 | GET | `/products`, `/products/{id}` | `kitchen:read` | Own products (not in a supplier catalog). Shape below. |
 | POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Create, change or delete an own product. |
+| GET | `/catalog/products?ids=` | `kitchen:read` | Product rows by code, for screens that hold product codes (recipes, orders). `ids` is 1 to 200 codes, comma-separated. Returns `{"products": [...]}` in the order asked, each in the product row shape of `search_products` (no `score`, no `match_reasons`). Covers the supplier catalogs and this kitchen's own products, never another kitchen's. A code that is not found is left out; it is not an error. Proposed; the gateway does not serve it yet. |
 | GET | `/recipes`, `/recipes/{id}` | `kitchen:read` | Recipe = products x quantity per portion, with yield; allergens rolled up. |
 | POST, PUT, DELETE | `/recipes`, `/recipes/{id}` | `kitchen:write` | Create, change or delete a recipe. |
 | GET | `/menu-plans/{week}` | `kitchen:read` | The week's menu plan (shape below). |
