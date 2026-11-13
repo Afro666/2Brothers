@@ -62,7 +62,8 @@ Ports 22, 80 and 443 must be open.
 ## Check or redo a deploy
 
 - Run it by hand: GitHub, Actions, `deploy`, "Run workflow".
-- On the server: `docker compose -f /opt/2brothers/deploy/compose.yaml ps` and
-  `... logs web`.
+- On the server (the settings file is needed for every compose command):
+  `docker compose --env-file /opt/2brothers/.env -f /opt/2brothers/deploy/compose.yaml ps`,
+  and the same with `logs web` or `logs gateway`.
 - Try the image locally: `docker build -t web web` then
-  `docker run -p 8080:80 -e SITE_ADDRESS=:80 web`.
+  `docker compose --env-file <your .env> -f deploy/compose.yaml up --build` (it needs the values above).
