@@ -4,8 +4,8 @@ Load the synthetic history from `env/history.py`:
 `python -m env.history --seed 1 && python -m store.history [--dir env/out/history]`.
 
 Time-series collections (`timeField: "ts"`, `metaField: "meta"`): `kitchen_stock`,
-`covers`, `orders_history`, `deliveries`, `forecasts`. Quantities are in kitchen
-units (`L`, `KG`, `PCS`), as docs/contract.md says.
+`covers`, `orders_history`, `deliveries`, `forecasts`, `feedback`. Quantities are in
+kitchen units (`L`, `KG`, `PCS`), as docs/contract.md says.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from bson import json_util
 
 from store import audit
 from store.db import get_db
+from store.repository import KITCHEN_UNITS, _decimal, _from_store, _to_store
 
 SERIES = {"stock": "kitchen_stock", "covers": "covers", "orders": "orders_history",
           "deliveries": "deliveries"}
@@ -31,7 +32,7 @@ MIN_KITCHENS = 3
 def ensure_history_collections(db) -> None:
     """Create the time-series collections and the consent index. Safe to run again."""
     existing = set(db.list_collection_names())
-    for name in (*SERIES.values(), "forecasts"):
+    for name in (*SERIES.values(), "forecasts", "feedback"):
         if name not in existing:
             db.create_collection(name, timeseries={"timeField": "ts", "metaField": "meta",
                                                    "granularity": "hours"})
@@ -184,6 +185,46 @@ def supplier_demand(db, supplier_id: str, product_id: str, start, end,
     kitchens = consenting_kitchens(db, supplier_id)
     rows = _demand(db, source, {"meta.kitchen_id": {"$in": kitchens}}, product_id, start, end)
     return [row for row in rows if row["kitchens"] >= min_kitchens]
+
+
+# Stock counts from the kitchen (POST /stock-counts)
+
+def record_stock_count(db, kitchen_id: str, counted_at: datetime, counts: list[dict],
+                       source: str = "manual") -> int:
+    """Store a stock count: one `kitchen_stock` row per product.
+
+    `on_hand: None` is kept as "not counted": unknown, never zero. Nothing is written
+    unless every line is valid.
+    """
+    if counted_at.tzinfo is None:
+        raise ValueError("counted_at must carry a timezone")
+    if source not in ("manual", "pos", "csv"):
+        raise ValueError("source must be manual, pos or csv")
+    rows = []
+    for line in counts:
+        if not line.get("product_id") or line.get("unit") not in KITCHEN_UNITS:
+            raise ValueError(f"each count needs product_id and a unit from {KITCHEN_UNITS}")
+        rows.append(_to_store({
+            "ts": counted_at, "meta": {"kitchen_id": kitchen_id, "product_id": str(line["product_id"])},
+            "unit": line["unit"], "on_hand": _decimal(line.get("on_hand"), "on_hand"),
+            "source": source}))
+    if rows:
+        db.kitchen_stock.insert_many(rows)
+    return len(rows)
+
+
+def current_stock(db, kitchen_id: str) -> list[dict]:
+    """The latest count per product: `product_id`, `unit`, `on_hand`, `counted_at`."""
+    rows = db.kitchen_stock.aggregate([
+        {"$match": {"meta.kitchen_id": kitchen_id}},
+        {"$sort": {"ts": -1}},
+        {"$group": {"_id": "$meta.product_id", "unit": {"$first": "$unit"},
+                    "on_hand": {"$first": "$on_hand"}, "counted_at": {"$first": "$ts"}}},
+        {"$sort": {"_id": 1}},
+    ])
+    return [_from_store({"product_id": row["_id"], "unit": row["unit"],
+                         "on_hand": row["on_hand"], "counted_at": row["counted_at"]})
+            for row in rows]
 
 
 def main() -> None:
