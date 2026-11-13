@@ -328,3 +328,35 @@ export interface KitchenSettings {
   /** A product that contains or may contain one of these is refused. GS1 codes. */
   excludedAllergens: string[];
 }
+
+/** A product the Buyer could add to this order, most useful first. */
+export interface AddableProduct {
+  product: Product;
+  offer: Offer;
+  /** null = not counted (unknown), never zero. */
+  onHand: number | null;
+  onOrder: number | null;
+  /** In the product's sales unit; from the engine, never typed by the model. */
+  suggestedQuantity: number;
+  why: string;
+}
+
+export type ProposalChange =
+  | { type: "SET_QUANTITY"; productId: ProductCode; quantity: number }
+  | { type: "REMOVE_LINE"; productId: ProductCode }
+  | { type: "ADD_LINE"; productId: ProductCode; quantity: number };
+
+/** One human correction, kept as learning data for the engine. */
+export interface FeedbackRow {
+  id: string;
+  at: string;
+  actor: AuditEvent["actor"];
+  orderId: string;
+  productId: ProductCode | null;
+  /** Maps to contract change kinds: QUANTITY_CHANGED = qty_changed (from_qty, to_qty), LINE_REMOVED = line_removed, LINE_ADDED = line_added (to_qty), REJECTED = rejected (reason), APPROVED = approved. */
+  kind: "QUANTITY_CHANGED" | "LINE_REMOVED" | "LINE_ADDED" | "REJECTED" | "APPROVED";
+  /** For QUANTITY_CHANGED: the Buyer's number and the person's number. */
+  from: number | null;
+  to: number | null;
+  reason: string | null;
+}

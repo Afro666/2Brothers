@@ -10,7 +10,9 @@ function withConfirmedStock() {
   const getOrder = api.getOrder;
   api.getOrder = async (id) => {
     const order = structuredClone(await getOrder(id));
-    order.lines.forEach((line) => { line.offer.availableAmount = line.quantity; });
+    order.lines.forEach((line) => {
+      line.offer.availableAmount = line.quantity;
+    });
     return order;
   };
   return api;
@@ -93,5 +95,125 @@ describe("ApprovalsPage", () => {
 
     expect(screen.getByRole("button", { name: "Hide order lines" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByText("Valio Eila 3 % lactose free milk drink 1 L").length).toBeGreaterThan(0);
+  });
+
+  it("changes a quantity, approves the new total and records feedback", async () => {
+    const user = userEvent.setup();
+    const api = withConfirmedStock();
+    renderApp("/approvals", api);
+    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    const originalQuantity = screen.getByRole("spinbutton", {
+      name: "Quantity for Valio Eila 3 % lactose free milk drink 1 L (ST)",
+    });
+    await user.clear(originalQuantity);
+    await user.type(originalQuantity, "900");
+    await user.click(screen.getByRole("button", { name: "Update Valio Eila 3 % lactose free milk drink 1 L" }));
+
+    const approve = await screen.findByRole("button", { name: /Approve €2,094\.08 incl VAT/ });
+    await user.click(approve);
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    expect(within(dialog).getByText(/€1,845\.00 ex VAT \(€2,094\.08 incl VAT\)/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,094.08" }));
+
+    await waitFor(async () => {
+      expect(await api.listFeedback({ orderId: "ORD-1043" })).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: "QUANTITY_CHANGED", productId: "463335", from: 950, to: 900 }),
+          expect.objectContaining({ kind: "APPROVED" }),
+        ]),
+      );
+    });
+  });
+
+  it("adds a product using its suggested quantity", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    renderApp("/approvals", api);
+    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    const search = screen.getByRole("searchbox", { name: "Search products" });
+    await user.type(search, "Arla 1 L");
+    const productRow = screen.getByText("Arla 1 L lactose free fat free UHT milk drink").closest("li");
+    expect(productRow).not.toBeNull();
+    await user.click(
+      within(productRow as HTMLElement).getByRole("button", {
+        name: "Add Arla 1 L lactose free fat free UHT milk drink",
+      }),
+    );
+
+    expect(await screen.findByRole("button", { name: /Approve €2,213\.33 incl VAT/ })).toBeInTheDocument();
+    expect((await api.getOrder("ORD-1043")).lines).toHaveLength(2);
+    const lineQuantities = screen.getAllByRole("spinbutton", { name: /Quantity for .* \(ST\)/ });
+    const updateButtons = screen.getAllByRole("button", { name: /^Update / });
+    expect(lineQuantities).toHaveLength(3);
+    expect(updateButtons).toHaveLength(2);
+    expect(new Set(lineQuantities.map((input) => (input as HTMLInputElement).labels?.[0]?.textContent)).size).toBe(3);
+    expect(new Set(updateButtons.map((button) => button.getAttribute("aria-label"))).size).toBe(2);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Add Arla 1 L lactose free fat free UHT milk drink" })).toBeNull(),
+    );
+    await user.click(screen.getByRole("button", { name: "Remove Arla 1 L lactose free fat free UHT milk drink" }));
+    expect(
+      await screen.findByRole("button", { name: "Add Arla 1 L lactose free fat free UHT milk drink" }),
+    ).toBeInTheDocument();
+    expect(await api.listFeedback({ orderId: "ORD-1043" })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "LINE_ADDED", productId: "462775", to: 1 })]),
+    );
+  });
+
+  it("follows the edited lines: approval opens once the line with unconfirmed stock is removed", async () => {
+    const user = userEvent.setup();
+    renderApp("/approvals", createMockApi());
+    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search products" }), "Arla 1 L");
+    await user.click(await screen.findByRole("button", { name: "Add Arla 1 L lactose free fat free UHT milk drink" }));
+    // Arla's stock is known, Eila's is not: the order is still blocked.
+    await screen.findByRole("button", { name: "Remove Arla 1 L lactose free fat free UHT milk drink" });
+    expect(screen.getByText(/Waiting for supplier stock confirmation/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
+    await waitFor(() => expect(screen.queryByText(/Waiting for supplier stock confirmation/)).toBeNull());
+    expect(screen.getByRole("button", { name: /^Approve/ })).toBeEnabled();
+  });
+
+  it("shows the API message when removing the only line is refused", async () => {
+    const user = userEvent.setup();
+    renderApp("/approvals", createMockApi());
+    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("An order needs at least one line; reject it instead.");
+  });
+
+  it("keeps rejection feedback with the reason", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    renderApp("/approvals", api);
+    await user.click(await screen.findByRole("button", { name: "Reject" }));
+    const dialog = await screen.findByRole("dialog", { name: "Reject this order?" });
+    await user.type(within(dialog).getByRole("textbox", { name: "Reason (optional)" }), "Wrong fat percentage");
+    await user.click(within(dialog).getByRole("button", { name: "Reject" }));
+    await waitFor(async () =>
+      expect(await api.listFeedback()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "REJECTED", reason: "Wrong fat percentage" })]),
+      ),
+    );
+  });
+
+  it("stores a null rejection reason and keeps the fallback in the audit event", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    renderApp("/approvals", api);
+    await user.click(await screen.findByRole("button", { name: "Reject" }));
+    const dialog = await screen.findByRole("dialog", { name: "Reject this order?" });
+    await user.click(within(dialog).getByRole("button", { name: "Reject" }));
+
+    await waitFor(async () => {
+      expect(await api.listFeedback()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "REJECTED", reason: null })]),
+      );
+      expect(await api.listAudit()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "approval", reason: "No reason given." })]),
+      );
+    });
   });
 });

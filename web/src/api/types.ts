@@ -2,6 +2,7 @@ import type { ApprovalDecision } from "@/components/purchasing/approval-card";
 import type {
   ApprovalRequest,
   AuditEvent,
+  AddableProduct,
   ChefRequest,
   DemandLine,
   Mandate,
@@ -9,6 +10,8 @@ import type {
   Order,
   OwnProduct,
   Product,
+  ProposalChange,
+  FeedbackRow,
   Recipe,
   SharingConsent,
   StockItem,
@@ -55,6 +58,15 @@ export interface Api {
   getApproval(id: string): Promise<ApprovalRequest>;
   approve(decision: ApprovalDecision, actor: AuditActor): Promise<ApprovalRequest>;
   reject(approvalId: string, reason: string, actor: AuditActor): Promise<ApprovalRequest>;
+  /** Products that could be added to this order, ranked; `query` filters by name. */
+  listAddableProducts(orderId: string, query?: string): Promise<AddableProduct[]>;
+  /** Applies one change, re-simulates the order and returns the new order and approval totals. */
+  changeProposal(
+    orderId: string,
+    change: ProposalChange,
+    actor: AuditActor,
+  ): Promise<{ order: Order; approval: ApprovalRequest }>;
+  listFeedback(filter?: { orderId?: string }): Promise<FeedbackRow[]>;
   listOrders(): Promise<Order[]>;
   getOrder(id: string): Promise<Order>;
   listAudit(filter?: { orderId?: string }): Promise<AuditEvent[]>;

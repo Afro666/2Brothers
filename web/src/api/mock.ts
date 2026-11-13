@@ -2,9 +2,27 @@ import type { Api, AuditActor, ProductTemperature } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
-import { approval as seedApproval, auditEvents, mandate, orders, products, substitutes } from "@/mocks/milk-case";
+import {
+  approval as seedApproval,
+  auditEvents,
+  mandate,
+  offers,
+  orders as seedOrders,
+  products,
+  substitutes,
+} from "@/mocks/milk-case";
 import { formatEur } from "@/lib/format";
-import type { ApprovalRequest, AuditEvent, Product } from "@/types";
+import { isPassed, isUnknownStock } from "@/lib/format";
+import type {
+  AddableProduct,
+  ApprovalRequest,
+  AuditEvent,
+  FeedbackRow,
+  Order,
+  OrderLine,
+  Product,
+  ProposalChange,
+} from "@/types";
 
 /** The mock products label temperature in prose, e.g. "Chilled, +2 to +6 °C". */
 function temperatureOf(product: Product): ProductTemperature | null {
@@ -23,8 +41,16 @@ export interface MockApi extends Api {
 
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
 export function createMockApi(): MockApi {
-  let approval: ApprovalRequest = { ...seedApproval };
+  let approval: ApprovalRequest = { ...seedApproval, reasons: [...seedApproval.reasons] };
+  const orderCopies = Object.fromEntries(
+    Object.entries(seedOrders).map(([key, order]) => [
+      key,
+      { ...order, lines: [...order.lines], mov: { ...order.mov } },
+    ]),
+  ) as Record<string, Order>;
+  const proposalOrder = orderCopies.needsApproval;
   const audit: AuditEvent[] = [...auditEvents];
+  const feedback: FeedbackRow[] = [];
   let nextFailure: ApiError | null = null;
 
   const recordAudit = (event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason">) => {
@@ -41,7 +67,7 @@ export function createMockApi(): MockApi {
     return approval;
   }
 
-  function decide(status: "APPROVED" | "REJECTED", actor: AuditActor, summary: string, reason: string) {
+  function decide(status: "APPROVED" | "REJECTED", actor: AuditActor, summary: string, reason: string | null) {
     approval = { ...approval, status };
     audit.push({
       id: `EV-${audit.length + 1}`,
@@ -49,10 +75,73 @@ export function createMockApi(): MockApi {
       kind: "approval",
       actor,
       summary,
-      reason,
+      reason: reason ?? (status === "REJECTED" ? "No reason given." : summary),
       orderId: approval.orderId,
     });
+    feedback.push({
+      id: `FB-${feedback.length + 1}`,
+      at: new Date().toISOString(),
+      actor,
+      orderId: approval.orderId,
+      productId: null,
+      kind: status === "APPROVED" ? "APPROVED" : "REJECTED",
+      from: null,
+      to: null,
+      reason: status === "REJECTED" ? reason : null,
+    });
     return approval;
+  }
+
+  function appendChange(
+    kind: FeedbackRow["kind"],
+    productId: string,
+    from: number | null,
+    to: number | null,
+    actor: AuditActor,
+    summary: string,
+  ) {
+    feedback.push({
+      id: `FB-${feedback.length + 1}`,
+      at: new Date().toISOString(),
+      actor,
+      orderId: proposalOrder.id,
+      productId,
+      kind,
+      from,
+      to,
+      reason: null,
+    });
+    audit.push({
+      id: `EV-${audit.length + 1}`,
+      at: new Date().toISOString(),
+      kind: "approval",
+      actor,
+      summary,
+      reason: summary,
+      orderId: proposalOrder.id,
+    });
+  }
+
+  function resimulate(lines: OrderLine[]): Order {
+    let exVat = 0;
+    let inclVat = 0;
+    for (const line of lines) {
+      if (line.offer.priceExVat == null) {
+        throw new ApiError("PRICE_UNKNOWN", `Price for ${line.product.id} is unknown.`);
+      }
+      const lineEx = line.offer.priceExVat * line.quantity;
+      exVat += lineEx;
+      inclVat += lineEx * (1 + line.offer.taxRatePercent / 100);
+    }
+    const totalExVat = Math.round((exVat + Number.EPSILON) * 100) / 100;
+    const totalInclVat = Math.round((inclVat + 1e-10) * 100) / 100;
+    return {
+      ...proposalOrder,
+      lines,
+      totalExVat,
+      totalInclVat,
+      mov: { ...proposalOrder.mov, current: totalExVat },
+    };
   }
 
   return {
@@ -91,14 +180,102 @@ export function createMockApi(): MockApi {
     },
     async reject(approvalId, reason, actor) {
       const current = pendingApproval(approvalId);
-      return decide("REJECTED", actor, `Rejected ${current.orderId}`, reason || "No reason given.");
+      return decide("REJECTED", actor, `Rejected ${current.orderId}`, reason.trim() || null);
+    },
+
+    async listAddableProducts(orderId, query = "") {
+      if (orderId !== proposalOrder.id) throw new ApiError("NOT_FOUND", `Order ${orderId} was not found.`);
+      const words = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+      const existing = new Set(proposalOrder.lines.map((line) => line.product.id));
+      const ranked: AddableProduct[] = (Object.entries(products) as [keyof typeof products, Product][])
+        .filter(([, product]) => !existing.has(product.id))
+        .map(([key, product]) => {
+          const offer = offers[key];
+          return {
+            product,
+            offer,
+            onHand: isUnknownStock(offer.availableAmount) ? null : offer.availableAmount,
+            onOrder: null,
+            suggestedQuantity: 1,
+            why: isPassed(offer.closingTime, new Date())
+              ? "The order cut-off has passed, so this product may arrive late."
+              : "The order cut-off is still open for the requested delivery.",
+          };
+        })
+        .filter(({ offer }) => offer.priceExVat != null)
+        .filter(({ product }) => {
+          const names = [product.names.en, product.names.fi, product.names.sv].join(" ").toLocaleLowerCase();
+          return words.every((word) => names.includes(word));
+        })
+        .sort(
+          (a, b) =>
+            Number(isPassed(a.offer.closingTime, new Date())) - Number(isPassed(b.offer.closingTime, new Date())),
+        );
+      return ranked;
+    },
+    async changeProposal(orderId, change: ProposalChange, actor) {
+      if (orderId !== proposalOrder.id) throw new ApiError("NOT_FOUND", `Order ${orderId} was not found.`);
+      pendingApproval(approval.id);
+      if (change.type !== "REMOVE_LINE" && (!Number.isInteger(change.quantity) || change.quantity < 1)) {
+        throw new ApiError("INVALID", "Quantity must be a whole number of at least 1.");
+      }
+      let lines = [...proposalOrder.lines];
+      let kind: FeedbackRow["kind"];
+      let from: number | null = null;
+      let to: number | null = null;
+      let summary: string;
+      if (change.type === "SET_QUANTITY") {
+        const line = lines.find((item) => item.product.id === change.productId);
+        if (!line) throw new ApiError("NOT_FOUND", `Product ${change.productId} is not on the order.`);
+        from = line.quantity;
+        to = change.quantity;
+        lines = lines.map((item) => (item === line ? { ...item, quantity: change.quantity } : item));
+        kind = "QUANTITY_CHANGED";
+        summary = `Changed ${change.productId} from ${from} to ${to}`;
+      } else if (change.type === "REMOVE_LINE") {
+        if (!lines.some((line) => line.product.id === change.productId)) {
+          throw new ApiError("NOT_FOUND", `Product ${change.productId} is not on the order.`);
+        }
+        lines = lines.filter((line) => line.product.id !== change.productId);
+        if (lines.length === 0) throw new ApiError("INVALID", "An order needs at least one line; reject it instead.");
+        kind = "LINE_REMOVED";
+        summary = `Removed ${change.productId}`;
+      } else {
+        if (lines.some((line) => line.product.id === change.productId)) {
+          throw new ApiError("INVALID", `${change.productId} is already on the order.`);
+        }
+        const productKey = Object.keys(products).find(
+          (key) => products[key as keyof typeof products].id === change.productId,
+        ) as keyof typeof offers | undefined;
+        if (!productKey) throw new ApiError("NOT_FOUND", `Product ${change.productId} was not found.`);
+        const product = products[productKey];
+        const offer = offers[productKey];
+        if (offer.priceExVat == null) throw new ApiError("PRICE_UNKNOWN", `Price for ${change.productId} is unknown.`);
+        lines.push({
+          product,
+          offer,
+          quantity: change.quantity,
+          why: "Added by a person reviewing the Buyer's proposal.",
+        });
+        to = change.quantity;
+        kind = "LINE_ADDED";
+        summary = `Added ${change.productId} with quantity ${change.quantity}`;
+      }
+      const next = resimulate(lines);
+      Object.assign(proposalOrder, next);
+      approval = { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length };
+      appendChange(kind, change.productId, from, to, actor, summary);
+      return { order: proposalOrder, approval };
+    },
+    async listFeedback(filter) {
+      return filter?.orderId ? feedback.filter((row) => row.orderId === filter.orderId) : [...feedback];
     },
 
     async listOrders() {
-      return Object.values(orders);
+      return Object.values(orderCopies);
     },
     async getOrder(id) {
-      const found = Object.values(orders).find((order) => order.id === id);
+      const found = Object.values(orderCopies).find((order) => order.id === id);
       if (!found) throw new ApiError("NOT_FOUND", `Order ${id} was not found.`);
       return found;
     },
@@ -106,7 +283,7 @@ export function createMockApi(): MockApi {
       return filter?.orderId ? audit.filter((event) => event.orderId === filter.orderId) : [...audit];
     },
     async submitChefRequest() {
-      return { order: orders.needsApproval, substitutes, approval };
+      return { order: proposalOrder, substitutes, approval };
     },
     async searchProducts(query, filters = {}) {
       const words = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);

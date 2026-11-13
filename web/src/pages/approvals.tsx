@@ -3,11 +3,13 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { useState } from "react";
+
 import { useApi } from "@/api";
 import type { Api } from "@/api/types";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { useAsync } from "@/lib/use-async";
-import type { ApprovalRequest, Order } from "@/types";
+import type { ApprovalRequest, Order, ProposalChange } from "@/types";
 
 interface ApprovalWithOrder {
   approval: ApprovalRequest;
@@ -32,6 +34,7 @@ export function ApprovalsPage() {
   const { role } = useRole();
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
+  const [editCounts, setEditCounts] = useState<Record<string, number>>({});
 
   async function approve(decision: ApprovalDecision): Promise<void> {
     await api.approve(decision, actor);
@@ -40,6 +43,12 @@ export function ApprovalsPage() {
 
   async function reject(approvalId: string, reason: string): Promise<void> {
     await api.reject(approvalId, reason, actor);
+    approvals.reload();
+  }
+
+  async function change(orderId: string, proposalChange: ProposalChange): Promise<void> {
+    await api.changeProposal(orderId, proposalChange, actor);
+    setEditCounts((counts) => ({ ...counts, [orderId]: (counts[orderId] ?? 0) + 1 }));
     approvals.reload();
   }
 
@@ -79,6 +88,9 @@ export function ApprovalsPage() {
                       order={order ?? undefined}
                       onApprove={approve}
                       onReject={reject}
+                      onChangeProposal={(proposalChange) => change(approval.orderId, proposalChange)}
+                      listAddableProducts={(query) => api.listAddableProducts(approval.orderId, query)}
+                      editCount={editCounts[approval.orderId] ?? 0}
                     />
                   ))}
                 </div>
