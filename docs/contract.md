@@ -74,7 +74,8 @@ Each entry requires `productId`, `salesBlock`, and `scheduleLines`;
 - A product-level or schedule-level `salesBlock: true` means it cannot be ordered.
 - `scheduleLines` is empty when the product cannot currently be delivered on any
   date; otherwise the challenge returns exactly one line.
-- A line requires `salesBlock`, `availableAmount`, and `salesUnit`.
+- A line requires `salesBlock` and `salesUnit`. `availableAmount` may be absent
+  or null: that is unknown stock (see the sentinel rule below), never zero.
   `availableDate` may be absent or null. Its value is the earliest available date
   and can differ from the requested date.
 - `availableAmount` is expressed in `salesUnit`. Zero means unavailable.
@@ -147,8 +148,13 @@ The gateway loads quantities from that stored need; neither `get_offer` nor
 `expected_total` includes fees and tax. Simulation also includes `mov_gap` and
 `delivery_fee` as decimal strings. Expired offers must be refreshed and simulated.
 
-`mandate.verdict` is exactly `AUTO`, `NEEDS_APPROVAL`, or `REFUSED`;
-`mandate.reasons` is a list of human-readable strings. For example, the milk case:
+`mandate.verdict` is exactly `NEEDS_APPROVAL` or `REFUSED`. There is no `AUTO`
+verdict: the Buyer proposes and a human approves every order (decision 2026-11-13
+23:00). `REFUSED` is only for a hard rule (an allergen rule, a passed cut-off, a sales
+block, a product outside the kitchen's suppliers). `mandate.reasons` is a list of
+human-readable strings; `mandate.reason_codes` and `mandate.warnings` use the codes in
+"Reason codes" below. A warning (for example `OVER_BUDGET_WARNING`) is shown on the
+approval card; it never blocks and never approves. For example, the milk case:
 
 ```json
 {
@@ -159,7 +165,9 @@ The gateway loads quantities from that stored need; neither `get_offer` nor
   "delivery_fee": "0.00",
   "mandate": {
     "verdict": "NEEDS_APPROVAL",
-    "reasons": ["Only 51 L is confirmed for Monday; the remaining stock is unknown."]
+    "reasons": ["Only 51 L is available for Monday; the full 1,000 L request cannot be met."],
+    "reason_codes": ["PARTIAL_STOCK"],
+    "warnings": []
   },
   "lines": [{
     "product_id": "462775", "quantity": "51", "unit": "ST",
@@ -173,7 +181,8 @@ This example is a deterministic mock scenario, not a live quote or a complete
 fulfilment. The agent requests approval and reports a pending decision. It never
 claims the full milk request was fulfilled.
 
-`place_order` independently enforces the mandate and recorded human approval,
+`place_order` independently enforces the mandate and a recorded human approval
+(always required),
 offer validity, unchanged total (tolerance EUR 0.005), and stock/cutoff guards.
 It persists an attempt and payload hash before any commit. The agent cannot
 approve, cancel, release, or bypass an order. A requested approval remains pending
@@ -237,16 +246,21 @@ IDs) apply here too. Base path: `/v1`.
 |---|---|---|---|
 | POST | `/stock-counts` | `kitchen:write` | Push a stock count (POS, inventory, manual). `null` means unknown, never zero. |
 | GET | `/stock` | `kitchen:read` | Current stock and position (on hand + on order). |
-| GET, POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Own products (not in a supplier catalog). |
-| GET, POST, PUT, DELETE | `/recipes`, `/recipes/{id}` | `kitchen:write` | Recipe = products x quantity per portion; allergens rolled up. |
+| GET | `/products`, `/products/{id}` | `kitchen:read` | Own products (not in a supplier catalog). Shape below. |
+| POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Create, change or delete an own product. |
+| GET | `/recipes`, `/recipes/{id}` | `kitchen:read` | Recipe = products x quantity per portion, with yield; allergens rolled up. |
+| POST, PUT, DELETE | `/recipes`, `/recipes/{id}` | `kitchen:write` | Create, change or delete a recipe. |
+| GET | `/menu-plans/{week}` | `kitchen:read` | The week's menu plan (shape below). |
 | PUT | `/menu-plans/{week}` | `kitchen:write` | Menus per day: recipe + expected covers. `week` is ISO `YYYY-Www`. |
 | GET | `/demand?from=&to=` | `kitchen:read` | Future need per product and day, from the menu plan and history. |
-| GET, POST, PUT, DELETE | `/suppliers`, `/suppliers/{id}` | `kitchen:write` | Suppliers and their terms: free-delivery threshold, fee, order days, cut-off, lead time. User-set; demo values are placeholders. |
+| GET | `/suppliers`, `/suppliers/{id}` | `kitchen:read` | Suppliers and their terms: free-delivery threshold, fee, order days, cut-off, lead time, discount tiers. User-set; demo values are placeholders. |
+| POST, PUT, DELETE | `/suppliers`, `/suppliers/{id}` | `kitchen:write` | Create, change or delete a supplier and its terms. |
 | POST | `/proposals` | `kitchen:propose` | Ask the Buyer: free text ("1,000 L milk by Monday") or a demand window `from`/`to`. Returns `proposal_id`, `status: PENDING`. |
 | GET | `/proposals/{id}` | `kitchen:read` | Lines with `why`, one block per supplier, simulated totals (`expected_total`, `mov_gap`, `delivery_fee`), mandate reasons, warnings. |
 | POST | `/proposals/{id}/approve` | `kitchen:approve` (human) | Body: `blocks: [{supplier_id, expected_total}]` + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH`; nothing is sent. |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). |
+| GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
 | PUT | `/sharing` | `kitchen:write` | Consent: which suppliers may see this kitchen's forecast. Every change is an audit entry. |
 | GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
 
@@ -283,3 +297,160 @@ A supplier only sees demand from kitchens whose `/sharing` consent names it.
 `order.confirmed`, `price.changed`, `recall.alert` (Context.dev), `demand.changed`
 (supplier). Each delivery carries an `event_id`; receivers treat a repeat `event_id` as
 a replay.
+
+### Data shapes
+
+Supplier terms are set by the user per supplier. No default comes from Valio; demo
+values are placeholders. Amounts are decimal strings in EUR; quantities are decimal
+strings in the stated unit.
+
+**Supplier**
+
+```json
+{
+  "supplier_id": "sup-valio",
+  "name": "Valio Aimo",
+  "adapter": "valio_api",
+  "terms": {
+    "free_delivery_threshold_eur": "300.00",
+    "delivery_fee_eur": "25.00",
+    "order_days": ["MON", "TUE", "WED", "THU", "FRI"],
+    "cutoff_time": "15:00",
+    "lead_time_days": 1,
+    "discount_tiers": [
+      {"product_id": "469549", "min_qty": "100", "unit": "ST", "unit_price_eur": "0.95"}
+    ]
+  }
+}
+```
+
+- `adapter` is `valio_api`, `manual` or `csv`. `manual` and `csv` suppliers have unknown
+  stock; their offer lines carry `unknown_stock: true`.
+- Any `terms` field may be null: unknown, never zero. A null `free_delivery_threshold_eur`
+  means no free-delivery threshold is known, so the engine does not pad.
+- `cutoff_time` is the kitchen's local time (`HH:MM`). For Valio products, Valio's own
+  `closingTime` wins.
+- `discount_tiers`: price per quantity break. The tier with the highest `min_qty` at or
+  below the line quantity applies. A tier without `product_id` applies to every product
+  of that supplier.
+
+**Own product** (a product not in a supplier catalog)
+
+```json
+{
+  "product_id": "own-7f3a",
+  "name": "Rye sourdough loaf 800 g",
+  "supplier_id": "sup-bakery",
+  "unit": "ST",
+  "base_unit": "KG",
+  "pack_size_in_base_units": "0.8",
+  "unit_price_eur": "4.20",
+  "allergens": [{"code": "AW", "level": "CONTAINS"}],
+  "allergen_data": "ENTERED"
+}
+```
+
+- `allergen_data` is `ENTERED` or `UNKNOWN`. An empty `allergens` list with `UNKNOWN`
+  means unknown, never "free from".
+- Codes are the GS1 allergen codes the Valio catalog uses; `level` is `CONTAINS` or
+  `MAY_CONTAIN`.
+
+**Recipe**
+
+```json
+{
+  "recipe_id": "rec-soup-1",
+  "name": "Carrot soup",
+  "portions": 1,
+  "ingredients": [
+    {"product_id": "460708", "qty_per_portion": "0.100", "unit": "KG", "yield_pct": "85"}
+  ]
+}
+```
+
+- `qty_per_portion` is the usable quantity on the plate. `yield_pct` is usable weight as
+  a percent of bought weight (trim loss); null means 100.
+- Bought quantity = `qty_per_portion` / (`yield_pct` / 100). Example: 0.100 kg at 85% =
+  0.118 kg bought. Cost per portion uses the bought quantity.
+- Recipe allergens are the union of its products' allergens. One product with unknown
+  allergen data makes the recipe's allergen data `UNKNOWN`.
+
+**Menu plan** (`PUT /menu-plans/{week}`)
+
+```json
+{
+  "week": "2026-W47",
+  "days": [
+    {"date": "2026-11-16", "meal": "lunch", "recipe_id": "rec-soup-1", "covers": 180}
+  ]
+}
+```
+
+- `meal` is `breakfast`, `lunch`, `dinner` or `other`. `covers` is the expected number of
+  portions. The engine computes need = covers x bought quantity - stock - on order.
+
+### Consent record (forecast sharing)
+
+One record per kitchen and supplier. `GET /sharing` returns the list; `PUT /sharing`
+replaces it.
+
+```json
+{
+  "kitchen_id": "kit-1",
+  "supplier_id": "sup-valio",
+  "share_forecast": true,
+  "scope": "forecast_only",
+  "granted_at": "2026-11-14T00:30:00+02:00",
+  "granted_by": "user-42",
+  "revoked_at": null
+}
+```
+
+- `scope` is `forecast_only`: need per product and day. Never menus, recipes, prices from
+  other suppliers or stock counts.
+- Consent is active when `share_forecast` is true and `revoked_at` is null. The supplier
+  demand routes and the engine's demand aggregation read only kitchens with active
+  consent for that supplier.
+- `granted_by` is a human user. An API key or the Buyer cannot grant consent.
+- Every grant writes an audit event `share_granted`; every revoke writes `share_revoked`.
+  Each carries `kitchen_id`, `supplier_id`, `scope`, the user and the time.
+
+## Reason codes
+
+Engine, gateway, web and agent use exactly these strings in `mandate.reason_codes`,
+`mandate.warnings` and line reasons. Source: `docs/scenarios.md`.
+
+| Code | Meaning |
+|---|---|
+| `CLOSING_PASSED` | `closingTime` is at or before now for this delivery |
+| `STOCK_UNKNOWN` | availability is a sentinel (999999 or 9999999999), missing or null |
+| `PARTIAL_STOCK` | less is available than needed |
+| `SUBSTITUTE_NEEDS_OK` | a substitute changes the product; a human agrees |
+| `SUBSTITUTE_FAT_LEVEL` | the substitute has a different fat level |
+| `ALLERGEN_RULE` | a kitchen allergen rule refuses a product (`REFUSED` for that line) |
+| `ALLERGEN_DATA_MISSING` | no allergen data; treated as unknown |
+| `OVER_BUDGET_WARNING` | total is above the kitchen's budget warning. A warning only: a human approves every order anyway. Replaces `OVER_SPEND_LIMIT`. |
+| `LOT_SIZE_ROUNDED` | quantity rounded up to `allowedLotSize` or pack |
+| `EVENT_LINE` | one-off demand, kept out of the base forecast |
+| `MOV_PADDED` | lines pulled forward to reach free delivery |
+| `TOTAL_MISMATCH` | gateway total differs from the figure the human approved |
+| `STANDING_ORDER_DRIFT` | standing order no longer matches usage |
+| `STOCK_COUNT_MISSING` | kitchen stock count is empty |
+| `STOCKOUT_ADJUSTED` | demand scaled up for days out of stock |
+| `POSITION_OK` | on hand + on order is enough; no order now |
+| `COVER_CEILING` | more would exceed the maximum days of cover |
+| `PACK_SIZE_DERIVED` | pack size derived because the pack data is missing or wrong |
+| `UNCONFIRMED` | the send may have landed; a human checks |
+
+## place_order outcomes
+
+| `outcome` | Meaning | What the caller does |
+|---|---|---|
+| `CONFIRMED` | The order is known to be placed in our gateway | Show it; done |
+| `NOT_SENT` | The request never left; nothing exists at the supplier | May retry explicitly, with the same `idempotency_key` |
+| `UNCONFIRMED` | It may already have been applied | Stop; a human checks the order status. Never resend |
+| `SENT_READ_FAILED` | It landed; only reading the answer failed | Re-read the order status. Never resend |
+
+Refusals before any send are errors, not outcomes: `TOTAL_MISMATCH` (409: re-simulate
+and ask the human again), `HUMAN_SESSION_REQUIRED` (403), `IDEMPOTENCY_KEY_REUSED`
+(409). No adapter retries a POST automatically.
