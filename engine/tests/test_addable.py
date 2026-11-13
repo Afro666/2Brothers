@@ -84,3 +84,13 @@ def test_products_already_on_the_proposal_are_left_out():
 def test_on_order_counts_toward_days_of_stock():
     (row,) = rank_addable([cand("m", on_hand=10, on_order=80)], P)
     assert row.days_of_stock == D(9) and row.suggested_qty == 0
+
+
+def test_quantity_without_demand_still_has_a_timing_and_a_why():
+    """#242: safety stock above the position with zero demand used to raise KeyError."""
+    item = Item("ss", LITRE, daily_demand=0.0, lead_time_days=1.0, review_days=3.0,
+                on_hand=2.0, abc="A", safety_stock=10.0)
+    (row,) = rank_addable([Candidate(item, name="ss", unit_price=D("1.00"))], P)
+    assert row.suggested_qty == D(8)
+    assert row.timing is Timing.THIS_WEEK
+    assert row.why == "The engine says order this week: 8 ST."
