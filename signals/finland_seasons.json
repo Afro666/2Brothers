@@ -36,7 +36,7 @@
         "early potatoes",
         "varhaisperuna",
         "varhaisperunat",
-        "f?rskpotatis"
+        "färskpotatis"
       ],
       "kind": "produce",
       "harvest_months": [
@@ -81,9 +81,9 @@
       "aliases": [
         "white cabbage",
         "cabbage",
-        "ker?kaali",
+        "keräkaali",
         "valkokaali",
-        "vitk?l"
+        "vitkål"
       ],
       "kind": "produce",
       "harvest_months": [
@@ -105,7 +105,7 @@
         "porkkana",
         "porkkanat",
         "morot",
-        "mor?tter"
+        "morötter"
       ],
       "kind": "produce",
       "harvest_months": [
@@ -142,8 +142,8 @@
         "punajuuri",
         "punajuuret",
         "punajuurikas",
-        "r?dbeta",
-        "r?dbetor"
+        "rödbeta",
+        "rödbetor"
       ],
       "kind": "produce",
       "harvest_months": [
@@ -165,7 +165,7 @@
         "bilberries",
         "mustikka",
         "mustikat",
-        "bl?b?r"
+        "blåbär"
       ],
       "kind": "produce",
       "harvest_months": [
@@ -250,7 +250,7 @@
       "aliases": [
         "vendace",
         "muikku",
-        "sikl?ja"
+        "siklöja"
       ],
       "kind": "wild_fish",
       "harvest_months": [
