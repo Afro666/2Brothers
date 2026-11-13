@@ -1,5 +1,43 @@
 # Nemotron buyer (#22)
 
+## Internal worker (#279)
+
+`two-brothers-buyer-worker` serves an internal `/run` endpoint on port 8001.
+The gateway's existing `POST /v1/kitchens/{k}/proposals` hands free-text bodies
+(`text`, optional `requested_date`, `idempotency_key`) to it when `product_ids`
+is absent. Structured engine requests retain their existing path.
+
+The worker accepts only the server's agent token and configured
+`GATEWAY_KITCHEN_ID`; it is not published to the browser. It creates a stored
+need through the gateway, runs Nemotron through the seven existing MCP tools,
+and returns the READY proposal plus `buyer_run_id` and `buyer_model`. Every model
+tool step is audited. No orders are placed and no human credential is supplied.
+
+For now a request must contain exactly one explicit positive quantity in L, KG
+or PCS. An explicit requested date is preferred; a single named weekday can be
+resolved to the next occurrence in Helsinki. Ambiguous quantities, missing dates
+or unsupported units return a details-needed error instead of invented amounts.
+This parser only establishes the trusted need; the gateway engine sizes lines.
+
+The `buyer` Compose service uses the gateway image with the worker entrypoint.
+Server configuration needs `VERDA_INFERENCE_KEY`, `MONGODB_URI`,
+`GATEWAY_AGENT_TOKEN`, `GATEWAY_KITCHEN_ID` and `GATEWAY_BASE_URL`.
+The gateway uses `BUYER_WORKER_URL=http://buyer:8001`. The worker receives neither
+the human token nor the Valio API key. Keys stay in the server `.env`.
+
+Jobs are deduplicated durably through `store.agent_runs` by kitchen and request
+key. Exact completed replays return the same proposal. Running, failed or
+ambiguous jobs require reconciliation; changed content under the same key is
+409. There is no automatic mutation retry. Runs are bounded to 150 seconds and
+12 model steps. Errors disclose a `fallback_safe` boolean: a separate fallback
+parser may run only when no approval/order mutation was attempted. In particular,
+a transport failure at the gateway handoff is ambiguous and never permits an
+automatic fallback. The fallback parser itself remains a separate gateway task.
+
+Offline verification: `python -m pytest agent/tests/test_service.py`. This uses
+the actual Buyer, MCP SDK and gateway routes, recorded Valio data and a scripted
+model. A live inference check must be labelled separately from these tests.
+
 Install from the repository root: `python -m pip install -e .`. The CLI loads the
 root `.env` without overwriting exported variables. Copy `.env.example` to `.env`
 and fill in `VERDA_INFERENCE_KEY`, which selects

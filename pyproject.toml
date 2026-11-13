@@ -16,6 +16,7 @@ signals = ["holidays>=0.107,<1"]
 two-brothers-mcp = "gateway.mcp_server:main"
 two-brothers-gateway = "gateway.app:main"
 two-brothers-agent = "agent.__main__:main"
+two-brothers-buyer-worker = "agent.service:main"
 
 [tool.setuptools.package-data]
 store = ["*.json"]
