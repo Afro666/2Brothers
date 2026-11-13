@@ -293,6 +293,7 @@ export interface SupplierDemandRow {
   date: string;
   forecastDemand: number;
   kitchens: number;
+  byKitchen: { kitchenId: string; kitchenName: string; demand: number }[];
   /** null = the supplier's availability is not measured. */
   available: number | null;
   risk: ShortageRisk;

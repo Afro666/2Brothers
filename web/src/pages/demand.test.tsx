@@ -20,7 +20,8 @@ function productSection(productId: string): HTMLElement[] {
 
 function kitchensFor(productId: string): number {
   const firstDay = productSection(productId)[1];
-  return Number(within(firstDay).getAllByRole("cell")[2].textContent);
+  const text = within(firstDay).getAllByRole("cell")[2].textContent ?? "";
+  return Number(text.match(/^\d+/)?.[0]);
 }
 
 describe("DemandPage", () => {
@@ -67,6 +68,72 @@ describe("DemandPage", () => {
     expect(kitchensFor("462775")).toBe(4);
   });
 
+  it("expands a demand row to list kitchen names and their demand", async () => {
+    const user = userEvent.setup();
+    renderApp("/demand?week=2026-W47", createMockApi());
+    await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+
+    const firstDay = productSection("463335")[1];
+    const button = within(firstDay).getByRole("button", { name: /^5 kitchens for Valio Eila 3 % milk, / });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(within(firstDay).getByRole("list", { hidden: true })).toHaveAttribute(
+      "id",
+      button.getAttribute("aria-controls"),
+    );
+    expect(within(firstDay).getByText("K00 Demo restaurant, Helsinki")).not.toBeVisible();
+    await user.click(button);
+
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(within(firstDay).getByText("K00 Demo restaurant, Helsinki")).toBeVisible();
+    expect(within(firstDay).getByText("31 L")).toBeVisible();
+    expect(within(firstDay).getByText("K01 School 1 Tampere")).toBeVisible();
+  });
+
+  it("gives the table and the phone list their own kitchen list ids", async () => {
+    renderApp("/demand?week=2026-W47", createMockApi());
+    await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+
+    const ids = [...document.querySelectorAll("button[aria-controls]")].map((button) =>
+      button.getAttribute("aria-controls"),
+    );
+    expect(ids).toHaveLength(30);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("lists the kitchens of an expanded row largest demand first", async () => {
+    const user = userEvent.setup();
+    renderApp("/demand?week=2026-W47", createMockApi());
+    await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+
+    const firstDay = productSection("462775")[1];
+    await user.click(within(firstDay).getByRole("button", { name: /^4 kitchens/ }));
+    expect(
+      within(firstDay)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "K07 Hospital kitchen Turku73.34 L",
+      "K01 School 1 Tampere73.33 L",
+      "K04 Hotel Aurora Helsinki73.33 L",
+      "K00 Demo restaurant, Helsinki16 L",
+    ]);
+  });
+
+  it("says so instead of offering a toggle when no kitchen shares a forecast", async () => {
+    const api: Api = createMockApi();
+    const getSupplierDemand = api.getSupplierDemand;
+    api.getSupplierDemand = async (from, to) =>
+      (await getSupplierDemand(from, to))
+        .slice(0, 1)
+        .map((row) => ({ ...row, byKitchen: [], kitchens: 0, forecastDemand: 0 }));
+    renderApp("/demand?week=2026-W47", api);
+    await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+
+    // Once in the table and once in the phone list.
+    expect(await screen.findAllByText("No kitchens share this forecast")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /kitchens? for/ })).not.toBeInTheDocument();
+  });
+
   it("loses a kitchen when the kitchen turns sharing off", async () => {
     const closed = createMockApi();
     await closed.setSharing("SUP-VALIO", false, "human");
@@ -75,6 +142,11 @@ describe("DemandPage", () => {
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
 
     expect(kitchensFor("462775")).toBe(3);
+    const firstDay = productSection("463335")[1];
+    const user = userEvent.setup();
+    await user.click(within(firstDay).getByRole("button", { name: /^4 kitchens/ }));
+    expect(within(firstDay).queryByText("K00 Demo restaurant, Helsinki")).not.toBeInTheDocument();
+    expect(within(firstDay).getByText("K01 School 1 Tampere")).toBeVisible();
   });
 
   it("moves to the next and previous week", async () => {

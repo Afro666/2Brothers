@@ -52,6 +52,26 @@ describe("SuppliersPage", () => {
     });
   });
 
+  it("lets a new supplier share forecasts and records the action", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    renderApp("/suppliers", api);
+
+    await user.click(await screen.findByRole("button", { name: "Add supplier" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add supplier" });
+    await user.type(within(dialog).getByLabelText("Name"), "Kallio Greens");
+    await user.click(within(dialog).getByRole("button", { name: "Save supplier" }));
+
+    const checkbox = await screen.findByRole("checkbox", { name: "Share our forecast with Kallio Greens" });
+    await waitFor(() => expect(checkbox).toBeEnabled());
+    await user.click(checkbox);
+    await waitFor(() => expect(checkbox).toBeChecked());
+    expect((await api.listAudit()).filter((event) => event.kind === "forecast_share").at(-1)).toMatchObject({
+      actor: "human",
+      summary: "Forecast sharing turned on for Kallio Greens",
+    });
+  });
+
   it("shows the API's error for a blank name in the dialog", async () => {
     const user = userEvent.setup();
     const api = createMockApi();

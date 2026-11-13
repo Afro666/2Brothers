@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
@@ -130,7 +130,9 @@ function DemandRow({ row }: { row: SupplierDemandRow }) {
       <TableCell className="text-right tabular-nums">
         {formatNumber(row.forecastDemand)} {row.unit}
       </TableCell>
-      <TableCell className="text-right tabular-nums">{row.kitchens}</TableCell>
+      <TableCell>
+        <KitchenDisclosure row={row} />
+      </TableCell>
       <TableCell>
         {row.available == null ? (
           <span
@@ -162,6 +164,43 @@ function DemandRow({ row }: { row: SupplierDemandRow }) {
   );
 }
 
+function KitchenDisclosure({ row }: { row: SupplierDemandRow }) {
+  const [expanded, setExpanded] = useState(false);
+  // The table and the phone list are both in the DOM, so each instance needs its own id.
+  const listId = useId();
+  if (row.byKitchen.length === 0) {
+    return <span className="text-muted-foreground">No kitchens share this forecast</span>;
+  }
+  const kitchens = [...row.byKitchen].sort((a, b) => b.demand - a.demand || a.kitchenName.localeCompare(b.kitchenName));
+  return (
+    <div className="space-y-2 whitespace-normal">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-auto min-h-8 px-2 py-1"
+        aria-expanded={expanded}
+        aria-controls={listId}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {formatNumber(row.kitchens)} {row.kitchens === 1 ? "kitchen" : "kitchens"}{" "}
+        <span className="sr-only">
+          for {row.productName}, {formatDate(row.date)}
+        </span>
+      </Button>
+      <ul id={listId} hidden={!expanded} className="space-y-1 text-sm">
+        {kitchens.map((kitchen) => (
+          <li key={kitchen.kitchenId} className="flex flex-wrap justify-between gap-x-3">
+            <span>{kitchen.kitchenName}</span>
+            <span className="tabular-nums">
+              {formatNumber(kitchen.demand)} {row.unit}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function MobileGroup({ group }: { group: ProductGroup }) {
   return (
     <li className="space-y-3 py-4">
@@ -184,7 +223,9 @@ function MobileGroup({ group }: { group: ProductGroup }) {
                 {formatNumber(row.forecastDemand)} {row.unit}
               </dd>
               <dt className="text-muted-foreground">Kitchens</dt>
-              <dd className="text-right tabular-nums">{row.kitchens}</dd>
+              <dd className="text-right">
+                <KitchenDisclosure row={row} />
+              </dd>
               <dt className="text-muted-foreground">Available</dt>
               <dd className="text-right tabular-nums">
                 {row.available == null ? (

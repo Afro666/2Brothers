@@ -66,6 +66,59 @@ describe("mock API planning data", () => {
     expect((await api.listAudit()).at(-1)).toMatchObject({ kind: "forecast_share", actor: "chef" });
   });
 
+  it("derives forecast totals and kitchen counts from the named kitchens", async () => {
+    const api = createMockApi();
+    const rows = await api.getSupplierDemand("2026-11-16", "2026-11-16");
+
+    for (const row of rows) {
+      expect(row.kitchens).toBe(row.byKitchen.length);
+      expect(row.byKitchen.reduce((sum, kitchen) => sum + kitchen.demand, 0)).toBe(row.forecastDemand);
+    }
+  });
+
+  it("includes the restaurant kitchen only while sharing with Valio", async () => {
+    const api = createMockApi();
+    const before = await api.getSupplierDemand("2026-11-16", "2026-11-16");
+    const shared = before.find((row) => row.productId === "463335");
+    expect(shared?.byKitchen.some((kitchen) => kitchen.kitchenId === "K00")).toBe(true);
+
+    await api.setSharing("SUP-VALIO", false, "chef");
+    const after = await api.getSupplierDemand("2026-11-16", "2026-11-16");
+    const privateRow = after.find((row) => row.productId === "463335");
+    expect(privateRow?.byKitchen.some((kitchen) => kitchen.kitchenId === "K00")).toBe(false);
+  });
+
+  it("allows sharing with a supplier added later, defaulting its consent to false", async () => {
+    const api = createMockApi();
+    const supplier = await api.saveSupplier({
+      name: "New supplier",
+      adapter: "manual",
+      freeDeliveryThresholdEur: null,
+      deliveryFeeEur: null,
+      orderDays: null,
+      cutoffTime: null,
+      leadTimeDays: null,
+    });
+
+    expect(await api.getSharing()).toContainEqual({ supplierId: supplier.id, shared: false });
+    const returned = await api.setSharing(supplier.id, true, "chef");
+    expect(returned).toEqual(await api.getSharing());
+    expect(returned).toContainEqual({ supplierId: supplier.id, shared: true });
+    expect((await api.listAudit()).at(-1)).toMatchObject({ kind: "forecast_share", actor: "chef" });
+  });
+
+  it("removes a deleted supplier's consent", async () => {
+    const api = createMockApi();
+    await api.deleteSupplier("SUP-VALIO");
+
+    const sharing = await api.getSharing();
+    expect(sharing.map((consent) => consent.supplierId)).toEqual(["SUP-BAKERY", "SUP-FISH"]);
+    expect(await api.setSharing("SUP-FISH", true, "chef")).toHaveLength(2);
+    // The consent went with the supplier, so Valio no longer sees this kitchen.
+    const rows = await api.getSupplierDemand("2026-11-16", "2026-11-16");
+    expect(rows.flatMap((row) => row.byKitchen).some((kitchen) => kitchen.kitchenId === "K00")).toBe(false);
+  });
+
   it("marks supplier demand with unknown availability as UNKNOWN", async () => {
     const api = createMockApi();
     const milk = (await api.getSupplierDemand("2026-11-16", "2026-11-16")).find((row) => row.productId === "463335");
