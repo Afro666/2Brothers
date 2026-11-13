@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from uuid import NAMESPACE_URL, uuid5
 
 import httpx
 from mcp.shared.memory import create_connected_server_and_client_session
@@ -100,6 +101,38 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
             orders = [r for r in mock.requests if r.url.path == "/tools/place_order"]
             if orders:
                 self.assertNotEqual(json.loads(orders[0].content)["idempotency_key"], "model-key")
+
+    async def test_place_order_schema_hides_key_and_runner_supplies_it(self):
+        class ApprovedGateway(MockGateway):
+            def __call__(self, request):
+                if request.url.path == "/tools/place_order":
+                    self.requests.append(request)
+                    return httpx.Response(200, json={"order_id": "order-1", "outcome": "CONFIRMED", "status": "PLACED"})
+                return super().__call__(request)
+        seen = {}
+
+        class Capturing(Scripted):
+            async def complete(self, messages, tools):
+                seen.update({t["function"]["name"]: t["function"]["parameters"] for t in tools})
+                return await super().complete(messages, tools)
+        steps = milk_steps()[:3] + [tool("place_order", offer_id="milk-offer-1", expected_total="149.02")]
+        mock = ApprovedGateway()
+        gateway = GatewayClient(transport=httpx.MockTransport(mock))
+        try:
+            async with create_connected_server_and_client_session(build_server(gateway)) as session:
+                buyer = Buyer(Capturing(steps), session, gateway, need_id="milk-need-1", requested_date="2026-11-16",
+                    run_id="test-run", approval_lookup=lambda offer_id: {"approval_id": "a-1", "offer_id": offer_id,
+                        "status": "APPROVED", "decided_by": "chef-1", "decided_at": "2026-11-01T10:00:00Z"})
+                result = await buyer.run("milk")
+        finally:
+            await gateway.close()
+        schema = seen["place_order"]
+        self.assertEqual(set(schema["properties"]), {"offer_id", "expected_total"})
+        self.assertNotIn("idempotency_key", schema.get("required", []))
+        self.assertEqual(result["status"], "ORDER_PLACED")
+        orders = [r for r in mock.requests if r.url.path == "/tools/place_order"]
+        expected = str(uuid5(NAMESPACE_URL, "test-run:milk-offer-1"))
+        self.assertEqual(json.loads(orders[0].content)["idempotency_key"], expected)
 
     async def test_place_order_requires_a_complete_matching_human_decision(self):
         approved = {"approval_id": "approval-1", "offer_id": "milk-offer-1", "status": "APPROVED",
