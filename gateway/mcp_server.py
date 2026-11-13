@@ -85,8 +85,8 @@ def build_server(gateway: GatewayClient) -> FastMCP:
     async def request_approval(offer_id: Identifier) -> dict:
         """Create a pending human decision for an offer. This does not approve, cancel, or release an order."""
         key = str(uuid5(NAMESPACE_URL, "2brothers-approval:" + offer_id))
-        return await gateway.request("POST", "/tools/request_approval", payload={"offer_id": offer_id},
-                                     headers={"Idempotency-Key": key})
+        return await gateway.request("POST", "/tools/request_approval", payload={
+            "offer_id": offer_id, "idempotency_key": key})
 
     @server.tool(annotations=read)
     async def get_order_status(order_id: Identifier) -> dict:
