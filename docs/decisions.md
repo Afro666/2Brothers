@@ -17,7 +17,9 @@ One line each: `YYYY-MM-DD HH:MM – who – decision – why`.
 - 2026-11-13 23:00 – Aron – No auto-approve: the agent proposes every order, a human approves it – trust; the buyer stays in control.
 - 2026-11-13 23:00 – Aron – Supplier terms (MOV, delivery fee, order days, cut-off) are user-set per supplier; demo values are placeholders – they differ per client and supplier.
 - 2026-11-13 23:00 – Aron – Multi-supplier, own products, recipes, menu and week planning, future demand from the menu plan – a kitchen buys from more than Valio and plans by menu.
+- 2026-11-13 23:00 – Tymon, #24 – `store/` is the one package that talks to MongoDB (sync `pymongo`); money is `Decimal` in Python and `Decimal128` in Mongo; the audit log is insert-only and hash-chained – gateway and agent import `store`, so the database can be swapped in one place and an audit entry cannot be changed unnoticed.
 - 2026-11-13 23:30 – Aron – Tymon deploys the app as Docker containers on the Verda instance through GitHub Actions – he already has that pipeline.
 - 2026-11-13 23:30 – Aron – The agent is called "Buyer".
 - 2026-11-13 23:30 – Aron – Our own API for kitchens and suppliers (docs/contract.md, "Product API"); approve is human-only, never the agent's token – trust rule.
 - 2026-11-13 23:45 – Aron – AfterQuery dropped; we stay with Valio only. `env/` stays as the synthetic history generator – one main track per project on the form.
+- 2026-11-13 23:20 – Tymon, #24 – Catalog rules in `store.products.flatten`: a size read from the product name is stored but flagged `net_content_source: "name"`; the GS1 level `UNDECLARED` is its own list `allergens.undeclared` and never counts as free-from; `temperatureCondition` 5, 6 and 9 stay unknown until Valio explains them; idempotency keys are unique per kitchen – 30% of products have no measured size, and an unknown value must never look safe.

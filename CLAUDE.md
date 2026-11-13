@@ -29,6 +29,7 @@ Codex reads `AGENTS.md`, which points here. One rule set for all agents.
 | `gateway/` + `engine/` | Aron | MCP + OpenAPI gateway over Valio's mock API; purchasing engine (quantities, MOV, guards) |
 | `web/` | Tymon | Approval inbox, audit log, chef/buyer view; mobile-friendly |
 | `agent/` + `env/` | Maciek | Nemotron 3.5 Super VL Buyer agent on Verda; synthetic kitchen history (`env/`) |
+| `store/` | Tymon | MongoDB repository, the only code that talks to Mongo: catalog loader, offers, orders, approvals, audit log, kitchen data, search |
 
 See `docs/plan.md` for the full architecture and timeline.
 

@@ -1,4 +1,4 @@
-"""The one repository module: the only code that talks to MongoDB.
+"""Kitchen data in MongoDB. The connection lives in `store.db`.
 
 Collections (shapes from issue #72):
 - suppliers: name, adapter (valio_api|manual|csv), free_delivery_threshold_eur,
@@ -28,14 +28,11 @@ SUPPLIER_TERMS = (
 )
 
 
-def connect(uri: str | None = None, db_name: str | None = None):
-    """Return a pymongo Database from MONGODB_URI (and optional MONGODB_DB)."""
-    from pymongo import MongoClient
+def connect(db_name: str | None = None):
+    """The shared database from `store.db`: one client, one Decimal128 codec."""
+    from store.db import get_db
 
-    uri = uri or os.environ.get("MONGODB_URI")
-    if not uri:
-        raise RuntimeError("MONGODB_URI is not set")
-    return MongoClient(uri)[db_name or os.environ.get("MONGODB_DB", "two_brothers")]
+    return get_db(db_name or os.environ.get("MONGODB_DB"))
 
 
 def _require(doc: dict, *fields: str) -> None:
