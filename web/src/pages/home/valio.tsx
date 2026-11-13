@@ -1,0 +1,113 @@
+import { formatDate, formatNumber } from "@/lib/format";
+import { isoWeekOf, weekDates } from "@/lib/week";
+import { useAsync } from "@/lib/use-async";
+import type { Api } from "@/api/types";
+import type { SupplierDemandRow } from "@/types";
+
+import { Tile, TileState } from "@/pages/home/tile";
+
+type SupplierDemandResult = { rows: SupplierDemandRow[]; week: string; fallback: boolean };
+
+function loadSupplierDemand(api: Api, now: Date): Promise<SupplierDemandResult> {
+  const today = now.toLocaleDateString("en-CA", { timeZone: "Europe/Helsinki" });
+  const currentWeek = isoWeekOf(today);
+  const [monday, , , , , , sunday] = weekDates(currentWeek);
+  return api.getSupplierDemand(monday, sunday).then((rows) => {
+    if (rows.length > 0) return { rows, week: currentWeek, fallback: false };
+
+    const nextWeekDates = weekDates(isoWeekOf(addDays(sunday, 1)));
+    const [nextMonday, , , , , , nextSunday] = nextWeekDates;
+    return api.getSupplierDemand(nextMonday, nextSunday).then((nextRows) => ({
+      rows: nextRows,
+      week: isoWeekOf(nextMonday),
+      fallback: true,
+    }));
+  });
+}
+
+function addDays(date: string, days: number): string {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+const riskOrder: Record<SupplierDemandRow["risk"], number> = { SHORT: 0, AT_RISK: 1, UNKNOWN: 2, COVERED: 3 };
+
+export function ShortageTile({ api, now }: { api: Api; now: Date }) {
+  const state = useAsync(() => loadSupplierDemand(api, now), [api, now.toISOString()]);
+  const currentWeek = isoWeekOf(now.toLocaleDateString("en-CA", { timeZone: "Europe/Helsinki" }));
+  const shownWeek = state.status === "ready" ? state.data.week : currentWeek;
+  const [weekMonday, , , , , , weekSunday] = weekDates(shownWeek);
+  return (
+    <Tile
+      title={`Shortage risk, week ${Number(shownWeek.slice(-2))} · ${formatDate(weekMonday)}–${formatDate(weekSunday)}`}
+      href="/demand"
+      linkLabel="Open demand view"
+    >
+      <TileState<SupplierDemandResult>
+        status={state.status}
+        error={state.error}
+        reload={state.reload}
+        data={state.status === "ready" ? state.data : null}
+        empty={state.status === "ready" && state.data.rows.length === 0}
+      >
+        {({ rows, fallback }: { rows: SupplierDemandRow[]; fallback: boolean }) => {
+          const counts = { SHORT: 0, UNKNOWN: 0, AT_RISK: 0 };
+          rows.forEach((row) => {
+            if (row.risk in counts) counts[row.risk as keyof typeof counts] += 1;
+          });
+          const worst = [...rows]
+            .sort((a, b) => riskOrder[a.risk] - riskOrder[b.risk] || b.forecastDemand - a.forecastDemand)
+            .slice(0, 5);
+          return (
+            <div className="space-y-4">
+              {fallback && (
+                <p className="text-sm text-muted-foreground">No forecasts for this week yet; showing next week.</p>
+              )}
+              <p className="text-sm">
+                <span className="font-semibold">{counts.SHORT}</span> SHORT ·{" "}
+                <span className="font-semibold">{counts.UNKNOWN}</span> UNKNOWN ·{" "}
+                <span className="font-semibold">{counts.AT_RISK}</span> AT_RISK
+              </p>
+              <ul className="space-y-3 text-sm">
+                {worst.map((row) => (
+                  <li key={`${row.productId}-${row.date}`} className="space-y-1">
+                    <p className="font-medium">
+                      {row.productName} · {formatDate(row.date)}
+                    </p>
+                    <p className="text-muted-foreground">
+                      Forecast {formatNumber(row.forecastDemand)} {row.unit}; available{" "}
+                      {row.available === null ? "unknown" : `${formatNumber(row.available)} ${row.unit}`}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        }}
+      </TileState>
+    </Tile>
+  );
+}
+
+export function KitchensTile({ api, now }: { api: Api; now: Date }) {
+  const state = useAsync(() => loadSupplierDemand(api, now), [api, now.toISOString()]);
+  return (
+    <Tile title="Kitchens sharing forecasts" href="/demand" linkLabel="Open demand view">
+      <TileState<SupplierDemandRow[]>
+        status={state.status}
+        error={state.error}
+        reload={state.reload}
+        data={state.status === "ready" ? state.data.rows : null}
+        empty={state.status === "ready" && state.data.rows.length === 0}
+      >
+        {(rows: SupplierDemandRow[]) => (
+          <div>
+            <p className="text-3xl font-semibold tabular-nums">{Math.max(...rows.map((row) => row.kitchens))}</p>
+            <p className="mt-2 text-sm text-muted-foreground">Only kitchens that agreed to share appear here.</p>
+          </div>
+        )}
+      </TileState>
+    </Tile>
+  );
+}

@@ -440,7 +440,8 @@ per product and day:
 |---|---|---|
 | `product_id`, `date`, `unit` | string | |
 | `demand` | decimal string | Sum of the kitchens' `net_need`. |
-| `kitchens` | integer | How many kitchens the sum covers. Never which ones. |
+| `kitchens` | integer | How many consenting kitchens the sum covers. |
+| `by_kitchen` | `{kitchen_id, kitchen_name, demand}[]` | One entry per consenting kitchen with demand that day; `demand` above is their sum. A kitchen without active consent appears nowhere: not in the sum, not in this list. |
 | `available` | decimal string or null | The supplier's stated availability; null when unknown. |
 | `shortage` | decimal string or null | `demand` minus `available` when positive; null when `available` is null. |
 | `risk` | `"OK"`, `"SHORT"` or `"UNKNOWN"` | `UNKNOWN` when `available` is null. |
@@ -566,6 +567,10 @@ replaces it.
 
 - `scope` is `forecast_only`: need per product and day. Never menus, recipes, prices from
   other suppliers or stock counts.
+- The supplier sees that need **with the kitchen's name**, not only a total (decided
+  2026-11-14 by Tymon). The consent text shown to the kitchen says so: "Share our forecast
+  with <supplier>. They see our kitchen's name and what we expect to need, never our menus
+  or prices." Because the kitchen agreed to be named, there is no minimum group size.
 - Consent is active when `share_forecast` is true and `revoked_at` is null. The supplier
   demand routes and the engine's demand aggregation read only kitchens with active
   consent for that supplier.
