@@ -309,6 +309,10 @@ export function createMockApi(): MockApi {
         return !product.allergens.some((allergen) => excluded.includes(allergen.code));
       });
     },
+    async getProducts(ids) {
+      const wanted = new Set(ids);
+      return (Object.values(products) as Product[]).filter((product) => wanted.has(product.id));
+    },
     async getMandate() {
       return mandate;
     },

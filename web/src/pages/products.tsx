@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useApi } from "@/api";
 import type { Draft } from "@/api/types";
@@ -16,8 +16,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatEur, formatNumber } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
-import type { Allergen, AllergenPresence, OwnProduct, Product, Recipe, RecipeItem, Supplier } from "@/types";
+import type {
+  Allergen,
+  AllergenPresence,
+  OwnProduct,
+  Product,
+  ProductCode,
+  Recipe,
+  RecipeItem,
+  Supplier,
+} from "@/types";
+import { ProductPicker, type PickerProduct } from "@/pages/products/product-picker";
 import { recipeAllergens } from "@/pages/products/recipe-allergens";
+import { catalogProductIdsInRecipes } from "@/pages/products/recipe-products";
 
 const ALLERGENS = [
   ["AM", "Milk"],
@@ -34,14 +45,38 @@ function productName(product: Product | OwnProduct): string {
   return "names" in product ? product.names.en : product.name;
 }
 
+/** A recipe row in the editor: the quantity as typed, and a key that survives removing a row above it. */
+type RecipeRow = Omit<RecipeItem, "qtyPerPortion"> & { qtyPerPortion: string; key: string };
+
+let rowKeys = 0;
+function newRowKey(): string {
+  rowKeys += 1;
+  return `recipe-row-${rowKeys}`;
+}
+
 async function loadData(api: ReturnType<typeof useApi>) {
-  const [ownProducts, suppliers, recipes, catalog] = await Promise.all([
+  const [ownProducts, suppliers, recipes] = await Promise.all([
     api.listOwnProducts(),
     api.listSuppliers(),
     api.listRecipes(),
-    api.searchProducts(""),
   ]);
+  // The catalog search returns only a page, so recipes load their products by id instead.
+  const catalog = await api.getProducts(catalogProductIdsInRecipes(recipes, ownProducts));
   return { ownProducts, suppliers, recipes, catalog };
+}
+
+/** The name, unit and origin a recipe row shows for one product. */
+function pickerProduct(product: Product | OwnProduct, suppliers: readonly Supplier[]): PickerProduct {
+  if ("names" in product) {
+    return {
+      product,
+      name: product.names.en,
+      unit: product.baseUnit,
+      source: product.vendorName || "Supplier not set",
+    };
+  }
+  const supplier = suppliers.find((candidate) => candidate.id === product.supplierId);
+  return { product, name: product.name, unit: product.unit, source: supplier?.name ?? "Supplier not found" };
 }
 
 function ProductsTable({
@@ -90,6 +125,7 @@ function ProductsTable({
 
 function ProductsPageContent() {
   const api = useApi();
+  const [tab, setTab] = useState("products");
   const state = useAsync(() => loadData(api), [api]);
   const [dialog, setDialog] = useState<"product" | "recipe" | "delete-product" | "delete-recipe" | null>(null);
   const [editingProduct, setEditingProduct] = useState<OwnProduct | null>(null);
@@ -103,7 +139,7 @@ function ProductsPageContent() {
   const [supplierId, setSupplierId] = useState("");
   const [unknown, setUnknown] = useState(true);
   const [allergenValues, setAllergenValues] = useState<Record<string, AllergenPresence>>({});
-  const [items, setItems] = useState<Array<Omit<RecipeItem, "qtyPerPortion"> & { qtyPerPortion: string }>>([]);
+  const [items, setItems] = useState<RecipeRow[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -119,7 +155,25 @@ function ProductsPageContent() {
       ]),
     [products, catalog],
   );
+  const searchProducts = useCallback(async (query: string) => api.searchProducts(query), [api]);
+  const loadProducts = useCallback(async (ids: ProductCode[]) => api.getProducts(ids), [api]);
+  const findPickerProduct = useCallback(
+    (id: string) => {
+      const product = productLookup.get(id);
+      return product ? pickerProduct(product, suppliers) : undefined;
+    },
+    [productLookup, suppliers],
+  );
 
+  /** Opens or closes a dialog once the browser has removed its previous one; a remount would drop a half-typed form. */
+  function whenSteady(callback: () => void) {
+    const expected = dialog === null ? 0 : 1;
+    const attempts = (left: number) => {
+      if (document.querySelectorAll("[role='dialog']").length === expected) callback();
+      else if (left > 0) window.queueMicrotask(() => attempts(left - 1));
+    };
+    window.queueMicrotask(() => attempts(100));
+  }
   function openProduct(product: OwnProduct | null = null) {
     setEditingProduct(product);
     setName(product?.name ?? "");
@@ -132,14 +186,34 @@ function ProductsPageContent() {
       Object.fromEntries((product?.allergens ?? []).map((allergen) => [allergen.code, allergen.presence])),
     );
     setError("");
-    setDialog("product");
+    whenSteady(() => setDialog("product"));
   }
   function openRecipe(recipe: Recipe | null = null) {
+    // The header can take the click that closes a dialog, so an opened recipe editor also shows its tab.
+    setTab("recipes");
     setEditingRecipe(recipe);
     setName(recipe?.name ?? "");
-    setItems(recipe ? recipe.items.map((item) => ({ ...item, qtyPerPortion: String(item.qtyPerPortion) })) : []);
+    setItems(
+      recipe
+        ? recipe.items.map((item) => ({ ...item, qtyPerPortion: String(item.qtyPerPortion), key: newRowKey() }))
+        : [],
+    );
     setError("");
-    setDialog("recipe");
+    whenSteady(() => setDialog("recipe"));
+  }
+  function chooseProduct(index: number, choice: PickerProduct) {
+    setItems((rows) =>
+      rows.map((row, rowIndex) =>
+        rowIndex === index
+          ? { ...row, productId: choice.product.id, productName: choice.name, unit: choice.unit }
+          : row,
+      ),
+    );
+  }
+  function clearProduct(index: number) {
+    setItems((rows) =>
+      rows.map((row, rowIndex) => (rowIndex === index ? { ...row, productId: "", productName: "", unit: "" } : row)),
+    );
   }
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -165,7 +239,8 @@ function ProductsPageContent() {
         supplierId,
         allergens: unknown ? null : allergens,
       } as Draft<OwnProduct>);
-      setDialog(null);
+      resetProductForm();
+      whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -173,16 +248,35 @@ function ProductsPageContent() {
       setBusy(false);
     }
   }
+  // A hidden form must not submit by itself, or its stale values would overwrite the saved one.
+  function resetProductForm() {
+    setName("");
+    setUnit("");
+    setPackSize("");
+    setPrice("");
+    setUnknown(true);
+    setAllergenValues({});
+    setSupplierId(suppliers[0]?.id ?? "");
+  }
   async function saveRecipe(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const quantities = items.map((item) => Number(item.qtyPerPortion));
+    if (items.some((item) => item.productId === "")) {
+      setError("Choose a product for each item.");
+      return;
+    }
+    if (items.length === 0) {
+      setError("Add at least one item to the recipe.");
+      return;
+    }
+    // A Finnish keypad types a decimal comma.
+    const quantities = items.map((item) => Number(item.qtyPerPortion.replace(",", ".")));
     if (quantities.some((quantity) => !Number.isFinite(quantity) || quantity <= 0)) {
       setError("Each quantity per portion must be greater than 0.");
       return;
     }
     setBusy(true);
     setError("");
-    const resolved = items.map((item, index) => {
+    const resolved = items.map(({ key: _key, ...item }, index) => {
       const product = productLookup.get(item.productId);
       return {
         ...item,
@@ -197,7 +291,8 @@ function ProductsPageContent() {
         name,
         items: resolved,
       } as Draft<Recipe>);
-      setDialog(null);
+      setItems([]);
+      whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -211,7 +306,7 @@ function ProductsPageContent() {
     setError("");
     try {
       await api.deleteOwnProduct(deletingProduct.id);
-      setDialog(null);
+      whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -225,7 +320,7 @@ function ProductsPageContent() {
     setError("");
     try {
       await api.deleteRecipe(deletingRecipe.id);
-      setDialog(null);
+      whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -252,7 +347,7 @@ function ProductsPageContent() {
         {state.status === "loading" ? <LoadingState label="Loading products and recipes" /> : null}
         {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
         {state.status === "ready" ? (
-          <Tabs defaultValue="products">
+          <Tabs value={tab} onValueChange={setTab}>
             <TabsList>
               <TabsTrigger value="products">Products</TabsTrigger>
               <TabsTrigger value="recipes">Recipes</TabsTrigger>
@@ -452,49 +547,33 @@ function ProductsPageContent() {
                   const unitName = product ? ("baseUnit" in product ? product.baseUnit : product.unit) : item.unit;
                   return (
                     <div
-                      key={index}
-                      className="grid gap-2 rounded-md border p-3 sm:grid-cols-[1fr_120px_auto] sm:items-end"
+                      key={item.key}
+                      className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_150px_auto] sm:items-start"
                     >
-                      <label className={labelClass}>
-                        Product
-                        <Select
-                          required
-                          value={item.productId}
-                          onValueChange={(id) =>
-                            setItems((rows) =>
-                              rows.map((row, rowIndex) => {
-                                if (rowIndex !== index) return row;
-                                const selected = productLookup.get(id);
-                                return {
-                                  ...row,
-                                  productId: id,
-                                  productName: selected ? productName(selected) : "",
-                                  unit: selected ? ("baseUnit" in selected ? selected.baseUnit : selected.unit) : "",
-                                };
-                              }),
-                            )
-                          }
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Choose product" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {[...products, ...catalog].map((option) => (
-                              <SelectItem key={option.id} value={option.id}>
-                                {productName(option)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </label>
-                      <label className={labelClass}>
+                      <div>
+                        <ProductPicker
+                          value={{ productId: item.productId, productName: item.productName }}
+                          findProduct={findPickerProduct}
+                          ownProducts={products}
+                          suppliers={suppliers}
+                          search={searchProducts}
+                          loadProducts={loadProducts}
+                          onChoose={(choice) => chooseProduct(index, choice)}
+                          onChange={() => clearProduct(index)}
+                        />
+                        {item.productId === "" ? (
+                          <p className="mt-1 text-xs text-destructive">Choose a product for this item.</p>
+                        ) : null}
+                      </div>
+                      <div className={labelClass}>
                         Quantity per portion
                         <Input
+                          aria-label="Quantity per portion"
+                          aria-describedby={`${item.key}-unit`}
                           type="text"
-                          required
-                          min="0.000001"
-                          step="any"
-                          value={item.qtyPerPortion || ""}
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={item.qtyPerPortion}
                           onChange={(event) =>
                             setItems((rows) =>
                               rows.map((row, rowIndex) =>
@@ -503,8 +582,10 @@ function ProductsPageContent() {
                             )
                           }
                         />
-                        <span className="text-xs text-muted-foreground">{unitName || "Unit from product"}</span>
-                      </label>
+                        <span id={`${item.key}-unit`} className="text-xs text-muted-foreground">
+                          {unitName || "Unit from product"}
+                        </span>
+                      </div>
                       <Button
                         type="button"
                         variant="outline"
@@ -519,7 +600,10 @@ function ProductsPageContent() {
                   type="button"
                   variant="outline"
                   onClick={() =>
-                    setItems((rows) => [...rows, { productId: "", productName: "", unit: "", qtyPerPortion: "" }])
+                    setItems((rows) => [
+                      ...rows,
+                      { productId: "", productName: "", unit: "", qtyPerPortion: "", key: newRowKey() },
+                    ])
                   }
                 >
                   Add item

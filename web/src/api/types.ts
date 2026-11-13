@@ -10,6 +10,7 @@ import type {
   Order,
   OwnProduct,
   Product,
+  ProductCode,
   ProposalChange,
   FeedbackRow,
   Recipe,
@@ -72,6 +73,8 @@ export interface Api {
   listAudit(filter?: { orderId?: string }): Promise<AuditEvent[]>;
   submitChefRequest(request: ChefRequest): Promise<ChefProposal>;
   searchProducts(query: string, filters?: ProductSearchFilters): Promise<Product[]>;
+  /** Catalog products by id; ids the catalog does not know are absent from the result. */
+  getProducts(ids: ProductCode[]): Promise<Product[]>;
   getMandate(): Promise<Mandate>;
   listSuppliers(): Promise<Supplier[]>;
   /** Creates when `id` is missing, otherwise replaces. */
