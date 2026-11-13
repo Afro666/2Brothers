@@ -1,6 +1,8 @@
 import { Check, X } from "lucide-react";
 import { useId, useState } from "react";
 
+import { MovProgress } from "@/components/purchasing/mov-progress";
+import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -17,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatDate, formatDateTime, formatEur } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
-import type { ApprovalRequest } from "@/types";
+import type { ApprovalRequest, Order } from "@/types";
 
 /** What the gateway gets on approve: the exact totals the human read. */
 export interface ApprovalDecision {
@@ -35,10 +37,14 @@ export interface ApprovalDecision {
  */
 export function ApprovalCard({
   request,
+  order,
+  now = new Date(),
   onApprove,
   onReject,
 }: {
   request: ApprovalRequest;
+  order?: Order;
+  now?: Date;
   onApprove?: (decision: ApprovalDecision) => void | Promise<void>;
   onReject?: (approvalId: string, reason: string) => void | Promise<void>;
 }) {
@@ -47,6 +53,7 @@ export function ApprovalCard({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showOrder, setShowOrder] = useState(false);
   const reasonId = useId();
   const pending = status === "PENDING";
 
@@ -73,8 +80,8 @@ export function ApprovalCard({
       <CardHeader>
         <CardTitle className="leading-snug">{request.summary}</CardTitle>
         <CardDescription>
-          {request.lineCount} {request.lineCount === 1 ? "line" : "lines"} · delivery {formatDate(request.deliveryDate)} ·
-          asked by {request.requestedBy}, {formatDateTime(request.createdAt)}
+          {request.lineCount} {request.lineCount === 1 ? "line" : "lines"} · delivery {formatDate(request.deliveryDate)}{" "}
+          · asked by {request.requestedBy}, {formatDateTime(request.createdAt)}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -99,6 +106,24 @@ export function ApprovalCard({
             ))}
           </ul>
         </section>
+        {order ? (
+          <section className="space-y-3 border-t pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              aria-expanded={showOrder}
+              onClick={() => setShowOrder((shown) => !shown)}
+            >
+              {showOrder ? "Hide order lines" : "Show order lines"}
+            </Button>
+            {showOrder ? (
+              <div className="space-y-4">
+                <OrderLinesTable lines={order.lines} now={now} />
+                <MovProgress mov={order.mov} />
+              </div>
+            ) : null}
+          </section>
+        ) : null}
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
         {pending ? (
