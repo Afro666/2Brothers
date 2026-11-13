@@ -17,8 +17,6 @@ services:
       - "443:443"
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
-      SITE_USER: ${SITE_USER:?set SITE_USER in .env}
-      SITE_PASSWORD_HASH: ${SITE_PASSWORD_HASH:?set SITE_PASSWORD_HASH in .env}
       GATEWAY_HUMAN_TOKEN: ${GATEWAY_HUMAN_TOKEN:?set GATEWAY_HUMAN_TOKEN in .env}
     volumes:
       # Caddy keeps its HTTPS certificates here; losing it re-requests them.

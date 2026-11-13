@@ -15,8 +15,8 @@ reached only through Caddy. MongoDB stays on Atlas.
 |---|---|---|
 | `/api/ping` | monitors | none; answers `{"status":"ok"}` |
 | `/gateway/*` | the Buyer agent, other services | the caller's own bearer token, checked by the gateway |
-| `/api/*` | the web app | the shared demo password; Caddy adds the gateway's human token on the server, so it never reaches a browser. The web app names the person in `X-User`. |
-| everything else | the screens | the shared demo password |
+| `/api/*` | the web app | open to anyone with the link; Caddy adds the gateway's human token on the server, so it never reaches a browser. The web app names the person in `X-User`. |
+| everything else | the screens | none |
 
 ## Settings
 
@@ -24,8 +24,6 @@ Server file `/opt/2brothers/.env` (mode 600, not in git; never in an image):
 
 ```
 SITE_ADDRESS="<ip-with-dashes>.sslip.io, http://<ip>"
-SITE_USER=<demo user name>
-SITE_PASSWORD_HASH='<bcrypt hash from: docker run --rm caddy:2-alpine caddy hash-password --plaintext "<password>">'
 GATEWAY_HUMAN_TOKEN=<long random string>
 GATEWAY_AGENT_TOKEN=<another long random string; give this one to the Buyer agent>
 VALIO_API_KEY=<key>
