@@ -96,7 +96,91 @@ must not be interpreted as evidence that an allergen is absent.
 
 ## Team gateway interfaces
 
-Pending agreement with the gateway and UI owners. The upstream facts above do
-not establish our MCP tool names, approval messages, simulation output, or order
-state transitions. Add those interfaces here in a separate contract PR before
-building integrations against them.
+These are team-owned HTTP interfaces, not Valio endpoints. The MCP adapter uses
+the gateway at `GATEWAY_BASE_URL` (default `http://127.0.0.1:8000`). Until the
+gateway implementation lands, integration tests use an in-process mock HTTP
+transport implementing this contract. Production deployment must restrict access
+to trusted server processes; these routes must not be exposed publicly without
+gateway authentication and tenant authorization. Never send Valio keys here.
+
+All request and response bodies are JSON objects. Errors use an HTTP 4xx/5xx
+status and `{"error": {"code": "TOTAL_MISMATCH", "message": "..."}}`.
+IDs are opaque strings. Currency amounts are decimal strings in EUR, never
+binary floats. Timestamps use ISO 8601 with an offset. The gateway validates every
+input, mandate and authenticated kitchen; model arguments are untrusted.
+
+| MCP tool | Method and path | Request / query fields | Success response fields |
+|---|---|---|---|
+| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object` | `products: object[]` |
+| `get_offer` | POST `/tools/get_offer` | `product_ids: string[]`, `requested_date: YYYY-MM-DD`, `need_id: string` | `offer_id`, `valid_until`, `lines: object[]` |
+| `simulate_order` | POST `/tools/simulate_order` | `offer_id: string` | `offer_id`, `expected_total`, `currency`, `mandate: object`, `lines: object[]` |
+| `place_order` | POST `/tools/place_order` | `offer_id`, `expected_total: decimal string`, `idempotency_key` | `order_id`, `outcome`, `status` |
+| `request_approval` | POST `/tools/request_approval` | `offer_id: string` | `approval_id`, `status: PENDING` |
+| `get_order_status` | GET `/tools/get_order_status` | `order_id: string` | `order_id`, `status`, `outcome` |
+| `get_audit_log` | GET `/tools/get_audit_log` | `run_id: string` | `events: object[]` |
+
+The trusted application/engine creates `need_id` before invoking the buyer agent.
+The gateway loads quantities from that stored need; neither `get_offer` nor
+`simulate_order` accepts quantities invented by the model. Offer lines include
+`product_id`, `quantity`, `unit`, `why`, `available_date`, `unknown_stock` and
+`cutoff_passed`. Unknown stock is never represented as a measured sentinel value.
+`expected_total` includes fees and tax. Simulation also includes `mov_gap` and
+`delivery_fee` as decimal strings. Expired offers must be refreshed and simulated.
+
+`mandate.verdict` is exactly `AUTO`, `NEEDS_APPROVAL`, or `REFUSED`;
+`mandate.reasons` is a list of human-readable strings. For example, the milk case:
+
+```json
+{
+  "offer_id": "milk-offer-1",
+  "expected_total": "149.02",
+  "currency": "EUR",
+  "mov_gap": "0.00",
+  "delivery_fee": "0.00",
+  "mandate": {
+    "verdict": "NEEDS_APPROVAL",
+    "reasons": ["Only 51 L is confirmed for Monday; the remaining stock is unknown."]
+  },
+  "lines": [{
+    "product_id": "462775", "quantity": "51", "unit": "ST",
+    "why": "51 one-litre units confirmed; the full 1,000 L request cannot be met.",
+    "available_date": "2026-11-16", "unknown_stock": false, "cutoff_passed": false
+  }]
+}
+```
+
+This example is a deterministic mock scenario, not a live quote or a complete
+fulfilment. The agent requests approval and reports a pending decision. It never
+claims the full milk request was fulfilled.
+
+`place_order` independently enforces the mandate and recorded human approval,
+offer validity, unchanged total (tolerance EUR 0.005), and stock/cutoff guards.
+It persists an attempt and payload hash before any commit. The agent cannot
+approve, cancel, release, or bypass an order. A requested approval remains pending
+until an authorized human acts through the approval UI, outside these tools.
+
+`outcome` is `CONFIRMED`, `NOT_SENT`, `UNCONFIRMED` or `SENT_READ_FAILED`.
+Only `CONFIRMED` means an order is known to have been placed in our gateway.
+`NOT_SENT` may be retried explicitly; the other failure outcomes require status
+reconciliation or human intervention. All mutation requests carry stable
+idempotency keys; `request_approval` uses `Idempotency-Key` in its HTTP header,
+while `place_order` carries it in the JSON body. Replays return the stored result;
+key reuse with a different payload is rejected. Adapters never automatically
+retry either mutation after an ambiguous transport failure.
+
+### Agent audit ingestion
+
+POST `/audit/events` accepts `event_id`, `run_id`, `type`, `tool`, `arguments`,
+and `result` (JSON object fields). Types are `tool_call_started` and
+`tool_call_finished`. `event_id` is an idempotency key: exact replays do not append
+twice; different content under the same key is rejected. The gateway adds its own
+timestamp, authenticated principal and kitchen scope, and returns
+`{"event_id": "...", "stored": true}` only after durable storage through the
+shared repository module. Never accept the model's identity or timestamp as fact.
+
+The buyer records a start event before dispatch and a finish event after every
+attempt, including errors. Audit failure stops the agent; no new tool is called.
+If finish logging fails after a mutation, the final result must flag human
+reconciliation rather than repeat the mutation. Arguments/results contain only
+allowlisted tool fields: no credentials, authorization headers or raw HTTP error
+bodies. Local traces supplement durable gateway audit; they do not replace it.
