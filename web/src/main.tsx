@@ -1,6 +1,7 @@
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { Toaster } from "sonner";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiProvider } from "@/api";
@@ -15,6 +16,7 @@ createRoot(document.getElementById("root")!).render(
     <ApiProvider>
       <TooltipProvider>
         <RouterProvider router={router} />
+        <Toaster position="bottom-right" theme="system" richColors />
       </TooltipProvider>
     </ApiProvider>
   </StrictMode>,

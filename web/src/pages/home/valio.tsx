@@ -64,7 +64,7 @@ export function ShortageTile({ api, now }: { api: Api; now: Date }) {
               {fallback && (
                 <p className="text-sm text-muted-foreground">No forecasts for this week yet; showing next week.</p>
               )}
-              <p className="text-sm">
+              <p className="text-sm tabular-nums">
                 <span className="font-semibold">{counts.SHORT}</span> SHORT ·{" "}
                 <span className="font-semibold">{counts.UNKNOWN}</span> UNKNOWN ·{" "}
                 <span className="font-semibold">{counts.AT_RISK}</span> AT_RISK
@@ -75,7 +75,7 @@ export function ShortageTile({ api, now }: { api: Api; now: Date }) {
                     <p className="font-medium">
                       {row.productName} · {formatDate(row.date)}
                     </p>
-                    <p className="text-muted-foreground">
+                    <p className="tabular-nums text-muted-foreground">
                       Forecast {formatNumber(row.forecastDemand)} {row.unit}; available{" "}
                       {row.available === null ? "unknown" : `${formatNumber(row.available)} ${row.unit}`}
                     </p>

@@ -75,4 +75,7 @@ dialog, table …) are in `src/components/ui/`.
 - A missing value is unknown, never zero, "none" or "allergen-free".
 - Stock sentinels never show as a number.
 - Colours come from the tokens in `src/index.css` (light and dark).
+- Primary accent tokens are herb green: `#2F6B3A` in light mode and `#7FC08A` in dark mode; focus rings follow the accent.
+- One system themed Sonner toaster is mounted at the app root and in tests.
+- Success toasts confirm stock counts, supplier saves/deletes, forecast sharing changes, and saved menu weeks.
 - Works at 390 px: tables become stacked rows on a phone.

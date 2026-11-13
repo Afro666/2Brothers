@@ -21,7 +21,7 @@ export function OrdersPage() {
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold">Orders</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            See orders and their current delivery and confirmation status.
+            Orders a person approved, and where each one stands.
           </p>
         </header>
         {state.status === "loading" ? <LoadingState /> : null}
@@ -45,7 +45,7 @@ export function OrdersPage() {
                         <StatusBadge status={order.status} />
                         <UrgencyBadge urgency={order.urgency} />
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm tabular-nums text-muted-foreground">
                         Delivery {formatDate(order.deliveryDate)} · {formatEur(order.totalInclVat)} incl VAT
                       </p>
                     </Link>

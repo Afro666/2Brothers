@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
@@ -114,6 +115,7 @@ export function StockPage() {
       setDrafts({});
       setSaved(true);
       stock.reload();
+      toast.success("Count saved", { testId: "stock-count-saved-toast" });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -137,7 +139,12 @@ export function StockPage() {
         ) : null}
         {stock.status === "ready" && rows.length > 0 ? (
           <div className="space-y-4">
-            <p className={cn("text-sm", uncounted > 0 ? "font-medium text-warning" : "text-muted-foreground")}>
+            <p
+              className={cn(
+                "text-sm tabular-nums",
+                uncounted > 0 ? "font-medium text-warning" : "text-muted-foreground",
+              )}
+            >
               {uncounted > 0
                 ? `${uncounted} of ${rows.length} not counted: treated as unknown, not as zero`
                 : `All ${rows.length} products counted`}
