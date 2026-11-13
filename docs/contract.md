@@ -156,6 +156,13 @@ The gateway loads quantities from that stored need; neither `get_offer` nor
 `expected_total` includes fees and tax. Simulation also includes `mov_gap` and
 `delivery_fee` as decimal strings. Expired offers must be refreshed and simulated.
 
+**Decision record (#282).** Every proposal (list and detail) carries
+`decision_summary`: `asked` (string), `searched` (string), `chosen` (string[]),
+`left_out` (string[]), `totals` (string), `decide` (string[]) and `text` (all of it, one
+line per part). It is built from the stored request and simulation only; every number in
+it is the gateway's own string, never recomputed. Each new proposal also writes an audit
+event with `kind: "decision_summary"`, `proposal_id`, `offer_id` and `summary` (= `text`).
+
 `mandate.verdict` is exactly `NEEDS_APPROVAL` or `REFUSED`. There is no `AUTO`
 verdict: the Buyer proposes and a human approves every order (decision 2026-11-13
 23:00). `REFUSED` is only for a hard rule (an allergen rule, a passed cut-off, a sales
