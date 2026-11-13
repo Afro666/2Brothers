@@ -29,3 +29,38 @@ export function weekDates(week: string): string[] {
     return date.toISOString().slice(0, 10);
   });
 }
+
+const ISO_WEEK = /^(\d{4})-W(0[1-9]|[1-4]\d|5[0-3])$/;
+
+export function isValidWeek(week: string): boolean {
+  const match = ISO_WEEK.exec(week);
+  if (!match) return false;
+  // A year has 53 ISO weeks only when its Thursday falls in week 53.
+  return weekDates(week)[3].slice(0, 4) === match[1];
+}
+
+/** "Week 47, 16 to 22 Nov 2026"; a week across New Year names both years. */
+export function weekLabel(week: string): string {
+  return `Week ${Number(week.slice(6))}, ${weekRangeLabel(week)}`;
+}
+
+const MONTHS = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" });
+
+function monthName(month: number): string {
+  return MONTHS.format(new Date(Date.UTC(2000, month - 1, 1)));
+}
+
+/**
+ * "16 to 22 Nov 2026", or "16 Nov to 22 Nov 2026" across a month end. A week
+ * that crosses New Year names both years.
+ */
+export function weekRangeLabel(week: string): string {
+  const dates = weekDates(week);
+  const [firstYear, firstMonth, firstDay] = dates[0].split("-").map(Number);
+  const [lastYear, lastMonth, lastDay] = dates[6].split("-").map(Number);
+  if (firstYear !== lastYear) {
+    return `${firstDay} ${monthName(firstMonth)} ${firstYear} to ${lastDay} ${monthName(lastMonth)} ${lastYear}`;
+  }
+  if (firstMonth === lastMonth) return `${firstDay} to ${lastDay} ${monthName(lastMonth)} ${lastYear}`;
+  return `${firstDay} ${monthName(firstMonth)} to ${lastDay} ${monthName(lastMonth)} ${lastYear}`;
+}

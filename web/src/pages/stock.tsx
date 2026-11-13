@@ -1,10 +1,335 @@
-import { ScreenPage } from "@/pages/screen";
-export function StockPage() {
+import { useState } from "react";
+
+import { AppShell } from "@/components/purchasing/app-shell";
+import { EmptyState } from "@/components/purchasing/empty-state";
+import { ErrorState } from "@/components/purchasing/error-state";
+import { LoadingState } from "@/components/purchasing/loading-state";
+import { useApi } from "@/api";
+import type { StockCount } from "@/api/types";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
+import { auditActorForRole, useRole } from "@/lib/role";
+import { cn } from "@/lib/utils";
+import { useAsync } from "@/lib/use-async";
+import type { StockItem } from "@/types";
+
+export interface RowDraft {
+  /** What the user typed; kept even when the save fails. */
+  value: string;
+  notCounted: boolean;
+}
+
+type Drafts = Record<string, RowDraft>;
+
+function draftFor(drafts: Drafts, productId: string): RowDraft {
+  return drafts[productId] ?? { value: "", notCounted: false };
+}
+
+/** Accepts plain decimals only: Number("") and Number("0x10") must not slip through. */
+function parseCount(value: string): number | null {
+  const text = value.trim();
+  if (!/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(text)) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
+}
+
+/** Why a touched row cannot be saved, or null when it can. */
+export function rowError(draft: RowDraft | undefined): string | null {
+  if (!draft || draft.notCounted) return null;
+  if (draft.value.trim() === "") return "Enter a count or mark the product as not counted.";
+  const number = parseCount(draft.value);
+  if (number == null) return "Enter a number.";
+  if (number < 0) return "A count cannot be negative.";
+  return null;
+}
+
+type CountsResult = { counts: StockCount[]; invalid: number };
+
+/** Only rows the user touched go to the API, and only once every one of them is valid. */
+function touchedCounts(rows: StockItem[], drafts: Drafts): CountsResult {
+  const counts: StockCount[] = [];
+  let invalid = 0;
+  for (const row of rows) {
+    const draft = drafts[row.productId];
+    if (!draft) continue;
+    if (rowError(draft)) {
+      invalid += 1;
+      continue;
+    }
+    counts.push({ productId: row.productId, onHand: draft.notCounted ? null : parseCount(draft.value) });
+  }
+  return { counts, invalid };
+}
+
+function OnHand({ item, className }: { item: StockItem; className?: string }) {
+  if (item.onHand == null) {
+    return (
+      <span className={cn("font-medium text-warning", className)} title="Nobody has counted this product yet">
+        not counted
+      </span>
+    );
+  }
   return (
-    <ScreenPage
-      title="Stock"
-      description="See known stock levels and clearly identify information that is unknown."
-      activeId="stock"
-    />
+    <span className={cn("tabular-nums", className)}>
+      {item.unit === "PCS" ? `${formatNumber(item.onHand)} pcs` : `${formatNumber(item.onHand)} ${item.unit}`}
+    </span>
+  );
+}
+
+export function StockPage() {
+  const api = useApi();
+  const { role } = useRole();
+  const actor = auditActorForRole(role);
+  const stock = useAsync(() => api.getStock(), [api]);
+  const [drafts, setDrafts] = useState<Drafts>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const rows = stock.status === "ready" ? stock.data : [];
+  const uncounted = rows.filter((row) => row.onHand == null).length;
+  const { counts: pending, invalid: invalidCount } = touchedCounts(rows, drafts);
+  const canSave = pending.length > 0 && invalidCount === 0 && !saving;
+
+  function updateDraft(productId: string, change: Partial<RowDraft>) {
+    setDrafts((current) => ({
+      ...current,
+      [productId]: { ...draftFor(current, productId), ...change },
+    }));
+    setSaved(false);
+    setSaveError(null);
+  }
+
+  async function saveCounts() {
+    if (pending.length === 0 || invalidCount > 0 || saving) return;
+    setSaving(true);
+    setSaved(false);
+    setSaveError(null);
+    try {
+      await api.submitStockCount(pending, actor);
+      setDrafts({});
+      setSaved(true);
+      stock.reload();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <AppShell activeId="stock">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <header className="space-y-2">
+          <h1 className="text-2xl font-semibold">Stock</h1>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            What is on hand and on order. A product nobody counted is unknown, not zero.
+          </p>
+        </header>
+        {stock.status === "loading" ? <LoadingState label="Loading stock" /> : null}
+        {stock.status === "error" ? <ErrorState message={stock.error.message} onRetry={stock.reload} /> : null}
+        {stock.status === "ready" && rows.length === 0 ? (
+          <EmptyState title="No stock to count">Products you order will appear here for counting.</EmptyState>
+        ) : null}
+        {stock.status === "ready" && rows.length > 0 ? (
+          <div className="space-y-4">
+            <p className={cn("text-sm", uncounted > 0 ? "font-medium text-warning" : "text-muted-foreground")}>
+              {uncounted > 0
+                ? `${uncounted} of ${rows.length} not counted: treated as unknown, not as zero`
+                : `All ${rows.length} products counted`}
+            </p>
+
+            <Card>
+              <CardContent>
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Unit</TableHead>
+                        <TableHead className="text-right">On hand</TableHead>
+                        <TableHead className="text-right">On order</TableHead>
+                        <TableHead>Last delivery</TableHead>
+                        <TableHead>Counted at</TableHead>
+                        <TableHead>Count</TableHead>
+                        <TableHead>Not counted</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((item) => {
+                        const draft = draftFor(drafts, item.productId);
+                        const error = rowError(drafts[item.productId]);
+                        const countId = `stock-count-${item.productId}`;
+                        const unknownId = `stock-unknown-${item.productId}`;
+                        const errorId = `stock-error-${item.productId}`;
+                        return (
+                          <TableRow key={item.productId}>
+                            <TableCell>
+                              <div className="font-medium">{item.productName}</div>
+                              <div className="text-xs text-muted-foreground">{item.productId}</div>
+                            </TableCell>
+                            <TableCell>{item.unit}</TableCell>
+                            <TableCell className="text-right">
+                              <OnHand item={item} />
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatNumber(item.onOrder)} {item.unit}
+                            </TableCell>
+                            <TableCell>{formatDate(item.lastDelivery)}</TableCell>
+                            <TableCell>{formatDateTime(item.countedAt)}</TableCell>
+                            <TableCell>
+                              <label className="flex items-center gap-2 text-xs font-medium" htmlFor={countId}>
+                                Count
+                                <Input
+                                  id={countId}
+                                  type="text"
+                                  inputMode="decimal"
+                                  autoComplete="off"
+                                  className="h-8 w-24"
+                                  aria-label={`${item.productName} count in ${item.unit}`}
+                                  aria-invalid={error != null}
+                                  aria-describedby={error ? errorId : undefined}
+                                  value={draft.notCounted ? "" : draft.value}
+                                  disabled={draft.notCounted || saving}
+                                  onChange={(event) =>
+                                    updateDraft(item.productId, { value: event.currentTarget.value })
+                                  }
+                                />
+                              </label>
+                              {error ? (
+                                <p id={errorId} role="alert" className="mt-1 text-xs text-destructive">
+                                  {error}
+                                </p>
+                              ) : null}
+                            </TableCell>
+                            <TableCell>
+                              <span className="flex items-center gap-2">
+                                <Checkbox
+                                  id={unknownId}
+                                  aria-label={`${item.productName} not counted`}
+                                  checked={draft.notCounted}
+                                  disabled={saving}
+                                  onCheckedChange={(checked) =>
+                                    updateDraft(item.productId, { notCounted: checked === true })
+                                  }
+                                />
+                                <label htmlFor={unknownId} className="text-sm">
+                                  Not counted
+                                </label>
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <ul className="divide-y md:hidden">
+                  {rows.map((item) => {
+                    const draft = draftFor(drafts, item.productId);
+                    const error = rowError(drafts[item.productId]);
+                    const countId = `stock-count-m-${item.productId}`;
+                    const unknownId = `stock-unknown-m-${item.productId}`;
+                    const errorId = `stock-error-m-${item.productId}`;
+                    return (
+                      <li key={item.productId} className="space-y-3 py-3">
+                        <div>
+                          <div className="font-medium">{item.productName}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {item.productId} · {item.unit}
+                          </div>
+                        </div>
+                        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                          <dt className="text-muted-foreground">On hand</dt>
+                          <dd className="text-right">
+                            <OnHand item={item} />
+                          </dd>
+                          <dt className="text-muted-foreground">On order</dt>
+                          <dd className="text-right tabular-nums">
+                            {formatNumber(item.onOrder)} {item.unit}
+                          </dd>
+                          <dt className="text-muted-foreground">Last delivery</dt>
+                          <dd className="text-right">{formatDate(item.lastDelivery)}</dd>
+                          <dt className="text-muted-foreground">Counted at</dt>
+                          <dd className="text-right">{formatDateTime(item.countedAt)}</dd>
+                        </dl>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                          <label className="flex items-center gap-2 text-sm font-medium" htmlFor={countId}>
+                            Count
+                            <Input
+                              id={countId}
+                              type="text"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              className="h-8 w-24"
+                              aria-label={`${item.productName} count in ${item.unit}`}
+                              aria-invalid={error != null}
+                              aria-describedby={error ? errorId : undefined}
+                              value={draft.notCounted ? "" : draft.value}
+                              disabled={draft.notCounted || saving}
+                              onChange={(event) => updateDraft(item.productId, { value: event.currentTarget.value })}
+                            />
+                          </label>
+                          <span className="flex items-center gap-2">
+                            <Checkbox
+                              id={unknownId}
+                              aria-label={`${item.productName} not counted`}
+                              checked={draft.notCounted}
+                              disabled={saving}
+                              onCheckedChange={(checked) =>
+                                updateDraft(item.productId, { notCounted: checked === true })
+                              }
+                            />
+                            <label htmlFor={unknownId} className="text-sm">
+                              Not counted
+                            </label>
+                          </span>
+                        </div>
+                        {error ? (
+                          <p id={errorId} role="alert" className="text-xs text-destructive">
+                            {error}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={saveCounts} disabled={!canSave} aria-busy={saving || undefined}>
+                {saving ? "Saving count" : "Save count"}
+              </Button>
+              {saved ? (
+                <p role="status" className="text-sm font-medium text-success">
+                  Count saved
+                </p>
+              ) : null}
+              {pending.length === 0 && invalidCount === 0 ? (
+                <p className="text-sm text-muted-foreground">Enter a count or mark a product as not counted.</p>
+              ) : null}
+              {invalidCount > 0 ? (
+                <p className="text-sm font-medium text-destructive">
+                  {invalidCount === 1
+                    ? "Fix the count marked below before saving."
+                    : `Fix the ${invalidCount} counts marked below before saving.`}
+                </p>
+              ) : null}
+            </div>
+            {saveError ? (
+              <p role="alert" className="rounded-md border border-destructive/40 px-3 py-2 text-sm text-destructive">
+                {saveError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </AppShell>
   );
 }
