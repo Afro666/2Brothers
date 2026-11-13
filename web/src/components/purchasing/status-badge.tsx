@@ -5,7 +5,6 @@ import {
   CircleDashed,
   CircleQuestionMark,
   type LucideIcon,
-  ShieldCheck,
   UserCheck,
 } from "lucide-react";
 
@@ -23,12 +22,6 @@ interface StatusMeta {
 }
 
 export const STATUS_META: Record<OrderStatus, StatusMeta> = {
-  AUTO_APPROVED: {
-    label: "Auto-approved",
-    tone: "success",
-    icon: ShieldCheck,
-    meaning: "Inside the mandate. The agent may place it without a human.",
-  },
   NEEDS_APPROVAL: {
     label: "Needs approval",
     tone: "warning",

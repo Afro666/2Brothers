@@ -15,7 +15,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** What the agent may do on its own. Anything outside it goes to a human. */
+/** Budget guidance and rules that apply to every human-approved order. */
 export function MandateSummary({ mandate }: { mandate: Mandate }) {
   const weekLeft = Math.max(0, mandate.weeklyLimitExVat - mandate.spentThisWeekExVat);
   return (
@@ -28,8 +28,10 @@ export function MandateSummary({ mandate }: { mandate: Mandate }) {
       <Section title="Spend limits (ex VAT)">
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
-            <dt className="text-xs text-muted-foreground">Auto-approve per order</dt>
-            <dd className="font-semibold tabular-nums">up to {formatEur(mandate.autoApproveLimitExVat)}</dd>
+            <dt className="text-xs text-muted-foreground">Budget warning per order</dt>
+            <dd className="font-semibold tabular-nums">
+              above {formatEur(mandate.budgetWarningPerOrderExVat)} the approval shows a warning
+            </dd>
           </div>
           <div>
             <dt className="text-xs text-muted-foreground">Per week</dt>
@@ -73,7 +75,7 @@ export function MandateSummary({ mandate }: { mandate: Mandate }) {
               <span>
                 {r.rule}
                 <span className="text-muted-foreground">
-                  {r.needsApproval ? " (needs approval)" : " (agent may do this)"}
+                  {r.needsApproval ? " (needs approval)" : " (permitted by mandate)"}
                 </span>
               </span>
             </li>

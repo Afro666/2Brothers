@@ -86,6 +86,6 @@ describe("/kit", () => {
     const kinds = within(audit)
       .getAllByRole("listitem")
       .map((li) => li.getAttribute("data-kind"));
-    expect(kinds).toEqual(["request", "search", "offer", "simulate", "mandate_check", "order", "mandate_check", "approval"]);
+    expect(kinds).toEqual(["request", "search", "offer", "simulate", "approval", "order", "mandate_check", "approval"]);
   });
 });

@@ -20,7 +20,7 @@ describe("RequestsPage", () => {
   beforeEach(() => localStorage.clear());
 
   it("shows the proposal with the line's why and the approvals link", async () => {
-    await ask();
+    const user = await ask();
 
     const proposal = await screen.findByRole("region", { name: "Proposal" });
     expect(within(proposal).getByRole("heading", { level: 2 })).toHaveTextContent(
@@ -29,6 +29,10 @@ describe("RequestsPage", () => {
     expect(within(proposal).getAllByText(/the other 949 L, rounded up to full cases of 5/).length).toBeGreaterThan(0);
     expect(within(proposal).getByRole("heading", { name: "Other options" })).toBeInTheDocument();
     expect(within(proposal).getByRole("link", { name: /Approvals/ })).toHaveAttribute("href", "/approvals");
+    await user.click(within(proposal).getByRole("button", { name: "Use good" }));
+    expect(within(proposal).getByRole("status")).toHaveTextContent(
+      "Noted: you prefer Valio Eila 3 % lactose free milk drink 1 L. This is not applied to the order yet; tell the approver, or ask the Buyer again.",
+    );
   });
 
   it("keeps the typed text when the gateway cannot be reached", async () => {

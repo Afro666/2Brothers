@@ -151,8 +151,8 @@ export function ApprovalCard({
             )}
           >
             {status === "APPROVED"
-              ? `Approved: ${formatEur(request.totalExVat)} ex VAT, ${formatEur(request.totalInclVat)} incl VAT. The agent may now place it.`
-              : "Rejected. The agent will not place this order."}
+              ? `Approved: ${formatEur(request.totalExVat)} ex VAT, ${formatEur(request.totalInclVat)} incl VAT. The order may now be sent.`
+              : "Rejected. This order will not be sent."}
           </p>
         )}
       </CardFooter>
@@ -194,7 +194,7 @@ export function ApprovalCard({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Reject this order?</DialogTitle>
-            <DialogDescription>The agent will not place it. Your reason goes in the audit log.</DialogDescription>
+            <DialogDescription>This order will not be sent. Your reason goes in the audit log.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor={reasonId}>Reason (optional)</Label>

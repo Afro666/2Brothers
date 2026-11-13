@@ -132,8 +132,18 @@ export const products = {
   },
 } satisfies Record<string, Product>;
 
-function offer(p: Product, o: Omit<Offer, "productId" | "requestedDate" | "taxRatePercent" | "salesUnit" | "salesBlock">): Offer {
-  return { productId: p.id, requestedDate: REQUESTED, taxRatePercent: DAIRY_VAT, salesUnit: p.salesUnit, salesBlock: false, ...o };
+function offer(
+  p: Product,
+  o: Omit<Offer, "productId" | "requestedDate" | "taxRatePercent" | "salesUnit" | "salesBlock">,
+): Offer {
+  return {
+    productId: p.id,
+    requestedDate: REQUESTED,
+    taxRatePercent: DAIRY_VAT,
+    salesUnit: p.salesUnit,
+    salesBlock: false,
+    ...o,
+  };
 }
 
 export const offers = {
@@ -249,14 +259,19 @@ export const approval: ApprovalRequest = {
   totalExVat: orders.needsApproval.totalExVat,
   totalInclVat: orders.needsApproval.totalInclVat,
   reasons: [
-    { rule: "Above the auto-approve limit", detail: "€1,947.50 ex VAT is over the €1,500.00 per-order limit." },
+    {
+      rule: "Over the budget warning",
+      detail: "€1,947.50 ex VAT is above the €1,500.00 per-order warning level.",
+      warning: true,
+    },
     {
       rule: "Substitute changes the fat %",
       detail: "3 % fat instead of 0 % in the first choice. The mandate allows 1.5 points without approval.",
     },
     {
       rule: "Stock not measured",
-      detail: "Valio did not measure the stock of 463335 (it returns the unknown-stock value). The delivery may arrive short.",
+      detail:
+        "Valio did not measure the stock of 463335 (it returns the unknown-stock value). The delivery may arrive short.",
     },
   ],
   status: "PENDING",
@@ -301,7 +316,7 @@ export const mandate: Mandate = {
   restaurant: "Demo restaurant, Helsinki",
   signedBy: "Restaurant manager",
   validUntil: "2026-12-31",
-  autoApproveLimitExVat: 1500,
+  budgetWarningPerOrderExVat: 1500,
   weeklyLimitExVat: 6000,
   spentThisWeekExVat: 2310.4,
   excludedAllergens: [
@@ -359,11 +374,11 @@ export const auditEvents: AuditEvent[] = [
   {
     id: "ev-5",
     at: "2026-11-13T20:42:00+02:00",
-    kind: "mandate_check",
-    actor: "gateway",
+    kind: "approval",
+    actor: "human",
     orderId: "ORD-1042",
-    summary: "ORD-1042 auto-approved (€131.07 ex VAT)",
-    reason: "Under the €1,500.00 auto-approve limit, and the same product the chef asked for.",
+    summary: "Head chef approved ORD-1042 (€131.07 ex VAT)",
+    reason: "The exact total matches the proposed order for the same product the chef asked for.",
   },
   {
     id: "ev-6",
@@ -381,7 +396,7 @@ export const auditEvents: AuditEvent[] = [
     actor: "gateway",
     orderId: "ORD-1043",
     summary: "ORD-1043 needs approval (€1,947.50 ex VAT)",
-    reason: "Over the auto-approve limit, fat % changes by 3 points, and the stock is not measured.",
+    reason: "Above the budget warning; fat % changes by 3 points, and the stock is not measured.",
   },
   {
     id: "ev-8",
