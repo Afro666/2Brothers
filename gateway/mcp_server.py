@@ -78,9 +78,10 @@ def build_server(gateway: GatewayClient) -> FastMCP:
     @server.tool(annotations=read)
     async def get_offer(product_ids: Annotated[list[Identifier], Field(min_length=1, max_length=1000)],
                         requested_date: date, need_id: Identifier) -> dict:
-        """Quote products for the application's stored need_id. The engine owns quantities; never invent them."""
-        return await gateway.request("POST", "/tools/get_offer", payload={
+        """Get an offer for the stored need. Next call simulate_order with its offer_id before request_approval. This call is not a simulation. Never invent quantities."""
+        result = await gateway.request("POST", "/tools/get_offer", payload={
             "product_ids": product_ids, "requested_date": requested_date.isoformat(), "need_id": need_id})
+        return {key: result.get(key) for key in ("offer_id", "valid_until", "lines")}
 
     @server.tool(annotations=read)
     async def simulate_order(offer_id: Identifier) -> dict:
