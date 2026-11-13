@@ -5,6 +5,9 @@
 import type { ReactNode } from "react";
 
 import { AppShell, NAV_ITEMS } from "@/components/purchasing/app-shell";
+import { EmptyState } from "@/components/purchasing/empty-state";
+import { ErrorState } from "@/components/purchasing/error-state";
+import { LoadingState } from "@/components/purchasing/loading-state";
 import { ApprovalCard } from "@/components/purchasing/approval-card";
 import { AuditTimeline } from "@/components/purchasing/audit-timeline";
 import { ChefRequestBox } from "@/components/purchasing/chef-request-box";
@@ -175,6 +178,12 @@ export function KitPage() {
               <MandateSummary mandate={mandate} />
             </CardContent>
           </Card>
+        </Section>
+
+        <Section id="states" title="Shared states" usedIn="Every screen while data loads, is empty, or fails">
+          <EmptyState title="No requests yet">New requests will appear here.</EmptyState>
+          <LoadingState />
+          <ErrorState message="Could not load this screen." onRetry={() => {}} />
         </Section>
       </div>
     </AppShell>

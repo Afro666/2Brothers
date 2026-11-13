@@ -39,14 +39,34 @@ export function ApprovalCard({
   onReject,
 }: {
   request: ApprovalRequest;
-  onApprove?: (decision: ApprovalDecision) => void;
-  onReject?: (approvalId: string, reason: string) => void;
+  onApprove?: (decision: ApprovalDecision) => void | Promise<void>;
+  onReject?: (approvalId: string, reason: string) => void | Promise<void>;
 }) {
   const [open, setOpen] = useState<"approve" | "reject" | null>(null);
   const [status, setStatus] = useState(request.status);
   const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const reasonId = useId();
   const pending = status === "PENDING";
+
+  // The status changes only after the gateway confirms. If the call fails
+  // (price moved, expected_total mismatch, network), the card stays PENDING
+  // and shows the error, so nobody believes an order went through.
+  async function decide(next: "APPROVED" | "REJECTED", call: () => void | Promise<void>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await call();
+      setStatus(next);
+    } catch (e) {
+      const what = next === "APPROVED" ? "Approval" : "Rejection";
+      setError(`${what} failed: ${e instanceof Error ? e.message : String(e)}. The order is still pending.`);
+    } finally {
+      setBusy(false);
+      setOpen(null);
+    }
+  }
 
   return (
     <Card className="gap-4">
@@ -83,11 +103,16 @@ export function ApprovalCard({
       <CardFooter className="flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
         {pending ? (
           <>
-            <Button variant="outline" onClick={() => setOpen("reject")}>
+            {error && (
+              <p role="alert" className={cn("rounded-md border px-3 py-2 text-sm sm:mr-auto", TONE_CLASSES.danger)}>
+                {error}
+              </p>
+            )}
+            <Button variant="outline" disabled={busy} onClick={() => setOpen("reject")}>
               <X aria-hidden />
               Reject
             </Button>
-            <Button onClick={() => setOpen("approve")}>
+            <Button disabled={busy} onClick={() => setOpen("approve")}>
               <Check aria-hidden />
               Approve {formatEur(request.totalInclVat)} incl VAT
             </Button>
@@ -118,20 +143,23 @@ export function ApprovalCard({
           </DialogHeader>
           <DialogFooter>
             <Button
-              onClick={() => {
-                setStatus("APPROVED");
-                setOpen(null);
-                onApprove?.({
-                  approvalId: request.id,
-                  expectedTotalExVat: request.totalExVat,
-                  expectedTotalInclVat: request.totalInclVat,
-                });
-              }}
+              disabled={busy}
+              onClick={() =>
+                decide("APPROVED", () =>
+                  onApprove?.({
+                    approvalId: request.id,
+                    expectedTotalExVat: request.totalExVat,
+                    expectedTotalInclVat: request.totalInclVat,
+                  }),
+                )
+              }
             >
               Yes, approve {formatEur(request.totalInclVat)}
             </Button>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline" disabled={busy}>
+                Cancel
+              </Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>
@@ -155,16 +183,15 @@ export function ApprovalCard({
           <DialogFooter>
             <Button
               variant="destructive"
-              onClick={() => {
-                setStatus("REJECTED");
-                setOpen(null);
-                onReject?.(request.id, reason.trim());
-              }}
+              disabled={busy}
+              onClick={() => decide("REJECTED", () => onReject?.(request.id, reason.trim()))}
             >
               Reject
             </Button>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline" disabled={busy}>
+                Cancel
+              </Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>

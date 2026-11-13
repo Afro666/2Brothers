@@ -43,6 +43,21 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.close()
 
+    async def test_request_approval_key_reuse(self):
+        mock = MockGateway()
+        async with httpx.AsyncClient(transport=httpx.MockTransport(mock), base_url="http://mock") as client:
+            body = {"offer_id": "milk-offer-1", "idempotency_key": "approval-key-1"}
+            first = await client.post("/tools/request_approval", json=body)
+            replay = await client.post("/tools/request_approval", json=body)
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(replay.status_code, 200)
+            self.assertEqual(replay.json(), first.json())
+            conflict = await client.post("/tools/request_approval",
+                                         json={**body, "note": "different"})
+            self.assertEqual(conflict.status_code, 409)
+            self.assertEqual(conflict.json()["error"]["code"], "IDEMPOTENCY_CONFLICT")
+            self.assertEqual(len(mock.approvals), 1)
+
     async def test_invalid_date_rejected_before_http(self):
         mock = MockGateway()
         gateway = GatewayClient(transport=httpx.MockTransport(mock))
@@ -54,6 +69,43 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(mock.requests, [])
         finally:
             await gateway.close()
+
+    async def test_mutations_use_json_keys_without_changing_mcp_signatures(self):
+        mock = MockGateway()
+        gateway = GatewayClient(transport=httpx.MockTransport(mock))
+        try:
+            async with create_connected_server_and_client_session(build_server(gateway)) as session:
+                tools = {t.name: t for t in (await session.list_tools()).tools}
+                self.assertNotIn("idempotency_key", tools["request_approval"].inputSchema["properties"])
+                for _ in range(2):
+                    result = await session.call_tool("request_approval", {"offer_id": "milk-offer-1"})
+                    self.assertFalse(result.isError)
+                await session.call_tool("place_order", {
+                    "offer_id": "milk-offer-1", "expected_total": "149.02", "idempotency_key": "order-key"})
+                approvals = [r for r in mock.requests if r.url.path == "/tools/request_approval"]
+                self.assertEqual(json.loads(approvals[0].content), json.loads(approvals[1].content))
+                self.assertEqual(len(mock.approvals), 1)
+                for request in mock.requests:
+                    payload = json.loads(request.content)
+                    self.assertIsInstance(payload["idempotency_key"], str)
+                    self.assertTrue(payload["idempotency_key"])
+                    self.assertNotIn("Idempotency-Key", request.headers)
+                self.assertEqual(json.loads(mock.requests[-1].content)["idempotency_key"], "order-key")
+        finally:
+            await gateway.close()
+
+    async def test_mock_rejects_missing_or_header_only_keys_for_both_mutations(self):
+        mock = MockGateway()
+        for path in ["/tools/request_approval", "/tools/place_order"]:
+            for value in [None, "", "  ", 123]:
+                with self.subTest(path=path, value=value):
+                    body = {"offer_id": "milk-offer-1", "expected_total": "149.02"}
+                    if value is not None:
+                        body["idempotency_key"] = value
+                    response = mock(httpx.Request("POST", "http://mock" + path,
+                        json=body, headers={"Idempotency-Key": "legacy-header"}))
+                    self.assertEqual(response.status_code, 422)
+        self.assertEqual(mock.approvals, {})
 
     async def test_mutation_transport_failure_is_not_retried_or_leaked(self):
         calls = []
