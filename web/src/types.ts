@@ -210,3 +210,97 @@ export interface ChefRequest {
   covers: number | null;
   deliveryDate: string;
 }
+
+export type SupplierAdapter = "valio_api" | "manual" | "csv";
+
+/** A kitchen's supplier. Terms are set by the user; null means not set, never a default. */
+export interface Supplier {
+  id: string;
+  name: string;
+  adapter: SupplierAdapter;
+  freeDeliveryThresholdEur: number | null;
+  deliveryFeeEur: number | null;
+  /** ISO weekdays the supplier takes orders: 1 Monday .. 7 Sunday. */
+  orderDays: number[] | null;
+  /** Order cut-off on an order day, "HH:MM" Helsinki time. */
+  cutoffTime: string | null;
+  leadTimeDays: number | null;
+}
+
+/** A product the kitchen added itself (not in a supplier catalog). */
+export interface OwnProduct {
+  id: string;
+  name: string;
+  unit: string;
+  packSize: number | null;
+  priceEur: number | null;
+  supplierId: string;
+  /** null = unknown, NOT allergen-free. */
+  allergens: Allergen[] | null;
+}
+
+export interface RecipeItem {
+  productId: ProductCode;
+  productName: string;
+  unit: string;
+  qtyPerPortion: number;
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  items: RecipeItem[];
+}
+
+/** One recipe on one day's menu, with the covers expected for it. */
+export interface MenuPlanEntry {
+  id: string;
+  date: string;
+  meal: string;
+  recipeId: string;
+  covers: number;
+}
+
+export interface StockItem {
+  productId: ProductCode;
+  productName: string;
+  unit: string;
+  /** null = not counted (unknown), never zero. */
+  onHand: number | null;
+  onOrder: number;
+  countedAt: string | null;
+  lastDelivery: string | null;
+}
+
+/** What the kitchen needs of one product on one day, from the menu plan. */
+export interface DemandLine {
+  productId: ProductCode;
+  productName: string;
+  unit: string;
+  date: string;
+  need: number;
+  why: string;
+}
+
+export type ShortageRisk = "SHORT" | "AT_RISK" | "COVERED" | "UNKNOWN";
+
+/** Supplier view: forecast demand across consenting kitchens against availability. */
+export interface SupplierDemandRow {
+  productId: ProductCode;
+  productName: string;
+  unit: string;
+  date: string;
+  forecastDemand: number;
+  kitchens: number;
+  /** null = the supplier's availability is not measured. */
+  available: number | null;
+  risk: ShortageRisk;
+  /** What the supplier should buy to close the gap; null when availability is unknown. */
+  suggestedBuy: number | null;
+}
+
+/** Whether this kitchen shares its forecast with a supplier. */
+export interface SharingConsent {
+  supplierId: string;
+  shared: boolean;
+}
