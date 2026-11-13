@@ -64,7 +64,7 @@ def env(monkeypatch):
     return TestClient(create_app(gw)), fake, db
 
 
-def milk(client, key="p1", quantity="1000"):
+def milk(client, key="p1", quantity="51"):
     r = client.post(K + "/proposals", headers=AGENT, json={
         "product_ids": ["462775", "462921", "463335"], "quantity": quantity, "unit": "L",
         "requested_date": "2026-11-16", "idempotency_key": key, "text": "1000 L lactose-free milk by Monday"})
@@ -74,7 +74,7 @@ def milk(client, key="p1", quantity="1000"):
 
 def test_milk_proposal_numbers_come_from_the_engine(env):
     client, _, _ = env
-    p = milk(client)
+    p = milk(client, quantity="1000")
     assert p["status"] == "READY"
     assert [(ln["product_id"], ln["quantity"]) for ln in p["lines"]] == [("462775", "51"), ("463335", "949")]
     assert p["total_ex_vat"] == "1459.67"
@@ -158,7 +158,7 @@ def test_wrong_total_from_the_client_is_refused(env):
 
 def test_human_approval_does_not_confirm_unknown_stock(env):
     client, _, db = env
-    p = milk(client)
+    p = milk(client, quantity="1000")
     assert any(line['unknown_stock'] for line in p['lines'])
     response = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
                            json={'expected_total': p['expected_total'], 'idempotency_key': 'a1'})
