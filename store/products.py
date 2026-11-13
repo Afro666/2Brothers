@@ -159,3 +159,23 @@ def get_product(db, product_id: str, raw: bool = False) -> dict | None:
     if doc is not None:
         doc["product_id"] = doc.pop("_id")
     return doc
+
+
+def get_products(db, product_ids: list[str], kitchen_id: str | None = None) -> list[dict]:
+    """Product rows by code, in the order asked. Unknown codes are left out.
+
+    Catalog rows plus `kitchen_id`'s own products, never another kitchen's: the same
+    scope as search. Without `kitchen_id`, catalog rows only.
+    """
+    ids = list(dict.fromkeys(str(product_id) for product_id in product_ids))
+    scope = [{"kitchen_id": {"$exists": False}}]
+    if kitchen_id is not None:
+        scope.append({"kitchen_id": kitchen_id})
+    found = {doc["_id"]: doc
+             for doc in db.products.find({"_id": {"$in": ids}, "$or": scope}, {"raw": 0})}
+    rows = []
+    for product_id in ids:
+        if product_id in found:
+            found[product_id]["product_id"] = found[product_id].pop("_id")
+            rows.append(found[product_id])
+    return rows

@@ -2,7 +2,12 @@
 
 import unittest
 
-from store.products import flatten
+from store.products import flatten, get_products
+
+try:
+    import mongomock
+except ImportError:  # the `test` extra is not installed
+    mongomock = None
 
 
 def record(**over):
@@ -187,6 +192,34 @@ class FlattenTests(unittest.TestCase):
     def test_substitutions_are_a_list_of_codes(self):
         doc = flatten(record(substitutions=[{"product": "900001", "substituteProduct": "900009"}]))
         self.assertEqual(doc["substitutions"], ["900009"])
+
+
+@unittest.skipUnless(mongomock, "install the test extra: pip install -e '.[test]'")
+class GetProductsTests(unittest.TestCase):
+    def setUp(self):
+        self.db = mongomock.MongoClient()["test"]
+        self.db.products.insert_many([
+            {"_id": "900001", "source": "valio", "names": {"fi": "Maito"}, "raw": {"big": True}},
+            {"_id": "900002", "source": "valio", "names": {"fi": "Kerma"}, "raw": {}},
+            {"_id": "own-1", "source": "own", "kitchen_id": "k1", "names": {"fi": "Leipä"}},
+            {"_id": "own-2", "source": "own", "kitchen_id": "k2", "names": {"fi": "Pulla"}},
+        ])
+
+    def ids(self, wanted, **kw):
+        return [row["product_id"] for row in get_products(self.db, wanted, **kw)]
+
+    def test_rows_come_in_the_order_asked_without_unknown_codes_or_raw(self):
+        rows = get_products(self.db, ["900002", "nope", 900001, "900002"])
+        self.assertEqual([row["product_id"] for row in rows], ["900002", "900001"])
+        self.assertNotIn("raw", rows[0])
+        self.assertNotIn("_id", rows[0])
+        self.assertEqual(get_products(self.db, []), [])
+
+    def test_own_products_are_only_returned_to_their_kitchen(self):
+        wanted = ["900001", "own-1", "own-2"]
+        self.assertEqual(self.ids(wanted), ["900001"])
+        self.assertEqual(self.ids(wanted, kitchen_id="k1"), ["900001", "own-1"])
+        self.assertEqual(self.ids(wanted, kitchen_id="k2"), ["900001", "own-2"])
 
 
 if __name__ == "__main__":

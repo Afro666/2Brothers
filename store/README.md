@@ -47,10 +47,12 @@ string. `store.orders` refuses binary floats and the unknown-stock sentinels
 from decimal import Decimal
 from store.db import get_db
 from store import audit, orders
-from store.products import get_product
+from store.products import get_product, get_products
 
 db = get_db()
 get_product(db, "462775")                      # flattened row; raw=True adds the full record
+get_products(db, ["469549", "own-1"], kitchen_id="k1")   # several, in the order asked; catalog
+                                               # rows plus that kitchen's own; unknown codes left out
 order, created = orders.record_attempt(         # before any send; replays return the stored row
     db, kitchen_id="k1", idempotency_key="key-1", offer_id="offer-1",
     expected_total=Decimal("149.02"), lines=[], payload_hash="sha256...")
@@ -217,10 +219,10 @@ the consent rule shows.
 
 ## Tests
 
-- Offline: `python -m unittest discover -s store/tests -t . -v`. Fixtures are synthetic.
-- Against the real cluster, in a throwaway database that is dropped afterwards:
-  `STORE_LIVE_TESTS=1 python -m unittest store.tests.test_live -v`.
-- Time series, also in a throwaway database:
-  `STORE_LIVE_TESTS=1 python -m unittest store.tests.test_history -v`.
-- Search acceptance, read-only on the loaded catalog:
-  `STORE_LIVE_TESTS=1 python -m unittest store.tests.test_search_live -v`.
+CI runs `python -m pytest`; install it next to the test extra:
+`python -m pip install -e ".[test]" pytest`.
+
+- Offline: `python -m pytest store`. Fixtures are synthetic; the live tests are skipped.
+- Live on Atlas: `STORE_LIVE_TESTS=1 python -m pytest store`. The store, time-series and
+  feedback tests use a throwaway database that is dropped afterwards. The search
+  acceptance reads the loaded catalog, and writes and removes one own product.
