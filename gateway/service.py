@@ -19,13 +19,16 @@ from uuid import uuid4
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 
-from engine import KitchenParams, Offer, pack_info, plan_request
+from engine import AddableRow, Candidate, Item, KitchenParams, Offer, pack_info, plan_request, rank_addable
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from store import audit, orders
 from store.audit import canonical
+from store.history import current_stock
 from store.products import get_product
 
+DEMAND_DAYS = 28                    # usage history behind the daily demand of addable rows
+REVIEW_DAYS = 3.0                   # days to the delivery after next, until order days are wired
 CENT = Decimal("0.01")
 TOLERANCE = Decimal("0.005")
 OFFER_TTL = timedelta(minutes=15)   # Aron, 2026-11-14 (#19 answer F)
@@ -390,9 +393,84 @@ class Gateway:
                                expected_total=_money(Decimal(str(order["expected_total"]))))
         return self._order_out(order)
 
+    # ---- addable products (#129) ------------------------------------------------------
+
+    def _daily_demand(self, kitchen_id: str, product_id: str, days: int = DEMAND_DAYS) -> float:
+        """Average of used + short per recorded day. No usage recorded: 0, so no order."""
+        since = self.now() - timedelta(days=days)
+        totals: dict = {}
+        for row in self.db.kitchen_stock.find({"meta.kitchen_id": kitchen_id, "meta.product_id": product_id,
+                                               "ts": {"$gte": since}}):
+            if row.get("used") is None:
+                continue
+            day = row["ts"].date()
+            totals[day] = totals.get(day, Decimal(0)) + _dec(row["used"]) + (_dec(row.get("short")) or Decimal(0))
+        return float(sum(totals.values()) / len(totals)) if totals else 0.0
+
+    def addable(self, kitchen_id: str, proposal_id: str) -> dict:
+        """What the buyer can add to this proposal, most probable first (engine.rank_addable).
+
+        Candidates are the products in the kitchen's latest stock count. Quantities come
+        from the engine, prices from live Valio. A product without a price is shown but
+        cannot be added; a product whose pack size is unknown is listed under `skipped`.
+        """
+        doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id})
+        if doc is None:
+            raise GatewayError(404, "PROPOSAL_NOT_FOUND", "no such proposal")
+        offer = orders.get_offer(self.db, doc["offer_id"])
+        on_proposal = {ln["product_id"] for ln in offer["simulation"]["lines"]}
+        counts = [c for c in current_stock(self.db, kitchen_id) if c["product_id"] not in on_proposal]
+        requested = doc["request"]["requested_date"]
+        prices = {}
+        if counts:
+            prices = {p["productId"]: p for p in
+                      self.valio.price([c["product_id"] for c in counts], requested)["products"]}
+        terms = self._terms(kitchen_id)
+        lead = float(terms.get("lead_time_days") or 1)
+        candidates, skipped = [], []
+        for count in counts:
+            pid = count["product_id"]
+            product = get_product(self.db, pid, raw=True)
+            if product is None or not product.get("raw"):
+                skipped.append({"product_id": pid, "reason": "not in the catalog"})
+                continue
+            price = prices.get(pid) or {}
+            value = None if price.get("error") else (price.get("catalogPrice") or {}).get("value")
+            unit_price = _dec(value) if value else None
+            cmp = price.get("comparisonPrice") or {}
+            measure = product["raw"]["baseUnit"] if count["unit"] == "PCS" else count["unit"]
+            try:
+                pack = pack_info(product["raw"], price=unit_price, comparison_price=_dec(cmp.get("value")),
+                                 comparison_unit=price.get("comparisonUnit"), measure=measure)
+            except PackDataError as exc:
+                skipped.append({"product_id": pid, "reason": f"pack size unknown: {exc}"})
+                continue
+            on_hand = count.get("on_hand")
+            item = Item(pid, pack, daily_demand=self._daily_demand(kitchen_id, pid), lead_time_days=lead,
+                        review_days=REVIEW_DAYS, on_hand=None if on_hand is None else float(on_hand),
+                        abc=product.get("abc"), category=product.get("category"))
+            names = product.get("names") or {}
+            candidates.append(Candidate(item, name=names.get("en") or names.get("fi") or pid,
+                                        unit_price=unit_price))
+        rows = rank_addable(candidates, self._params(kitchen_id))
+        return {"proposal_id": proposal_id, "rows": [_addable_out(r) for r in rows], "skipped": skipped}
+
     def audit_log(self, kitchen_id: str) -> list[dict]:
         return [{"seq": e["seq"], **e["event"], "at": e["server"].get("at")}
                 for e in audit.list_events(self.db, kitchen_id=kitchen_id)]
+
+
+def _qty(x) -> str | None:
+    return None if x is None else f"{Decimal(str(x)).normalize():f}"
+
+
+def _addable_out(r: AddableRow) -> dict:
+    return {"rank": r.rank, "product_id": r.product_id, "name": r.name,
+            "on_hand": _qty(r.on_hand), "on_order": _qty(r.on_order),
+            "suggested_qty": _qty(r.suggested_qty), "unit": r.unit,
+            "unit_price": None if r.unit_price is None else _money(r.unit_price),
+            "addable": r.addable, "timing": r.timing.name, "days_of_stock": _qty(r.days_of_stock),
+            "reason_codes": list(r.reason_codes), "why": r.why}
 
 
 def offer_out(offer: dict) -> dict:
