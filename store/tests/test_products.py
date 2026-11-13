@@ -144,35 +144,35 @@ class FlattenTests(unittest.TestCase):
         return doc["net_content"], doc["net_content_source"]
 
     def test_net_content_of_the_piece_not_the_case(self):
-        self.assertEqual(self.net(), ({"value": 1.0, "unit": "l"}, "synkka"))
+        self.assertEqual(self.net(), ({"value": 1.0, "unit": "L"}, "synkka"))
 
     def test_net_content_falls_back_to_net_weight_when_volume_counts_pieces(self):
         conversions = [{"synkkaPackagingType": "BASE_UNIT_OR_EACH",
                         "volume": {"unit": "H87", "value": 4.0},
                         "netWeight": {"unit": "GRM", "value": 400.0}}]
         self.assertEqual(self.net(synkka={"unitConversions": conversions}),
-                         ({"value": 0.4, "unit": "kg"}, "synkka"))
+                         ({"value": 0.4, "unit": "KG"}, "synkka"))
 
     def test_net_content_of_a_measured_case_is_divided_by_the_case_size(self):
         conversions = [{"synkkaPackagingType": "CASE", "volume": {"unit": "LTR", "value": 6.0}}]
         self.assertEqual(self.net(synkka={"unitConversions": conversions}),
-                         ({"value": 0.5, "unit": "l"}, "synkka_case"))
+                         ({"value": 0.5, "unit": "L"}, "synkka_case"))
 
     def test_net_content_from_the_name_is_flagged(self):
         gross_only = [{"synkkaPackagingType": "CASE", "grossWeight": {"unit": "GRM", "value": 5300.0}}]
         self.assertEqual(self.net(synkka={"unitConversions": gross_only}),
-                         ({"value": 1.0, "unit": "l"}, "name"))
+                         ({"value": 1.0, "unit": "L"}, "name"))
 
     def test_sizes_in_names(self):
         def named(name, units=(("ST", 1.0),)):
             return self.net(units=[{"unitId": u, "sizeInBaseUnits": s} for u, s in units],
                             synkka={"unitConversions": [], "names": [{"language": "fi", "value": name}]})[0]
-        self.assertEqual(named("TESTI 7X1,2KG LEIPÄ", (("KI", 1.0),)), {"value": 8.4, "unit": "kg"})
+        self.assertEqual(named("TESTI 7X1,2KG LEIPÄ", (("KI", 1.0),)), {"value": 8.4, "unit": "KG"})
         self.assertEqual(named("12x1 l Testi juoma", (("KI", 12.0), ("ST", 1.0))),
-                         {"value": 1.0, "unit": "l"})
-        self.assertEqual(named("Testi juusto e750 g"), {"value": 0.75, "unit": "kg"})
-        self.assertEqual(named("Testi 2,5 dl kerma"), {"value": 0.25, "unit": "l"})
-        self.assertEqual(named("PORKKANA 10KG/SK"), {"value": 10.0, "unit": "kg"})
+                         {"value": 1.0, "unit": "L"})
+        self.assertEqual(named("Testi juusto e750 g"), {"value": 0.75, "unit": "KG"})
+        self.assertEqual(named("Testi 2,5 dl kerma"), {"value": 0.25, "unit": "L"})
+        self.assertEqual(named("PORKKANA 10KG/SK"), {"value": 10.0, "unit": "KG"})
         self.assertIsNone(named("Testi lusikka 130 mm 20 kpl"))
         self.assertIsNone(named("Testi 500 grammaa"))
 
@@ -181,7 +181,7 @@ class FlattenTests(unittest.TestCase):
                         "volume": {"unit": "KGM", "value": 2.0}}]
         self.assertEqual(self.net(baseUnit="KG", allowedLotSize=10.0,
                                   synkka={"unitConversions": conversions}),
-                         ({"value": 1.0, "unit": "kg"}, "base_unit"))
+                         ({"value": 1.0, "unit": "KG"}, "base_unit"))
         self.assertEqual(flatten(record(allowedLotSize=10.0))["lot_size"], 10.0)
 
     def test_substitutions_are_a_list_of_codes(self):

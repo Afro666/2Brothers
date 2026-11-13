@@ -35,8 +35,8 @@ ALLERGENS = {
 _NAME_BY_CODE = {codes[0]: name for name, codes in ALLERGENS.items()}
 _KNOWN_CODES = {code for codes in ALLERGENS.values() for code in codes}
 
-_UNITS = {"l": ("l", 1), "dl": ("l", 0.1), "cl": ("l", 0.01), "ml": ("l", 0.001),
-          "kg": ("kg", 1), "g": ("kg", 0.001)}
+_UNITS = {"l": ("L", 1), "dl": ("L", 0.1), "cl": ("L", 0.01), "ml": ("L", 0.001),
+          "kg": ("KG", 1), "g": ("KG", 0.001)}
 _SIZE = re.compile(r"(?<![\w.,])(\d+(?:[.,]\d+)?)\s*(kg|g|dl|cl|ml|l)(?![\w])", re.IGNORECASE)
 _TEXT_PATHS = ["names.en", "names.fi", "names.sv", "brand"]
 _NAME_PATHS = ["names.en", "names.fi", "names.sv"]
@@ -70,7 +70,7 @@ def _size(value, unit) -> dict:
 
 
 def parse_query(query: str) -> tuple[str, dict | None]:
-    """'lactose free milk 1 l' -> ('lactose free milk', {'value': 1.0, 'unit': 'l'})."""
+    """'lactose free milk 1 l' -> ('lactose free milk', {'value': 1.0, 'unit': 'L'})."""
     query = query or ""
     match = _SIZE.search(query)
     if not match:

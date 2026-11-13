@@ -12,12 +12,12 @@ def compound(query="", filters=None, **kw):
 class SearchQueryTests(unittest.TestCase):
     def test_size_is_read_from_the_query_text(self):
         self.assertEqual(parse_query("lactose free milk 1 l"),
-                         ("lactose free milk", {"value": 1.0, "unit": "l"}))
-        self.assertEqual(parse_query("butter 500g"), ("butter", {"value": 0.5, "unit": "kg"}))
-        self.assertEqual(parse_query("cream 2,5 dl"), ("cream", {"value": 0.25, "unit": "l"}))
-        self.assertEqual(parse_query("juice 33 cl")[1], {"value": 0.33, "unit": "l"})
-        self.assertEqual(parse_query("yoghurt 150 ml")[1], {"value": 0.15, "unit": "l"})
-        self.assertEqual(parse_query("carrot 10 KG")[1], {"value": 10.0, "unit": "kg"})
+                         ("lactose free milk", {"value": 1.0, "unit": "L"}))
+        self.assertEqual(parse_query("butter 500g"), ("butter", {"value": 0.5, "unit": "KG"}))
+        self.assertEqual(parse_query("cream 2,5 dl"), ("cream", {"value": 0.25, "unit": "L"}))
+        self.assertEqual(parse_query("juice 33 cl")[1], {"value": 0.33, "unit": "L"})
+        self.assertEqual(parse_query("yoghurt 150 ml")[1], {"value": 0.15, "unit": "L"})
+        self.assertEqual(parse_query("carrot 10 KG")[1], {"value": 10.0, "unit": "KG"})
         self.assertEqual(parse_query("vitamin b12 gel"), ("vitamin b12 gel", None))
         self.assertEqual(parse_query("  3 % milk "), ("3 % milk", None))
         self.assertEqual(parse_query(None), ("", None))
@@ -61,7 +61,7 @@ class SearchQueryTests(unittest.TestCase):
     def test_explicit_pack_size_filters_and_a_size_in_the_text_only_boosts(self):
         explicit = compound("milk 1 l", {"pack_size": {"value": 500, "unit": "ml"}})
         size = explicit["filter"][0]["compound"]["filter"]
-        self.assertEqual(size[0], {"equals": {"path": "net_content.unit", "value": "l"}})
+        self.assertEqual(size[0], {"equals": {"path": "net_content.unit", "value": "L"}})
         self.assertAlmostEqual(size[1]["range"]["gte"], 0.495)
         self.assertAlmostEqual(size[1]["range"]["lte"], 0.505)
         self.assertEqual(explicit["must"][0]["text"]["query"], "milk")
@@ -79,7 +79,7 @@ class SearchQueryTests(unittest.TestCase):
         for query, filters, limit in (("", None, 20), ("milk", {"colour": "red"}, 20),
                                       ("milk", None, 0), ("milk", None, 51), ("milk", None, True),
                                       ("milk", {"pack_size": {"value": 1, "unit": "oz"}}, 20),
-                                      ("milk", {"pack_size": {"value": -1, "unit": "l"}}, 20),
+                                      ("milk", {"pack_size": {"value": -1, "unit": "L"}}, 20),
                                       ("milk", {"pack_size": "1 l"}, 20)):
             with self.assertRaises(ValueError, msg=(query, filters, limit)):
                 build_pipeline(query, filters, limit)
@@ -90,17 +90,17 @@ class SearchQueryTests(unittest.TestCase):
         self.assertIn({"$limit": 5}, pipeline)
 
     def test_match_reasons(self):
-        size = {"value": 1.0, "unit": "l"}
+        size = {"value": 1.0, "unit": "L"}
         doc = {"names": {"en": "Testi Lactose Free Milk 1 l"}, "allergen_data_known": False,
-               "net_content": {"value": 1.0, "unit": "l"}, "net_content_source": "name",
+               "net_content": {"value": 1.0, "unit": "L"}, "net_content_source": "name",
                "allergens": {"contains": [], "may_contain": [], "undeclared": ["AE"]}}
         self.assertEqual(_reasons(doc, "lactose free milk", size, ["AE", "AM"]),
-                         ["size 1 l matches", "size read from the name",
+                         ["size 1 L matches", "size read from the name",
                           'name contains "lactose free milk"', "allergen data missing",
                           "eggs undeclared"])
         self.assertEqual(_reasons({"names": {}, "net_content": None, "allergen_data_known": True},
                                   "", size, []), ["size unknown"])
-        self.assertEqual(_reasons({**doc, "net_content": {"value": 10.0, "unit": "l"},
+        self.assertEqual(_reasons({**doc, "net_content": {"value": 10.0, "unit": "L"},
                                    "allergen_data_known": True}, "", size, []), [])
 
     def test_index_definition_fits_the_free_tier(self):
