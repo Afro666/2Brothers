@@ -105,8 +105,8 @@ that interface.
 - Natural stack: an **MCP server** (open standard) + an OpenAPI spec over a mock catalog, a
   policy engine (spend limits, categories, new-supplier rules), an approval inbox, and an
   audit log. Possibly A2A / Agent Cards for discovery, signed order intents.
-- Aron already works daily with a purchasing agent that drafts orders, simulates totals and
-  needs a human "yes" with an expected total before sending. That is exactly this pattern.
+- Proven pattern: the agent drafts an order, simulates the total, and sends only after a human
+  says "yes" to that exact total (the server rejects the send if the total moved).
 - Stack prizes: ElevenLabs (voice approval call), MongoDB/Gemini.
 - Questions for the booth: is there a mock dataset / catalog? Which standards do they like (MCP,
   A2A, UCP/ACP)? How do they score?
@@ -455,8 +455,8 @@ Aaltonomous is judged in simulation first, and the robot is theirs.
 
 ## 9. Shortlist (Claude's view, to discuss)
 
-1. **A1 Valio Aimo** – biggest prize, clear core, pure software, matches what Aron already
-   builds (agent drafts, human approves a stated total).
+1. **A1 Valio Aimo** – biggest prize, clear core, pure software, a pattern we know well
+   (agent drafts, human approves a stated total).
 2. **A2 Spread** – objective leaderboard, built for agents, easy to split three ways, deck comes
    from A/B data. Cost: Sunday 07:30 wake-up.
 3. **A3 AfterQuery** – big prize, strict rubric, harness provided.

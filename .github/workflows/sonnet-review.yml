@@ -1,0 +1,55 @@
+name: sonnet-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: sonnet-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  sonnet-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Review with Sonnet
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 30
+            --allowedTools "Read,Grep,Glob,Write,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(git diff:*),Bash(git log:*)"
+          prompt: |
+            You review pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            This is a 48-hour hackathon. Speed matters. Block only real problems.
+
+            1. Read the diff: `gh pr diff ${{ github.event.pull_request.number }}`.
+               Read CLAUDE.md for the team rules. Read changed files when you need context.
+            2. BLOCK only for: a bug that breaks the app or the demo, a leaked secret or key,
+               a security hole, data loss, or a change that breaks another area's contract
+               in docs/contract.md without updating it.
+               Style, naming, missing tests and small refactors are NOT blocking: list them as notes.
+            3. Post one comment with `gh pr comment ${{ github.event.pull_request.number }} --body "..."`:
+               first line `Sonnet review: PASS` or `Sonnet review: BLOCK`,
+               then blocking issues (file:line, why, the fix), then up to 5 short notes.
+            4. Write the file `verdict.txt` in the repo root with exactly one word: PASS or BLOCK.
+
+      - name: Enforce verdict
+        run: |
+          test -f verdict.txt || { echo "No verdict written"; exit 1; }
+          v=$(tr -d '[:space:]' < verdict.txt)
+          echo "Verdict: $v"
+          [ "$v" = "PASS" ]
