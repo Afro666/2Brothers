@@ -1,5 +1,6 @@
 import { ApiError, type Api, type AuditActor, type Draft, type StockCount } from "@/api/types";
 import { isoWeekOf } from "@/lib/week";
+import { mandate } from "@/mocks/milk-case";
 import {
   planningMenu,
   planningOwnProducts,
@@ -9,7 +10,7 @@ import {
   planningSupplierDemand,
   planningSuppliers,
 } from "@/mocks/planning";
-import type { AuditEvent, DemandLine, SupplierDemandRow } from "@/types";
+import type { AuditEvent, DemandLine, SharingConsent, SupplierDemandRow } from "@/types";
 
 type PlanningApi = Pick<
   Api,
@@ -107,6 +108,16 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
     }));
   }
 
+  /** One row per current supplier; a supplier that was never asked shares nothing. */
+  function sharingRows(): SharingConsent[] {
+    return copy(
+      suppliers.map(
+        (supplier) =>
+          sharing.find((row) => row.supplierId === supplier.id) ?? { supplierId: supplier.id, shared: false },
+      ),
+    );
+  }
+
   return {
     async listSuppliers() {
       return copy(suppliers);
@@ -121,6 +132,7 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
         throw new ApiError("IN_USE", `${name} still supplies some of your own products. Move or delete those first.`);
       }
       deleteById(suppliers, id, "Supplier");
+      sharing = sharing.filter((consent) => consent.supplierId !== id);
     },
     async listOwnProducts() {
       return copy(ownProducts);
@@ -190,13 +202,15 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
       return getDemand(from, to);
     },
     async getSharing() {
-      return copy(sharing);
+      return sharingRows();
     },
     async setSharing(supplierId, shared, actor) {
+      const supplier = suppliers.find((row) => row.id === supplierId);
+      if (!supplier) throw new ApiError("NOT_FOUND", `Sharing supplier ${supplierId} was not found.`);
       const consent = sharing.find((row) => row.supplierId === supplierId);
-      if (!consent) throw new ApiError("NOT_FOUND", `Sharing supplier ${supplierId} was not found.`);
-      consent.shared = shared;
-      const supplierName = suppliers.find((supplier) => supplier.id === supplierId)?.name ?? supplierId;
+      if (consent) consent.shared = shared;
+      else sharing.push({ supplierId, shared });
+      const supplierName = supplier.name;
       recordAudit({
         kind: "forecast_share",
         actor,
@@ -205,7 +219,7 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
           ? `${supplierName} can now see what this kitchen expects to need.`
           : `${supplierName} no longer sees this kitchen's forecast.`,
       });
-      return copy(sharing);
+      return sharingRows();
     },
     async getSupplierDemand(from, to) {
       const ownNeed = getDemand(from, to);
@@ -217,7 +231,15 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
             const own = sharesWithValio
               ? ownNeed.find((line) => line.date === base.date && line.productId === base.productId)
               : undefined;
-            const forecastDemand = base.forecastDemand + (own ? Math.ceil(own.need) : 0);
+            const byKitchen = [...base.byKitchen];
+            if (own) {
+              byKitchen.push({
+                kitchenId: "K00",
+                kitchenName: `K00 ${mandate.restaurant}`,
+                demand: Math.ceil(own.need),
+              });
+            }
+            const forecastDemand = byKitchen.reduce((sum, kitchen) => sum + kitchen.demand, 0);
             const risk =
               base.available === null
                 ? "UNKNOWN"
@@ -228,8 +250,9 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
                     : "COVERED";
             return {
               ...base,
+              byKitchen,
               forecastDemand,
-              kitchens: base.kitchens + (own ? 1 : 0),
+              kitchens: byKitchen.length,
               risk,
               suggestedBuy: base.available === null ? null : Math.max(0, forecastDemand - base.available),
             };
