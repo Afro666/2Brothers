@@ -23,8 +23,8 @@ class Product:
 
 _ROWS = [
     # id, name, unit, pack, sales_unit, price, shelf_life, abc
-    ("463171", "Valio skimmed milk 1 L (case of 5)", "L", 5.0, "KI", 4.38, 10, "A"),
-    ("463335", "Valio Eila 3% milk drink 1 L lactose free", "L", 1.0, "ST", 1.40, 10, "A"),
+    ("463171", "Valio skimmed milk 1 L (case of 5)", "L", 5.0, "KI", 4.38, 10, "B"),
+    ("463335", "Valio Eila 3% milk drink 1 L lactose free", "L", 1.0, "ST", 1.40, 10, "B"),
     ("464194", "Valio whipping cream 1 L UHT lactose free", "L", 1.0, "ST", 3.91, 30, "B"),
     ("463437", "Valio Eila butter 500 g lactose free", "KG", 0.5, "ST", 3.31, 60, "B"),
     ("463982", "Kieku barn eggs L, 180 pcs", "KG", 12.3, "KI", 31.01, 21, "A"),
