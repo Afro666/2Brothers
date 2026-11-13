@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+ARG VITE_LIVE_BUYER=false
+ENV VITE_LIVE_BUYER=$VITE_LIVE_BUYER
 RUN npm run build
 
 # Caddy serves the built files. Its config is in the image, so a config change

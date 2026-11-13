@@ -5,7 +5,10 @@ name: two-brothers
 
 services:
   web:
-    build: ../web
+    build:
+      context: ../web
+      args:
+        VITE_LIVE_BUYER: "true"
     restart: unless-stopped
     depends_on:
       - gateway
