@@ -72,8 +72,9 @@ class LiveTests(unittest.TestCase):
         key = uuid4().hex
         approval, created = orders.request_approval(self.db, kitchen_id="k1", idempotency_key=key,
                                                     offer_id="o1", reasons=["Only 51 L is confirmed."])
-        same, created_again = orders.request_approval(self.db, kitchen_id="k1",
-                                                      idempotency_key=key, offer_id="o1")
+        same, created_again = orders.request_approval(
+            self.db, kitchen_id="k1", idempotency_key=key, offer_id="o1",
+            reasons=["Only 51 L is confirmed."])
         self.assertEqual((created, created_again), (True, False))
         self.assertEqual(same["approval_id"], approval["approval_id"])
         self.assertEqual(approval["status"], "PENDING")

@@ -8,10 +8,13 @@ into `None` first.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 from uuid import uuid4
 
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
+
+from store.audit import canonical
 
 OUTCOMES = ("CONFIRMED", "NOT_SENT", "UNCONFIRMED", "SENT_READ_FAILED")
 DECISIONS = ("APPROVED", "REJECTED")
@@ -49,15 +52,18 @@ def _out(doc: dict | None, id_key: str) -> dict | None:
     return doc
 
 
-def _insert_once(collection, doc: dict, id_key: str, same) -> tuple[dict, bool]:
-    """Insert, or return the row already stored under this idempotency key."""
+def _insert_once(collection, doc: dict, id_key: str) -> tuple[dict, bool]:
+    """Insert, or return the row already stored under this kitchen's idempotency key.
+
+    The stored row must carry the same `payload_hash`, else the key was reused.
+    """
     try:
         collection.insert_one(doc)
         return _out(doc, id_key), True
     except DuplicateKeyError:
         stored = collection.find_one({"kitchen_id": doc["kitchen_id"],
                                       "idempotency_key": doc["idempotency_key"]})
-        if not same(stored):
+        if stored["payload_hash"] != doc["payload_hash"]:
             raise IdempotencyConflict(doc["idempotency_key"]) from None
         return _out(stored, id_key), False
 
@@ -96,8 +102,7 @@ def record_attempt(db, *, kitchen_id: str, idempotency_key: str, offer_id: str,
            "payload_hash": payload_hash, "status": None, "outcome": None,
            "created_at": now, "updated_at": now}
     _check(doc)
-    return _insert_once(db.orders, doc, "order_id",
-                        lambda stored: stored["payload_hash"] == payload_hash)
+    return _insert_once(db.orders, doc, "order_id")
 
 
 def set_outcome(db, order_id: str, *, outcome: str, status: str | None,
@@ -129,13 +134,19 @@ def list_orders(db, kitchen_id: str, limit: int = 100) -> list[dict]:
 
 def request_approval(db, *, kitchen_id: str, idempotency_key: str, offer_id: str,
                      reasons=(), **extra) -> tuple[dict, bool]:
-    """Open a PENDING approval. Returns `(approval, created)`; replays are safe."""
-    doc = {**extra, "_id": uuid4().hex, "kitchen_id": kitchen_id,
-           "idempotency_key": idempotency_key, "offer_id": offer_id, "status": "PENDING", "reasons": list(reasons),
+    """Open a PENDING approval. Returns `(approval, created)`.
+
+    A replay of the same request returns the stored approval and False. The same
+    key with any other content (offer, reasons, extra fields) raises
+    `IdempotencyConflict`.
+    """
+    payload = {**extra, "offer_id": offer_id, "reasons": list(reasons)}
+    _check(payload)
+    doc = {**payload, "_id": uuid4().hex, "kitchen_id": kitchen_id,
+           "idempotency_key": idempotency_key, "status": "PENDING",
+           "payload_hash": hashlib.sha256(canonical(payload).encode()).hexdigest(),
            "requested_at": _now(), "decided_by": None, "decided_at": None}
-    _check(doc)
-    return _insert_once(db.approvals, doc, "approval_id",
-                        lambda stored: stored["offer_id"] == offer_id)
+    return _insert_once(db.approvals, doc, "approval_id")
 
 
 def decide_approval(db, approval_id: str, *, status: str, decided_by: str,
