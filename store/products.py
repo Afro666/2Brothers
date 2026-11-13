@@ -22,10 +22,10 @@ _TEMPERATURE_BY_TAG = {"coolTemperature": "chilled", "freezeTemperature": "froze
                        "warmTemperature": "ambient"}
 
 # GS1 unit code -> (our unit, factor). Pieces (H87) and portions (PTN) are not sizes.
-_MEASURES = {"LTR": ("l", 1), "MLT": ("l", 0.001), "CLT": ("l", 0.01),
-             "KGM": ("kg", 1), "GRM": ("kg", 0.001)}
-_NAME_UNITS = {"l": ("l", 1), "ltr": ("l", 1), "dl": ("l", 0.1), "cl": ("l", 0.01),
-               "ml": ("l", 0.001), "kg": ("kg", 1), "g": ("kg", 0.001), "gr": ("kg", 0.001)}
+_MEASURES = {"LTR": ("L", 1), "MLT": ("L", 0.001), "CLT": ("L", 0.01),
+             "KGM": ("KG", 1), "GRM": ("KG", 0.001)}
+_NAME_UNITS = {"l": ("L", 1), "ltr": ("L", 1), "dl": ("L", 0.1), "cl": ("L", 0.01),
+               "ml": ("L", 0.001), "kg": ("KG", 1), "g": ("KG", 0.001), "gr": ("KG", 0.001)}
 _NAME_SIZE = re.compile(
     r"(?<![\w,.])(?:(\d+)\s*[x×*]\s*)?e?(\d+(?:[.,]\d+)?)\s*(kg|gr|g|ltr|l|dl|cl|ml)(?![a-zäöå])",
     re.IGNORECASE)
@@ -50,7 +50,7 @@ def _net_content(raw: dict, names: dict) -> tuple[dict | None, str | None]:
     units = raw.get("units") or []
     found = None
     if raw.get("baseUnit") == "KG":
-        found = (1.0, "kg", "base_unit")  # sold by weight: one base unit is one kilogram
+        found = (1.0, "KG", "base_unit")  # sold by weight: one base unit is one kilogram
     conversions = (raw.get("synkkaData") or {}).get("unitConversions") or []
     if not found and conversions:
         conversion = conversions[0]
