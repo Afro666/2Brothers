@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from enum import Enum
 import json
 import os
 from pathlib import Path
@@ -30,8 +31,21 @@ tool schema and trusted need/date. Policy checks still apply; never bypass them.
 """
 
 
+class PolicyReason(str, Enum):
+    SCHEMA_INVALID = "SCHEMA_INVALID"
+    MALFORMED_JSON = "MALFORMED_JSON"
+    NEED_MISMATCH = "NEED_MISMATCH"
+    DATE_MISMATCH = "DATE_MISMATCH"
+    UNKNOWN_ID = "UNKNOWN_ID"
+    OFFER_INVALID = "OFFER_INVALID"
+    RUN_MISMATCH = "RUN_MISMATCH"
+    POLICY_VIOLATION = "POLICY_VIOLATION"
+
+
 class PolicyError(RuntimeError):
-    pass
+    def __init__(self, message: str, reason_code: PolicyReason = PolicyReason.POLICY_VIOLATION):
+        super().__init__(message)
+        self.reason_code = PolicyReason(reason_code)
 
 
 class AuditError(RuntimeError):
@@ -104,22 +118,24 @@ class Buyer:
         try:
             validate(args, schema)
         except (ValidationError, TypeError):
-            raise PolicyError("Tool arguments do not match the schema") from None
+            raise PolicyError("Tool arguments do not match the schema", PolicyReason.SCHEMA_INVALID) from None
         if name == "get_offer":
-            if args["need_id"] != self.need_id or args["requested_date"] != self.requested_date:
-                raise PolicyError("Offer must use the application's trusted need and date")
+            if args["need_id"] != self.need_id:
+                raise PolicyError("Offer must use the application's trusted need", PolicyReason.NEED_MISMATCH)
+            if args["requested_date"] != self.requested_date:
+                raise PolicyError("Offer must use the application's trusted date", PolicyReason.DATE_MISMATCH)
             if not set(args["product_ids"]).issubset(self.products):
-                raise PolicyError("Products must come from a catalog search")
+                raise PolicyError("Products must come from a catalog search", PolicyReason.UNKNOWN_ID)
         if name in {"simulate_order", "request_approval", "place_order"}:
             offer = self.offers.get(args["offer_id"])
             if not offer:
-                raise PolicyError("Unknown offer; get a fresh engine-backed offer first")
+                raise PolicyError("Unknown offer; get a fresh engine-backed offer first", PolicyReason.UNKNOWN_ID)
             try:
                 expiry = datetime.fromisoformat(offer["valid_until"].replace("Z", "+00:00"))
                 if expiry.tzinfo is None or expiry <= self.now():
                     raise ValueError()
             except (KeyError, TypeError, ValueError):
-                raise PolicyError("Offer is expired or has no valid expiry") from None
+                raise PolicyError("Offer is expired or has no valid expiry", PolicyReason.OFFER_INVALID) from None
         if name in {"place_order", "request_approval"}:
             offer_id = args["offer_id"]
             sim = self.simulations.get(offer_id)
@@ -136,9 +152,9 @@ class Buyer:
                     raise PolicyError("Total must match simulation")
                 args["idempotency_key"] = str(uuid5(NAMESPACE_URL, self.run_id + ":" + offer_id))
         if name == "get_order_status" and args["order_id"] not in self.orders:
-            raise PolicyError("Order must belong to this run")
+            raise PolicyError("Order must belong to this run", PolicyReason.UNKNOWN_ID)
         if name == "get_audit_log" and args["run_id"] != self.run_id:
-            raise PolicyError("Audit query must use this run_id")
+            raise PolicyError("Audit query must use this run_id", PolicyReason.RUN_MISMATCH)
 
     def accept(self, name, args, result):
         if name == "search_products":
@@ -186,14 +202,21 @@ class Buyer:
                     return self.final("CANNOT_FULFIL", "Tool call limit reached")
                 name, args, error, result = "invalid", {}, None, {}
                 policy_rejected = False
+                reason_code = PolicyReason.POLICY_VIOLATION
                 try:
                     if not isinstance(call.get("id"), str) or not call["id"]:
                         raise PolicyError("Tool call requires an ID")
                     name = call["function"]["name"]
                     args = json.loads(call["function"]["arguments"])
                     self.authorize(name, args, schemas)
-                except (KeyError, TypeError, ValueError, AttributeError, PolicyError):
+                except (KeyError, TypeError, ValueError, AttributeError, PolicyError) as exc:
                     policy_rejected = True
+                    if isinstance(exc, PolicyError):
+                        reason_code = exc.reason_code
+                    elif isinstance(exc, json.JSONDecodeError):
+                        reason_code = PolicyReason.MALFORMED_JSON
+                    else:
+                        reason_code = PolicyReason.SCHEMA_INVALID
                     error = "Rejected by buyer policy; no gateway tool dispatched"
                     args = {}
                     name = name if isinstance(name, str) and name in TOOLS else "invalid"
@@ -212,6 +235,8 @@ class Buyer:
                                if isinstance(result.get(k), str) and len(result[k]) <= 200}
                     if error:
                         summary = {"error": error}
+                        if policy_rejected:
+                            summary["reason_code"] = reason_code.value
                     await self.audit({"type": "tool_call_finished", "tool": name, "arguments": args, "result": summary})
                 except AuditError:
                     return self.final("CANNOT_FULFIL", "Audit unavailable; human reconciliation required", reconciliation_required=True)
@@ -219,6 +244,7 @@ class Buyer:
                     if policy_rejected and name in READ_ONLY_TOOLS:
                         messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
                             "error": {"code": "POLICY_REJECTED", "message": error,
+                                      "reason_code": reason_code.value,
                                       "retryable": True}})})
                         continue
                     return self.final("CANNOT_FULFIL", error, reconciliation_required=bool(self.mutations))
