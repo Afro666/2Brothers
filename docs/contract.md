@@ -207,3 +207,79 @@ If finish logging fails after a mutation, the final result must flag human
 reconciliation rather than repeat the mutation. Arguments/results contain only
 allowlisted tool fields: no credentials, authorization headers or raw HTTP error
 bodies. Local traces supplement durable gateway audit; they do not replace it.
+
+## Product API: kitchens and suppliers
+
+Moved from `docs/api.md` (agreed 2026-11-13). One REST API (OpenAPI) and the MCP
+server for the Buyer agent; both call the same gateway code. The rules in "Team
+gateway interfaces" (JSON bodies, error shape, decimal-string EUR, ISO 8601, opaque
+IDs) apply here too. Base path: `/v1`.
+
+### Auth and the trust rule
+
+- Every organisation (kitchen or supplier) gets API keys with scopes.
+- Scopes: `kitchen:read`, `kitchen:write` (stock, menus, products, suppliers),
+  `kitchen:propose`, `kitchen:approve`, `supplier:read-orders`, `supplier:confirm`,
+  `supplier:demand`.
+- **`kitchen:approve` is only on a human user session.** No API key and no agent MCP
+  token can hold it. The Buyer proposes; it never approves. A call to approve or reject
+  without a human session returns 403 `HUMAN_SESSION_REQUIRED`.
+- Every mutation (POST, PUT, DELETE) carries a nonempty `idempotency_key` string in
+  the JSON body, scoped to the organisation and the route. The same rules as the
+  gateway tools apply: a replay returns the stored result, reuse with a different
+  payload returns 409 `IDEMPOTENCY_KEY_REUSED`, no header alternative.
+- Every call is in the audit log: who (user, API key or agent), what, when, and the
+  figure that was shown.
+
+### Kitchen side: `/v1/kitchens/{kitchen_id}/...`
+
+| Method | Path | Scope | What |
+|---|---|---|---|
+| POST | `/stock-counts` | `kitchen:write` | Push a stock count (POS, inventory, manual). `null` means unknown, never zero. |
+| GET | `/stock` | `kitchen:read` | Current stock and position (on hand + on order). |
+| GET, POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Own products (not in a supplier catalog). |
+| GET, POST, PUT, DELETE | `/recipes`, `/recipes/{id}` | `kitchen:write` | Recipe = products x quantity per portion; allergens rolled up. |
+| PUT | `/menu-plans/{week}` | `kitchen:write` | Menus per day: recipe + expected covers. `week` is ISO `YYYY-Www`. |
+| GET | `/demand?from=&to=` | `kitchen:read` | Future need per product and day, from the menu plan and history. |
+| GET, POST, PUT, DELETE | `/suppliers`, `/suppliers/{id}` | `kitchen:write` | Suppliers and their terms: free-delivery threshold, fee, order days, cut-off, lead time. User-set; demo values are placeholders. |
+| POST | `/proposals` | `kitchen:propose` | Ask the Buyer: free text ("1,000 L milk by Monday") or a demand window `from`/`to`. Returns `proposal_id`, `status: PENDING`. |
+| GET | `/proposals/{id}` | `kitchen:read` | Lines with `why`, one block per supplier, simulated totals (`expected_total`, `mov_gap`, `delivery_fee`), mandate reasons, warnings. |
+| POST | `/proposals/{id}/approve` | `kitchen:approve` (human) | Body: `blocks: [{supplier_id, expected_total}]` + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH`; nothing is sent. |
+| POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
+| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). |
+| PUT | `/sharing` | `kitchen:write` | Consent: which suppliers may see this kitchen's forecast. Every change is an audit entry. |
+| GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
+
+Proposal `status`: `PENDING`, `READY`, `APPROVED`, `REJECTED`, `EXPIRED`. An approved
+proposal places one order per supplier block, through the same `place_order` guards.
+
+Order `status` is the supplier side of the order: `SENT`, `CONFIRMED`, `PARTIAL`,
+`REJECTED`, `UNCONFIRMED`. The order `outcome` is the gateway result from "Team gateway
+interfaces": `CONFIRMED`, `NOT_SENT`, `UNCONFIRMED`, `SENT_READ_FAILED`. An outcome of
+`NOT_SENT` means no order exists at the supplier, so it has no order `status`.
+
+### Supplier side
+
+**We call them (adapter contract).** Each supplier is one adapter with the same five
+calls: `catalog`, `price(products, date)`, `availability(products, date)`, `place_order`,
+`order_status`. Valio Aimo is the live adapter. The `manual` and `csv` adapters use the
+price list the kitchen entered: stock is unknown, and the order goes out by e-mail or PDF.
+
+**They call us:** `/v1/suppliers/{supplier_id}/...`
+
+| Method | Path | Scope | What |
+|---|---|---|---|
+| GET | `/orders` | `supplier:read-orders` | Orders that kitchens approved for this supplier. |
+| POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
+| GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. |
+| GET | `/demand/shortage-risk` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability. |
+| POST | `/offers` | `supplier:read-orders` | Proactive offer to a kitchen (substitute, promotion). It shows up as a suggestion, never as an order. |
+
+A supplier only sees demand from kitchens whose `/sharing` consent names it.
+
+### Webhooks (both sides)
+
+`proposal.ready`, `proposal.approved`, `order.sent`, `order.unconfirmed`,
+`order.confirmed`, `price.changed`, `recall.alert` (Context.dev), `demand.changed`
+(supplier). Each delivery carries an `event_id`; receivers treat a repeat `event_id` as
+a replay.
