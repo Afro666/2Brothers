@@ -31,12 +31,12 @@ The database is the one named in the URI, else `two_brothers`.
 
 | Collection | Module | Notes |
 |---|---|---|
-| `products` | `store.products` | `_id` is the product code (a string). Every source shares this collection: `source` is `valio`, `csv` or `own`, with a `supplier_id`. |
+| `products` | `store.products` | `_id` is the product code (a string). Every row has `source` (`valio` today) and `supplier_id`, so supplier price lists and own products can share the collection and its search index. |
 | `offers` | `store.orders` | Price and availability snapshots with `fetched_at`. Never updated, never expired. |
 | `orders` | `store.orders` | The attempt row is written before any send. Unique `(kitchen_id, idempotency_key)`. |
 | `approvals` | `store.orders` | `PENDING` until a human decides, once. There is no auto-approve. |
 | `audit_log` | `store.audit` | Insert-only and hash-chained. `_id` is the sequence number. |
-| `suppliers`, `own_products`, `recipes`, `menu_plans` | `store.repository` | Kitchen data (#81). |
+| `suppliers`, `own_products`, `recipes`, `menu_plans` | `store.repository` | Kitchen data (#81). Own products are still a separate collection here. |
 
 Money is `Decimal` in Python and `Decimal128` in Mongo; the wire format is a decimal
 string. `store.orders` refuses binary floats and the unknown-stock sentinels

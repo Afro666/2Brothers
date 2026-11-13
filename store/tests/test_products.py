@@ -62,7 +62,7 @@ class FlattenTests(unittest.TestCase):
         self.assertIsNone(doc["lot_size"])
         self.assertEqual(doc["substitutions"], [])  # the key is absent on most records
         self.assertEqual((doc["reliability"], doc["carbon_kg_co2e_per_kg"]), (0.975, 1.44))
-        self.assertIs(doc["raw"]["synkkaData"]["names"][3]["language"], "es")
+        self.assertEqual(doc["raw"]["synkkaData"]["names"][3]["language"], "es")  # raw is whole
 
     def test_codes_are_always_strings_and_optional_data_may_be_missing(self):
         doc = flatten({"id": 900002, "units": [], "synkkaData": {"names": []}})
