@@ -1,5 +1,39 @@
 # Nemotron buyer (#22)
 
+## Substitute choices (#281)
+
+`SubstitutePlanner` runs after a partial-stock, unknown-stock or passed-cutoff
+simulation. It considers supplier-linked codes before a bounded catalog search
+and returns up to three distinct baskets (`good`, `better`, `best`). These labels
+describe presentation order, not a claim that an option is objectively superior.
+Every basket has its own engine-backed offer, exact total, lines, one-line reason,
+stock/allergen-data flags and `requires_chef_approval=true`. No option is applied
+or placed automatically. A passed-cutoff candidate excluded by the engine never
+becomes a choice. Missing candidates do not cause fabricated options.
+
+The trusted worker reads `kitchen_settings.excluded_allergens` through
+`store.buyer_context` (an explicit list, including `[]` for a kitchen whose rules
+allow all allergens). Absent or malformed rules disable automatic substitute
+assessment; they are not inferred from a model message. AW includes individual
+gluten cereals; GO oats are distinct. CONTAINS, MAY_CONTAIN and UNDECLARED matches
+are refused. Unknown allergen data is excluded for substitutes and for any
+restricted kitchen. A specifically requested product in an unrestricted kitchen
+may remain visible as unknown, with that fact called out for the chef.
+
+Kitchen policy also filters model searches and independently checks offer and
+approval baskets. Model-supplied filters cannot remove the kitchen exclusions.
+Trusted catalog reads are scoped to the kitchen, including own products.
+
+For partial stock, the next offer combines the original product and the candidate
+against the same stored need: the engine converts the remaining need by base unit.
+S02 tests 20 x 8.4 kg as 168 kg: 16 original cases plus 84 x 0.4 kg substitute bags,
+never four bags for a four-case gap. S03 tests that Oatly with AW never reaches a
+quote for a coeliac school, even when supplier-linked or returned by catalog search.
+
+All additional tool reads are audited and share the 30-call run budget. The worker
+stores chef choices on the pending proposal, returned as `substitute_options`.
+UI selection still requires a fresh simulation and a separate human decision.
+
 ## Internal worker (#279)
 
 `two-brothers-buyer-worker` serves an internal `/run` endpoint on port 8001.
