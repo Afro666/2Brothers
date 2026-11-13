@@ -70,7 +70,8 @@ def test_milk_flow_up_to_pending(client):
                                           "need_id": need["need_id"]})
     assert offer["lines"][0]["quantity"] == "51"  # sized by the gateway from the need
     _, sim = call(client, "simulate_order", {"offer_id": offer["offer_id"]})
-    assert sim["expected_total"] == offer["expected_total"]
+    assert 'expected_total' not in offer
+    assert sim['offer_id'] == offer['offer_id'] and isinstance(sim['expected_total'], str)
     assert sim["mandate"]["verdict"] == "NEEDS_APPROVAL"
     _, req = call(client, "request_approval", {"offer_id": offer["offer_id"]})
     assert req["status"] == "PENDING"
