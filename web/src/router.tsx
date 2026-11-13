@@ -1,4 +1,4 @@
-import { type RouterHistory, Link, Outlet, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { type RouterHistory, Outlet, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 
 import { KitPage } from "@/pages/kit";
 import { RoleProvider } from "@/lib/role";
@@ -13,7 +13,7 @@ import { ProductsPage } from "@/pages/products";
 import { RequestsPage } from "@/pages/requests";
 import { StockPage } from "@/pages/stock";
 import { SuppliersPage } from "@/pages/suppliers";
-import { AppShell } from "@/components/purchasing/app-shell";
+import { HomePage } from "@/pages/home";
 
 function RootLayout() {
   return (
@@ -23,20 +23,6 @@ function RootLayout() {
   );
 }
 const rootRoute = createRootRoute({ component: RootLayout });
-
-function HomePage() {
-  return (
-    <AppShell activeId="home">
-      <div className="mx-auto max-w-prose space-y-3 py-8">
-        <h1 className="text-2xl font-semibold">Kitchen Buyer</h1>
-        <p className="text-muted-foreground">Choose a screen to get started.</p>
-        <Link to="/kit" className="font-medium underline underline-offset-4">
-          Open the component kit
-        </Link>
-      </div>
-    </AppShell>
-  );
-}
 
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: HomePage });
 const kitRoute = createRoute({ getParentRoute: () => rootRoute, path: "/kit", component: KitPage });
