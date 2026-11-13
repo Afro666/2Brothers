@@ -41,6 +41,8 @@ class ValioTests(unittest.TestCase):
             data["products"][0][field] = value
             result = self.client(lambda *args: data).availability(["462775"], "2026-11-16")
             self.assertFalse(result["products"][0]["scheduleLines"][0]["orderable"])
+            if field == "closingTime":
+                self.assertIsNone(result["products"][0]["cutoff_passed"])
 
     def test_available_date_must_be_valid_and_no_later_than_requested(self):
         now = datetime(2026, 11, 13, tzinfo=timezone.utc)
