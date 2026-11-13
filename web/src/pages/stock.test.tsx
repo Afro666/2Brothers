@@ -34,6 +34,7 @@ describe("StockPage", () => {
     await user.type(screen.getAllByRole("textbox", { name: "Valio Eila 3 % milk count in L" })[0], "42");
     await user.click(screen.getByRole("button", { name: "Save count" }));
 
+    expect(await screen.findByTestId("stock-count-saved-toast")).toHaveTextContent("Count saved");
     expect(await screen.findByRole("status")).toHaveTextContent("Count saved");
     await waitFor(() => expect(rowFor("Valio Eila 3 % milk")).toHaveTextContent("42 L"));
     expect(screen.getByText("3 of 8 not counted: treated as unknown, not as zero")).toBeInTheDocument();

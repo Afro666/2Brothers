@@ -36,7 +36,7 @@ export function OrderDetailPage() {
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold">Order {orderId}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Inspect the order lines, totals, status, and decision history.
+            The lines, the totals and every step taken for this order.
           </p>
         </header>
         {state.status === "loading" ? <LoadingState /> : null}
@@ -49,7 +49,7 @@ export function OrderDetailPage() {
                 <StatusBadge status={state.data.status} />
                 <UrgencyBadge urgency={state.data.urgency} />
               </div>
-              <dl className="grid gap-3 text-sm sm:grid-cols-3">
+              <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-3">
                 <div>
                   <dt className="text-muted-foreground">Delivery</dt>
                   <dd>{formatDate(state.data.deliveryDate)}</dd>

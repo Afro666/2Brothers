@@ -75,7 +75,7 @@ function NavList({ items, activeId, onNavigate }: { items: NavItem[]; activeId?:
             "aria-current": active ? ("page" as const) : undefined,
             onClick: onNavigate,
             className: cn(
-              "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/70",
               active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
             ),
           };
@@ -137,7 +137,9 @@ function RolePicker() {
 function Brand() {
   return (
     <span className="flex items-center gap-2 font-semibold">
-      <ChefHat className="size-5" aria-hidden />
+      <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+        <ChefHat className="size-5" aria-hidden />
+      </span>
       Kitchen Buyer
     </span>
   );
@@ -162,7 +164,7 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
         <NavList items={nav} activeId={current} />
       </aside>
 
-      <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:hidden">
+      <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top,0px))] items-center gap-3 border-b bg-background/95 pt-[env(safe-area-inset-top,0px)] pr-[calc(1rem+env(safe-area-inset-right,0px))] pl-[calc(1rem+env(safe-area-inset-left,0px))] backdrop-blur md:hidden">
         <Button variant="ghost" size="icon" aria-label="Open menu" onClick={() => setOpen(true)}>
           <Menu />
         </Button>
@@ -183,7 +185,10 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
         </SheetContent>
       </Sheet>
 
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
+      {/* Safe-area insets are 0px on devices without a notch, so the gutters stay 1rem / 2rem there. */}
+      <main className="min-w-0 flex-1 pt-6 pr-[calc(1rem+env(safe-area-inset-right,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pl-[calc(1rem+env(safe-area-inset-left,0px))] md:pr-[calc(2rem+env(safe-area-inset-right,0px))] md:pl-[calc(2rem+env(safe-area-inset-left,0px))]">
+        {children}
+      </main>
     </div>
   );
 }

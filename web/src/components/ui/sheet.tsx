@@ -44,7 +44,7 @@ function SheetContent({
       >
         {children}
         <SheetPrimitive.Close
-          className="absolute top-4 right-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="absolute top-4 right-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-[3px] focus-visible:ring-ring/70 focus-visible:outline-none"
         >
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>

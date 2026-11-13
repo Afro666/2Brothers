@@ -96,7 +96,7 @@ export function AuditPage() {
                 </Select>
               </label>
             </div>
-            <p className="text-sm text-muted-foreground" aria-live="polite">
+            <p className="text-sm tabular-nums text-muted-foreground" aria-live="polite">
               {filtered.length} {filtered.length === 1 ? "step" : "steps"}
             </p>
             {events.length === 0 ? (

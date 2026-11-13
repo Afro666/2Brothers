@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { toast } from "sonner";
 
 import { useApi } from "@/api";
 import type { Draft } from "@/api/types";
@@ -208,6 +209,7 @@ function SupplierForm({
     setError(null);
     try {
       await api.saveSupplier(draftFromForm(form, supplier, parsed));
+      toast.success("Supplier saved");
       onSaved();
       onClose();
     } catch (e) {
@@ -390,7 +392,7 @@ function SupplierCard({
   }
 
   return (
-    <Card className="gap-4">
+    <Card className="gap-4 tabular-nums">
       <CardHeader>
         <CardTitle className="leading-snug">
           <h3 className="text-base font-semibold">{supplier.name}</h3>
@@ -430,7 +432,7 @@ function SupplierCard({
         <Button variant="outline" size="sm" onClick={onEdit}>
           Edit
         </Button>
-        <Button variant="ghost" size="sm" onClick={onDelete}>
+        <Button variant="ghost" size="sm" className="text-danger hover:text-danger" onClick={onDelete}>
           Delete
         </Button>
       </CardFooter>
@@ -488,6 +490,8 @@ export function SuppliersPage() {
     try {
       const data = await api.setSharing(supplierId, shared, actor);
       setSharing({ status: "ready", data });
+      const supplier = suppliers.data.find((item) => item.id === supplierId);
+      toast.success(`Forecast sharing turned ${shared ? "on" : "off"}${supplier ? ` for ${supplier.name}` : ""}`);
     } finally {
       setSharingPending(false);
     }
@@ -508,6 +512,7 @@ export function SuppliersPage() {
     setDeleteError(null);
     try {
       await api.deleteSupplier(deleting.id);
+      toast.success("Supplier deleted");
       setDeleting(null);
       suppliers.reload();
     } catch (e) {
@@ -534,7 +539,7 @@ export function SuppliersPage() {
         {suppliers.status === "ready" ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground" aria-live="polite">
+              <p className="text-sm tabular-nums text-muted-foreground" aria-live="polite">
                 {suppliers.data.length} {suppliers.data.length === 1 ? "supplier" : "suppliers"}
               </p>
               <Button onClick={openAdd}>Add supplier</Button>
