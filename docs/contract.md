@@ -131,7 +131,7 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 
 | MCP tool | Method and path | Request / query fields | Success response fields |
 |---|---|---|---|
-| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object` | `products: object[]` |
+| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object`, `limit: integer` (see below) | `products: object[]` |
 | `get_offer` | POST `/tools/get_offer` | `product_ids: string[]`, `requested_date: YYYY-MM-DD`, `need_id: string` | `offer_id`, `valid_until`, `lines: object[]` |
 | `simulate_order` | POST `/tools/simulate_order` | `offer_id: string` | `offer_id`, `expected_total`, `currency`, `mandate: object`, `lines: object[]` |
 | `place_order` | POST `/tools/place_order` | `offer_id`, `expected_total: decimal string`, `idempotency_key: string` | `order_id`, `outcome`, `status` |
@@ -190,6 +190,84 @@ The approval adapter generates this field; it is not an extra model argument.
 Replays return the stored result;
 key reuse with a different payload is rejected. Adapters never automatically
 retry either mutation after an ambiguous transport failure.
+
+### `search_products`: filters and the product row
+
+Request: `query` (string, may be empty when a filter is set) and `filters`
+(object, every field optional). `limit` (integer, default 20, maximum 50) is a
+third top-level field.
+
+| Filter | Type | Meaning |
+|---|---|---|
+| `exclude_allergens` | string[] | Allergen names or GS1 codes, for example `"milk"` or `"AM"`. Removes every product that lists one of them as CONTAINS or MAY_CONTAIN. |
+| `allergen_strictness` | `"declared"` (default) or `"strict"` | `declared` keeps products without allergen data and marks them unknown. `strict` also removes them, and removes products that list an excluded allergen as `undeclared`. |
+| `require_labels` | string[] | Label ids such as `EU_ORGANIC_FARMING`; the product must carry all of them. |
+| `temperature` | `"ambient"`, `"chilled"` or `"frozen"` | Storage class. |
+| `category` | string | The 5-character category code. |
+| `pack_size` | `{value: number, unit}` | Net content of one base unit; `unit` is `l`, `dl`, `cl`, `ml`, `kg` or `g`. A hard filter. |
+| `supplier_id` | string | Only this supplier's products. |
+
+Allergen names are the 14 EU allergens: `gluten` (AW), `crustaceans` (AC), `eggs`
+(AE), `fish` (AF), `peanuts` (AP), `soy` (AY), `milk` (AM), `nuts` (AN), `celery`
+(BC), `mustard` (BM), `sesame` (AS), `sulphites` (AU), `lupin` (NL), `molluscs`
+(UM); plus `lactose` (ML), `wheat` (UW) and `oats` (GO). `gluten` also covers the
+wheat, rye, barley, spelt and kamut codes, and `nuts` the single-nut codes. `gluten`
+does not cover oats: gluten-free oats exist. An unknown name is a 422, never ignored.
+
+When `pack_size` is absent, a size written in the query ("milk 1 l", "500 g") is
+read from the text and only raises the rank of products with that size.
+
+Response: `products`, best match first. Each row is the product row below plus
+`score` (number) and `match_reasons` (short strings, for example `"size 1 l matches"`,
+`"allergen data missing"`, `"size read from the name"`).
+
+Product row (the catalog row from the shared repository, without the raw record):
+
+| Field | Type | Notes |
+|---|---|---|
+| `product_id` | string | Product code. Always a string. |
+| `source`, `supplier_id` | string | `source` is `valio`, `csv` or `own`. |
+| `names` | `{en?, fi?, sv?}` | For Valio products `fi` is always there; `sv` is missing on 8%. |
+| `brand` | string or null | Null on 18% of the Valio catalog. |
+| `category` | string | A 5-character code. The data has no category names: the UI shows the code. |
+| `vendor`, `country` | string or null | `country` is a lower-case ISO alpha-2 code. |
+| `base_unit`, `sales_unit` | string | Valio unit codes: `ST` piece, `KI` case, `KG`. |
+| `units` | `{unit, size_in_base_units, gtin}[]` | Pack hierarchy, in base units. |
+| `lot_size` | number or null | Order in multiples of this many sales units; null means no rule. |
+| `net_content` | `{value, unit}` or null | Of one base unit, in `l` or `kg`. A case of 12 x 1 l is 1 l. |
+| `net_content_source` | string or null | `synkka` (measured piece), `synkka_case` (measured case, divided), `base_unit` (sold by weight), `name` (read from the product name: a guess, verify before relying on it). |
+| `allergens` | `{contains, may_contain, undeclared}` | Lists of GS1 codes. `undeclared` is the supplier's "not declared" level; it is not a free-from claim. |
+| `allergen_data_known` | boolean | False on 46% of the Valio catalog. False means unknown: show "unknown", never "none". |
+| `no_declarable_allergens` | boolean | The supplier states that no declarable allergen is present. |
+| `free_from` | string[] | GS1 codes the supplier claims the product is free from. |
+| `claims` | string[] | For example `FREE_FROM_LACTOSE`, `VEGAN`, `LOW_LACTOSE`. |
+| `lactose_free` | boolean | A lactose-free claim and no lactose listed. Lactose-free milk still contains milk (`AM`). |
+| `labels` | string[] | For example `GOODS_FROM_FINLAND_BLUE_SWAN`, `EU_ORGANIC_FARMING`. |
+| `temperature` | string or null | `ambient`, `chilled`, `frozen`; null when unknown. |
+| `reliability` | number or null | Delivered versus ordered, 0 to 1. |
+| `carbon_kg_co2e_per_kg` | number or null | Product-group average, not this product's own figure. |
+| `substitutions` | string[] | Product codes Valio suggests. A kitchen's allergen rule still wins. |
+
+The contract is snake_case. The web client maps these rows to its own camelCase
+types in `web/src/api/`.
+
+### Stored rows: order, approval, audit entry
+
+What the shared repository keeps, and what list and detail routes return. Money
+and quantities are decimal strings on the wire.
+
+- **Order:** `order_id`, `kitchen_id`, `offer_id`, `idempotency_key`, `expected_total`,
+  `lines`, `payload_hash`, `status`, `outcome`, `created_at`, `updated_at`. The row is
+  written before any send, with `status` and `outcome` null; both are set when the
+  attempt ends.
+- **Approval:** `approval_id`, `kitchen_id`, `offer_id`, `idempotency_key`, `status`
+  (`PENDING`, `APPROVED`, `REJECTED`), `reasons` (string[]), `requested_at`,
+  `decided_by`, `decided_at`, and `reason` on a rejection. Decided once, by a human.
+- **Audit entry:** `seq` (1, 2, 3 ...), `prev_hash`, `hash`, `stored_at`, `event` (what
+  the client sent: `event_id`, `run_id`, `type`, `tool`, `arguments`, `result`, and
+  `order_id` when the event belongs to an order) and `server` (what the gateway adds:
+  `kitchen_id`, `principal`, its own timestamp). `hash` covers the whole entry and
+  the previous entry's hash, so a changed or removed entry is detectable.
 
 ### Agent audit ingestion
 
@@ -276,6 +354,66 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/offers` | `supplier:read-orders` | Proactive offer to a kitchen (substitute, promotion). It shows up as a suggestion, never as an order. |
 
 A supplier only sees demand from kitchens whose `/sharing` consent names it.
+
+### Body shapes: stock and demand
+
+Proposed for the routes above. Quantities are decimal strings in the stated `unit`.
+`null` means unknown, never zero.
+
+`POST /v1/kitchens/{kitchen_id}/stock-counts`
+
+```json
+{
+  "idempotency_key": "count-2026-11-13-22",
+  "counted_at": "2026-11-13T22:00:00+02:00",
+  "source": "manual",
+  "counts": [
+    {"product_id": "469549", "on_hand": "120", "unit": "L"},
+    {"product_id": "470863", "on_hand": null, "unit": "L"}
+  ]
+}
+```
+
+`source` is `manual`, `pos` or `csv`. A `null` count is stored as "not counted".
+Response: `{"stock_count_id": "...", "stored": 2}`.
+
+`GET /v1/kitchens/{kitchen_id}/stock` returns `as_of` and `items`:
+
+| Field | Type | Notes |
+|---|---|---|
+| `product_id`, `unit` | string | |
+| `on_hand` | decimal string or null | The last count; null when never counted or counted as unknown. |
+| `counted_at` | timestamp or null | |
+| `on_order` | decimal string | Approved orders not yet delivered. |
+| `position` | decimal string or null | `on_hand` + `on_order`; null when `on_hand` is null. |
+| `next_delivery_date` | date or null | |
+
+`GET /v1/kitchens/{kitchen_id}/demand?from=&to=` returns `from`, `to` and `rows`, one
+per product and day:
+
+| Field | Type | Notes |
+|---|---|---|
+| `product_id`, `date`, `unit` | string | |
+| `covers` | integer or null | Expected guests that day. |
+| `gross_need` | decimal string | Covers x recipe quantity. |
+| `net_need` | decimal string or null | `gross_need` minus stock and stock on order; null when the stock is unknown. |
+| `source` | `"menu_plan"` or `"history"` | Where the forecast comes from. |
+
+`GET /v1/suppliers/{supplier_id}/demand?from=&to=&product=` returns `from`, `to` and
+`rows`, one per product and delivery day, across kitchens that consented:
+
+| Field | Type | Notes |
+|---|---|---|
+| `product_id`, `date`, `unit` | string | |
+| `demand` | decimal string | Sum of the kitchens' `net_need`. |
+| `kitchens` | integer | How many kitchens the sum covers. Never which ones. |
+| `available` | decimal string or null | The supplier's stated availability; null when unknown. |
+| `shortage` | decimal string or null | `demand` minus `available` when positive; null when `available` is null. |
+| `risk` | `"OK"`, `"SHORT"` or `"UNKNOWN"` | `UNKNOWN` when `available` is null. |
+| `suggested_buy` | decimal string or null | What the supplier should buy to cover the shortage. |
+
+`GET /v1/suppliers/{supplier_id}/demand/shortage-risk` returns the same rows, only
+those whose `risk` is not `OK`.
 
 ### Webhooks (both sides)
 
