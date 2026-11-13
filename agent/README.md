@@ -28,6 +28,15 @@ exact totals and one attempt per mutation. It generates stable order keys and
 never exposes approve, cancel, release or quantity-changing tools. The gateway
 must enforce all checks again. Unknown or malformed responses stop the run.
 
+Read-only policy recovery (#67): when the buyer rejects `search_products`,
+`get_offer`, `simulate_order`, `get_order_status` or `get_audit_log` before
+dispatch, it audits the attempt and returns a fixed `POLICY_REJECTED` tool error
+to the model. The model may correct arguments within the existing step and
+30-call limits. Rejected calls are never sent to the gateway. This does not
+recover gateway failures, malformed tool responses, missing call IDs, or
+unknown/malformed tool names. Mutation rejections and failures still stop immediately; audit failure
+always stops dispatch, including during recovery.
+
 Each tool attempt writes start and finish events through gateway audit ingestion.
 Audit failure stops dispatch. A failure after a mutation explicitly requires human
 reconciliation. The local `.local/traces/<run-id>.jsonl` file supplements durable
