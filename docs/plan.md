@@ -6,7 +6,7 @@ Status: draft, 2026-11-13 (before the opening). Owner: Aron.
 
 A restaurant's purchasing agent orders from Valio Aimo through a **trusted agent gateway**:
 the numbers come from a proven purchasing engine, the model chooses and explains, a human
-approves what is outside the mandate, and every step is in an audit log. We also ship the
+approves every order, and every step is in an audit log. We also ship the
 same world as an **RL environment** that shows where frontier agents fail at these decisions.
 
 ## Challenges we enter
@@ -44,7 +44,7 @@ Chef / buyer UI (Tymon)                 Agent Gateway (Aron)  = MCP server + Ope
         |                                 get_offer            -> price, availability, lead time, labels,
 Buyer agent (Maciek)                                              offer_id valid until T
   Nemotron 3.5 Super VL on Verda          simulate_order       -> total, delivery date, MOV gap,
-  + purchasing engine (Python)                                    mandate verdict (auto / needs approval / refused)
+  + purchasing engine (Python)                                    policy verdict (propose / refused) + warnings
         |                                 place_order(offer_id, expected_total, idempotency_key)
         +----------- MCP --------------->  request_approval / approval status
                                           order_status, audit_log
@@ -92,6 +92,22 @@ Patterns only, no data. Source: the engine's code and docs (read 2026-11-13).
   engine scored for this need.
 - "expected_total guards against the order moving, it does not prove consent." Consent is a
   human "yes" in the approval inbox, recorded in the audit log.
+
+## Kitchen planning and own suppliers (Aron, 2026-11-13 23:00)
+
+- **No auto-approve.** The agent proposes every order; a human approves it. The mandate
+  only limits what the agent may *propose* (allergen rules, approved substitutes, budget
+  warning).
+- **Suppliers are the user's.** Valio Aimo is one supplier, not the only one. The user adds
+  suppliers and sets each one's terms: free-delivery threshold, delivery fee, order days,
+  cut-off time, lead time. Valio comes with a live API adapter; other suppliers start as
+  manual entry or a CSV price list.
+- **Own products.** The user adds products that are not in a supplier catalog (name, unit,
+  pack size, price, supplier, allergens).
+- **Meals and menus.** The user builds recipes from products (quantity per portion), plans
+  menus per day and week, and enters expected covers.
+- **Future demand.** Menu plan x covers x recipe quantity - stock - on order gives the need
+  per product and day, weeks ahead. The same numbers feed the Valio demand view.
 
 ## Two-sided: what Valio told us at their stand (2026-11-13 evening)
 
