@@ -81,7 +81,6 @@ export interface Offer {
 }
 
 export type OrderStatus =
-  | "AUTO_APPROVED"
   | "NEEDS_APPROVAL"
   | "REFUSED"
   | "PLACED"
@@ -129,6 +128,7 @@ export interface Order {
 export interface MandateReason {
   rule: string;
   detail: string;
+  warning?: boolean;
 }
 
 export interface ApprovalRequest {
@@ -156,8 +156,8 @@ export interface Mandate {
   restaurant: string;
   signedBy: string;
   validUntil: string;
-  /** Orders at or below this total (ex VAT) may be placed without a human. */
-  autoApproveLimitExVat: number;
+  /** Ex VAT amount above which an approval carries a budget warning. */
+  budgetWarningPerOrderExVat: number;
   weeklyLimitExVat: number;
   spentThisWeekExVat: number;
   /** A line with one of these (CONTAINS or MAY_CONTAIN) is refused. */

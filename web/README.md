@@ -28,7 +28,7 @@ dialog, table …) are in `src/components/ui/`.
 | Component | What it shows | Where it is used in the app |
 |---|---|---|
 | `AppShell` | Sidebar nav (Requests, Approvals, Orders, Audit log, Catalog); a top bar with a drawer on a phone | Every screen |
-| `StatusBadge` | Order state (AUTO_APPROVED, NEEDS_APPROVAL, REFUSED, PLACED, NOT_SENT, UNCONFIRMED, SENT_READ_FAILED) with a tooltip that says what it means | Orders, Approvals, Audit log |
+| `StatusBadge` | Order state (NEEDS_APPROVAL, REFUSED, PLACED, NOT_SENT, UNCONFIRMED, SENT_READ_FAILED) with a tooltip that says what it means | Orders, Approvals, Audit log |
 | `UrgencyBadge` | Guests affected today / runs out before next delivery / due now / can wait / unknown (unknown is styled and sorted as urgent) | Requests, Orders |
 | `OrderLinesTable` | Product, pack, quantity, unit price ex VAT, € per L/KG, stock ("unknown" for the 999999 and 9999999999 sentinels), available date, order cut-off (red when passed), and the line's "why" | Order detail, approval detail |
 | `MovProgress` | Order value against the free-delivery threshold, with the gap in € | Order detail, Approvals |

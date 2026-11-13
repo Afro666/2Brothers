@@ -79,7 +79,7 @@ export function KitPage() {
           <p className="max-w-prose text-sm text-muted-foreground">
             The purchasing components with mock data from the milk case: "{chefRequest.text}", asked on Fri 13 Nov
             for delivery on {formatDate(chefRequest.deliveryDate)}. Three of five products missed the order
-            cut-off, so the agent splits the order: one part placed, one part waiting for approval.
+            cut-off, so the Buyer proposes a split: one part is approved and placed, one part waits for approval.
           </p>
         </header>
 

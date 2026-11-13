@@ -120,7 +120,8 @@ function Proposal({
           />
           {preferred ? (
             <p role="status" className="text-sm">
-              You prefer: {preferred}
+              Noted: you prefer {preferred}. This is not applied to the order yet; tell the approver, or ask the Buyer
+              again.
             </p>
           ) : null}
         </div>
