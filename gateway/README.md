@@ -37,6 +37,27 @@ value is treated the same way; measured zero stock is unavailable, not unknown.
 Run offline tests: `python -m unittest discover -s gateway/tests -v`.
 Fixtures are small responses recorded from the challenge API, without credentials.
 
+## Remote MCP at /mcp (#280)
+
+The gateway app also serves the same seven Buyer tools over MCP streamable HTTP at
+`/mcp`, so Claude, Codex or any MCP client can be the Buyer:
+
+```bash
+claude mcp add --transport http kitchen-buyer https://<gateway-host>/mcp   --header "Authorization: Bearer $GATEWAY_AGENT_TOKEN"
+```
+
+- **Agent token only.** No token, a wrong token or the human token gets `401
+  UNAUTHENTICATED` (`WWW-Authenticate: Bearer`). A person approves in the inbox, never
+  through MCP; approve, reject and cancel are not tools.
+- **Same rules as the HTTP API.** Each tool call runs the gateway's own `/tools/*` route
+  in-process with the agent token: same validation, refusals (`NEEDS_APPROVAL`,
+  `TOTAL_MISMATCH` ...), principal and audit trail. Errors reach the client as MCP tool
+  errors carrying only the gateway's short error code.
+- **Stateless JSON** (no server-side MCP session), so any worker can answer.
+- Checked with the official MCP Python client over real HTTP (uvicorn): tools listed,
+  `get_offer` -> `simulate_order` (`NEEDS_APPROVAL`) -> `request_approval` = `PENDING`;
+  the human token is refused. Tests: `gateway/tests/test_mcp_http.py`.
+
 ## MCP adapter (#21)
 
 Start the stdio MCP server with `python -m gateway.mcp_server`. Set
