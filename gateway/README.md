@@ -62,3 +62,46 @@ retry, or replay behavior.
 
 Tests use an actual SDK MCP client and HTTP mock transport, plus a subprocess
 stdio handshake. Run the same unittest command above after installing the project.
+## Human approval dispatch host (#170)
+
+`gateway.approval_host.build_approval_host(db, gateway_for_kitchen)` binds the
+trusted human approval host to existing gateway `simulate_order`/`place_order`
+HTTP calls. The factory selects a gateway client authenticated for the requested
+kitchen. The application owns client lifetime. This is not an MCP tool: the
+model has no approval or session construction capability.
+
+The human HTTP handler must authenticate its server-side user session, verify
+the `kitchen:approve` scope, construct `HumanSession(kitchen_id, user_id, scopes)`
+from that verified session, and call:
+
+```python
+await host.approve(session=session, kitchen_id=kitchen_id,
+                   approval_id=approval_id, expected_total="149.02",
+                   idempotency_key=browser_decision_key)
+```
+
+The pending approval must carry `expected_total` as the exact decimal string
+shown to the human (fees and tax included), stored at `request_approval` time.
+The host compares that snapshot and a new simulation before deciding. Placement
+still independently enforces recorded approval, stock, cutoff, expiry, mandate
+and exact-total guards in the gateway. Human consent never confirms unknown stock.
+
+The host atomically records APPROVED plus one dispatch claim in the approval
+document through `store.approval_dispatch`, then writes durable audit before
+calling placement. Concurrent clicks/replays send once. Placement uses an
+approval-derived key so a different browser key cannot create a second order.
+An exact decision replay returns the saved receipt; changed keys/totals fail.
+
+Receipt fields are `approval_id`, `status` (human decision), `placement_state`
+and `order` (`order_id`, `outcome`, `status`, or null). APPROVED does not itself
+mean placed: show placement only for `order.outcome == "CONFIRMED"`.
+`CLAIMED` means in progress or a crashed worker; `RECONCILE` means ambiguous
+dispatch or audit failure. Neither is automatically resent, including after
+process restart. Query/reconcile gateway status with a human; this host does not
+implement retry recovery. `NOT_SENT` also requires an explicit recovery flow.
+
+Integration boundary: the repository currently has no human HTTP/session server,
+and `web/src/api/http.ts` is still a NOT_SERVED stub. The gateway #19 human route
+and real inbox adapter must call this host before #170 is complete; this module
+alone does not make the current mock inbox place real orders.
+
