@@ -119,6 +119,30 @@ repo.own_products.create("k1", {"name": "Rye loaf 800 g", "unit": "ST", "supplie
 `menu_plans` has `put` (replaces the week), `get`, `list`, `delete`. A supplier term that
 was never set is `None`: unknown, never zero.
 
+## Feedback and stock counts
+
+```python
+from datetime import datetime, timezone
+from store import feedback, history
+
+feedback.record_feedback(db, "k1", "prop-1", [
+    {"kind": "qty_changed", "product_id": "469549", "from_qty": "40", "to_qty": "60", "unit": "L"},
+    {"kind": "line_removed", "product_id": "460708"},
+    {"kind": "approved"}], user="chef-1")          # one row per change
+feedback.list_feedback(db, "k1", proposal_id="prop-1")
+feedback.declined_products(db, "k1")                # removed 3 times or more: stop proposing
+
+history.record_stock_count(db, "k1", datetime.now(timezone.utc), [
+    {"product_id": "469549", "on_hand": "120", "unit": "L"},
+    {"product_id": "470863", "on_hand": None, "unit": "L"}])   # None: not counted, never zero
+history.current_stock(db, "k1")                     # the latest count per product
+```
+
+Feedback kinds are `qty_changed`, `line_removed`, `line_added`, `rejected` (with a
+`reason`) and `approved`. The corrected quantity is the label the forecast learns from.
+Time-series collections must exist before the first write: `python -m store.history`
+creates them, or call `history.ensure_history_collections(db)` once per database.
+
 ## Search
 
 `store.search.search_products(db, query, filters, limit)` implements `search_products`
@@ -166,6 +190,7 @@ python -m store.history --share-with valio_aimo   # demo: 16 of the 20 kitchens 
 | `orders_history` (time series) | order | `orders.jsonl`; prices become `Decimal` |
 | `deliveries` (time series) | order line | `deliveries.jsonl` |
 | `forecasts` (time series) | kitchen, product, day | `save_forecasts(db, rows)`: `need`, `unit`, `why` |
+| `feedback` (time series) | change a human made to a proposal | `store.feedback.record_feedback` |
 | `kitchens` | kitchen | `kitchens.jsonl`, marked `synthetic: true` |
 | `sharing` | kitchen and supplier | the contract's consent record |
 
