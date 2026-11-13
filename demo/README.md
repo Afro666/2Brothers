@@ -19,3 +19,9 @@ Proof on seed 1 (weeks 2026-09-07 to 2026-11-14, weekly error per product):
 | demo-kitchen WAPE / bias | 4.4% / +0.1% | 6.7% / +4.5% |
 | all 20 kitchens WAPE / bias | 4.7% / -0.2% | 11.4% / +0.8% |
 | all 20: under-order / over-order (kitchen units) | 13,354 / 12,347 | 28,663 / 33,032 |
+The synthetic `demo-kitchen` also receives the web demo mandate's exclusions
+`AP`, `AN`, `AS` when no explicit `excluded_allergens` setting exists. Existing
+settings (including `[]`) are preserved. This enables Buyer substitute checks;
+it never changes a real kitchen. To apply only this setting to an already-seeded
+demo: `python -m store.buyer_context`. The helper refuses a non-synthetic kitchen.
+
