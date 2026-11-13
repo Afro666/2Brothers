@@ -43,6 +43,21 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.close()
 
+    async def test_request_approval_key_reuse(self):
+        mock = MockGateway()
+        async with httpx.AsyncClient(transport=httpx.MockTransport(mock), base_url="http://mock") as client:
+            headers = {"Idempotency-Key": "approval-key-1"}
+            first = await client.post("/tools/request_approval", json={"offer_id": "milk-offer-1"}, headers=headers)
+            replay = await client.post("/tools/request_approval", json={"offer_id": "milk-offer-1"}, headers=headers)
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(replay.status_code, 200)
+            self.assertEqual(replay.json(), first.json())
+            conflict = await client.post("/tools/request_approval",
+                                         json={"offer_id": "milk-offer-1", "note": "different"}, headers=headers)
+            self.assertEqual(conflict.status_code, 409)
+            self.assertEqual(conflict.json()["error"]["code"], "IDEMPOTENCY_CONFLICT")
+            self.assertEqual(len(mock.approvals), 1)
+
     async def test_invalid_date_rejected_before_http(self):
         mock = MockGateway()
         gateway = GatewayClient(transport=httpx.MockTransport(mock))
