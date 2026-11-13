@@ -121,8 +121,8 @@ stock-out" = products ordered for a day Valio had announced it cannot deliver):
 | kimi | restaurant | 3 | 3969 | 4861 | -892 | 43.7 | 0 | 0 | 3 | 55068 |
 | kimi | hotel | 3 | 3461 | 5952 | -2492 | 156.7 | 0 | 0 | 1 | 58621 |
 | kimi | school | 3 | 3972 | 9098 | -5126 | 592.2 | 0 | 0 | 2 | 30897 |
-| kimi | hospital | 2 | 6920 | 7164 | -244 | 23.8 | 0 | 0 | 2 | 92553 |
-| kimi | all | 11 | 4368 | 6733 | -2365 | 220.5 | 0 | 0 | 8 | 56260 |
+| kimi | hospital | 3 | 6754 | 8935 | -2181 | 56.3 | 0 | 0 | 3 | 79812 |
+| kimi | all | 12 | 4539 | 7212 | -2673 | 212.2 | 0 | 0 | 9 | 56100 |
 | nemotron | restaurant | 3 | 3433 | 4861 | -1428 | 21.1 | 0 | 0 | 0 | 112514 |
 | nemotron | hotel | 3 | 1917 | 5952 | -4035 | 239.2 | 0 | 0 | 1 | 131103 |
 | nemotron | school | 3 | 5598 | 9098 | -3500 | 408.7 | 0 | 0 | 1 | 87206 |
@@ -137,7 +137,7 @@ stock-out" = products ordered for a day Valio had announced it cannot deliver):
 What the numbers say:
 
 1. **No model reaches the engine.** Every model is below the reference on every kitchen
-   type; the best (Kimi, Nemotron with thinking) lose about EUR 2.4-2.8k a week.
+   type; the best (Kimi, Nemotron with thinking) lose about EUR 2.7-2.8k a week.
 2. **The cheap fast model breaks the rules.** DeepSeek Flash skipped approval 21 times in 20
    weeks and ordered into the announced stock-out 26 times; Kimi and Nemotron (thinking)
    almost never did. Controls matter most for the model you would pick on price.
@@ -145,7 +145,7 @@ What the numbers say:
    week). With thinking off it is the worst model and loses money in the hotel and hospital.
 
 Caveats: 3 seeds per kitchen (DeepSeek 5), and seed-to-seed sd is large (see the baselines
-table), so read the "all" rows. 9 of Kimi's 46 decisions hit the 16k-token cap of that run
+table), so read the "all" rows. 9 of Kimi's 49 decisions hit the 16k-token cap of that run
 (empty reply = no order); its score is a lower bound. Reasoning models need a large
 `max_tokens` (now 64k): at 4k Kimi, at 16k Nemotron answered nothing. `/no_think` and a
 reasoning budget are ignored by the Nemotron endpoint; `chat_template_kwargs.enable_thinking`
