@@ -1,0 +1,1021 @@
+{
+ "source": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot/",
+ "fetched_at": "2026-11-13T22:17:51+00:00",
+ "via": "Context.dev /v1/web/scrape (json)",
+ "notices": [
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/muovisessa-ensilusikassa-kontaktimateriaalivirhe/",
+   "date": "2026-11-11",
+   "title": "Muovisessa ensilusikassa kontaktimateriaalivirhe",
+   "reason": "Tuotteesta siirtyy bisfenoli AF:aa (BPAF) yli lainsäädännön havaitsemisrajan, joten se ei täytä elintarvikekontaktimateriaaleille asetettuja vaatimuksia.",
+   "action": "Kuluttajia pyydetään lopettamaan tuotteen käyttö ja palauttamaan se ostopaikkaan hyvityksen saamiseksi.",
+   "products": [
+    {
+     "product_name": "ensilusikat",
+     "brand": "Nuby",
+     "company": "SOK",
+     "gtin": null,
+     "package_size": "kolmen lusikan pakkaus",
+     "best_before_or_lot": null
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/pakastetussa-chilissa-kadmiumylitys/",
+   "date": "2026-10-27",
+   "title": "Pakastetussa chilissä kadmiumylitys",
+   "reason": "Tuote-erästä on omavalvonnassa löytynyt EU:n raja-arvon ylittävä määrä raskasmetallia (kadmium).",
+   "action": "SOK pyytää kuluttajia lopettamaan takaisinvedetyn tuotteen käytön ja hävittämään pakkauksen sisällön. Hyvitystä varten tyhjä pakkaus pyydetään palauttamaan ostopaikkaan.",
+   "products": [
+    {
+     "product_name": "Coop Chopped Chili",
+     "brand": "Coop",
+     "company": "SOK",
+     "gtin": "7340191134195",
+     "package_size": "50 g",
+     "best_before_or_lot": "parasta ennen 31.7.2027"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/proteiinivanukkaissa-mahdollisesti-lasinsiruja/",
+   "date": "2026-10-26",
+   "title": "Proteiinivanukkaissa mahdollisesti lasinsiruja",
+   "reason": "Kyseisten päivämäärien tuotteisiin sisältyy erittäin vähäinen lasinsiruriski.",
+   "action": "Kuluttajia pyydetään olemaan käyttämättä tuotteita ja hävittämään ne. Tuotteet voi palauttaa ostopaikkaan tai ottaa yhteyttä Arla Oy:n kuluttajapalveluun. Palautetut tuotteet hyvitetään kuluttajalle.",
+   "products": [
+    {
+     "product_name": "Arla Protein Suklaa vanukas",
+     "brand": "Arla Protein",
+     "company": "Arla Oy",
+     "gtin": null,
+     "package_size": "200g",
+     "best_before_or_lot": "08.01.2027, 09.01.2027, 22.01.2027, 25.01.2027"
+    },
+    {
+     "product_name": "Arla Protein Suolainen kinuski vanukas",
+     "brand": "Arla Protein",
+     "company": "Arla Oy",
+     "gtin": null,
+     "package_size": "200g",
+     "best_before_or_lot": "08.01.2027, 09.01.2027, 22.01.2027, 25.01.2027"
+    },
+    {
+     "product_name": "Arla Protein Vanilja vanukas",
+     "brand": "Arla Protein",
+     "company": "Arla Oy",
+     "gtin": null,
+     "package_size": "200g",
+     "best_before_or_lot": "08.01.2027, 09.01.2027, 22.01.2027, 25.01.2027"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/kananmunien-takaisinveto2/",
+   "date": "2026-10-09",
+   "title": "Kananmunien takaisinveto",
+   "reason": "Salmonellaa todettu viranomaisen näytteenoton yhteydessä yhdessä Munax Oy:n sopimustuottajan kanalassa.",
+   "action": "Takaisinveto koskee vain kananmunia, joiden kuoreen on merkitty leima 1FI15493 ja joiden parasta ennen -päiväys on 28.10. tai aiempi. Jos leima ei täsmää, munat eivät kuulu takaisinvedon piiriin.",
+   "products": [
+    {
+     "product_name": "Kotimaista Ulko M10",
+     "brand": "Kotimaista",
+     "company": "Munax Oy",
+     "gtin": "6415715101210",
+     "package_size": "580 g",
+     "best_before_or_lot": "Parasta ennen 28.10. tai aiempi; leima 1FI15493"
+    },
+    {
+     "product_name": "Laitilan Kanatarha Ulko L6",
+     "brand": "Laitilan Kanatarha",
+     "company": "Munax Oy",
+     "gtin": "6430017904017",
+     "package_size": "408 g",
+     "best_before_or_lot": "Parasta ennen 28.10. tai aiempi; leima 1FI15493"
+    },
+    {
+     "product_name": "Laitilan Kanatarha Ulko L10",
+     "brand": "Laitilan Kanatarha",
+     "company": "Munax Oy",
+     "gtin": "6430017900576",
+     "package_size": "680 g",
+     "best_before_or_lot": "Parasta ennen 28.10. tai aiempi; leima 1FI15493"
+    },
+    {
+     "product_name": "Pirkka Ulko M8",
+     "brand": "Pirkka",
+     "company": "Munax Oy",
+     "gtin": "6410405224316",
+     "package_size": "464 g",
+     "best_before_or_lot": "Parasta ennen 28.10. tai aiempi; leima 1FI15493"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/taytetyn-patongin-ainesosaluettelo-virheellinen-allergeenivaara/",
+   "date": "2026-10-06",
+   "title": "Täytetyn patongin ainesosaluettelo virheellinen, allergeenivaara",
+   "reason": "Osassa yhden tuote-erän pakkauksia on toisen tuotteen takaetiketti, jonka ainesosaluettelo ei kerro kaikkia tuotteen sisältämiä ainesosia, kuten anjovisuutetta. Erityisesti kalalle allergisten on syytä huomioida asia.",
+   "action": "Tuotetta on ollut myynnissä K- ja S-ryhmien myymälöissä, Tokmanneissa, Minimaneissa, Kokkolan Halpa-Halleissa sekä Veljekset Keskisen myymälässä. Takaisinveto koskee erää, jonka viimeinen käyttöpäivä on 07.10.2026.",
+   "products": [
+    {
+     "product_name": "Chef Lundén Kana-caesar patonki",
+     "brand": "Chef Lundén",
+     "company": "Lunden Food OÜ",
+     "gtin": null,
+     "package_size": "200 g",
+     "best_before_or_lot": "Viimeinen käyttöpäivä 07.10.2026"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/proteiiniriisipuurossa-mahdollisesti-gluteenijaamia/",
+   "date": "2026-10-01",
+   "title": "Proteiiniriisipuurossa mahdollisesti gluteenijäämiä",
+   "reason": "Kyseisen erän tuote saattaa sisältää pinaattia sekä gluteenijäämiä, ja aiheuttaa oireita gluteenille herkille kuluttajille.",
+   "action": "Palauta tuote siihen myymälään, josta se on ostettu.",
+   "products": [
+    {
+     "product_name": "Juustoportti Proteiiniriisipuuro",
+     "brand": "Juustoportti",
+     "company": "Juustoportti Oy",
+     "gtin": null,
+     "package_size": "300 g",
+     "best_before_or_lot": "Viimeinen käyttöpäivä 16.10.2026"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/b3-vitamiinivalmisteissa-liikaa-nikotiinihappoa-tai-inositoliheksanikotinaattia/",
+   "date": "2026-09-25",
+   "title": "B3-vitamiinivalmisteissa liikaa nikotiinihappoa tai inositoliheksanikotinaattia",
+   "reason": "Takaisinvedettävien ravintolisien vuorokausiannos sisältää nikotiinihappoa tai sen johdannaista inositoliheksanikotinaattia 50–60-kertaisesti turvallisen vuorokautisen saannin ylärajaan nähden, minkä vuoksi niitä ei katsota turvallisiksi.",
+   "action": "Markkinoilta vedetään kaikkien erien tuotteet.",
+   "products": [
+    {
+     "product_name": "Vitamin B3 Niacin 500 mg",
+     "brand": "Life Extension",
+     "company": null,
+     "gtin": null,
+     "package_size": "100 kapselia",
+     "best_before_or_lot": "Kaikki erät"
+    },
+    {
+     "product_name": "No Flush Niacin 640 mg",
+     "brand": "Life Extension",
+     "company": null,
+     "gtin": null,
+     "package_size": "100 kapselia",
+     "best_before_or_lot": "Kaikki erät"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/jaahilejuomissa-liikaa-glyserolia-e-422/",
+   "date": "2026-09-17",
+   "title": "Jäähilejuomissa liikaa glyserolia (E 422)",
+   "reason": "Liian korkea glyserolipitoisuus.",
+   "action": "K.E. Sunqvist Oy vetää tuotteet myynnistä.",
+   "products": [
+    {
+     "product_name": "jäähilejuoma",
+     "brand": "Frosty Pocket",
+     "company": "K.E. Sunqvist Oy",
+     "gtin": null,
+     "package_size": "150 ml",
+     "best_before_or_lot": null
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/hasselpahkinalevitteen-pakkauksessa-vaarankieliset-merkinnat/",
+   "date": "2026-09-04",
+   "title": "Hasselpähkinälevitteen pakkauksessa vääränkieliset merkinnät",
+   "reason": "Osasta tuotteen erän L6079407 pakkauksista puuttuvat suomen- ja ruotsinkieliset merkinnät. Tuote sisältää allergeeneja (hasselpähkinä ja maito) ja saattaa sisältää jäämiä maapähkinästä ja muista pähkinöistä. Käännösten puuttuminen aiheuttaa mahdollisen riskin pähkinä-, maapähkinä- ja maitoallergikoille.",
+   "action": "Väärällä etiketillä varustetun tuotteen voi palauttaa ostopaikkaan.",
+   "products": [
+    {
+     "product_name": "Good Good Suklaa-hassellevite",
+     "brand": "Good Good",
+     "company": "Aduki Oy",
+     "gtin": null,
+     "package_size": "350g",
+     "best_before_or_lot": "parasta ennen 20.9.2027, erä L6079407"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/vegaaninen-raaste-saattaa-sisaltaa-maitoa/",
+   "date": "2026-08-28",
+   "title": "Vegaaninen raaste saattaa sisältää maitoa",
+   "reason": "Tuote saattaa sisältää ilmoittamatonta maitoa, joka on pakkausmerkinnöissä ilmoittamaton allergeeni.",
+   "action": "Lidl Suomi Ky vetää tuotteen markkinoilta. Takaisinveto koskee vain erätunnusta L1141152 ja parasta ennen -päivää 19.11.2026.",
+   "products": [
+    {
+     "product_name": "Vegan Topping Mozzarella Flavour",
+     "brand": "Vemondo",
+     "company": "Lidl Suomi Ky",
+     "gtin": null,
+     "package_size": "150 g",
+     "best_before_or_lot": "Erätunnus L1141152; parasta ennen 19.11.2026"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/kananmunien-takaisinveto/",
+   "date": "2026-08-19",
+   "title": "Kananmunien takaisinveto",
+   "reason": "Yhdessä Munax Oy:n sopimustuottajan kanalassa on todettu salmonellaa.",
+   "action": "Takaisinveto koskee vain kananmunia, joiden kuoreen on merkitty leima 2FI164181 tai 2FI164182 ja joiden parasta ennen -päiväys on 8.9. tai aiempi. Jos leima ei täsmää, munat eivät kuulu takaisinvedon piiriin.",
+   "products": [
+    {
+     "product_name": "Vapaa S/M10",
+     "brand": "K-MENU",
+     "company": null,
+     "gtin": "6410405364074",
+     "package_size": "530 g",
+     "best_before_or_lot": "Leima 2FI164181 tai 2FI164182; parasta ennen 8.9. tai aiempi"
+    },
+    {
+     "product_name": "Vapaa M10",
+     "brand": "KotKot",
+     "company": null,
+     "gtin": "4056489454960",
+     "package_size": "580 g",
+     "best_before_or_lot": "Leima 2FI164181 tai 2FI164182; parasta ennen 8.9. tai aiempi"
+    },
+    {
+     "product_name": "Vapaa M10",
+     "brand": "Kotimaista",
+     "company": null,
+     "gtin": "6414893094918",
+     "package_size": "580 g",
+     "best_before_or_lot": "Leima 2FI164181 tai 2FI164182; parasta ennen 8.9. tai aiempi"
+    },
+    {
+     "product_name": "Vapaa L15",
+     "brand": "Kotimaista",
+     "company": null,
+     "gtin": "6438460328329",
+     "package_size": "1020 g",
+     "best_before_or_lot": "Leima 2FI164181 tai 2FI164182; parasta ennen 8.9. tai aiempi"
+    },
+    {
+     "product_name": "Vapaa M15",
+     "brand": "Laitilan Kanatarha",
+     "company": null,
+     "gtin": "6430017901429",
+     "package_size": "870 g",
+     "best_before_or_lot": "Leima 2FI164181 tai 2FI164182; parasta ennen 8.9. tai aiempi"
+    },
+    {
+     "product_name": "Vapaa M10",
+     "brand": "Laitilan Kanatarha",
+     "company": null,
+     "gtin": "6430017900309",
+     "package_size": "580 g",
+     "best_before_or_lot": "Leima 2FI164181 tai 2FI164182; parasta ennen 8.9. tai aiempi"
+    },
+    {
+     "product_name": "Vapaa L15",
+     "brand": "Laitilan Kanatarha",
+     "company": null,
+     "gtin": "6430017900583",
+     "package_size": "1020 g",
+     "best_before_or_lot": "Leima 2FI164181 tai 2FI164182; parasta ennen 8.9. tai aiempi"
+    },
+    {
+     "product_name": "Vapaa M24",
+     "brand": "Laitilan Kanatarha",
+     "company": null,
+     "gtin": "6430017900347",
+     "package_size": "1392 g",
+     "best_before_or_lot": "Leima 2FI164181 tai 2FI164182; parasta ennen 8.9. tai aiempi"
+    },
+    {
+     "product_name": "Vapaa S30",
+     "brand": "Laitilan Kanatarha",
+     "company": null,
+     "gtin": "6430017902105",
+     "package_size": "1440 g",
+     "best_before_or_lot": "Leima 2FI164181 tai 2FI164182; parasta ennen 8.9. tai aiempi"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/rucolassa-torjunta-ainejaamia/",
+   "date": "2026-08-05",
+   "title": "Rucolassa torjunta-ainejäämiä",
+   "reason": "Erässä on todettu torjunta-ainejäämiä (asetamipridi), eikä tuotteen turvallisuudesta lapsille voida varmistua.",
+   "action": "Tuotteen käyttö tulee lopettaa. Tuotteen voi palauttaa ostopaikkaan tai olla yhteydessä ostopaikkaan palautukseen liittyvissä kysymyksissä.",
+   "products": [
+    {
+     "product_name": "ruola",
+     "brand": "Foglia Sublime",
+     "company": "Satotukku Oy",
+     "gtin": null,
+     "package_size": "100 g",
+     "best_before_or_lot": "L:204"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/riisipuurossa-mahdollisesti-allergeenivaara/",
+   "date": "2026-08-03",
+   "title": "Riisipuurossa mahdollisesti allergeenivaara",
+   "reason": "Tuotteen epäillään sisältävän maitoa, jota ei ole merkitty pakkaukseen. Tuote saattaa aiheuttaa allergisen reaktion maidolle allergisille kuluttajille.",
+   "action": "HoviRuoka Oy vetää tuotteen markkinoilta. Takaisinveto koskee erää, jonka viimeinen käyttöpäivä on 8.8.2026.",
+   "products": [
+    {
+     "product_name": "HoviRuoka Maidoton Riisipuuro",
+     "brand": "HoviRuoka",
+     "company": "HoviRuoka Oy",
+     "gtin": null,
+     "package_size": "300 g",
+     "best_before_or_lot": "Viimeinen käyttöpäivä 8.8.2026"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/mikroruoka-keitossa-sailyvyysongelma/",
+   "date": "2026-06-30",
+   "title": "Mikroruoka-keitossa säilyvyysongelma",
+   "reason": "Tuotteen valmistuksessa on tapahtunut virhe, todennäköisesti vihannesten riittämätön kypsennys, minkä takia tuote ei välttämättä säily pakkauksessa merkittyyn parasta ennen -merkintään saakka.",
+   "action": "Älä käytä tuotetta, jos sen viimeinen käyttöpäivä on 30.6.2026, 2.7.2026, 7.7.2026 tai 10.7.2026. Ota kuva tuotteesta ja päiväyksestä ja lähetä se sähköpostitse osoitteeseen hello@rebleats.com ostoksen hyvittämistä varten. Hävitä tuote tämän jälkeen.",
+   "products": [
+    {
+     "product_name": "Massaman Curry -keitto",
+     "brand": "Rebl Eats",
+     "company": "Rebl Eats Oy",
+     "gtin": null,
+     "package_size": "320 g",
+     "best_before_or_lot": "Viimeinen käyttöpäivä: 30.6.2026, 2.7.2026, 7.7.2026 ja 10.7.2026"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/kebabissa-todettu-sianlihaa/",
+   "date": "2026-06-26",
+   "title": "Kebabissa todettu sianlihaa",
+   "reason": "Yhdessä toimitetussa naudanlihaerässä on ollut mukana sianlihaa, jota ei ole merkitty kebabin pakkausmerkintöihin. Yrityksen mukaan asiaan ei liity terveysvaaraa.",
+   "action": "Korv-Görans Kebab Oy vetää tuotteen pois myynnistä.",
+   "products": [
+    {
+     "product_name": "Görans Döner Kebab",
+     "brand": "Görans",
+     "company": "Korv-Görans Kebab Oy",
+     "gtin": "6416345084065",
+     "package_size": "1 kg",
+     "best_before_or_lot": "Parasta ennen 5.8.2027 ja 18.7.2027"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/valurautapannusta-saattaa-irrota-ruokaan-metalleja/",
+   "date": "2026-06-25",
+   "title": "Valurautapannusta saattaa irrota ruokaan metalleja",
+   "reason": "Tutkimuksissa on todettu, että tuotteesta saattaa siirtyä metalleja ruokaan.",
+   "action": "Maahantuoja on ilmoittanut vetävänsä tuotteen takaisin.",
+   "products": [
+    {
+     "product_name": "Napoleon-valurautapannu alustalla",
+     "brand": "Napoleon",
+     "company": "Scandinavisk Spismiljö AB",
+     "gtin": "629162560032",
+     "package_size": null,
+     "best_before_or_lot": null
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/kananmunien-takaisinveto-varotoimenpiteena/",
+   "date": "2026-06-23",
+   "title": "Kananmunien takaisinveto varotoimenpiteenä",
+   "reason": "Normaalin näytteenoton yhteydessä yhdessä Munax Oy:n sopimustuottajan kanalassa todettiin salmonellaa. Kyseisen kanalan munia ei päätynyt Suomessa myyntiin, mutta viereisen kanalan munat vedetään pois myynnistä varotoimenpiteenä.",
+   "action": "Kuluttajien tulee palauttaa tai olla käyttämättä vain kananmunia, joissa on leima 2FI648551 ja joiden parasta ennen -päiväys on 12.7.2026 tai aiempi (merkintätapa voi olla esimerkiksi 12.7.2026 tai 12/07 L).",
+   "products": [
+    {
+     "product_name": "KotKot Vapaa M10",
+     "brand": "KotKot",
+     "company": "Munax Oy",
+     "gtin": "4056489454960",
+     "package_size": "580 g",
+     "best_before_or_lot": "Leima 2FI648551; parasta ennen 12.7.2026 tai aiempi"
+    },
+    {
+     "product_name": "KotKot Vapaa L15",
+     "brand": "KotKot",
+     "company": "Munax Oy",
+     "gtin": "4056489454977",
+     "package_size": "1020g",
+     "best_before_or_lot": "Leima 2FI648551; parasta ennen 12.7.2026 tai aiempi"
+    },
+    {
+     "product_name": "Kotimaista Vapaa M10",
+     "brand": "Kotimaista",
+     "company": "Munax Oy",
+     "gtin": "6414893094918",
+     "package_size": "580g",
+     "best_before_or_lot": "Leima 2FI648551; parasta ennen 12.7.2026 tai aiempi"
+    },
+    {
+     "product_name": "Kotimaista Vapaa L15",
+     "brand": "Kotimaista",
+     "company": "Munax Oy",
+     "gtin": "6438460328329",
+     "package_size": "1020g",
+     "best_before_or_lot": "Leima 2FI648551; parasta ennen 12.7.2026 tai aiempi"
+    },
+    {
+     "product_name": "Laitilan Kanatarha Vapaa M15",
+     "brand": "Laitilan Kanatarha",
+     "company": "Munax Oy",
+     "gtin": "6430017901429",
+     "package_size": "870g",
+     "best_before_or_lot": "Leima 2FI648551; parasta ennen 12.7.2026 tai aiempi"
+    },
+    {
+     "product_name": "Laitilan Kanatarha Vapaa M10",
+     "brand": "Laitilan Kanatarha",
+     "company": "Munax Oy",
+     "gtin": "6430017900309",
+     "package_size": "580g",
+     "best_before_or_lot": "Leima 2FI648551; parasta ennen 12.7.2026 tai aiempi"
+    },
+    {
+     "product_name": "Laitilan Kanatarha Vapaa L15",
+     "brand": "Laitilan Kanatarha",
+     "company": "Munax Oy",
+     "gtin": "6430017900583",
+     "package_size": "1020g",
+     "best_before_or_lot": "Leima 2FI648551; parasta ennen 12.7.2026 tai aiempi"
+    },
+    {
+     "product_name": "Laitilan Kanatarha Vapaa M24",
+     "brand": "Laitilan Kanatarha",
+     "company": "Munax Oy",
+     "gtin": "6430017900347",
+     "package_size": "1392g",
+     "best_before_or_lot": "Leima 2FI648551; parasta ennen 12.7.2026 tai aiempi"
+    },
+    {
+     "product_name": "Laitilan Kanatarha Vapaa L180",
+     "brand": "Laitilan Kanatarha",
+     "company": "Munax Oy",
+     "gtin": "6430017907766",
+     "package_size": "12,3kg",
+     "best_before_or_lot": "Leima 2FI648551; parasta ennen 12.7.2026 tai aiempi"
+    },
+    {
+     "product_name": "Laitilan Kanatarha Vapaa XL180",
+     "brand": "Laitilan Kanatarha",
+     "company": "Munax Oy",
+     "gtin": "6430017907131",
+     "package_size": "14,1kg",
+     "best_before_or_lot": "Leima 2FI648551; parasta ennen 12.7.2026 tai aiempi"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/luomukauranaksuissa-yhdessa-erassa-hometoksiiniylitys/",
+   "date": "2026-06-22",
+   "title": "Luomukauranaksuissa yhdessä erässä hometoksiiniylitys",
+   "reason": "Erässä on todettu kohonneita okratoksiini A-pitoisuuksia.",
+   "action": "Tuotetta ei tulisi syödä eikä tarjota lapsille. Tuotteiden ostaneita pyydetään ottamaan yhteyttä nettisivuilla olevan reklamaatiolomakkeen kautta. Ilmoitukseen tulee liittää kuva pakkauksesta, josta ilmenee tuotteen päiväys tai eräkoodi. Ostos hyvitetään.",
+   "products": [
+    {
+     "product_name": "herne-porkkana -luomukauranaksut",
+     "brand": "Oikia Moomin",
+     "company": "Suomen Oikia Oy",
+     "gtin": "6430013258893",
+     "package_size": "35 grammaa",
+     "best_before_or_lot": "01.03.2027"
+    },
+    {
+     "product_name": "herne-porkkana -luomukauranaksut",
+     "brand": "Oikia Moomin",
+     "company": "Suomen Oikia Oy",
+     "gtin": "6430013258893",
+     "package_size": "35 grammaa",
+     "best_before_or_lot": "06.01.2027"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/proteiinipatukoissa-allergeenivirhe-todettu-jaamaa-kananmunasta/",
+   "date": "2026-06-18",
+   "title": "Proteiinipatukoissa allergeenivirhe; todettu jäämää kananmunasta",
+   "reason": "Raaka-aineessa ollut ilmoittamaton kananmunajäämä saattaa aiheuttaa oireita kananmunalle allergisille kuluttajille.",
+   "action": "Takaisinveto laajenee koskemaan mainittuja Leader- ja Coop-proteiinipatukoita ja niiden parasta ennen -päiväyksiä ja eriä.",
+   "products": [
+    {
+     "product_name": "Leader Performance Protein Soft White Chocolate",
+     "brand": "Leader Performance",
+     "company": "Leader Foods Oy",
+     "gtin": "6430051514821",
+     "package_size": "60 g",
+     "best_before_or_lot": "13.4.2027 (erä X07926) ja 11.5.2027 (erä X10226)"
+    },
+    {
+     "product_name": "Performance Protein Soft Brownie",
+     "brand": "Leader Performance",
+     "company": "Leader Foods Oy",
+     "gtin": "6430051514845",
+     "package_size": "60 g",
+     "best_before_or_lot": "11.5.2027 (erä X10126)"
+    },
+    {
+     "product_name": "Performance Crisp Choco Caramel",
+     "brand": "Leader Performance",
+     "company": "Leader Foods Oy",
+     "gtin": "6430080442812",
+     "package_size": "55 g",
+     "best_before_or_lot": "7.5.2027 (erä X09526)"
+    },
+    {
+     "product_name": "Promour Puffed Banana Toffee",
+     "brand": "Leader Promour",
+     "company": "Leader Foods Oy",
+     "gtin": "6430080441662",
+     "package_size": "40 g",
+     "best_before_or_lot": "13.2.2027 (erä X05126)"
+    },
+    {
+     "product_name": "Red Berries",
+     "brand": "Coop",
+     "company": "SOK",
+     "gtin": "7340191143807",
+     "package_size": "50 g",
+     "best_before_or_lot": "9.4.2027 (erä X07626) ja 12.5.2027 (erä X09826)"
+    },
+    {
+     "product_name": "Salty Caramel",
+     "brand": "Coop",
+     "company": "SOK",
+     "gtin": "7340191143821",
+     "package_size": "50 g",
+     "best_before_or_lot": "9.4.2027 (erä X07726)"
+    },
+    {
+     "product_name": "Choco Mint",
+     "brand": "Coop",
+     "company": "SOK",
+     "gtin": "7340191143838",
+     "package_size": "50 g",
+     "best_before_or_lot": "20.4.2027 (erä X08026)"
+    },
+    {
+     "product_name": "Choco",
+     "brand": "Coop",
+     "company": "SOK",
+     "gtin": "7340191143845",
+     "package_size": "50 g",
+     "best_before_or_lot": "9.3.2027 (erä X04826), 17.4.2027 (erä X07826) ja 13.5.2027 (erä X09926)"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/palvilihaleikkeleen-pakkauksessa-saumausvirhe-tuote-voi-pilaantua/",
+   "date": "2026-06-05",
+   "title": "Palvilihaleikkeleen pakkauksessa saumausvirhe; tuote voi pilaantua",
+   "reason": "Pakkauksen saumausvirheen vuoksi tuote saattaa pilaantua ennen viimeistä käyttöpäivää.",
+   "action": "Tuotteen voi palauttaa Lidl-myymälään, jossa tuotteen hinta hyvitetään.",
+   "products": [
+    {
+     "product_name": "siivutettua palvilihaa",
+     "brand": "Dulano",
+     "company": "Lidl",
+     "gtin": null,
+     "package_size": "400 grammaa",
+     "best_before_or_lot": "viimeinen käyttöpäivä 27.6.2026 tai 18.7.2026"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/silikonisista-pikkulasten-lautasista-siirtyy-liikaa-orgaanisia-haihtuvia-yhdisteita/",
+   "date": "2026-06-04",
+   "title": "Silikonisista pikkulasten lautasista siirtyy liikaa orgaanisia haihtuvia yhdisteitä",
+   "reason": "Oranssin ja vihreän värisistä lasten lautasista irtoaa sallittua enemmän orgaanisia haihtuvia yhdisteitä, joten ne eivät täytä elintarvikekontaktimateriaalille asetettuja vaatimuksia.",
+   "action": "Lopeta tuotteen käyttö välittömästi ja palauta se ostopaikkaan. Ostos hyvitetään.",
+   "products": [
+    {
+     "product_name": "Lasten silikoninen lautanen, oranssi ja vihreä",
+     "brand": "Nuby Monkey",
+     "company": "SOK",
+     "gtin": "5414959074121",
+     "package_size": null,
+     "best_before_or_lot": null
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/proteiinipatukassa-toista-tuotetta-allergeenivaara/",
+   "date": "2026-05-28",
+   "title": "Proteiinipatukassa toista tuotetta; allergeenivaara (maapähkinän lisäksi soijaa ja soijalesitiiniä)",
+   "reason": "Osassa Barebells SOFT Coco Choco proteiinipatukka -tuotteista saattaa kääreen sisällä olla Barebells Soft Peanut Cloud -patukka, joka sisältää pakkauksessa ilmoittamattomia maapähkinää, soijaa ja soijalesitiiniä. Terveysvaara maapähkinälle allergisille henkilöille.",
+   "action": "Valmistaja on päättänyt vetää myynnistä erän, jonka erätunnus on L6055-R ja parasta ennen -päiväys 24.2.2027.",
+   "products": [
+    {
+     "product_name": "Barebells SOFT Coco Choco proteiinipatukka",
+     "brand": "Barebells",
+     "company": "Lejos Oy",
+     "gtin": "7340001805383",
+     "package_size": "55g",
+     "best_before_or_lot": "Erätunnus L6055-R; parasta ennen 24.2.2027"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/sinimailasen-iduissa-salmonellaepaily/",
+   "date": "2026-05-25",
+   "title": "Sinimailasen iduissa salmonellaepäily",
+   "reason": "Lounasitu Oy tekee takaisinvedon salmonellariskin vuoksi. Riskin taustalla ovat yritykselle idätykseen toimitetut sinimailasen siemenet.",
+   "action": "Kuluttajia pyydetään lopettamaan sellaisten tuotteiden käyttö, joiden viimeinen käyttöpäivä on 2.6.2026 tai aiempi.",
+   "products": [
+    {
+     "product_name": "sinimailasen ituja",
+     "brand": null,
+     "company": "Lounasitu Oy",
+     "gtin": "6416332000504",
+     "package_size": "125 gramman pakkauksissa; 1 kilon pakkauksessa",
+     "best_before_or_lot": "Viimeinen käyttöpäivä 2.6.2026 tai aiempi"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/kuivatuissa-viikunoissa-yhdessa-erassa-hometoksiiniylitys/",
+   "date": "2026-05-21",
+   "title": "Kuivatuissa viikunoissa yhdessä erässä hometoksiiniylitys",
+   "reason": "Erässä on todettu kohonneita okratoksiini A-pitoisuuksia.",
+   "action": "Tuotteen voi palauttaa Lidl-myymälään, jossa tuotteen hinta hyvitetään.",
+   "products": [
+    {
+     "product_name": "kuivattu viikuna",
+     "brand": "Alesto",
+     "company": "Lidl",
+     "gtin": null,
+     "package_size": "200 grammaa",
+     "best_before_or_lot": "parasta ennen 28/02/2027; erätunnus 5785"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/jaatelokakun-merkinnoista-puuttuu-tieto-kananmunasta-suomen-kielella/",
+   "date": "2026-05-15",
+   "title": "Jäätelökakun merkinnöistä puuttuu tieto kananmunasta suomen kielellä",
+   "reason": "Suomenkielisistä pakkausmerkinnöistä puuttuu tieto siitä, että tuote saattaa sisältää jäämiä kananmunasta. Tuote voi aiheuttaa terveysriskin kananmunalle allergisille kuluttajille.",
+   "action": "Tuotteen korjatut tiedot ovat nähtävillä Suomen Jätskiauto Oy:n verkkosivuilla ja myyntipisteissä. Tiedot annetaan myös tuotteen ostajille myynnin yhteydessä. Kuluttajat voivat halutessaan palauttaa tuotteen ostopaikkaan, jossa tuotteen hinta hyvitetään.",
+   "products": [
+    {
+     "product_name": "Vanilja-suklaajäätelökakku",
+     "brand": null,
+     "company": "Suomen Jätskiauto Oy",
+     "gtin": null,
+     "package_size": "1L",
+     "best_before_or_lot": null
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/toisessakin-valmisateriassa-ilmoittamatonta-sinapinsiementa/",
+   "date": "2026-05-15",
+   "title": "Toisessakin valmisateriassa ilmoittamatonta sinapinsiementä",
+   "reason": "Tuotteen nuudelit saattavat sisältää sinapinsiementä, josta ei ole merkintää pakkauksessa. Tuote voi aiheuttaa allergisen reaktion sinapinsiemenille allergisille kuluttajille.",
+   "action": "Takaisinveto koskee eriä, joiden viimeinen käyttöpäivä on 9.6.2026 tai aiempi.",
+   "products": [
+    {
+     "product_name": "Red Thai Curry -valmisateria",
+     "brand": "Via",
+     "company": "HKFoods Finland Oy",
+     "gtin": "6409100071899",
+     "package_size": "320 g",
+     "best_before_or_lot": "Viimeinen käyttöpäivä 9.6.2026 tai aiempi"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/valmisateriassa-ilmoittamatonta-sinappia/",
+   "date": "2026-05-13",
+   "title": "Valmisateriassa ilmoittamatonta sinappia",
+   "reason": "Tuotteen nuudelit saattavat sisältää sinappia, jota ei ole merkitty pakkaukseen. Tuote saattaa aiheuttaa allergisen reaktion sinapille allergisille kuluttajille.",
+   "action": "Lidl Suomi Ky vetää tuotteen markkinoilta. Takaisinveto koskee eriä, joiden viimeinen käyttöpäivä on 26.5.2026 tai aiempi.",
+   "products": [
+    {
+     "product_name": "Kartanon Kananuudelit täysjyvänuudeliateria",
+     "brand": null,
+     "company": "Lidl Suomi Ky",
+     "gtin": null,
+     "package_size": "350 g",
+     "best_before_or_lot": "Viimeinen käyttöpäivä 26.5.2026 tai aiempi"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/kiivissa-torjunta-ainejaamaa/",
+   "date": "2026-05-12",
+   "title": "Kiivissä torjunta-ainejäämää myös toisessa erässä",
+   "reason": "Kiiveistä löytyi liikaa fentioni-nimisen torjunta-aineen jäämää.",
+   "action": "Kiivien käyttö tulee lopettaa. Tuotepalautusten suhteen kuluttajien suositellaan olevan yhteydessä tuotteen ostopaikkaan.",
+   "products": [
+    {
+     "product_name": "Kiivit",
+     "brand": "Puro Gusto",
+     "company": "Satotukku",
+     "gtin": null,
+     "package_size": "500 grammaa",
+     "best_before_or_lot": "L: 1804; L: 1905"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/proteiinijuomassa-sailyvyysongelma/",
+   "date": "2026-04-21",
+   "title": "Proteiinijuomassa säilyvyysongelma",
+   "reason": "Osassa erän tuotteista säilyvyys ei vastaa vaatimuksia. Valmistajan mukaan laadultaan heikentyneet, virheelliset tuotteet ovat tunnistettavissa aistinvaraisesti voimakkaana saostumisena ennen käyttöä.",
+   "action": "Osuuskunta Maitomaa ilmoittaa vetävänsä myynnistä yhden erän tuotetta.",
+   "products": [
+    {
+     "product_name": "BIG PRO suolainen karamelli proteiinijuoma",
+     "brand": "BIG PRO",
+     "company": "Osuuskunta Maitomaa",
+     "gtin": null,
+     "package_size": "330 ml",
+     "best_before_or_lot": "Parasta ennen 17.7.2026; erätunnus 26083 klo 13:00-13:50"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/kaurajuoma-kahviin-25-dl--tuotteessa-sailyvyysongelma/",
+   "date": "2026-04-02",
+   "title": "Kaurajuoma kahviin 2,5 dl -tuotteessa säilyvyysongelma",
+   "reason": "Osassa erän tuotteista säilyvyys ei vastaa vaatimuksia.",
+   "action": "Raisio ilmoittaa vetävänsä myynnistä yhden erän tuotetta Elovena® kaurajuoma kahviin, 2,5 dl.",
+   "products": [
+    {
+     "product_name": "Elovena® kaurajuoma kahviin",
+     "brand": "Elovena",
+     "company": "Raisio",
+     "gtin": "6411200000082",
+     "package_size": "2,5 dl",
+     "best_before_or_lot": "Parasta ennen 5.10.2026"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/proteiinipatukassa-allergeenivirhe-todettu-jaamaa-kananmunasta.-takaisinveto-laajenee-uusiin-patukoihin-ja-proteiinijauheisiin",
+   "date": "2026-04-01",
+   "title": "Proteiinipatukassa allergeenivirhe; todettu jäämää kananmunasta - takaisinveto laajenee uusiin patukoihin ja proteiinijauheisiin",
+   "reason": "Tuotteissa on todettu ilmoittamattomia jäämiä kananmunasta, mikä voi aiheuttaa oireita kananmunalle allergisille kuluttajille.",
+   "action": "Valmistaja on aloittanut takaisinvedon yhdessä kauppaketjujen kanssa.",
+   "products": [
+    {
+     "product_name": "Performance Protein Soft White Chocolate",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "60 g",
+     "best_before_or_lot": "22.9.2026, erä X19125"
+    },
+    {
+     "product_name": "Performance Protein Soft White Chocolate",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "60 g",
+     "best_before_or_lot": "11.11.2026, erä X23725"
+    },
+    {
+     "product_name": "Performance Protein Soft White Chocolate",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "60 g",
+     "best_before_or_lot": "29.12.2026, erä X27425"
+    },
+    {
+     "product_name": "Performance Protein Soft White Chocolate",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "60 g",
+     "best_before_or_lot": "19.2.2027, erä X03826"
+    },
+    {
+     "product_name": "Performance Protein Soft Brownie",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "60 g",
+     "best_before_or_lot": "22.9.2026, erä X19025"
+    },
+    {
+     "product_name": "Performance Protein Soft Brownie",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "60 g",
+     "best_before_or_lot": "12.12.2026, erä X26425"
+    },
+    {
+     "product_name": "Performance Whey Chocolate",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "2 kg",
+     "best_before_or_lot": "30.8.2028, erä 18825"
+    },
+    {
+     "product_name": "Performance Whey Chocolate",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "2 kg",
+     "best_before_or_lot": "30.9.2028, erä 22425"
+    },
+    {
+     "product_name": "Performance Whey Strawberry",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "500 g",
+     "best_before_or_lot": "30.08.2028, erä 19725"
+    },
+    {
+     "product_name": "Performance Whey Strawberry",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "500 g",
+     "best_before_or_lot": "30.09.2028, erä 24525"
+    },
+    {
+     "product_name": "Performance Whey Strawberry",
+     "brand": "Leader",
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "500 g",
+     "best_before_or_lot": "30.10.2028, erä 34525"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suklaalevyssa-vaaran-tuotteen-etiketti-allergeenivaara/",
+   "date": "2026-03-27",
+   "title": "Suklaalevyssä väärän tuotteen etiketti; allergeenivaara",
+   "reason": "Etiketissä ei mainita tuotteen sisältämiä allergeeneja maito ja hasselpähkinä.",
+   "action": "Tuotteen voi palauttaa Lidl-myymälään, jossa tuotteen hinta hyvitetään.",
+   "products": [
+    {
+     "product_name": "Ritter Sport Nugat",
+     "brand": "Ritter Sport",
+     "company": "Lidl",
+     "gtin": null,
+     "package_size": "100 g",
+     "best_before_or_lot": null
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/juomalasista-siirtyy-liikaa-lyijya-ja-kadmiumia-takaisinveto-laajenee/",
+   "date": "2026-03-23",
+   "title": "Juomalasista siirtyy liikaa lyijyä ja kadmiumia; takaisinveto laajenee",
+   "reason": "Tuotteista irtoaa liikaa lyijyä ja kadmiumia.",
+   "action": "Kuluttajia neuvotaan lopettamaan tuotteen käyttö.",
+   "products": [
+    {
+     "product_name": "kukkakuvioinen juomalasi",
+     "brand": "Flying Tiger Copenhagen",
+     "company": "Tiger Stores Oy",
+     "gtin": null,
+     "package_size": "220 ml",
+     "best_before_or_lot": "tuotenro 3060031"
+    },
+    {
+     "product_name": "kurpitsakuvioinen juomalasi",
+     "brand": "Flying Tiger Copenhagen",
+     "company": "Tiger Stores Oy",
+     "gtin": null,
+     "package_size": "220 ml",
+     "best_before_or_lot": "tuotenro 3057450"
+    },
+    {
+     "product_name": "appelsiinikuvioinen juomalasi",
+     "brand": "Flying Tiger Copenhagen",
+     "company": "Tiger Stores Oy",
+     "gtin": null,
+     "package_size": "220 ml",
+     "best_before_or_lot": "tuotenro 3062993"
+    },
+    {
+     "product_name": "sydänkuvioinen juomalasi",
+     "brand": "Flying Tiger Copenhagen",
+     "company": "Tiger Stores Oy",
+     "gtin": null,
+     "package_size": "220 ml",
+     "best_before_or_lot": "tuotenro 3052986"
+    },
+    {
+     "product_name": "mansikkakuvioinen juomalasi",
+     "brand": "Flying Tiger Copenhagen",
+     "company": "Tiger Stores Oy",
+     "gtin": null,
+     "package_size": "220 ml",
+     "best_before_or_lot": "tuotenro 3053912"
+    },
+    {
+     "product_name": "sitruunakuviollinen juomalasi",
+     "brand": "Flying Tiger Copenhagen",
+     "company": "Tiger Stores Oy",
+     "gtin": null,
+     "package_size": "220 ml",
+     "best_before_or_lot": "tuotenro 3055350"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/proteiinipatukassa-allergeenivirhe-todettu-jaamaa-kananmunasta/",
+   "date": "2026-03-20",
+   "title": "Proteiinipatukassa allergeenivirhe; todettu jäämää kananmunasta",
+   "reason": "Tuote-erässä on todettu jäämiä kananmunasta, mikä voi aiheuttaa oireita kananmunalle allergisille kuluttajille.",
+   "action": "Leader Foods on aloittanut takaisinvedon yhdessä kauppaketjujen kanssa.",
+   "products": [
+    {
+     "product_name": "Performance Protein Soft White Chocolate",
+     "brand": null,
+     "company": "Leader Foods",
+     "gtin": null,
+     "package_size": "60 g",
+     "best_before_or_lot": "Parasta ennen 11.11.2026; erätunnus x23725"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suklaamoussejauheen-pakkauksesta-puuttuvat-suomen--ja-ruotsinkieliset-merkinnat/",
+   "date": "2026-03-20",
+   "title": "Suklaamoussejauheen pakkauksesta puuttuvat suomen- ja ruotsinkieliset merkinnät",
+   "reason": "Tuote sisältää maitoa ja saattaa sisältää gluteenia, kananmunaa, soijaa ja hasselpähkinää, joten se voi muodostaa kyseisille ainesosille allergisille henkilöille terveysvaaran. Suomeen toimitetun erän merkinnät ovat vain tanskan kielellä.",
+   "action": "Dr. Oetker Suomi Oy on ilmoittanut takaisinvedosta.",
+   "products": [
+    {
+     "product_name": "Suklaamousse 95g suklaamoussejauhe",
+     "brand": "Dr. Oetker",
+     "company": "Dr. Oetker Suomi Oy",
+     "gtin": null,
+     "package_size": "95g",
+     "best_before_or_lot": "Parasta ennen 03.2027; erätunnus L5260"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suodatinkahvissa-vierasesineriski/",
+   "date": "2026-03-06",
+   "title": "Suodatinkahvissa vierasesineriski",
+   "reason": "Tuotantolinjalla tapahtuneen laiterikkoontumisen vuoksi joihinkin suodatinkahvipakkauksiin on saattanut päätyä silmällä havaittavia metallipaloja.",
+   "action": "Kyseisten erien tuotteita ei tule käyttää. Kuluttajat voivat palauttaa tuotteet siihen myymälään, josta ne on ostettu; myymälä hyvittää palautetut tuotteet.",
+   "products": [
+    {
+     "product_name": "Kulta Katriina Perinteinen suodatinkahvi",
+     "brand": "Kulta Katriina",
+     "company": "Meira Oy",
+     "gtin": null,
+     "package_size": "500 g",
+     "best_before_or_lot": "23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/muffinssipakkauksessa-toista-tuotetta/",
+   "date": "2026-03-02",
+   "title": "Muffinssipakkauksessa toista tuotetta",
+   "reason": "Osa pakkauksista voi virheellisesti sisältää Sitruunahoukutus-muffinsseja, joten pakkausmerkinnät eivät vastaa sisältöä.",
+   "action": "Virheellisesti pakattua tuotetta ei suositella käytettäväksi, jos kuluttajan on vältettävä tiettyjä ainesosia tai allergeeneja.",
+   "products": [
+    {
+     "product_name": "Mansikkahoukutus-täytemuffinssit",
+     "brand": null,
+     "company": "Porokylän leipomo Oy",
+     "gtin": null,
+     "package_size": null,
+     "best_before_or_lot": "1.3., 4.3., 6.3. ja 8.3.2026"
+    }
+   ]
+  },
+  {
+   "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suklaalevy-saattaa-sisaltaa-kovia-muovinpalasia/",
+   "date": "2026-03-02",
+   "title": "Suklaalevy saattaa sisältää kovia muovinpalasia",
+   "reason": "Osa suklaalevyistä saattaa sisältää kovia muovinpalasia.",
+   "action": "Kuluttajia, jotka ovat ostaneet Marabou Japp 160 g -tuotteen mainitulla eränumerolla ja parasta ennen -päiväyksellä, pyydetään palauttamaan tuote hyvitystä varten ostopaikkaan tai olemaan yhteydessä Mondelēzin asiakaspalveluun: kuluttajapalaute@mdlz.com, puh: 0800-411410.",
+   "products": [
+    {
+     "product_name": "Marabou Japp",
+     "brand": "Marabou",
+     "company": "Mondelez Finland",
+     "gtin": null,
+     "package_size": "160g",
+     "best_before_or_lot": "Parasta ennen 05.07.2026; erätunnus OUV0254051"
+    }
+   ]
+  }
+ ]
+}
