@@ -1,9 +1,39 @@
-# SITE_ADDRESS comes from the server's .env. A host name gets HTTPS
-# automatically; ":80" or "http://<ip>" stays plain HTTP.
+# Every value in {$...} comes from the server's .env through deploy/compose.yaml.
+# SITE_ADDRESS: a host name gets HTTPS automatically; ":80" or "http://<ip>" stays plain HTTP.
 {$SITE_ADDRESS} {
 	encode zstd gzip
-	root * /srv
-	# The web app routes in the browser: unknown paths get index.html.
-	try_files {path} /index.html
-	file_server
+
+	# Health check for monitors: no password, and it says nothing but "ok".
+	handle /api/ping {
+		rewrite * /health
+		reverse_proxy gateway:8000
+	}
+
+	# The Buyer agent and other services call the gateway here with their own
+	# bearer token; the gateway checks it. No shared password on this path.
+	handle_path /gateway/* {
+		reverse_proxy gateway:8000
+	}
+
+	# The screens and the API they call sit behind one shared demo password.
+	handle {
+		basic_auth {
+			{$SITE_USER} {$SITE_PASSWORD_HASH}
+		}
+
+		# The gateway's human token is added here, on the server, so it never
+		# reaches a browser. The web app says who is acting in X-User.
+		handle_path /api/* {
+			reverse_proxy gateway:8000 {
+				header_up Authorization "Bearer {$GATEWAY_HUMAN_TOKEN}"
+			}
+		}
+
+		handle {
+			root * /srv
+			# The web app routes in the browser: unknown paths get index.html.
+			try_files {path} /index.html
+			file_server
+		}
+	}
 }

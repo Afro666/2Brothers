@@ -1,6 +1,6 @@
 name: deploy
 
-# Every push to main that touches the app is deployed to the Verda instance.
+# Every push to main that touches the web app or the gateway is deployed to the Verda instance.
 # The server builds the images itself (deploy/update.sh), so there is no registry.
 
 on:
@@ -9,6 +9,12 @@ on:
     paths:
       - "web/**"
       - "deploy/**"
+      - "gateway/**"
+      - "engine/**"
+      - "store/**"
+      - "agent/**"
+      - "signals/**"
+      - "pyproject.toml"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
