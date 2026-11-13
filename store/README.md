@@ -36,6 +36,7 @@ The database is the one named in the URI, else `two_brothers`.
 | `orders` | `store.orders` | The attempt row is written before any send. Unique `(kitchen_id, idempotency_key)`. |
 | `approvals` | `store.orders` | `PENDING` until a human decides, once. There is no auto-approve. |
 | `audit_log` | `store.audit` | Insert-only and hash-chained. `_id` is the sequence number. |
+| `kitchen_stock`, `covers`, `orders_history`, `deliveries`, `forecasts`, `kitchens`, `sharing` | `store.history` | Time series and consent; see below. |
 | `suppliers`, `own_products`, `recipes`, `menu_plans` | `store.repository` | Kitchen data (#81). Own products are still a separate collection here. |
 
 Money is `Decimal` in Python and `Decimal128` in Mongo; the wire format is a decimal
@@ -116,10 +117,49 @@ search_products(db, "", {"require_labels": ["EU_ORGANIC_FARMING"], "temperature"
 - Known limit: Finnish and Swedish compound words are not split, so `maito` does not
   find `kevytmaitojuoma`. English queries find those products through the English name.
 
+## History, forecasts and consent
+
+`store.history` keeps the time series behind the demand views. Load Maciek's synthetic
+history (20 kitchens, 12 weeks) with:
+
+```bash
+python -m env.history --seed 1     # writes env/out/history/*.jsonl (git-ignored)
+python -m store.history            # about one minute; safe to run again
+```
+
+| Collection | One row per | From |
+|---|---|---|
+| `kitchen_stock` (time series) | kitchen, product, day | `stock.jsonl`: `on_hand`, `received`, `used`, `short`, `wasted`, `unit` |
+| `covers` (time series) | kitchen, day | `covers.jsonl` |
+| `orders_history` (time series) | order | `orders.jsonl`; prices become `Decimal` |
+| `deliveries` (time series) | order line | `deliveries.jsonl` |
+| `forecasts` (time series) | kitchen, product, day | `save_forecasts(db, rows)`: `need`, `unit`, `why` |
+| `kitchens` | kitchen | `kitchens.jsonl`, marked `synthetic: true` |
+| `sharing` | kitchen and supplier | the contract's consent record |
+
+Loading replaces the rows of the kitchens in `kitchens.jsonl` and leaves other kitchens
+alone. Quantities are in kitchen units (`L`, `KG`, `PCS`).
+
+```python
+from store import history
+
+history.kitchen_demand(db, "K01", "463171", "2026-11-02", "2026-11-08")
+# [{"product_id": "463171", "date": "2026-11-02", "unit": "L", "demand": 117.1, "kitchens": 1}, ...]
+history.set_sharing(db, "K01", "valio_aimo", True, granted_by="user-42")   # a human grants
+history.supplier_demand(db, "valio_aimo", "463171", "2026-11-02", "2026-11-08")
+# the same rows, summed over the kitchens with active consent; never which kitchens
+```
+
+Demand from history is what the kitchen used plus what it could not serve (`used` +
+`short`). Pass `source="forecast"` to read the engine's `forecasts` instead. A supplier
+sees nothing until a kitchen shares: no consent is seeded.
+
 ## Tests
 
 - Offline: `python -m unittest discover -s store/tests -t . -v`. Fixtures are synthetic.
 - Against the real cluster, in a throwaway database that is dropped afterwards:
   `STORE_LIVE_TESTS=1 python -m unittest store.tests.test_live -v`.
+- Time series, also in a throwaway database:
+  `STORE_LIVE_TESTS=1 python -m unittest store.tests.test_history -v`.
 - Search acceptance, read-only on the loaded catalog:
   `STORE_LIVE_TESTS=1 python -m unittest store.tests.test_search_live -v`.
