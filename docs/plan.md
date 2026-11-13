@@ -93,6 +93,29 @@ Patterns only, no data. Source: the engine's code and docs (read 2026-11-13).
 - "expected_total guards against the order moving, it does not prove consent." Consent is a
   human "yes" in the approval inbox, recorded in the audit log.
 
+## Two-sided: what Valio told us at their stand (2026-11-13 evening)
+
+Valio wants to **give this tool to their customers**, so kitchens order faster and know what
+they will need. Two additions follow from that:
+
+1. **Kitchen stock integration (customer side).** The kitchen's current stock feeds the
+   engine: manual count, CSV, or a mock POS/inventory feed. Need = forecast − stock − on order.
+2. **Valio demand view (wholesaler side).** With the kitchen's consent, its forecast need is
+   shared with Valio. Valio sees, per product and delivery day, the **predicted demand across
+   all customers** vs. its own availability: shortage risk before orders arrive, what Valio
+   itself should buy from its suppliers, and which customers to offer a substitute early.
+   This is the same purchasing engine one level up (warehouse reorder point, safety stock,
+   lead time from supplier). It also covers Valio's "proactive selling agent" scenario.
+
+Trust and data ownership: the kitchen decides what it shares (forecast only, never menus or
+prices it got elsewhere); every share is in the audit log. That is Valio's "trust protocol"
+question, answered from both sides.
+
+Data we must generate: synthetic order and stock history for ~20 kitchens (hotel, school,
+hospital, restaurant) over ~12 weeks, using real catalog products. The Kitchen Week sim
+(below) produces it, so one generator serves the demo, the forecasts and the RL env.
+Store history in MongoDB time-series collections.
+
 ## The RL environment ("Kitchen Week", for AfterQuery)
 
 - One simulated week of a restaurant, seeded: guests per day (weather/events), recipes,
