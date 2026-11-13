@@ -1,6 +1,7 @@
 import type { Api, AuditActor, ProductTemperature } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { createPlanningMock } from "@/api/mock-planning";
+import { createSettingsMock } from "@/api/mock-settings";
 import { approval as seedApproval, auditEvents, mandate, orders, products, substitutes } from "@/mocks/milk-case";
 import { formatEur } from "@/lib/format";
 import type { ApprovalRequest, AuditEvent, Product } from "@/types";
@@ -26,6 +27,14 @@ export function createMockApi(): MockApi {
   const audit: AuditEvent[] = [...auditEvents];
   let nextFailure: ApiError | null = null;
 
+  const recordAudit = (event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason">) => {
+    audit.push({
+      ...event,
+      id: `EV-${audit.length + 1}`,
+      at: new Date().toISOString(),
+    });
+  };
+
   function pendingApproval(id: string): ApprovalRequest {
     if (id !== approval.id) throw new ApiError("NOT_FOUND", `Approval ${id} was not found.`);
     if (approval.status !== "PENDING") throw new ApiError("ALREADY_DECIDED", `Approval ${id} is already decided.`);
@@ -47,13 +56,8 @@ export function createMockApi(): MockApi {
   }
 
   return {
-    ...createPlanningMock((event) => {
-      audit.push({
-        ...event,
-        id: `EV-${audit.length + 1}`,
-        at: new Date().toISOString(),
-      });
-    }),
+    ...createPlanningMock(recordAudit),
+    ...createSettingsMock(recordAudit),
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
     },

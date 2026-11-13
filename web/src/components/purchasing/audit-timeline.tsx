@@ -4,6 +4,7 @@ import {
   ChefHat,
   ClipboardList,
   Search,
+  Settings,
   Send,
   Share2,
   ShieldCheck,
@@ -25,6 +26,7 @@ export const KIND_META: Record<AuditKind, { label: string; icon: LucideIcon }> =
   order: { label: "Order", icon: Send },
   stock: { label: "Stock", icon: Boxes },
   forecast_share: { label: "Forecast shared", icon: Share2 },
+  settings: { label: "Settings", icon: Settings },
 };
 
 export const ACTOR_LABEL: Record<AuditEvent["actor"], string> = {

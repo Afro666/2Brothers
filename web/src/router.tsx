@@ -14,6 +14,7 @@ import { RequestsPage } from "@/pages/requests";
 import { StockPage } from "@/pages/stock";
 import { SuppliersPage } from "@/pages/suppliers";
 import { HomePage } from "@/pages/home";
+import { SettingsPage } from "@/pages/settings";
 
 function RootLayout() {
   return (
@@ -41,6 +42,7 @@ const suppliersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/su
 const productsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/products", component: ProductsPage });
 const plannerRoute = createRoute({ getParentRoute: () => rootRoute, path: "/planner", component: PlannerPage });
 const demandRoute = createRoute({ getParentRoute: () => rootRoute, path: "/demand", component: DemandPage });
+const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsPage });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -56,6 +58,7 @@ const routeTree = rootRoute.addChildren([
   productsRoute,
   plannerRoute,
   demandRoute,
+  settingsRoute,
 ]);
 
 export function createAppRouter(history?: RouterHistory) {

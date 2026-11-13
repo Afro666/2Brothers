@@ -175,7 +175,8 @@ export type AuditKind =
   | "approval"
   | "order"
   | "stock"
-  | "forecast_share";
+  | "forecast_share"
+  | "settings";
 
 export interface AuditEvent {
   id: string;
@@ -303,4 +304,26 @@ export interface SupplierDemandRow {
 export interface SharingConsent {
   supplierId: string;
   shared: boolean;
+}
+
+export type DemandClass = "A" | "B" | "C";
+
+export interface CoverRule {
+  category: string;
+  maxDays: number;
+}
+
+/** How the engine sizes orders for this kitchen. Defaults come from the engine. */
+export interface KitchenSettings {
+  /** Target service level per demand class, in percent (A = menu-critical). */
+  serviceLevelPercent: Record<DemandClass, number>;
+  /** Never order more than this many days of cover for a category. */
+  maxDaysOfCover: CoverRule[];
+  /** Demand seen during a stock-out is undercounted; it is scaled up by at most this factor. */
+  stockOutDemandCap: number;
+  /** Above these the approval shows a warning. null = no warning set. */
+  budgetWarningPerOrderExVat: number | null;
+  budgetWarningPerWeekExVat: number | null;
+  /** A product that contains or may contain one of these is refused. GS1 codes. */
+  excludedAllergens: string[];
 }

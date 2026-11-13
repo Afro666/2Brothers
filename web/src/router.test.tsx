@@ -22,6 +22,7 @@ describe("application routes", () => {
     ["/products", "Products"],
     ["/planner", "Planner"],
     ["/demand", "Demand"],
+    ["/settings", "Settings"],
   ])("renders %s", async (path, title) => {
     await renderAt(path);
     expect(await screen.findByRole("heading", { level: 1, name: title })).toBeInTheDocument();
