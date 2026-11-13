@@ -154,6 +154,11 @@ class ValioTests(unittest.TestCase):
         self.assertEqual(closing_time("2026-07-01T12:00:00").utcoffset(), timedelta(hours=3))
         self.assertEqual(closing_time("2026-11-01T12:00:00").utcoffset(), timedelta(hours=2))
 
+    def test_offset_without_colon_parses_on_python_310(self):
+        self.assertEqual(closing_time("2026-11-15T17:00:00+0200").utcoffset(), timedelta(hours=2))
+        self.assertEqual(closing_time("2026-11-15T17:00:00-0530").utcoffset(), -timedelta(hours=5, minutes=30))
+        self.assertEqual(closing_time("2026-11-15T17:00:00Z").utcoffset(), timedelta(0))
+
     def test_invalid_inputs_never_send_a_request(self):
         client = self.client(lambda *args: self.fail("unexpected request"))
         for codes, day in [([], "2026-11-16"), ([1], "2026-11-16"), (["1"], "bad-date")]:
