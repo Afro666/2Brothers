@@ -17,6 +17,15 @@ class SeasonsTests(unittest.TestCase):
                 self.assertTrue(all(type(m) is int and 1 <= m <= 12 for m in entry[field]))
             self.assertTrue(set(entry['peak_months']) <= set(entry['harvest_months']))
 
+    def test_aliases_have_no_mojibake(self):
+        for entry in calendar()['items']:
+            for alias in entry['aliases']:
+                self.assertNotIn('?', alias)
+
+    def test_nordic_letter_aliases_match(self):
+        self.assertEqual(match_product('keräkaali')['id'], 'cabbage')
+        self.assertEqual(match_product('blåbär')['id'], 'bilberry')
+
     def test_strawberry_peak_and_outside_season(self):
         self.assertTrue(season_info('mansikka', date(2026, 7, 1))['peak'])
         self.assertFalse(in_season('strawberries', date(2026, 1, 1)))
