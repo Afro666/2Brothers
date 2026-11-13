@@ -21,3 +21,26 @@ def excluded_allergens(db, kitchen_id):
 def save_options(db, kitchen_id, proposal_id, options):
     db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id, 'status': 'READY'},
                             {'$set': {'substitute_options': options}})
+
+
+def seed_demo_policy(db):
+    """Default synthetic demo mandate only; never overwrite explicit settings."""
+    kitchen_id = 'demo-kitchen'
+    kitchen = db.kitchens.find_one({'_id': kitchen_id})
+    if not kitchen or kitchen.get('synthetic') is not True:
+        raise ValueError('A synthetic demo-kitchen is required')
+    defaults = {'excluded_allergens': ['AP', 'AN', 'AS'],
+                'excluded_allergens_source': 'synthetic web demo mandate'}
+    db.kitchen_settings.update_one({'_id': kitchen_id}, {'$setOnInsert': defaults}, upsert=True)
+    db.kitchen_settings.update_one({'_id': kitchen_id, 'excluded_allergens': {'$exists': False}},
+                                  {'$set': defaults})
+    return excluded_allergens(db, kitchen_id)
+
+
+if __name__ == '__main__':
+    from store.db import get_db
+    try:
+        seed_demo_policy(get_db())
+        print('Synthetic demo policy configured; explicit settings preserved')
+    except Exception:
+        raise SystemExit('Demo policy setup failed; check synthetic kitchen and storage configuration') from None

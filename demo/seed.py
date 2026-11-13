@@ -141,6 +141,9 @@ def load(db, data: dict) -> dict:
         repo.menu_plans.put(DEMO_ID, plan["week"], plan["days"])
     counts["recipes"], counts["menu_plans"] = len(data["recipes"]), len(data["menu_plans"])
     counts["sharing"] = len(seed_sharing(db, ids, VALIO))
+    from store.buyer_context import seed_demo_policy
+    if DEMO_ID in ids:
+        seed_demo_policy(db)
     return counts
 
 
