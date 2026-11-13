@@ -16,28 +16,53 @@ export function ChefRequestBox({
   onSubmit,
 }: {
   initial?: Partial<ChefRequest>;
-  onSubmit?: (request: ChefRequest) => void;
+  onSubmit?: (request: ChefRequest) => void | Promise<void>;
 }) {
   const [text, setText] = useState(initial?.text ?? "");
   const [covers, setCovers] = useState(initial?.covers == null ? "" : String(initial.covers));
   const [date, setDate] = useState(initial?.deliveryDate ?? "");
   const [sent, setSent] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const textId = useId();
   const coversId = useId();
   const dateId = useId();
   const canSend = text.trim().length > 0 && date !== "";
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!canSend) return;
+    if (!canSend || pending) return;
     const n = covers === "" ? null : Number(covers);
     const request: ChefRequest = {
       text: text.trim(),
       covers: n != null && Number.isFinite(n) ? n : null,
       deliveryDate: date,
     };
-    onSubmit?.(request);
-    setSent(request.text);
+    setSent(null);
+    setError(null);
+    let result: void | Promise<void>;
+    try {
+      result = onSubmit?.(request);
+    } catch (failure) {
+      setSent(null);
+      setError(failure instanceof Error ? failure.message : String(failure));
+      return;
+    }
+    if (result instanceof Promise) {
+      setPending(true);
+      try {
+        await result;
+        setSent(request.text);
+      } catch (failure) {
+        setSent(null);
+        setError(failure instanceof Error ? failure.message : String(failure));
+      } finally {
+        setPending(false);
+      }
+    } else {
+      // A plain callback keeps the old immediate "sent" line.
+      setSent(request.text);
+    }
   }
 
   return (
@@ -71,14 +96,19 @@ export function ChefRequestBox({
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p role="status" className="text-sm text-muted-foreground">
+        <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
           {sent ? `Sent to the agent: "${sent}"` : null}
         </p>
-        <Button type="submit" disabled={!canSend}>
+        <Button type="submit" disabled={!canSend || pending}>
           <Send aria-hidden />
-          Ask the agent
+          {pending ? "Asking…" : "Ask the agent"}
         </Button>
       </div>
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
     </form>
   );
 }

@@ -37,6 +37,26 @@ recover gateway failures, malformed tool responses, missing call IDs, or
 unknown/malformed tool names. Mutation rejections and failures still stop immediately; audit failure
 always stops dispatch, including during recovery.
 
+`reason_code` comes from the closed `PolicyReason` enum (#96).
+The envelope remains `{"error": {"code": "POLICY_REJECTED", ...}}`;
+`reason_code` is inside that error object. It gives only the category to correct:
+
+| Reason code | Meaning |
+|---|---|
+| `SCHEMA_INVALID` | Arguments do not match the tool schema, have an invalid encoding type, or are missing. |
+| `MALFORMED_JSON` | The arguments string is not valid JSON. |
+| `NEED_MISMATCH` | Use the application-provided need ID. |
+| `DATE_MISMATCH` | Use the application-provided delivery date. |
+| `UNKNOWN_ID` | Product, offer or order ID is not known in this run. |
+| `OFFER_INVALID` | Refresh an offer with expired, missing or invalid validity data. |
+| `RUN_MISMATCH` | Audit query must use the current run ID. |
+| `POLICY_VIOLATION` | Generic fallback for another local policy rejection. |
+
+Codes never contain actual IDs, dates, quantities, field paths, exception text or
+upstream text. The audit finish event records the same fixed code. Classification
+does not grant retries: only the existing known read-only rejection paths can
+recover, with the same audit requirements, step limit and 30-call limit.
+
 Each tool attempt writes start and finish events through gateway audit ingestion.
 Audit failure stops dispatch. A failure after a mutation explicitly requires human
 reconciliation. The local `.local/traces/<run-id>.jsonl` file supplements durable
