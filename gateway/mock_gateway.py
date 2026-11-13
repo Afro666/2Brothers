@@ -33,12 +33,14 @@ class MockGateway:
         if path in ("/tools/simulate_order", "/tools/request_approval", "/tools/place_order"):
             if body.get("offer_id") != "milk-offer-1":
                 return httpx.Response(404, json={"error": {"code": "OFFER_NOT_FOUND"}})
+        if path in ("/tools/request_approval", "/tools/place_order"):
+            key = body.get("idempotency_key")
+            if not isinstance(key, str) or not key.strip():
+                return httpx.Response(422, json={"error": {"code": "MISSING_IDEMPOTENCY_KEY"}})
         if path == "/tools/simulate_order":
             return httpx.Response(200, json=self.simulation())
         if path == "/tools/request_approval":
-            key = request.headers.get("Idempotency-Key")
-            if not key:
-                return httpx.Response(422, json={"error": {"code": "MISSING_IDEMPOTENCY_KEY"}})
+            key = body["idempotency_key"]  # validated above
             if key in self.approvals:
                 if self.approvals[key]["body"] != body:
                     return httpx.Response(409, json={"error": {"code": "IDEMPOTENCY_CONFLICT"}})
