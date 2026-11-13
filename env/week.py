@@ -19,7 +19,7 @@ from datetime import date, timedelta
 from env.catalog import PRODUCTS
 from env.history import Forecaster
 from env.kitchens import RECIPES, make_kitchens
-from env.sim import KitchenState, Order, actual_covers, next_delivery, serve_day
+from env.sim import KitchenState, Order, actual_covers, lost_covers, next_delivery, serve_day
 
 
 @dataclass(frozen=True)
@@ -245,25 +245,13 @@ class KitchenWeek:
         served = serve_day(self.state, day, covers, self.rng)
         self.forecast.observe(day, covers)
 
-        # A guest is lost when a menu-critical (A) ingredient of their dish is missing;
-        # a missing B/C ingredient costs a quarter of that (a worse plate, not no plate).
-        share = {}
-        for recipe, part in k.menu(day):
-            for pid in RECIPES[recipe]:
-                share[pid] = min(1.0, share.get(pid, 0.0) + part)
-        worst_a = worst_other = 0.0
         short = {}
         for pid, (demand, got) in served.items():
             s.food_cost += value(pid, got)
             if demand - got > 1e-6:
-                hit = (demand - got) / demand * share.get(pid, 0.0)
                 short[pid] = round(demand - got, 3)
                 s.stockout_days += 1
-                if PRODUCTS[pid].abc == "A":
-                    worst_a = max(worst_a, hit)
-                else:
-                    worst_other = max(worst_other, hit)
-        lost = covers * min(1.0, worst_a + 0.25 * worst_other)
+        lost = lost_covers(k, day, covers, served)
         s.covers += covers
         s.lost_covers += lost
         s.revenue += (covers - lost) * self.rules.price_per_cover

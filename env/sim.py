@@ -122,6 +122,26 @@ def serve_day(state: KitchenState, day: date, covers: int, rng: random.Random) -
     return out
 
 
+def lost_covers(kitchen: Kitchen, day: date, covers: int, served: dict) -> float:
+    """Guests lost on a day. A guest is lost when a menu-critical (A) ingredient of their
+    dish is missing; a missing B/C ingredient costs a quarter of that (a worse plate,
+    not no plate). `served` is serve_day's {pid: (demand, served)}."""
+    from env.kitchens import RECIPES
+    share = {}
+    for recipe, part in kitchen.menu(day):
+        for pid in RECIPES[recipe]:
+            share[pid] = min(1.0, share.get(pid, 0.0) + part)
+    worst_a = worst_other = 0.0
+    for pid, (demand, got) in served.items():
+        if demand - got > 1e-6:
+            hit = (demand - got) / demand * share.get(pid, 0.0)
+            if PRODUCTS[pid].abc == "A":
+                worst_a = max(worst_a, hit)
+            else:
+                worst_other = max(worst_other, hit)
+    return covers * min(1.0, worst_a + 0.25 * worst_other)
+
+
 def round_to_pack(pid: str, qty: float) -> int:
     """Kitchen units -> whole sales units, rounded up."""
     if qty <= 1e-9:

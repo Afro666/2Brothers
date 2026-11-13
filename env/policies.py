@@ -34,12 +34,13 @@ def project(state, pid, today, until, use):
     return unmet, sum(l[0] for l in lots)
 
 
-def reference(state, today, delivery, forecast, unavailable=None) -> dict:
+def reference(state, today, delivery, forecast, unavailable=None, demand=None) -> dict:
     """Deterministic engine stand-in: project stock (FIFO, expiry, open orders) to the
     day before the following delivery, order the expected gap plus safety stock, never
     more than can be used within shelf life, rounded up to whole sales units.
     `unavailable(pid, day)` marks announced supplier stock-outs: then cover until the
-    next delivery where the product is available again."""
+    next delivery where the product is available again. `demand(pid, day)` replaces the
+    default expected use (forecast covers x recipe), e.g. with a statistical forecast."""
     kitchen = state.kitchen
     blocked = unavailable or (lambda pid, day: False)
     lines = {}
@@ -51,7 +52,10 @@ def reference(state, today, delivery, forecast, unavailable=None) -> dict:
         while blocked(pid, following):
             following = next_delivery(kitchen, following) or following + timedelta(days=7)
         period = [delivery + timedelta(days=i) for i in range((following - delivery).days)]
-        use = lambda d, pid=pid: forecast(d) * kitchen.usage_per_cover(d).get(pid, 0.0)  # noqa: E731
+        if demand is None:
+            use = lambda d, pid=pid: forecast(d) * kitchen.usage_per_cover(d).get(pid, 0.0)  # noqa: E731
+        else:
+            use = lambda d, pid=pid: demand(pid, d)  # noqa: E731
         per_day = [use(d) for d in period]
         if sum(per_day) <= 0:
             continue

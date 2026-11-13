@@ -12,6 +12,7 @@ Python 3.10+, standard library only.
 | `history.py` | 20 kitchens x 12 weeks of history as JSON Lines |
 | `week.py` | Kitchen Week RL env: one kitchen, one week, mandate, reward |
 | `run.py` | runs a policy through Kitchen Week and prints the score |
+| `backtest.py` | forecast backtest (recipe vs weekday-MA vs MA28 vs Croston/SBA), results in `BACKTEST.md` |
 
 ## Synthetic history
 
