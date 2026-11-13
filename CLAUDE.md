@@ -8,10 +8,15 @@ Codex reads `AGENTS.md`, which points here. One rule set for all agents.
 - One task = one GitHub issue = one owner = one branch = one PR.
 - Branch name: `<name>/<issue>-<short>` (example: `aron/12-voice-api`).
 - `main` is protected: no direct push. Every change is a PR.
-- Every PR gets an automatic **Sonnet review** (`sonnet-review` check). No human review.
+- Every PR gets an automatic **Opus review** (`opus-review` check). No human review.
 - Open the PR with auto-merge on, so it merges by itself when the review passes:
   `gh pr create --fill` then `gh pr merge --auto --squash --delete-branch`.
 - Review says BLOCK: read its PR comment, fix, push again. It re-runs by itself.
+- Improvements the review finds become issues:
+  - `ai-fix`: the Opus fix agent fixes it at once and opens its own PR (branch `ai-fix/<n>`).
+  - `todo`: assigned to the PR author. Check `gh issue list --assignee @me` between tasks.
+- Want the agent to do any issue? Add the `ai-fix` label to it.
+- Never edit an `ai-fix/*` branch by hand; the agent owns it.
 - Small PRs, merged often (aim: every 1–2 hours). Long branches cause conflicts.
 - Pull `main` before you start a task: `git pull --rebase origin main`.
 - Stay inside your area folder (see "Areas"). Touching another area: say it in the issue first.
