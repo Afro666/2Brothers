@@ -18,7 +18,7 @@ same world as an **RL environment** that shows where frontier agents fail at the
 | Verda Compute Track ($10k credits) | Tech | Host Nemotron + fine-tune a small model on env rollouts. |
 | NVIDIA Nemotron (RTX 5080) | Tech | Nemotron 3.5 Super VL is the buyer agent; VL reads delivery notes / menus. |
 | Context.dev – Fully Structured Web (€750) | Tech | Live food-recall and price monitors trigger re-plans. |
-| Aiven (€1k) or MongoDB Atlas (kit) | Tech | Audit log + order store. Aiven pays more. |
+| MongoDB Atlas (kit) | Tech | Audit log + order store. Decided 2026-11-13 (see `docs/decisions.md`); Aiven dropped. |
 | OpenAI – Best Use of Codex ($10k credits) | Tech | Maciek builds with Codex; log how. |
 | Entire (projector) | Tech | Our agent workflow. |
 
