@@ -21,10 +21,10 @@ function withConfirmedStock() {
 describe("ApprovalsPage", () => {
   it("keeps the milk proposal visible while awaiting stock confirmation", async () => {
     renderApp("/approvals", createMockApi());
-    expect(await screen.findByRole("heading", { name: "Waiting for you (1)" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Waiting for you (2)" })).toBeVisible();
     expect(await screen.findByText(/Waiting for supplier stock confirmation/)).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
+    expect(screen.getAllByRole("button", { name: /^Approve/ }).filter((button) => button.hasAttribute("disabled"))).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Reject" })[0]).toBeEnabled();
   });
   beforeEach(() => localStorage.clear());
 
@@ -33,20 +33,20 @@ describe("ApprovalsPage", () => {
     const api = withConfirmedStock();
     renderApp("/approvals", api);
 
-    expect(await screen.findByRole("heading", { name: "Waiting for you (1)" })).toBeInTheDocument();
-    expect(screen.getByText("€2,210.41")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    expect(await screen.findByRole("heading", { name: "Waiting for you (2)" })).toBeInTheDocument();
+    expect(screen.getByText("€148.76")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Approve €148\.76 incl VAT/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
-    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
     expect(await screen.findByRole("heading", { name: "Decided" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Waiting for you (0)" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Waiting for you (1)" })).toBeInTheDocument();
     await waitFor(async () => {
       const events = await api.listAudit();
       expect(events.filter((event) => event.kind === "approval").at(-1)).toMatchObject({
         actor: "human",
-        orderId: "ORD-1043",
-        summary: "Approved ORD-1043",
+        orderId: "ORD-1044",
+        summary: "Approved ORD-1044",
       });
     });
   });
@@ -57,12 +57,12 @@ describe("ApprovalsPage", () => {
     api.failNextApprove("TOTAL_MISMATCH", "The total moved.");
     renderApp("/approvals", api);
 
-    await user.click(await screen.findByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    await user.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
-    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The total moved.");
-    expect(screen.getByRole("heading", { name: "Waiting for you (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Waiting for you (2)" })).toBeInTheDocument();
   });
 
   it("records a rejection reason in the audit log", async () => {
@@ -70,7 +70,7 @@ describe("ApprovalsPage", () => {
     const api = createMockApi();
     renderApp("/approvals", api);
 
-    await user.click(await screen.findByRole("button", { name: "Reject" }));
+    await user.click((await screen.findAllByRole("button", { name: "Reject" }))[1]);
     const dialog = await screen.findByRole("dialog", { name: "Reject this order?" });
     await user.type(within(dialog).getByRole("textbox", { name: "Reason (optional)" }), "Too much milk");
     await user.click(within(dialog).getByRole("button", { name: "Reject" }));
@@ -89,7 +89,7 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
 
-    const button = await screen.findByRole("button", { name: "Show order lines" });
+    const button = (await screen.findAllByRole("button", { name: "Show order lines" }))[1];
     expect(button).toHaveAttribute("aria-expanded", "false");
     await user.click(button);
 
@@ -101,24 +101,24 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     const api = withConfirmedStock();
     renderApp("/approvals", api);
-    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[0]);
     const originalQuantity = screen.getByRole("spinbutton", {
-      name: "Quantity for Valio Eila 3 % lactose free milk drink 1 L (ST)",
+      name: "Quantity for Arla 1 L lactose free fat free UHT milk drink (ST)",
     });
     await user.clear(originalQuantity);
-    await user.type(originalQuantity, "900");
-    await user.click(screen.getByRole("button", { name: "Update Valio Eila 3 % lactose free milk drink 1 L" }));
+    await user.type(originalQuantity, "40");
+    await user.click(screen.getByRole("button", { name: "Update Arla 1 L lactose free fat free UHT milk drink" }));
 
-    const approve = await screen.findByRole("button", { name: /Approve €2,094\.08 incl VAT/ });
+    const approve = await screen.findByRole("button", { name: /Approve €116\.68 incl VAT/ });
     await user.click(approve);
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
-    expect(within(dialog).getByText(/€1,845\.00 ex VAT \(€2,094\.08 incl VAT\)/)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,094.08" }));
+    expect(within(dialog).getByText(/€102\.80 ex VAT \(€116\.68 incl VAT\)/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €116.68" }));
 
     await waitFor(async () => {
-      expect(await api.listFeedback({ orderId: "ORD-1043" })).toEqual(
+      expect(await api.listFeedback({ orderId: "ORD-1044" })).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ kind: "QUANTITY_CHANGED", productId: "463335", from: 950, to: 900 }),
+          expect.objectContaining({ kind: "QUANTITY_CHANGED", productId: "462775", from: 51, to: 40 }),
           expect.objectContaining({ kind: "APPROVED" }),
         ]),
       );
@@ -129,7 +129,7 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     const api = createMockApi();
     renderApp("/approvals", api);
-    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
     const search = screen.getByRole("searchbox", { name: "Search products" });
     await user.type(search, "Arla 1 L");
     const productRow = screen.getByText("Arla 1 L lactose free fat free UHT milk drink").closest("li");
@@ -163,23 +163,23 @@ describe("ApprovalsPage", () => {
   it("follows the edited lines: approval opens once the line with unconfirmed stock is removed", async () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
-    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
     await user.type(screen.getByRole("searchbox", { name: "Search products" }), "Arla 1 L");
     await user.click(await screen.findByRole("button", { name: "Add Arla 1 L lactose free fat free UHT milk drink" }));
     // Arla's stock is known, Eila's is not: the order is still blocked.
     await screen.findByRole("button", { name: "Remove Arla 1 L lactose free fat free UHT milk drink" });
     expect(screen.getByText(/Waiting for supplier stock confirmation/)).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: /^Approve/ })[1]).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
     await waitFor(() => expect(screen.queryByText(/Waiting for supplier stock confirmation/)).toBeNull());
-    expect(screen.getByRole("button", { name: /^Approve/ })).toBeEnabled();
+    expect(screen.getAllByRole("button", { name: /^Approve/ })[1]).toBeEnabled();
   });
 
   it("shows the API message when removing the only line is refused", async () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
-    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("An order needs at least one line; reject it instead.");
   });
@@ -188,7 +188,7 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     const api = createMockApi();
     renderApp("/approvals", api);
-    await user.click(await screen.findByRole("button", { name: "Reject" }));
+    await user.click((await screen.findAllByRole("button", { name: "Reject" }))[1]);
     const dialog = await screen.findByRole("dialog", { name: "Reject this order?" });
     await user.type(within(dialog).getByRole("textbox", { name: "Reason (optional)" }), "Wrong fat percentage");
     await user.click(within(dialog).getByRole("button", { name: "Reject" }));
@@ -203,7 +203,7 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     const api = createMockApi();
     renderApp("/approvals", api);
-    await user.click(await screen.findByRole("button", { name: "Reject" }));
+    await user.click((await screen.findAllByRole("button", { name: "Reject" }))[1]);
     const dialog = await screen.findByRole("dialog", { name: "Reject this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Reject" }));
 

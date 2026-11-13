@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createMockApi } from "@/api/mock";
-import { approval } from "@/mocks/milk-case";
+import { confirmedDemoApproval as approval, approval as unknownApproval } from "@/mocks/milk-case";
 
 const DECISION = {
   approvalId: approval.id,
@@ -10,6 +10,19 @@ const DECISION = {
 };
 
 describe("mock API approvals", () => {
+  it("places the measured-stock demo once while leaving unknown stock pending", async () => {
+    const api = createMockApi();
+    await api.approve(DECISION, "human");
+    expect((await api.getOrder(approval.orderId)).status).toBe("PLACED");
+    await expect(api.approve(DECISION, "human")).rejects.toMatchObject({ code: "ALREADY_DECIDED" });
+    const events = await api.listAudit({ orderId: approval.orderId });
+    expect(events.filter((event) => event.kind === "order")).toHaveLength(1);
+    await expect(api.approve({ approvalId: unknownApproval.id,
+      expectedTotalExVat: unknownApproval.totalExVat,
+      expectedTotalInclVat: unknownApproval.totalInclVat }, "human")).rejects.toMatchObject({ code: "STOCK_UNKNOWN" });
+    expect((await api.getApproval(unknownApproval.id)).status).toBe("PENDING");
+  });
+
   it("approves, and records who approved in the audit log", async () => {
     const api = createMockApi();
     const before = (await api.listAudit({ orderId: approval.orderId })).length;
@@ -19,8 +32,8 @@ describe("mock API approvals", () => {
     expect(decided.status).toBe("APPROVED");
     expect((await api.listApprovals())[0].status).toBe("APPROVED");
     const after = await api.listAudit({ orderId: approval.orderId });
-    expect(after).toHaveLength(before + 1);
-    expect(after.at(-1)).toMatchObject({ kind: "approval", actor: "human", orderId: approval.orderId });
+    expect(after).toHaveLength(before + 2);
+    expect(after.at(-2)).toMatchObject({ kind: "approval", actor: "human", orderId: approval.orderId });
   });
 
   it("keeps the approval pending when the gateway refuses it", async () => {
@@ -124,7 +137,7 @@ describe("mock API proposal changes", () => {
   it("resimulates totals and MOV from line prices and tax rates", async () => {
     const api = createMockApi();
     const result = await api.changeProposal(
-      approval.orderId,
+      unknownApproval.orderId,
       {
         type: "SET_QUANTITY",
         productId: "463335",

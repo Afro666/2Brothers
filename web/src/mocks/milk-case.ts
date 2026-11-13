@@ -277,6 +277,21 @@ export const approval: ApprovalRequest = {
   status: "PENDING",
 };
 
+/** Independent demo request using the measured 51 ST offer, not a stock override. */
+export const confirmedDemoOrder: Order = {
+  ...orders.placed, id: "ORD-1044", status: "NEEDS_APPROVAL",
+};
+
+export const confirmedDemoApproval: ApprovalRequest = {
+  id: "APR-312", orderId: confirmedDemoOrder.id, requestedBy: "Head chef",
+  createdAt: "2026-11-13T20:43:00+02:00",
+  summary: "Demo: 51 L measured-stock milk for Monday",
+  lineCount: 1, deliveryDate: REQUESTED,
+  totalExVat: confirmedDemoOrder.totalExVat, totalInclVat: confirmedDemoOrder.totalInclVat,
+  reasons: [{ rule: "Human approval required", detail: "51 ST measured in the supplier offer. Review the exact total before placing this separate demo request." }],
+  status: "PENDING",
+};
+
 export const substitutes: SubstituteOption[] = [
   {
     tier: "good",
