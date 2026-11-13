@@ -21,5 +21,5 @@ store = ["*.json"]
 signals = ["*.json"]
 
 [tool.setuptools.packages.find]
-include = ["gateway*", "agent*", "store*", "signals*"]
+include = ["gateway*", "engine*", "agent*", "store*", "signals*"]
 exclude = ["*.tests*"]
