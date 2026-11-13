@@ -195,7 +195,13 @@ class KitchenWeek:
         delivery = self.today + timedelta(days=1)
         lines, s, r = {}, self.score, self.rules
         for pid, units in (action.get("order") or {}).items():
-            units = int(units)
+            try:
+                units = int(units)
+            except (ValueError, TypeError):
+                s.mandate_penalty += r.refused_penalty
+                s.refused += 1
+                s.events.append(f"{self.today}: invalid quantity for {pid}, refused")
+                continue
             if units <= 0:
                 continue
             if pid not in self.kitchen.products:
