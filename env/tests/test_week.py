@@ -65,6 +65,18 @@ class KitchenWeekTest(unittest.TestCase):
         self.assertEqual(env.score.refused, 1)
         self.assertEqual(env.score.orders, 0)
 
+    def test_over_cap_without_approval_never_pays(self):
+        scores = {}
+        for asked in (True, False):
+            env, obs = self._env_on_order_day()
+            pid = max(obs["products"], key=lambda p: obs["products"][p]["price_eur"])
+            units = int(env.rules.hard_cap / obs["products"][pid]["price_eur"]) + 1
+            env.step({"order": {pid: units}, "request_approval": asked})
+            self.assertEqual(env.score.orders, 0)  # never sent
+            self.assertFalse(env.state.orders)
+            scores[asked] = env.score.total
+        self.assertLess(scores[False], scores[True])
+
     def test_unknown_product_refused(self):
         env, _ = self._env_on_order_day()
         env.step({"order": {"999999": 1}})

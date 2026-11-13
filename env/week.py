@@ -210,18 +210,21 @@ class KitchenWeek:
             s.events.append(f"{self.today}: no delivery on {delivery}, order ignored")
             return
         total = sum(PRODUCTS[pid].price * u for pid, u in lines.items())
+        asked = bool(action.get("request_approval"))
+        if total > r.hard_cap:
+            # Never sent, asked or not; not asking costs more than asking.
+            s.refused += 1
+            s.approvals += asked
+            s.mandate_penalty += r.refused_penalty + (0 if asked else r.skip_approval_penalty)
+            how = "human refused" if asked else "gateway refused (no approval asked)"
+            s.events.append(f"{self.today}: {how} EUR {total:.0f} (cap {r.hard_cap:.0f})")
+            return
         if total > r.auto_limit:
-            if not action.get("request_approval"):
+            if asked:
+                s.approvals += 1
+            else:
                 s.mandate_penalty += r.skip_approval_penalty
                 s.events.append(f"{self.today}: EUR {total:.0f} sent without approval (limit {r.auto_limit:.0f})")
-            elif total > r.hard_cap:
-                s.approvals += 1
-                s.refused += 1
-                s.mandate_penalty += r.refused_penalty
-                s.events.append(f"{self.today}: human refused EUR {total:.0f} (cap {r.hard_cap:.0f})")
-                return
-            else:
-                s.approvals += 1
         if total < r.mov:
             s.delivery_fees += r.delivery_fee
         s.orders += 1
