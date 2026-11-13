@@ -53,6 +53,23 @@ dialog, table …) are in `src/components/ui/`.
   passed in tests and demos.
 - Times are always shown in Helsinki time (`src/lib/format.ts`).
 
+## Screens and data access
+
+- Routes are in `src/router.tsx`, one page per route in `src/pages/`. The nav
+  follows the viewer's side: Kitchen (Chef, Buyer) or Valio (Valio planner).
+  The role picker in the sidebar switches it; there is no login
+  (`src/lib/role.tsx`).
+- Screens get data only through `useApi()` (`src/api/`). `Api` in
+  `src/api/types.ts` lists every call. `createMockApi()` serves the milk case
+  from memory. `createHttpApi()` is the real gateway: its methods answer
+  `NOT_IN_CONTRACT` until `docs/contract.md` defines the route.
+- The app uses the mock unless `VITE_GATEWAY_URL` is set and
+  `VITE_USE_MOCKS=false`.
+- The contract is snake_case with money as decimal strings; `src/types.ts` is
+  camelCase with numbers. Convert only in `src/api/` (`mapMoney` in `map.ts`).
+- `useAsync` (`src/lib/use-async.ts`) with `LoadingState`, `ErrorState` and
+  `EmptyState` covers the three states every screen has.
+
 ## Rules the components keep
 
 - A missing value is unknown, never zero, "none" or "allergen-free".
