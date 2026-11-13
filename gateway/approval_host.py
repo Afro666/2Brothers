@@ -42,9 +42,13 @@ class ApprovalHost:
     async def approve(self, *, session, kitchen_id, approval_id, expected_total, idempotency_key):
         # A route must construct this from its server-side authenticated human
         # session, not deserialize it from JSON or trust an actor/user header.
-        if (not isinstance(session, HumanSession) or not session.user_id.strip()
+        if (not isinstance(session, HumanSession) or not isinstance(session.user_id, str)
+                or not session.user_id.strip()
                 or 'kitchen:approve' not in session.scopes):
             raise ApprovalError('HUMAN_SESSION_REQUIRED')
+        if any(not isinstance(value, str) or not value.strip()
+               for value in (kitchen_id, approval_id)):
+            raise ApprovalError('NOT_FOUND')
         if session.kitchen_id != kitchen_id:
             raise ApprovalError('NOT_FOUND')
         expected_total = _total(expected_total)

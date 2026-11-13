@@ -4,8 +4,11 @@ import unittest
 from unittest.mock import patch
 
 import mongomock
+import httpx
+import json
 
-from gateway.approval_host import ApprovalError, ApprovalHost, HumanSession
+from gateway.approval_host import ApprovalError, ApprovalHost, HumanSession, build_approval_host
+from gateway.mcp_server import GatewayClient
 from store import audit, orders
 from store.db import ensure_indexes
 
@@ -129,6 +132,34 @@ class ApprovalFlowTests(unittest.IsolatedAsyncioTestCase):
         for value in (149.02, True, 'NaN', '149.020', '-1.00'):
             await self.assert_error('INVALID_TOTAL', expected_total=value)
         await self.assert_error('MISSING_IDEMPOTENCY_KEY', idempotency_key=' ')
+
+    async def test_gateway_transport_binding_uses_trusted_kitchen_and_one_post(self):
+        posts = []
+        def transport(request):
+            payload = json.loads(request.content)
+            if request.url.path == '/tools/simulate_order':
+                self.assertEqual(payload, {'offer_id': 'offer-1'})
+                return httpx.Response(200, json=self.simulation)
+            self.assertEqual(request.url.path, '/tools/place_order')
+            self.assertEqual(orders.get_approval(self.db, self.approval['approval_id'])['status'], 'APPROVED')
+            posts.append(payload)
+            return httpx.Response(200, json={'order_id': 'o1', 'outcome': 'CONFIRMED', 'status': 'SENT'})
+        client = GatewayClient('http://scoped-gateway', transport=httpx.MockTransport(transport))
+        def client_for(kitchen_id):
+            self.assertEqual(kitchen_id, 'k1')
+            return client
+        try:
+            self.host = build_approval_host(self.db, client_for)
+            result = await self.approve()
+            self.assertEqual(await self.approve(), result)
+            self.assertEqual(len(posts), 1)
+            self.assertEqual(posts[0]['expected_total'], '149.02')
+        finally:
+            await client.close()
+
+    async def test_query_objects_cannot_be_used_as_identifiers(self):
+        await self.assert_error('NOT_FOUND', approval_id={'$ne': None})
+        await self.assert_error('NOT_FOUND', kitchen_id={'$ne': None})
 
 
 if __name__ == '__main__':
