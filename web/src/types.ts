@@ -166,13 +166,22 @@ export interface Mandate {
   substitutionRules: SubstitutionRule[];
 }
 
-export type AuditKind = "request" | "search" | "offer" | "simulate" | "mandate_check" | "approval" | "order";
+export type AuditKind =
+  | "request"
+  | "search"
+  | "offer"
+  | "simulate"
+  | "mandate_check"
+  | "approval"
+  | "order"
+  | "stock"
+  | "forecast_share";
 
 export interface AuditEvent {
   id: string;
   at: string;
   kind: AuditKind;
-  actor: "chef" | "agent" | "gateway" | "human";
+  actor: "chef" | "agent" | "gateway" | "human" | "valio" | "system";
   /** What happened, short. */
   summary: string;
   /** Why, in the words of the engine, the gateway or the human. */

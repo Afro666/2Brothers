@@ -1,9 +1,11 @@
 import {
+  Boxes,
   Calculator,
   ChefHat,
   ClipboardList,
   Search,
   Send,
+  Share2,
   ShieldCheck,
   Tag,
   UserCheck,
@@ -13,7 +15,7 @@ import {
 import { formatDateTime } from "@/lib/format";
 import type { AuditEvent, AuditKind } from "@/types";
 
-const KIND_META: Record<AuditKind, { label: string; icon: LucideIcon }> = {
+export const KIND_META: Record<AuditKind, { label: string; icon: LucideIcon }> = {
   request: { label: "Request", icon: ChefHat },
   search: { label: "Search", icon: Search },
   offer: { label: "Offer", icon: Tag },
@@ -21,17 +23,22 @@ const KIND_META: Record<AuditKind, { label: string; icon: LucideIcon }> = {
   mandate_check: { label: "Mandate check", icon: ShieldCheck },
   approval: { label: "Approval", icon: UserCheck },
   order: { label: "Order", icon: Send },
+  stock: { label: "Stock", icon: Boxes },
+  forecast_share: { label: "Forecast shared", icon: Share2 },
 };
 
-const ACTOR_LABEL: Record<AuditEvent["actor"], string> = {
+export const ACTOR_LABEL: Record<AuditEvent["actor"], string> = {
   chef: "Chef",
   agent: "Agent",
   gateway: "Gateway",
   human: "Buyer",
+  valio: "Valio",
+  system: "System",
 };
 
 /** Every step, oldest first, each with who did it and why. */
 export function AuditTimeline({ events }: { events: AuditEvent[] }) {
+  // Array.sort is stable, so steps with the same time keep the order the API recorded them in.
   const sorted = [...events].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
   if (sorted.length === 0) {
     return (
