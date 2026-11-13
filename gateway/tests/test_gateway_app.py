@@ -64,9 +64,9 @@ def env(monkeypatch):
     return TestClient(create_app(gw)), fake, db
 
 
-def milk(client, key="p1"):
+def milk(client, key="p1", quantity="1000"):
     r = client.post(K + "/proposals", headers=AGENT, json={
-        "product_ids": ["462775", "462921", "463335"], "quantity": "1000", "unit": "L",
+        "product_ids": ["462775", "462921", "463335"], "quantity": quantity, "unit": "L",
         "requested_date": "2026-11-16", "idempotency_key": key, "text": "1000 L lactose-free milk by Monday"})
     assert r.status_code == 200, r.text
     return r.json()
@@ -115,7 +115,7 @@ def test_no_token_no_access(env):
 
 def test_human_approves_order_is_placed_once(env):
     client, _, db = env
-    p = milk(client)
+    p = milk(client, quantity="51")
     body = {"expected_total": p["expected_total"], "idempotency_key": "a1"}
     r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
     assert r.status_code == 200, r.text
@@ -134,8 +134,8 @@ def test_human_approves_order_is_placed_once(env):
 
 def test_price_moved_is_total_mismatch_and_nothing_is_placed(env):
     client, fake, db = env
-    p = milk(client)
-    fake.bump("463335", 1.47)
+    p = milk(client, quantity="51")
+    fake.bump("462775", 3.57)
     r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
                     json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
     assert r.status_code == 409 and r.json()["error"]["code"] == "TOTAL_MISMATCH"
@@ -154,6 +154,19 @@ def test_wrong_total_from_the_client_is_refused(env):
                     json={"expected_total": "1.00", "idempotency_key": "a1"})
     assert r.status_code == 409 and r.json()["error"]["code"] == "TOTAL_MISMATCH"
     assert db.orders.count_documents({}) == 0
+
+
+def test_human_approval_does_not_confirm_unknown_stock(env):
+    client, _, db = env
+    p = milk(client)
+    assert any(line['unknown_stock'] for line in p['lines'])
+    response = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                           json={'expected_total': p['expected_total'], 'idempotency_key': 'a1'})
+    assert response.status_code == 409
+    assert response.json()['error']['code'] == 'STOCK_UNKNOWN'
+    assert db.orders.count_documents({}) == 0
+    assert db.approvals.find_one({})['status'] == 'PENDING'
+    assert client.get(f"{K}/proposals/{p['proposal_id']}", headers=HUMAN).json()['status'] == 'READY'
 
 
 def test_reject_records_reason(env):
@@ -180,3 +193,39 @@ def test_agent_tool_flow_need_offer_simulate_request_approval(env):
     assert again.json()["approval_id"] == req.json()["approval_id"]
     bad = client.post("/tools/get_offer", headers=AGENT, json={"need_id": "nope", "product_ids": ["462775"]})
     assert bad.status_code == 422
+
+
+def test_buyer_request_reaches_human_inbox_and_one_exact_order(env):
+    client, _, db = env
+    need = client.post(K + '/needs', headers=AGENT, json={
+        'quantity': '51', 'unit': 'L', 'requested_date': '2026-11-16'}).json()
+    offer = client.post('/tools/get_offer', headers=AGENT, json={
+        'need_id': need['need_id'], 'product_ids': ['462775']}).json()
+    simulation = client.post('/tools/simulate_order', headers=AGENT,
+                             json={'offer_id': offer['offer_id']}).json()
+    requested = client.post('/tools/request_approval', headers=AGENT, json={
+        'offer_id': offer['offer_id'], 'idempotency_key': 'buyer-request'}).json()
+    inbox = client.get(K + '/proposals', headers=HUMAN).json()['proposals']
+    pending = next(p for p in inbox if p['approval_id'] == requested['approval_id'])
+    assert pending['status'] == 'READY'
+    assert db.orders.count_documents({}) == 0
+    path = f"{K}/proposals/{pending['proposal_id']}/approve"
+    decision = {'expected_total': simulation['expected_total'], 'idempotency_key': 'human-decision'}
+    denied = client.post(path, headers=AGENT, json=decision)
+    assert denied.status_code == 403
+    placed = client.post(path, headers=HUMAN, json=decision)
+    assert placed.status_code == 200, placed.text
+    order = placed.json()
+    assert order['expected_total'] == simulation['expected_total']
+    assert order['outcome'] == 'CONFIRMED'
+    replay = client.post(path, headers=HUMAN, json=decision)
+    assert replay.json()['order_id'] == order['order_id']
+    assert db.orders.count_documents({}) == 1
+    approval = db.approvals.find_one({'_id': requested['approval_id']})
+    assert approval['status'] == 'APPROVED' and approval['decided_by'] == 'aron'
+    assert approval['decided_at'] is not None
+    listed = client.get(K + '/orders', headers=HUMAN).json()['orders']
+    assert [row['order_id'] for row in listed] == [order['order_id']]
+    events = client.get(K + '/audit', headers=HUMAN).json()['events']
+    assert any(e['kind'] == 'order_placed' and e['actor'] == 'aron'
+               and e['order_id'] == order['order_id'] for e in events)
