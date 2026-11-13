@@ -226,6 +226,10 @@ does not cover oats: gluten-free oats exist. An unknown name is a 422, never ign
 When `pack_size` is absent, a size written in the query ("milk 1 l", "500 g") is
 read from the text and only raises the rank of products with that size.
 
+The search covers the supplier catalogs and the authenticated kitchen's own products.
+It never returns another kitchen's own products. The kitchen comes from the
+authenticated caller, never from a request field.
+
 Response: `products`, best match first. Each row is the product row below plus
 `score` (number) and `match_reasons` (short strings, for example `"size 1 L matches"`,
 `"allergen data missing"`, `"size read from the name"`).
@@ -236,7 +240,9 @@ Product row (the catalog row from the shared repository, without the raw record)
 |---|---|---|
 | `product_id` | string | Product code. Always a string. |
 | `source`, `supplier_id` | string | `source` is `valio`, `csv` or `own`. |
-| `names` | `{en?, fi?, sv?}` | For Valio products `fi` is always there; `sv` is missing on 8%. |
+| `kitchen_id` | string | Only on `own` rows: the kitchen the product belongs to. |
+| `unit_price_eur` | decimal string or null | Only on `own` rows: the price the kitchen entered. Catalog prices come from `get_offer`. |
+| `names` | `{en?, fi?, sv?}` | For Valio products `fi` is always there; `sv` is missing on 8%. An own product has one entered name, repeated under all three. |
 | `brand` | string or null | Null on 18% of the Valio catalog. |
 | `category` | string | A 5-character code. The data has no category names: the UI shows the code. |
 | `vendor`, `country` | string or null | `country` is a lower-case ISO alpha-2 code. |
@@ -244,7 +250,7 @@ Product row (the catalog row from the shared repository, without the raw record)
 | `units` | `{unit, size_in_base_units, gtin}[]` | Pack hierarchy, in base units. |
 | `lot_size` | number or null | Order in multiples of this many sales units; null means no rule. |
 | `net_content` | `{value, unit}` or null | Of one base unit, in `L` or `KG` (see "Units" below). A case of 12 x 1 L is 1 L. |
-| `net_content_source` | string or null | `synkka` (measured piece), `synkka_case` (measured case, divided), `base_unit` (sold by weight), `name` (read from the product name: a guess, verify before relying on it). |
+| `net_content_source` | string or null | `synkka` (measured piece), `synkka_case` (measured case, divided), `base_unit` (sold by weight), `entered` (typed in by the kitchen for an own product), `name` (read from the product name: a guess, verify before relying on it). |
 | `allergens` | `{contains, may_contain, undeclared}` | Lists of GS1 codes. `undeclared` is the supplier's "not declared" level; it is not a free-from claim. |
 | `allergen_data_known` | boolean | False on 46% of the Valio catalog. False means unknown: show "unknown", never "none". |
 | `no_declarable_allergens` | boolean | The supplier states that no declarable allergen is present. |
