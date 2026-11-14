@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useState } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 
 import { createHttpApi } from "@/api/http";
 import { createMockApi } from "@/api/mock";
@@ -15,10 +15,17 @@ export function getApi(): Api {
 
 const ApiContext = createContext<Api | null>(null);
 
-/** Tests pass their own `api`; the app lets it pick from the environment once. */
+let defaultApi: Api | null = null;
+
+/** One Api per page, so a remount (e.g. the language switch) keeps the mock's data. */
+function getDefaultApi(): Api {
+  defaultApi ??= getApi();
+  return defaultApi;
+}
+
+/** Tests pass their own `api`; the app picks one from the environment once per page. */
 export function ApiProvider({ api, children }: { api?: Api; children: ReactNode }) {
-  const [fallback] = useState(() => api ?? getApi());
-  return <ApiContext.Provider value={api ?? fallback}>{children}</ApiContext.Provider>;
+  return <ApiContext.Provider value={api ?? getDefaultApi()}>{children}</ApiContext.Provider>;
 }
 
 export function useApi(): Api {
