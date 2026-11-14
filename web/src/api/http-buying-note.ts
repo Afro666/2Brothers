@@ -11,7 +11,7 @@ const text = (value: unknown): string => {
 
 /**
  * The gateway's buying-note answer (`GET /suppliers/{id}/demand/buying-note`). `note: null`
- * (dropped) and `note: []` (nothing short) read as null: the page then shows the table only.
+ * (dropped) and `note: []` (nothing short) read as null. Failures reject so the page can say so.
  */
 const day = (value: unknown): string => {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("a buying note line has no date");
@@ -45,11 +45,7 @@ export function createBuyingNoteHttp(
   return {
     async getBuyingNote(from, to, language) {
       const query = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&lang=${language}`;
-      try {
-        return mapBuyingNote(await call(`/v1/suppliers/${encodeURIComponent(SUPPLIER_ID)}/demand/buying-note?${query}`));
-      } catch {
-        return null;
-      }
+      return mapBuyingNote(await call(`/v1/suppliers/${encodeURIComponent(SUPPLIER_ID)}/demand/buying-note?${query}`));
     },
   };
 }

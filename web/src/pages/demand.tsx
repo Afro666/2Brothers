@@ -9,30 +9,39 @@ import { LoadingState } from "@/components/purchasing/loading-state";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { RiskBadge } from "@/components/purchasing/risk-badge";
 import { useApi } from "@/api";
-import type { Api } from "@/api/types";
+import { ApiError, type Api } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { formatAmount, formatDate, formatNumber } from "@/lib/format";
 import { translate, useLanguage, useT } from "@/lib/i18n";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
-import { isValidWeek, isoWeekOf, shiftWeek, weekDates, weekRangeLabel } from "@/lib/week";
+import { isValidWeek, isoWeekOf, shiftWeek, weekDates, weekTitle } from "@/lib/week";
 import type { BuyingNote, ShortageRisk, SupplierDemandRow } from "@/types";
 import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
 import { ProductLink } from "@/components/purchasing/product-link";
+import { explanationModelName } from "@/components/purchasing/proposal-explanation";
 
 /** Worst first: a short week matters more than an unmeasured one. */
 const RISK_ORDER: Record<ShortageRisk, number> = { SHORT: 0, UNKNOWN: 1, AT_RISK: 2, COVERED: 3 };
 
-export const RISK_PLURALS: Record<ShortageRisk, string> = {
-  SHORT: "short",
-  UNKNOWN: "unknown",
-  AT_RISK: "at risk",
-  COVERED: "covered",
+export const RISK_COUNTS: Record<ShortageRisk, string> = {
+  SHORT: "{count} short",
+  UNKNOWN: "{count} unknown",
+  AT_RISK: "{count} at risk",
+  COVERED: "{count} covered",
 };
 
-const RISK_BEFORE_AND: readonly ShortageRisk[] = ["SHORT", "UNKNOWN", "AT_RISK"];
+/** Finnish counts differ in the singular ("1 tuntematon", not "1 tuntematonta"). */
+export const RISK_ONE: Record<ShortageRisk, string> = {
+  SHORT: "1 short",
+  UNKNOWN: "1 unknown",
+  AT_RISK: "1 at risk",
+  COVERED: "1 covered",
+};
+
+const RISK_SUMMARY_ORDER: readonly ShortageRisk[] = ["SHORT", "UNKNOWN", "AT_RISK", "COVERED"];
 
 interface ProductGroup {
   productId: string;
@@ -51,15 +60,17 @@ export function riskSummary(
   // Without a language the English text, with its placeholders filled.
   t: ReturnType<typeof useT> = (text, vars) => translate("en", text, vars),
 ): string {
+  const groups = groupByProduct(rows);
   const counts: Record<ShortageRisk, number> = { SHORT: 0, UNKNOWN: 0, AT_RISK: 0, COVERED: 0 };
-  for (const row of rows) counts[row.risk] += 1;
-  const spoken = RISK_BEFORE_AND.filter((risk) => counts[risk] > 0).map((risk) =>
-    t("{count} {risk}", { count: counts[risk], risk: t(RISK_PLURALS[risk]) }),
-  );
-  if (counts.COVERED > 0) spoken.push(t("{count} {risk}", { count: counts.COVERED, risk: t("covered") }));
-  if (spoken.length === 0) return t("No forecast lines this week");
-  if (spoken.length === 1) return spoken[0];
-  return t("{items} and {last}", { items: spoken.slice(0, -1).join(", "), last: spoken.at(-1) ?? "" });
+  for (const group of groups) counts[group.worst] += 1;
+  if (groups.length === 0) return t("No forecast lines this week");
+  const items = RISK_SUMMARY_ORDER.filter((risk) => counts[risk] > 0)
+    .map((risk) => (counts[risk] === 1 ? t(RISK_ONE[risk]) : t(RISK_COUNTS[risk], { count: formatNumber(counts[risk]) })))
+    .join(", ");
+  return t(groups.length === 1 ? "{count} product: {items}" : "{count} products: {items}", {
+    count: formatNumber(groups.length),
+    items,
+  });
 }
 
 export function groupByProduct(rows: SupplierDemandRow[]): ProductGroup[] {
@@ -110,7 +121,7 @@ interface WeekSection {
 
 /** The buying note for one window and language; a stale answer is ignored by `useAsync`. */
 function loadNote(api: Api, from: string, to: string, language: "en" | "fi"): Promise<BuyingNote | null> {
-  return api.getBuyingNote(from, to, language).catch(() => null);
+  return api.getBuyingNote(from, to, language);
 }
 
 const noteTone: Record<string, string> = {
@@ -120,7 +131,7 @@ const noteTone: Record<string, string> = {
 
 function BuyingNoteBox({ note }: { note: BuyingNote }) {
   const t = useT();
-  const model = note.model || "Nemotron 3.5 Super VL";
+  const model = explanationModelName(note.model || "Nemotron 3.5 Super VL");
   // The note often has one line per day for the same product: name it once.
   const byProduct = new Map<string, BuyingNote["lines"]>();
   for (const line of note.lines) byProduct.set(line.productId, [...(byProduct.get(line.productId) ?? []), line]);
@@ -169,7 +180,7 @@ async function loadWeek(api: Api, week: string, t: ReturnType<typeof useT>): Pro
   return {
     monday,
     sunday,
-    label: t("Week {number}, {range}", { number: Number(week.slice(6)), range: weekRangeLabel(week) }),
+    label: weekTitle(week, t),
     summary: riskSummary(rows, t),
     groups: groupByProduct(rows),
   };
@@ -182,7 +193,6 @@ function ProductSummary({ group }: { group: ProductGroup }) {
       <ProductThumb en={group.productName} size="sm" />
       <span className="block min-w-40 flex-1">
         <span className="block font-medium break-words">{group.productName}</span>
-        <span className="block text-xs text-muted-foreground">{group.productId}</span>
       </span>
       <RiskBadge risk={group.worst} />
       <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -199,11 +209,7 @@ function ProductSummary({ group }: { group: ProductGroup }) {
             {t("Buy {amount}", { amount: formatAmount(group.totalBuy, group.unit) })}
           </span>
         ) : null}
-        {group.unknownBuyDays > 0 ? (
-          <span className="text-warning">
-            {t("+ days with an unknown amount: {count}", { count: formatNumber(group.unknownBuyDays) })}
-          </span>
-        ) : null}
+        {group.unknownBuyDays > 0 ? <UnknownBuyDays group={group} /> : null}
         <span className="tabular-nums">
           {t("kitchens: up to {count}", { count: formatNumber(group.maxKitchens) })}
         </span>
@@ -235,6 +241,7 @@ function ProductSection({
   hidden?: boolean;
   onToggle: () => void;
 }) {
+  const t = useT();
   return (
     <TableBody data-product-section={group.productId} hidden={hidden}>
       <TableRow className="border-b-0 bg-muted/40 hover:bg-muted/40">
@@ -251,6 +258,14 @@ function ProductSection({
           <OpenProductPage group={group} className="px-2" />
         </TableHead>
       </TableRow>
+      <TableRow data-demand-day-header hidden={!open}>
+        <TableHead scope="col">{t("Date")}</TableHead>
+        <TableHead scope="col" className="text-right">{t("Forecast demand")}</TableHead>
+        <TableHead scope="col" className="text-right">{t("Kitchens")}</TableHead>
+        <TableHead scope="col">{t("Available")}</TableHead>
+        <TableHead scope="col">{t("Risk")}</TableHead>
+        <TableHead scope="col" className="text-right">{t("Buy")}</TableHead>
+      </TableRow>
       {group.rows.map((row) => (
         <DemandRow key={row.date} row={row} hidden={!open} />
       ))}
@@ -261,7 +276,7 @@ function ProductSection({
 function DemandRow({ row, hidden }: { row: SupplierDemandRow; hidden: boolean }) {
   const t = useT();
   return (
-    <TableRow hidden={hidden}>
+    <TableRow data-demand-day hidden={hidden}>
       <TableCell>{formatDate(row.date)}</TableCell>
       <TableCell className="text-right tabular-nums">
         {formatAmount(row.forecastDemand, row.unit)}
@@ -345,7 +360,9 @@ function UnknownBuyDays({ group }: { group: ProductGroup }) {
   const t = useT();
   return (
     <span className="text-warning">
-      {t("+ days with an unknown amount: {count}", { count: formatNumber(group.unknownBuyDays) })}
+      {t(group.unknownBuyDays === 1 ? "{count} day with no stock figure" : "{count} days with no stock figure", {
+        count: formatNumber(group.unknownBuyDays),
+      })}
     </span>
   );
 }
@@ -398,7 +415,6 @@ function MobileGroup({
       <div data-phone-details hidden={!open} className="ml-4 space-y-1 border-l pb-2 pl-3 text-sm">
         <OpenProductPage group={group} className="inline-flex min-h-11 items-center" />
         <p className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-          <span>{group.productId}</span>
           {group.shortDays > 0 ? (
             <span className="font-medium text-foreground">
               {t("Short on {count} of {days} days", {
@@ -503,9 +519,16 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
   const [coveredOpen, setCoveredOpen] = useState(false);
   const shortGroups = groups.filter((group) => group.shortDays > 0);
   const unknownGroups = groups.filter((group) => group.shortDays === 0 && group.worst === "UNKNOWN");
-  const coveredGroups = groups.filter((group) => group.shortDays === 0 && group.worst !== "UNKNOWN");
+  const atRiskGroups = groups.filter((group) => group.shortDays === 0 && group.worst === "AT_RISK");
+  const coveredGroups = groups.filter((group) => group.worst === "COVERED");
   const directGroups =
-    filter === "SHORT" ? shortGroups : filter === "UNKNOWN" ? unknownGroups : filter === "ALL" ? [...shortGroups, ...unknownGroups] : [];
+    filter === "SHORT"
+      ? shortGroups
+      : filter === "UNKNOWN"
+        ? unknownGroups
+        : filter === "ALL"
+          ? [...shortGroups, ...unknownGroups, ...atRiskGroups]
+          : [];
   const showCovered = filter === "ALL" || filter === "COVERED";
   const filterIsEmpty = directGroups.length === 0 && !(showCovered && coveredGroups.length > 0);
   const options = [
@@ -571,16 +594,6 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
         <CardContent className="px-3 md:px-6">
           <div className="hidden md:block">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("Date")}</TableHead>
-                  <TableHead className="text-right">{t("Forecast demand")}</TableHead>
-                  <TableHead className="text-right">{t("Kitchens")}</TableHead>
-                  <TableHead>{t("Available")}</TableHead>
-                  <TableHead>{t("Risk")}</TableHead>
-                  <TableHead className="text-right">{t("Buy")}</TableHead>
-                </TableRow>
-              </TableHeader>
               {filterIsEmpty ? (
                 <TableBody>
                   <TableRow>
@@ -688,6 +701,20 @@ export function DemandPage() {
     () => (noteWindow ? loadNote(api, noteWindow[0], noteWindow[1], language) : Promise.resolve(null)),
     [api, noteWindow?.[0], noteWindow?.[1], language],
   );
+  const noteRequestKey = noteWindow ? `${noteWindow[0]}:${noteWindow[1]}:${language}` : "";
+  const noteAutoRetried = useRef("");
+  const noteRetryAfterS =
+    note.status === "error" && note.error instanceof ApiError && note.error.status === 429
+      ? note.error.retryAfterS
+      : undefined;
+  useEffect(() => {
+    if (noteRetryAfterS == null || noteAutoRetried.current === noteRequestKey) return;
+    const timer = window.setTimeout(() => {
+      noteAutoRetried.current = noteRequestKey;
+      void note.reload();
+    }, noteRetryAfterS * 1000);
+    return () => window.clearTimeout(timer);
+  }, [note.reload, noteRequestKey, noteRetryAfterS]);
 
   function showWeek(target: string) {
     void navigate({ to: "/demand", search: { week: target } });
@@ -708,10 +735,7 @@ export function DemandPage() {
               {t("Previous week")}
             </Button>
             <h2 className="order-first w-full text-lg font-semibold md:order-none md:w-auto md:px-2 md:text-center">
-              {t("Week {number}, {range}", {
-                number: Number(week.slice(6)),
-                range: weekRangeLabel(week),
-              })}
+              {weekTitle(week, t)}
             </h2>
             <Button variant="outline" className="h-11 md:h-9" onClick={() => showWeek(shiftWeek(week, 1))}>
               {t("Next week")}
@@ -722,10 +746,7 @@ export function DemandPage() {
           <div className="space-y-3">
             <InvalidWeek>
               {t("Go to next week, {week}", {
-                week: t("Week {number}, {range}", {
-                  number: Number(defaultWeek.slice(6)),
-                  range: weekRangeLabel(defaultWeek),
-                }),
+                week: weekTitle(defaultWeek, t),
               })}
             </InvalidWeek>
           </div>
@@ -749,6 +770,14 @@ export function DemandPage() {
             ) : (
               <div className="space-y-4">
                 {note.status === "ready" && note.data ? <BuyingNoteBox note={note.data} /> : null}
+                {note.status === "error" ? (
+                  <div role="alert" className="space-y-3 rounded-lg border border-destructive/40 p-4 text-sm">
+                    <p>{t("The buying note could not be loaded. The table below is complete.")}</p>
+                    <Button variant="outline" size="sm" onClick={() => void note.reload()}>
+                      {t("Try again")}
+                    </Button>
+                  </div>
+                ) : null}
                 <DemandGroups key={state.data.monday} groups={state.data.groups} />
               </div>
             )}

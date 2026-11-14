@@ -167,6 +167,19 @@ describe("ApprovalCard", () => {
     expect(screen.getByRole("button", { name: "Inspect" })).toHaveAttribute("aria-expanded", "true");
   });
 
+  it("prints no fee line for a zero fee, and no limit once free delivery is reached", () => {
+    // Live shape: the gateway sends the gap, so at a gap of 0 the mapped threshold is the order's own total.
+    const reached = { ...confirmedOrder, deliveryFee: 0, mov: { threshold: 2320.82, current: 2320.82, deliveryFee: 0 } };
+    const { unmount } = render(<ApprovalCard request={approval} order={reached} onApprove={vi.fn()} />);
+    expect(screen.queryByText(/Delivery fee/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/free from/)).not.toBeInTheDocument();
+    unmount();
+    const feeAtLimit = { ...confirmedOrder, deliveryFee: 25, mov: { threshold: 530, current: 530, deliveryFee: 25 } };
+    render(<ApprovalCard request={approval} order={feeAtLimit} onApprove={vi.fn()} />);
+    expect(screen.getByText("Delivery fee €25.00")).toBeVisible();
+    expect(screen.queryByText(/free from/)).not.toBeInTheDocument();
+  });
+
   it("shows the delivery fee below the totals and keeps the gateway's approve total", () => {
     const feeRequest = { ...approval, totalExVat: 33.1, totalInclVat: 62.74, inclVat: 37.74 };
     const feeOrder = {

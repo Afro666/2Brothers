@@ -41,21 +41,41 @@ describe("Buying note gateway boundary", () => {
     });
   });
 
-  it("is null when the note was dropped or is empty, and when the gateway refuses", async () => {
+  it("is null when the note was dropped or is empty", async () => {
     for (const body of [
       { ...ANSWER, note: null, dropped: "NUMBER_NOT_IN_ROW" },
       { ...ANSWER, note: [], rows_used: 0 },
-      { error: { code: "SCOPE_REQUIRED", message: "no" } },
-      { error: { code: "BUYING_NOTE_UNAVAILABLE", message: "down" } },
     ]) {
-      for (const status of [200, 403, 502]) {
-        gateway(body, status);
-        expect(await createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "en")).toBeNull();
-      }
+      gateway(body);
+      expect(await createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "en")).toBeNull();
     }
   });
 
-  it("is null on a malformed answer or an unreachable gateway", async () => {
+  it("rejects gateway failures so the page can explain them", async () => {
+    for (const [body, status] of [
+      [{ error: { code: "SCOPE_REQUIRED", message: "no" } }, 403],
+      [{ error: { code: "BUYING_NOTE_UNAVAILABLE", message: "down" } }, 502],
+    ] as const) {
+      gateway(body, status);
+      await expect(createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "en")).rejects.toMatchObject({
+        code: body.error.code,
+        status,
+      });
+    }
+    vi.stubGlobal("fetch", async () => { throw new Error("offline"); });
+    await expect(createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "en")).rejects.toMatchObject({
+      code: "NETWORK",
+    });
+  });
+
+  it("keeps the wait named by a rate-limited answer", async () => {
+    gateway({ error: { code: "BUYING_NOTE_RATE_LIMITED", message: "wait", retry_after_s: 2 } }, 429);
+    const refused = await createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "en")
+      .catch((reason: unknown) => reason);
+    expect(refused).toMatchObject({ code: "RATE_LIMITED", status: 429, retryAfterS: 2 });
+  });
+
+  it("rejects a malformed answer instead of hiding the failed note", async () => {
     for (const body of [
       { ...ANSWER, model: 3 },
       { ...ANSWER, note: [{ ...ANSWER.note[0], risk: "LOW" }] },
@@ -64,10 +84,8 @@ describe("Buying note gateway boundary", () => {
       { ...ANSWER, note: "none" },
     ]) {
       gateway(body);
-      expect(await createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "en")).toBeNull();
+      await expect(createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "en")).rejects.toThrow();
     }
-    vi.stubGlobal("fetch", async () => { throw new Error("offline"); });
-    expect(await createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "en")).toBeNull();
   });
 
   it("maps without the supplier's window", () => {
@@ -76,8 +94,8 @@ describe("Buying note gateway boundary", () => {
     expect(mapBuyingNote(ANSWER)?.lines).toHaveLength(2);
   });
 
-  it("hides the note when a line's date is not a day", async () => {
+  it("rejects the note when a line's date is not a day", async () => {
     gateway({ ...ANSWER, note: [{ ...ANSWER.note[0], date: "next week" }] });
-    expect(await createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "fi")).toBeNull();
+    await expect(createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "fi")).rejects.toThrow();
   });
 });

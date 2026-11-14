@@ -1,3 +1,5 @@
+import { getLanguage } from "@/lib/i18n";
+
 function parseDate(value: string): Date {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day));
@@ -49,6 +51,33 @@ export function isValidWeek(week: string): boolean {
 /** "Week 47, 16 to 22 Nov 2026"; a week across New Year names both years. */
 export function weekLabel(week: string): string {
   return `Week ${Number(week.slice(6))}, ${weekRangeLabel(week)}`;
+}
+
+/** The planner's Finnish title, and the fuller English range across months and years. */
+export function weekTitle(
+  week: string,
+  t: (text: string, vars?: Record<string, string | number>) => string,
+): string {
+  if (getLanguage() !== "fi") {
+    return t("Week {number}, {range}", { number: Number(week.slice(6)), range: weekRangeLabel(week) });
+  }
+  const dates = weekDates(week);
+  const from = new Date(`${dates[0]}T12:00:00Z`);
+  const to = new Date(`${dates[6]}T12:00:00Z`);
+  const month = new Intl.DateTimeFormat("fi-FI", { month: "short", timeZone: "UTC" });
+  const vars = {
+    week: Number(week.slice(-2)),
+    from: from.getUTCDate(),
+    fromMonth: month.format(from),
+    fromYear: from.getUTCFullYear(),
+    to: to.getUTCDate(),
+    month: month.format(to),
+    year: to.getUTCFullYear(),
+  };
+  // A week across a month end names both months, across New Year both years.
+  if (vars.fromYear !== vars.year) return t("Week {week}, {from} {fromMonth} {fromYear} to {to} {month} {year}", vars);
+  if (from.getUTCMonth() !== to.getUTCMonth()) return t("Week {week}, {from} {fromMonth} to {to} {month} {year}", vars);
+  return t("Week {week}, {from} to {to} {month} {year}", vars);
 }
 
 const MONTHS = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" });
