@@ -40,8 +40,8 @@ def test_a_placed_order_carries_a_receipt_that_verifies_against_the_public_jwks(
     assert claims["sub"] == order["order_id"] and claims["kitchen_id"] == "demo-kitchen"
     assert claims["offer_id"] == p["offer_id"] and claims["offer_hash"] == p["offer_hash"]
     assert claims["expected_total"] == order["expected_total"] and claims["currency"] == "EUR"
-    assert claims["lines"] == [{"product_id": ln["product_id"], "quantity": str(ln["quantity"]), "unit": ln["unit"]}
-                               for ln in order["lines"]]
+    assert claims["lines"] == [{"product_id": ln["product_id"], "quantity": str(ln["quantity"]), "unit": ln["unit"],
+                                "stock": "confirmed"} for ln in order["lines"]]
     assert claims["approved_by"] == db.orders.find_one({})["approved_by"]
     assert isinstance(claims["iat"], int) and "exp" not in claims
     header = pyjwt.get_unverified_header(order["receipt"])
