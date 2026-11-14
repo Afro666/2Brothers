@@ -2204,6 +2204,76 @@ Rules:
 - The web client maps `logo_url` to `logoUrl`, `kitchen_type` to `kitchenType`,
   `opening_hours` to `openingHours` and `postal_code` to `postalCode`.
 
+### Product pictures: kind icons and brand logos (Context.dev)
+
+The Valio catalog and its API have no product photo (`synkkaData.medias[]` holds ids
+only, no URL). Photos from the web are not copied: that is a copyright risk. So a
+product shows one of two pictures, and both are honest about what they are:
+
+1. **A kind icon.** The web maps the product's `category` code to a kind (milk,
+   cheese, bread, fish, cleaning ...) and shows that kind's icon. The map is
+   `web/src/lib/product-kinds.json`, made once from the catalog names by
+   `scripts/product_kinds.py` (run it again when the catalog changes). A category
+   that is not in the map gets a neutral package icon. This needs no route.
+2. **The brand logo, when it is known.** `brand` on the product row (from
+   `synkkaData.brand`) is looked up with Context.dev and the answer is kept in
+   MongoDB (`brand_logos`, through `store/`). The logo replaces the icon.
+
+`GET /v1/brands/logos?name=Valio&name=Arla` (`kitchen:read`). One to 50 `name`
+parameters (repeat the parameter; a brand can hold a comma). Each name is trimmed;
+no name, an empty name, more than 50 names or a name longer than 100 characters is
+422 `INVALID_REQUEST`. The answer has one row per distinct name, in the order asked:
+
+```json
+{"logos": [
+  {"brand": "Valio", "status": "found", "logo_url": "https://media.brand.dev/....png",
+   "background": "own", "domain": "valio.fi", "checked_at": "2026-11-14T20:00:00+00:00",
+   "source": {"provider": "Context.dev", "endpoint": "POST /v1/brand/retrieve"}},
+  {"brand": "HK", "status": "none", "logo_url": null, "background": null, "domain": null,
+   "checked_at": "2026-11-14T20:00:00+00:00", "source": null},
+  {"brand": "Arla", "status": "not_checked", "logo_url": null, "background": null,
+   "domain": null, "checked_at": null, "source": null}
+]}
+```
+
+| Field | Notes |
+|---|---|
+| `status` | `found`: a logo is known. `none`: Context.dev was asked (or the name cannot be asked) and there is no logo that matches the brand; this is kept and never asked again. `not_checked`: nobody has asked yet. |
+| `logo_url` | An https URL from Context.dev's answer, or `null`. |
+| `background` | What the logo needs behind it: `light`, `dark`, or `own` (the image has its own background). `null` without a logo. |
+| `domain` | The brand's website as Context.dev found it, so a person can see which company the logo belongs to. `null` without a logo. |
+| `checked_at` | When Context.dev was asked; `null` for `not_checked`. |
+
+Rules:
+
+- **This route never calls Context.dev.** It reads `brand_logos` only, so a page view or
+  a search on the open demo spends no credits. A database error is 503
+  `LOGOS_UNAVAILABLE`; the web then shows the kind icons.
+- **Context.dev is asked only by an operator**, once per brand, with a capped command:
+  `python -m gateway.brand_logos --limit 20` (default 10, at most 30 per run). It takes
+  the catalog brands with the most products that have no row yet, or the brands named
+  with `--brand`. It stops early when Context.dev says fewer than 300 credits remain
+  (the recall monitor and the onboarding lookup use the same key), on a 401, 402 or
+  429, and after three failed calls in a row. A failed call (network, timeout, 5xx)
+  stores nothing, so the brand stays `not_checked`. Without `CONTEXT_DEV_API_KEY` it
+  calls nothing.
+- The lookup is `POST /v1/brand/retrieve` with `{"type": "by_name", "name": <brand>,
+  "country_gl": "fi"}`: the catalog has brand names, not domains. A name shorter than
+  3 or longer than 30 characters cannot be asked (Context.dev's limits): it is stored
+  as `none` without a call.
+- **A logo is kept only when the answer matches the brand**, because a name can be
+  ambiguous: the brand name, lower case with everything but letters and digits removed,
+  must equal Context.dev's `title` treated the same way, or the first label of its
+  `domain` ("Santa Maria" matches the title "SantaMaria"; "Valio" matches `valio.fi`).
+  Anything else, and Context.dev's 400 `NOT_FOUND`, is stored as `none`.
+- The logo picked, from `brand.logos[]` with an https URL: an `icon` with its own
+  background, then an `icon` and then a `logo` for a light background, then the same
+  for a dark background, then a `logo` with its own background.
+- The web client maps `logo_url` to `logoUrl` and `checked_at` to `checkedAt`. It shows a
+  logo only for `status` `found` with an https URL, with `alt` "<brand> logo" and the
+  `domain` as its title. A failed call or a broken image shows the kind icon. The
+  browser loads the image from Context.dev's host; the gateway never fetches it.
+
 ### Recall alerts (Context.dev)
 
 The recall monitor (`monitor/recalls.py`) reads the Ruokavirasto recall list with
