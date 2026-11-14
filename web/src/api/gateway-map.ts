@@ -2,6 +2,7 @@ import { mapMoney } from "@/api/map";
 import { mapProposalOptions } from "@/api/map-options";
 import { SUPPLIER_ID } from "@/api/supplier-id";
 import { ApiError } from "@/api/types";
+import { codeLabel, plainReason } from "@/lib/codes";
 import type {
   AddableProduct,
   ApprovalRequest,
@@ -405,6 +406,28 @@ const WARNING_CODES: Record<string, { rule: string; detail: string }> = {
   },
 };
 
+/** Audit actors that are not a person's name, in words for "asked by". */
+const ACTOR_NAMES: Record<string, string> = {
+  "buyer-agent": "the Buyer agent",
+  "demo-visitor": "a demo visitor",
+  "demo-seed": "the demo setup",
+  human: "a person",
+};
+
+/**
+ * Who asked for a proposal, in words, or null when nothing says so. The audit actor wins;
+ * without it, a supplier offer proposal (its text is written by the gateway,
+ * gateway/supplier_offers.py) came from Valio's selling agent.
+ */
+export function askedBy(actor: unknown, request: Json): string | null {
+  if (typeof actor === "string" && actor.trim()) {
+    if (actor.startsWith("supplier:")) return "Valio's selling agent";
+    return ACTOR_NAMES[actor] ?? actor;
+  }
+  if (typeof request.text === "string" && request.text.startsWith("Offer from ")) return "Valio's selling agent";
+  return null;
+}
+
 export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalRequest["suppliersToConfirm"] {
   if (!Array.isArray(proposal.blocks)) return [];
   return proposal.blocks.flatMap((block) => {
@@ -440,16 +463,6 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
   if (Array.isArray(proposal.lines)) {
     for (const line of proposal.lines) for (const code of strings(line?.reason_codes)) codes.add(code);
   }
-  const reasons = [
-    ...strings(mandate.reasons).map((rule) => ({ rule, detail: "" })),
-    ...Object.entries(CHECK_CODES)
-      .filter(([code]) => codes.has(code))
-      .map(([, reason]) => reason),
-    ...strings(mandate.warnings).map((code) => ({
-      ...(WARNING_CODES[code] ?? { rule: code, detail: "A warning. It does not block the order." }),
-      warning: true,
-    })),
-  ];
   const productNames = new Map<string, string>();
   if (Array.isArray(proposal.lines)) {
     for (const line of proposal.lines) {
@@ -458,12 +471,23 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
       }
     }
   }
+  // #1142: no raw code reaches the screen, in a gateway reason or as an unknown warning.
+  const reasons = [
+    ...strings(mandate.reasons).map((rule) => ({ rule: plainReason(rule, productNames), detail: "" })),
+    ...Object.entries(CHECK_CODES)
+      .filter(([code]) => codes.has(code))
+      .map(([, reason]) => reason),
+    ...strings(mandate.warnings).map((code) => ({
+      ...(WARNING_CODES[code] ?? { rule: codeLabel(code).title, detail: "A warning. It does not block the order." }),
+      warning: true,
+    })),
+  ];
   return {
     id,
     approvalRef: typeof proposal.approval_id === "string" && proposal.approval_id ? proposal.approval_id : null,
     // The approval's order is the proposal's basket; a placed order gets its own id in `listOrders`.
     orderId: id,
-    requestedBy: typeof created?.actor === "string" && created.actor ? created.actor : null,
+    requestedBy: askedBy(created?.actor, request),
     createdAt: typeof created?.at === "string" && created.at ? created.at : null,
     summary:
       typeof request.text === "string" && request.text.trim()
