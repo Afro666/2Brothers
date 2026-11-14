@@ -1,4 +1,5 @@
 import { useParams } from "@tanstack/react-router";
+import { toast } from "sonner";
 
 import { useApi } from "@/api";
 import { AppShell } from "@/components/purchasing/app-shell";
@@ -11,10 +12,12 @@ import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
 import { OrderResolutionPanel } from "@/components/purchasing/order-resolution-panel";
 import { StatusBadge } from "@/components/purchasing/status-badge";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatDate, formatEur } from "@/lib/format";
+import { formatDate, formatDateTime, formatEur } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
+import type { OrderReceipt } from "@/types";
 
 function OrderHistory({ orderId }: { orderId: string }) {
   const api = useApi();
@@ -24,6 +27,54 @@ function OrderHistory({ orderId }: { orderId: string }) {
   if (state.status === "error") return <ErrorState message={state.error.message} onRetry={state.reload} />;
   if (state.data.length === 0) return <EmptyState title="No history yet">Order history will appear here.</EmptyState>;
   return <AuditTimeline events={state.data} />;
+}
+
+async function copyReceipt(jws: string) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(jws);
+      toast.success("Receipt copied");
+      return;
+    }
+  } catch {}
+  toast.error("Copy failed. Select the receipt text and copy it.");
+}
+
+/** The signed receipt: claims decoded for display only. Anyone checks the signature with the public key. */
+function SignedReceipt({ receipt }: { receipt: OrderReceipt | null }) {
+  return (
+    <section aria-labelledby="receipt-heading" className="space-y-2 border-t pt-4">
+      <h3 id="receipt-heading" className="text-base font-semibold">
+        Signed receipt
+      </h3>
+      {receipt ? (
+        <>
+          <p className="text-sm text-muted-foreground">Signed by the gateway. Anyone can check it with the public key.</p>
+          <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-3">
+            <div>
+              <dt className="text-muted-foreground">Approved by</dt>
+              <dd className="break-words">{receipt.approvedBy ?? "unknown"}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Signed at</dt>
+              <dd>{formatDateTime(receipt.signedAt)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Signed total</dt>
+              <dd>{formatEur(receipt.total)}</dd>
+            </div>
+          </dl>
+          <Button type="button" variant="outline" size="sm" onClick={() => void copyReceipt(receipt.jws)}>
+            Copy receipt
+          </Button>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No signed receipt (this order is from before receipts, or signing was not possible)
+        </p>
+      )}
+    </section>
+  );
 }
 
 export function OrderDetailPage() {
@@ -74,6 +125,7 @@ export function OrderDetailPage() {
                   </div>
                 ) : null}
               </dl>
+              {state.data.receipt !== undefined ? <SignedReceipt receipt={state.data.receipt} /> : null}
             </div>
             <CardContent>
               <Tabs defaultValue="lines">

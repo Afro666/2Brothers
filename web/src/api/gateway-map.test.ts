@@ -330,6 +330,28 @@ describe("mapOrder", () => {
     });
     expect(order.lines[0]).toMatchObject({ quantity: 40, why: "Not recorded with the order." });
   });
+
+  it("decodes the signed receipt for display; an old order has none; a proposal has no receipt field", () => {
+    const encode = (value: unknown) => btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const claims = { sub: "ord-1", expected_total: "91.20", approved_by: "Aino Ääkkönen", iat: 1_763_107_200 };
+    // UTF-8 bytes, as the gateway signs them.
+    const payload = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(claims))))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const jws = `${encode({ alg: "EdDSA", kid: "k1" })}.${payload}.sig`;
+
+    expect(mapOrder(null, { ...placedOrder, receipt: jws }).receipt).toEqual({
+      jws,
+      approvedBy: "Aino Ääkkönen",
+      signedAt: new Date(1_763_107_200_000).toISOString(),
+      total: 91.2,
+    });
+    expect(mapOrder(null, { ...placedOrder, receipt: null }).receipt).toBeNull();
+    expect(mapOrder(null, placedOrder).receipt).toBeNull();
+    expect(mapOrder(null, { ...placedOrder, receipt: "not-a-jws" }).receipt).toEqual({
+      jws: "not-a-jws", approvedBy: null, signedAt: null, total: null,
+    });
+    expect(mapOrder(proposal, null).receipt).toBeUndefined();
+  });
 });
 
 describe("mapAudit", () => {

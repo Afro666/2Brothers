@@ -130,6 +130,20 @@ export interface Order {
   mov: MovState | null;
   /** The supplier's own reference after a person resolves an unknown send. */
   supplierOrderRef?: string | null;
+  /**
+   * The gateway's signed order receipt (docs/contract.md "Signed order receipt").
+   * null = a placed order without one; undefined = not a placed order (or not known).
+   */
+  receipt?: OrderReceipt | null;
+}
+
+/** The compact JWS plus a few claims decoded for display only; never verified in the browser. */
+export interface OrderReceipt {
+  jws: string;
+  approvedBy: string | null;
+  /** ISO time from the `iat` claim. */
+  signedAt: string | null;
+  total: number | null;
 }
 
 export type OrderSendOutcome = "CONFIRMED" | "NOT_SENT" | "UNCONFIRMED" | "SENT_READ_FAILED";

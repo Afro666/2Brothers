@@ -10,6 +10,7 @@ import { createOffersMock } from "@/api/mock-offers";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
 import { createRecallMock } from "@/api/mock-recalls";
 import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
+import { sampleReceipt } from "@/mocks/receipt";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import { readShelfPhotoMock } from "@/api/mock-shelf";
 import { createMockAuth } from "@/api/mock-auth";
@@ -74,6 +75,12 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     status: "UNCONFIRMED",
     urgency: "UNKNOWN",
     supplierOrderRef: null,
+    // Placed before receipts existed: the detail page says it has none.
+    receipt: null,
+  };
+  const placedOrder: Order = {
+    ...structuredClone(seedOrders.placed),
+    receipt: sampleReceipt(seedOrders.placed, "aron", "2026-11-14T08:15:00Z"),
   };
   const unknownApproval: ApprovalRequest = {
     ...structuredClone(seedApproval),
@@ -91,7 +98,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     ].map((row) => [row.id, structuredClone(row)]),
   );
   const demoOrders = new Map(
-    [...Object.values(seedOrders), confirmedDemoOrder, coffeeOrder, unknownOrder].map((row) => [
+    [placedOrder, seedOrders.needsApproval, confirmedDemoOrder, coffeeOrder, unknownOrder].map((row) => [
       row.id,
       structuredClone(row),
     ]),

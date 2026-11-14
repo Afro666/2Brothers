@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/api";
+import { mapReceipt } from "@/api/gateway-map";
 import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
 
@@ -20,6 +21,33 @@ describe("orders pages", () => {
     await user.click(screen.getByRole("tab", { name: "History" }));
     expect(await screen.findByText("ORD-1042 placed for Mon 16 Nov")).toBeInTheDocument();
     expect(screen.queryByText("Asked the buyer to approve ORD-1043")).not.toBeInTheDocument();
+  });
+
+  it("shows the signed receipt of a placed order and copies the JWS", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const { receipt } = await api.getOrder("ORD-1042");
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    renderApp("/orders/ORD-1042", api);
+
+    const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
+    expect(within(block).getByText("Signed by the gateway. Anyone can check it with the public key.")).toBeVisible();
+    expect(within(block).getByText("Approved by").nextElementSibling).toHaveTextContent("aron");
+    expect(within(block).getByText("Signed total").nextElementSibling).toHaveTextContent("148.76");
+    expect(within(block).getByText("Signed at").nextElementSibling).not.toHaveTextContent("unknown");
+
+    await user.click(within(block).getByRole("button", { name: "Copy receipt" }));
+    expect(writeText).toHaveBeenCalledWith(receipt!.jws);
+    // The sample is shaped like the gateway's: the real mapper reads the same claims back.
+    expect(mapReceipt(receipt!.jws)).toEqual(receipt);
+  });
+
+  it("says when a placed order has no signed receipt", async () => {
+    renderApp("/orders/ORD-1046");
+
+    const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
+    expect(within(block).getByText("No signed receipt (this order is from before receipts, or signing was not possible)")).toBeVisible();
+    expect(within(block).queryByRole("button", { name: "Copy receipt" })).not.toBeInTheDocument();
   });
 
   it("shows the API error for an unknown id", async () => {
