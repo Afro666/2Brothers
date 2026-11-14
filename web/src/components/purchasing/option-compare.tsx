@@ -19,6 +19,9 @@ const CHOOSE_ERRORS: Record<string, string> = {
   OPTION_UNAVAILABLE: "This option is no longer available. The current basket is unchanged; choose another option. Nothing was approved.",
   NOT_PENDING: "This proposal is no longer waiting for approval. Its current status is being reloaded. Nothing was changed or approved by this choice.",
   HUMAN_SESSION_REQUIRED: "Only a person signed in to the kitchen can choose an option. Nothing was changed or approved.",
+  OPTION_NOT_FOUND: "This option is not part of this proposal any more. The current basket is unchanged; choose another option. Nothing was approved.",
+  PROPOSAL_NOT_FOUND: "This proposal could not be found in this kitchen. The current basket is unchanged. Nothing was approved.",
+  IDEMPOTENCY_KEY_REUSED: "This choice clashed with an earlier one that was still being sent. The current basket is unchanged; try again. Nothing was approved.",
 };
 
 /** Why a person cannot approve this option now; null when they can. */

@@ -194,6 +194,9 @@ describe("OptionCompare", () => {
     ["OPTION_UNAVAILABLE", "This option is no longer available"],
     ["NOT_PENDING", "This proposal is no longer waiting for approval"],
     ["HUMAN_SESSION_REQUIRED", "Only a person signed in to the kitchen can choose an option"],
+    ["OPTION_NOT_FOUND", "This option is not part of this proposal any more"],
+    ["PROPOSAL_NOT_FOUND", "This proposal could not be found in this kitchen"],
+    ["IDEMPOTENCY_KEY_REUSED", "This choice clashed with an earlier one"],
   ])("explains %s without exposing a gateway code", async (code, message) => {
     const user = userEvent.setup();
     render(
