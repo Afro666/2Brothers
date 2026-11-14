@@ -160,8 +160,9 @@ def delivery_facts(when: dict[str, dict], offers: list[Offer], terms: dict, demo
     out = {}
     for pid, facts in when.items():
         own = products.get(pid) or {}
-        lead, lead_source = _first((own.get("lead_time_days"), DEMO_SOURCE),
-                                   (terms.get("lead_time_days"), TERMS_SOURCE),
+        # Terms first (#1462): a per-product demo value never hides the supplier's real lead time.
+        lead, lead_source = _first((terms.get("lead_time_days"), TERMS_SOURCE),
+                                   (own.get("lead_time_days"), DEMO_SOURCE),
                                    (supplier.get("lead_time_days"), DEMO_SOURCE))
         days, days_source = _first((terms.get("order_days") or None, TERMS_SOURCE),
                                    (supplier.get("order_days") or None, DEMO_SOURCE))
