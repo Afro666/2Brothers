@@ -1,5 +1,7 @@
 """API tokens (#271): created by a person, scoped to one kitchen, never approve."""
 
+import json
+
 import pytest
 
 from gateway.tests.test_gateway_app import AGENT, HUMAN, K, env, milk  # noqa: F401 (fixture)
@@ -85,3 +87,31 @@ def test_mcp_accepts_a_propose_token_but_not_a_read_token(env):
         names = {t["name"] for t in ok.json()["result"]["tools"]}
         assert "place_order" in names and not any("approve" in n for n in names)
         assert client.post("/mcp", headers={**MCP_HEADERS, **bearer(read)}, json=body).status_code == 401
+
+
+def test_mcp_tool_call_with_a_kitchen_token_acts_for_that_kitchen(env):
+    client, _, db = env
+    other = "/v1/kitchens/other-k"
+    t = make(client, ["kitchen:read", "kitchen:propose"], kitchen=other)["token"]
+    need = client.post(other + "/needs", headers=bearer(t),
+                       json={"quantity": "60", "unit": "L", "requested_date": "2026-11-16"})
+    assert need.status_code == 200, need.text
+
+    def call(tool, arguments):
+        body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": tool, "arguments": arguments}}
+        r = client.post("/mcp", headers={**MCP_HEADERS, **bearer(t)}, json=body)
+        assert r.status_code == 200, r.text
+        result = r.json()["result"]
+        assert not result.get("isError"), result
+        return json.loads(result["content"][0]["text"])
+
+    with client:
+        # The need is in other-k: with the server agent token (demo-kitchen) it is not found.
+        offer = call("get_offer", {"product_ids": ["462775"], "requested_date": "2026-11-16",
+                                   "need_id": need.json()["need_id"]})
+        call("simulate_order", {"offer_id": offer["offer_id"]})
+        req = call("request_approval", {"offer_id": offer["offer_id"]})
+    assert req["status"] == "PENDING"
+    assert [p["kitchen_id"] for p in db.proposals.find({})] == ["other-k"]
+    assert db.proposals.find_one({"_id": req["proposal_id"]})["kitchen_id"] == "other-k"
