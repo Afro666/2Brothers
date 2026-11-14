@@ -17,6 +17,7 @@ import { createTokensHttp } from "@/api/http-tokens";
 import { createApprovalTokensHttp } from "@/api/http-approval-tokens";
 import { createDeveloperHttp } from "@/api/http-developer";
 import { createEventsHttp } from "@/api/http-events";
+import { createExplanationHttp } from "@/api/http-explanation";
 import {
   type Json,
   mapAddable,
@@ -36,6 +37,7 @@ import { createMockApi } from "@/api/mock";
 import type { Api, AuditActor, Session } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { formatEur } from "@/lib/format";
+import { dropKeptAnswers } from "@/lib/use-async";
 import { randomBytes, randomHex, toHex } from "@/lib/random-id";
 
 function uuid(): string {
@@ -52,7 +54,7 @@ export const SIGNED_IN_EVENT = "kitchen-buyer:signed-in";
 
 /** Run before every write, so a read that starts after it never joins a request from before it.
  * shortcut: an entry is never removed; the app makes one api per page. Remove on dispose if that changes. */
-const beforeWrite = new Set<() => void>();
+const beforeWrite = new Set<() => void>([dropKeptAnswers]);
 
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
@@ -71,6 +73,7 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
   const isSessionCheck = method === "GET" && path === "/v1/me";
   const isLogin = method === "POST" && path === "/v1/auth/login";
   if (response.status === 401 && !isSessionCheck && !isLogin) {
+    dropKeptAnswers();
     window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
   }
   if (response.status === 429) {
@@ -246,6 +249,7 @@ export function createHttpApi(baseUrl: string): Api {
           onStatus?.(connected);
         },
       ),
+    ...createExplanationHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));

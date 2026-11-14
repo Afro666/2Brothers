@@ -200,8 +200,23 @@ describe("OptionCompare", () => {
       expect(fact("A", label)).toHaveTextContent(/^unknown$/);
     }
     expect(screen.queryByText("Recommended by the Buyer")).toBeNull();
-    expect(within(row("A")).getAllByRole("button")).toEqual([optionToggle("A")]);
-    expect(within(row("A")).getByText(/Cannot be approved now: Stock is not confirmed/)).toBeVisible();
+    // Unknown stock does not block (#1221, #1434): the order is placed and waits for Valio.
+    expect(within(row("A")).getByText("Valio must confirm stock")).toBeVisible();
+    expect(within(row("A")).getByRole("button", { name: /^Choose option A/ })).toBeEnabled();
+    expect(within(row("A")).queryByText(/Cannot be approved now/)).toBeNull();
+  });
+
+  it("lets a person choose an option with unknown stock and names who must confirm it (#1221, #1434)", async () => {
+    const user = userEvent.setup();
+    const onChoose = vi.fn(() => Promise.resolve());
+    const unknownStock: ProposalOption = { ...optionC, stockConfirmed: false, chosen: false, cutoffPassed: false };
+    render(<OptionCompare options={[optionA, unknownStock]} onChoose={onChoose} onApprove={vi.fn()} />);
+    // Collapsed, the row says who must confirm; it is not a blocked reason.
+    expect(within(optionToggle("B")).getByText("Valio must confirm stock")).toBeVisible();
+    expect(optionToggle("B")).not.toHaveAccessibleDescription(/Cannot be approved|not confirmed\. Approval/);
+    await user.click(optionToggle("B"));
+    await user.click(within(row("B")).getByRole("button", { name: /^Choose option B/ }));
+    expect(onChoose).toHaveBeenCalledWith(unknownStock.id);
   });
 
   it("shows a missed cut-off with its time and offers no approval for it", async () => {
@@ -269,7 +284,7 @@ describe("OptionCompare", () => {
     await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1));
   });
 
-  it("does not open the approval when the chosen basket comes back with unconfirmed stock", async () => {
+  it("opens the approval when the chosen basket comes back with unconfirmed stock (#1221, #1434)", async () => {
     const user = userEvent.setup();
     const onApprove = vi.fn();
     const { rerender } = render(
@@ -283,8 +298,9 @@ describe("OptionCompare", () => {
         onApprove={onApprove}
       />,
     );
-    expect(await screen.findByText(/Cannot be approved now: Stock is not confirmed/)).toBeVisible();
-    expect(onApprove).not.toHaveBeenCalled();
+    await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Cannot be approved now/)).toBeNull();
+    expect(screen.getByText("Valio must confirm stock")).toBeVisible();
   });
 
   it("frees the buttons again when the new options do not hold the chosen basket", async () => {
@@ -453,7 +469,9 @@ describe("Approvals page: the milk options", () => {
     expect(fact("A", "Stock")).toHaveTextContent(/^confirmed$/);
     expect(within(row("A")).getByRole("button", { name: /^Choose option A/ })).toBeEnabled();
     expect(fact("C", "Stock")).toHaveTextContent(/^unknown$/);
-    expect(within(row("C")).getAllByRole("button")).toEqual([optionToggle("C")]);
+    // Unknown stock can be chosen (#1221, #1434); a missed cut-off cannot.
+    expect(within(row("C")).getByText("Valio must confirm stock")).toBeVisible();
+    expect(within(row("C")).getByRole("button", { name: /^Choose option C/ })).toBeEnabled();
     expect(fact("B", "Order cut-off")).toHaveTextContent(/^missed/);
     expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
 

@@ -44,6 +44,17 @@ def _extra_items(fact):
     return [(key, fact[key]) for key in keys if _decimal(fact.get(key)) is not None]
 
 
+def _evidence(fact):
+    """The fact's evidence dict, or an empty one when it is missing or not a dict."""
+    evidence = fact.get("evidence")
+    return evidence if isinstance(evidence, dict) else {}
+
+
+def _rows(fact) -> Decimal:
+    """Evidence rows for sorting; a missing or non-numeric count counts as 0."""
+    return _decimal(_evidence(fact).get("rows")) or Decimal(0)
+
+
 def _entry(fact):
     entry = {"id": fact.get("id"), "kind": fact.get("kind")}
     if fact.get("product_id") is not None:
@@ -53,8 +64,9 @@ def _entry(fact):
     entry["name"] = fact.get("name")
     entry["value"] = fact.get("value")
     entry.update(_extra_items(fact))
-    entry["rows"] = fact.get("evidence", {}).get("rows")
-    entry["last"] = fact.get("evidence", {}).get("last")
+    evidence = _evidence(fact)
+    entry["rows"] = evidence.get("rows")
+    entry["last"] = evidence.get("last")
     return entry
 
 
@@ -69,7 +81,7 @@ def kitchen_memory(facts, product_ids, supplier_ids, *, max_lines=12, max_chars=
              or (fact.get("supplier_id") is not None and fact["supplier_id"] in suppliers))
     ]
     relevant.sort(key=lambda fact: (KIND_ORDER.index(fact["kind"]),
-                                    -int(fact.get("evidence", {}).get("rows", 0)),
+                                    -_rows(fact),
                                     str(fact.get("id", ""))))
 
     entries, limit = [], max(0, max_lines)
@@ -102,7 +114,7 @@ def allowed_numbers(fact):
     if value is not None:
         numbers.append((value, "value"))
     numbers.extend((_decimal(raw), key) for key, raw in _extra_items(fact))
-    rows = _decimal(fact.get("evidence", {}).get("rows"))
+    rows = _decimal(_evidence(fact).get("rows"))
     if rows is not None:
         numbers.append((rows, "rows"))
 

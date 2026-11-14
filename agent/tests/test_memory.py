@@ -136,3 +136,18 @@ def test_not_applicable_reasons_must_be_short_and_use_only_their_facts_numbers()
     ]
 
     assert check_not_applicable(marks, [active], "en") == marks[:2]
+
+
+def test_facts_with_null_evidence_or_null_rows_do_not_raise():
+    no_evidence = fact("no-evidence", "CORRECTION_RATIO", product_id="prod-1", value=0.5)
+    no_evidence["evidence"] = None
+    null_rows = fact("null-rows", "CORRECTION_RATIO", product_id="prod-1", value=0.5, rows=None)
+    counted = fact("counted", "CORRECTION_RATIO", product_id="prod-1", value=0.5, rows=3)
+
+    entries = kitchen_memory([no_evidence, null_rows, counted], ["prod-1"], [])
+
+    assert [entry["id"] for entry in entries] == ["counted", "no-evidence", "null-rows"]
+    assert entries[1]["rows"] is None and entries[1]["last"] is None
+    assert entries[2]["rows"] is None
+    assert allowed_numbers(no_evidence) == {Decimal("0.5"), Decimal(50)}
+    assert allowed_numbers(null_rows) == {Decimal("0.5"), Decimal(50)}

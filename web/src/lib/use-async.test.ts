@@ -2,7 +2,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/api/types";
-import { isUnreachable, useAsync } from "@/lib/use-async";
+import { gatewayRequest } from "@/api/http";
+import { dropKeptAnswers, isUnreachable, useAsync } from "@/lib/use-async";
 
 describe("useAsync", () => {
   it("keeps the ready data while reloading, then shows the new data", async () => {
@@ -128,6 +129,120 @@ describe("useAsync", () => {
       expect(load).toHaveBeenCalledTimes(3);
       expect(result.current.status).toBe("ready");
       expect(result.current.data).toBe("second");
+    });
+  });
+
+  describe("with a kept answer", () => {
+    afterEach(() => {
+      dropKeptAnswers();
+      vi.unstubAllGlobals();
+    });
+
+    it("shows the kept answer at once on the next visit, then the new answer", async () => {
+      const first = renderHook(() => useAsync(() => Promise.resolve("first"), [], { keep: "list" }));
+      await waitFor(() => expect(first.result.current.status).toBe("ready"));
+      first.unmount();
+
+      let answer: (value: string) => void = () => {};
+      const load = vi.fn(() => new Promise<string>((resolve) => (answer = resolve)));
+      const second = renderHook(() => useAsync(load, [], { keep: "list" }));
+      expect(second.result.current.status).toBe("ready");
+      expect(second.result.current.data).toBe("first");
+      expect(load).toHaveBeenCalledTimes(1);
+
+      await act(async () => answer("second"));
+      expect(second.result.current.data).toBe("second");
+    });
+
+    it("starts from loading without a key, and for another key", async () => {
+      const first = renderHook(() => useAsync(() => Promise.resolve("first"), [], { keep: "list" }));
+      await waitFor(() => expect(first.result.current.status).toBe("ready"));
+      first.unmount();
+      const never = () => new Promise<string>(() => {});
+      expect(renderHook(() => useAsync(never)).result.current.status).toBe("loading");
+      expect(renderHook(() => useAsync(never, [], { keep: "other" })).result.current.status).toBe("loading");
+    });
+
+    it("forgets every kept answer after a write through the gateway", async () => {
+      const first = renderHook(() => useAsync(() => Promise.resolve("first"), [], { keep: "list" }));
+      await waitFor(() => expect(first.result.current.status).toBe("ready"));
+      first.unmount();
+
+      vi.stubGlobal("fetch", () => Promise.resolve(new Response("{}")));
+      await gatewayRequest("/api", "/v1/kitchens/demo-kitchen/proposals", { method: "POST", body: "{}" });
+
+      const second = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "list" }));
+      expect(second.result.current.status).toBe("loading");
+    });
+
+    it("keeps the answers after a read through the gateway", async () => {
+      const first = renderHook(() => useAsync(() => Promise.resolve("first"), [], { keep: "list" }));
+      await waitFor(() => expect(first.result.current.status).toBe("ready"));
+      first.unmount();
+
+      vi.stubGlobal("fetch", () => Promise.resolve(new Response("{}")));
+      await gatewayRequest("/api", "/v1/kitchens/demo-kitchen/orders");
+
+      const second = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "list" }));
+      expect(second.result.current.data).toBe("first");
+    });
+
+    it("does not put back the answer of a load that began before the drop", async () => {
+      let answer: (value: string) => void = () => {};
+      const first = renderHook(() =>
+        useAsync(() => new Promise<string>((resolve) => (answer = resolve)), [], { keep: "list" }),
+      );
+      dropKeptAnswers();
+      await act(async () => answer("from before the write"));
+      expect(first.result.current.data).toBe("from before the write");
+      first.unmount();
+
+      const second = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "list" }));
+      expect(second.result.current.status).toBe("loading");
+    });
+
+    it("lets only the newest load for a key change the kept answer", async () => {
+      let answerOld: (value: string) => void = () => {};
+      const old = renderHook(() =>
+        useAsync(() => new Promise<string>((resolve) => (answerOld = resolve)), [], { keep: "list" }),
+      );
+      old.unmount();
+      const newer = renderHook(() => useAsync(() => Promise.resolve("newer"), [], { keep: "list" }));
+      await waitFor(() => expect(newer.result.current.data).toBe("newer"));
+      newer.unmount();
+      await act(async () => answerOld("older, answered late"));
+
+      const next = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "list" }));
+      expect(next.result.current.data).toBe("newer");
+    });
+
+    it("forgets the kept answers when a request is answered 401", async () => {
+      const first = renderHook(() => useAsync(() => Promise.resolve("first"), [], { keep: "list" }));
+      await waitFor(() => expect(first.result.current.status).toBe("ready"));
+      first.unmount();
+
+      vi.stubGlobal("fetch", () =>
+        Promise.resolve(new Response(JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "Sign in." } }), { status: 401 })),
+      );
+      await expect(gatewayRequest("/api", "/v1/kitchens/demo-kitchen/orders")).rejects.toBeTruthy();
+
+      const second = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "list" }));
+      expect(second.result.current.status).toBe("loading");
+    });
+
+    it("shows the error and forgets the kept answer when the new load fails", async () => {
+      const first = renderHook(() => useAsync(() => Promise.resolve("first"), [], { keep: "list" }));
+      await waitFor(() => expect(first.result.current.status).toBe("ready"));
+      first.unmount();
+
+      const second = renderHook(() => useAsync(() => Promise.reject(new Error("Bad mapping")), [], { keep: "list" }));
+      expect(second.result.current.data).toBe("first");
+      await waitFor(() => expect(second.result.current.status).toBe("error"));
+      expect(second.result.current.data).toBeNull();
+      second.unmount();
+
+      const third = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "list" }));
+      expect(third.result.current.status).toBe("loading");
     });
   });
 

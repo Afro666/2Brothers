@@ -38,9 +38,9 @@ def compact(products, quote):
 
 class SinglePickModel:
     """Adapts a single JSON pick to the existing tool runner; no policy bypass path."""
-    def __init__(self, model, db, kitchen, need, need_id, exclusions, *, today, timeout=20):
+    def __init__(self, model, db, kitchen, need, need_id, exclusions, *, today, timeout=20, poll=0.5):
         self.model, self.db, self.kitchen, self.need = model, db, kitchen, need
-        self.need_id, self.exclusions, self.timeout = need_id, exclusions, timeout
+        self.need_id, self.exclusions, self.timeout, self.poll = need_id, exclusions, timeout, poll
         self.query = parse_request(need['text'], today, default_day=today).query
         self.phase, self.products, self.offer_id, self.cached = 'search', [], None, False
         self.selected_ids = []
@@ -65,12 +65,23 @@ class SinglePickModel:
             key = buyer_picks.cache_key(self.kitchen, self.need, self.exclusions, rows)
             ids = await asyncio.to_thread(buyer_picks.get, self.db, key)
             allowed = {p['product_id'] for p in self.products}
-            if isinstance(ids, list) and all(isinstance(p, str) for p in ids) and 1 <= len(ids) <= 3 and len(set(ids)) == len(ids) and set(ids) <= allowed:
+            def usable(ids):
+                return (isinstance(ids, list) and all(isinstance(p, str) for p in ids) and 1 <= len(ids) <= 3
+                        and len(set(ids)) == len(ids) and set(ids) <= allowed)
+            token = None
+            if not usable(ids):
+                token = await asyncio.to_thread(buyer_picks.claim, self.db, key)
+            if token is None and not usable(ids):
+                # An identical pick is in flight: wait for the leader's answer instead of a second model call.
+                deadline = asyncio.get_running_loop().time() + self.timeout
+                while not usable(ids):
+                    if asyncio.get_running_loop().time() >= deadline:
+                        raise RuntimeError('An identical product choice is still in flight')
+                    await asyncio.sleep(self.poll)
+                    ids = await asyncio.to_thread(buyer_picks.get, self.db, key)
+            if usable(ids):
                 self.cached = True
             else:
-                token = await asyncio.to_thread(buyer_picks.claim, self.db, key)
-                if token is None:
-                    raise RuntimeError('An identical product choice is already in flight')
                 try:
                     try:
                         message = await asyncio.wait_for(self.model.complete_json([

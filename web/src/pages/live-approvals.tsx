@@ -13,6 +13,7 @@ import { useAsync } from "@/lib/use-async";
 import { LiveConnectionLabel, useLiveEvents } from "@/lib/live-events";
 import { LabelEvidence, type LabelCheck } from "@/components/purchasing/label-evidence";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
+import { ProposalExplanationBlock, useCardExplanation } from "@/components/purchasing/proposal-explanation";
 
 const path = "/v1/kitchens/demo-kitchen/proposals";
 interface RecallAlert {
@@ -117,6 +118,7 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
     .filter((r): r is string => typeof r === "string" && r.includes(" must confirm stock for: "));
   const expired = Date.parse(row.valid_until) <= Date.now();
   const pending = row.status === "READY" && !placed && !rejected;
+  const explanation = useCardExplanation(row.proposal_id, pending, `${row.offer_id}\u0000${row.expected_total}`);
   const rejectable = ["READY", "BLOCKED_BY_RECALL"].includes(row.status) && !placed && !rejected;
   async function decide(approve: boolean) {
     if (approvalBlockedReason) return;
@@ -148,6 +150,7 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
   }
   return <article id={`proposal-${row.proposal_id}`} className="docket space-y-4 rounded-sm border bg-card p-4 text-card-foreground sm:p-5" aria-label={t("Proposal {id}", { id: row.proposal_id })}>
     <h2 className="text-[19px] leading-[25px] font-[650]">{t("Proposal {id}", { id: row.proposal_id })}</h2>
+    <ProposalExplanationBlock explanation={explanation} />
     {typeof row.decision_summary?.text === "string" && <p className="max-w-[68ch] text-[15px] leading-[22px] whitespace-pre-line">{row.decision_summary.text}</p>}
     {row.recall_alerts?.map((alert, index) => <RecallNotice key={alert.event_id ?? index} alert={alert} reload={reload} />)}
     {row.replacement_proposal_id && <p><a className="underline" href={`#proposal-${row.replacement_proposal_id}`}>{t("Review replacement proposal {id}", { id: row.replacement_proposal_id })}</a>. {t("A fresh human approval is required.")}</p>}

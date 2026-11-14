@@ -26,9 +26,13 @@ export const CHOOSE_ERRORS: Record<string, string> = {
   IDEMPOTENCY_KEY_REUSED: "This choice clashed with an earlier one that was still being sent. The current basket is unchanged; try again. Nothing was approved.",
 };
 
-/** Why a person cannot approve this option now; null when they can. */
+/**
+ * Why a person cannot approve this option now; null when they can. Unknown stock is not a
+ * reason (#1221, #1434, docs/contract.md "Chef substitute choices"): the order is placed and
+ * waits for the supplier. Only a passed cut-off blocks; an option that is no longer available
+ * is refused by the gateway (`OPTION_UNAVAILABLE`) and never offered.
+ */
 function blockedReason(option: ProposalOption, t: (text: string) => string): string | null {
-  if (!option.stockConfirmed) return t("Stock is not confirmed. Approval is available once the supplier confirms it.");
   if (option.cutoffPassed) return t("The order cut-off has passed.");
   return null;
 }
@@ -221,6 +225,11 @@ export function OptionCompare({
                     ) : null}
                     {option.kind === "PARTIAL" ? <span className={BADGE}>{t("Part now, the rest later")}</span> : null}
                     {option.chosen ? <span className={BADGE}>{t("Proposed now")}</span> : null}
+                    {option.stockConfirmed ? null : (
+                      <span className={cn(BADGE, "border-warning/40 bg-warning-surface text-warning")}>
+                        {t("Valio must confirm stock")}
+                      </span>
+                    )}
                     <span className="price-tag min-w-0 break-words text-xs font-normal">
                       {priceLabel === "unknown" ? <span className="unknown-value">{t("unknown")}</span> : priceLabel}
                     </span>

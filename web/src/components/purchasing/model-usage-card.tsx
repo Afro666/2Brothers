@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
+import { NemotronMark } from "@/components/nemotron-mark";
 
 /** Runs that carry a count. Zero when nothing was counted, whatever the other fields say. */
 const counted = (usage: ModelUsage) =>
@@ -38,7 +39,7 @@ function figures(usage: ModelUsage): [string, string][] {
 export function ModelUsageCard() {
   const t = useT();
   const api = useApi();
-  const usage = useAsync(() => api.getModelUsage());
+  const usage = useAsync(() => api.getModelUsage(), [], { keep: "model-usage" });
   const empty = usage.status === "ready" && nothingCounted(usage.data);
   return (
     <Card>
@@ -46,6 +47,7 @@ export function ModelUsageCard() {
         <CardTitle>
           <h2 id="about-model">
             {t("The Buyer agent runs on Nemotron 3.5 Super VL")}
+            <NemotronMark side="after" />
           </h2>
         </CardTitle>
       </CardHeader>

@@ -73,6 +73,7 @@ describe("createHttpApi", () => {
         "getOrder",
         "getOrderResolution",
         "getPermissions",
+        "getProposalExplanation",
         "listApiTokens",
         "createApiToken",
         "revokeApiToken",

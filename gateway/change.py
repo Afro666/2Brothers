@@ -127,7 +127,8 @@ def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, per
         raise GatewayError(422, "EMPTY_PROPOSAL", "a proposal needs at least one line; reject it instead")
 
     old = doc["request"]
-    request = {key_: old[key_] for key_ in ("text", "made_by", "event", "window", "problems", "query")
+    request = {key_: old[key_] for key_ in ("text", "made_by", "event", "window", "problems", "query",
+                                            "items", "split_by")    # a list of needs (#1375)
                if key_ in old}
     request.update({"product_ids": [n["product_id"] for n in needs], "quantity": str(len(needs)),
                     "unit": "products", "requested_date": old["requested_date"], "needs": needs,

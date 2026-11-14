@@ -115,9 +115,11 @@ REFUSAL_WINDOW = 60.0          # seconds: one audit row per repeated refusal (#8
 
 
 def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None,
-               delivery_note_worker=None, menu_photo_worker=None, buying_note_worker=None, price_list_worker=None, explanation_worker=None, label_photo_worker=None, brief_worker=None) -> FastAPI:
+               delivery_note_worker=None, menu_photo_worker=None, buying_note_worker=None, price_list_worker=None, explanation_worker=None, label_photo_worker=None, brief_worker=None,
+               split_worker=None) -> FastAPI:
     from gateway.buyer_worker import Breaker
     buyer_breaker = Breaker()        # one per app: a timeout skips the model for 2 minutes
+    split_breaker = Breaker()        # the same for the split of several products (#1375), its own
     app = FastAPI(
         title="Trusted Kitchen Buyer gateway", version="0.1.0",
         description=("REST and MCP gateway between a kitchen's Buyer agent and its suppliers. "
@@ -325,7 +327,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need("kitchen:propose", kitchen_id)
         data = await body(request)
         data.pop("buyer_down", None)          # set by the gateway only, never by the client
+        if 'needs' in data:
+            return gw().create_proposal(kitchen_id, data, who.name)    # the list body (#1375)
         if 'text' in data and 'product_ids' not in data:
+            several = gw().prepare_several(kitchen_id, data)
+            if several is not None:
+                return several.get("replay") or await split_and_propose(kitchen_id, data, several["day"], who.name)
             # A request the kitchen's allergen rule removes ends here, with the reason (#974):
             # the Buyer would only see what the rule left and propose another kind of product.
             refused = gw().refuse_excluded(kitchen_id, data, who.name)
@@ -350,6 +357,40 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
                         buyer_breaker.trip()
                         data["buyer_down"] = True
         return gw().create_proposal(kitchen_id, data, who.name)
+
+    async def split_and_propose(kitchen_id: str, data: dict, day: str, actor: str) -> dict:
+        """Several products in one text (#1375): Nemotron splits it, plain code checks the
+        split (the model never sets a quantity), and the needs go as one list body. The model
+        off, slow or out of its schema: the plain-code split. A split that fails the check is
+        refused with the sentence of #288."""
+        import asyncio
+        from gateway import split
+        from gateway.buyer_worker import SPLIT_SECONDS, run_split
+        from gateway.parse import ONE_PRODUCT, ParseError
+        text, reply, split_by = data["text"], None, "rules"
+        if not split_breaker.is_open():
+            try:
+                reply = await asyncio.wait_for((split_worker or run_split)(kitchen_id, text), SPLIT_SECONDS + 1)
+                split_breaker.reset()
+            except asyncio.TimeoutError:
+                split_breaker.trip()          # the next texts skip the model for 2 minutes
+            except Exception:
+                reply = None                  # never upstream text in an answer: the rules split
+        try:
+            if reply is not None:
+                try:
+                    needs, split_by = split.check(text, reply), "model"
+                except ParseError:
+                    # The sentence of before (#288), never the model's words.
+                    raise GatewayError(422, "CANNOT_READ_REQUEST", ONE_PRODUCT) from None
+            else:
+                needs = split.rules_split(text)
+        except ParseError as exc:
+            raise GatewayError(422, "CANNOT_READ_REQUEST", str(exc)) from None
+        body = {"needs": needs, "requested_date": day, "idempotency_key": data["idempotency_key"], "text": text}
+        if data.get("event") is True:
+            body["event"] = True
+        return gw()._create_list(kitchen_id, body, actor, split_by=split_by)
 
     @app.get(k + "/proposals")
     def list_proposals(kitchen_id: str, who: Principal = Depends(principal)):
@@ -779,9 +820,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     from gateway.stock_photo import mount_stock_photo
     mount_stock_photo(app, gw, principal, shelf_worker)
 
-    # Check a delivery from a photo of its note (#362): read in the worker; stores nothing.
+    # Check a delivery from a photo of its note (#362): read in the worker; save the facts.
     from gateway.delivery_note import mount_delivery_note
     mount_delivery_note(app, gw, principal, delivery_note_worker)
+    # One-tap "it all arrived" (#1304): a chef or approver's own observation, no stock change.
+    from gateway.received import mount_received
+    mount_received(app, gw, principal, body)
     from gateway.menu_photo import mount_menu_photo
     mount_menu_photo(app, gw, principal, menu_photo_worker)
     from gateway.price_list_photo import mount_price_list_photo   # a supplier's price list from a photo (#1174)
