@@ -134,9 +134,12 @@ def home_category(db, query: str) -> str | None:
     text, _ = parse_query(query)
     if not text:
         return None
-    meta = next(iter(db.products.aggregate([{"$searchMeta": {"index": INDEX_NAME, "facet": {
-        "operator": {"compound": {"must": [_all_words(text)], "filter": [_CATALOG]}},
-        "facets": {"category": {"type": "string", "path": "category", "numBuckets": 2}}}}}])), {})
+    try:
+        meta = next(iter(db.products.aggregate([{"$searchMeta": {"index": INDEX_NAME, "facet": {
+            "operator": {"compound": {"must": [_all_words(text)], "filter": [_CATALOG]}},
+            "facets": {"category": {"type": "string", "path": "category", "numBuckets": 2}}}}}])), {})
+    except Exception:
+        return None  # a ranking hint only: it must never fail a search
     buckets = (meta.get("facet") or {}).get("category", {}).get("buckets") or []
     if buckets and (len(buckets) == 1 or buckets[0]["count"] >= 3 * buckets[1]["count"]):
         return buckets[0]["_id"]
@@ -368,9 +371,9 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
         if query_model and stored and query_model != stored:
             # Same size, other model: Atlas would accept the vector and rank by noise.
             raise EmbeddingError(f"query model {query_model} does not match stored vectors {stored}")
+        home = home_category(db, query)  # before the paid embedding call
         vector = to_binary((embedder or embed)([query], "query")[0])
-        pipeline = build_hybrid_pipeline(query, vector, filters, limit, kitchen_id,
-                                         home_category(db, query))
+        pipeline = build_hybrid_pipeline(query, vector, filters, limit, kitchen_id, home)
     else:
         home = home_category(db, query) if text else None
         pipeline = build_pipeline(query, filters, limit, kitchen_id, home)

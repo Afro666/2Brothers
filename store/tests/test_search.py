@@ -145,6 +145,35 @@ class SearchQueryTests(unittest.TestCase):
         self.assertIsNone(home([])[0])
         self.assertEqual(home([{"_id": "10400", "count": 5}], query="1 l"), (None, []))  # no words: no call
 
+    def test_a_failing_home_category_query_does_not_fail_the_search(self):
+        from unittest import mock
+        from store import embeddings
+        order = []
+
+        class Products:
+            def find_one(self, *args, **kwargs):
+                return None
+
+            def aggregate(self, pipeline):
+                if "$searchMeta" in pipeline[0]:
+                    order.append("home")
+                    raise RuntimeError("searchMeta is down")
+                return [{"_id": "1", "names": {"en": "milk"}}]
+
+        db = type("Db", (), {"products": Products(), "client": object(), "name": "fake"})()
+        self.assertIsNone(home_category(db, "milk"))
+        self.assertEqual([r["product_id"] for r in search_products(db, "milk")], ["1"])
+        order.clear()
+
+        def embedder(texts, kind):
+            order.append("embed")
+            return [[0.0] * embeddings.EMBED_DIMENSIONS]
+
+        with mock.patch.object(embeddings, "current_model", return_value=None):
+            rows = search_products(db, "milk", hybrid=True, embedder=embedder)
+        self.assertEqual([r["product_id"] for r in rows], ["1"])
+        self.assertEqual(order, ["home", "embed"])  # the hint runs before the paid call
+
     def test_search_sees_the_catalog_and_only_the_asking_kitchens_own_products(self):
         catalog = {"compound": {"must": [{"exists": {"path": "supplier_id"}}],
                                 "mustNot": [{"exists": {"path": "kitchen_id"}}]}}
