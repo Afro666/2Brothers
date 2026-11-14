@@ -443,6 +443,8 @@ function optionLine(line: OrderLine, quantity: number) {
   return {
     productId: line.product.id,
     productName: line.product.names.en,
+    productNameFi: line.product.names.fi ?? null,
+    brand: line.product.brand ?? null,
     quantity,
     unit: line.offer.comparisonUnit ?? line.product.salesUnit,
     unitPrice: line.offer.comparisonPrice,

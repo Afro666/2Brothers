@@ -24,6 +24,27 @@ function line(overrides: Record<string, unknown> = {}) {
 }
 
 describe("mapProposalOptions", () => {
+  it("reads the line's own names and brand (#1130), over the names map; empty is unknown", () => {
+    const [mapped] = mapProposalOptions(
+      [
+        option({
+          lines: [
+            line({ product_name: "Arla milk 1 L", product_name_fi: "Arla maito 1 l", brand: "Arla" }),
+            line({ product_id: "P2", product_name: null, product_name_fi: "", brand: "  " }),
+            line({ product_id: "P3" }),
+          ],
+        }),
+      ],
+      undefined,
+      new Map([["P1", "Old name"], ["P3", "From the map"]]),
+    );
+    expect(mapped.lines.map((row) => [row.productId, row.productName, row.productNameFi, row.brand])).toEqual([
+      ["P1", "Arla milk 1 L", "Arla maito 1 l", "Arla"],
+      ["P2", null, null, null],
+      ["P3", "From the map", null, null],
+    ]);
+  });
+
   it("maps a contract option and leaves what the gateway does not send unknown", () => {
     expect(mapProposalOptions([option()], "offer-a")).toEqual([
       {
@@ -31,7 +52,7 @@ describe("mapProposalOptions", () => {
         tier: "good",
         source: "original",
         kind: "FULL",
-        lines: [{ productId: "P1", productName: null, quantity: 51, unit: "ST", unitPrice: null }],
+        lines: [{ productId: "P1", productName: null, productNameFi: null, brand: null, quantity: 51, unit: "ST", unitPrice: null }],
         totalInclVat: 148.76,
         stockConfirmed: true,
         cutoffPassed: null,

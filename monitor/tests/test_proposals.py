@@ -178,7 +178,9 @@ def test_recalled_coffee_on_the_shelf_alerts_without_any_open_proposal():
     later = gw.create_proposal('hotel', {'product_ids': ['461332'], 'quantity': '5', 'unit': 'KG',
         'requested_date': '2026-11-16', 'text': 'hotel coffee', 'idempotency_key': 'again'}, 'test')
     assert later['lines'] == []
-    assert later['excluded'] == [{'product_id': '461332', 'reason': 'BLOCKED_BY_RECALL'}]
+    assert later['excluded'] == [{'product_id': '461332', 'reason': 'BLOCKED_BY_RECALL',   # names: #1130
+                                  'product_name': 'Kulta Katriina Perinteinen kahvi',
+                                  'product_name_fi': 'Kulta Katriina Perinteinen kahvi', 'brand': 'Kulta Katriina'}]
 
 
 def test_an_uncounted_product_on_the_stock_list_is_unknown_never_zero():

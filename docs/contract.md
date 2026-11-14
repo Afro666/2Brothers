@@ -1021,6 +1021,30 @@ model or gateway retry and no automatic provider fallback. Usage is metered as
 latency, sentence count or safe error code. No explanation text, prompt or secret
 is written to audit. The signed offer and receipt remain authoritative.
 
+### Product names on proposal and order lines (#1130)
+
+Every line a person reads carries three fields next to `product_id`, so a screen shows
+a name, the kind picture and the brand logo ("Product pictures" below) instead of a code:
+
+| Field | Type | Rule |
+|---|---|---|
+| `product_name` | string or null | The English name of the product row (`names.en`). |
+| `product_name_fi` | string or null | The Finnish name (`names.fi`). |
+| `brand` | string or null | The brand of the product row. |
+
+- Where: `lines`, `blocks[].lines`, `substitute_options[].lines`, `alternative.lines`,
+  `partial_fill.now.lines`, `partial_fill.rest[].lines` and each `excluded` entry, on
+  `GET /proposals`, `GET /proposals/{id}`, the `POST /proposals` answer and the change
+  answer; and `lines` on `GET /orders`, `GET /orders/{id}` and the approve answer.
+- Read at read time from the catalog and this kitchen's own products (never another
+  kitchen's): an order stored before #1130 has them too. Never stored on a line.
+- Unknown is null, never an invented name. One query per proposal (one per order
+  list), never one per line.
+- A mandate reason that starts with a bare product code (`"463203: confirmed in stock,
+  but ..."`) starts with the name when it is known, the code after it in brackets:
+  `"Arla milk 1 L (463203): confirmed in stock, but ..."`. `excluded[].reason` itself is
+  unchanged. Names and reasons are not part of `offer_hash`.
+
 ### Creating a proposal
 
 `POST /v1/kitchens/{kitchen_id}/proposals` takes one of four bodies. All need a nonempty

@@ -243,10 +243,9 @@ def register(app, gw, principal, body) -> None:
 def _named(db, rows: list[dict]) -> list[dict]:
     """Add `product_name` where the catalog or the kitchen's own products know it; a product
     without a name keeps only its id (never an invented name)."""
-    ids = sorted({row["product_id"] for row in rows})
-    names = {d["_id"]: (d.get("names") or {}).get("en")
-             for d in db.products.find({"_id": {"$in": ids}}, {"names": 1})} if ids else {}
-    return [{**row, "product_name": names.get(row["product_id"])} for row in rows]
+    from gateway.product_names import labels    # the same reading as proposal lines (#1130)
+    found = labels(db, [row["product_id"] for row in rows])
+    return [{**row, "product_name": (found.get(row["product_id"]) or {}).get("product_name")} for row in rows]
 
 
 # Net content units scaled to a kitchen unit: (kitchen unit, factor).
