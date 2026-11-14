@@ -9,7 +9,7 @@ const quantity = (v: unknown): number | null => {
   const n = decimal(v, "a delivery quantity");
   return n != null && n >= 0 ? n : invalid();
 };
-const lot = (r: Json): DeliveryLot => ({ lot: text(r.lot), bestBefore: text(r.best_before), quantity: quantity(r.quantity), unit: text(r.unit) });
+const lot = (r: Json): DeliveryLot => ({ lot: typeof r.lot === "string" && r.lot.trim() ? r.lot : "unknown", bestBefore: text(r.best_before), quantity: quantity(r.quantity), unit: text(r.unit) });
 
 export function mapDeliveryNote(body: unknown, orderId: string): DeliveryNoteRead {
   const raw = object(body, "the delivery note");
@@ -24,7 +24,8 @@ export function mapDeliveryNote(body: unknown, orderId: string): DeliveryNoteRea
   const notOrdered = rows(body, "not_ordered").map((r): DeliveryNoteOther => {
     const status = r.status;
     if (status !== "SUBSTITUTE" && status !== "EXTRA" && status !== "UNREADABLE") return invalid();
-    return { ...lot(r), productId: text(r.product_id), status, replaces: text(r.replaces),
+    const replaces = typeof r.replaces === "string" && r.replaces ? r.replaces : status === "SUBSTITUTE" ? invalid() : "none";
+    return { ...lot(r), productId: text(r.product_id), status, replaces,
       received: status === "UNREADABLE" ? null : quantity(r.received), baseUnit: text(r.base_unit), needsApproval: status === "SUBSTITUTE" };
   });
   const note = object(raw.note, "the note reference");
