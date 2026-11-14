@@ -113,15 +113,17 @@ def rank(offers: list[Offer]) -> tuple[list[Offer], dict[str, str]]:
     cheapest = by_price[0].price_per_measure
     band = [o for o in by_price if o.price_per_measure <= cheapest * (1 + BAND)]
     rest = [o for o in by_price if o not in band]
+    def rel(o: Offer) -> float:
+        return o.reliability if o.reliability is not None else -1.0
     def better(o: Offer):
-        return (-(o.reliability if o.reliability is not None else -1.0),
+        return (-rel(o),
                 o.carbon if o.carbon is not None else float("inf"), o.price_per_measure, o.product_id)
     band.sort(key=better)
     notes: dict[str, str] = {}
     top, cheap = band[0], by_price[0]
     if top is not cheap:
         diff = (top.price_per_measure / cheap.price_per_measure - 1) * 100
-        if (top.reliability or -1) > (cheap.reliability if cheap.reliability is not None else -1):
+        if rel(top) > rel(cheap):
             notes[top.product_id] = (f"chosen over {cheap.name} ({diff:.1f}% cheaper): delivery reliability "
                                      f"{_pct(top.reliability)} vs {_pct(cheap.reliability)}")
         else:
