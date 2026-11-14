@@ -58,7 +58,7 @@ describe("Permissions settings", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Activity log" })).toBeInTheDocument();
     expect(router.state.location.search).toEqual({ kind: "search" });
     expect(await screen.findByRole("combobox", { name: "Kind" })).toHaveTextContent("Search");
-    await screen.findByText(/^\d+ steps?$/);
+    await screen.findByText(/ · \d+ steps?/);
     const steps = document.querySelectorAll("li[data-kind]");
     expect(steps.length).toBeGreaterThan(0);
     for (const step of steps) expect(step).toHaveAttribute("data-kind", "search");
@@ -66,7 +66,7 @@ describe("Permissions settings", () => {
 
   it("ignores an audit kind that does not exist", async () => {
     renderApp("/audit?kind=toString");
-    expect(await screen.findByText("8 steps")).toBeInTheDocument();
+    expect(await screen.findByText(/ · 8 steps/)).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Kind" })).toHaveTextContent("All kinds");
   });
 
