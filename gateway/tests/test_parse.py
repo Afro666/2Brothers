@@ -53,3 +53,33 @@ def test_language_is_detected():
 def test_refuses_instead_of_guessing(text, why):
     with pytest.raises(ParseError, match=why):
         parse_request(text, FRI)
+
+
+@pytest.mark.parametrize("text,when", [
+    ("50 kg cheese by Monday", MON),
+    ("1000 l laktoositonta maitoa maanantaiksi", MON),
+    ("500 L oat drink by Friday", date(2026, 11, 20)),
+    ("20 kg perunoita huomenna", date(2026, 11, 14)),
+    ("50 kg carrots on 16.11.", MON),
+    ("115 kg hanger steak 2026-11-20", date(2026, 11, 20)),
+    ("12 kpl ruisleipää 17 nov", date(2026, 11, 17)),
+    ("200 L lactose-free milk", None),             # no day named: the form's date stays
+    ("40 kg Edam cheese", None),
+    ("monday", MON),                               # no quantity: the day is still read
+    ("", None),
+])
+def test_named_day_reads_the_day_a_text_names(text, when):
+    from gateway.parse import named_day
+    assert named_day(text, FRI) == when
+
+
+def test_named_day_agrees_with_the_parser():
+    from gateway.parse import named_day
+    for text in ("1,000 L lactose-free milk by Monday", "2,5 kg voita keskiviikkona", "500 g parmesan tomorrow"):
+        assert named_day(text, FRI) == parse_request(text, FRI).requested_date
+
+
+def test_named_day_refuses_a_date_that_does_not_exist():
+    from gateway.parse import named_day
+    with pytest.raises(ParseError):
+        named_day("20 kg butter 31.2.", FRI)
