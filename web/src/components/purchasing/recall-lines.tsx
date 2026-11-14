@@ -23,6 +23,16 @@ export const REPLAN_ERROR_TEXT: Record<string, string> = {
 
 type Translate = (text: string, vars?: TranslationVariables) => string;
 
+/** The notice's hostname when its URL is a well-formed https link; null otherwise (shown as text). */
+function noticeHost(url: string | null | undefined): string | null {
+  if (!url || !/^https:\/\//.test(url)) return null;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Why the order cannot be approved because of a recall; null when it can. A blocked line
  * that is still on the order holds the approval: the total would include recalled goods.
@@ -63,6 +73,7 @@ function RecallLine({ alert }: { alert: RecallAlert }) {
   const t = useT();
   const blocked = alert.lineStatus === "BLOCKED_BY_RECALL";
   const { recall } = alert;
+  const host = noticeHost(recall.url);
   return (
     <article className="space-y-2">
       <div className={cn("space-y-2 rounded-md border px-3 py-2 text-sm", TONE_CLASSES[blocked ? "danger" : "warning"])}>
@@ -105,14 +116,14 @@ function RecallLine({ alert }: { alert: RecallAlert }) {
             })}
           </p>
         ) : null}
-        {recall.url ? (
+        {recall.url && host ? (
           <a
             href={recall.url}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 font-medium underline underline-offset-2"
           >
-            {t("Open the notice ({host})", { host: new URL(recall.url).hostname })}
+            {t("Open the notice ({host})", { host })}
             <ExternalLink aria-hidden className="size-3.5" />
             <span className="sr-only">{t("(opens in a new tab)")}</span>
           </a>

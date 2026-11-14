@@ -52,7 +52,7 @@ function UnheldRecall({ alert }: { alert: RecallAlert }) {
         {recall.date
           ? t("Food Authority notice, {date}:", { date: `${formatDate(recall.date)} ${recall.date.slice(0, 4)}` })
           : t("Food Authority notice:")}{" "}
-        {recall.url ? (
+        {recall.url && /^https:\/\//.test(recall.url) ? (
           <a className="font-medium underline" href={recall.url} target="_blank" rel="noreferrer">
             {title} <span className="sr-only">{t("(opens in a new tab)")}</span>
           </a>
