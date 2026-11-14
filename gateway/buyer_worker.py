@@ -1,7 +1,32 @@
 """Authenticated internal worker handoff for free-text proposal requests."""
+from datetime import date, datetime
 import os
+from zoneinfo import ZoneInfo
+
 import httpx
+from gateway.parse import ParseError, named_day
 from gateway.service import GatewayError
+
+
+def _today() -> date:
+    return datetime.now(ZoneInfo('Europe/Helsinki')).date()     # the worker's own "today"
+
+
+def buyer_payload(kitchen_id, body):
+    """What the worker gets. A day named in the text wins over `requested_date` of the body
+    (the date picked in a form): live on 2026-11-14 "by Monday" was quoted for the form's
+    Tuesday. The worker reads the body's date first, so the gateway reads the text here."""
+    payload = {k: body[k] for k in ('text', 'requested_date', 'idempotency_key') if k in body}
+    if body.get('event') is True:
+        payload['event'] = True     # one-off demand (S05): the need keeps it, every line gets EVENT_LINE (#530)
+    payload['kitchen_id'] = kitchen_id
+    try:
+        named = named_day(body['text'], _today()) if isinstance(body.get('text'), str) else None
+    except ParseError:
+        named = None                # not a real date: the worker and the parser say so
+    if named is not None:
+        payload['requested_date'] = named.isoformat()
+    return payload
 
 
 async def run_buyer(kitchen_id, body):
@@ -9,10 +34,7 @@ async def run_buyer(kitchen_id, body):
     token = os.environ.get('GATEWAY_AGENT_TOKEN', '')
     if not url or not token:
         raise GatewayError(503, 'BUYER_UNAVAILABLE', 'Buyer worker is not configured')
-    payload = {k: body[k] for k in ('text', 'requested_date', 'idempotency_key') if k in body}
-    if body.get('event') is True:
-        payload['event'] = True     # one-off demand (S05): the need keeps it, every line gets EVENT_LINE (#530)
-    payload['kitchen_id'] = kitchen_id
+    payload = buyer_payload(kitchen_id, body)
     try:
         async with httpx.AsyncClient(timeout=165, follow_redirects=False, trust_env=False) as client:
             response = await client.post(url.rstrip('/') + '/run', json=payload,
