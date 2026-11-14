@@ -104,4 +104,20 @@ describe("LearnedBadge", () => {
     expect(onChanged).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Use the forecast instead" })).toBeEnabled();
   });
+
+  it("shows the badge as switched off when only the refresh after the switch fails", async () => {
+    const user = userEvent.setup();
+    const onChanged = vi.fn(async () => {
+      throw new Error("The plan is unavailable.");
+    });
+    const api = renderBadge(onChanged);
+
+    await user.click(screen.getByRole("button", { name: "Learned from your changes" }));
+    await user.click(await screen.findByRole("button", { name: "Use the forecast instead" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Switched off. The plan could not refresh: The plan is unavailable.");
+    expect(screen.queryByText(/Could not use the forecast instead/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Learned from your changes" })).not.toBeInTheDocument();
+    expect((await api.listLearnedFacts()).find((fact) => fact.id === LEARNED.factId)?.active).toBe(false);
+  });
 });

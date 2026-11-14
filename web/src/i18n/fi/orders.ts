@@ -621,5 +621,6 @@ export default {
   "Use the forecast instead": "Käytä sen sijaan ennustetta",
   "Switching off…": "Poistetaan käytöstä…",
   "Could not use the forecast instead: {message}": "Ennusteen käyttäminen epäonnistui: {message}",
+  "Switched off. The plan could not refresh: {message}": "Poistettu käytöstä. Suunnitelman päivitys epäonnistui: {message}",
   "Only an approver can switch off learned facts.": "Vain hyväksyjä voi poistaa opittuja faktoja käytöstä.",
 } satisfies Record<string, string>;
