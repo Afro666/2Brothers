@@ -368,8 +368,8 @@ and quantities are decimal strings on the wire.
 - **Order:** `order_id`, `kitchen_id`, `offer_id`, `idempotency_key`, `expected_total`,
   `lines`, `payload_hash`, `offer_hash` ("Signed offers"), `approved_by` (a person, or
   `"auto-approve (rule set by <person>)"`), `status`, `outcome`, `created_at`,
-  `updated_at`. The row is written before any send, with `status` and `outcome` null;
-  both are set when the attempt ends.
+  `updated_at`, and `receipt` ("Signed order receipt") once the order is placed. The row is
+  written before any send, with `status` and `outcome` null; both are set when the attempt ends.
 - **Approval:** `approval_id`, `kitchen_id`, `offer_id`, `idempotency_key`, `status`
   (`PENDING`, `APPROVED`, `REJECTED`), `reasons` (string[]), `requested_at`,
   `decided_by`, `decided_at`, and `reason` on a rejection. Decided once, by a human, or
@@ -528,7 +528,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | POST | `/proposals/{id}/approve` | `kitchen:approve` (human, role `approver`) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN` (one exception: the kitchen setting `approve_unconfirmed_manual`, see "Kitchen settings"); a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". Proposed; the gateway does not serve it yet. |
-| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. |
+| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. `receipt` is the signed order receipt or null ("Signed order receipt"). |
 | GET | `/orders/{id}/resolution` | `kitchen:approve` (human) | What our store knows about an order whose send result is unknown. Shape under "Resolving an unknown send". |
 | POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
@@ -1167,6 +1167,35 @@ when signing failed; signing never fails a quote.
 - An approved order stores the `offer_hash` of the offer the person approved.
   `place_order` for an offer whose `offer_hash` differs is 409 `APPROVAL_MISMATCH`.
   An order without a stored `offer_hash` (older, or signing failed) skips this check.
+
+### Signed order receipt (#290)
+
+Every order answer carries `receipt`: `GET /orders`, `GET /orders/{id}`, the answer of
+`POST /proposals/{id}/approve` and of `/tools/place_order`. The gateway signs it once, when
+it records the order a person approved, with the same key as the offers.
+
+- `receipt` is a compact JWS, algorithm `EdDSA` (Ed25519), header `kid`. Claims:
+  `iss` (`trusted-kitchen-buyer`), `type` (`order_receipt`), `sub` (the `order_id`),
+  `kitchen_id`, `offer_id`, `offer_hash` (the signed offer the person approved),
+  `currency` (`EUR`), `expected_total` (decimal string), `lines` (`product_id`,
+  `quantity`, `unit`), `approved_by` (the person, or
+  `"auto-approve (rule set by <person>)"`), `iat` (when the gateway recorded the order),
+  `supplier_outcome`, `supplier_note` and `supplier_must_confirm`.
+- `supplier_outcome` is what the gateway knows about the supplier when it signs. Today
+  it is always `NOT_SENT`: Valio's API has no order endpoint, so the gateway records the
+  order and sends nothing. The receipt proves that a person approved this order and that
+  the gateway recorded it. It never says that a supplier accepted it.
+- A receipt has no `exp`: it does not expire. It is a statement about one moment (`iat`).
+  A later change (a supplier confirmation, a person's resolution) is in the order's
+  `status` and `outcome`, not in the receipt.
+- `receipt` is null when signing failed (the order is still placed, and the gateway logs
+  a warning), and for every order placed before this field existed. Old orders are not
+  signed afterwards.
+- To verify: take the public key from `GET /.well-known/jwks.json`, check the JWS, then
+  compare `sub`, `expected_total` and `lines` with the order shown.
+  `python -m gateway.verify_offer --base-url <gateway> --receipt order.json` does this
+  (`order.json` is one order answer); a changed line, quantity or total, another key or
+  an offer signature in place of the receipt fails.
 
 ### Supplier side
 
