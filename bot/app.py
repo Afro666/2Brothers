@@ -21,9 +21,12 @@ from bot.links import Links
 HELP = ("Say or type what the kitchen needs, for example: <b>20 L oat drink for Monday</b>.\n"
         "/week makes the order for the menu plan: 7 days from the next working day.\n"
         "/brief shows what waits and what is urgent. It also comes at 07:00 and 16:00.\n"
+        "A photo of a shelf becomes a stock count: you check it, then save it.\n"
         "You approve on the approval card: press \"Open to approve\".")
 NOT_LINKED = "This chat is not linked to a kitchen yet. Ask the kitchen's admin for a link."
 MAX_VOICE_SECONDS = 30
+MAX_PHOTO_BYTES = 4 * 1024 * 1024       # the gateway's limit for a shelf photo
+MAX_SHELVES = 50
 
 
 BRIEF_TIMES = {"morning": "07:00", "evening": "16:00"}      # the kitchen's time
@@ -66,6 +69,7 @@ class Bot:
         self._products: dict[str, dict] = {}                 # product_id -> {"name", "lot"}
         self._summaries: dict[tuple[int, str], int] = {}     # (chat, proposal) -> summary message id
         self._heard: dict[tuple[int, str], str] = {}
+        self._shelves: dict[tuple[int, int], dict] = {}      # (chat, message) -> a shelf read to confirm
         self._lock = threading.Lock()
         self.brief_times = brief_times if brief_times is not None else dict(BRIEF_TIMES)
 
@@ -91,6 +95,8 @@ class Bot:
             return
         if "voice" in message:
             return self._voice(chat, message["voice"])
+        if message.get("photo"):
+            return self._photo(chat, message["photo"])
         if text in ("/help", "/start"):
             self.tg.send(chat, HELP)
         elif text == "/week":
@@ -167,6 +173,56 @@ class Bot:
         for index in range(len(render.blocks_of(proposal))):
             message = render.supplier_message(proposal, index, names)
             self.tg.send(chat, message.text, message.markup, silent=True)
+
+    # ---- a shelf photo -----------------------------------------------------------------
+    def _photo(self, chat: int, sizes: list[dict]) -> None:
+        """Nemotron reads the shelf; the person saves the count with one press. The read is
+        kept in memory only: the gateway route stores nothing, and neither does the bot."""
+        fits = [s for s in sizes if int(s.get("file_size") or 0) <= MAX_PHOTO_BYTES]
+        if not fits:
+            self.tg.send(chat, "That photo is too large. Send a smaller one.")
+            return
+        best = max(fits, key=lambda s: int(s.get("width") or 0) * int(s.get("height") or 0))
+        status = self.tg.send(chat, "One moment: Nemotron is reading the shelf.", silent=True)
+        self.tg.typing(chat)
+        try:
+            answer = self.gw.shelf_photo(self.tg.download(best["file_id"], MAX_PHOTO_BYTES))
+        except GatewayError as exc:
+            self.tg.edit(chat, status, render.refusal(exc.code, exc.message))
+            return
+        with self._lock:
+            self._shelves[(chat, status)] = answer
+            for old in list(self._shelves)[:-MAX_SHELVES]:       # the oldest reads go first
+                del self._shelves[old]
+        message = render.shelf(answer)
+        self.tg.edit(chat, status, message.text, message.markup)
+
+    def _shelf_button(self, query: dict, chat: int, message_id: int, action: str) -> None:
+        with self._lock:
+            answer = self._shelves.get((chat, message_id))
+        if answer is None:
+            self.tg.answer(query["id"], "This photo is out of date. Send it again.")
+            return
+        if action == "drop":
+            with self._lock:
+                self._shelves.pop((chat, message_id), None)
+            self.tg.edit(chat, message_id, "Discarded. Nothing was saved.")
+            self.tg.answer(query["id"])
+            return
+        counts = render.shelf_counts(answer)
+        if action != "save" or not counts:
+            self.tg.answer(query["id"])
+            return
+        try:
+            # The key is the chat and the message: a second press stores nothing new.
+            self.gw.save_counts(counts, self.now().isoformat(timespec="seconds"), f"tg-shelf-{chat}-{message_id}")
+        except GatewayError as exc:
+            self.tg.answer(query["id"], exc.message[:190])
+            return
+        with self._lock:
+            self._shelves.pop((chat, message_id), None)
+        self.tg.edit(chat, message_id, render.shelf(answer, saved=True).text)
+        self.tg.answer(query["id"], "Saved.")
 
     # ---- the brief ---------------------------------------------------------------------
     def _period(self, asked: str = "") -> str:
@@ -248,6 +304,8 @@ class Bot:
         if chat is None or not self.links.linked(chat) or parts[0] == "noop" or len(parts) < 3:
             self.tg.answer(query["id"])
             return
+        if parts[0] == "s":
+            return self._shelf_button(query, chat, message_id, parts[1])
         action, pid = parts[0], parts[1]
         try:
             index = int(parts[2])
