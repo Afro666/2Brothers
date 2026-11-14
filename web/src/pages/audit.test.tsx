@@ -105,7 +105,7 @@ describe("audit page", () => {
       recall_check: "Recall check",
       demo_inbox_cleared: "Test proposals cleared before a demo",
       delivery_note_read: "Delivery note read",
-      proposal_explanation_failed: "Proposal explanation failed",
+      proposal_explanation_failed: "No model sentence for a proposal",
       kitchen_brief_read: "Kitchen brief read",
       approval_token_created: "Approval token created",
       proposal_changed: "Proposal changed",

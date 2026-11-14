@@ -175,9 +175,23 @@ def food_word_query(db, text: str, home: str | None) -> bool:
     name with both words is a hand wash. "milk jug" does not: a jug is tableware.
     `home` is the home category of the whole text, reused when the text is one word.
     """
+    return food_head(db, text, home)[0]
+
+
+def food_head(db, text: str, home: str | None) -> tuple[bool, str | None]:
+    """`(food_first, head_home)` for `build_pipeline`.
+
+    `food_first`: the query's last word is clearly at home in a food category.
+    `head_home`: that category, when the words as asked have no food home of their own
+    (#1828). "laktoositon maito" is in four names, two milks and two condensed milks, but
+    "maito" lives among the milks; Finnish writes the rest as "kevytmaito", "maitojuoma".
+    """
     words = text.split()
     head = home if len(words) == 1 else home_category(db, words[-1])
-    return bool(head) and not str(head).startswith(NON_FOOD_PREFIXES)
+    if not head or str(head).startswith(NON_FOOD_PREFIXES):
+        return False, None
+    own_food_home = home and not str(home).startswith(NON_FOOD_PREFIXES)
+    return True, None if own_food_home or len(words) == 1 else head
 
 
 def _food_rows_first(limit: int) -> list[dict]:
@@ -196,7 +210,7 @@ def _food_rows_first(limit: int) -> list[dict]:
 
 def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
                    kitchen_id: str | None = None, home: str | None = None,
-                   food_first: bool = False) -> list[dict]:
+                   food_first: bool = False, head_home: str | None = None) -> list[dict]:
     """The aggregation pipeline for one search. Pure, so it can be tested offline.
 
     Catalog rows have no `kitchen_id`; an own product belongs to one kitchen. A search
@@ -204,6 +218,9 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
     `home` is the query's home category (`home_category`), when it has one.
     `food_first` is for a query that asks for a food (`food_word_query`): a non-food row
     gets no all-words and no home boost, and comes after every food row that was read.
+    `head_home` (`food_head`) is the home of the query's last word when the words as asked
+    have none: it is ranked first, and a name also holds every word when the last word is
+    inside a longer Finnish or Swedish word ("kevytmaito") and the other words are there.
     """
     filters = dict(filters or {})
     unknown = set(filters) - {"exclude_allergens", "allergen_strictness", "require_labels",
@@ -260,6 +277,15 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
                                        "score": {"constant": {"value": ALL_WORDS_BOOST}}}}
             if home and str(home).startswith(NON_FOOD_PREFIXES):
                 home = None
+        words = text.lower().split()
+        if head_home and len(words) > 1 and words[-1].isalpha():  # letters only: no wildcard signs
+            home = str(head_home)
+            inside = [{"wildcard": {"query": f"*{words[-1]}*", "path": ["names.fi", "names.sv"],
+                                    "allowAnalyzedField": True}}, _all_words(" ".join(words[:-1]))]
+            all_words = {"compound": {"minimumShouldMatch": 1, "should": [
+                all_words, {"compound": {"must": inside}}]}}
+            every_word = {"compound": {"must": [all_words], "mustNot": list(not_food),
+                                       "score": {"constant": {"value": ALL_WORDS_BOOST}}}}
         if home:
             not_food.append({"equals": {"path": "category", "value": str(home)}})  # it has its own boost
         compound["must"] = [{"text": {"query": text, "path": _TEXT_PATHS, "fuzzy": _FUZZY}}]
@@ -333,7 +359,8 @@ def vector_filter(filters: dict | None = None, kitchen_id: str | None = None) ->
 
 def build_hybrid_pipeline(query: str, query_vector, filters: dict | None = None,
                           limit: int = 20, kitchen_id: str | None = None,
-                          home: str | None = None, food_first: bool = False) -> list[dict]:
+                          home: str | None = None, food_first: bool = False,
+                          head_home: str | None = None) -> list[dict]:
     """Text search and vector search over the same filters, fused by rank in Atlas.
 
     Each side gives its best `MAX_LIMIT` rows; `$rankFusion` merges them by reciprocal
@@ -343,7 +370,8 @@ def build_hybrid_pipeline(query: str, query_vector, filters: dict | None = None,
     """
     # shortcut: the text side's own cut at MAX_LIMIT keeps Atlas's order for equal rows;
     # $rankFusion takes no computed sort key. Fix when the Buyer runs on hybrid search.
-    text_side = [build_pipeline(query, filters, MAX_LIMIT, kitchen_id, home, food_first)[0],  # validates too
+    text_side = [build_pipeline(query, filters, MAX_LIMIT, kitchen_id, home, food_first, head_home)[0],
+                 # validates too
                  {"$limit": MAX_LIMIT}]
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIMIT:
         raise ValueError(f"limit must be an integer from 1 to {MAX_LIMIT}")
@@ -414,14 +442,16 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
             # Same size, other model: Atlas would accept the vector and rank by noise.
             raise EmbeddingError(f"query model {query_model} does not match stored vectors {stored}")
         home = home_category(db, query)  # before the paid embedding call
-        food_first = food_word_query(db, text, home)
+        food_first, head_home = food_head(db, text, home)
         vector = to_binary((embedder or embed)([query], "query")[0])
-        pipeline = build_hybrid_pipeline(query, vector, filters, limit, kitchen_id, home, food_first)
+        pipeline = build_hybrid_pipeline(query, vector, filters, limit, kitchen_id, home, food_first,
+                                         head_home)
     else:
         home = home_category(db, query) if text else None
         pipeline = build_pipeline(query, filters, limit, kitchen_id, home)
-        if text and food_word_query(db, text, home):
-            pipeline = build_pipeline(query, filters, limit, kitchen_id, home, food_first=True)
+        food_first, head_home = food_head(db, text, home) if text else (False, None)
+        if food_first:
+            pipeline = build_pipeline(query, filters, limit, kitchen_id, home, True, head_home)
     filters = filters or {}
     size = (_size(filters["pack_size"]["value"], filters["pack_size"]["unit"])
             if filters.get("pack_size") else text_size)

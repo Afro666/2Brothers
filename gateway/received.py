@@ -18,7 +18,6 @@ from gateway.service import GatewayError
 from store import delivery_results, orders
 
 HELSINKI = ZoneInfo("Europe/Helsinki")
-PLACED_STATUSES = ("SENT", "CONFIRMED", "PARTIAL")
 FIELDS = {"idempotency_key", "delivery_date", "complete"}
 
 
@@ -74,7 +73,7 @@ def mount_received(app, gw, principal, body) -> None:
         order = orders.get_order(gw().db, order_id)
         if order is None or order.get("kitchen_id") != kitchen_id:
             raise _error(404, "ORDER_NOT_FOUND", "no such order in this kitchen")
-        if order.get("outcome") != "CONFIRMED" or order.get("status") not in PLACED_STATUSES:
+        if order.get("outcome") != "CONFIRMED" or order.get("status") not in orders.PLACED_STATUSES:
             raise _error(409, "NOT_PENDING", "this order was not placed successfully")
         context = delivery_context(gw().db, order)
         try:

@@ -1030,7 +1030,7 @@ describe("createHttpApi", () => {
       proposal_id: "prop-1",
       proposal_status: "APPROVED",
       outcome: "CONFIRMED",
-      status: "SENT",
+      status: "RECORDED",
       resolution: {
         resolution: "placed",
         supplier_order_ref: "VAL-2026-00123",

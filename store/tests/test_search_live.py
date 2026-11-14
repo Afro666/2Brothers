@@ -118,6 +118,15 @@ class SearchAcceptance(unittest.TestCase):
         self.assertEqual(foods, sorted(foods, reverse=True))  # every food row before any non-food row
         self.assertTrue(all(row["category"].startswith("63") for row in wash))  # a non-food query: as before
 
+    def test_laktoositon_maito_gives_lactose_free_milk_first(self):
+        # #1828: was Dovgan condensed milk first, then two milks, then margarine and yoghurt.
+        rows = search_products(self.db, "laktoositon maito", limit=20)
+        self.assertEqual([row["category"] for row in rows], ["10400"] * 20, [r["names"]["fi"] for r in rows[:6]])
+        for row in rows:
+            self.assertIn("laktoositon", row["names"]["fi"].lower())
+            self.assertTrue(row["lactose_free"], row["names"])
+        self.assertTrue(any("kevytmaito" in row["names"]["fi"].lower() for row in rows))  # a compound
+
     def test_a_row_with_some_of_the_words_stays_under_the_all_words_line(self):
         from store.search import ALL_WORDS_BOOST
         rows = search_products(self.db, "milk honey", limit=20)

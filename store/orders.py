@@ -18,6 +18,16 @@ from pymongo.errors import DuplicateKeyError
 from store.audit import canonical
 
 OUTCOMES = ("CONFIRMED", "NOT_SENT", "UNCONFIRMED", "SENT_READ_FAILED")
+# Supplier-side status of a placed order. Valio's API has no order route, so nothing is
+# sent: the gateway records it (docs/contract.md, "Order status"). Rows stored as SENT
+# before that rule mean the same and are answered as RECORDED.
+RECORDED = "RECORDED"
+PLACED_STATUSES = (RECORDED, "SENT", "CONFIRMED", "PARTIAL")
+
+
+def public_status(status: str | None) -> str | None:
+    """The order `status` an answer shows: a legacy SENT is RECORDED (nothing was sent)."""
+    return RECORDED if status == "SENT" else status
 DECISIONS = ("APPROVED", "REJECTED")
 STOCK_FILLER_MIN = 999999  # any availableAmount this large is a filler, not stock
 

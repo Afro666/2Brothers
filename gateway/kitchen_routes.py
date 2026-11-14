@@ -16,6 +16,7 @@ from fastapi import Depends, Request
 
 from gateway.service import GatewayError
 from store.history import forecasts_between
+from store.orders import PLACED_STATUSES
 
 
 def _json(value):
@@ -266,9 +267,9 @@ def _content_per_base_unit(content: dict | None, kitchen_unit: str | None) -> De
 
 
 def incoming_orders_query(kitchen_id: str) -> dict:
-    """The orders that count as incoming: approved, and sent to the supplier without failing."""
+    """The orders that count as incoming: approved and recorded without failing."""
     return {"kitchen_id": kitchen_id, "outcome": "CONFIRMED",
-            "status": {"$in": ["SENT", "CONFIRMED", "PARTIAL"]}}
+            "status": {"$in": list(PLACED_STATUSES)}}
 
 
 def _open_orders(db, kitchen_id: str, today: date,
