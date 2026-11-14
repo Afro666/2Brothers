@@ -1,0 +1,68 @@
+{
+  "source": "Measured by the server session on 2026-11-14 at about 07:18 UTC and sent to the store session before SEARCH_HYBRID was decided. The totals are in docs/decisions.md (2026-11-14 11:55) and PR #1080. Not computed at page load: these are the written-down results.",
+  "measured_on": "2026-11-14",
+  "how": "store.search.search_products, the top 8 for each query, text search against hybrid search ($rankFusion of Atlas Search and Atlas Vector Search), on the server at 38d3dae-5b2dc57, index products_vector READY with 17,546 voyage-4 vectors.",
+  "totals": { "better": 6, "equal": 2, "slightly_worse": 2 },
+  "queries": [
+    {
+      "query": "lactose-free milk",
+      "verdict": "better",
+      "words": "3 Brunberg chocolates, a bread mix, cold brew, cake bases",
+      "hybrid": "6 real lactose-free milks in the top 7"
+    },
+    {
+      "query": "laktoositon maito",
+      "verdict": "better",
+      "words": "2 condensed milks first, then yoghurts",
+      "hybrid": "café milk and skimmed milk first, 5 milks in the top 8"
+    },
+    {
+      "query": "cheese",
+      "verdict": "better",
+      "words": "Pringles, a TUC biscuit, mac and cheese, tortilla chips",
+      "hybrid": "cheddar sauce, cheese bites, sliced processed cheese, grated and shredded cheddar (still not plain cheese first)"
+    },
+    {
+      "query": "cream",
+      "verdict": "better",
+      "words": "ice cream, crackers, Pringles",
+      "hybrid": "cream spray, cream powder, Valio whipping cream, Arla heavy whipping cream"
+    },
+    {
+      "query": "butter",
+      "verdict": "better",
+      "words": "peanut butter ice cream, Snickers, peanut butter, a butter spreader: no plain butter",
+      "hybrid": "clarified butter, brown butter, then plain Valio butter at ranks 3 to 8"
+    },
+    {
+      "query": "eggs",
+      "verdict": "better",
+      "words": "chocolate eggs, egg noodles, an egg cutter",
+      "hybrid": "Kieku barn eggs at ranks 1 to 4, organic and free-range eggs in the top 8"
+    },
+    {
+      "query": "gluten free bread",
+      "verdict": "equal",
+      "words": "good",
+      "hybrid": "good"
+    },
+    {
+      "query": "oat drink",
+      "verdict": "equal",
+      "words": "good, with a chicken snack in the list",
+      "hybrid": "good, without the chicken snack"
+    },
+    {
+      "query": "salmon fillet",
+      "verdict": "slightly_worse",
+      "words": "the plain C-cut fillet at rank 2",
+      "hybrid": "the plain fillet at rank 4, behind smoked and marinated salmon"
+    },
+    {
+      "query": "kermaa",
+      "verdict": "slightly_worse",
+      "words": "Arla Café cream at rank 1; two Millac cooking creams at ranks 6 and 7",
+      "hybrid": "Arla Café cream at rank 1; then creamed potatoes and gram flour"
+    }
+  ]
+}

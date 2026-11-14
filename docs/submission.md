@@ -175,6 +175,16 @@ so read the "all" rows only.
 The database is MongoDB Atlas. `store/` is the only package that talks to it
 (`store/README.md`, `docs/decisions.md`).
 
+**See it live: the About page, "The data lives in MongoDB Atlas"** (#1383). It shows the
+live numbers from `GET /v1/kitchens/{k}/atlas` (`store/atlas.py`, `gateway/atlas_routes.py`,
+kept for a minute): the product vectors with their model and size (voyage-4, 1,024
+numbers), the indexes `products_search` and `products_vector` with Atlas's own status, the
+database size, the time-series collections, the audit chain length and the change-stream
+collections. A part that cannot be read shows "unknown", never zero. Under it is the
+measured comparison of words against hybrid (`$rankFusion`) on 10 searches: better on 6,
+equal on 2, slightly worse on 2 (`web/src/data/atlas-search-comparison.json`, with its
+source). The Buyer searches by words on stage; the Catalog page can search by meaning.
+
 | Atlas feature | What we use it for | Source |
 |---|---|---|
 | Atlas Search | One index, `products_search`, over English, Finnish and Swedish names. One typo allowed, allergen exclusion, size boost. The gateway's product search calls it. | `store/search.py:153`, `store/search_index.json`, `gateway/service.py` |

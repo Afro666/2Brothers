@@ -364,6 +364,38 @@ export interface ModelUsage {
   modelSeconds: number;
 }
 
+/** One embedding model and size in `products`; two rows while the vectors are being replaced. */
+export interface AtlasVectors {
+  model: string | null;
+  dimensions: number | null;
+  count: number;
+}
+
+/** An Atlas Search (`search`) or Atlas Vector Search (`vectorSearch`) index and Atlas's own status word. */
+export interface AtlasSearchIndex {
+  name: string;
+  type: string;
+  status: string | null;
+  queryable: boolean | null;
+}
+
+/**
+ * `GET /atlas`: what MongoDB Atlas holds and runs, for the whole database. Contract:
+ * docs/contract.md, "Atlas facts". null is unknown (it could not be read), never zero.
+ */
+export interface AtlasFacts {
+  mongodbVersion: string | null;
+  /** Data plus indexes, whole megabytes. */
+  dataMb: number | null;
+  products: number | null;
+  vectors: AtlasVectors[] | null;
+  searchIndexes: AtlasSearchIndex[] | null;
+  timeSeries: { collection: string; documents: number }[] | null;
+  /** The length of the hash-chained audit log, all kitchens. */
+  auditEntries: number | null;
+  changeStreamCollections: string[];
+}
+
 /** The label nutrients of one portion. null means the labels do not say: unknown, never zero. */
 export interface NutrientValues {
   kcal: number | null;
@@ -515,6 +547,8 @@ export interface Api {
   listAuditChain(limit: number): Promise<AuditChainRow[]>;
   verifyAuditChain(): Promise<AuditChainCheck>;
   getModelUsage(): Promise<ModelUsage>;
+  /** What MongoDB Atlas holds and runs; the gateway keeps the answer for a minute. */
+  getAtlasFacts(): Promise<AtlasFacts>;
   /**
    * Demo only: changes the newest stored line and leaves its hash alone, so the next verify
    * reports the break. Fails with `DEMO_ONLY`, `ALREADY_TAMPERED` or `NOTHING_TO_TAMPER`.
