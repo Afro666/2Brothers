@@ -3392,7 +3392,9 @@ kitchen, order and supplier ids, `requested_date`, note-read `delivery_date`, de
 
 ```json
 {
+  "supplier_id": "supplier-1",
   "product_id": "462775",
+  "unit": "ST",
   "status": "SHORT",
   "ordered": "40",
   "delivered": "30"
