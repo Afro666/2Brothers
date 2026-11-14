@@ -249,6 +249,36 @@ as the consent text tells the kitchen. A kitchen without active consent appears 
 synthetic kitchens, recorded as granted by `synthetic-seed`; every fifth is held back so
 the consent rule shows.
 
+## Semantic search (hybrid)
+
+Words miss what meaning finds: a search for "lactose-free milk" should also find a
+product whose name says it another way. Every product has one embedding from an NVIDIA
+Nemotron model (`nvidia/nemotron-3.5-embed-1b`, 1024 dimensions), stored on the product
+row as float32 binary under `embedding` with the model name and size. A second Atlas
+index, `products_vector` (`store/vector_index.json`), serves `$vectorSearch`.
+
+```bash
+python -m store.embeddings     # embeds new and changed products; needs NVIDIA_API_KEY in .env
+```
+
+`python -m store.loader` does the same after loading the catalog, and skips it with a
+message when the key is missing. Reloading the catalog keeps the vectors.
+
+```python
+search_products(db, "lactose free milk", hybrid=True)                      # text + meaning
+search_products(db, "oat drink", {"exclude_allergens": ["gluten"]}, hybrid=True)
+```
+
+- `hybrid=True` embeds the query, runs the text search and the vector search over the
+  **same hard filters**, and lets Atlas fuse the two by rank (`$rankFusion`). A row found
+  only by meaning carries the reason `similar meaning, no word match`.
+- A similar meaning never overrides a filter: excluded allergens, required labels and
+  the kitchen scope cut rows before ranking, and missing allergen data is still unknown.
+- If the embedding service fails, the call raises `EmbeddingError`; ask again without
+  `hybrid` for the plain text search.
+- Storage: 17,546 vectors of 1024 float32 are 72 MB. As plain number arrays they would
+  be about three times that.
+
 ## Tests
 
 CI runs `python -m pytest`; install it next to the test extra:

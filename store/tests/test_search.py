@@ -96,7 +96,7 @@ class SearchQueryTests(unittest.TestCase):
 
     def test_rows_never_carry_the_raw_record(self):
         pipeline = build_pipeline("milk", limit=5)
-        self.assertIn({"$project": {"raw": 0}}, pipeline)
+        self.assertIn({"$project": {"raw": 0, "embedding": 0}}, pipeline)
         self.assertIn({"$limit": 5}, pipeline)
 
     def test_match_reasons(self):
