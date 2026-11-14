@@ -576,7 +576,7 @@ class Gateway:
             return None
         return self.create_proposal(kitchen_id, body, actor, read=read)
 
-    def _from_plan(self, kitchen_id: str, body: dict) -> dict:
+    def _from_plan(self, kitchen_id: str, body: dict, *, entries=None) -> dict:
         """`from` and `to` and no products: an order for what the menu plan needs in that
         window (net of stock). Unknown stock is not treated as zero stock silently: the full
         need is proposed and the line says the count is missing."""
@@ -587,7 +587,8 @@ class Gateway:
             raise GatewayError(422, "INVALID_REQUEST", "from and to must be YYYY-MM-DD") from None
         if end < start or (end - start).days > 31:
             raise GatewayError(422, "INVALID_REQUEST", "from must be on or before to, at most 31 days apart")
-        rows, problems = demand_rows(self.db, kitchen_id, start, end, self.now().date(), self.now().tzinfo)
+        rows, problems = demand_rows(self.db, kitchen_id, start, end, self.now().date(), self.now().tzinfo,
+                                     entries_override=entries)
         total: dict[tuple[str, str], Decimal] = {}
         uncounted: set[str] = set()
         for row in rows:
@@ -610,20 +611,27 @@ class Gateway:
                 "idempotency_key": body.get("idempotency_key")}
 
     def create_proposal(self, kitchen_id: str, body: dict, actor: str, *, auto_approve: bool = True,
-                        read: dict | None = None) -> dict:
+                        read: dict | None = None, plan_entries=None, menu_photo=None) -> dict:
         """`auto_approve=False`: this proposal always waits for a person, whatever the kitchen's
         auto-approve rule says (a proposal made from a supplier's offer, #374).
         `read`: what `_from_text` already made of this free text (`refuse_excluded`)."""
+        original_body = body
         planned = False
         if body.get("from") and body.get("to") and not body.get("product_ids") and not body.get("text"):
             if not body.get("idempotency_key"):
                 raise GatewayError(422, "INVALID_REQUEST", "idempotency_key is required")
             stored = self.db.proposals.find_one({"kitchen_id": kitchen_id, "idempotency_key": body["idempotency_key"]})
             if stored:
+                if menu_photo is not None and (stored.get('menu_photo') or {}).get('fingerprint') != menu_photo['fingerprint']:
+                    raise GatewayError(409, 'IDEMPOTENCY_KEY_REUSED', 'key used with another request')
                 if (stored["request"].get("window") or {}) != {"from": str(body["from"]), "to": str(body["to"])}:
                     raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
                 return self._proposal_out(stored)
-            body = self._from_plan(kitchen_id, body)
+            body = self._from_plan(kitchen_id, body, entries=plan_entries)
+            if menu_photo is not None:
+                unsized = sum(not dish['in_proposal'] for dish in menu_photo['response']['dishes'])
+                if unsized:
+                    body['problems'].append(f'Menu photo: {unsized} dishes were not sized; check the photo results')
             planned = True
         if body.get("text") and not body.get("product_ids"):
             if not body.get("idempotency_key"):
@@ -666,10 +674,13 @@ class Gateway:
                "payload_hash": _hash(request), "request": request, "offer_id": offer["offer_id"],
                "status": "READY" if sim["lines"] else "REJECTED", "created_by": actor,
                "created_at": self.now(), "approval_id": None, "order_id": None}
+        if menu_photo is not None:
+            doc['menu_photo'] = menu_photo    # replay result only; never image bytes
         try:
             self.db.proposals.insert_one(doc)
         except DuplicateKeyError:
-            return self.create_proposal(kitchen_id, body, actor, auto_approve=auto_approve, read=read)
+            return self.create_proposal(kitchen_id, original_body, actor, auto_approve=auto_approve, read=read,
+                                         plan_entries=plan_entries, menu_photo=menu_photo)
         if sim["lines"]:
             approval, _ = orders.request_approval(
                 self.db, kitchen_id=kitchen_id, idempotency_key=f"proposal:{doc['_id']}",

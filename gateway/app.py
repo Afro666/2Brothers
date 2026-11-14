@@ -86,7 +86,7 @@ REFUSAL_WINDOW = 60.0          # seconds: one audit row per repeated refusal (#8
 
 
 def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None,
-               delivery_note_worker=None) -> FastAPI:
+               delivery_note_worker=None, menu_photo_worker=None) -> FastAPI:
     from gateway.buyer_worker import Breaker
     buyer_breaker = Breaker()        # one per app: a timeout skips the model for 2 minutes
     app = FastAPI(
@@ -623,6 +623,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     # Check a delivery from a photo of its note (#362): read in the worker; stores nothing.
     from gateway.delivery_note import mount_delivery_note
     mount_delivery_note(app, gw, principal, delivery_note_worker)
+    from gateway.menu_photo import mount_menu_photo
+    mount_menu_photo(app, gw, principal, menu_photo_worker)
 
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp
