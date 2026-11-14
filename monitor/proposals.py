@@ -54,9 +54,10 @@ def apply_notices(gateway, kitchen_id, notices, *, live_enrichment=False):
             continue
         key = hashlib.sha256((proposal['_id'] + '|' + '|'.join(sorted(a['event_id'] for a in relevant))).encode()).hexdigest()
         try:
-            replacement = gateway.create_proposal(kitchen_id, {**proposal['request'],
-                'product_ids': basket, 'idempotency_key': 'recall-' + key,
-                'made_by': 'recall-buyer'}, 'recall-buyer')
+            # Provenance is the actor and the audit entry; the gateway sets made_by itself.
+            request = {k: v for k, v in proposal['request'].items() if k not in ('made_by', 'query')}
+            replacement = gateway.create_proposal(kitchen_id, {**request,
+                'product_ids': basket, 'idempotency_key': 'recall-' + key}, 'recall-buyer')
             if not replacement['lines'] or replacement.get('shortfall') not in ('0', '0.0', '0.00'):
                 recalls.link(db, kitchen_id, proposal['_id'], recall_replan_error='REPLACEMENT_SHORTFALL')
                 if recalls.reject_replacement(db, kitchen_id, replacement['proposal_id'],
