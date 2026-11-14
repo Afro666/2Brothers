@@ -173,7 +173,7 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 
 | MCP tool | Method and path | Request / query fields | Success response fields |
 |---|---|---|---|
-| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object`, `limit: integer`, `need_id: string` (optional; see below), `mode: "text" \| "hybrid"` (optional, HTTP only; see below) | `products: object[]`, `search: "text" \| "hybrid"`, `meaning_unavailable: true` (only when `mode: "hybrid"` fell back to words); with `need_id` also `requested_date`, `measure`, `note` |
+| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object`, `limit: integer`, `need_id: string` (optional; see below), `mode: "text" \| "hybrid"` (optional, HTTP only; see below) | `products: object[]`, `search: "text" \| "hybrid" \| "meaning-fallback"` (the last only with `need_id`), `meaning_unavailable: true` (only when `mode: "hybrid"` fell back to words); with `need_id` also `requested_date`, `measure`, `note` |
 | `get_offer` | POST `/tools/get_offer` | `product_ids: string[]`, `requested_date: YYYY-MM-DD`, `need_id: string` | `offer_id`, `valid_until`, `lines: object[]`, `signature`, `offer_hash` |
 | `simulate_order` | POST `/tools/simulate_order` | `offer_id: string` | `offer_id`, `expected_total`, `currency`, `mandate: object`, `lines: object[]`, `signature`, `offer_hash` |
 | `place_order` | POST `/tools/place_order` | `offer_id`, `expected_total: decimal string`, `idempotency_key: string` | `order_id`, `outcome`, `status` |
@@ -417,6 +417,21 @@ embedding service's limit of 3 new texts a minute, more than 2 seconds, the rest
 a failure), the answer is the text search with `search: "text"` and `meaning_unavailable: true`.
 A query asked before keeps its vector in the gateway's memory, so asking it again runs hybrid
 without a new embedding call.
+
+**Meaning search when the words find nothing (`"meaning-fallback"`, #1384).** With
+`need_id`, when the word search finds no product, the gateway runs Atlas Vector Search
+once for the same query and the same hard filters (allergens with the group rule,
+`allergen_strictness`, labels, kitchen scope; with `strict`, a product with
+`allergen_data_known: false` never comes back). It runs whatever `SEARCH_HYBRID` says,
+and only on zero word hits: a request the words answer gets the same rows as before.
+The kind and measure steps above then run on what it found. Such an answer says
+`search: "meaning-fallback"`, and each of its rows has the match reason
+`"similar meaning, no word match"` (`matched_by: "meaning"`). It never runs for a need the allergen rule refuses
+(`products: []` as above), and not when the word search finds products only without the
+allergen filter: the excluded products are not replaced by others. When the query vector
+cannot be made (no key, the embedding rate limit, a slow answer, no vector index), the
+answer stays `products: []` with `search: "text"` and a `note` that says the meaning
+search could not run.
 
 Product row (the catalog row from the shared repository, without the raw record):
 
@@ -1037,6 +1052,10 @@ The proposal's `request` object echoes what was quoted: `product_ids`, `quantity
 - `made_by`: `parser` when the parser read the free text, `structured` for a body with
   `product_ids`.
 - `query`: the product words the parser searched for. Only on `made_by: parser`.
+- `search`: `"meaning-fallback"`, only when the Buyer quoted a product that its search
+  found by meaning after the word search found nothing (#1384). The proposal's
+  `decision_summary.searched` then ends with "Found by meaning (Atlas Vector Search)
+  after the word search found nothing."
 - `event`: `true`, only when the request was an event.
 - `refusal`: only on a request the allergen rule removes (below): `code`
   (`ALLERGEN_RULE`), `allergens` (string[], the names a person reads, for example
@@ -1140,7 +1159,7 @@ One step:
 | `query` | string, optional | `search_products` only: the search words, only letters, digits, spaces and `-`, at most 60 characters. |
 | `products` | integer, optional | `get_offer` only: how many products were asked for. |
 | `count` | integer, optional | How many rows came back: products found (after the allergen rule), offer lines, simulated lines, shortlist entries. |
-| `code` | string, optional | A code, never text: the mandate verdict (`NEEDS_APPROVAL`, `REFUSED`), the approval status (`PENDING`), the order outcome, a policy reason code (`SCHEMA_INVALID`, `UNKNOWN_ID`, `NEED_MISMATCH`, ...), `TOOL_FAILED`, or `PICKED` for the seller's pick. |
+| `code` | string, optional | A code, never text: the mandate verdict (`NEEDS_APPROVAL`, `REFUSED`), the approval status (`PENDING`), the order outcome, a policy reason code (`SCHEMA_INVALID`, `UNKNOWN_ID`, `NEED_MISMATCH`, ...), `TOOL_FAILED`, `MEANING_FALLBACK` on a `search_products` step whose answer was `search: "meaning-fallback"` (#1384), or `PICKED` for the seller's pick. |
 
 **Never in it:** a key or token, the system prompt, any text the model wrote (its
 reply, its reasons, the seller's `reason`), prices, quantities, other kitchens' data
