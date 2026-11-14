@@ -516,7 +516,10 @@ export interface OwnProduct {
   id: string;
   name: string;
   unit: string;
+  /** In `packMeasure` per `unit` ("5" with KG: 5 kg in one ST). */
   packSize: number | null;
+  /** The measure the pack size is in (not `baseUnit`: the pages tell a catalog product from an own one by that key). */
+  packMeasure?: "KG" | "L" | null;
   priceEur: number | null;
   supplierId: string;
   /** null = unknown, NOT allergen-free. */

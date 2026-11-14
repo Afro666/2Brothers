@@ -1,6 +1,7 @@
 import { CircleQuestionMark, Heart, Leaf, Star, TriangleExclamationPoint } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { allergenName } from "@/lib/allergens";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useT } from "@/lib/i18n";
 import type { Allergen, ProductLabel } from "@/types";
@@ -21,7 +22,7 @@ export function AllergenChip({ allergen }: { allergen: Allergen }) {
     >
       {contains ? <TriangleExclamationPoint className="size-3" aria-hidden /> : null}
       <span className="uppercase">{contains ? t("Contains") : t("May contain")}</span>
-      <span>{allergen.name}</span>
+      <span>{allergenName(allergen.code, t)}</span>
     </span>
   );
 }

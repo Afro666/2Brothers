@@ -157,8 +157,8 @@ export function mapOwnProduct(body: unknown): OwnProduct {
     id: text(row.product_id, "a product_id"),
     name: text(row.name, "a product name"),
     unit: text(row.unit, "a product unit"),
-    // The measure (`base_unit`: L or KG) has no place in the UI type yet.
     packSize: decimal(row.pack_size_in_base_units, "pack_size_in_base_units"),
+    packMeasure: row.base_unit === "KG" || row.base_unit === "L" ? row.base_unit : null,
     priceEur: decimal(row.unit_price_eur, "unit_price_eur"),
     supplierId: text(row.supplier_id, "a supplier_id"),
     allergens,
