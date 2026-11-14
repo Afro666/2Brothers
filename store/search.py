@@ -21,6 +21,16 @@ MAX_LIMIT = 50
 # then plain text relevance. The constants only need to be larger than a text score.
 ALL_WORDS_BOOST = 200
 SIZE_BOOST = 100
+# Inside the all-words tier only, so a row without every word still scores under
+# ALL_WORDS_BOOST (gateway/candidates.py reads that line): the category the words clearly
+# belong to, else food before non-food. One of the two, never both, and both under the
+# size tier. "milk" is in the names of soap and jugs too (#1593).
+HOME_BOOST = 90
+FOOD_BOOST = 40
+# Category codes are five digits and have no names. Measured on the catalog, 2026-11-14:
+# under these two-digit prefixes (tableware, packaging, cleaning, office) no product
+# declares a food allergen; under every other prefix most do.
+NON_FOOD_PREFIXES = ("20", "30", "32", "63", "64", "67", "77", "90")
 
 # The 14 EU allergens by GS1 code, plus three single ingredients people ask for.
 # `gluten` covers the gluten cereals but not oats (GO): gluten-free oats exist.
@@ -95,12 +105,43 @@ def _size_clause(size: dict) -> dict:
                    "gte": size["value"] * 0.99, "lte": size["value"] * 1.01}}]}}
 
 
+_CATALOG = {"compound": {"must": [{"exists": {"path": "supplier_id"}}],
+                         "mustNot": [{"exists": {"path": "kitchen_id"}}]}}
+_FUZZY = {"maxEdits": 1, "prefixLength": 1}  # one typo, not in the first letter
+
+
+def _all_words(text: str) -> dict:
+    return {"text": {"query": text, "path": _NAME_PATHS, "fuzzy": _FUZZY, "matchCriteria": "all"}}
+
+
+def home_category(db, query: str) -> str | None:
+    """The category the query's words clearly belong to, or None when none stands out.
+
+    Counts the catalog names that hold every word, by category: "milk" is in 84 names
+    of the milk category and in 14 of the next one. A category is the home when it has
+    at least three times the names of the runner-up. Measured 2026-11-14: milk 6x,
+    lactose free milk 4x, oat drink 12x, yoghurt 30x have a home; chicken breast 2.1x,
+    coffee 2.5x, cheese, cream and butter have none, and keep their order among food.
+    """
+    text, _ = parse_query(query)
+    if not text:
+        return None
+    meta = next(iter(db.products.aggregate([{"$searchMeta": {"index": INDEX_NAME, "facet": {
+        "operator": {"compound": {"must": [_all_words(text)], "filter": [_CATALOG]}},
+        "facets": {"category": {"type": "string", "path": "category", "numBuckets": 2}}}}}])), {})
+    buckets = (meta.get("facet") or {}).get("category", {}).get("buckets") or []
+    if buckets and (len(buckets) == 1 or buckets[0]["count"] >= 3 * buckets[1]["count"]):
+        return buckets[0]["_id"]
+    return None
+
+
 def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
-                   kitchen_id: str | None = None) -> list[dict]:
+                   kitchen_id: str | None = None, home: str | None = None) -> list[dict]:
     """The aggregation pipeline for one search. Pure, so it can be tested offline.
 
     Catalog rows have no `kitchen_id`; an own product belongs to one kitchen. A search
     sees the catalog plus the asking kitchen's own products, never another kitchen's.
+    `home` is the query's home category (`home_category`), when it has one.
     """
     filters = dict(filters or {})
     unknown = set(filters) - {"exclude_allergens", "allergen_strictness", "require_labels",
@@ -118,9 +159,7 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
 
     text, text_size = parse_query(query)
     compound: dict = {"filter": [], "mustNot": [], "should": []}
-    catalog = {"compound": {"must": [{"exists": {"path": "supplier_id"}}],
-                            "mustNot": [{"exists": {"path": "kitchen_id"}}]}}
-    scope = [catalog]
+    scope = [_CATALOG]
     if kitchen_id is not None:
         scope.append({"equals": {"path": "kitchen_id", "value": str(kitchen_id)}})
     scope_clause = {"compound": {"should": scope, "minimumShouldMatch": 1}}
@@ -148,14 +187,23 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
             compound["mustNot"].append({"equals": {"path": "allergen_data_known", "value": False}})
 
     if text:
-        fuzzy = {"maxEdits": 1, "prefixLength": 1}  # one typo, not in the first letter
-        compound["must"] = [{"text": {"query": text, "path": _TEXT_PATHS, "fuzzy": fuzzy}}]
+        all_words = _all_words(text)
+        not_food = [{"range": {"path": "category", "gte": f"{prefix}000", "lte": f"{prefix}999"}}
+                    for prefix in NON_FOOD_PREFIXES]
+        if home:
+            not_food.append({"equals": {"path": "category", "value": str(home)}})  # it has its own boost
+        compound["must"] = [{"text": {"query": text, "path": _TEXT_PATHS, "fuzzy": _FUZZY}}]
         compound["should"] += [
-            {"text": {"query": text, "path": _NAME_PATHS, "fuzzy": fuzzy, "matchCriteria": "all",
-                      "score": {"constant": {"value": ALL_WORDS_BOOST}}}},
+            {"text": {**all_words["text"], "score": {"constant": {"value": ALL_WORDS_BOOST}}}},
+            {"compound": {"filter": [all_words], "mustNot": not_food,
+                          "score": {"constant": {"value": FOOD_BOOST}}}},
             {"text": {"query": text, "path": _TEXT_PATHS}},  # exact words beat near misses
             {"phrase": {"query": text, "path": _NAME_PATHS, "slop": 2,
                         "score": {"boost": {"value": 3}}}}]
+        if home:
+            compound["should"].append({"compound": {
+                "filter": [all_words, {"equals": {"path": "category", "value": str(home)}}],
+                "score": {"constant": {"value": HOME_BOOST}}}})
     elif not compound["filter"] and not compound["mustNot"]:
         raise ValueError("give a query or at least one filter")
     compound["filter"].append(scope_clause)
@@ -200,13 +248,14 @@ def vector_filter(filters: dict | None = None, kitchen_id: str | None = None) ->
 
 
 def build_hybrid_pipeline(query: str, query_vector, filters: dict | None = None,
-                          limit: int = 20, kitchen_id: str | None = None) -> list[dict]:
+                          limit: int = 20, kitchen_id: str | None = None,
+                          home: str | None = None) -> list[dict]:
     """Text search and vector search over the same filters, fused by rank in Atlas.
 
     Each side gives its best `MAX_LIMIT` rows; `$rankFusion` merges them by reciprocal
     rank, so a product that words miss but meaning finds still comes up.
     """
-    text_side = build_pipeline(query, filters, MAX_LIMIT, kitchen_id)[:2]  # validates too
+    text_side = build_pipeline(query, filters, MAX_LIMIT, kitchen_id, home)[:2]  # validates too
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIMIT:
         raise ValueError(f"limit must be an integer from 1 to {MAX_LIMIT}")
     vector_side = [{"$vectorSearch": {
@@ -268,17 +317,19 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
     call raises `EmbeddingError` and the caller can ask again without `hybrid`.
     """
     text, text_size = parse_query(query)
+    build_pipeline(query, filters, limit, kitchen_id)  # refuse bad input before any call
     if hybrid and text:
         from store.embeddings import EmbeddingError, current_model, embed, to_binary
-        build_pipeline(query, filters, limit, kitchen_id)  # refuse bad input before paying
         query_model, stored = current_model(), _stored_model(db)
         if query_model and stored and query_model != stored:
             # Same size, other model: Atlas would accept the vector and rank by noise.
             raise EmbeddingError(f"query model {query_model} does not match stored vectors {stored}")
         vector = to_binary((embedder or embed)([query], "query")[0])
-        pipeline = build_hybrid_pipeline(query, vector, filters, limit, kitchen_id)
+        pipeline = build_hybrid_pipeline(query, vector, filters, limit, kitchen_id,
+                                         home_category(db, query))
     else:
-        pipeline = build_pipeline(query, filters, limit, kitchen_id)
+        home = home_category(db, query) if text else None
+        pipeline = build_pipeline(query, filters, limit, kitchen_id, home)
     filters = filters or {}
     size = (_size(filters["pack_size"]["value"], filters["pack_size"]["unit"])
             if filters.get("pack_size") else text_size)
