@@ -34,6 +34,16 @@ describe("HomePage", () => {
     expect(screen.getByText("Hakaniemi Fish").parentElement).toHaveTextContent("terms not set");
     expect(screen.getAllByText("not counted").length).toBeGreaterThan(0);
     expect(screen.getByText("Latest steps")).toBeInTheDocument();
+    // Who decides what: two machines and the person, in that order; only the person approves.
+    const strip = screen.getByRole("region", { name: "Who decides what" });
+    expect(
+      [...strip.querySelectorAll(".actor-box")].map((box) => `${box.textContent}:${box.getAttribute("data-actor")}`),
+    ).toEqual(["Buyer agent:machine", "Ordering engine:machine", "You:person"]);
+    expect([...strip.querySelectorAll("li")].map((step) => /approve/.test(step.textContent ?? ""))).toEqual([
+      false,
+      false,
+      true,
+    ]);
   });
 
   it("shows Valio risk counts and demand navigation for a Valio planner", async () => {

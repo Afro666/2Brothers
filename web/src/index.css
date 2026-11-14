@@ -162,6 +162,27 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
+  /* Who acted: a person is solid ink, a machine a dashed outline (same as the activity log). */
+  .actor-box {
+    display: inline-block;
+    border: 1px solid var(--foreground);
+    border-radius: 2px;
+    padding: 0 0.375rem;
+    font-family: var(--font-mono);
+    font-size: 0.65625rem;
+    line-height: 1.125rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    background: var(--foreground);
+    color: var(--background);
+  }
+  .actor-box[data-actor="machine"] {
+    border: 1px dashed var(--input);
+    background: transparent;
+    color: var(--muted-foreground);
+  }
   .price-tag {
     font-family: var(--font-stamp);
     font-stretch: 75%;
