@@ -65,6 +65,7 @@ export function ApprovalCard({
   listAddableProducts,
   editCount = 0,
   approvalBlockedReason,
+  approveUnconfirmedManual = false,
   recalls = [],
 }: {
   request: ApprovalRequest;
@@ -77,6 +78,7 @@ export function ApprovalCard({
   listAddableProducts?: (query: string) => Promise<AddableProduct[]>;
   editCount?: number;
   approvalBlockedReason?: string;
+  approveUnconfirmedManual?: boolean;
   /** Recall alerts on this order; a blocked line still on it holds the approval. */
   recalls?: RecallAlert[];
 }) {
@@ -224,9 +226,11 @@ export function ApprovalCard({
                 key={supplier.supplierId}
                 className="rounded-r-md border-l-[3px] border-warning bg-warning-surface px-3 py-2 text-sm text-warning"
               >
-                {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", {
-                  supplier: supplier.name,
-                })}
+                {approveUnconfirmedManual
+                  ? t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", {
+                      supplier: supplier.name,
+                    })
+                  : t("{supplier} must confirm stock before this order can be approved.", { supplier: supplier.name })}
               </li>
             ))}
           </ul>

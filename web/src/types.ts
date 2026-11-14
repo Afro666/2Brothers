@@ -501,6 +501,8 @@ export interface CoverRule {
  * the engine's default applies and the gateway does not send it.
  */
 export interface KitchenSettings {
+  /** Whether a person may approve a manual supplier's unconfirmed-stock lines. */
+  approveUnconfirmedManual: boolean;
   /** Target service level per demand class, in percent (A = menu-critical). */
   serviceLevelPercent: Record<DemandClass, number>;
   /** Never order more than this many days of cover for a category. */

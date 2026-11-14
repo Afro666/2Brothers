@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { useApi } from "@/api";
 import { mapSuppliersToConfirm } from "@/api/gateway-map";
 import { gatewayRequest } from "@/api/http";
 import { mapMoney } from "@/api/map";
@@ -91,7 +92,7 @@ function parse(value: unknown, t: (text: string) => string): Proposal {
   return row;
 }
 
-function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; reload: () => void; approvalBlockedReason?: string }) {
+function ProposalCard({ row, reload, approvalBlockedReason, approveUnconfirmedManual }: { row: Proposal; reload: () => void; approvalBlockedReason?: string; approveUnconfirmedManual: boolean }) {
   const t = useT();
   const [confirm, setConfirm] = useState<"approve" | "reject" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -144,7 +145,9 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
       <h3 className="label-caps">{t("What to check")}</h3>
       <div className="space-y-2 rounded-md border border-warning/40 bg-warning-surface p-3 text-warning">
         {suppliersToConfirm.map(supplier => <p key={supplier.supplierId} className="text-sm">
-          {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", { supplier: supplier.name })}
+          {approveUnconfirmedManual
+            ? t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", { supplier: supplier.name })
+            : t("{supplier} must confirm stock before this order can be approved.", { supplier: supplier.name })}
         </p>)}
       </div>
     </section>}
@@ -181,6 +184,7 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
 
 export function LiveApprovalsPage() {
   const t = useT();
+  const api = useApi();
   const { session } = useSession();
   const approvalBlockedReason = session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined;
   const proposals = useAsync(async () => {
@@ -188,6 +192,10 @@ export function LiveApprovalsPage() {
     if (!Array.isArray(result?.proposals)) throw new Error(t("Invalid proposal list."));
     return result.proposals.map((item) => parse(item, t));
   }, []);
+  const approveUnconfirmedManual = useAsync(
+    () => api.getKitchenSettings().then((settings) => settings.approveUnconfirmedManual).catch(() => false),
+    [api],
+  );
   return <AppShell activeId="approvals"><main className="mx-auto max-w-5xl space-y-5">
     <OpenDemoNote />
     <h1 className="page-title">{t("To approve")}</h1>
@@ -196,6 +204,6 @@ export function LiveApprovalsPage() {
     {proposals.status === "loading" && <p>{t("Loading proposals…")}</p>}
     {proposals.status === "error" && <p role="alert">{proposals.error.message}</p>}
     {proposals.status === "ready" && (proposals.data.length ? proposals.data.map(row =>
-      <ProposalCard key={`${row.proposal_id}-${row.offer_id}-${row.status}`} row={row} reload={proposals.reload} approvalBlockedReason={approvalBlockedReason} />) : <p>{t("No proposals yet. Ask the Buyer on Requests.")}</p>)}
+      <ProposalCard key={`${row.proposal_id}-${row.offer_id}-${row.status}`} row={row} reload={proposals.reload} approvalBlockedReason={approvalBlockedReason} approveUnconfirmedManual={approveUnconfirmedManual.status === "ready" && approveUnconfirmedManual.data} />) : <p>{t("No proposals yet. Ask the Buyer on Requests.")}</p>)}
   </main></AppShell>;
 }

@@ -385,6 +385,7 @@ export default {
   "{quantity} {unit} of {product}": "{quantity} {unit} tuotetta {product}",
   "{quantity} {unit} waits for stock confirmation": "{quantity} {unit} odottaa varastovahvistusta",
   "{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.": "Toimittajan {supplier} on vahvistettava varasto. Jos hyväksyt tilauksen, se lähetetään ja odottaa toimittajan vahvistusta: soita tai lähetä sähköpostia.",
+  "{supplier} must confirm stock before this order can be approved.": "Toimittajan {supplier} on vahvistettava varasto, ennen kuin tämä tilaus voidaan hyväksyä.",
   "{unit} (pack size unknown)": "{unit} (pakkauskoko tuntematon)",
   "{restaurant} · signed by {signedBy} · valid until {date} · {id}": "{restaurant} · allekirjoittanut {signedBy} · voimassa {date} asti · {id}",
   "{what} failed: {message}. {outcome}": "{what} epäonnistui: {message}. {outcome}",

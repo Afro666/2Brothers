@@ -432,6 +432,7 @@ export function mapKitchenSettings(body: unknown): KitchenSettings {
     return Number.isNaN(fraction) ? fraction : Math.round(fraction * 1e6) / 1e4;
   };
   return {
+    approveUnconfirmedManual: row.approve_unconfirmed_manual === true,
     serviceLevelPercent: { A: level("A"), B: level("B"), C: level("C") },
     maxDaysOfCover: Object.entries(cover).map(([category, days]) => ({
       category,

@@ -31,11 +31,26 @@ describe("ApprovalCard", () => {
           suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
         }}
         order={order}
+        approveUnconfirmedManual
       />,
     );
     const checks = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
     expect(within(checks).getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
     expect((screen.getByRole("button", { name: /^Approve/ }) as HTMLButtonElement).disabled).toBe(disabledWithoutNotice);
+  });
+
+  it("does not promise to send unconfirmed stock when manual approval is off or unknown", () => {
+    const request = {
+      ...approval,
+      suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
+    };
+    const first = render(<ApprovalCard request={request} order={confirmedOrder} approveUnconfirmedManual={false} />);
+    expect(screen.getByText("Leipomo Demo must confirm stock before this order can be approved.")).toBeVisible();
+    expect(screen.queryByText(/If you approve, the order is sent/)).toBeNull();
+    first.unmount();
+
+    render(<ApprovalCard request={request} order={confirmedOrder} />);
+    expect(screen.getByText("Leipomo Demo must confirm stock before this order can be approved.")).toBeVisible();
   });
 
   it("shows the gateway's manual-supplier confirmation reason as sent under What to check", () => {

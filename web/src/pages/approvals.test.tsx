@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { mapKitchenSettings } from "@/api/map-planning";
 import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
 
@@ -19,6 +20,35 @@ function withConfirmedStock() {
 }
 
 describe("ApprovalsPage", () => {
+  it.each([
+    ["on", "Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them."],
+    ["off", "Leipomo Demo must confirm stock before this order can be approved."],
+    ["absent", "Leipomo Demo must confirm stock before this order can be approved."],
+    ["failed", "Leipomo Demo must confirm stock before this order can be approved."],
+  ] as const)("shows the supplier-confirm notice when the kitchen setting is %s", async (setting, expected) => {
+    const api = createMockApi();
+    const listApprovals = api.listApprovals;
+    api.listApprovals = async () => (await listApprovals()).map((approval, index) => index === 0 ? {
+      ...approval,
+      suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
+    } : approval);
+    const getKitchenSettings = api.getKitchenSettings;
+    api.getKitchenSettings = vi.fn(async () => {
+      if (setting === "failed") throw new Error("Settings unavailable");
+      if (setting === "absent") return mapKitchenSettings({});
+      return { ...(await getKitchenSettings()), approveUnconfirmedManual: setting === "on" };
+    });
+    renderApp("/approvals", api);
+
+    expect((await screen.findAllByText(expected)).length).toBeGreaterThan(0);
+    if (setting === "on") {
+      expect(screen.queryByText("Leipomo Demo must confirm stock before this order can be approved.")).toBeNull();
+    } else {
+      expect(screen.queryByText(/Leipomo Demo must confirm stock\. If you approve/)).toBeNull();
+    }
+    expect(api.getKitchenSettings).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the milk proposal visible while awaiting stock confirmation", async () => {
     renderApp("/approvals", createMockApi());
     expect(await screen.findByRole("heading", { name: "Waiting for you (4)" })).toBeVisible();
