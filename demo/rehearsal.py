@@ -32,6 +32,8 @@ class Rehearsal:
         self.http = client or httpx.Client(base_url=site.rstrip("/"), timeout=60, follow_redirects=True)
         self.today = today or date.today()
         self.retry_wait = 15.0
+        # One key per run, so a retried Buyer POST is the same request, never a second proposal.
+        self.idempotency_key = f"rehearsal-{int(time.time())}"
         self.rows: list[tuple[str, str, str]] = []
 
     def get(self, path: str):
@@ -43,14 +45,14 @@ class Rehearsal:
             data = None
         return r.status_code, data, time.monotonic() - t
 
-    def check(self, name: str, fn) -> None:
+    def check(self, name: str, fn, retry_on: type[Exception] = httpx.TransportError) -> None:
         status, detail = "FAIL", ""
         for attempt in (1, 2):
             try:
                 ok, detail = fn()
                 status = "SKIP" if ok is None else ("OK" if ok else "FAIL")
                 break
-            except httpx.TransportError as exc:
+            except retry_on as exc:
                 # A deploy restarts the containers for a few seconds: wait once, then it is a real failure.
                 status, detail = "FAIL", f"no connection ({type(exc).__name__}); a deploy may be running"
                 if attempt == 1:
@@ -145,7 +147,7 @@ class Rehearsal:
         t = time.monotonic()
         r = self.http.post(K + "/proposals", json={"text": f"200 L lactose-free milk by {monday}",
                                                    "requested_date": monday.isoformat(),
-                                                   "idempotency_key": f"rehearsal-{int(time.time())}"}, timeout=180)
+                                                   "idempotency_key": self.idempotency_key}, timeout=180)
         secs = time.monotonic() - t
         data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
         who = "Nemotron Buyer" if data.get("buyer_model") else f"fallback: {(data.get('request') or {}).get('made_by')}"
@@ -162,7 +164,9 @@ class Rehearsal:
                          ("API docs", self.docs)):
             self.check(name, fn)
         if with_buyer:
-            self.check("Buyer makes a proposal", self.buyer)
+            # Only a refused connection is retried: after a timeout the server may still be making
+            # the proposal, and sending it again would start a second Nemotron run.
+            self.check("Buyer makes a proposal", self.buyer, retry_on=httpx.ConnectError)
         else:
             self.rows.append(("Buyer makes a proposal", "SKIP", "add --buyer to run one real request"))
         return self.rows
