@@ -21,26 +21,18 @@ class ModelError(RuntimeError):
 BUYER_THINKING = False
 BUYER_MAX_TOKENS = 2048
 
-PROVIDERS = {
-    'verda': ('https://containers.datacrunch.io/nemotron-3-5-super-vl-b300/v1/',
-              'nemotron-3.5-super-vl', 'VERDA_INFERENCE_KEY'),
-    'nvidia': ('https://integrate.api.nvidia.com/v1/',
-               'nvidia/nemotron-3.5-super-vl-120b-a12b', 'NVIDIA_API_KEY'),
-}
+DEFAULT_BASE_URL = 'https://containers.datacrunch.io/nemotron-3-5-super-vl-b300/v1/'
+DEFAULT_MODEL = 'nemotron-3.5-super-vl'
 
 
 def provider_settings(environ=None):
-    """Explicit provider selection; never an automatic switch or paid fallback."""
+    """The shared Nemotron route; operator overrides never trigger a fallback."""
     environ = os.environ if environ is None else environ
-    provider = (environ.get('NEMOTRON_PROVIDER') or 'verda').strip().lower()
-    if provider not in PROVIDERS:
-        raise ValueError('NEMOTRON_PROVIDER must be verda or nvidia')
-    base, model, key_name = PROVIDERS[provider]
-    key = environ.get(key_name, '')
+    key = environ.get('VERDA_INFERENCE_KEY', '')
     if not key:
-        raise ValueError(key_name + ' is required')
-    base = (environ.get('NEMOTRON_BASE_URL') or base).strip().rstrip('/') + '/'
-    model = (environ.get('NEMOTRON_MODEL') or model).strip()
+        raise ValueError('VERDA_INFERENCE_KEY is required')
+    base = (environ.get('NEMOTRON_BASE_URL') or DEFAULT_BASE_URL).strip().rstrip('/') + '/'
+    model = (environ.get('NEMOTRON_MODEL') or DEFAULT_MODEL).strip()
     try:
         url = urlsplit(base)
         valid = (url.hostname and not url.username and not url.password and not url.query and not url.fragment
