@@ -555,6 +555,14 @@ describe("the app on the gateway", () => {
     expect(await screen.findByText("Sample data")).toBeVisible();
   });
 
+  it("gives a real Set for live, so the Trust page shows the gateway's error instead of crashing", async () => {
+    expect(createHttpApi("/api").live).toBeInstanceOf(Set);
+    gateway({ [`GET ${K}/audit/chain?limit=5`]: () => error(503, "NOT_SERVED") });
+    renderApp("/trust", createHttpApi("/api"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("NOT_SERVED");
+    expect(screen.getByText("Audit log stored in MongoDB Atlas")).toBeVisible();
+  });
+
   it("shows the gateway's own stock without the mark, with on order unknown and not zero", async () => {
     gateway({
       [`GET ${K}/stock`]: () => ({
