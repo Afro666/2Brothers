@@ -87,7 +87,7 @@ const BUILT_WITH = [
     title: "NVIDIA Nemotron 3.5 Super VL: the Buyer agent",
     rows: [
       {
-        text: "Reads the chef's sentence, picks the products and calls the tools. It never sets a quantity or a price and it has no approve tool.",
+        text: "Reads the chef's sentence and picks the products. Code calls the tools. It never sets a quantity or a price and it has no approve tool.",
         link: "Request an order",
         to: "/requests",
       },

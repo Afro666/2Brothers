@@ -136,7 +136,9 @@ The scenarios run on frozen test data, not the live site. S01's EUR 1,459.67 is 
 ## NVIDIA: Best Use of Nemotron
 
 **Model.** Nemotron 3.5 Super VL (`nemotron-3.5-super-vl`) on Verda's shared inference
-endpoint (`agent/model.py:43`, `agent/model.py:54`). We did not train or fine-tune it.
+endpoint (`agent/model.py:24`, `agent/model.py:25`). Nemotron is reached only through
+Verda's endpoint: every call needs `VERDA_INFERENCE_KEY`, and the code has no second
+provider and no fallback model (`agent/model.py:28-33`). We did not train or fine-tune it.
 
 **What it does: five jobs in one buying loop.** One model plans, buys, sells, counts and
 receives. In every job it reads or chooses, and plain code sets every number. It never
@@ -149,11 +151,29 @@ sets a quantity, a price or a total, and it has no approve tool.
    `agent/menu_photo.py`). Live on 2026-11-14 it read `demo/menu-photo.png` in 1,893 ms
    end to end: five dishes matched, with their covers 120, 100, 110, 90 and 100 (comment
    on #1136).
-2. **Buy: the Buyer agent.** It reads the chef's request and calls seven MCP tools:
-   search, offer, simulate, request approval, place order, order status and audit log
-   (`gateway/mcp_server.py:83`, `agent/runner.py`). It chooses the products and the next
-   step. The deployed gateway sends free-text requests to it (`deploy/compose.yaml:41`,
-   `agent/service.py`).
+2. **Buy: the Buyer agent.** The deployed gateway sends free-text requests to the Buyer
+   worker (`deploy/compose.yaml:48`, `agent/service.py`). Today one live request makes
+   **one model call** (the default `NEMOTRON_BUYER_STRATEGY=single_pick`,
+   `deploy/compose.yaml:86`, `agent/service.py:65`; #1208, merged in #1257).
+   - **What the model decides:** which products. Code searches the catalog and gets an
+     engine offer. Nemotron then picks up to three products from that numbered shortlist
+     and gives a short reason for each (`agent/single_pick.py:20`). It gets no tool
+     definitions. Code checks the reason and drops it: it is never stored or shown
+     (`agent/single_pick.py:263`). The `why` a person reads on each line is the engine's
+     (`gateway/service.py:290`).
+   - **What code does:** every tool step. It searches, gets the offer, gets a fresh offer
+     for the picked products, simulates it and requests approval
+     (`agent/single_pick.py:201-291`). These steps go through the same audited MCP tools
+     and the same guards as before: `search_products`, `get_offer`, `simulate_order` and
+     `request_approval` (`agent/runner.py:18`, `gateway/mcp_server.py:126-162`).
+   - **The same pick again** within ten minutes comes from a cache and makes no model
+     call; the prices, the stock and the offer are read again every time
+     (`store/buyer_picks.py:40`, `agent/README.md` "One model pick per request").
+   - **The older tool loop** is still in the code (`NEMOTRON_BUYER_STRATEGY=loop`, and the
+     CLI agent). There the model itself called the tools, from a list of seven: search,
+     offer, simulate, request approval, place order, order status and audit log
+     (`agent/runner.py:18`). It was about 4 model calls per request. It is not what the
+     live site runs today.
    - **Several products in one sentence** (#1375; #1437, #1474). "20 L oat drink, 5 kg
      butter and 40 rolls for Monday" becomes one proposal. Nemotron splits the text into
      needs (`agent/split.py`). Plain code then checks the split: one need per quantity in
@@ -186,7 +206,11 @@ sets a quantity, a price or a total, and it has no approve tool.
    the stored order's own price, and one total (`gateway/delivery_note.py:245`). The model
    gives no price. On the prepared note for the fixed demo order `DEMO-1198` (EUR 178.09)
    the claim is 3 cases, EUR 91.08 (`demo/tests/test_delivery_order.py:47`,
-   `demo/tests/test_delivery_order.py:84`).
+   `demo/tests/test_delivery_order.py:84`). An order that a person approves gets a signed
+   receipt (`gateway/service.py:1511`; a signing failure is logged and never blocks the
+   order). `DEMO-1198` is different: the demo seed placed it and no person approved it. Its
+   page says "Placed by the demo seed" and it has no signed receipt (`gateway/seeded.py:1`,
+   `web/src/pages/order-detail.tsx:100`; #1560, fixed in #1620).
 
 **See what it did: the "What Nemotron did" panel** (#1197; #1228, #1279). Each Buyer
 proposal and each supplier offer has a folded panel. Folded, it shows one line: model
@@ -208,20 +232,30 @@ approves, never accepts the offer and never saves a count (`demo/record_demo.py:
 on #1199). So the vectors for Atlas Vector Search are MongoDB's `voyage-4`.
 
 **How much we use it.** A token meter counts every model call per role from the
-endpoint's `usage` field (`agent/usage.py`, `agent/README.md` "Token meter"). Measured on
-2026-11-14 with the settings the product runs: one Buyer request is about 4 model calls,
-44,700 prompt tokens and 290 completion tokens (before the settings change: 2,250
-completion tokens, of which 1,720 reasoning). One photo read is one call of about 1,300 to
-2,100 prompt tokens and 190 completion tokens. The benchmark used about 130,000 tokens per
-kitchen week with thinking on, over 12 weeks (`env/README.md`, the "tokens/episode"
-column). Measuring the live loop on 2026-11-14 took 184 Buyer requests: 832 model calls
-and 9.57 million tokens (`agent/README.md` "Buyer loop settings"). The site shows the
+endpoint's `usage` field (`agent/usage.py`, `agent/README.md` "Token meter"). Each number
+below names the Buyer path it was measured on.
+
+- **Today, one pick per request.** One Buyer request is one model call, or none when the
+  pick comes from the cache. Measured on the live site on 2026-11-14, after #1316: three
+  new requests made one call each, 2,224 prompt tokens and 355 completion tokens in total,
+  0.345 to 0.441 model seconds per call; two cached requests made no call
+  (`agent/README.md` "Live measurements, 14 November 2026"). That is a small sample on a
+  healthy endpoint, not a promise for a busy one.
+- **Before, the old tool loop** (the default until #1257). One Buyer request was about 4
+  model calls, 44,700 prompt tokens and 290 completion tokens; before the loop's settings
+  change it was 2,250 completion tokens, of which 1,720 reasoning. Measuring that loop on
+  2026-11-14 took 184 Buyer requests: 832 model calls and 9.57 million tokens
+  (`agent/README.md` "Legacy Buyer loop settings").
+
+One photo read is one call of about 1,300 to 2,100 prompt tokens and 190 completion
+tokens. The benchmark used about 130,000 tokens per kitchen week with thinking on, over 12
+weeks (`env/README.md`, the "tokens/episode" column). The site shows the
 kitchen's own count on the About page, from
 `GET /v1/kitchens/{kitchen_id}/model-usage` (`gateway/model_usage.py`,
 `store/agent_runs.py`).
 
 **Why it matters.** A chef writes a sentence, not product codes. The model turns it into
-catalog products and a reason a person can read. A wrong model answer cannot become a
+catalog products, and the engine gives each line a reason a person can read. A wrong model answer cannot become a
 wrong order, because the engine sizes the lines and a person approves.
 
 **How we improved its outputs.** We measured first. On our Kitchen Week benchmark (12
@@ -243,22 +277,32 @@ reply outside the schema is refused whole (`agent/model.py:66`, `agent/vision.py
 scripted prompt-injection test shows the guards hold when the model obeys the attack
 (`agent/conformance.py`, `agent/README.md:49`).
 
-The live Buyer loop got its own measurement, because there the model picks products and
-tools and sets no quantity (`agent/README.md` "Buyer loop settings", 24 requests per
-variant on the live model). Before, it ran on the endpoint default (thinking on) with a
-2,048 token reply budget: 5 of 346 model calls used the whole budget on reasoning and
-returned no tool call, so the run stopped and started again. The product now runs with
-thinking off, 2,048 tokens, and a prompt that asks for one offer with the three best
-products that can arrive (`agent/model.py`, `agent/runner.py`):
+The old Buyer tool loop got its own measurement, because there the model picked products
+and tools and set no quantity (`agent/README.md` "Legacy Buyer loop settings", 24 requests
+per variant, the worker on a laptop against the live model). The table below is
+that old loop, not what the live site runs today. At first the loop ran on the endpoint
+default (thinking on) with a 2,048 token reply budget: 5 of 346 model calls used the whole
+budget on reasoning and returned no tool call, so the run stopped and started again. We
+then set thinking off, 2,048 tokens, and a prompt that asks for one offer with the three
+best products that can arrive (`agent/model.py:21-22`, `agent/runner.py`):
 
 | Live loop | Finished | On the first attempt | Completion tokens per request | Median seconds |
 |---|---|---|---|---|
-| Before: thinking on, old prompt | 24 of 24 | 20 | 2,251 | 14.1 |
-| Now: thinking off, one-offer prompt | 24 of 24 | 24 | 289 | 8.8 |
+| Old loop, first: thinking on, old prompt | 24 of 24 | 20 | 2,251 | 14.1 |
+| Old loop, tuned: thinking off, one-offer prompt | 24 of 24 | 24 | 289 | 8.8 |
 
-The first offer now has three products every time (before: 1 to 5), and repeated runs of
-one request give the same products much more often. So thinking is on where the model
-decides numbers (the benchmark) and off where the engine does (the product).
+In the tuned loop the first offer had three products every time (before: 1 to 5), and
+repeated runs of one request gave the same products much more often. So thinking is on
+where the model decides numbers (the benchmark) and off where the engine does (the
+product).
+
+The next step took the tools away from the model (#1208, #1257). The live site now asks
+Nemotron for one pick: one JSON call, thinking off, 512 output tokens, a 20-second limit
+and no model retry (`agent/service.py:186-187`, `agent/single_pick.py:168`). In three live
+requests of one size on 2026-11-14 the loop took 4 model calls and about 43,500 prompt
+tokens per request; the single pick took 1 call and 741 to 742 prompt tokens
+(`agent/README.md` "Live measurements, 14 November 2026", 3 requests per row). The
+"Buyer read context" part below measures that pick.
 
 **It learns from the kitchen, without fine-tuning.** We have only API access to Nemotron,
 so nothing is trained. The tool learns from the reasons people give when they change a
@@ -334,18 +378,21 @@ The database is MongoDB Atlas. `store/` is the only package that talks to it
 #1447). The card shows the live numbers from `GET /v1/kitchens/{kitchen_id}/atlas`
 (`store/atlas.py:49`, `gateway/atlas_routes.py:3`, kept for 60 s,
 `gateway/atlas_routes.py:20`; `web/src/components/purchasing/atlas-card.tsx`). A part that
-cannot be read shows "unknown", never zero. Read from that route on 2026-11-14 at about
-15:45 UTC:
+cannot be read shows "unknown", never zero. The numbers below were read from that route
+(`GET https://31-22-104-201.sslip.io/api/v1/kitchens/demo-kitchen/atlas`) on 14 Nov at
+21:46 UTC. They grow while people use the site, so the card can show more than this
+table: at about 15:45 UTC the same route gave 17,548 products, 1,491 audit entries and
+216 MB.
 
-| On the card | Live value |
+| On the card | Live value, read on 14 Nov at 21:46 UTC |
 |---|---|
 | MongoDB version | 8.0.37 |
-| Data and indexes | 216 MB |
-| Products | 17,548 |
-| Product vectors | 17,546, model `voyage-4`, 1,024 dimensions |
+| Data and indexes | 221 MB |
+| Products (documents in the `products` collection, `store/atlas.py:54`) | 17,563 |
+| Product vectors | 17,546, model `voyage-4`, 1,024 dimensions (17 fewer than the product count) |
 | Search indexes | `products_search` READY, `products_vector` READY |
 | Time-series collections | forecasts 43,078, kitchen_stock 32,218, deliveries 13,221, covers 1,780, orders_history 1,050 |
-| Audit entries (the hash chain) | 1,491 |
+| Audit entries (the hash chain) | 1,570 |
 | Change streams | proposals, approvals, audit_log |
 
 Under the numbers is the measured comparison of words against hybrid search
@@ -380,7 +427,7 @@ Catalog switch and the Buyer's shortlist are separate: the shortlist ignores `mo
 
 Why it matters: an order must not be sent twice, money must not round, and a person must
 be able to check that nobody changed the log. The whole database, data and indexes, is
-216 MB (the About card, read at about 15:45 UTC on 2026-11-14).
+221 MB (the same route, read on 14 Nov at 21:46 UTC).
 
 **Atlas Vector Search.** The index `products_vector` (1,024 dimensions, cosine) and the
 hybrid search with `$rankFusion` are on `main` (`store/search.py`, `store/embeddings.py`,
