@@ -22,7 +22,7 @@ from enum import IntEnum
 from typing import Iterable
 
 from engine.params import KitchenParams
-from engine.quantity import Item, replenish
+from engine.quantity import Item, _drift, replenish
 from engine.urgency import Urgency
 
 MONTH_DAYS = 30
@@ -113,6 +113,7 @@ def _row(c: Candidate, params: KitchenParams) -> AddableRow:
         why = "No order needed yet: no recent use."
     else:
         why = f"No order needed yet: {_n(days)} days of stock."
+    why += _drift(item, qty) or ""          # S08: the engine's own drift sentence (#380)
     if c.unit_price is None:
         why += " No price yet, so it cannot be added."
     return AddableRow(
