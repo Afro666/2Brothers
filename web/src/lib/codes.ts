@@ -117,3 +117,22 @@ export function plainReason(reason: string, names?: ReadonlyMap<string, string>)
   const name = names?.get(product) ?? product;
   return rest === undefined ? `${name}: ${label.title}. ${label.detail}` : `${name}: ${label.title}: ${rest}`;
 }
+
+/**
+ * A reason as `plainReason` wrote it, with its code title (and detail) put through `translate`,
+ * so Finnish mode shows the title in Finnish. A sentence the dictionary knows whole wins.
+ */
+export function translateReason(text: string, translate: (text: string) => string): string {
+  const whole = translate(text);
+  if (whole !== text) return whole;
+  for (const { title, detail } of Object.values(CODE_LABELS)) {
+    const inner = `: ${title}: `;
+    const at = text.indexOf(inner);
+    if (at > 0) return `${text.slice(0, at)}: ${translate(title)}: ${text.slice(at + inner.length)}`;
+    const tail = `: ${title}. ${detail}`;
+    if (text.length > tail.length && text.endsWith(tail)) {
+      return `${text.slice(0, -tail.length)}: ${translate(title)}. ${translate(detail)}`;
+    }
+  }
+  return whole;
+}

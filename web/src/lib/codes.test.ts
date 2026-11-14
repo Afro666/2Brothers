@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { CODE_LABELS, codeLabel, plainReason } from "@/lib/codes";
+import { CODE_LABELS, codeLabel, plainReason, translateReason } from "@/lib/codes";
+import { collectFinnishDictionaries, translate } from "@/lib/i18n";
 
 describe("codeLabel", () => {
   it("gives the over-budget warning a plain title and says it does not block", () => {
@@ -71,5 +72,33 @@ describe("plainReason", () => {
     expect(plainReason("15 KG of the request cannot be covered for this date.")).toBe(
       "15 KG of the request cannot be covered for this date.",
     );
+  });
+});
+
+describe("translateReason (#1169)", () => {
+  const fi = (text: string) => translate("fi", text);
+
+  it("has a Finnish entry for every code title", () => {
+    const dictionary = collectFinnishDictionaries(
+      import.meta.glob("../i18n/fi/*.ts", { eager: true }) as Record<string, { default: Record<string, string> }>,
+    );
+    const missing = Object.values(CODE_LABELS)
+      .map((label) => label.title)
+      .filter((title) => !Object.prototype.hasOwnProperty.call(dictionary, title));
+    expect(missing).toEqual([]);
+  });
+
+  it("shows the Finnish title for a gateway reason in Finnish mode", () => {
+    const reason = plainReason("472710: ALLERGEN_RULE: the kitchen excludes AN");
+    expect(translateReason(reason, fi)).toBe("472710: Suljettu allergeeni: the kitchen excludes AN");
+    expect(translateReason(reason, (text) => translate("en", text))).toBe(reason);
+  });
+
+  it("translates the title of a code that stands alone", () => {
+    expect(translateReason(plainReason("461332: BLOCKED_BY_RECALL"), fi)).toMatch(/^461332: Takaisinveto estää\. /);
+  });
+
+  it("leaves a sentence the dictionary does not know as it is", () => {
+    expect(translateReason("Unknown sentence.", fi)).toBe("Unknown sentence.");
   });
 });
