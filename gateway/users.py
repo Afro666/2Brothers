@@ -180,6 +180,11 @@ def main(argv=None) -> int:
         return 0
     email = args.email.strip().lower()
     if args.command == "remove":
+        user = db.users.find_one({"_id": email})
+        if user and user["role"] == "approver" and db.users.count_documents(
+                {"role": "approver", "kitchen_id": user["kitchen_id"]}) <= 1:
+            print("this is the last approver of", user["kitchen_id"], "- add another approver first")
+            return 1
         gone = db.users.delete_one({"_id": email}).deleted_count
         db.sessions.delete_many({"email": email})
         print("removed" if gone else "no such account")
