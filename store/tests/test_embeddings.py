@@ -203,6 +203,40 @@ class HybridQueryTests(unittest.TestCase):
                             embedder=lambda texts, kind: calls.append(texts))
         self.assertEqual(calls, [])
 
+    def test_each_row_says_how_it_was_found(self):
+        """#1382: the Catalog page marks each row "by words", "by meaning" or "both"."""
+        def fused(pid, **ranks):
+            return {"_id": pid, "names": {"en": pid},
+                    "fusion": {"details": [{"inputPipelineName": side, "rank": rank}
+                                           for side, rank in ranks.items()]}}
+
+        class Products:
+            def __init__(self, docs):
+                self.docs = docs
+
+            def find_one(self, *args, **kwargs):
+                return None              # no stored vectors yet: no model to compare
+
+            def aggregate(self, pipeline):
+                return [dict(doc) for doc in self.docs]
+
+        class Db:
+            client, name = object(), "fake"
+
+            def __init__(self, docs):
+                self.products = Products(docs)
+
+        db = Db([fused("both", text=1, vector=2), fused("meaning", vector=1),
+                 fused("words", text=2)])
+        with mock.patch.object(embeddings, "current_model", return_value=None):
+            rows = search_products(db, "dairy-free drink", hybrid=True, embedder=fake_embedder)
+        self.assertEqual([(r["product_id"], r["matched_by"]) for r in rows],
+                         [("both", "both"), ("meaning", "meaning"), ("words", "words")])
+        self.assertIn("similar meaning, no word match", rows[1]["match_reasons"])
+        self.assertNotIn("similar meaning, no word match", rows[0]["match_reasons"])
+        text_rows = search_products(Db([{"_id": "plain", "names": {"en": "milk"}}]), "milk")
+        self.assertEqual([r["matched_by"] for r in text_rows], ["words"])
+
     @unittest.skipIf(mongomock is None, "mongomock is not installed")
     def test_a_query_model_other_than_the_stored_vectors_is_refused(self):
         db = mongomock.MongoClient().db

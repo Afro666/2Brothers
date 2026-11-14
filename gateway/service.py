@@ -73,6 +73,13 @@ def _line_out(line: dict) -> dict:
     return {**line, **{key: float(line[key]) for key in _LINE_NUMBERS if line.get(key) is not None}}
 
 
+def _matched_by(rows: list[dict]) -> list[dict]:
+    """Every search row says how it was found (#1382); a text search finds by words."""
+    for row in rows:
+        row.setdefault("matched_by", "words")
+    return rows
+
+
 def _hash(payload: dict) -> str:
     return hashlib.sha256(canonical(payload).encode()).hexdigest()
 
@@ -1042,18 +1049,27 @@ class Gateway:
         return {"need_id": need["_id"], **{k: need[k] for k in ("quantity", "unit", "requested_date", "text")}}
 
     def tool_search(self, kitchen_id: str, query: str, filters: dict, limit: int,
-                    need_id: str | None = None) -> dict:
+                    need_id: str | None = None, mode: str | None = None) -> dict:
         """Catalog search for the Buyer. With the stored need it becomes a shortlist the
         Buyer can order from: only products sold in the need's measure (a request in litres
         never gets chocolate), and products that can still arrive on the requested date
-        first. One availability call for the shortlist only, never for the whole catalog."""
+        first. One availability call for the shortlist only, never for the whole catalog.
+
+        `mode` ("text" or "hybrid") is the Catalog page's "Search by meaning" switch (#1382):
+        it decides for this one request without a need. With a need (the Buyer) it is
+        ignored, so the Buyer's basket never changes with it."""
         from gateway import catalog_search
         need = self.db.needs.find_one({"_id": need_id, "kitchen_id": kitchen_id}) if need_id else None
         if need_id and need is None:
             raise GatewayError(422, "INVALID_NEED", "unknown need_id")
         if need is None:
-            rows, kind = catalog_search.search(self.db, query, filters, limit, injected=self._search)
-            return {"products": rows, "search": kind}
+            hybrid = {"hybrid": True, "text": False}.get(mode)
+            rows, kind = catalog_search.search(self.db, query, filters, limit, injected=self._search,
+                                               hybrid=hybrid)
+            out = {"products": _matched_by(rows), "search": kind}
+            if hybrid and kind == "text" and (query or "").strip():
+                out["meaning_unavailable"] = True     # no query vector: the words answered
+            return out
         if need.get("refusal"):
             # Nothing to pick from, whatever the query: "butter" must not answer "peanut butter".
             return {"products": [], "requested_date": need["requested_date"], "measure": None,
@@ -1091,7 +1107,7 @@ class Gateway:
         for r in rows:
             r["can_arrive"] = arrival.get(r["product_id"])
         rows.sort(key=lambda r: 0 if r["can_arrive"] else (1 if r["can_arrive"] is None else 2))
-        return {"products": rows[:limit], "requested_date": need["requested_date"],
+        return {"products": _matched_by(rows[:limit]), "requested_date": need["requested_date"],
                 "measure": measure if filtered else None, "search": kind,
                 "note": "can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
                         "prefer products with can_arrive true"}

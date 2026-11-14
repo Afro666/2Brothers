@@ -1,5 +1,7 @@
 """The gateway's catalog search: hybrid behind a switch, text as the fallback."""
 
+import re
+
 import mongomock
 import pytest
 from fastapi.testclient import TestClient
@@ -111,6 +113,24 @@ def test_hybrid_can_be_switched_off_for_one_call(monkeypatch):
     assert [c["hybrid"] for c in calls] == [False]
 
 
+def test_hybrid_can_be_asked_for_one_call_while_the_switch_is_off(monkeypatch):
+    """#1382: the Catalog page's "Search by meaning" switch, whatever SEARCH_HYBRID says."""
+    calls = fake_store(monkeypatch)
+    monkeypatch.setattr(embeddings, "embed", lambda texts, kind, post=None, sleep=None:
+                        [[0.0] * embeddings.EMBED_DIMENSIONS])
+    assert catalog_search.search(None, "lactose free milk", {}, 20, hybrid=True)[1] == "hybrid"
+    assert catalog_search.search(None, "lactose free milk", {}, 20)[1] == "text"
+    monkeypatch.setenv("SEARCH_HYBRID", "true")
+    assert catalog_search.search(None, "lactose free milk", {}, 20, hybrid=False)[1] == "text"
+    assert [c["hybrid"] for c in calls] == [True, False, False]
+
+
+def test_a_hybrid_call_that_cannot_embed_falls_back_to_text(monkeypatch):
+    calls = fake_store(monkeypatch, fail=embeddings.EmbeddingError("rate-limited"))
+    assert catalog_search.search(None, "oat drink", {}, 20, hybrid=True)[1] == "text"
+    assert [c["hybrid"] for c in calls] == [True, False]
+
+
 def test_a_bad_filter_is_still_an_error_not_a_fallback(monkeypatch):
     monkeypatch.setenv("SEARCH_HYBRID", "true")
     fake_store(monkeypatch, fail=ValueError("limit must be an integer from 1 to 50"))
@@ -162,3 +182,76 @@ def test_the_tool_answer_says_which_search_ran(monkeypatch):
     short = client.post("/tools/search_products", headers=app_tests.AGENT,
                         json={"query": "milk", "need_id": need["need_id"]})
     assert short.status_code == 200 and short.json()["search"] == "text"
+
+
+def _app_client(monkeypatch, search):
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    db = mongomock.MongoClient(tz_aware=True)["test"]
+    fake = app_tests.FakeValio()
+    gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: app_tests.NOW),
+                 now=lambda: app_tests.NOW, search=search)
+    return TestClient(create_app(gw)), gw
+
+
+def test_mode_hybrid_runs_meaning_for_the_catalog_page_only(monkeypatch):
+    """#1382: `mode: "hybrid"` turns hybrid on for one request; a need's shortlist (the
+    Buyer) ignores it, so the rehearsed basket never changes."""
+    AGENT, K = app_tests.AGENT, app_tests.K
+    asked = []
+
+    def search(db, query, filters, limit, kitchen_id=None, *, injected=None, now=None,
+               hybrid_ok=True, hybrid=None):
+        asked.append(hybrid)
+        if hybrid:
+            return [{"product_id": "1", "matched_by": "meaning"},
+                    {"product_id": "2", "matched_by": "both"}], "hybrid"
+        return [{"product_id": "3"}], "text"
+
+    monkeypatch.setattr(catalog_search, "search", search)
+    client, _ = _app_client(monkeypatch, None)
+    on = client.post("/tools/search_products", headers=AGENT,
+                     json={"query": "lactose-free milk", "mode": "hybrid"})
+    assert on.status_code == 200, on.text
+    body = on.json()
+    assert body["search"] == "hybrid" and "meaning_unavailable" not in body
+    assert [p["matched_by"] for p in body["products"]] == ["meaning", "both"]
+    off = client.post("/tools/search_products", headers=AGENT, json={"query": "lactose-free milk"}).json()
+    assert off["search"] == "text" and [p["matched_by"] for p in off["products"]] == ["words"]
+    text = client.post("/tools/search_products", headers=AGENT, json={"query": "milk", "mode": "text"})
+    assert text.status_code == 200
+    assert asked == [True, None, False]
+    need = client.post(K + "/needs", headers=AGENT,
+                       json={"quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
+    asked.clear()
+    short = client.post("/tools/search_products", headers=AGENT,
+                        json={"query": "milk", "need_id": need["need_id"], "mode": "hybrid"})
+    assert short.status_code == 200 and short.json()["search"] == "text"
+    assert asked and all(h is None for h in asked)      # the Buyer's path: SEARCH_HYBRID decides
+    assert all(p["matched_by"] == "words" for p in short.json()["products"])
+
+
+def test_mode_hybrid_that_falls_back_says_so(monkeypatch):
+    AGENT = app_tests.AGENT
+    client, _ = _app_client(monkeypatch, lambda db, q, f, n, kitchen_id=None: [{"product_id": "462775"}])
+    body = client.post("/tools/search_products", headers=AGENT,
+                       json={"query": "lactose-free milk", "mode": "hybrid"}).json()
+    assert body["search"] == "text" and body["meaning_unavailable"] is True
+    assert body["products"][0]["matched_by"] == "words"
+    plain = client.post("/tools/search_products", headers=AGENT, json={"query": "milk"}).json()
+    assert "meaning_unavailable" not in plain
+
+
+@pytest.mark.parametrize("mode", ["meaning", 1, True, ""])
+def test_an_unknown_mode_is_refused(monkeypatch, mode):
+    AGENT = app_tests.AGENT
+    client, _ = _app_client(monkeypatch, lambda db, q, f, n, kitchen_id=None: [])
+    r = client.post("/tools/search_products", headers=AGENT, json={"query": "milk", "mode": mode})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_the_mcp_tool_never_sends_mode():
+    import inspect
+    from gateway import mcp_server
+    source = inspect.getsource(mcp_server.build_server)
+    tool = source[source.index("async def search_products"):source.index("async def get_offer")]
+    assert not re.search(r"\bmode\b", tool)      # model_dump is fine; a `mode` key is not
