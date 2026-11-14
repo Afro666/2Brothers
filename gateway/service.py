@@ -71,6 +71,11 @@ class Gateway:
     def _audit(self, kitchen_id: str, kind: str, actor: str, **data) -> None:
         event = {"event_id": uuid4().hex, "kind": kind, "actor": actor, **data}
         audit.append_event(self.db, event, {"kitchen_id": kitchen_id, "at": self.now().isoformat()})
+        try:    # webhooks (#277): after the event is stored; a receiver can never break an order
+            from gateway import webhooks
+            webhooks.dispatch(self.db, kitchen_id, kind, data)
+        except Exception:
+            pass
 
     def _params(self, kitchen_id: str) -> KitchenParams:
         doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}) or {}
