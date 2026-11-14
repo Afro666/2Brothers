@@ -191,3 +191,19 @@ def test_the_parser_path_never_quotes_cows_milk_for_almond_milk_and_says_why(gat
     assert [(e["product_id"], e["reason"]) for e in p["excluded"]] == [
         ("462775", "not the almond drink asked: no other kind of product is proposed in its place")]
     assert p["mandate"]["reasons"][0].startswith("not the almond drink asked")
+
+
+def _row(en, fi=""):
+    return {"category": "10402", "names": {"en": en, "fi": fi}}
+
+
+def test_plant_word_is_whole_not_prefix():
+    """#1758: "pea" must not match a peanut or peach drink; compounds and Oatly still match."""
+    assert not is_plant_drink(_row("Peanut drink 1L"), "pea")
+    assert not is_plant_drink(_row("Peach flavoured drink"), "pea")
+    assert not is_plant_drink(_row("Risotto drink"), "rice")
+    assert is_plant_drink(_row("Pea drink 1L"), "pea")
+    assert is_plant_drink(_row("Oatly Oat Drink"), "oat")
+    assert is_plant_drink(_row("Oatly iKaffe"), "oat")
+    assert is_plant_drink(_row("Alpro Mantelijuoma"), "almond")
+    assert is_plant_drink(_row("Santa Maria Kookosmaito"), "coconut")

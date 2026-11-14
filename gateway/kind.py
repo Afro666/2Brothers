@@ -196,12 +196,25 @@ def plant_query(plant: str) -> str:
     return PLANTS[plant][1]
 
 
+# A brand name that is the plant's word plus more ("Oatly"): it holds that plant.
+_PLANT_BRANDS = {"oatly": "oat"}
+
+
+def _names_plant(word: str, plant: str, forms) -> bool:
+    """The word is the plant's word, the word plus a drink stem ("mantelijuoma"), or a brand
+    of it ("oatly"). Not any word that starts with it: "peanut" or "peach" is not a pea."""
+    if _PLANT_BRANDS.get(word) == plant:
+        return True
+    return any(word == form or (word.startswith(form) and _is_drink_word(word[len(form):]))
+               for form in forms)
+
+
 def _holds_plant(row: dict, plant: str) -> bool:
     forms = PLANTS[plant][0]
     names = row.get("names") if isinstance(row.get("names"), dict) else {}
     for name in names.values():
         for word in _PLANT_WORD.findall(str(name or "").lower()):
-            if any(word == form or word.startswith(form) for form in forms):
+            if _names_plant(word, plant, forms):
                 return True
     return False
 
