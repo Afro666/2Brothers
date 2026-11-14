@@ -50,7 +50,7 @@ def test_recipes_menu_plan_stock_and_demand_end_to_end(env):
     assert db.kitchen_stock.count_documents({}) == 2
     items = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}
     assert items["469549"]["on_hand"] == "8" and items["460708"]["on_hand"] is None
-    assert items["469549"]["on_order_known"] is False
+    assert items["469549"]["on_order_known"] is True and items["469549"]["on_order"] == "0"
     demand = client.get(K + "/demand?from=2026-11-16&to=2026-11-22", headers=AGENT).json()
     rows = {(r["product_id"], r["date"]): r for r in demand["rows"]}
     assert rows[("469549", "2026-11-16")]["gross_need"] == "5" and rows[("469549", "2026-11-16")]["net_need"] == "0"
@@ -118,3 +118,28 @@ def test_names_defaults_and_unknown_edit_rate(env):
     settings = client.get(K + "/settings", headers=AGENT).json()
     assert settings["defaults"]["stockout_cap"] == 1.8 and settings["defaults"]["service_level"]["A"] == "0.975"
     assert client.get(K + "/auto-approve", headers=AGENT).json()["learning"]["edit_rate"] is None
+
+
+def test_approved_orders_count_as_on_order_until_their_delivery_day(env):
+    client, _, db = env
+    db.products.update_one({"_id": "462775"}, {"$set": {
+        "units": [{"unit": "ST", "size_in_base_units": 1.0}], "net_content": {"value": 1.0, "unit": "L"}}})
+    count = {"idempotency_key": "c9", "counted_at": "2026-11-13T22:00:00+02:00", "source": "manual",
+             "counts": [{"product_id": "462775", "on_hand": "5", "unit": "L"},
+                        {"product_id": "463335", "on_hand": "2", "unit": "L"}]}
+    client.post(K + "/stock-counts", headers=HUMAN, json=count)
+    p = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "30", "unit": "L", "requested_date": "2026-11-16",
+        "idempotency_key": "p-on-order"}).json()
+    done = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                       json={"expected_total": p["expected_total"], "idempotency_key": "a-on-order"})
+    assert done.status_code == 200, done.text
+    items = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}
+    assert items["462775"]["on_order"] == "30" and items["462775"]["position"] == "35"
+    assert items["462775"]["next_delivery_date"] == "2026-11-16" and items["462775"]["on_order_known"] is True
+    assert items["463335"]["on_order"] == "0" and items["463335"]["position"] == "2"
+    # An order line for a product whose pack cannot be converted: on order is unknown, not zero.
+    db.orders.update_one({}, {"$push": {"lines": {"product_id": "463335", "quantity": "4", "unit": "KI"}}})
+    items = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}
+    assert items["463335"]["on_order"] is None and items["463335"]["position"] is None
+    assert items["463335"]["on_order_known"] is False
