@@ -1551,7 +1551,7 @@ A person can always type the count by hand; no error blocks `POST /stock-counts`
 
 ### Check a delivery from a photo of its note (#362)
 
-Planned (`gateway/delivery_note.py`; the Buyer worker reads the photo at its internal
+Served (`gateway/delivery_note.py`; the Buyer worker reads the photo at its internal
 `POST /delivery-note`, `agent/receiving_service.py`, like the shelf photo above).
 
 `POST /v1/kitchens/{kitchen_id}/orders/{order_id}/delivery-note/photo` reads one photo
