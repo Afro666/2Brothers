@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hmac
 import os
+from decimal import InvalidOperation
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request
@@ -89,6 +90,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     @app.exception_handler(ValueError)
     async def _invalid(_: Request, exc: ValueError) -> JSONResponse:
         return JSONResponse(status_code=422, content={"error": {"code": "INVALID_REQUEST", "message": str(exc)[:200]}})
+
+    @app.exception_handler(InvalidOperation)   # Decimal("abc"): an ArithmeticError, not a ValueError
+    async def _invalid_number(_: Request, exc: InvalidOperation) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"error": {"code": "INVALID_REQUEST", "message": "a number field is not a number"}})
 
     def principal(request: Request) -> Principal:
         """The session cookie of a signed-in person first, then the server env tokens (Buyer

@@ -113,6 +113,18 @@ def test_agent_cannot_approve(env):
     assert r.status_code == 403 and r.json()["error"]["code"] == "NEEDS_APPROVAL"
 
 
+def test_non_numeric_quantity_and_total_are_422(env):
+    client, _, _ = env
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "abc", "unit": "L",
+        "requested_date": "2026-11-16", "idempotency_key": "bad-q"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_REQUEST", r.text
+    p = milk(client)
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                    json={"expected_total": "abc", "idempotency_key": "bad-t"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_REQUEST", r.text
+
+
 def test_no_token_no_access(env):
     client, _, _ = env
     assert client.get(K + "/orders").status_code == 401
