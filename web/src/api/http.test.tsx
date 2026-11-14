@@ -137,6 +137,7 @@ describe("createHttpApi", () => {
         "lookupKitchenBrand",
         // Catalog search and products by code (api/http-catalog.ts).
         "searchProducts",
+        "getProductPage",
         "getProducts",
         // The Trust page (api/http-trust.ts).
         "listAuditChain",

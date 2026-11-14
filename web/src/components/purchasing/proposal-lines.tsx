@@ -19,6 +19,7 @@ import { useT } from "@/lib/i18n";
 import { TONE_CLASSES, type Tone } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import type { DeliverySource, OrderLine } from "@/types";
+import { ProductLink } from "@/components/purchasing/product-link";
 
 const CHIP = "inline-flex items-center gap-1 rounded-sm border px-1.5 py-px text-xs font-medium whitespace-nowrap";
 
@@ -253,9 +254,11 @@ export function ProposalLines({
                   <div className="flex min-w-0 items-center gap-2">
                     <ProductThumb en={product.names.en} fi={product.names.fi} brand={product.brand} size="sm" />
                     <div className="min-w-0">
-                      <div className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]" title={name}>
-                        {name}
-                      </div>
+                      <ProductLink productId={product.id} className="block">
+                        <div className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]" title={name}>
+                          {name}
+                        </div>
+                      </ProductLink>
                       <div className="truncate font-mono text-[11px] leading-4 text-muted-foreground">
                         {product.brand ? <>{product.brand} · </> : null}
                         {product.id}

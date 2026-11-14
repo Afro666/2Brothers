@@ -1,5 +1,6 @@
 import { createBrandLogosHttp } from "@/api/http-brand-logos";
 import { createCatalogHttp } from "@/api/http-catalog";
+import { createProductPageHttp } from "@/api/http-product-page";
 import { createNutritionHttp } from "@/api/http-nutrition";
 import { createOffersHttp } from "@/api/http-offers";
 import { createOnboardingHttp } from "@/api/http-onboarding";
@@ -258,6 +259,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createApprovalTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createProductPageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     // A live event or a new connection means the lists may have changed since a request began.
     subscribeEvents: (onEvent, onStatus) =>
       events.subscribeEvents!(
