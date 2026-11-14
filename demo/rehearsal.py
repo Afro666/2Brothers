@@ -8,6 +8,9 @@ server adds the demo person's session), so it needs no token and never prints on
 unless `--buyer` is given: then it asks the Buyer for 200 L of lactose-free milk once (one
 Nemotron run, one proposal in the inbox; clear it with `python -m demo.clear_inbox`).
 Exit code 1 when a check fails.
+
+When the site has login on (GATEWAY_REQUIRE_LOGIN=true), add `--email <account>`; the password
+comes from the REHEARSAL_PASSWORD environment variable or a prompt, and is never printed.
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ class Rehearsal:
         self.http = client or httpx.Client(base_url=site.rstrip("/"), timeout=60, follow_redirects=True)
         self.today = today or date.today()
         self.retry_wait = 15.0
+        self.signed_in = False
         # One key per run, so a retried Buyer POST is the same request, never a second proposal.
         self.idempotency_key = f"rehearsal-{int(time.time())}"
         self.rows: list[tuple[str, str, str]] = []
@@ -61,6 +65,23 @@ class Rehearsal:
                 status, detail = "FAIL", f"{type(exc).__name__}: {str(exc)[:80]}"
                 break
         self.rows.append((name, status, detail))
+
+    def sign_in(self, email: str, password: str):
+        """With login on, every /api call needs the session cookie; the client keeps it."""
+        r = self.http.post("/api/v1/auth/login", json={"email": email, "password": password})
+        if r.status_code != 200:
+            return False, f"HTTP {r.status_code}: sign-in refused (the password is never shown)"
+        me = r.json()
+        self.signed_in = True
+        return True, f"signed in as {me.get('role')} of {me.get('kitchen_id')}"
+
+    def login_state(self):
+        """Says whether the site is open or needs sign-in, so a 401 below is not a mystery."""
+        code, _, _ = self.get(K + "/permissions")
+        if code == 401:
+            return (False, "the site needs sign-in: run again with --email") if not self.signed_in \
+                else (False, "signed in, but the session is not accepted")
+        return code == 200, "signed-in session works" if self.signed_in else "open demo: anyone with the link is the demo person"
 
     # ---- checks -------------------------------------------------------------------------
 
@@ -161,6 +182,7 @@ class Rehearsal:
 
     def run(self, with_buyer: bool) -> list[tuple[str, str, str]]:
         for name, fn in (("Site loads", self.site), ("Gateway answers", self.gateway),
+                         ("Open demo or sign-in", self.login_state),
                          ("Approval inbox", self.inbox), ("Menu plan for next week", self.planner),
                          ("Demand from the menu plan", self.demand), ("Stock counts", self.stock),
                          ("Suppliers", self.suppliers), ("Forecast beats the weekday average", self.forecast_proof),
@@ -181,8 +203,17 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--site", default=SITE)
     parser.add_argument("--buyer", action="store_true", help="also make one real Buyer request")
+    parser.add_argument("--email", default=None,
+                        help="sign in first (when the site has login on); the password comes from the "
+                             "REHEARSAL_PASSWORD environment variable, or a prompt")
     args = parser.parse_args(argv)
-    rows = Rehearsal(args.site).run(args.buyer)
+    check = Rehearsal(args.site)
+    if args.email:
+        import getpass
+        import os
+        password = os.environ.get("REHEARSAL_PASSWORD") or getpass.getpass("Password: ")
+        check.check("Sign in", lambda: check.sign_in(args.email, password))
+    rows = check.run(args.buyer)
     width = max(len(name) for name, _, _ in rows)
     for name, status, detail in rows:
         print(f"{name:<{width}}  {status:<4}  {detail}")
