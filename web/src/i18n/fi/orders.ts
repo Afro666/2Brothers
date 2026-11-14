@@ -1,4 +1,6 @@
 export default {
+  "Approved and recorded, not sent to the supplier": "Hyväksytty ja kirjattu, ei lähetetty toimittajalle",
+  "A person approved this order and the gateway recorded it with a signed receipt. Nothing has been sent to the supplier yet.": "Ihminen hyväksyi tämän tilauksen, ja yhdyskäytävä kirjasi sen allekirjoitetulla kuitilla. Toimittajalle ei ole vielä lähetetty mitään.",
   "Examples": "Esimerkkejä",
   "100 L cream for Thursday": "100 litraa kermaa torstaiksi",
   "400 pcs single-serve fruit yoghurt for Friday": "400 kpl hedelmäjogurttia perjantaiksi",

@@ -135,7 +135,7 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
                 <code className="max-w-full font-mono text-xs break-all select-text text-muted-foreground" title={order.id}>
                   {shortOrderId(order.id)}
                 </code>
-                <StatusBadge status={order.status} />
+                <StatusBadge status={order.status} notSent={order.receipt?.supplierOutcome === "NOT_SENT"} />
                 {placedStatuses.has(order.status) ? null : <UrgencyBadge urgency={order.urgency} />}
               </div>
               {order.supplierOrderRef ? (
