@@ -1831,7 +1831,11 @@ nothing is stored. A person can always check the delivery by hand.
 
 ### Check a package's allergen label from a photo (#1175)
 
-Planned. `POST /v1/kitchens/{kitchen_id}/orders/{order_id}/label/photo` reads one photo of
+Served by `gateway/label_photo.py` (#1175); the photo is read by the Buyer worker
+(`agent/label_service.py`), the words are mapped and compared by plain code
+(`agent/label.py`). The prepared demo photo is `demo/label-photo.png`: the demo bakery's
+cinnamon bun, whose "may contain" line names peanuts, which the demo kitchen excludes.
+`POST /v1/kitchens/{kitchen_id}/orders/{order_id}/label/photo` reads one photo of
 a delivered package's label with Nemotron 3.5 Super VL. Plain code compares the allergens
 read with the kitchen's allergen rule and with the catalog row of the product. **The
 answer is shown to a person and stored nowhere**: it never changes the catalog, the order
@@ -1852,7 +1856,8 @@ The model copies, as printed:
 Plain code maps each word to its GS1 code with a fixed table in Finnish, Swedish and English
 (`maito` → `AM`, `vehnä` → `UW`, `manteli` → `SA`, `pähkinä` → `AN`, ...). The table matches
 whole words and safe word starts only: `kookosmaito` is not `maito` and `munakoiso` is not
-`muna`. **A word that is not in the table is "please check", never ignored.**
+`muna`. The "may contain" phrase itself is removed first: `voi sisältää` starts with `voi`,
+which alone means butter. **A word that is not in the table is "please check", never ignored.**
 
 Answer:
 
@@ -1878,7 +1883,7 @@ Answer:
 |---|---|
 | `outcome` | The first that applies: `EXCLUDED_ALLERGEN` (a code the kitchen excludes, as CONTAINS **or** MAY_CONTAIN, same as the search filter), `PLEASE_CHECK` (any reason below), `DIFFERS` (label and catalog differ), `CATALOG_UNKNOWN` (the catalog has no allergen data; the label is shown as read), `AGREES`. |
 | `message` | One plain sentence for the page. `AGREES` says "The label we read agrees with the catalog. Read the label yourself before use." **There is no green or safe outcome**: a vision model can miss a word. |
-| `product_check` | `CONFIRMED_BY_EAN` (the EAN read is one of the product's GTINs), `CONFIRMED_BY_NAME` (no EAN read; most words of a catalog name of the product are on the label), `MISMATCH` (an EAN read that is not this product's), `NOT_CONFIRMED`. The last two are "please check: this may be another product". |
+| `product_check` | `CONFIRMED_BY_EAN` (the EAN read is one of the product's GTINs), `CONFIRMED_BY_NAME` (no EAN read, or the product has no GTIN, as an own product; at least 60% of the words of a catalog name of the product are on the label), `MISMATCH` (an EAN read that is not this product's), `NOT_CONFIRMED`. The last two are "please check: this may be another product". |
 | `label.contains`, `label.may_contain` | The words as printed with their code; a word with no code is in `unknown_words` instead. |
 | `excluded_hits` | Codes the label declares that the kitchen's rule excludes (groups expanded as in the order path, #741). |
 | `differences` | Both directions, each with a sentence: `LABEL_ADDS` (on the label, not in the catalog) and `CATALOG_ADDS` ("The catalog lists milk; we did not read it on the label.", the more likely reader error). Empty when the catalog data is unknown. |
