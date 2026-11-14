@@ -98,6 +98,7 @@ def test_a_piece_is_one_item_not_the_case():
     assert nutrition.piece_amount("Arla portion milk 100x2 cl", {"value": 2.0, "unit": "L"}) == D("20")
     assert nutrition.piece_amount("Valio milk 1 l", {"value": 1.0, "unit": "L"}) == D("1000")   # a carton
     assert nutrition.piece_amount("Salmon fillet apx. 10 kg", {"value": 10.0, "unit": "KG"}) is None  # a case: unknown
+    assert nutrition.piece_amount("Salmon 1x10 kg", None) is None                     # multipack of one case
     bread = {"raw": label(240, 8, 2, 45, 1.1), "net_content": case, "name": "Vaasan Rye bread 45x85g"}
     recipe = {"ingredients": [{"product_id": "b", "qty_per_portion": "1.5", "unit": "PCS"}]}
     got = nutrition.recipe_portion(recipe, {"b": bread})
