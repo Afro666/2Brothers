@@ -3201,3 +3201,65 @@ offer other than the one the person approved), `HUMAN_SESSION_REQUIRED` (403),
 The way out of `UNCONFIRMED` and `SENT_READ_FAILED` is "Resolving an unknown send": a
 person records `placed` or `not_sent`. Its refusals are `ORDER_NOT_RESOLVABLE` (409) and
 `ALREADY_RESOLVED` (409).
+
+
+## Kitchen morning/evening brief (#1332)
+
+`GET /v1/kitchens/{kitchen_id}/brief?when=morning|evening&lang=en|fi`
+requires `kitchen:read` scoped to that kitchen. Both parameters are required;
+missing, repeated, unknown parameters or unsupported values return 422
+`INVALID_REQUEST`. Calendar dates and cut-offs use `Europe/Helsinki`.
+This read creates no proposal, approval, order or delivery decision.
+
+Plain code gathers current kitchen-scoped facts and ranks at most six rows:
+1. READY waiting proposals with the earliest known offer closing time today
+   (morning), or from now until tomorrow noon (evening).
+2. Active recall alerts matching stock, recipes or waiting proposals.
+3. OPEN supplier suggestions waiting for an answer.
+4. Non-cancelled orders arriving today (morning); today's latest delivery-note
+   check per order with SHORT, MISSING or SUBSTITUTE counts (evening).
+5. Remaining READY drafts, grouped by supplier with count and known EUR total.
+6. Non-cancelled orders with `supplier_must_confirm`.
+
+Ties use time, then stable reference ID. A cut-off already represented is not
+repeated in the draft summary. Missing stock, quantity or price stays unknown,
+never zero; incomplete totals are not shown as complete totals. Existing delivery
+checks expose audit counts, not product quantities: the brief reports only those
+counts until a separate delivery-result contract provides more. No upstream
+supplier call, photo, document text or other kitchen's data is used.
+
+Each internal row has `kind` (`CUTOFF`, `RECALL`, `SUPPLIER_OFFER`, `DELIVERY`,
+`DELIVERY_CHECK`, `WAITING_DRAFTS`, `UNCONFIRMED`), `ref_id`, code-set `urgent`, and
+only its known product/supplier names, quantities with units, amounts and times.
+The worker receives these compact rows with closed English/Finnish sentence
+variants generated from their facts. It selects wording in strict JSON:
+`{lines: [{text, kind, ref_id, numbers: ["..."]}]}`. Exactly one line per row,
+in source order. The gateway accepts only that row's complete allowed sentence,
+and additionally checks its declared/written numbers against the same row using
+`claim_check` with Finnish formatting normalized. Numeric inclusion alone cannot
+prove a product/date/advice claim. A bad or missing line is replaced individually
+by its deterministic localized sentence. Extra rows never appear.
+
+Response (no wrapper):
+```json
+{"when":"morning","lang":"en","made_by":"model",
+ "lines":[{"text":"...","kind":"CUTOFF","ref_id":"...","urgent":true}],
+ "nothing_urgent":false,"model":"nemotron-3.5-super-vl","duration_ms":123}
+```
+`made_by` is `model` when all returned lines passed, `mixed` when some passed,
+or `rule` when none passed. `nothing_urgent` means no reportable rows: empty
+`lines` and `true`; a nonempty brief has `false`, even with no urgent row.
+Only cut-offs today and active recalls have `urgent:true`.
+
+One model call, no retry, with a 30-second model deadline and a 35-second worker
+request deadline. Missing configuration, timeout, invalid reply or a busy writer
+returns the same facts in rule-based lines, never a model error in place of the
+brief. Empty briefs make no model call. No model key reaches the gateway.
+Cache per kitchen, period, language and current fact fingerprint: valid results
+300 seconds, partial/rule fallback 30 seconds, bounded entries. Facts are rebuilt
+before cache lookup so a changed approval/recall/offer does not reuse old text.
+Simultaneous readers do not start duplicate model calls for the same key.
+The usage meter records role `kitchen_brief`. Audit kind `kitchen_brief_read`
+records only row/model-line/rule-line counts, duration, cache use and period/language;
+no line text or model reply. Authentication/scope/storage failures are ordinary
+route errors, never an invented empty brief.
