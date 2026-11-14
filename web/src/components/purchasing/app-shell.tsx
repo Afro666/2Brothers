@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { usePendingApprovals } from "@/lib/pending-approvals";
 import { ROLE_LABELS, type Role, useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
 
@@ -132,6 +133,8 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
   const Icon = item.icon;
   const shared = {
     "aria-current": active ? ("page" as const) : undefined,
+    // The count is in the description, so the link keeps its plain name.
+    "aria-description": item.count ? `${item.count} waiting` : undefined,
     onClick: onNavigate,
     className: cn(
       "flex items-center gap-2 rounded-sm border-l-2 font-medium outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/70",
@@ -144,7 +147,7 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
       <Icon className={item.foot ? "size-3.5" : "size-4"} aria-hidden />
       <span className="flex-1">{item.label}</span>
       {item.count ? (
-        <span className="rounded-sm bg-foreground px-1.5 font-mono text-[11px] text-background">
+        <span aria-hidden data-nav-count className="rounded-sm bg-foreground px-1.5 font-mono text-[11px] text-background">
           {item.count}
         </span>
       ) : null}
@@ -199,6 +202,7 @@ function SectionTabs({ label, items, activeId }: { label: string; items: NavItem
               <Link
                 to={item.href as LinkProps["to"]}
                 aria-current={active ? "page" : undefined}
+                aria-description={item.count ? `${item.count} waiting` : undefined}
                 className={cn(
                   "-mb-px flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/70",
                   active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground",
@@ -206,7 +210,7 @@ function SectionTabs({ label, items, activeId }: { label: string; items: NavItem
               >
                 {item.label}
                 {item.count ? (
-                  <span className="rounded-sm bg-foreground px-1.5 font-mono text-[11px] text-background">
+                  <span aria-hidden data-nav-count className="rounded-sm bg-foreground px-1.5 font-mono text-[11px] text-background">
                     {item.count}
                   </span>
                 ) : null}
@@ -274,7 +278,13 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
   const [open, setOpen] = useState(false);
   const { side } = useRole();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const nav = items ?? (side === "valio" ? VALIO_NAV : KITCHEN_NAV);
+  const { count: waiting } = usePendingApprovals();
+  const base = items ?? (side === "valio" ? VALIO_NAV : KITCHEN_NAV);
+  // Only the kitchen's own menu shows what waits; zero or unknown shows no badge.
+  const nav =
+    !items && side === "kitchen" && waiting
+      ? base.map((item) => (item.id === "approvals" ? { ...item, count: waiting } : item))
+      : base;
   const current = activeId ?? activeFromPath(nav, pathname);
   const group = nav.find((item) => item.id === current)?.group;
   const tabs = group ? nav.filter((item) => item.group === group) : [];

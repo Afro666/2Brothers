@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { useApi } from "@/api";
 import { ApiError, type Api } from "@/api/types";
+import { usePendingApprovals } from "@/lib/pending-approvals";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { formatEur } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
@@ -62,6 +63,7 @@ function ApiApprovalsPage() {
   const { role } = useRole();
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
+  const { refresh: refreshWaiting } = usePendingApprovals();
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
   const recalls = useAsync(() => loadRecalls(api), [api]);
 
@@ -75,6 +77,7 @@ function ApiApprovalsPage() {
     } finally {
       // Also after a refusal: when the total moved, the card must show the new one before asking again.
       approvals.reload();
+      refreshWaiting();
     }
   }
 
@@ -82,6 +85,7 @@ function ApiApprovalsPage() {
     await api.reject(approvalId, reason, actor);
     toast.success("Rejected. The reason goes back to the Buyer.", { testId: "approval-toast" });
     approvals.reload();
+    refreshWaiting();
   }
 
   async function change(orderId: string, proposalChange: ProposalChange): Promise<void> {

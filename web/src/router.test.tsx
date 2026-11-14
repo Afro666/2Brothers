@@ -42,11 +42,18 @@ describe("application routes", () => {
     expect(screen.queryByRole("link", { name: "Orders" })).not.toBeInTheDocument();
   });
 
+  /** The link's label without the waiting-approvals badge, which loads a moment later. */
+  function label(link: HTMLElement): string | null {
+    const copy = link.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll("[data-nav-count]").forEach((badge) => badge.remove());
+    return copy.textContent;
+  }
+
   it("shows five menu entries and the current entry's pages as tabs", async () => {
     await renderAt("/approvals");
     await screen.findByRole("heading", { level: 1, name: "To approve" });
     const menu = within(screen.getAllByRole("navigation", { name: "Main" })[0]);
-    expect(menu.getAllByRole("link").map((link) => link.textContent)).toEqual([
+    expect(menu.getAllByRole("link").map(label)).toEqual([
       "Home",
       "Orders",
       "Kitchen",
@@ -57,7 +64,7 @@ describe("application routes", () => {
     ]);
     expect(menu.getByRole("link", { name: "Orders" })).toHaveAttribute("aria-current", "page");
     const tabs = within(screen.getByRole("navigation", { name: "Orders" }));
-    expect(tabs.getAllByRole("link").map((link) => link.textContent)).toEqual([
+    expect(tabs.getAllByRole("link").map(label)).toEqual([
       "Request an order",
       "To approve",
       "Order history",
