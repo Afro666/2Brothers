@@ -33,6 +33,24 @@ def test_the_seed_makes_the_next_weekly_plan_show_a_learned_line(env):
     assert line["learned"]["fact_id"] == fact["id"] and line["learned"]["ratio"] == 0.5
 
 
+def test_a_chosen_product_uses_its_plan_line_unit_and_shows_the_learned_line(env):
+    client, _, db = env
+    setup(client, [{"product_id": "462775", "on_hand": "5", "unit": "L"}])
+    chosen = "463335"                                               # in next week's plan in L, not the largest
+    assert pick_product(db, "demo-kitchen", TODAY)["product_id"] != chosen
+
+    done = seed(db, today=TODAY, product_id=chosen)
+    assert done["written"] == 8 and done["product_id"] == chosen and done["unit"] == "L"
+    assert db.feedback.distinct("unit", {"meta.product_id": chosen}) == ["L"]   # the plan line's unit, not ST
+
+    fact = next(f for f in client.get(K + "/learned", headers=HUMAN).json()["facts"]
+                if f["kind"] == "CORRECTION_RATIO")
+    assert fact["product_id"] == chosen
+    proposal = plan(client, "after-chosen-seed")
+    line = next(line for line in proposal["lines"] if line["product_id"] == chosen)
+    assert line["learned"]["fact_id"] == fact["id"] and line["learned"]["ratio"] == 0.5
+
+
 def test_a_repeat_run_writes_nothing_and_the_fact_can_be_switched_off(env):
     client, _, db = env
     setup(client, [{"product_id": "462775", "on_hand": "5", "unit": "L"}])
