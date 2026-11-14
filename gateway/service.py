@@ -19,22 +19,21 @@ from uuid import uuid4
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 
-from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, allergen_codes, pack_info,
+from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, pack_info,
                     pad_to_free_delivery, plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from gateway.decision import decision_summary
+from gateway.suppliers import VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers
 from store import audit, orders, recalls
 from store.audit import canonical
 from store.history import current_stock
-from store.products import get_product
 
 DEMAND_DAYS = 28                    # usage history behind the daily demand of addable rows
 REVIEW_DAYS = 3.0                   # days to the delivery after next, until order days are wired
 CENT = Decimal("0.01")
 TOLERANCE = Decimal("0.005")
 OFFER_TTL = timedelta(minutes=15)   # Aron, 2026-11-14 (#19 answer F)
-VALIO = "sup-valio"
 
 
 class GatewayError(Exception):
@@ -93,82 +92,112 @@ class Gateway:
         doc = self.db.suppliers.find_one({"kitchen_id": kitchen_id, "adapter": "valio_api"}) or {}
         return doc.get("terms") or {}
 
-    def _offers(self, product_ids: list[str], measure: str, requested: date) -> tuple[list[Offer], list[tuple[str, str]], dict]:
-        """Live Valio offers for these products, converted for the engine."""
-        prices = {p["productId"]: p for p in self.valio.price(product_ids, requested.isoformat())["products"]}
-        avail = {p["productId"]: p for p in self.valio.availability(product_ids, requested.isoformat())["products"]}
-        offers, skipped, tax = [], [], {}
-        for pid in product_ids:
-            doc = get_product(self.db, pid, raw=True)
-            price, stock = prices.get(pid) or {}, avail.get(pid) or {}
-            if doc is None or not doc.get("raw"):
-                skipped.append((pid, "not in the catalog"))
-                continue
-            if price.get("error") or not (price.get("catalogPrice") or {}).get("value"):
-                skipped.append((pid, "no price from Valio"))
-                continue
-            lines = stock.get("scheduleLines") or []
-            if not lines:
-                skipped.append((pid, "Valio cannot deliver it on any date"))
-                continue
-            unit_price = _dec(price["catalogPrice"]["value"])
-            cmp = price.get("comparisonPrice") or {}
-            try:
-                pack = pack_info(doc["raw"], price=unit_price, comparison_price=_dec(cmp.get("value")),
-                                 comparison_unit=price.get("comparisonUnit"), measure=measure)
-            except PackDataError as exc:
-                skipped.append((pid, f"pack size unknown: {exc}"))
-                continue
-            line = lines[0]
-            available_date = line.get("availableDate")
-            offers.append(Offer(
-                pid, (doc.get("names") or {}).get("en") or doc.get("name") or pid, pack, unit_price,
-                _dec(line.get("availableAmount")),   # the client already turned sentinels into None
-                stock.get("cutoff_passed"),
-                date.fromisoformat(available_date) if available_date else None,
-                bool(stock.get("salesBlock") or line.get("salesBlock")),
-                allergen_data_known=not allergen_codes(doc),   # unknown allergen data is never safe (S02, S04)
-                reliability=doc.get("reliability"),            # Valio CSV, delivered / ordered
-                carbon=doc.get("carbon_kg_co2e_per_kg"),       # product-group average
-                labels=tuple(doc.get("labels") or ()),
-            ))
-            tax[pid] = _dec((price.get("tax") or {}).get("taxRate")) or Decimal(0)
-        return offers, skipped, tax
+    def _supplier(self, kitchen_id: str, supplier_id: str) -> dict | None:
+        """The kitchen's supplier row; Valio is the row with the `valio_api` adapter."""
+        if supplier_id == VALIO:
+            doc = self.db.suppliers.find_one({"kitchen_id": kitchen_id, "adapter": "valio_api"}) or {}
+            return {"name": "Valio Aimo", "adapter": "valio_api", **doc, "supplier_id": VALIO}
+        return self.db.suppliers.find_one({"kitchen_id": kitchen_id, "supplier_id": supplier_id})
 
-    def _simulate(self, kitchen_id: str, plan: RequestPlan, tax: dict, skipped: list) -> dict:
-        terms = self._terms(kitchen_id)
+    def _offers(self, kitchen_id: str, product_ids: list[str], measure: str,
+                requested: date) -> tuple[list[Offer], list[tuple[str, str]], dict, dict[str, str]]:
+        """Live offers per supplier (gateway/suppliers.py), and the supplier of each product.
+        A catalog product is Valio's; an own product belongs to its `supplier_id`."""
+        groups: dict[str, list[str]] = {}
+        for pid in product_ids:
+            row = self.db.products.find_one({"_id": pid, "source": "own", "kitchen_id": kitchen_id},
+                                            {"supplier_id": 1})
+            groups.setdefault(row["supplier_id"] if row else VALIO, []).append(pid)
+        offers, skipped, tax, supplier_of = [], [], {}, {}
+        for supplier_id, ids in groups.items():
+            supplier = self._supplier(kitchen_id, supplier_id)
+            if supplier is None:
+                skipped.extend((pid, f"supplier {supplier_id} is not set up") for pid in ids)
+                continue
+            adapter = (ValioAdapter(self.db, self.valio) if supplier_id == VALIO
+                       else ManualAdapter(self.db, kitchen_id, supplier, self.now))
+            found, left_out, rates = adapter.offers(ids, measure, requested)
+            offers.extend(found)
+            skipped.extend(left_out)
+            tax.update(rates)
+            supplier_of.update({pid: supplier_id for pid in ids})
+        return offers, skipped, tax, supplier_of
+
+    def _block(self, supplier: dict, lines: list, tax: dict) -> dict:
+        """One supplier's part of a basket: its lines and its own user-set terms."""
+        terms = supplier.get("terms") or {}
         threshold = _dec(terms.get("free_delivery_threshold_eur"))
         fee_value = _dec(terms.get("delivery_fee_eur"))
-        net = plan.total
-        vat = sum((ln.total * tax.get(ln.product_id, Decimal(0)) / 100 for ln in plan.lines), Decimal(0))
+        net = sum((ln.total for ln in lines), Decimal(0))
+        rates = [tax.get(ln.product_id, Decimal(0)) for ln in lines]
+        vat = None if any(rate is None for rate in rates) else sum(
+            (ln.total * rate / 100 for ln, rate in zip(lines, rates)), Decimal(0))
         if threshold is None or fee_value is None:
             mov_gap = fee = None          # unknown terms: never shown as zero
         else:
             mov_gap = max(threshold - net, Decimal(0))
             fee = fee_value if mov_gap > 0 else Decimal(0)
-        expected = net + vat + (fee or Decimal(0))
+        return {"supplier_id": supplier["supplier_id"], "name": supplier.get("name"),
+                "net": net, "vat": vat, "mov_gap": mov_gap, "fee": fee,
+                "expected": net + (vat or Decimal(0)) + (fee or Decimal(0)), "lines": lines}
+
+    def _simulate(self, kitchen_id: str, plan: RequestPlan, tax: dict, skipped: list,
+                  supplier_of: dict[str, str] | None = None) -> dict:
+        supplier_of = supplier_of or {}
+        by_supplier: dict[str, list] = {}
+        for ln in plan.lines:
+            by_supplier.setdefault(supplier_of.get(ln.product_id, VALIO), []).append(ln)
+        blocks = [self._block(self._supplier(kitchen_id, sid), lines, tax)
+                  for sid, lines in by_supplier.items()]
+        # The top-level gap and fee are those of the only supplier; with several, read `blocks`.
+        # No line at all: Valio's terms on an empty basket, as before #73.
+        if len(blocks) > 1:
+            mov_gap = fee = None
+        else:
+            only = blocks[0] if blocks else self._block(self._supplier(kitchen_id, VALIO), [], tax)
+            mov_gap, fee = only["mov_gap"], only["fee"]
+        net = plan.total
+        vat = sum((b["vat"] or Decimal(0) for b in blocks), Decimal(0))
+        expected = sum((b["expected"] for b in blocks), Decimal(0)) if blocks else only["expected"]
         excluded = [*plan.excluded, *skipped]
         reasons = [f"{pid}: {why}" for pid, why in excluded]
         if plan.shortfall > 0:
             reasons.append(f"{plan.shortfall.normalize():f} {plan.measure} of the request cannot be covered for this date.")
-        if any(ln.unknown_stock for ln in plan.lines):
+        if any(ln.unknown_stock and supplier_of.get(ln.product_id, VALIO) == VALIO for ln in plan.lines):
             reasons.append("Some lines have stock Valio does not report: not confirmed until Valio confirms.")
+        for b in blocks:
+            if b["supplier_id"] != VALIO:
+                reasons.append(f"{b['name']} is a price list the kitchen entered: its stock is not known "
+                               "until the supplier confirms.")
+            if b["vat"] is None:
+                reasons.append(f"VAT for {b['name']} is not known: its total is ex VAT.")
         verdict = "NEEDS_APPROVAL" if plan.lines else "REFUSED"
+
+        def line_out(ln) -> dict:
+            return {"product_id": ln.product_id, "quantity": f"{ln.quantity.normalize():f}",
+                    "unit": ln.unit, "unit_price": _money(ln.unit_price), "total": _money(ln.total),
+                    "why": ln.why, "unknown_stock": ln.unknown_stock,
+                    "reason_codes": list(ln.reason_codes),
+                    "reliability": ln.reliability, "carbon_kg_co2e_per_kg": ln.carbon,
+                    "labels": list(ln.labels)}
+
+        def money(x: Decimal | None) -> str | None:
+            return None if x is None else _money(x)
+
         return {
             "currency": "EUR",
             "total_ex_vat": _money(net), "vat": _money(vat),
-            "delivery_fee": None if fee is None else _money(fee),
-            "mov_gap": None if mov_gap is None else _money(mov_gap),
+            "delivery_fee": money(fee), "mov_gap": money(mov_gap),
             "expected_total": _money(expected),
             "shortfall": f"{plan.shortfall.normalize():f}", "measure": plan.measure,
             "mandate": {"verdict": verdict, "reasons": reasons,
                         "reason_codes": list(plan.reason_codes), "warnings": list(plan.warnings)},
-            "lines": [{"product_id": ln.product_id, "quantity": f"{ln.quantity.normalize():f}",
-                       "unit": ln.unit, "unit_price": _money(ln.unit_price), "total": _money(ln.total),
-                       "why": ln.why, "unknown_stock": ln.unknown_stock,
-                       "reason_codes": list(ln.reason_codes),
-                       "reliability": ln.reliability, "carbon_kg_co2e_per_kg": ln.carbon,
-                       "labels": list(ln.labels)} for ln in plan.lines],
+            "lines": [line_out(ln) for ln in plan.lines],
+            "blocks": [{"supplier_id": b["supplier_id"], "name": b["name"],
+                        "lines": [line_out(ln) for ln in b["lines"]],
+                        "total_ex_vat": _money(b["net"]), "vat": money(b["vat"]),
+                        "mov_gap": money(b["mov_gap"]), "delivery_fee": money(b["fee"]),
+                        "expected_total": _money(b["expected"])} for b in blocks],
             "excluded": [{"product_id": pid, "reason": why} for pid, why in excluded],
             "alternative": None if plan.alternative is None else {
                 "total_ex_vat": _money(plan.alternative.total),
@@ -184,11 +213,15 @@ class Gateway:
         if need <= 0:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
         blocked = recalls.blocked_ids(self.db, kitchen_id)
-        offers, skipped, tax = self._offers([p for p in request["product_ids"] if p not in blocked], measure, requested)
+        offers, skipped, tax, supplier_of = self._offers(
+            kitchen_id, [p for p in request["product_ids"] if p not in blocked], measure, requested)
         skipped.extend((p, 'BLOCKED_BY_RECALL') for p in request['product_ids'] if p in blocked)
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
-        sim = self._simulate(kitchen_id, plan, tax, skipped)
+        tiers = {sid: (self._supplier(kitchen_id, sid).get("terms") or {}).get("discount_tiers") or []
+                 for sid in set(supplier_of.values())}
+        plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
+        sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of)
         now = self.now()
         offer = orders.save_offer(self.db, {
             "offer_id": uuid4().hex, "kitchen_id": kitchen_id, "supplier_id": VALIO,
@@ -381,11 +414,16 @@ class Gateway:
         if not committed.modified_count:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
         payload = {"offer_id": stored["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}
+        blocks = sim.get("blocks") or [{"supplier_id": VALIO}]   # an offer stored before #73
         order, created = orders.record_attempt(
             self.db, kitchen_id=kitchen_id, idempotency_key=key, offer_id=stored["offer_id"],
             expected_total=Decimal128(sim["expected_total"]),   # exact decimal in any Mongo
             lines=[{k: v for k, v in ln.items() if k != "why"} for ln in sim["lines"]],
-            payload_hash=_hash(payload), proposal_id=proposal_id, supplier_id=VALIO, approved_by=human)
+            payload_hash=_hash(payload), proposal_id=proposal_id, approved_by=human,
+            # One order for the proposal (#73); the supplier split is stored on it.
+            supplier_id=blocks[0]["supplier_id"] if len(blocks) == 1 else None,
+            blocks=[{k: v for k, v in b.items() if k != "lines"}
+                    | {"product_ids": [ln["product_id"] for ln in b.get("lines", [])]} for b in blocks])
         if created:
             if doc.get("approval_id"):
                 orders.decide_approval(self.db, doc["approval_id"], status="APPROVED", decided_by=human)

@@ -35,6 +35,7 @@ class Offer:
     carbon: float | None = None         # kg CO2e per kg, product-group average; None = unknown
     labels: tuple[str, ...] = ()
     allergen_data_known: bool | None = True   # False or None: ALLERGEN_DATA_MISSING (S02)
+    stock_source: str = "Valio"         # who would report the stock (a manual supplier: its name)
 
     @property
     def price_per_measure(self) -> Decimal:
@@ -174,7 +175,7 @@ def _fill(need: Decimal, measure: str, usable: list[Offer], *, confirmed_first: 
         why = (f"{_n(qty)} {o.pack.sales_unit} of {o.name} = {_n(qty * o.pack.size)} {measure}: "
                f"{'price' if o.product_id in notes else 'cheapest'} per {measure} "
                f"({_n(o.price_per_measure.quantize(CENT))} EUR), "
-               "but Valio does not report its stock, so it is not confirmed"
+               f"but {o.stock_source} does not report its stock, so it is not confirmed"
                + (f"; {notes[o.product_id]}" if o.product_id in notes else "") + ".")
         lines.append(_line(o, qty, line_codes, why))
         codes.update(line_codes)

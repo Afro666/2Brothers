@@ -138,3 +138,39 @@ Roles: `approver` approves, rejects and manages tokens; `chef` asks; `viewer` re
 The first approver comes from the server `.env`: `DEMO_USER_EMAIL`, `DEMO_USER_PASSWORD`.
 Set `GATEWAY_REQUIRE_LOGIN=true` to switch off the shared human token: then only a signed-in
 person can approve (the open demo stops being open). The Buyer agent token is not affected.
+
+## Several suppliers in one proposal (#73)
+
+`gateway/suppliers.py` holds one adapter per supplier kind. Each gives the engine the
+same thing: `offers(product_ids, measure, requested_date) -> (offers, skipped, tax)`.
+
+- `ValioAdapter`: live Valio price and availability (the logic that was in `Gateway._offers`).
+- `ManualAdapter`: a supplier with adapter `manual` or `csv`. Its price list is the
+  kitchen's own products for that supplier (`unit_price_eur`, `pack_size_in_base_units`).
+  Stock is always unknown, so every line has `unknown_stock: true`. The cut-off comes
+  from the supplier's terms: the next order day whose `cutoff_time` is still ahead, plus
+  `lead_time_days`, must reach the requested date. If it cannot, the product is excluded
+  ("order cut-off has passed"). If one of the three terms is unknown, it is excluded too
+  ("no cut-off time known").
+
+A request may name products of several suppliers. A catalog product belongs to
+`sup-valio`; an own product belongs to its `supplier_id`. The engine plans the whole
+request as before. The simulation then also returns `blocks`, one per supplier that has
+a line:
+
+```json
+{"supplier_id": "sup-bakery", "name": "Leipomo Demo", "lines": [],
+ "total_ex_vat": "58.80", "vat": null, "mov_gap": "41.20", "delivery_fee": "9.50",
+ "expected_total": "68.30"}
+```
+
+- `mov_gap` and `delivery_fee` come from that supplier's user-set terms. An unknown term
+  gives `null`, never zero. `vat` is `null` for an own product (no VAT rate is stored).
+- The top-level `expected_total` is the sum of the block totals. The top-level `mov_gap`
+  and `delivery_fee` are those of the block when there is one supplier, and `null` when
+  there are several.
+- `discount_tiers`: the tier with the highest `min_qty` at or below the line quantity, in
+  the line's unit, sets the unit price. The line's `why` names the tier.
+- Approve is still one human yes and one order; the order stores `blocks`. A line with
+  unknown stock still returns 409 `STOCK_UNKNOWN`, so a block of a manual supplier cannot
+  be placed until a supplier confirmation exists.
