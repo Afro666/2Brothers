@@ -304,12 +304,18 @@ function Summary({ read }: { read: PriceListRead }) {
     <div className="space-y-1 text-sm">
       <p>
         <NemotronMark />
-        {t("Read by {model} in {seconds} s: {count} rows, {check} to check.", {
-          model: MODEL_NAME,
-          seconds: (read.durationMs / 1000).toFixed(1),
-          count: read.rows.length,
-          check: toCheck,
-        })}
+        {read.durationMs == null
+          ? t("Read by {model}: {count} rows, {check} to check.", {
+              model: MODEL_NAME,
+              count: read.rows.length,
+              check: toCheck,
+            })
+          : t("Read by {model} in {seconds} s: {count} rows, {check} to check.", {
+              model: MODEL_NAME,
+              seconds: (read.durationMs / 1000).toFixed(1),
+              count: read.rows.length,
+              check: toCheck,
+            })}
       </p>
       {read.vat === "INCLUDED" ? <p>{t("The list says the prices include VAT.")}</p> : null}
       {read.vat === "EXCLUDED" ? <p>{t("The list says the prices are without VAT.")}</p> : null}
