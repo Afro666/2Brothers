@@ -365,6 +365,17 @@ export interface KitchenWords {
 }
 
 /** Everything the screens ask the gateway for. Mock and HTTP both implement it. */
+/** A brand's logo from Context.dev, kept by the gateway; only `found` has a logo. */
+export interface BrandLogo {
+  brand: string;
+  status: "found" | "none" | "not_checked";
+  logoUrl: string | null;
+  /** What the logo needs behind it; `own` means the image has its own background. */
+  background: "light" | "dark" | "own" | null;
+  domain: string | null;
+  checkedAt: string | null;
+}
+
 export interface Api {
   /**
    * Gateway mode only: the methods the real gateway answers. Every other method still
@@ -412,6 +423,8 @@ export interface Api {
    */
   chooseOption?(approvalId: string, optionId: string, actor: AuditActor): Promise<ApprovalRequest>;
   listFeedback(filter?: { orderId?: string }): Promise<FeedbackRow[]>;
+  /** What is known about each brand's logo (contract: "Product pictures"). Never calls Context.dev. */
+  listBrandLogos?(brands: string[]): Promise<BrandLogo[]>;
   listOrders(): Promise<Order[]>;
   getOrder(id: string): Promise<Order>;
   getOrderResolution(orderId: string): Promise<OrderResolution>;

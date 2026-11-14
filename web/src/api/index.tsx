@@ -28,6 +28,11 @@ export function ApiProvider({ api, children }: { api?: Api; children: ReactNode 
   return <ApiContext.Provider value={api ?? getDefaultApi()}>{children}</ApiContext.Provider>;
 }
 
+/** The Api when there is a provider, else null: for small parts that work without one. */
+export function useOptionalApi(): Api | null {
+  return useContext(ApiContext);
+}
+
 export function useApi(): Api {
   const api = useContext(ApiContext);
   if (!api) throw new Error("useApi must be used within ApiProvider");
