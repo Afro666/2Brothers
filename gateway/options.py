@@ -9,8 +9,10 @@ stored, signed quote that a person can choose and then approve.
 Rules.
 - An option never selects, approves or places itself. Choosing needs a human session and
   only swaps the proposal's basket; the person then approves the new exact total.
-- A basket with a line of unconfirmed stock cannot be chosen (409 `STOCK_UNKNOWN`): it
-  would still not be placeable.
+- A basket with a line of unknown stock can be chosen, as it can be approved (#1221, #1313):
+  the line keeps `unknown_stock`, and the approval (`Gateway._place` in service.py) marks the order
+  `supplier_must_confirm`. A line that is not available is excluded by the quote, so the
+  choice is refused (409 `OPTION_UNAVAILABLE`).
 - After a refused choice the proposal keeps the basket it had.
 
 Contract: docs/contract.md, "Chef substitute choices".
@@ -86,7 +88,7 @@ def _all_confirmed(quote: dict) -> bool:
 
 
 def _confirmed_option(gw, kitchen_id: str, request: dict, sim: dict) -> dict | None:
-    if request.get("needs") or not sim.get("lines"):
+    if request.get("needs") or request.get("items") or not sim.get("lines"):
         return None
     if all(line.get("unknown_stock") is False for line in sim["lines"]):
         return None      # the plan is placeable as it is
@@ -173,8 +175,7 @@ def choose(gw, kitchen_id: str, proposal_id: str, body: dict, *, human: str | No
         if "cut-off" in reasons:
             raise GatewayError(409, "CLOSING_PASSED", "the order cut-off of a line has passed")
         raise GatewayError(409, "OPTION_UNAVAILABLE", "a product of this option cannot be ordered now")
-    if any(line.get("unknown_stock") is not False for line in lines):
-        raise GatewayError(409, "STOCK_UNKNOWN", "the fresh quote cannot confirm the stock of a line")
+    # Unknown stock is not refused here: a person's approve places it and marks it (#1313).
 
     def refreshed(entry: dict | None) -> dict | None:
         return {**entry, "offer_id": fresh["offer_id"]} if entry and entry.get("offer_id") == offer_id else entry

@@ -1,5 +1,5 @@
 import { type Json, object, rows, text } from "@/api/gateway-map";
-import type { Api, ProductSearchFilters } from "@/api/types";
+import type { Api, MatchedBy, ProductSearchFilters, SearchedProduct, SearchedProducts } from "@/api/types";
 import { ApiError } from "@/api/types";
 import type { Allergen, PackUnit, Product, ProductLabel } from "@/types";
 
@@ -148,6 +148,25 @@ function mapRows(body: unknown): Product[] {
   });
 }
 
+const MATCHED_BY: readonly MatchedBy[] = ["words", "meaning", "both"];
+
+/** Search rows with how each was found, and whether a search by meaning fell back to words. */
+function mapSearchRows(body: unknown): SearchedProducts {
+  const found: SearchedProducts = rows(body, "products").flatMap((row): SearchedProduct[] => {
+    try {
+      const product: SearchedProduct = mapCatalogProduct(row);
+      const matchedBy = MATCHED_BY.find((value) => value === row.matched_by);
+      if (matchedBy) product.matchedBy = matchedBy;
+      return [product];
+    } catch (error) {
+      console.warn(`Skipped product ${String(row.product_id ?? "(no id)")}:`, error);
+      return [];
+    }
+  });
+  if (object(body, "a search answer").meaning_unavailable === true) found.meaningUnavailable = true;
+  return found;
+}
+
 /** The web filters to the gateway's names (store/search.py `build_pipeline`). Unset stays unsent. */
 function gatewayFilters(filters: ProductSearchFilters): Json {
   const out: Json = {};
@@ -162,23 +181,8 @@ function gatewayFilters(filters: ProductSearchFilters): Json {
   return out;
 }
 
-/**
- * A 404 without the gateway's `error` envelope is the framework's "no such route": a gateway
- * from before PR #1172 does not serve `GET /catalog/products`. A named 404 means the route exists.
- */
-function routeNotServed(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 404 && error.code === "GATEWAY_ERROR";
-}
-
-/**
- * Catalog search and products by code, on the gateway. `sampleProducts` answers `getProducts`
- * while the gateway does not serve its route yet, so the screens keep the sample rows they had.
- */
-export function createCatalogHttp(
-  call: GatewayCall,
-  kitchen: string,
-  sampleProducts?: Api["getProducts"],
-): CatalogApi {
+/** Catalog search and products by code, on the gateway. A failed call is an error, never sample rows (#1263). */
+export function createCatalogHttp(call: GatewayCall, kitchen: string): CatalogApi {
   return {
     async searchProducts(query, filters = {}) {
       const trimmed = query.trim();
@@ -186,11 +190,13 @@ export function createCatalogHttp(
       // The gateway refuses a search with no query and no filter; strictness alone is not a filter.
       const hasFilter = Object.keys(sent).some((key) => key !== "allergen_strictness");
       if (!trimmed && !hasFilter) return [];
+      // The "Search by meaning" switch: hybrid for this one search only (#1382).
+      const mode = filters.byMeaning ? { mode: "hybrid" } : {};
       const body = await call("/tools/search_products", {
         method: "POST",
-        body: JSON.stringify({ query: trimmed, filters: sent, limit: SEARCH_LIMIT }),
+        body: JSON.stringify({ query: trimmed, filters: sent, limit: SEARCH_LIMIT, ...mode }),
       });
-      return mapRows(body);
+      return mapSearchRows(body);
     },
     async getProducts(ids) {
       const unique = [...new Set(ids.filter((id) => typeof id === "string" && id.trim()))];
@@ -198,16 +204,9 @@ export function createCatalogHttp(
       for (let start = 0; start < unique.length; start += IDS_PER_CALL) {
         groups.push(unique.slice(start, start + IDS_PER_CALL));
       }
-      let answers: unknown[];
-      try {
-        answers = await Promise.all(
-          groups.map((group) => call(`${kitchen}/catalog/products?ids=${group.map(encodeURIComponent).join(",")}`)),
-        );
-      } catch (error) {
-        if (!sampleProducts || !routeNotServed(error)) throw error;
-        console.warn("The gateway does not serve GET /catalog/products yet (#1172): sample products shown.");
-        return sampleProducts(unique);
-      }
+      const answers = await Promise.all(
+        groups.map((group) => call(`${kitchen}/catalog/products?ids=${group.map(encodeURIComponent).join(",")}`)),
+      );
       return answers.flatMap(mapRows);
     },
   };

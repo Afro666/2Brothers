@@ -1,11 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { ADD_SEARCH_DEBOUNCE_MS, ApprovalCard } from "@/components/purchasing/approval-card";
+import { ADD_SEARCH_DEBOUNCE_MS, ApprovalCard, earliestCutoff } from "@/components/purchasing/approval-card";
 import { mapApproval } from "@/api/gateway-map";
 import { ApiError } from "@/api/types";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, formatTime } from "@/lib/format";
 import { proposal } from "@/test/gateway-fixtures";
 import { approval, orders } from "@/mocks/milk-case";
 
@@ -16,16 +16,154 @@ const confirmedOrder = {
   })),
 };
 
+describe("earliestCutoff", () => {
+  const at = (closingTime: string | null, supplierName = "Valio") => ({ closingTime, supplierName });
+
+  it("does not warn when more than two hours remain", () => {
+    expect(earliestCutoff([at("2026-11-15T17:00:00+02:00")], new Date("2026-11-15T14:00:00+02:00"))).toMatchObject({
+      warning: false,
+      passed: false,
+      minutesLeft: 180,
+    });
+  });
+
+  it("warns with whole hours and minutes left when less than two hours remain", () => {
+    expect(earliestCutoff([at("2026-11-15T17:00:00+02:00")], new Date("2026-11-15T15:40:00+02:00"))).toMatchObject({
+      warning: true,
+      minutesLeft: 80,
+    });
+  });
+
+  it("reports a cut-off at or before now as passed", () => {
+    expect(earliestCutoff([at("2026-11-15T17:00:00+02:00")], new Date("2026-11-15T17:00:00+02:00"))).toMatchObject({
+      warning: true,
+      passed: true,
+      minutesLeft: 0,
+    });
+  });
+
+  it("shows no cut-off when every value is null", () => {
+    expect(earliestCutoff([at(null), at(null)], new Date("2026-11-15T17:00:00+02:00"))).toBeNull();
+  });
+
+  it("does not warn at exactly two hours left", () => {
+    expect(earliestCutoff([at("2026-11-15T17:00:00+02:00")], new Date("2026-11-15T15:00:00+02:00"))).toMatchObject({
+      warning: false,
+      minutesLeft: 120,
+    });
+  });
+
+  it("chooses the earliest supplier cut-off and counts the known lines", () => {
+    expect(earliestCutoff([
+      at("2026-11-15T17:00:00+02:00"),
+      at("2026-11-15T15:00:00+02:00", "Töölö Bakery"),
+      at(null),
+    ], new Date("2026-11-15T12:00:00+02:00"))).toMatchObject({
+      closingTime: "2026-11-15T15:00:00+02:00",
+      supplierName: "Töölö Bakery",
+      earliestOf: 2,
+    });
+  });
+
+  it("uses absolute timestamps and Helsinki formatting across the change to winter time", () => {
+    const cutoff = earliestCutoff([at("2026-10-25T05:00:00+02:00")], new Date("2026-10-25T03:30:00+02:00"))!;
+    expect(cutoff.minutesLeft).toBe(90);
+    expect(`${formatDate(cutoff.closingTime)} ${formatTime(cutoff.closingTime)}`).toBe("Sun 25 Oct 05:00");
+  });
+});
+
 describe("ApprovalCard", () => {
-  it("starts folded when asked: title and total show, the details open on a tap (#1142)", async () => {
-    render(<ApprovalCard request={{ ...approval, status: "REJECTED" }} order={confirmedOrder} folded />);
+  it("shows the earliest supplier cut-off next to the totals while waiting", () => {
+    render(<ApprovalCard
+      request={{
+        ...approval,
+        cutoffs: [
+          { closingTime: "2026-11-15T17:00:00+02:00", supplierName: "Valio" },
+          { closingTime: "2026-11-15T16:00:00+02:00", supplierName: "Töölö Bakery" },
+        ],
+      }}
+      order={confirmedOrder}
+      now={new Date("2026-11-15T14:40:00+02:00")}
+    />);
+    expect(screen.getByText("Approve before Sun 15 Nov 16:00 · Töölö Bakery's cut-off (earliest of 2) · 1 h 20 min left")).toBeVisible();
+  });
+
+  it("says less than a minute, not 0 min, in the last minute before the cut-off", () => {
+    render(<ApprovalCard
+      request={{ ...approval, cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: "Valio" }] }}
+      order={confirmedOrder}
+      now={new Date("2026-11-15T16:59:30+02:00")}
+    />);
+    expect(screen.getByText("Approve before Sun 15 Nov 17:00 · Valio's cut-off · Less than 1 min left")).toBeVisible();
+  });
+
+  it("names no supplier when no supplier block names the line", () => {
+    render(<ApprovalCard
+      request={{ ...approval, cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: null }] }}
+      order={confirmedOrder}
+      now={new Date("2026-11-15T12:00:00+02:00")}
+    />);
+    expect(screen.getByText("Approve before Sun 15 Nov 17:00")).toBeVisible();
+  });
+
+  it("warns when the cut-off has passed and shows nothing when all cut-offs are null", () => {
+    const passed = render(<ApprovalCard
+      request={{ ...approval, cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: "Valio" }] }}
+      order={confirmedOrder}
+      now={new Date("2026-11-15T17:00:00+02:00")}
+    />);
+    expect(screen.getByText("The cut-off has passed · Valio's cut-off")).toHaveClass("hatch", "text-warning");
+    expect(screen.getByRole("button", { name: "Approve €2,210.41 incl VAT" })).toBeEnabled();
+    passed.unmount();
+
+    render(<ApprovalCard
+      request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: "Valio" }] }}
+      order={confirmedOrder}
+    />);
+    expect(screen.queryByText(/Approve before|cut-off has passed/)).not.toBeInTheDocument();
+  });
+
+  it("hides the cut-off on a decided card", () => {
+    render(<ApprovalCard
+      request={{
+        ...approval,
+        status: "APPROVED",
+        cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: "Valio" }],
+      }}
+      order={confirmedOrder}
+    />);
+    expect(screen.queryByText(/Approve before|cut-off has passed/)).not.toBeInTheDocument();
+  });
+
+  it("refreshes the countdown once a minute and clears its timer", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-15T15:40:00+02:00"));
+    const clearInterval = vi.spyOn(window, "clearInterval");
+    try {
+      const card = render(<ApprovalCard
+        request={{ ...approval, cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: "Valio" }] }}
+        order={confirmedOrder}
+      />);
+      expect(screen.getByText(/1 h 20 min left/)).toBeVisible();
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(screen.getByText(/1 h 19 min left/)).toBeVisible();
+      card.unmount();
+      expect(clearInterval).toHaveBeenCalled();
+    } finally {
+      clearInterval.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("starts compact: title and total show, the details open on Inspect (#1142)", async () => {
+    render(<ApprovalCard request={{ ...approval, status: "REJECTED" }} order={confirmedOrder} />);
     expect(screen.getByText(approval.summary)).toBeInTheDocument();
     expect(screen.queryByText("What to check")).not.toBeInTheDocument();
-    const toggle = screen.getByRole("button", { name: "Show details" });
+    const toggle = screen.getByRole("button", { name: "Inspect" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(toggle);
     expect(screen.getByText("What to check")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hide details" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Inspect" })).toHaveAttribute("aria-expanded", "true");
   });
 
   it("shows who asked and when when both are known", () => {
@@ -56,7 +194,7 @@ describe("ApprovalCard", () => {
     )).toBeVisible();
   });
 
-  it.each([false, true])("names suppliers that must confirm without changing Approve when stock is unconfirmed: %s", (unconfirmed) => {
+  it.each([false, true])("names suppliers that must confirm without changing Approve when stock is unconfirmed: %s", async (unconfirmed) => {
     const order = structuredClone(confirmedOrder);
     if (unconfirmed) order.lines[0].offer.availableAmount = 999999;
     const withoutNotice = { ...approval, suppliersToConfirm: [] };
@@ -73,22 +211,25 @@ describe("ApprovalCard", () => {
         order={order}
       />,
     );
+    expect(screen.getByText("Leipomo Demo must confirm")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     const checks = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
     expect(within(checks).getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
     expect((screen.getByRole("button", { name: /^Approve/ }) as HTMLButtonElement).disabled).toBe(disabledWithoutNotice);
   });
 
-  it("says the order is sent and waits for the supplier, with no kitchen setting (Aron, 2026-11-14)", () => {
+  it("says the order is sent and waits for the supplier, with no kitchen setting (Aron, 2026-11-14)", async () => {
     const request = {
       ...approval,
       suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
     };
     render(<ApprovalCard request={request} order={confirmedOrder} />);
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     expect(screen.getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
     expect(screen.queryByText(/before this order can be approved/)).toBeNull();
   });
 
-  it("shows the gateway's manual-supplier confirmation reason as sent under What to check", () => {
+  it("shows the gateway's manual-supplier confirmation reason as sent under What to check", async () => {
     const reason =
       "Töölö Bakery is a price list the kitchen entered: its stock is not known until the supplier confirms. You may approve it; the order then waits for the supplier's confirmation (call or e-mail them).";
     render(
@@ -97,7 +238,7 @@ describe("ApprovalCard", () => {
         order={orders.needsApproval}
       />,
     );
-
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     const checks = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
     expect(within(checks).getByText(reason)).toBeVisible();
   });
@@ -113,7 +254,10 @@ describe("ApprovalCard", () => {
         listAddableProducts={listAddableProducts}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Show order lines" }));
+    await user.click(screen.getByRole("button", { name: "Inspect" }));
+    // The addable list is asked for only once Add products is open.
+    expect(listAddableProducts).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Add products" }));
     await waitFor(() => expect(listAddableProducts).toHaveBeenCalledTimes(1));
     listAddableProducts.mockClear();
     await user.type(screen.getByLabelText("Search products"), "Arla 1 L");
@@ -129,36 +273,45 @@ describe("ApprovalCard", () => {
     const order = structuredClone(confirmedOrder);
     Object.assign(order.lines[0].offer, { availableAmount: amount });
     render(<ApprovalCard request={approval} order={order} onApprove={onApprove} />);
-    expect(screen.getByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
+    // Compact: a chip says who must confirm; the full sentence is in Inspect and in the confirmation.
+    expect(screen.getByText("Valio must confirm 1")).toBeVisible();
     expect(screen.queryByText(/approval is available once stock is confirmed/)).toBeNull();
     const approve = screen.getByRole("button", { name: /^Approve/ });
     expect(approve).toBeEnabled();
     expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
     await user.click(approve);
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    expect(within(dialog).getByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
     await user.click(within(dialog).getByRole("button", { name: /^Yes, approve/ }));
     expect(onApprove).toHaveBeenCalledTimes(1);
   });
 
   it("still holds approval when the order lines are unavailable", () => {
     render(<ApprovalCard request={approval} order={{ ...confirmedOrder, lines: [] }} />);
-    expect(screen.getByText("Order details are unavailable. Reload them before approving.")).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
+    const reason = "Order details are unavailable. Reload them before approving.";
+    expect(screen.getByText(reason)).toBeVisible();
+    const button = screen.getByRole("button", { name: "Approve" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription(reason);
   });
 
-  it("lists what to check and never says an order can go without approval", () => {
+  it("lists what to check and never says an order can go without approval", async () => {
     render(<ApprovalCard request={approval} order={confirmedOrder} />);
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     expect(screen.getByRole("heading", { name: "What to check" })).toBeVisible();
     expect(screen.getByText("3 % fat instead of 0 % in the first choice.")).toBeVisible();
     expect(screen.queryByText(/without approval/)).not.toBeInTheDocument();
   });
 
-  it("shows missing allergen data under what to check", () => {
+  it("shows missing allergen data under what to check", async () => {
     const unknownAllergens = mapApproval({
       ...proposal,
       lines: [{ ...proposal.lines[0], reason_codes: ["ALLERGEN_DATA_MISSING"] }],
     });
     render(<ApprovalCard request={unknownAllergens} order={confirmedOrder} />);
+    // Short at the top of the compact card, in full under Inspect.
+    expect(screen.getByText("Allergen data missing", { selector: "li" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     const check = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
     expect(within(check).getByText("Allergen data missing")).toBeVisible();
     expect(
@@ -169,7 +322,18 @@ describe("ApprovalCard", () => {
   it("blocks missing order details", () => {
     render(<ApprovalCard request={approval} />);
     expect(screen.getByText(/Order details are unavailable/)).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+  });
+
+  it("keeps an enabled total but omits it from a button disabled for a stated reason", () => {
+    const reason = "Your account cannot approve or reject orders.";
+    const { rerender } = render(<ApprovalCard request={approval} order={confirmedOrder} />);
+    expect(screen.getByRole("button", { name: "Approve €2,210.41 incl VAT" })).toBeEnabled();
+    rerender(<ApprovalCard request={approval} order={confirmedOrder} approvalBlockedReason={reason} />);
+    const approve = screen.getByRole("button", { name: "Approve" });
+    expect(approve).toBeDisabled();
+    expect(approve).toHaveAccessibleDescription(reason);
+    expect(screen.getByText("€2,210.41", { selector: "dd" })).toBeVisible();
   });
 
   it("rechecks the order while the confirmation dialog is open", async () => {
@@ -265,6 +429,7 @@ describe("ApprovalCard", () => {
     ["CLOSING_PASSED", "The order cut-off for this line has passed."],
     ["LINE_UNAVAILABLE", "This product cannot be ordered now."],
     ["EMPTY_PROPOSAL", "Every line would be removed: reject the proposal instead."],
+    ["PROPOSAL_NOT_FOUND", "This proposal could not be found in this kitchen."],
     ["ROLE_REQUIRED", "Your role cannot change proposals."],
   ])("explains a refused %s change next to the controls without changing the basket", async (code, message) => {
     const user = userEvent.setup();
@@ -277,13 +442,13 @@ describe("ApprovalCard", () => {
         listAddableProducts={vi.fn().mockResolvedValue([])}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Show order lines" }));
+    await user.click(screen.getByRole("button", { name: "Inspect" }));
     const quantity = screen.getAllByRole("spinbutton", { name: /^Quantity for / })[0];
     const originalQuantity = (quantity as HTMLInputElement).valueAsNumber;
 
     await user.click(screen.getAllByRole("button", { name: /^Remove / })[0]);
 
-    const orderSection = screen.getByRole("button", { name: "Hide order lines" }).closest("section")!;
+    const orderSection = screen.getByRole("region", { name: "Order lines" });
     expect(await within(orderSection).findByRole("alert")).toHaveTextContent(message);
     expect(within(orderSection).getByRole("alert")).toHaveTextContent("The proposal is unchanged.");
     expect(quantity).toHaveValue(originalQuantity);

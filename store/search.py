@@ -189,7 +189,7 @@ def vector_filter(filters: dict | None = None, kitchen_id: str | None = None) ->
         clauses += [{"net_content.unit": size["unit"]},
                     {"net_content.value": {"$gte": size["value"] * 0.99,
                                            "$lte": size["value"] * 1.01}}]
-    codes = allergen_codes(filters.get("exclude_allergens"))
+    codes = _excluded_codes(filters.get("exclude_allergens"))  # the group rule, as text search
     if codes:
         strict = filters.get("allergen_strictness") == "strict"
         for level in ["contains", "may_contain"] + (["undeclared"] if strict else []):
@@ -291,6 +291,8 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
                  for side in (doc.pop("fusion", None) or {}).get("details", [])}
         if ranks.get("vector") and not ranks.get("text"):
             doc["match_reasons"].append("similar meaning, no word match")
+        # How the row was found (#1382): a text search finds by words only.
+        doc["matched_by"] = ("both" if ranks.get("text") else "meaning") if ranks.get("vector") else "words"
         rows.append(doc)
     return rows
 

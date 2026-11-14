@@ -5,6 +5,9 @@ stock, so no Approve button worked. The engine already knew the part Valio confi
 (`partial_fill.now`); it was read-only. It is now an option a person can choose and approve.
 """
 
+import pytest
+
+from gateway import signing
 from gateway.tests.test_gateway_app import AGENT, HUMAN, K, env, milk  # noqa: F401 (fixture)
 
 
@@ -115,16 +118,44 @@ def test_a_decided_proposal_cannot_be_changed(env):
     assert r.status_code == 409 and r.json()["error"]["code"] == "NOT_PENDING"
 
 
-def test_when_the_confirmed_stock_is_gone_the_choice_is_refused_and_nothing_changes(env):
+def _set_stock(fake, product_id, amount):
+    for product in fake.avail_data["products"]:
+        if product["productId"] == product_id:
+            for line in product.get("scheduleLines", []):
+                line["availableAmount"] = amount
+
+
+def test_a_choice_with_unknown_stock_follows_the_approve_rule(env):
+    """#1313: since #1221 a person's approve places unknown stock and marks it; choosing an
+    option whose fresh stock became unknown does the same, it is not refused."""
+    client, fake, db = env
+    p = milk(client, quantity="1000")
+    option = confirmed(p)
+    _set_stock(fake, "462775", 999999)                             # Valio no longer reports the stock
+    r = choose(client, p, option["offer_id"])
+    assert r.status_code == 200, r.text
+    chosen = r.json()
+    assert [(ln["product_id"], ln["quantity"], ln["unknown_stock"]) for ln in chosen["lines"]] == [
+        ("462775", "51", True)]
+    assert any(reason.startswith("Valio must confirm stock for: ") for reason in chosen["mandate"]["reasons"])
+    assert db.orders.count_documents({}) == 0                      # nothing approved, nothing sent
+    ok = approve(client, chosen)
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["supplier_must_confirm"] == ["sup-valio"]
+    claims = signing.verify(ok.json()["receipt"], signing.jwks(db))
+    assert claims["supplier_must_confirm"] == ["sup-valio"]
+    assert [(ln["product_id"], ln["stock"]) for ln in claims["lines"]] == [("462775", "unknown")]
+
+
+@pytest.mark.parametrize("amount", [0, None])
+def test_when_the_confirmed_stock_is_gone_the_choice_is_refused_and_nothing_changes(env, amount):
+    """Empty, null or zero is not available (Valio, 14 Nov): still refused."""
     client, fake, _ = env
     p = milk(client, quantity="1000")
     option = confirmed(p)
-    for product in fake.avail_data["products"]:                    # Valio no longer reports the stock
-        if product["productId"] == "462775":
-            for line in product.get("scheduleLines", []):
-                line["availableAmount"] = 999999
+    _set_stock(fake, "462775", amount)
     r = choose(client, p, option["offer_id"])
-    assert r.status_code == 409 and r.json()["error"]["code"] == "STOCK_UNKNOWN"
+    assert r.status_code == 409 and r.json()["error"]["code"] == "OPTION_UNAVAILABLE", r.text
     after = client.get(f"{K}/proposals/{p['proposal_id']}", headers=HUMAN).json()
     assert after["offer_id"] == p["offer_id"]                      # it keeps the basket it had
 

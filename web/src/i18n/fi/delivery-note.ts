@@ -28,7 +28,7 @@ export default {
   "{count} cases short: {amount} to claim from {supplier}": "{count} laatikkoa puuttuu: {amount} reklamoitavaa, toimittaja {supplier}",
   "{count} {unit} short: {amount} to claim from {supplier}": "{count} {unit} puuttuu: {amount} reklamoitavaa, toimittaja {supplier}",
   "{count} lines short or missing: {amount} to claim from {supplier}": "{count} riviä vajaana tai puuttuu: {amount} reklamoitavaa, toimittaja {supplier}",
-  "{product} ({code}): {status}, ordered {ordered}, missing {missing}, {price} each = {value}": "{product} ({code}): {status}, tilattu {ordered}, puuttuu {missing}, {price} / kpl = {value}",
+  "{product} ({code}): {status}, ordered {ordered}, missing {missing}, {price} each = {value}": "{product} ({code}): {status}, tilattu {ordered}, puuttuu {missing}, á {price} = {value}",
   "value unknown": "arvo ei tiedossa",
   "Claim for a short delivery to {supplier}": "Reklamaatio vajaasta toimituksesta: {supplier}",
   "Order: {id}": "Tilaus: {id}",

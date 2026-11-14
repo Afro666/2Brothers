@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { type FormEvent, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -73,7 +74,8 @@ export function ApproveChatSection() {
   // The open demo's person has no email: everyone is the same demo approver, so no one person (#1052).
   const openDemo = session?.kind === "human" && !session.email;
   const canApprove = session?.canApprove === true;
-  const canCreate = canApprove && !openDemo;
+  const createServed = !api.live || api.live.has("createApprovalToken");
+  const canCreate = canApprove && !openDemo && createServed;
   const tokens = useAsync(() => api.listApprovalTokens(), [api]);
   const [hours, setHours] = useState(String(DEFAULT_HOURS));
   const [created, setCreated] = useState<CreatedApprovalToken | null>(null);
@@ -143,14 +145,23 @@ export function ApproveChatSection() {
         {openDemo ? (
           <Alert data-testid="approve-chat-open-demo">
             <AlertTitle>{t("Not available in the open demo")}</AlertTitle>
-            <AlertDescription>
-              {t(
-                "A personal approval token stands for one person. In the open demo everyone is the same demo approver, so there is no one person to give it to. Sign in with your own approver account to create one.",
-              )}
+            <AlertDescription className="space-y-2">
+              <p>
+                {t(
+                  "A personal approval token stands for one person. In the open demo everyone is the same demo approver, so there is no one person to give it to. Sign in with your own approver account to create one.",
+                )}
+              </p>
+              <Link to="/sign-in" className="inline-block underline underline-offset-4">
+                {t("Sign in")}
+              </Link>
             </AlertDescription>
           </Alert>
         ) : !canApprove ? (
           <p className="text-sm text-muted-foreground">{t("Only an approver can create an approval token.")}</p>
+        ) : !createServed ? (
+          <p role="alert" className="text-sm text-destructive">
+            {t("The gateway does not serve approval token creation.")}
+          </p>
         ) : null}
 
         {created ? (

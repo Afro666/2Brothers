@@ -46,6 +46,10 @@ export function formatNumber(value: number): string {
   return num[getAppearance().numberFormat].format(value);
 }
 
+export function shortOrderId(id: string): string {
+  return id.length > 12 ? `${id.slice(0, 8)}…` : id;
+}
+
 /** Units a kitchen weighs or measures; every other unit (PCS, ST, KI, ...) is counted. */
 const MEASURED_UNITS = new Set(["KG", "G", "L", "DL", "CL", "ML"]);
 

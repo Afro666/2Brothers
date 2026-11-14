@@ -79,9 +79,11 @@ def test_finnish_numeric_formatting_and_english_grouping_keep_value():
     assert '1000.50' in checked_reply(reply, payload['facts'])
 
 
-def test_dotted_product_names_are_literal_text_not_invalid_decimals():
-    payload = context(PROPOSAL, {'milk': 'Milk 12.3.4'}, 'en')
-    assert 'Milk 12.3.4' in checked_reply(reply_for(payload), payload['facts'])
+@pytest.mark.parametrize('name', ['Milk 12.3.4', 'Milk 12.11.2026 1 L'])
+def test_dotted_product_names_are_literal_text_not_invalid_decimals(name):
+    numbers(name)  # must not raise
+    payload = context(PROPOSAL, {'milk': name}, 'en')
+    assert name in checked_reply(reply_for(payload), payload['facts'])
 
 
 def test_shortfall_and_unknown_stock_are_both_required_in_one_warning():

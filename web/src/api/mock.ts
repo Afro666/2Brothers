@@ -1,4 +1,4 @@
-import type { Api, AuditActor, AuditChainRow, ProductTemperature } from "@/api/types";
+import type { Api, AuditActor, AuditChainRow, ProductTemperature, ProposalExplanation } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { GENESIS, KITCHEN_ID, mapChainCheck, rowHash, verifyRows } from "@/api/audit-chain";
 import { nameProducts } from "@/api/map";
@@ -11,11 +11,14 @@ import { createOffersMock } from "@/api/mock-offers";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
 import { createRecallMock } from "@/api/mock-recalls";
 import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
+import { menuPlanApproval, menuPlanOrder } from "@/mocks/menu-plan-case";
 import { sampleReceipt } from "@/mocks/receipt";
 import { listBrandLogosMock } from "@/api/mock-brand-logos";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import { readShelfPhotoMock } from "@/api/mock-shelf";
 import { readMenuPhotoMock } from "@/api/mock-menu-photo";
+import { readPriceListPhotoMock } from "@/api/mock-price-list";
+import { readLabelPhotoMock } from "@/api/mock-label-photo";
 import { createMockAuth } from "@/api/mock-auth";
 import { createKitchenMock } from "@/api/mock-kitchen";
 import { createNotificationsMock } from "@/api/mock-notifications";
@@ -24,6 +27,7 @@ import { createPrivacyMock } from "@/api/mock-privacy";
 import { createTokensMock } from "@/api/mock-tokens";
 import { createApprovalTokensMock } from "@/api/mock-approval-tokens";
 import { modelUsageMock } from "@/api/mock-usage";
+import { atlasFactsMock } from "@/api/mock-atlas";
 import { createWordsMock } from "@/api/mock-words";
 import {
   approval as seedApproval,
@@ -40,6 +44,7 @@ import {
 } from "@/mocks/milk-case";
 import { formatEur } from "@/lib/format";
 import { isPassed, isUnknownStock } from "@/lib/format";
+import { dropKeptAnswers } from "@/lib/use-async";
 import type {
   AddableProduct,
   ApprovalRequest,
@@ -70,9 +75,17 @@ export interface MockApi extends Api {
 
 export interface MockApiOptions {
   signedOut?: boolean;
+  /**
+   * Sample explanations by proposal id and language (#1173). A proposal without one answers
+   * null, as the sample data did before the explanation existed.
+   */
+  explanations?: Record<string, Partial<Record<"en" | "fi", ProposalExplanation>>>;
 }
 
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
+/** `VITE_MOCK_MENU_PLAN=true` adds a 14-line menu-plan proposal to the mock inbox. */
+const MENU_PLAN = import.meta.env.VITE_MOCK_MENU_PLAN === "true";
+
 export function createMockApi(options: MockApiOptions = {}): MockApi {
   const unknownOrder: Order = {
     ...structuredClone(seedOrders.placed),
@@ -116,12 +129,20 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       coffeeApproval,
       unknownApproval,
       supplierConfirmationApproval,
+      // A long menu-plan order, only on request: the default inbox and its counts stay as they are.
+      ...(MENU_PLAN ? [menuPlanApproval] : []),
     ].map((row) => [row.id, structuredClone(row)]),
   );
   const demoOrders = new Map(
-    [placedOrder, seedOrders.needsApproval, confirmedDemoOrder, coffeeOrder, unknownOrder, supplierConfirmationOrder].map(
-      (row) => [row.id, structuredClone(row)],
-    ),
+    [
+      placedOrder,
+      seedOrders.needsApproval,
+      confirmedDemoOrder,
+      coffeeOrder,
+      unknownOrder,
+      supplierConfirmationOrder,
+      ...(MENU_PLAN ? [menuPlanOrder] : []),
+    ].map((row) => [row.id, structuredClone(row)]),
   );
   const resolutions = new Map<string, OrderResolution>([
     [
@@ -247,20 +268,22 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
   function resimulate(lines: OrderLine[], proposalOrder: Order): Order & { totalExVat: number } {
     let exVat = 0;
     let inclVat = 0;
-    for (const line of lines) {
+    const pricedLines = lines.map((line) => {
       if (line.offer.priceExVat == null || line.offer.taxRatePercent == null) {
         throw new ApiError("PRICE_UNKNOWN", `Price for ${line.product.id} is unknown.`);
       }
       const lineEx = line.offer.priceExVat * line.quantity;
       exVat += lineEx;
       inclVat += lineEx * (1 + line.offer.taxRatePercent / 100);
-    }
+      return { ...line, lineTotal: Math.round((lineEx + Number.EPSILON) * 100) / 100 };
+    });
     const totalExVat = Math.round((exVat + Number.EPSILON) * 100) / 100;
     const totalInclVat = Math.round((inclVat + 1e-10) * 100) / 100;
     return {
       ...proposalOrder,
-      lines,
+      lines: pricedLines,
       totalExVat,
+      vat: Math.round((totalInclVat - totalExVat + Number.EPSILON) * 100) / 100,
       totalInclVat,
       mov: proposalOrder.mov && { ...proposalOrder.mov, current: totalExVat },
     };
@@ -274,7 +297,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
 
   const auth = createMockAuth(options.signedOut);
 
-  return {
+  return forgetKeptAnswersOnWrite({
     subscribeEvents() {
       return () => {};
     },
@@ -313,8 +336,11 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     // Like the gateway: only a signed-in account (it has an email) gets a personal approval token.
     ...createApprovalTokensMock(async () => (await auth.getSession())?.email ?? null),
     getModelUsage: async () => modelUsageMock(),
+    getAtlasFacts: async () => atlasFactsMock(),
     readShelfPhoto: readShelfPhotoMock,
     readMenuPhoto: readMenuPhotoMock,
+    readPriceListPhoto: readPriceListPhotoMock,
+    readLabelPhoto: readLabelPhotoMock,
     async readDeliveryNote() {
       throw new ApiError("VISION_NOT_CONFIGURED", "Delivery note reading needs the live gateway. Check the delivery by hand.");
     },
@@ -329,6 +355,9 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       const approval = approvals.get(id);
       if (!approval) throw new ApiError("NOT_FOUND", `Approval ${id} was not found.`);
       return approval;
+    },
+    async getProposalExplanation(proposalId, language) {
+      return options.explanations?.[proposalId]?.[language] ?? null;
     },
     async approve(decision, actor) {
       const current = pendingApproval(decision.approvalId, true);
@@ -445,7 +474,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
           throw new ApiError("NOT_FOUND", `Product ${change.productId} is not on the order.`);
         }
         lines = lines.filter((line) => line.product.id !== change.productId);
-        if (lines.length === 0) throw new ApiError("INVALID", "An order needs at least one line; reject it instead.");
+        if (lines.length === 0) throw new ApiError("EMPTY_PROPOSAL", "An order needs at least one line; reject it instead.");
         kind = "LINE_REMOVED";
         summary = `Removed ${change.productId}`;
       } else {
@@ -463,6 +492,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
           product,
           offer,
           quantity: change.quantity,
+          lineTotal: Math.round((offer.priceExVat * change.quantity + Number.EPSILON) * 100) / 100,
           why: "Added by a person reviewing the Buyer's proposal.",
         });
         to = change.quantity;
@@ -633,5 +663,21 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     async getMandate() {
       return mandate;
     },
-  };
+  });
+}
+
+/** Methods that only read: every other method changes the demo state. */
+const READ_ONLY = /^(get|list|search|lookup|subscribe|count|verify|read)[A-Z]/;
+
+/** Like `beforeWrite` in api/http.ts: every mock write forgets the kept `useAsync` answers first. */
+function forgetKeptAnswersOnWrite<T extends object>(api: T): T {
+  const wrapped = { ...api } as Record<string, unknown>;
+  for (const [name, method] of Object.entries(api)) {
+    if (typeof method !== "function" || READ_ONLY.test(name)) continue;
+    wrapped[name] = (...args: unknown[]) => {
+      dropKeptAnswers();
+      return (method as (...args: unknown[]) => unknown).apply(wrapped, args);
+    };
+  }
+  return wrapped as T;
 }

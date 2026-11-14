@@ -60,6 +60,9 @@ export interface Product {
   deliveryReliability: number | null;
 }
 
+/** Where a delivery fact comes from (#1453): Valio, the supplier's own terms, or demo values. */
+export type DeliverySource = "valio" | "supplier_terms" | "demo";
+
 /** Price + availability for one product and one requested date (an offer). */
 export interface Offer {
   productId: ProductCode;
@@ -81,6 +84,14 @@ export interface Offer {
   /** Order cut-off for `availableDate`. Can already be in the past. */
   closingTime: string | null;
   salesBlock: boolean;
+  /** Where `closingTime` came from (#1453); absent or null when not said. */
+  cutoffSource?: DeliverySource | null;
+  /** Days from order to delivery (#1453); null when no source knows it. */
+  leadTimeDays?: number | null;
+  leadTimeSource?: DeliverySource | null;
+  /** Delivered versus ordered, 0..1, for this line (#1453). */
+  deliveryReliability?: number | null;
+  reliabilitySource?: DeliverySource | null;
 }
 
 export type OrderStatus =
@@ -105,6 +116,7 @@ export interface OrderLine {
   offer: Offer;
   /** In the product's sales unit. Computed by the engine, never by the model. */
   quantity: number;
+  lineTotal: number | null;
   /** Deterministic one-sentence reason from the engine. */
   why: string;
 }
@@ -126,6 +138,8 @@ export interface Order {
   lines: OrderLine[];
   supplierMustConfirm: string[];
   totalExVat: number | null;
+  vat: number | null;
+  deliveryFee: number | null;
   totalInclVat: number;
   /** null = the supplier's delivery terms are not known. */
   mov: MovState | null;
@@ -147,6 +161,8 @@ export interface OrderReceipt {
   total: number | null;
   /** `supplier_outcome` claim: `NOT_SENT` today; null when the claim is absent. */
   supplierOutcome: string | null;
+  /** `supplier_note` claim: the gateway's one-line explanation; null when absent or empty. */
+  supplierNote: string | null;
 }
 
 export type OrderSendOutcome = "CONFIRMED" | "NOT_SENT" | "UNCONFIRMED" | "SENT_READ_FAILED";
@@ -213,6 +229,8 @@ export interface ApprovalRequest {
   totalInclVat: number;
   reasons: MandateReason[];
   suppliersToConfirm: { supplierId: string; name: string }[];
+  /** Proposal-line cut-offs and the supplier block each line belongs to. */
+  cutoffs?: { closingTime: OrderLine["offer"]["closingTime"]; supplierName: string | null }[];
   /** Only PENDING can be approved; IN_PROGRESS and BLOCKED_BY_RECALL wait, they are not decided. */
   status: "PENDING" | "IN_PROGRESS" | "BLOCKED_BY_RECALL" | "APPROVED" | "REJECTED";
   /** The baskets the engine offers for this request; absent or empty when it offers one. */
@@ -249,6 +267,9 @@ export interface ProposalOptionLine {
   productId: ProductCode;
   /** null when the API names only the product id. */
   productName: string | null;
+  /** The Finnish name and the brand (#1130), for the kind picture and the brand logo; null when unknown. */
+  productNameFi: string | null;
+  brand: string | null;
   quantity: number;
   unit: string;
   /** Ex VAT, per `unit`. */
@@ -275,7 +296,13 @@ export interface ProposalOption {
   stockConfirmed: boolean;
   /** true = the order cut-off is missed; null = the API did not say. */
   cutoffPassed: boolean | null;
+  /** The earliest line cut-off (#1453); null when no line says. */
   cutoffAt: string | null;
+  cutoffSource?: DeliverySource | null;
+  /** The longest line lead time in days (#1453). */
+  leadTimeDays?: number | null;
+  leadTimeSource?: DeliverySource | null;
+  reliabilitySource?: DeliverySource | null;
   /** Delivered vs ordered, 0..1, of the weakest line. */
   deliveryReliability: number | null;
   /** Product-group average (not this product's own figure): lowest and highest line. */
@@ -339,6 +366,10 @@ export interface AuditEvent {
   /** Why, in the words of the engine, the gateway or the human. */
   reason: string;
   orderId?: string;
+  /** Run, offer, proposal and order ids that connect the steps of one request. */
+  groupIds?: string[];
+  /** Raw fields from the gateway, kept behind the row's Details disclosure. */
+  details?: string;
 }
 
 /**

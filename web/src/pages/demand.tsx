@@ -18,6 +18,7 @@ import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
 import { isValidWeek, isoWeekOf, shiftWeek, weekDates, weekRangeLabel } from "@/lib/week";
 import type { BuyingNote, ShortageRisk, SupplierDemandRow } from "@/types";
+import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
 
 /** Worst first: a short week matters more than an unmeasured one. */
 const RISK_ORDER: Record<ShortageRisk, number> = { SHORT: 0, UNKNOWN: 1, AT_RISK: 2, COVERED: 3 };
@@ -37,6 +38,10 @@ interface ProductGroup {
   unit: string;
   rows: SupplierDemandRow[];
   worst: ShortageRisk;
+  shortDays: number;
+  totalBuy: number | null;
+  unknownBuyDays: number;
+  maxKitchens: number;
 }
 
 export function riskSummary(
@@ -62,6 +67,10 @@ export function groupByProduct(rows: SupplierDemandRow[]): ProductGroup[] {
     if (current) {
       current.rows.push(row);
       if (RISK_ORDER[row.risk] < RISK_ORDER[current.worst]) current.worst = row.risk;
+      if (row.risk === "SHORT") current.shortDays += 1;
+      if (row.suggestedBuy == null) current.unknownBuyDays += 1;
+      else current.totalBuy = (current.totalBuy ?? 0) + row.suggestedBuy;
+      current.maxKitchens = Math.max(current.maxKitchens, row.kitchens);
     } else {
       groups.set(row.productId, {
         productId: row.productId,
@@ -69,13 +78,20 @@ export function groupByProduct(rows: SupplierDemandRow[]): ProductGroup[] {
         unit: row.unit,
         rows: [row],
         worst: row.risk,
+        shortDays: row.risk === "SHORT" ? 1 : 0,
+        totalBuy: row.suggestedBuy,
+        unknownBuyDays: row.suggestedBuy == null ? 1 : 0,
+        maxKitchens: row.kitchens,
       });
     }
   }
+  const band = (group: ProductGroup) => (group.shortDays > 0 ? 0 : group.worst === "UNKNOWN" ? 1 : 2);
   return [...groups.values()]
     .map((group) => ({ ...group, rows: [...group.rows].sort((a, b) => a.date.localeCompare(b.date)) }))
     .sort(
       (a, b) =>
+        band(a) - band(b) ||
+        (a.shortDays > 0 && b.shortDays > 0 ? (b.totalBuy ?? -1) - (a.totalBuy ?? -1) : 0) ||
         RISK_ORDER[a.worst] - RISK_ORDER[b.worst] ||
         a.productName.localeCompare(b.productName) ||
         a.productId.localeCompare(b.productId),
@@ -133,6 +149,7 @@ function BuyingNoteBox({ note }: { note: BuyingNote }) {
         ))}
       </ul>
       <p className="text-xs text-muted-foreground">
+        <NemotronMark when={isNemotron(model)} />
         {t("Written by {model}. Every number is checked against its row in the table.", { model })}
       </p>
     </section>
@@ -156,39 +173,81 @@ async function loadWeek(api: Api, week: string, t: ReturnType<typeof useT>): Pro
   };
 }
 
-/** One product's days, in their own body so its name heads the row group. */
-function ProductSection({ group }: { group: ProductGroup }) {
+function ProductSummary({ group }: { group: ProductGroup }) {
   const t = useT();
   return (
-    <TableBody data-product-section={group.productId}>
+    <span className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+      <ProductThumb en={group.productName} size="sm" />
+      <span className="block min-w-40 flex-1">
+        <span className="block font-medium break-words">{group.productName}</span>
+        <span className="block text-xs text-muted-foreground">{group.productId}</span>
+      </span>
+      <RiskBadge risk={group.worst} />
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        {group.shortDays > 0 ? (
+          <span className="font-medium text-foreground">
+            {t("Short on {count} of {days} days", {
+              count: formatNumber(group.shortDays),
+              days: formatNumber(group.rows.length),
+            })}
+          </span>
+        ) : null}
+        {group.totalBuy != null ? (
+          <span className="font-medium text-foreground tabular-nums">
+            {t("Buy {amount}", { amount: `${formatNumber(group.totalBuy)} ${group.unit}` })}
+          </span>
+        ) : null}
+        {group.unknownBuyDays > 0 ? (
+          <span className="text-warning">
+            {t("+ days with an unknown amount: {count}", { count: formatNumber(group.unknownBuyDays) })}
+          </span>
+        ) : null}
+        <span className="tabular-nums">
+          {t("kitchens: up to {count}", { count: formatNumber(group.maxKitchens) })}
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/** One product's days, in their own body so its name heads the row group. */
+function ProductSection({
+  group,
+  open,
+  hidden = false,
+  onToggle,
+}: {
+  group: ProductGroup;
+  open: boolean;
+  hidden?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <TableBody data-product-section={group.productId} hidden={hidden}>
       <TableRow className="border-b-0 bg-muted/40 hover:bg-muted/40">
         <TableHead scope="rowgroup" colSpan={6} className="py-2 align-top font-normal whitespace-normal">
-          <div className="flex items-start gap-2">
-            <ProductThumb en={group.productName} size="sm" />
-            <div className="min-w-0">
-              <div className="font-medium break-words">{group.productName}</div>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span>{group.productId}</span>
-                <span aria-hidden>·</span>
-                <span>{t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })}</span>
-                <span aria-hidden>·</span>
-                <span>{t("{count} days", { count: group.rows.length })}</span>
-              </div>
-            </div>
-          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto w-full justify-start px-2 py-1 text-left whitespace-normal"
+            aria-expanded={open}
+            onClick={onToggle}
+          >
+            <ProductSummary group={group} />
+          </Button>
         </TableHead>
       </TableRow>
       {group.rows.map((row) => (
-        <DemandRow key={row.date} row={row} />
+        <DemandRow key={row.date} row={row} hidden={!open} />
       ))}
     </TableBody>
   );
 }
 
-function DemandRow({ row }: { row: SupplierDemandRow }) {
+function DemandRow({ row, hidden }: { row: SupplierDemandRow; hidden: boolean }) {
   const t = useT();
   return (
-    <TableRow>
+    <TableRow hidden={hidden}>
       <TableCell>{formatDate(row.date)}</TableCell>
       <TableCell className="text-right tabular-nums">
         {formatNumber(row.forecastDemand)} {row.unit}
@@ -267,21 +326,28 @@ function KitchenDisclosure({ row }: { row: SupplierDemandRow }) {
   );
 }
 
-function MobileGroup({ group }: { group: ProductGroup }) {
+function MobileGroup({
+  group,
+  open,
+  onToggle,
+}: {
+  group: ProductGroup;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const t = useT();
   return (
     <li className="space-y-3 py-4">
-      <div className="flex items-start gap-2">
-        <ProductThumb en={group.productName} size="sm" />
-        <div className="min-w-0">
-          <div className="font-medium break-words">{group.productName}</div>
-          <div className="text-xs text-muted-foreground">
-            {group.productId} · {t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })} ·{" "}
-            {t("{count} days", { count: group.rows.length })}
-          </div>
-        </div>
-      </div>
-      <ul className="space-y-3">
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-auto w-full justify-start px-2 py-1 text-left whitespace-normal"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <ProductSummary group={group} />
+      </Button>
+      <ul className="space-y-3" hidden={!open}>
         {group.rows.map((row) => (
           <li key={row.date} className="rounded-md border p-3 text-sm">
             <div className="flex items-center justify-between gap-3">
@@ -316,6 +382,168 @@ function MobileGroup({ group }: { group: ProductGroup }) {
         ))}
       </ul>
     </li>
+  );
+}
+
+type DemandFilter = "ALL" | "SHORT" | "UNKNOWN" | "COVERED";
+
+function DemandGroups({ groups }: { groups: ProductGroup[] }) {
+  const t = useT();
+  const [filter, setFilter] = useState<DemandFilter>("ALL");
+  const [openProducts, setOpenProducts] = useState<Set<string>>(() => new Set());
+  const [coveredOpen, setCoveredOpen] = useState(false);
+  const shortGroups = groups.filter((group) => group.shortDays > 0);
+  const unknownGroups = groups.filter((group) => group.shortDays === 0 && group.worst === "UNKNOWN");
+  const coveredGroups = groups.filter((group) => group.shortDays === 0 && group.worst !== "UNKNOWN");
+  const directGroups =
+    filter === "SHORT" ? shortGroups : filter === "UNKNOWN" ? unknownGroups : filter === "ALL" ? [...shortGroups, ...unknownGroups] : [];
+  const showCovered = filter === "ALL" || filter === "COVERED";
+  const options = [
+    { id: "ALL" as const, label: t("All ({n})", { n: formatNumber(groups.length) }) },
+    { id: "SHORT" as const, label: t("Short ({n})", { n: formatNumber(shortGroups.length) }) },
+    { id: "UNKNOWN" as const, label: t("Unknown ({n})", { n: formatNumber(unknownGroups.length) }) },
+    { id: "COVERED" as const, label: t("Covered ({n})", { n: formatNumber(coveredGroups.length) }) },
+  ];
+
+  function toggleProduct(productId: string) {
+    setOpenProducts((current) => {
+      const next = new Set(current);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  }
+
+  function chooseFilter(next: DemandFilter) {
+    setFilter(next);
+    if (next === "COVERED") setCoveredOpen(true);
+  }
+
+  function openAll() {
+    // Opens what the filter shows; the filter itself stays as the person set it.
+    setCoveredOpen(true);
+    setOpenProducts(new Set(groups.map((group) => group.productId)));
+  }
+
+  function closeAll() {
+    setCoveredOpen(false);
+    setOpenProducts(new Set());
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {options.map((option) => (
+            <Button
+              key={option.id}
+              type="button"
+              size="sm"
+              variant={filter === option.id ? "default" : "outline"}
+              aria-pressed={filter === option.id}
+              onClick={() => chooseFilter(option.id)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={openAll}>
+            {t("Open all")}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={closeAll}>
+            {t("Close all")}
+          </Button>
+        </div>
+      </div>
+      <Card>
+        <CardContent>
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("Date")}</TableHead>
+                  <TableHead className="text-right">{t("Forecast demand")}</TableHead>
+                  <TableHead className="text-right">{t("Kitchens")}</TableHead>
+                  <TableHead>{t("Available")}</TableHead>
+                  <TableHead>{t("Risk")}</TableHead>
+                  <TableHead className="text-right">{t("Buy")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              {directGroups.map((group) => (
+                <ProductSection
+                  key={group.productId}
+                  group={group}
+                  open={openProducts.has(group.productId)}
+                  onToggle={() => toggleProduct(group.productId)}
+                />
+              ))}
+              {showCovered && coveredGroups.length > 0 ? (
+                <TableBody data-covered-group>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead scope="rowgroup" colSpan={6} className="py-2 font-normal whitespace-normal">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-auto w-full justify-start px-2 py-1 text-left"
+                        aria-expanded={coveredOpen}
+                        onClick={() => setCoveredOpen((open) => !open)}
+                      >
+                        {t("Covered products: {count}", { count: formatNumber(coveredGroups.length) })}
+                      </Button>
+                    </TableHead>
+                  </TableRow>
+                </TableBody>
+              ) : null}
+              {showCovered
+                ? coveredGroups.map((group) => (
+                    <ProductSection
+                      key={group.productId}
+                      group={group}
+                      open={openProducts.has(group.productId)}
+                      hidden={!coveredOpen}
+                      onToggle={() => toggleProduct(group.productId)}
+                    />
+                  ))
+                : null}
+            </Table>
+          </div>
+          <ul className="divide-y md:hidden">
+            {directGroups.map((group) => (
+              <MobileGroup
+                key={group.productId}
+                group={group}
+                open={openProducts.has(group.productId)}
+                onToggle={() => toggleProduct(group.productId)}
+              />
+            ))}
+            {showCovered && coveredGroups.length > 0 ? (
+              <li className="py-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-auto w-full justify-start px-2 py-1 text-left"
+                  aria-expanded={coveredOpen}
+                  onClick={() => setCoveredOpen((open) => !open)}
+                >
+                  {t("Covered products: {count}", { count: formatNumber(coveredGroups.length) })}
+                </Button>
+                <ul className="divide-y" hidden={!coveredOpen}>
+                  {coveredGroups.map((group) => (
+                    <MobileGroup
+                      key={group.productId}
+                      group={group}
+                      open={openProducts.has(group.productId)}
+                      onToggle={() => toggleProduct(group.productId)}
+                    />
+                  ))}
+                </ul>
+              </li>
+            ) : null}
+          </ul>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -411,32 +639,7 @@ export function DemandPage() {
             ) : (
               <div className="space-y-4">
                 {note.status === "ready" && note.data ? <BuyingNoteBox note={note.data} /> : null}
-                <Card>
-                  <CardContent>
-                  <div className="hidden md:block">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>{t("Date")}</TableHead>
-                          <TableHead className="text-right">{t("Forecast demand")}</TableHead>
-                          <TableHead className="text-right">{t("Kitchens")}</TableHead>
-                          <TableHead>{t("Available")}</TableHead>
-                          <TableHead>{t("Risk")}</TableHead>
-                          <TableHead className="text-right">{t("Buy")}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      {state.data.groups.map((group) => (
-                        <ProductSection key={group.productId} group={group} />
-                      ))}
-                    </Table>
-                  </div>
-                  <ul className="divide-y md:hidden">
-                    {state.data.groups.map((group) => (
-                      <MobileGroup key={group.productId} group={group} />
-                    ))}
-                  </ul>
-                  </CardContent>
-                </Card>
+                <DemandGroups key={state.data.monday} groups={state.data.groups} />
               </div>
             )}
             <p className="text-sm text-muted-foreground">

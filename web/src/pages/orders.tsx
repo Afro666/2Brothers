@@ -6,19 +6,21 @@ import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { StatusBadge } from "@/components/purchasing/status-badge";
+import { placedStatuses } from "@/lib/order-status";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDate, formatEur } from "@/lib/format";
+import { formatDate, formatEur, shortOrderId } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { orderTitle } from "@/lib/order-title";
 import { useAsync } from "@/lib/use-async";
 import { supplierName } from "@/lib/supplier-name";
 
 export function OrdersPage() {
   const t = useT();
   const api = useApi();
-  const state = useAsync(() => api.listOrders());
-  const suppliers = useAsync(() => api.listSuppliers(), [api]);
+  const state = useAsync(() => api.listOrders(), [], { keep: "orders" });
+  const suppliers = useAsync(() => api.listSuppliers(), [api], { keep: "suppliers" });
   const supplierNames = new Map(
     suppliers.status === "ready" ? suppliers.data.map((supplier) => [supplier.id, supplier.name]) : [],
   );
@@ -48,10 +50,26 @@ export function OrdersPage() {
                       params={{ orderId: order.id }}
                       className="block space-y-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <span className="block font-semibold [overflow-wrap:anywhere]">{orderTitle(order, t)}</span>
+                          <code
+                            className="mt-1 block max-w-full font-mono text-xs break-all text-muted-foreground"
+                            title={order.id}
+                          >
+                            {shortOrderId(order.id)}
+                          </code>
+                        </div>
+                        <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                          {t("Delivery {date} · {amount} incl VAT", {
+                            date: t(formatDate(order.deliveryDate)),
+                            amount: formatEur(order.totalInclVat),
+                          })}
+                        </p>
+                      </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold">{order.id}</span>
                         <StatusBadge status={order.status} />
-                        <UrgencyBadge urgency={order.urgency} />
+                        {placedStatuses.has(order.status) ? null : <UrgencyBadge urgency={order.urgency} />}
                         {order.supplierMustConfirm.map((supplierId) => (
                           <Badge
                             key={supplierId}
@@ -62,12 +80,6 @@ export function OrdersPage() {
                           </Badge>
                         ))}
                       </div>
-                      <p className="text-sm tabular-nums text-muted-foreground">
-                        {t("Delivery {date} · {amount} incl VAT", {
-                          date: t(formatDate(order.deliveryDate)),
-                          amount: formatEur(order.totalInclVat),
-                        })}
-                      </p>
                     </Link>
                   </CardContent>
                 </Card>

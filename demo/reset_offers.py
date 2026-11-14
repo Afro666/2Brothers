@@ -25,8 +25,7 @@ from store import supplier_offers as offers
 
 def reset(db, kitchen_id: str, *, apply: bool, actor: str = "demo.reset_offers") -> dict:
     current = offers.round_of(db, kitchen_id)
-    rows = [row for row in db.supplier_offers.find({"kitchen_id": kitchen_id})
-            if int(row.get("round", 0)) == current]
+    rows = offers.list_round(db, kitchen_id, current)
     listing = [{"offer_id": row["_id"], "status": row.get("status"), "product": row.get("product_name"),
                 "requested_date": row.get("requested_date")} for row in rows]
     if not apply:

@@ -35,28 +35,36 @@ describe("orders pages", () => {
     renderApp("/orders");
 
     const row = await screen.findByRole("link", { name: /ORD-1047/ });
+    expect(within(row).getByText("Arla 1 L lactose free fat free UHT milk drink × 51 ST")).toBeVisible();
     expect(within(row).getByText("Call Töölö Bakery to confirm")).toBeVisible();
     expect(within(row).getByText("Placed", { selector: "[data-status='PLACED']" })).toBeVisible();
+    expect(within(row).queryByText("Runs out before next delivery")).not.toBeInTheDocument();
   });
 
   it("shows no supplier confirmation notice for a regular order", async () => {
     renderApp("/orders/ORD-1042");
 
-    expect(await screen.findByRole("heading", { level: 1, name: "Order ORD-1042" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Arla 1 L lactose free fat free UHT milk drink × 51 ST" }),
+    ).toBeVisible();
     expect(screen.queryByText(/Waiting for .* to confirm\. Call or e-mail them/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Call .* to confirm/)).not.toBeInTheDocument();
   });
 
-  it("shortens a long order id in the page title and keeps the full id in its title attribute", async () => {
+  it("uses the products as the title and a short selectable id as the receipt reference", async () => {
     const longId = "d2148e9a0b1c4d5e6f708192a3b4c5d6";
     const api = createMockApi();
     const getOrder = api.getOrder;
     api.getOrder = async () => ({ ...(await getOrder("ORD-1042")), id: longId });
     renderApp(`/orders/${longId}`, api);
 
-    const title = await screen.findByRole("heading", { level: 1, name: "Order d2148e9a…" });
-    expect(title).toHaveAttribute("title", longId);
-    expect(await screen.findByRole("heading", { level: 2, name: longId })).toBeVisible();
+    const title = "Arla 1 L lactose free fat free UHT milk drink × 51 ST";
+    expect(await screen.findByRole("heading", { level: 1, name: title })).toBeVisible();
+    expect(screen.getByRole("heading", { level: 2, name: title })).toBeVisible();
+    const reference = screen.getByText("d2148e9a…", { selector: "code" });
+    expect(reference).toHaveAttribute("title", longId);
+    expect(reference).toHaveClass("select-text");
+    expect(screen.queryByRole("heading", { name: longId })).not.toBeInTheDocument();
   });
 
   it("links from the order list to its detail and shows lines and filtered history", async () => {
@@ -64,7 +72,9 @@ describe("orders pages", () => {
     renderApp("/orders");
 
     await user.click(await screen.findByRole("link", { name: /ORD-1042/ }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Order ORD-1042" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Arla 1 L lactose free fat free UHT milk drink × 51 ST" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Arla 1 L lactose free fat free UHT milk drink").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("tab", { name: "History" }));
@@ -80,11 +90,13 @@ describe("orders pages", () => {
     renderApp("/orders/ORD-1042", api);
 
     const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
+    expect(within(block).getByText("Signed", { selector: ".stamp" })).toBeVisible();
     expect(within(block).getByText("Signed by the gateway. Anyone can check it with the public key.")).toBeVisible();
     expect(within(block).getByText("Approved by").nextElementSibling).toHaveTextContent("aron");
     expect(within(block).getByText("Signed total").nextElementSibling).toHaveTextContent("148.76");
     expect(within(block).getByText("Signed at").nextElementSibling).not.toHaveTextContent("unknown");
     expect(within(block).getByText("Supplier").nextElementSibling).toHaveTextContent("Nothing sent to the supplier yet");
+    expect(within(block).getByText(/Valio's API has no order endpoint/)).toBeVisible();
 
     await user.click(within(block).getByRole("button", { name: "Copy receipt" }));
     expect(writeText).toHaveBeenCalledWith(receipt!.jws);
@@ -103,12 +115,147 @@ describe("orders pages", () => {
     expect(mapReceipt(withoutClaim)?.supplierOutcome).toBeNull();
   });
 
+  it("maps the supplier note claim; an absent or empty note is null and renders nothing", async () => {
+    const api = createMockApi();
+    const order = await api.getOrder("ORD-1042");
+    expect(mapReceipt(order.receipt!.jws)?.supplierNote).toMatch(/^Valio's API has no order endpoint/);
+
+    const [header, payload, signature] = order.receipt!.jws.split(".");
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    const encode = (value: unknown) => btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    expect(mapReceipt([header, encode({ ...claims, supplier_note: "" }), signature].join("."))?.supplierNote).toBeNull();
+    delete claims.supplier_note;
+    const withoutNote = [header, encode(claims), signature].join(".");
+    expect(mapReceipt(withoutNote)?.supplierNote).toBeNull();
+
+    vi.spyOn(api, "getOrder").mockResolvedValue({ ...order, receipt: mapReceipt(withoutNote) });
+    renderApp("/orders/ORD-1042", api);
+    const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
+    expect(within(block).getByText("Supplier").nextElementSibling).toHaveTextContent("Nothing sent to the supplier yet");
+    expect(within(block).queryByText(/Valio's API has no order endpoint/)).not.toBeInTheDocument();
+  });
+
   it("says when a placed order has no signed receipt", async () => {
     renderApp("/orders/ORD-1046");
 
     const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
     expect(within(block).getByText("No signed receipt (this order is from before receipts, or signing was not possible)")).toBeVisible();
     expect(within(block).queryByRole("button", { name: "Copy receipt" })).not.toBeInTheDocument();
+    expect(within(block).queryByText("Signed", { selector: ".stamp" })).not.toBeInTheDocument();
+  });
+
+  it("shows no receipt footer before an order has been placed", async () => {
+    renderApp("/orders/ORD-1043");
+
+    expect(await screen.findByRole("heading", { level: 1, name: /Valio Eila/ })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Signed receipt" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Copy receipt")).not.toBeInTheDocument();
+  });
+
+  it("describes the gateway's generic approver as a person", async () => {
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    api.getOrder = async (id) => {
+      const order = await getOrder(id);
+      return { ...order, receipt: order.receipt ? { ...order.receipt, approvedBy: "human" } : order.receipt };
+    };
+    renderApp("/orders/ORD-1042", api);
+
+    const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
+    expect(within(block).getByText("Approved by").nextElementSibling).toHaveTextContent("a person");
+  });
+
+  it("keeps an unnamed approver unknown", async () => {
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    api.getOrder = async (id) => {
+      const order = await getOrder(id);
+      return { ...order, receipt: order.receipt ? { ...order.receipt, approvedBy: null } : order.receipt };
+    };
+    renderApp("/orders/ORD-1042", api);
+
+    const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
+    expect(within(block).getByText("Approved by").nextElementSibling).toHaveTextContent("unknown");
+  });
+
+  it("uses the order's own incl-VAT total and shows its VAT and delivery fee", async () => {
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    api.getOrder = async (id) => ({
+      ...(await getOrder(id)),
+      totalExVat: 1,
+      vat: 2,
+      deliveryFee: 3,
+      totalInclVat: 999.99,
+    });
+    renderApp("/orders/ORD-1042", api);
+
+    expect(await screen.findByText("VAT")).toBeVisible();
+    expect(screen.getByText("VAT").nextElementSibling).toHaveTextContent("€2.00");
+    expect(screen.getByText("Delivery fee").nextElementSibling).toHaveTextContent("€3.00");
+    expect(screen.getByText("Total incl VAT").nextElementSibling).toHaveTextContent("€999.99");
+  });
+
+  it("omits urgency on a placed order but keeps it on a proposal", async () => {
+    renderApp("/orders/ORD-1042");
+    expect(await screen.findByRole("heading", { level: 1, name: /Arla 1 L/ })).toBeVisible();
+    expect(screen.queryByText("Runs out before next delivery", { selector: "[data-urgency]" })).not.toBeInTheDocument();
+  });
+
+  it("order history keeps urgency on a waiting proposal and omits it on a placed order", async () => {
+    renderApp("/orders", createMockApi());
+    const placed = (await screen.findAllByText("Placed"))[0]!.closest("li")!;
+    const waiting = screen.getAllByText("Needs approval")[0]!.closest("li")!;
+    expect(placed.querySelector("[data-urgency]")).toBeNull();
+    expect(waiting.querySelector("[data-urgency]")).not.toBeNull();
+  });
+
+  it("keeps urgency on a proposal", async () => {
+    renderApp("/orders/ORD-1043");
+    expect(await screen.findByRole("heading", { level: 1, name: /Valio Eila/ })).toBeVisible();
+    expect(screen.getByText("Unknown: treat as urgent", { selector: "[data-urgency]" })).toBeVisible();
+  });
+
+  it("shows a product code only once when it is also the product name", async () => {
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    api.getOrder = async (id) => {
+      const order = await getOrder(id);
+      const [line] = order.lines;
+      return {
+        ...order,
+        lines: [{ ...line!, product: { ...line!.product, names: { en: line!.product.id } } }],
+      };
+    };
+    renderApp("/orders/ORD-1042", api);
+
+    const lines = await screen.findByRole("list", { name: "Lines" });
+    const code = (await api.getOrder("ORD-1042")).lines[0]!.product.id;
+    expect(within(lines).getAllByText(code, { exact: true })).toHaveLength(1);
+  });
+
+  it("names an unknown pack size once without removing the sales unit", async () => {
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    api.getOrder = async (id) => {
+      const order = await getOrder(id);
+      const [line] = order.lines;
+      return {
+        ...order,
+        lines: [
+          {
+            ...line!,
+            product: { ...line!.product, salesUnit: "KG", baseUnitsPerSalesUnit: null },
+          },
+        ],
+      };
+    };
+    renderApp("/orders/ORD-1042", api);
+
+    const lines = await screen.findByRole("list", { name: "Lines" });
+    expect(within(lines).getByText("pack size not in the catalog")).toHaveClass("unknown-value");
+    expect(within(lines).getByText("pack size not in the catalog").parentElement).toHaveTextContent("KG");
+    expect(within(lines).queryByText(/pack size unknown/)).not.toBeInTheDocument();
   });
 
   it("shows the API error for an unknown id", async () => {
@@ -120,7 +267,7 @@ describe("orders pages", () => {
     renderApp("/orders/ORD-missing", api);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
-    expect(screen.getByRole("heading", { level: 1, name: "Order ORD-missing" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Order" })).toBeInTheDocument();
   });
 
   it("shows what is known and resolves a placed order only with its supplier reference", async () => {

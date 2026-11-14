@@ -50,7 +50,11 @@ def make(monkeypatch, worker=None):
     monkeypatch.setenv("GATEWAY_HUMAN_TOKEN", "human-test-token")
     monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
     db = mongomock.MongoClient(tz_aware=True)["test"]
+    db.offers.insert_one({"_id": "offer-1", "kitchen_id": "demo-kitchen",
+                          "request": {"requested_date": "2026-11-16"}})
     db.orders.insert_one({"_id": ORDER, "kitchen_id": "demo-kitchen",
+                          "offer_id": "offer-1", "supplier_id": "sup-valio",
+                          "outcome": "CONFIRMED", "status": "SENT", "created_at": NOW,
                           "lines": [{"product_id": "462775", "quantity": "51", "unit": "ST"}]})
     db.orders.insert_one({"_id": "theirs", "kitchen_id": "other-kitchen", "lines": []})
     gw = Gateway(db, None, now=lambda: NOW)
@@ -65,22 +69,27 @@ def error_of(answer):
     return answer.status_code, answer.json()["error"]["code"]
 
 
-def test_a_person_gets_the_checked_lines_and_only_an_audit_entry_is_stored(monkeypatch):
+def test_a_person_gets_the_checked_lines_and_the_observation_is_saved(monkeypatch):
     worker = FakeWorker()
     client, db = make(monkeypatch, worker)
     answer = client.post(URL, headers=HUMAN, json=BODY)
     assert answer.status_code == 200, answer.text
     data = answer.json()
     assert (data["model"], data["saved"], data["order_id"], data["complete"]) == (
-        "nemotron-3.5-super-vl", False, ORDER, False)
+        "nemotron-3.5-super-vl", True, ORDER, False)
     assert data["lines"][0]["missing"] == "15" and data["not_ordered"][0]["needs_approval"] is True
     assert worker.calls == [("demo-kitchen", ORDER)]
     written = {n for n in db.list_collection_names() if db[n].count_documents({})}
-    assert written == {"orders", "audit_log"} and db.audit_log.count_documents({}) == 1
+    assert written == {"orders", "offers", "delivery_results", "delivery_result_current", "audit_log"}
+    assert db.delivery_results.count_documents({}) == 1 and db.audit_log.count_documents({}) == 2
     [event] = events(db, "delivery_note_read")
     assert (event["actor"], event["order_id"], event["statuses"]) == ("aron", ORDER, {"SHORT": 1, "SUBSTITUTE": 1})
-    stored = json.dumps(list(db.audit_log.find({}, {"_id": 0})), default=str)
+    [saved] = events(db, "delivery_result_saved")
+    assert (saved["order_id"], saved["revision"], saved["statuses"]) == (ORDER, 1, {"SHORT": 1, "SUBSTITUTE": 1})
+    stored = json.dumps([*db.audit_log.find({}, {"_id": 0}), *db.delivery_results.find({}, {"_id": 0})],
+                        default=str)
     assert BODY["image_base64"][:200] not in stored and "ORD-DEMO" not in stored
+    assert "L1" not in stored and "best_before" not in stored
 
 
 def test_who_and_which_order(monkeypatch):

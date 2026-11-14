@@ -75,7 +75,7 @@ def test_one_model_call_then_cached_ids_with_fresh_price_and_new_offer(monkeypat
     asyncio.run(run())
 
 
-def test_same_choice_in_flight_does_not_start_another_model_request(monkeypatch):
+def test_same_choice_in_flight_waits_for_the_leader_pick(monkeypatch):
     async def run():
         entered, release = asyncio.Event(), asyncio.Event()
         class Blocking(Pick):
@@ -94,11 +94,15 @@ def test_same_choice_in_flight_does_not_start_another_model_request(monkeypatch)
         first = asyncio.create_task(worker.run('demo-kitchen', NEED))
         try:
             await asyncio.wait_for(entered.wait(), 2)
-            with pytest.raises(WorkerError) as err:
-                await worker.run('demo-kitchen', {**NEED, 'idempotency_key': 'concurrent'})
-            assert err.value.fallback_safe and sum(m.calls for m in models) == 1
+            second = asyncio.create_task(worker.run('demo-kitchen', {**NEED, 'idempotency_key': 'concurrent'}))
+            await asyncio.sleep(0.3)
+            assert not second.done() and sum(m.calls for m in models) == 1
             release.set()
-            assert (await first)['status'] == 'READY'
+            leader, follower = await first, await asyncio.wait_for(second, 5)
+            assert leader['status'] == follower['status'] == 'READY'
+            ids = lambda r: [l['product_id'] for l in r['lines']]
+            assert ids(follower) == ids(leader) and sum(m.calls for m in models) == 1
+            assert next(s for s in follower['model_trace']['steps'] if s['tool'] == 'pick')['code'] == 'CACHED_PICK'
             assert db.orders.count_documents({}) == 0
         finally:
             release.set()

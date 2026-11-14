@@ -1,6 +1,7 @@
 import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import type { ModelTrace, ModelTraceStep } from "@/types";
+import { NemotronMark } from "@/components/nemotron-mark";
 
 type T = ReturnType<typeof useT>;
 
@@ -64,6 +65,10 @@ function stepText(step: ModelTraceStep, t: T): string {
   if (step.code && POLICY_CODES.has(step.code))
     return t("{action} — refused by the policy ({code})", { action: what, code: step.code });
   if (step.code === "TOOL_FAILED") return t("{action} — the tool failed", { action: what });
+  if (step.code === "MEANING_FALLBACK" && step.tool === "search_products")
+    return t("{action} — found by meaning (Atlas Vector Search) after the word search found nothing", {
+      action: what,
+    });
   return what;
 }
 
@@ -107,6 +112,7 @@ export function ModelTracePanel({ trace }: { trace: ModelTrace | null | undefine
   return (
     <details className="text-sm" aria-label={t("What Nemotron did")}>
       <summary className="cursor-pointer">
+        <NemotronMark />
         <span className="font-medium">{t("What Nemotron did")}</span>{" "}
         <span className="font-mono text-[13px] tabular-nums text-muted-foreground">{headline(trace, t)}</span>
       </summary>

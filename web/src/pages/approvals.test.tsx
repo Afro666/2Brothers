@@ -1,6 +1,6 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mapKitchenSettings } from "@/api/map-planning";
 import { createMockApi } from "@/api/mock";
@@ -38,6 +38,8 @@ describe("ApprovalsPage", () => {
       });
       renderApp("/approvals", api);
 
+      expect((await screen.findAllByText("Leipomo Demo must confirm")).length).toBeGreaterThan(0);
+      for (const inspect of await screen.findAllByRole("button", { name: /^Inspect/ })) await userEvent.click(inspect);
       expect((await screen.findAllByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).length).toBeGreaterThan(0);
       expect(screen.queryByText(/before this order can be approved/)).toBeNull();
     },
@@ -46,11 +48,177 @@ describe("ApprovalsPage", () => {
   it("keeps the milk proposal visible while awaiting stock confirmation", async () => {
     renderApp("/approvals", createMockApi());
     expect(await screen.findByRole("heading", { name: "Waiting for you (4)" })).toBeVisible();
+    // Compact: a chip names who must confirm; the full sentence is under Inspect.
+    expect(await screen.findByText("Valio must confirm 1")).toBeVisible();
+    await userEvent.click(screen.getAllByRole("button", { name: /^Inspect/ })[1]);
     expect(await screen.findByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
     expect(screen.getAllByRole("button", { name: /^Approve/ }).filter((button) => button.hasAttribute("disabled"))).toHaveLength(0);
     expect(screen.getAllByRole("button", { name: "Reject" })[0]).toBeEnabled();
   });
   beforeEach(() => localStorage.clear());
+  afterEach(() => {
+    delete window.Telegram;
+    delete window.TelegramWebviewProxy;
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("puts a valid linked proposal first, open, scrolled to and focused", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    renderApp("/approvals?proposal=APR-312");
+
+    const heading = await screen.findByRole("heading", { name: "Waiting for you (4)" });
+    const card = document.getElementById("proposal-ORD-1044");
+    expect(card).not.toBeNull();
+    expect(heading.closest("section")?.querySelector('[id^="proposal-"]')).toBe(card);
+    expect(within(card!).getByRole("button", { name: /Approve €148\.76 incl VAT/ })).toBeVisible();
+    await waitFor(() => expect(card).toHaveFocus());
+    expect(scroll.mock.contexts).toContain(card);
+  });
+
+  it("keeps the normal inbox and says a linked proposal is held by a recall", async () => {
+    const api = createMockApi();
+    const listApprovals = api.listApprovals;
+    api.listApprovals = async () =>
+      (await listApprovals()).map((approval) =>
+        approval.id === "APR-312" ? { ...approval, status: "BLOCKED_BY_RECALL" as const } : approval,
+      );
+    renderApp("/approvals?proposal=APR-312", api);
+
+    expect(await screen.findByText("Proposal APR-312 is held by a recall and cannot be approved.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Held by a recall (1)" })).toBeVisible();
+  });
+
+  it("keeps the normal inbox and reports an unknown linked proposal", async () => {
+    renderApp("/approvals?proposal=APR-DOES-NOT-EXIST");
+
+    expect(await screen.findByText("Proposal APR-DOES-NOT-EXIST was not found.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Waiting for you (4)" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Decided" })).toBeVisible();
+  });
+
+  it("keeps the normal inbox and reports an already decided linked proposal", async () => {
+    renderApp("/approvals?proposal=APR-UNKNOWN-1046");
+
+    expect(await screen.findByText("Proposal APR-UNKNOWN-1046 has already been decided.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Waiting for you (4)" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Decided" })).toBeVisible();
+  });
+
+  it("hides the menu in Telegram and closes the Mini App two seconds after approval", async () => {
+    const ready = vi.fn();
+    const expand = vi.fn();
+    const close = vi.fn();
+    window.Telegram = { WebApp: { ready, expand, close } };
+    renderApp("/approvals?proposal=APR-312", withConfirmedStock());
+
+    const approve = await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ });
+    expect(ready).toHaveBeenCalledTimes(1);
+    expect(expand).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Open menu" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    expect(approve.closest("main")).toHaveClass("w-full");
+
+    fireEvent.click(approve);
+    const dialog = screen.getByRole("dialog", { name: "Approve this order?" });
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(close).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1999);
+    expect(close).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("in a phone's Telegram web view without Telegram.WebApp, hides the menu and posts the close", async () => {
+    const postEvent = vi.fn();
+    window.TelegramWebviewProxy = { postEvent };
+    renderApp("/approvals?proposal=APR-312", withConfirmedStock());
+
+    fireEvent.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
+    expect(screen.queryByRole("button", { name: "Open menu" })).not.toBeInTheDocument();
+    expect(postEvent).toHaveBeenCalledWith("web_app_ready", "{}");
+    vi.useFakeTimers();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Yes, approve €148.76" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(postEvent).toHaveBeenCalledWith("web_app_close", "{}");
+  });
+
+  it("keeps the approval result when the Telegram web view's proxy throws", async () => {
+    const postEvent = vi.fn(() => {
+      throw new Error("web view gone");
+    });
+    window.TelegramWebviewProxy = { postEvent };
+    renderApp("/approvals?proposal=APR-312", withConfirmedStock());
+
+    fireEvent.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
+    expect(postEvent).toHaveBeenCalledWith("web_app_ready", "{}");
+    vi.useFakeTimers();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Yes, approve €148.76" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(postEvent).toHaveBeenCalledWith("web_app_close", "{}");
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(screen.getByRole("heading", { name: "Waiting for you (3)" })).toBeVisible();
+  });
+
+  it("keeps the Mini App open when the gateway refuses the approval", async () => {
+    const close = vi.fn();
+    window.Telegram = { WebApp: { ready: vi.fn(), expand: vi.fn(), close } };
+    const api = withConfirmedStock();
+    api.failNextApprove("TOTAL_MISMATCH", "The total moved.");
+    renderApp("/approvals?proposal=APR-312", api);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
+    const dialog = screen.getByRole("dialog", { name: "Approve this order?" });
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("The total moved.");
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("does not close the Mini App after the page is gone, even after two quick approvals", async () => {
+    const close = vi.fn();
+    window.Telegram = { WebApp: { ready: vi.fn(), expand: vi.fn(), close } };
+    const { api } = renderApp("/approvals?proposal=APR-312", withConfirmedStock());
+    const approved = async () => (await api.listApprovals()).filter(({ status }) => status === "APPROVED").length;
+    const approvedBefore = await approved();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
+    vi.useFakeTimers();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Yes, approve €148.76" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect((await api.getApproval("APR-312")).status).toBe("APPROVED");
+    fireEvent.click(screen.getAllByRole("button", { name: /^Approve €/ })[0]);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^Yes, approve/ }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(await approved()).toBe(approvedBefore + 2);
+    cleanup();
+    vi.advanceTimersByTime(3000);
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("reads an all-digit linked proposal id as text", async () => {
+    renderApp("/approvals?proposal=312");
+
+    expect(await screen.findByText("Proposal 312 was not found.")).toBeVisible();
+  });
 
   it("shows the pending approval and its total, then reloads it under Decided", async () => {
     const user = userEvent.setup();
@@ -134,11 +302,11 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
 
-    const button = (await screen.findAllByRole("button", { name: "Show order lines" }))[1];
+    const button = (await screen.findAllByRole("button", { name: /^Inspect/ }))[1];
     expect(button).toHaveAttribute("aria-expanded", "false");
     await user.click(button);
 
-    expect(screen.getByRole("button", { name: "Hide order lines" })).toHaveAttribute("aria-expanded", "true");
+    expect(button).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByText("Valio Eila 3 % lactose free milk drink 1 L").length).toBeGreaterThan(0);
   });
 
@@ -146,7 +314,7 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     const api = withConfirmedStock();
     renderApp("/approvals", api);
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[0]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[0]);
     const originalQuantity = screen.getByRole("spinbutton", {
       name: "Quantity for Arla 1 L lactose free fat free UHT milk drink (ST)",
     });
@@ -174,7 +342,8 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     const api = createMockApi();
     renderApp("/approvals", api);
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
+    await user.click(screen.getByRole("button", { name: "Add products" }));
     const search = screen.getByRole("searchbox", { name: "Search products" });
     await user.type(search, "Arla 1 L");
     const productRow = screen.getByText("Arla 1 L lactose free fat free UHT milk drink").closest("li");
@@ -208,7 +377,8 @@ describe("ApprovalsPage", () => {
   it("follows the edited lines: the waiting notice goes once the line with unconfirmed stock is removed", async () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
+    await user.click(screen.getByRole("button", { name: "Add products" }));
     await user.type(screen.getByRole("searchbox", { name: "Search products" }), "Arla 1 L");
     await user.click(await screen.findByRole("button", { name: "Add Arla 1 L lactose free fat free UHT milk drink" }));
     // Arla's stock is known, Eila's is not: the order still waits for the supplier, but can be approved.
@@ -229,7 +399,7 @@ describe("ApprovalsPage", () => {
       throw new ApiError("NETWORK", "Could not reach the gateway.");
     };
     renderApp("/approvals", api);
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
     const before = listed.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
     const alert = await screen.findByRole("alert");
@@ -245,7 +415,7 @@ describe("ApprovalsPage", () => {
     const change = vi.fn(() => new Promise<never>((_, reject) => { finish = () => reject(new ApiError("NOT_PENDING", "no")); }));
     api.changeProposal = change;
     renderApp("/approvals", api);
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
     const remove = screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" });
     fireEvent.click(remove);
     fireEvent.click(remove);
@@ -257,10 +427,10 @@ describe("ApprovalsPage", () => {
   it("shows the API message when removing the only line is refused", async () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Could not change this proposal: An order needs at least one line; reject it instead. The proposal is unchanged.",
+      "Could not change this proposal. Every line would be removed: reject the proposal instead. The proposal is unchanged.",
     );
   });
 

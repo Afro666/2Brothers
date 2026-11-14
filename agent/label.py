@@ -76,6 +76,9 @@ NAMES = {'AM': 'milk', 'ML': 'lactose', 'AE': 'egg', 'AW': 'gluten', 'UW': 'whea
          'AP': 'peanuts', 'AN': 'tree nuts', 'SA': 'almond', 'SC': 'cashew', 'SH': 'hazelnut', 'SM': 'macadamia',
          'SP': 'pecan', 'SR': 'Brazil nut', 'ST': 'pistachio', 'SW': 'walnut', 'AY': 'soy', 'BC': 'celery',
          'BM': 'mustard', 'AS': 'sesame', 'AU': 'sulphites', 'NL': 'lupin'}
+# Word starts that look like a table start but are not allergens: maltodextrin and maltitol
+# are not barley, though they start with "malt".
+_NOT_ALLERGEN = ('maltodekst', 'maltodext', 'maltit')
 # Words that may stand in an emphasised term without being an allergen ("vehnä-jauho", "and").
 _FILLER = {'ja', 'och', 'and', 'or', 'tai', 'eller', 'sekä', 'samt', 'of', 'från', 'peräisin', 'jauho',
            'jauhoja', 'mjöl', 'flour', 'proteiini', 'protein', 'tärkkelys', 'stärkelse', 'starch', 'jauhe',
@@ -90,7 +93,7 @@ def _norm(value):
 def code_of(word: str) -> str | None:
     """One printed word -> its GS1 code, or None when the table does not know it."""
     w = re.sub(r'[^\w]', '', _norm(word))
-    if not w:
+    if not w or w.startswith(_NOT_ALLERGEN):
         return None
     for code, (exact, starts) in TABLE.items():
         if w in exact or any(w.startswith(s) for s in starts):

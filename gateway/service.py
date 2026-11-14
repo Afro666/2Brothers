@@ -24,11 +24,12 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
                     pad_to_free_delivery, plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
-from gateway import options
-from gateway.decision import decision_summary
+from gateway import options, product_names
+from gateway.decision import FOUND_BY_MEANING, decision_summary
 from gateway.partial_fill import partial_out
-from gateway.suppliers import VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers
-from store import audit, orders, recalls, supplier_offers
+from gateway.suppliers import (UNKNOWN_FACTS, VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers,
+                               delivery_facts)
+from store import audit, demo_delivery, orders, recalls, supplier_offers
 from store.audit import canonical
 from store.history import current_stock
 
@@ -42,6 +43,7 @@ OFFER_TTL = timedelta(minutes=15)   # Aron, 2026-11-14 (#19 answer F)
 KIND_SEARCHES = 3                   # extra catalog searches for a request's kind, one per category
 KINDS_TTL = timedelta(hours=1)      # the kinds snapshot is rebuilt after this: a reloaded catalog counts (#1026)
 KINDS_RETRY = timedelta(seconds=60) # after a failed catalog read, wait this long before reading again (#1026)
+MAX_NEED_QUANTITY = Decimal("1000000")   # one need of a list body (#1375), as change.py caps a line
 
 
 class GatewayError(Exception):
@@ -64,13 +66,34 @@ def _text(value) -> str | None:
     return None if value is None else str(value)
 
 
-_LINE_NUMBERS = ("reliability", "carbon_kg_co2e_per_kg")
+_LINE_NUMBERS = ("reliability", "carbon_kg_co2e_per_kg", "delivery_reliability")
 
 
 def _line_out(line: dict) -> dict:
     """A stored offer or order line as the API answers it: the two dataset values are numbers
     (docs/contract.md), kept as text in Mongo because the store refuses a binary float (#570)."""
-    return {**line, **{key: float(line[key]) for key in _LINE_NUMBERS if line.get(key) is not None}}
+    out = {**line, **{key: float(line[key]) for key in _LINE_NUMBERS if line.get(key) is not None}}
+    out.pop("unlearned_quantity", None)     # internal basis for a later correction
+    return out
+
+
+def _learned_out(info: dict | None) -> dict | None:
+    """A stored learned entry as the API answers it: ratio is a JSON number."""
+    if not isinstance(info, dict):
+        return info
+    out = dict(info)
+    try:
+        out["ratio"] = float(Decimal(str(out["ratio"])))
+    except (ArithmeticError, KeyError, TypeError, ValueError):
+        pass
+    return out
+
+
+def _matched_by(rows: list[dict]) -> list[dict]:
+    """Every search row says how it was found (#1382); a text search finds by words."""
+    for row in rows:
+        row.setdefault("matched_by", "words")
+    return rows
 
 
 def _hash(payload: dict) -> str:
@@ -79,9 +102,13 @@ def _hash(payload: dict) -> str:
 
 class Gateway:
     def __init__(self, db, valio, *, now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-                 search: Callable | None = None):
+                 search: Callable | None = None, meaning: Callable | None = None):
         self.db, self.valio, self.now = db, valio, now
         self._search = search          # catalog search; default: store.search (Atlas Search)
+        # The Buyer's meaning search when the words find nothing (#1384); default: Atlas Vector
+        # Search, but only with the default word search: an injected word search and no
+        # injected meaning search (tests, offline runs) means no fallback.
+        self._meaning = meaning
         self._kinds = None             # gateway/kind.py, read from the catalog on first use
         self._kinds_at = None          # when the snapshot was read (rebuilt after KINDS_TTL)
         self._kinds_failed_at = None   # when the last read failed (no new read for KINDS_RETRY)
@@ -151,7 +178,9 @@ class Gateway:
             adapter = (ValioAdapter(self.db, self.valio) if supplier_id == VALIO
                        else ManualAdapter(self.db, kitchen_id, supplier, self.now))
             found, left_out, rates = adapter.offers(ids, measure, requested)
-            when.update(adapter.when)
+            # Display-only cut-off, lead time and reliability, with their source (#1453).
+            when.update(delivery_facts(adapter.when, found, supplier.get("terms") or {},
+                                       demo_delivery.lookup(self.db, kitchen_id, supplier_id, ids), requested))
             offers.extend(found)
             skipped.extend(left_out)
             tax.update(rates)
@@ -179,7 +208,7 @@ class Gateway:
     def _simulate(self, kitchen_id: str, plan: RequestPlan, tax: dict, skipped: list,
                   supplier_of: dict[str, str] | None = None, when: dict | None = None) -> dict:
         supplier_of, when = supplier_of or {}, when or {}
-        unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None}
+        unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None, **UNKNOWN_FACTS}
         by_supplier: dict[str, list] = {}
         for ln in plan.lines:
             by_supplier.setdefault(supplier_of.get(ln.product_id, VALIO), []).append(ln)
@@ -309,10 +338,10 @@ class Gateway:
         docs = self.db.products.find({"_id": {"$in": ids}}, {"raw.synkkaData.nutritionalContent": 1})
         return fat_levels_differ([fat_per_100g(d.get("raw")) for d in docs])
 
-    def _quote(self, kitchen_id: str, request: dict) -> dict:
-        if request.get("needs"):
-            sim = self._basket(kitchen_id, request)
-            return self._save_offer(kitchen_id, request, sim)
+    def _plan_one(self, kitchen_id: str, request: dict) -> tuple:
+        """One need over its products: recall holds, the kitchen's allergen rule, live offers,
+        the engine's sizes and the gap fill. (plan, skipped, tax, supplier_of, when, refused);
+        no discount tier yet, nothing saved. The single request and each need of a list."""
         requested = date.fromisoformat(request["requested_date"])
         measure = request["unit"]
         need = Decimal(str(request["quantity"]))
@@ -329,6 +358,15 @@ class Gateway:
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
         plan, skipped = self._fill_gap(kitchen_id, plan, skipped, requested, tax, supplier_of, when)
+        return plan, skipped, tax, supplier_of, when, refused
+
+    def _quote(self, kitchen_id: str, request: dict) -> dict:
+        if request.get("needs"):
+            sim = self._basket(kitchen_id, request)
+            return self._save_offer(kitchen_id, request, sim)
+        if request.get("made_by") == "list":
+            return self._save_offer(kitchen_id, request, self._list_basket(kitchen_id, request))
+        plan, skipped, tax, supplier_of, when, refused = self._plan_one(kitchen_id, request)
         tiers = {sid: (self._supplier(kitchen_id, sid).get("terms") or {}).get("discount_tiers") or []
                  for sid in set(supplier_of.values())}
         plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
@@ -424,6 +462,18 @@ class Gateway:
                  for sid in set(supplier_of.values())}
         plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
         sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
+        if request.get("made_by") == "menu_plan":
+            # The change helper measures a later correction against the unlearned engine
+            # number, never against the already learned line (#1305).
+            ratios = {}
+            for need in needs:
+                ratio = (need.get("learned") or {}).get("ratio")
+                if ratio is not None:
+                    ratios[need["product_id"]] = Decimal(str(ratio))
+            for line in sim["lines"]:
+                ratio = ratios.get(line["product_id"])
+                if ratio is not None and ratio > 0:
+                    line["unlearned_quantity"] = f"{(Decimal(str(line['quantity'])) / ratio).normalize():f}"
         sim["shortfalls"] = [{"product_id": p, "shortfall": f"{q.normalize():f}", "unit": u} for p, q, u in short]
         for p, q, u in short:
             sim["mandate"]["reasons"].append(f"{p}: {q.normalize():f} {u} of the plan's need cannot be covered for this date.")
@@ -431,6 +481,227 @@ class Gateway:
             if code not in sim["mandate"]["reason_codes"]:
                 sim["mandate"]["reason_codes"].append(code)
         return sim
+
+    def _list_basket(self, kitchen_id: str, request: dict) -> dict:
+        """One simulation for a request with several products (#1375): each need is planned
+        over its own products as a single request is (`_plan_one`), then one total, one set of
+        supplier blocks, one approval. A need with no line is refused here (NOT_AVAILABLE) and
+        the others go on; `request["items"]` and `request["problems"]` are updated in place
+        before the request is stored, so the proposal says what was left out and why."""
+        requested = request["requested_date"]
+        params = self._params(kitchen_id)
+        lines, excluded, codes, warnings, skipped, short = [], [], [], [], [], []
+        tax, supplier_of, when = {}, {}, {}
+        used: dict[str, int] = {}       # product_id -> the need (1-based) that has it
+        mixed = allergen = False
+        for number, item in enumerate(request["items"], 1):
+            if item.get("result") != "proposed":
+                allergen = allergen or (item.get("problem") or {}).get("code") == "ALLERGEN_RULE"
+                continue
+            free = [p for p in item["product_ids"] if p not in used]
+            if not free:
+                first = min(used[p] for p in item["product_ids"])
+                item.update(result="refused", problem={
+                    "code": "NOT_AVAILABLE",
+                    "message": f"same product as need {first}: ask for it once, with the sum"})
+                continue
+            plan, skip, t, s, w, refused = self._plan_one(kitchen_id, {
+                "product_ids": free, "quantity": item["quantity"], "unit": item["unit"],
+                "requested_date": requested, "event": request.get("event")})
+            tax.update(t), supplier_of.update(s), when.update(w)
+            skipped += skip
+            allergen = allergen or bool(refused)
+            if not plan.lines:
+                why = "; ".join(f"{pid}: {r}" for pid, r in [*plan.excluded, *skip][:3])
+                item.update(result="refused", problem={
+                    "code": "NOT_AVAILABLE",
+                    "message": "no product can be ordered for this day" + (f" ({why})" if why else "")})
+                continue
+            used.update({ln.product_id: number for ln in plan.lines})
+            lines += plan.lines
+            excluded += list(plan.excluded)
+            codes += [c for c in plan.reason_codes if c not in codes]
+            warnings += [w_ for w_ in plan.warnings if w_ != "OVER_BUDGET_WARNING" and w_ not in warnings]
+            mixed = mixed or self._mixed_fat(plan)        # within one need, never milk next to cream
+            if plan.shortfall > 0:
+                short.append((plan.lines[0].product_id, plan.shortfall, plan.measure, item["text"]))
+        total = sum((ln.total for ln in lines), Decimal("0.00"))
+        if params.budget_warning_order_eur is not None and total > params.budget_warning_order_eur:
+            warnings.append("OVER_BUDGET_WARNING")
+        plan = RequestPlan(Decimal(len(request["items"])), "products", tuple(lines), total, Decimal(0),
+                           tuple(excluded), tuple(codes), tuple(warnings))
+        tiers = {sid: (self._supplier(kitchen_id, sid).get("terms") or {}).get("discount_tiers") or []
+                 for sid in set(supplier_of.values())}
+        plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
+        sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
+        problems = [f"{item['quantity']} {item['unit']} {item['text']}: {item['problem']['message']}"
+                    for item in request["items"] if item.get("result") == "refused"]
+        request["problems"] = problems
+        sim["mandate"]["reasons"][:0] = problems
+        sim["shortfalls"] = [{"product_id": p, "shortfall": f"{q.normalize():f}", "unit": u, "text": t}
+                             for p, q, u, t in short]
+        for p, q, u, t in short:
+            sim["mandate"]["reasons"].append(f"{t}: {q.normalize():f} {u} cannot be covered for this date.")
+        reason_codes = sim["mandate"]["reason_codes"]
+        if not sim["lines"]:            # every need was refused: a rule or the stock, not a shortfall
+            reason_codes[:] = [c for c in reason_codes if c != "PARTIAL_STOCK"]
+        for code, on in (("PARTIAL_STOCK", bool(short)), ("ALLERGEN_RULE", allergen),
+                         ("SUBSTITUTE_FAT_LEVEL", mixed), ("NEED_REFUSED", bool(problems))):
+            if on and code not in reason_codes:
+                reason_codes.append(code)
+        return sim
+
+    def _list_inputs(self, kitchen_id: str, body: dict) -> tuple[list[dict], str, str, bool]:
+        """The list body checked (#1375): (items, requested_date, text, event), or 422
+        INVALID_REQUEST naming the row. No search, no model: this is what a replay compares."""
+        from gateway.parse import UNITS, product_words
+        from gateway.split import MAX_NEED_TEXT, MAX_NEEDS, MIN_NEEDS
+        if body.get("product_ids") or body.get("from") or body.get("to"):
+            raise GatewayError(422, "INVALID_REQUEST", "needs cannot be sent with product_ids or from/to")
+        needs = body.get("needs")
+        if not isinstance(needs, list) or not MIN_NEEDS <= len(needs) <= MAX_NEEDS:
+            raise GatewayError(422, "INVALID_REQUEST", f"needs must be a list of {MIN_NEEDS} to {MAX_NEEDS} rows")
+        try:
+            day = date.fromisoformat(str(body.get("requested_date")))
+        except ValueError:
+            raise GatewayError(422, "INVALID_REQUEST", "requested_date must be YYYY-MM-DD") from None
+        if day < self.now().date():
+            raise GatewayError(422, "INVALID_REQUEST", "requested_date is in the past")
+        text = body.get("text") or ""
+        if not isinstance(text, str) or len(text) > 500:
+            raise GatewayError(422, "INVALID_REQUEST", "text: at most 500 characters")
+        event = body.get("event", False)
+        if not isinstance(event, bool):
+            raise GatewayError(422, "INVALID_REQUEST", "event must be true or false")
+        items, seen = [], {}
+        for number, need in enumerate(needs, 1):
+            words = need.get("text") if isinstance(need, dict) else None
+            raw, unit = (need.get("quantity"), need.get("unit")) if isinstance(need, dict) else (None, None)
+            if not isinstance(words, str) or not 0 < len(words.strip()) <= MAX_NEED_TEXT:
+                raise GatewayError(422, "INVALID_REQUEST", f"need {number}: text must be 1 to {MAX_NEED_TEXT} characters")
+            unit = UNITS.get(unit.strip().lower()) if isinstance(unit, str) else None
+            if unit not in ("L", "KG", "G", "ST"):
+                raise GatewayError(422, "INVALID_REQUEST", f"need {number}: unit must be L, KG, G or ST")
+            try:
+                if isinstance(raw, bool) or not isinstance(raw, (str, int)):
+                    raise InvalidOperation
+                quantity = Decimal(str(raw).strip())
+            except InvalidOperation:
+                raise GatewayError(422, "INVALID_REQUEST", f"need {number}: quantity must be a number") from None
+            if not quantity.is_finite() or quantity <= 0 or quantity > MAX_NEED_QUANTITY:
+                raise GatewayError(422, "INVALID_REQUEST",
+                                   f"need {number}: quantity must be above 0 and at most {MAX_NEED_QUANTITY}")
+            if unit == "G":
+                quantity, unit = quantity / 1000, "KG"
+            query = product_words(words)
+            if not query:
+                raise GatewayError(422, "INVALID_REQUEST", f"need {number}: no product words in {words!r}")
+            if query in seen:
+                raise GatewayError(422, "INVALID_REQUEST",
+                                   f"need {number}: the same product as need {seen[query]}; put it in one row")
+            seen[query] = number
+            items.append({"text": " ".join(words.split()), "quantity": f"{quantity.normalize():f}",
+                          "unit": unit, "query": query})
+        return items, day.isoformat(), text, event
+
+    def _read_need(self, kitchen_id: str, item: dict, rule: tuple[str, ...]) -> None:
+        """Which products may answer one need, read as the parser reads a single request, with
+        no model. The allergen rule of #974 runs first, before the kitchen's own words: a
+        product linked by alias is not a way around it. Sets result, product_ids, problem."""
+        from gateway import catalog_search, memory
+        from gateway.candidates import SEARCH_LIMIT, pick_candidates
+        from gateway.refusal import excluded_request
+        from store.products import get_product
+        query, unit = item["query"], item["unit"]
+        rows = None
+        if rule:
+            rows, _ = catalog_search.search(self.db, query, {}, SEARCH_LIMIT, kitchen_id, injected=self._search)
+            refusal = excluded_request(query, rows, rule)
+            if refusal:
+                item.update(result="refused", product_ids=refusal["product_ids"], problem={
+                    "code": "ALLERGEN_RULE", "message": refusal["message"], "allergens": refusal["allergens"]})
+                return
+        known = memory.lookup(self.db, kitchen_id, query, count_use=True)
+        if known and get_product(self.db, known) is not None:
+            item.update(result="proposed", product_ids=[known], problem=None)
+            return
+        if rows is None:
+            rows, _ = catalog_search.search(self.db, query, {}, SEARCH_LIMIT, kitchen_id, injected=self._search)
+        ids = pick_candidates(self._of_kind(rows, query, {}, query, unit, kitchen_id), unit)
+        if not ids:
+            memory.note_unknown(self.db, kitchen_id, query)     # remembered for a person to link or add
+            item.update(result="refused", product_ids=[], problem={
+                "code": "NO_PRODUCTS_FOUND", "message": f"no catalog product matches {query!r}"})
+            return
+        item.update(result="proposed", product_ids=ids, problem=None)
+
+    def _create_list(self, kitchen_id: str, body: dict, actor: str, *, auto_approve: bool = True,
+                     split_by: str | None = None) -> dict:
+        """The list body (#1375): one proposal for several needs. The replay check compares the
+        checked inputs before any search, so a changed catalog never turns a replay into a
+        conflict."""
+        key = body.get("idempotency_key")
+        if not isinstance(key, str) or not key.strip():
+            raise GatewayError(422, "INVALID_REQUEST", "idempotency_key is required")
+        items, day, text, event = self._list_inputs(kitchen_id, body)
+        payload_hash = _hash({"needs": [{k: i[k] for k in ("text", "quantity", "unit")} for i in items],
+                              "requested_date": day, "text": text, "event": event})
+        stored = self.db.proposals.find_one({"kitchen_id": kitchen_id, "idempotency_key": key})
+        if stored:
+            # A split free text is the same request when the text is the same: two racing
+            # requests may have split it differently (the model, or plain code).
+            same = (stored["request"].get("text") == text) if split_by else stored.get("payload_hash") == payload_hash
+            if not same:
+                raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
+            return self._proposal_out(stored)
+        rule = self._allergen_rule(kitchen_id)        # a misspelt rule fails the whole request (409)
+        for item in items:
+            self._read_need(kitchen_id, item, rule)
+        ids = list(dict.fromkeys(p for item in items for p in item["product_ids"]))
+        request = {"product_ids": ids, "quantity": str(len(items)), "unit": "products",
+                   "requested_date": day, "text": text, "made_by": "list", "items": items, "problems": []}
+        if split_by:
+            request["split_by"] = split_by
+        if event:
+            request["event"] = True
+        return self._store_proposal(
+            kitchen_id, request, key, payload_hash, actor, auto_approve=auto_approve,
+            retry=lambda: self._create_list(kitchen_id, body, actor, auto_approve=auto_approve, split_by=split_by))
+
+    def prepare_several(self, kitchen_id: str, body: dict) -> dict | None:
+        """A free text that asks for several products (#1375), before any model call. None:
+        the text names one product, and the single-product path answers as before.
+        `{"replay": proposal}`: the key was used with this text. `{"day": "YYYY-MM-DD"}`: split
+        it and send the needs as a list body for that one delivery day."""
+        from gateway.parse import ParseError
+        from gateway import split
+        text = body.get("text")
+        if not isinstance(text, str) or not split.several(text):
+            return None
+        key = body.get("idempotency_key")
+        if not isinstance(key, str) or not key.strip():
+            raise GatewayError(422, "INVALID_REQUEST", "idempotency_key is required")
+        stored = self.db.proposals.find_one({"kitchen_id": kitchen_id, "idempotency_key": key})
+        if stored is not None:
+            if stored["request"].get("text") != text:
+                raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
+            return {"replay": self._proposal_out(stored)}
+        if len(text) > 500:
+            raise GatewayError(422, "CANNOT_READ_REQUEST", "the request is too long (500 characters at most)")
+        today = self.now().date()
+        try:
+            named = split.days(text, today)
+        except ParseError as exc:
+            raise GatewayError(422, "CANNOT_READ_REQUEST", str(exc)) from None
+        if len(named) > 1:
+            raise GatewayError(422, "CANNOT_READ_REQUEST", split.ONE_DAY)
+        day = next(iter(named), None) or _form_day(body)
+        if day is None:
+            raise GatewayError(422, "CANNOT_READ_REQUEST",
+                               "no delivery day (for example 'by Monday', 'maanantaiksi' or '16.11.')")
+        if day < today:
+            raise GatewayError(422, "CANNOT_READ_REQUEST", "the delivery day is in the past")
+        return {"day": day.isoformat()}
 
     def _save_offer(self, kitchen_id: str, request: dict, sim: dict) -> dict:
         now = self.now()
@@ -611,6 +882,36 @@ class Gateway:
         if not needs:
             raise GatewayError(422, "NOTHING_NEEDED", "the plan needs nothing beyond the stock in this window",
                                problems=problems)
+        # Learned facts are computed once for this plan. Only a plan proposal adjusts a
+        # quantity; the stored need keeps the unlearned number as the correction basis.
+        from engine.learning import apply_ratio
+        from gateway import learned as learned_facts
+        # Learning is an extra: any error in it leaves the plan unlearned (#1522).
+        try:
+            learned_needs = [dict(need) for need in needs]
+            facts = learned_facts.compute_facts(self, kitchen_id, self.now().date())
+            ratios = {fact["product_id"]: fact for fact in facts
+                      if fact.get("kind") == "CORRECTION_RATIO" and fact.get("active") is True
+                      and fact.get("applicable") is True}
+            for need in learned_needs:
+                fact = ratios.get(need["product_id"])
+                if fact is None:
+                    continue
+                original = need["quantity"]
+                adjusted, info = apply_ratio(original, fact)
+                if info is None:
+                    continue
+                need["quantity"] = f"{adjusted.normalize():f}"
+                # The offer store refuses binary floats; the API turns this back into a number.
+                need["learned"] = {**info, "ratio": f"{Decimal(str(info['ratio'])).normalize():f}",
+                                   "unit": need["unit"]}
+                need["unlearned_quantity"] = original
+            learned_problems = [*problems, *learned_facts.plan_problems(
+                self, kitchen_id, facts, [need["product_id"] for need in learned_needs])]
+        except Exception:
+            log.warning("learned facts failed for kitchen %s; plan proposed unlearned", kitchen_id, exc_info=True)
+        else:
+            needs, problems = learned_needs, learned_problems
         return {"product_ids": [n["product_id"] for n in needs], "quantity": str(len(needs)), "unit": "products",
                 "requested_date": str(body.get("requested_date") or body["from"]), "needs": needs,
                 "text": body.get("text") or f"Order for the menu plan {start.isoformat()} to {end.isoformat()}",
@@ -618,10 +919,15 @@ class Gateway:
                 "idempotency_key": body.get("idempotency_key")}
 
     def create_proposal(self, kitchen_id: str, body: dict, actor: str, *, auto_approve: bool = True,
-                        read: dict | None = None, plan_entries=None, menu_photo=None) -> dict:
+                        read: dict | None = None, plan_entries=None, menu_photo=None,
+                        needs: list[dict] | None = None) -> dict:
         """`auto_approve=False`: this proposal always waits for a person, whatever the kitchen's
         auto-approve rule says (a proposal made from a supplier's offer, #374).
-        `read`: what `_from_text` already made of this free text (`refuse_excluded`)."""
+        `read`: what `_from_text` already made of this free text (`refuse_excluded`).
+        `needs`: internal callers only (the recall replan, #1482): each line's own
+        `{product_id, quantity, unit}`, so a structured body is not sized as "N products"."""
+        if body.get("needs") is not None:
+            return self._create_list(kitchen_id, body, actor, auto_approve=auto_approve)    # #1375
         original_body = body
         planned = False
         if body.get("from") and body.get("to") and not body.get("product_ids") and not body.get("text"):
@@ -661,6 +967,8 @@ class Gateway:
         request["made_by"] = "menu_plan" if planned else ("parser" if parsed else "structured")
         if planned:
             request.update({key: body[key] for key in ("needs", "window", "problems")})
+        elif needs:
+            request["needs"] = needs
         if parsed and body.get("query"):
             request["query"] = body["query"]
         if parsed and body.get("refusal"):
@@ -675,10 +983,20 @@ class Gateway:
             if stored["payload_hash"] != _hash(request):
                 raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
             return self._proposal_out(stored)
+        return self._store_proposal(
+            kitchen_id, request, key, _hash(request), actor, auto_approve=auto_approve, menu_photo=menu_photo,
+            retry=lambda: self.create_proposal(kitchen_id, original_body, actor, auto_approve=auto_approve,
+                                               read=read, plan_entries=plan_entries, menu_photo=menu_photo,
+                                               needs=needs))
+
+    def _store_proposal(self, kitchen_id: str, request: dict, key: str, payload_hash: str, actor: str, *,
+                        auto_approve: bool, retry: Callable[[], dict], menu_photo=None) -> dict:
+        """Quote, store, ask for approval, audit: every body ends here. `retry` runs when
+        another request stored the same key first (it then answers the replay)."""
         offer = self._quote(kitchen_id, request)
         sim = offer["simulation"]
         doc = {"_id": uuid4().hex, "kitchen_id": kitchen_id, "idempotency_key": key,
-               "payload_hash": _hash(request), "request": request, "offer_id": offer["offer_id"],
+               "payload_hash": payload_hash, "request": request, "offer_id": offer["offer_id"],
                "status": "READY" if sim["lines"] else "REJECTED", "created_by": actor,
                "created_at": self.now(), "approval_id": None, "order_id": None}
         if menu_photo is not None:
@@ -686,8 +1004,7 @@ class Gateway:
         try:
             self.db.proposals.insert_one(doc)
         except DuplicateKeyError:
-            return self.create_proposal(kitchen_id, original_body, actor, auto_approve=auto_approve, read=read,
-                                         plan_entries=plan_entries, menu_photo=menu_photo)
+            return retry()
         if sim["lines"]:
             approval, _ = orders.request_approval(
                 self.db, kitchen_id=kitchen_id, idempotency_key=f"proposal:{doc['_id']}",
@@ -698,8 +1015,15 @@ class Gateway:
         self._audit(kitchen_id, "proposal_created", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], expected_total=sim["expected_total"],
                     verdict=sim["mandate"]["verdict"])
+        applied = [{"product_id": need["product_id"], "fact_id": need["learned"].get("fact_id"),
+                    "from_qty": need["learned"].get("from_qty"), "to_qty": need["learned"].get("to_qty"),
+                    "unit": need["learned"].get("unit")}
+                   for need in request.get("needs") or [] if need.get("learned")]
+        if applied:
+            self._audit(kitchen_id, "learned_fact_applied", actor, proposal_id=doc["_id"],
+                        offer_id=offer["offer_id"], applied=applied)
         self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
-                    offer_id=offer["offer_id"], summary=self._summary(request, sim)["text"])
+                    offer_id=offer["offer_id"], summary=self._summary(request, sim, kitchen_id)["text"])
         if auto_approve:
             self._maybe_auto_approve(kitchen_id, doc, sim, request)
         return self._proposal_out(self.db.proposals.find_one({"_id": doc["_id"]}) or doc)
@@ -737,7 +1061,7 @@ class Gateway:
         """What the model did (#1197): the Buyer run's trace, the parser's rule trace, or None."""
         from gateway import model_trace
         from store import agent_runs
-        if (doc.get("request") or {}).get("made_by") == "parser":
+        if (doc.get("request") or {}).get("made_by") in ("parser", "list"):   # a list is matched by rules (#1375)
             return model_trace.parser_trace()
         if traces is None:
             traces = agent_runs.traces(self.db, doc["kitchen_id"], [doc["_id"]])
@@ -745,17 +1069,28 @@ class Gateway:
 
     def _proposal_out(self, doc: dict, traces: dict | None = None) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
-        result = {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
-                "substitute_options": options.merged(doc),
+        substitutes = options.merged(doc)
+        found = product_names.labels(self.db, product_names.proposal_ids(
+            {**offer["simulation"], "substitute_options": substitutes}), doc["kitchen_id"])
+        request_out = dict(doc["request"])
+        if request_out.get("needs"):
+            request_out["needs"] = [{**need, "learned": _learned_out(need["learned"])}
+                                    if need.get("learned") else need
+                                    for need in request_out["needs"]]
+        result = {"proposal_id": doc["_id"], "status": doc["status"], "request": request_out,
+                "substitute_options": substitutes,
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
                 **offer["simulation"],
-                "decision_summary": self._summary(doc["request"], offer["simulation"]),
+                "decision_summary": self._summary(doc["request"], offer["simulation"], doc["kitchen_id"], found),
                 "signature": offer.get("signature"), "offer_hash": offer.get("offer_hash")}
         result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
         result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []))
         blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
-        result['lines'] = [{**_line_out(line), **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
+        learned = {need['product_id']: _learned_out(need['learned']) for need in doc['request'].get('needs') or []
+                   if need.get('learned')}
+        result['lines'] = [{**_line_out(line), **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {}),
+                            **({'learned': learned[line['product_id']]} if line['product_id'] in learned else {})}
                            for line in result['lines']]
         result['blocks'] = _blocks_out(result, result['lines'])
         from monitor.labels import checks
@@ -763,13 +1098,16 @@ class Gateway:
         result['label_checks'] = checks(get_products(self.db,
             [line['product_id'] for line in result['lines']], doc['kitchen_id']), now=self.now())
         result['model_trace'] = self._trace(doc, traces)
-        return result
+        # #1130: names on every line kind, read in one query for the whole proposal.
+        return product_names.name_proposal(result, found)
 
-    def _summary(self, request: dict, sim: dict) -> dict:
-        ids = {ln["product_id"] for ln in sim.get("lines") or []} | {e["product_id"] for e in sim.get("excluded") or []}
-        names = {d["_id"]: (d.get("names") or {}).get("en")
-                 for d in self.db.products.find({"_id": {"$in": sorted(ids)}}, {"names": 1})}
-        return decision_summary(request, sim, names)
+    def _summary(self, request: dict, sim: dict, kitchen_id: str, found: dict | None = None) -> dict:
+        """`found`: product_names.labels already read for this proposal (no second query).
+        Names are scoped to `kitchen_id`: never another kitchen's own product (#1450)."""
+        if found is None:
+            ids = {ln["product_id"] for ln in sim.get("lines") or []} | {e["product_id"] for e in sim.get("excluded") or []}
+            found = product_names.labels(self.db, ids, kitchen_id)
+        return decision_summary(request, sim, {pid: f["product_name"] for pid, f in found.items()})
 
     def get_proposal(self, kitchen_id: str, proposal_id: str) -> dict:
         doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id})
@@ -798,7 +1136,10 @@ class Gateway:
         if doc["status"] == "COMMITTING" and self._release_stuck_commit(kitchen_id, doc, human):
             doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id}) or doc
         if doc["status"] != "READY":
-            return self._approved_or_conflict(kitchen_id, proposal_id, key)
+            result = self._approved_or_conflict(kitchen_id, proposal_id, key)
+            self._decision_feedback(kitchen_id, proposal_id, "approved", human,
+                                    total=result.get("expected_total"))
+            return result
         stored = orders.get_offer(self.db, doc["offer_id"])
         if Decimal(str(seen)) - Decimal(stored["simulation"]["expected_total"]) != 0:
             raise GatewayError(409, "TOTAL_MISMATCH", "this is not the total of the proposal",
@@ -809,9 +1150,12 @@ class Gateway:
             {"_id": proposal_id, "kitchen_id": kitchen_id, "status": "READY", "offer_id": stored["offer_id"]},
             {"$set": {"status": "APPROVING", "approving_key": key}})
         if claimed is None:
-            return self._approved_or_conflict(kitchen_id, proposal_id, key)
+            result = self._approved_or_conflict(kitchen_id, proposal_id, key)
+            self._decision_feedback(kitchen_id, proposal_id, "approved", human,
+                                    total=result.get("expected_total"))
+            return result
         try:
-            return self._place(kitchen_id, proposal_id, doc, stored, seen, key, human, via)
+            placed = self._place(kitchen_id, proposal_id, doc, stored, seen, key, human, via)
         except BaseException:
             # A write may have succeeded before its response failed. Only a
             # confirmed absence permits releasing the post-quote commit claim.
@@ -838,6 +1182,29 @@ class Gateway:
                 except Exception:
                     pass
             raise
+        self._decision_feedback(kitchen_id, proposal_id, "approved", human,
+                                total=placed.get("expected_total"))
+        return placed
+
+    def _decision_feedback(self, kitchen_id: str, proposal_id: str, kind: str, human: str,
+                           *, total=None, reason=None) -> None:
+        """One learning row per human decision, never for auto-approval. A replay finds
+        its row and writes none. Feedback is never a reason to fail the decision."""
+        if not human or human.startswith("auto-approve"):
+            return
+        try:
+            from store.feedback import record_feedback
+            existing = self.db.feedback.find_one(
+                {"meta.kitchen_id": kitchen_id, "proposal_id": proposal_id, "kind": kind},
+                {"_id": 1})
+            if existing is not None:
+                return
+            record_feedback(self.db, kitchen_id, proposal_id, [{
+                "feedback_id": f"{proposal_id}:{kind}", "kind": kind,
+                "reason": reason, "total": total}], human)
+        except Exception:
+            log.warning("decision feedback failed: kitchen_id=%s proposal_id=%s kind=%s",
+                        kitchen_id, proposal_id, kind, exc_info=True)
 
     def _release_stuck_commit(self, kitchen_id: str, doc: dict, human: str) -> bool:
         """A COMMITTING claim whose rollback failed (#715): with no order attempt for its key
@@ -964,6 +1331,12 @@ class Gateway:
                                   actor=doc.get('rejected_by', human))
             except Exception:
                 pass
+        try:
+            total = orders.get_offer(self.db, doc["offer_id"])["simulation"]["expected_total"]
+        except Exception:
+            total = None
+        self._decision_feedback(kitchen_id, proposal_id, "rejected", human, total=total,
+                                reason=doc.get("reject_reason") or reason.strip())
         return {"proposal_id": proposal_id, "status": "REJECTED"}
 
     def dismiss_recall(self, kitchen_id: str, event_id: str, body: dict, *, human: str | None) -> dict:
@@ -998,18 +1371,24 @@ class Gateway:
             log.warning("receipt signing failed: %s", type(exc).__name__)
             return {}
 
-    @staticmethod
-    def _order_out(order: dict) -> dict:
+    def _order_out(self, order: dict, found: dict | None = None) -> dict:
+        """`found`: product_names.labels for these lines; read here when not given (#1130:
+        names are computed at read time, so an order stored before them has them too)."""
+        if found is None:
+            found = product_names.labels(self.db, [ln.get("product_id") for ln in order["lines"]],
+                                         order.get("kitchen_id"))
         return {"order_id": order["order_id"], "outcome": order["outcome"], "status": order["status"],
                 "receipt": order.get("receipt"),     # signed order receipt (#290); null when not signed
                 # #631: suppliers whose stock nobody confirmed yet; a person calls them
                 "supplier_must_confirm": list(order.get("supplier_must_confirm") or []),
                 "expected_total": _money(Decimal(str(order["expected_total"]))),
-                "lines": [_line_out(ln) for ln in order["lines"]], "created_at": order["created_at"].isoformat()
+                "lines": [product_names.named(_line_out(ln), found) for ln in order["lines"]], "created_at": order["created_at"].isoformat()
                 if hasattr(order["created_at"], "isoformat") else order["created_at"]}
 
     def list_orders(self, kitchen_id: str) -> list[dict]:
-        return [self._order_out(o) for o in orders.list_orders(self.db, kitchen_id)]
+        rows = list(orders.list_orders(self.db, kitchen_id))
+        found = product_names.labels(self.db, [ln.get("product_id") for o in rows for ln in o["lines"]], kitchen_id)
+        return [self._order_out(o, found) for o in rows]
 
     def get_order(self, kitchen_id: str, order_id: str) -> dict:
         order = orders.get_order(self.db, order_id)
@@ -1042,24 +1421,39 @@ class Gateway:
         return {"need_id": need["_id"], **{k: need[k] for k in ("quantity", "unit", "requested_date", "text")}}
 
     def tool_search(self, kitchen_id: str, query: str, filters: dict, limit: int,
-                    need_id: str | None = None) -> dict:
+                    need_id: str | None = None, mode: str | None = None) -> dict:
         """Catalog search for the Buyer. With the stored need it becomes a shortlist the
         Buyer can order from: only products sold in the need's measure (a request in litres
         never gets chocolate), and products that can still arrive on the requested date
-        first. One availability call for the shortlist only, never for the whole catalog."""
+        first. One availability call for the shortlist only, never for the whole catalog.
+
+        `mode` ("text" or "hybrid") is the Catalog page's "Search by meaning" switch (#1382):
+        it decides for this one request without a need. With a need (the Buyer) it is
+        ignored, so the Buyer's basket never changes with it."""
         from gateway import catalog_search
         need = self.db.needs.find_one({"_id": need_id, "kitchen_id": kitchen_id}) if need_id else None
         if need_id and need is None:
             raise GatewayError(422, "INVALID_NEED", "unknown need_id")
         if need is None:
-            rows, kind = catalog_search.search(self.db, query, filters, limit, injected=self._search)
-            return {"products": rows, "search": kind}
+            hybrid = {"hybrid": True, "text": False}.get(mode)
+            rows, kind = catalog_search.search(self.db, query, filters, limit, injected=self._search,
+                                               hybrid=hybrid)
+            out = {"products": _matched_by(rows), "search": kind}
+            if hybrid and kind == "text" and (query or "").strip():
+                out["meaning_unavailable"] = True     # no query vector: the words answered
+            return out
         if need.get("refusal"):
             # Nothing to pick from, whatever the query: "butter" must not answer "peanut butter".
             return {"products": [], "requested_date": need["requested_date"], "measure": None,
                     "search": "text", "note": need["refusal"]["message"]}
         # Text search, or text plus meaning when SEARCH_HYBRID is on (gateway/catalog_search.py).
         rows, kind = catalog_search.search(self.db, query, filters, 50, injected=self._search)
+        found_by_meaning: set[str] = set()
+        fallback_note = None
+        if not rows:
+            # #1384: no word hit, so Atlas Vector Search once, with the same query and filters.
+            rows, fallback_note = self._meaning_fallback(kitchen_id, query, filters)
+            found_by_meaning = {r["product_id"] for r in rows}
         measure = need["unit"]
         # The kind of product the person named, from their own words, not the model's
         # query: "50 kg cheese" gets cheese, never a cheese sauce (gateway/kind.py). After
@@ -1091,10 +1485,69 @@ class Gateway:
         for r in rows:
             r["can_arrive"] = arrival.get(r["product_id"])
         rows.sort(key=lambda r: 0 if r["can_arrive"] else (1 if r["can_arrive"] is None else 2))
-        return {"products": rows[:limit], "requested_date": need["requested_date"],
-                "measure": measure if filtered else None, "search": kind,
-                "note": "can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
-                        "prefer products with can_arrive true"}
+        rows = rows[:limit]
+        note = ("can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
+                "prefer products with can_arrive true")
+        shown = {r["product_id"] for r in rows} & found_by_meaning
+        if shown:
+            kind = "meaning-fallback"
+            note = (f"{FOUND_BY_MEANING}; check that each product is what was asked. " + note)
+            # Kept with the need, so the offer and the proposal can say it (tool_get_offer).
+            self.db.needs.update_one({"_id": need["_id"]}, {"$addToSet": {"meaning_ids": {"$each": sorted(shown)}}})
+        elif fallback_note and not rows:
+            note = fallback_note
+        return {"products": _matched_by(rows), "requested_date": need["requested_date"],
+                "measure": measure if filtered else None, "search": kind, "note": note}
+
+    def _meaning_fallback(self, kitchen_id: str, query: str, filters: dict) -> tuple[list[dict], str | None]:
+        """#1384: the rows Atlas Vector Search finds for a query the words do not answer, and a
+        note when there are none. It never runs in place of products the allergen filter
+        removed, and it drops what the allergen rule refuses even when the vector side's
+        pre-filter does not (the group rule: almonds excluded also excludes "tree nuts")."""
+        from gateway import catalog_search
+        if self._search is not None and self._meaning is None:
+            return [], None                    # offline: an injected word search, no meaning search
+        allergen_keys = ("exclude_allergens", "allergen_strictness")
+        if any(filters.get(key) for key in allergen_keys):
+            unfiltered = {k: v for k, v in filters.items() if k not in allergen_keys}
+            try:
+                hits, _ = catalog_search.search(self.db, query, unfiltered, 1, injected=self._search,
+                                                hybrid_ok=False)
+            except Exception:
+                hits = [{}]                    # cannot tell: never risk a replacement
+            if hits:
+                return [], ("the allergen filter removes every product these words find; "
+                            "nothing else is proposed in their place")
+        try:
+            rows = catalog_search.meaning(self.db, query, filters, 50, injected=self._meaning)
+        except catalog_search.MeaningUnavailable:
+            log.warning("meaning fallback could not run")
+            return [], ("no product matches these words, and the meaning search could not run now "
+                        "(Atlas Vector Search needs a new query vector); try other words")
+        for r in rows:
+            r.setdefault("matched_by", "meaning")     # no word hit: every row is by meaning (#1382)
+        return self._allergen_safe(kitchen_id, filters, rows), None
+
+    def _allergen_safe(self, kitchen_id: str, filters: dict, rows: list[dict]) -> list[dict]:
+        """The rows no excluded allergen refuses: the caller's filter and the kitchen's rule, each
+        with the group rule (store/allergen_groups.py). Strict, or a kitchen rule: undeclared
+        counts too, and unknown allergen data is never safe."""
+        from store.allergen_groups import excluded_allergen_codes
+        rule = set(self._allergen_rule(kitchen_id))
+        codes = set(excluded_allergen_codes(filters.get("exclude_allergens"))) | rule
+        if not codes:
+            return rows
+        strict = filters.get("allergen_strictness") == "strict" or bool(rule)
+        levels = ("contains", "may_contain") + (("undeclared",) if strict else ())
+        safe = []
+        for r in rows:
+            allergens = r.get("allergens") or {}
+            if any(codes & set(allergens.get(level) or ()) for level in levels):
+                continue
+            if strict and r.get("allergen_data_known") is False:
+                continue
+            safe.append(r)
+        return safe
 
     def _alias_first(self, kitchen_id: str, words: str, rows: list[dict],
                      measure: str | None = None) -> list[dict]:
@@ -1133,6 +1586,8 @@ class Gateway:
                    "requested_date": need["requested_date"], "text": need["text"], "need_id": need["_id"]}
         if need.get("event"):
             request["event"] = True
+        if not need.get("refusal") and set(ids) & set(need.get("meaning_ids") or ()):
+            request["search"] = "meaning-fallback"     # the proposal says it (#1384)
         if need.get("refusal"):
             # Quote the refused products the person named, not the ones the caller picked.
             request["product_ids"] = need["refusal"]["product_ids"]
@@ -1180,7 +1635,7 @@ class Gateway:
         self._audit(kitchen_id, "approval_requested", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], expected_total=sim["expected_total"])
         self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
-                    offer_id=offer["offer_id"], summary=self._summary(offer["request"], sim)["text"])
+                    offer_id=offer["offer_id"], summary=self._summary(offer["request"], sim, kitchen_id)["text"])
         return {"approval_id": approval["approval_id"], "proposal_id": doc["_id"], "status": "PENDING"}
 
     def tool_place_order(self, kitchen_id: str, body: dict) -> dict:

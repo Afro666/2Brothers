@@ -36,6 +36,7 @@ export default {
   "Orders per guest are steady. Nothing to check before renewal.": "Tilaukset vierasta kohti ovat vakaita. Ei tarkistettavaa ennen uusimista.",
   "Kitchens drifting": "Muuttuvat keittiöt",
   "No sharing kitchen is drifting this week.": "Ennustetta jakavien keittiöiden tilaukset ovat vakaita tällä viikolla.",
+  "MongoDB Atlas time-series aggregation over the earlier weeks of orders": "MongoDB Atlasin aikasarja-aggregaatio aiempien viikkojen tilauksista",
   "Your account cannot accept or decline offers.": "Tilisi ei voi hyväksyä tai hylätä tarjouksia.",
   "product {id}": "tuote {id}",
   "a supplier": "toimittaja",

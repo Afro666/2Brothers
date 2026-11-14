@@ -138,6 +138,38 @@ describe("Catalog search on the real gateway", () => {
     await expect(createHttpApi("/api").searchProducts("milk")).rejects.toMatchObject({ code: "INVALID_REQUEST" });
   });
 
+  it("searches by meaning only when asked, and keeps how each row was found (#1382)", async () => {
+    const calls = gateway({
+      "POST /api/tools/search_products": () => ({
+        products: [
+          { ...MILK, matched_by: "meaning" },
+          { ...MILK, product_id: "463336", matched_by: "both" },
+          { ...MILK, product_id: "463337", matched_by: "something else" },
+        ],
+        search: "hybrid",
+      }),
+    });
+    const found = await createHttpApi("/api").searchProducts("dairy-free drink", { byMeaning: true });
+    await createHttpApi("/api").searchProducts("dairy-free drink");
+    expect(calls[0].body).toMatchObject({ query: "dairy-free drink", filters: {}, mode: "hybrid" });
+    expect(calls[1].body).not.toHaveProperty("mode");
+    expect(found.map((product) => product.matchedBy)).toEqual(["meaning", "both", undefined]);
+    expect(found.meaningUnavailable).toBeUndefined();
+  });
+
+  it("says when the gateway used words because the meaning search was not available", async () => {
+    gateway({
+      "POST /api/tools/search_products": () => ({
+        products: [{ ...MILK, matched_by: "words" }],
+        search: "text",
+        meaning_unavailable: true,
+      }),
+    });
+    const found = await createHttpApi("/api").searchProducts("dairy-free drink", { byMeaning: true });
+    expect(found.meaningUnavailable).toBe(true);
+    expect(found.map((product) => product.matchedBy)).toEqual(["words"]);
+  });
+
   it("skips a row that does not map and keeps the rest", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     gateway({ "POST /api/tools/search_products": () => ({ products: [{ names: {} }, MILK], search: "text" }) });
@@ -155,13 +187,23 @@ describe("Products by code on the real gateway", () => {
     expect(found.map((product) => product.id)).toEqual(["400001", "463335"]);
   });
 
-  it("answers from the sample products while the gateway does not serve the route yet (#1172)", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    const sample = products.arlaUht1l.id;
-    // A gateway without the route: FastAPI's own 404, no `error` envelope.
+  // #1263: no sample rows any more. A 404 with no `error` envelope (a proxy mis-route) is an error.
+  it("fails on a 404 with no error envelope, never answers with sample products", async () => {
+    // FastAPI's own 404, no `error` envelope.
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 }));
-    const found = await createHttpApi("/api").getProducts([sample, "999999"]);
-    expect(found.map((product) => product.id)).toEqual([sample]);
+    await expect(createHttpApi("/api").getProducts([products.arlaUht1l.id])).rejects.toMatchObject({
+      code: "GATEWAY_ERROR",
+      status: 404,
+    });
+  });
+
+  it("fails when the gateway cannot be reached, never answers with sample products", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    await expect(createHttpApi("/api").getProducts([products.arlaUht1l.id])).rejects.toMatchObject({
+      code: "NETWORK",
+    });
   });
 
   it("still fails on a 404 the gateway names (the route is served)", async () => {

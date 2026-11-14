@@ -5,6 +5,7 @@ import { mapModelTrace } from "@/api/model-trace";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { ChefRequestBox } from "@/components/purchasing/chef-request-box";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
 import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +26,9 @@ interface Proposal {
   request?: { made_by?: string; buyer_down?: boolean; refusal?: { code?: string; allergens?: string[]; message?: string } };
   decision_summary?: { asked?: string; searched?: string; chosen?: string[]; left_out?: string[]; text?: string };
   mandate?: { verdict?: string; reasons?: string[] };
-  lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
+  /** `product_name`, `product_name_fi`, `brand`: string or null (#1130); older answers lack them. */
+  lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean;
+    product_name?: string | null; product_name_fi?: string | null; brand?: string | null }[];
   substitute_options?: {
     tier: string;
     expected_total: string;
@@ -87,13 +90,17 @@ const text = (value: unknown) => (typeof value === "string" && value.trim() ? va
 const texts = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : undefined;
 
-// shortcut: lines carry no name field, so names are read from the gateway's "chosen" sentences
-// ("<qty> <unit> of <id> <name>, EUR ..."); use a line name when the contract adds one.
+// A line's own `product_name` (#1130) wins; an older answer without it falls back to the
+// gateway's "chosen" sentences ("<qty> <unit> of <id> <name>, EUR ...").
 function productNames(row: Proposal) {
   const names = new Map<string, string>();
   for (const sentence of texts(row.decision_summary?.chosen) ?? []) {
     const match = /^\S+ \S+ of ([^\s,]+) (.+?), EUR /.exec(sentence);
     if (match) names.set(match[1], match[2]);
+  }
+  for (const line of Array.isArray(row.lines) ? row.lines : []) {
+    const name = text(line?.product_name);
+    if (name) names.set(line.product_id, name);
   }
   return names;
 }
@@ -102,20 +109,45 @@ function productNames(row: Proposal) {
 const refusal = (row: Proposal) =>
   row.request?.refusal ? (text(row.request.refusal.message) ?? text(row.mandate?.reasons?.[0]) ?? "") : undefined;
 
-function proposedBy(row: Proposal, t: (text: string, vars?: Record<string, string | number>) => string) {
-  if (refusal(row) !== undefined) return t("Refused by the kitchen’s allergen rule");
+/** Who made the proposal, and whether Nemotron did the work (only then the NVIDIA mark shows). */
+function proposedBy(
+  row: Proposal,
+  t: (text: string, vars?: Record<string, string | number>) => string,
+): { text: string; byNemotron: boolean } {
+  const by = (sentence: string, byNemotron = false) => ({ text: sentence, byNemotron });
+  if (refusal(row) !== undefined) return by(t("Refused by the kitchen’s allergen rule"));
   if (row.request?.made_by === "parser" && row.request?.buyer_down === true)
-    return t("The Buyer model was not answering, so the gateway’s request parser made this proposal");
+    return by(t("The Buyer model was not answering, so the gateway’s request parser made this proposal"));
   if (row.status === "REJECTED" && row.request?.made_by === "parser")
-    return t("Made by the fallback parser because the Buyer agent was not available");
+    return by(t("Made by the fallback parser because the Buyer agent was not available"));
+  // A proposal from a list of needs (#1375): rules match each need; Nemotron only splits a free
+  // text into needs, and only then is it named.
+  if (row.request?.made_by === "list")
+    return mapModelTrace(row.model_trace)?.madeBy === "model"
+      ? by(t("Split into needs by Nemotron 3.5 Super VL, matched to products by rules"), true)
+      : by(t("Matched to products by rules, not by the Buyer model"));
   const model = text(row.buyer_model);
   if (model)
-    return t("Proposed by the Buyer agent ({model})", {
-      model: model === "nemotron-3.5-super-vl" ? "Nemotron 3.5 Super VL" : model,
-    });
+    return by(
+      t("Proposed by the Buyer agent ({model})", {
+        model: model === "nemotron-3.5-super-vl" ? "Nemotron 3.5 Super VL" : model,
+      }),
+      isNemotron(model) && row.request?.made_by !== "parser",
+    );
   // The gateway marks a proposal made by its fallback parser: do not credit the Buyer for it.
-  if (row.request?.made_by === "parser") return t("Proposed by the gateway’s request parser, not the Buyer model");
-  return t("Proposed by the Buyer agent");
+  if (row.request?.made_by === "parser") return by(t("Proposed by the gateway’s request parser, not the Buyer model"));
+  return by(t("Proposed by the Buyer agent"));
+}
+
+function ProposedBy({ row }: { row: Proposal }) {
+  const t = useT();
+  const who = proposedBy(row, t);
+  return (
+    <p className="font-mono text-xs leading-4 text-muted-foreground">
+      {who.text}
+      <NemotronMark when={who.byNemotron} side="after" />
+    </p>
+  );
 }
 
 function Decision({ row }: { row: Proposal }) {
@@ -297,7 +329,7 @@ export function LiveBuyerRequests() {
         </header>
         <Card>
           <CardContent>
-            <ChefRequestBox onSubmit={submit} />
+            <ChefRequestBox onSubmit={submit} withCovers={false} />
           </CardContent>
         </Card>
         {pending ? (
@@ -312,7 +344,7 @@ export function LiveBuyerRequests() {
               <CardTitle className="label-caps leading-4">{t("Buyer decision")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 px-0">
-              <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result, t)}</p>
+              <ProposedBy row={result} />
               <ModelTracePanel trace={mapModelTrace(result.model_trace)} />
               <p className="break-all font-mono text-[11px] text-muted-foreground">{result.proposal_id}</p>
               <Rejection row={result} />
@@ -325,7 +357,7 @@ export function LiveBuyerRequests() {
               <CardTitle className="label-caps leading-4">{t("Proposal ready for human review")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 px-0">
-              <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result, t)}</p>
+              <ProposedBy row={result} />
               <ModelTracePanel trace={mapModelTrace(result.model_trace)} />
               <p className="break-all font-mono text-[11px] text-muted-foreground">{result.proposal_id}</p>
               <p className="text-xl font-bold">
@@ -339,7 +371,7 @@ export function LiveBuyerRequests() {
                 {result.lines.map((line) => (
                   <li key={line.product_id} className="border-t py-2 first:border-t-0">
                     <p className="flex items-center gap-2 font-mono text-[13px]">
-                      <ProductThumb en={names.get(line.product_id)} size="sm" />
+                      <ProductThumb en={names.get(line.product_id)} fi={text(line.product_name_fi)} brand={text(line.brand)} size="sm" />
                       <span className="min-w-0 break-words">
                         {line.quantity} {line.unit} · {product(line.product_id)}
                       </span>

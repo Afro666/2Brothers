@@ -144,7 +144,9 @@ def test_manual_cutoff_passed_excludes_the_product(env):
     bakery(db, {**BAKERY_DAYS, "order_days": ["MON", "TUE", "WED", "THU", "FRI"]})
     p = propose(client)
     assert [b["supplier_id"] for b in p["blocks"]] == ["sup-valio"]
-    assert {"product_id": OAT, "reason": "order cut-off has passed for this delivery"} in p["excluded"]
+    # #1130: an excluded entry carries the product's names too (the own product has its name in both).
+    assert {"product_id": OAT, "reason": "order cut-off has passed for this delivery", "product_name": "Oat drink 1 L",
+            "product_name_fi": "Oat drink 1 L", "brand": None} in p["excluded"]
     assert "CLOSING_PASSED" in p["mandate"]["reason_codes"]
 
 
@@ -153,7 +155,8 @@ def test_manual_unknown_cutoff_terms_exclude_the_product(env, missing):
     client, _, db = env
     bakery(db, {k: v for k, v in BAKERY_DAYS.items() if k != missing})
     p = propose(client)
-    assert {"product_id": OAT, "reason": "no cut-off time known: cannot promise this delivery"} in p["excluded"]
+    assert {"product_id": OAT, "reason": "no cut-off time known: cannot promise this delivery",
+            "product_name": "Oat drink 1 L", "product_name_fi": "Oat drink 1 L", "brand": None} in p["excluded"]
 
 
 def test_own_product_without_price_or_supplier_is_left_out(env):
@@ -172,6 +175,22 @@ def test_own_product_without_price_or_supplier_is_left_out(env):
     assert reasons["own-x"] == "supplier sup-gone is not set up"
     assert reasons["own-free"] == "no price entered for Leipomo Demo"
     assert reasons["own-loaf"] == "pack size unknown: no L per ST entered"
+
+
+def test_changing_the_quantity_of_an_own_product_line_works_like_a_catalog_line(env):
+    """#1480: the oat drink is sold in ST with 1 L in each. A change names the quantity in
+    the line's sales unit (ST); the own product's pack must answer in ST, not in L."""
+    client, _, db = env
+    bakery(db, BAKERY_DAYS)
+    p = propose(client, quantity="49", ids=(OAT,))
+    assert [(ln["product_id"], ln["quantity"], ln["unit"]) for ln in p["lines"]] == [(OAT, "49", "ST")]
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/change", headers=HUMAN,
+                    json={"idempotency_key": "ch1", "lines": [{"product_id": OAT, "quantity": "30"}]})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert [(ln["product_id"], ln["quantity"], ln["unit"]) for ln in out["lines"]] == [(OAT, "30", "ST")]
+    assert out["expected_total"] == "36.00"           # 30 x 1.20, no VAT known
+    assert out["lines"][0]["why"].startswith("Quantity set by aron.")
 
 
 def test_manual_delivery_rule():

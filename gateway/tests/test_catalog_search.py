@@ -1,6 +1,15 @@
 """The gateway's catalog search: hybrid behind a switch, text as the fallback."""
 
+import re
+
+import mongomock
 import pytest
+from fastapi.testclient import TestClient
+
+from gateway.app import create_app
+from gateway.service import Gateway
+from gateway.tests import test_gateway_app as app_tests
+from gateway.valio_client import ValioClient
 
 from gateway import catalog_search
 from store import embeddings, search as store_search
@@ -104,6 +113,24 @@ def test_hybrid_can_be_switched_off_for_one_call(monkeypatch):
     assert [c["hybrid"] for c in calls] == [False]
 
 
+def test_hybrid_can_be_asked_for_one_call_while_the_switch_is_off(monkeypatch):
+    """#1382: the Catalog page's "Search by meaning" switch, whatever SEARCH_HYBRID says."""
+    calls = fake_store(monkeypatch)
+    monkeypatch.setattr(embeddings, "embed", lambda texts, kind, post=None, sleep=None:
+                        [[0.0] * embeddings.EMBED_DIMENSIONS])
+    assert catalog_search.search(None, "lactose free milk", {}, 20, hybrid=True)[1] == "hybrid"
+    assert catalog_search.search(None, "lactose free milk", {}, 20)[1] == "text"
+    monkeypatch.setenv("SEARCH_HYBRID", "true")
+    assert catalog_search.search(None, "lactose free milk", {}, 20, hybrid=False)[1] == "text"
+    assert [c["hybrid"] for c in calls] == [True, False, False]
+
+
+def test_a_hybrid_call_that_cannot_embed_falls_back_to_text(monkeypatch):
+    calls = fake_store(monkeypatch, fail=embeddings.EmbeddingError("rate-limited"))
+    assert catalog_search.search(None, "oat drink", {}, 20, hybrid=True)[1] == "text"
+    assert [c["hybrid"] for c in calls] == [True, False]
+
+
 def test_a_bad_filter_is_still_an_error_not_a_fallback(monkeypatch):
     monkeypatch.setenv("SEARCH_HYBRID", "true")
     fake_store(monkeypatch, fail=ValueError("limit must be an integer from 1 to 50"))
@@ -140,28 +167,141 @@ def test_the_query_embedder_never_waits_or_retries(monkeypatch):
     assert seen["kind"] == "query" and len(vectors[0]) == embeddings.EMBED_DIMENSIONS
 
 
-def test_the_tool_answer_says_which_search_ran():
-    from gateway.tests.test_gateway_app import AGENT, K
-    import importlib
-    app_tests = importlib.import_module("gateway.tests.test_gateway_app")
-    import mongomock
-    from fastapi.testclient import TestClient
-    from gateway.app import create_app
-    from gateway.service import Gateway
-    from gateway.valio_client import ValioClient
-
+def test_the_tool_answer_says_which_search_ran(monkeypatch):
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
     db = mongomock.MongoClient(tz_aware=True)["test"]
     fake = app_tests.FakeValio()
     gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: app_tests.NOW),
                  now=lambda: app_tests.NOW,
                  search=lambda db, q, f, n, kitchen_id=None: [{"product_id": "462775"}])
-    import os
-    os.environ.setdefault("GATEWAY_AGENT_TOKEN", "agent-test-token")
     client = TestClient(create_app(gw))
-    plain = client.post("/tools/search_products", headers=AGENT, json={"query": "milk"})
+    plain = client.post("/tools/search_products", headers=app_tests.AGENT, json={"query": "milk"})
     assert plain.status_code == 200 and plain.json()["search"] == "text"
-    need = client.post(K + "/needs", headers=AGENT,
+    need = client.post(app_tests.K + "/needs", headers=app_tests.AGENT,
                        json={"quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
-    short = client.post("/tools/search_products", headers=AGENT,
+    short = client.post("/tools/search_products", headers=app_tests.AGENT,
                         json={"query": "milk", "need_id": need["need_id"]})
     assert short.status_code == 200 and short.json()["search"] == "text"
+
+
+def _app_client(monkeypatch, search):
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    db = mongomock.MongoClient(tz_aware=True)["test"]
+    fake = app_tests.FakeValio()
+    gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: app_tests.NOW),
+                 now=lambda: app_tests.NOW, search=search)
+    return TestClient(create_app(gw)), gw
+
+
+def test_mode_hybrid_runs_meaning_for_the_catalog_page_only(monkeypatch):
+    """#1382: `mode: "hybrid"` turns hybrid on for one request; a need's shortlist (the
+    Buyer) ignores it, so the rehearsed basket never changes."""
+    AGENT, K = app_tests.AGENT, app_tests.K
+    asked = []
+
+    def search(db, query, filters, limit, kitchen_id=None, *, injected=None, now=None,
+               hybrid_ok=True, hybrid=None):
+        asked.append(hybrid)
+        if hybrid:
+            return [{"product_id": "1", "matched_by": "meaning"},
+                    {"product_id": "2", "matched_by": "both"}], "hybrid"
+        return [{"product_id": "3"}], "text"
+
+    monkeypatch.setattr(catalog_search, "search", search)
+    client, _ = _app_client(monkeypatch, None)
+    on = client.post("/tools/search_products", headers=AGENT,
+                     json={"query": "lactose-free milk", "mode": "hybrid"})
+    assert on.status_code == 200, on.text
+    body = on.json()
+    assert body["search"] == "hybrid" and "meaning_unavailable" not in body
+    assert [p["matched_by"] for p in body["products"]] == ["meaning", "both"]
+    off = client.post("/tools/search_products", headers=AGENT, json={"query": "lactose-free milk"}).json()
+    assert off["search"] == "text" and [p["matched_by"] for p in off["products"]] == ["words"]
+    text = client.post("/tools/search_products", headers=AGENT, json={"query": "milk", "mode": "text"})
+    assert text.status_code == 200
+    assert asked == [True, None, False]
+    need = client.post(K + "/needs", headers=AGENT,
+                       json={"quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
+    asked.clear()
+    short = client.post("/tools/search_products", headers=AGENT,
+                        json={"query": "milk", "need_id": need["need_id"], "mode": "hybrid"})
+    assert short.status_code == 200 and short.json()["search"] == "text"
+    assert asked and all(h is None for h in asked)      # the Buyer's path: SEARCH_HYBRID decides
+    assert all(p["matched_by"] == "words" for p in short.json()["products"])
+
+
+def test_mode_hybrid_that_falls_back_says_so(monkeypatch):
+    AGENT = app_tests.AGENT
+    client, _ = _app_client(monkeypatch, lambda db, q, f, n, kitchen_id=None: [{"product_id": "462775"}])
+    body = client.post("/tools/search_products", headers=AGENT,
+                       json={"query": "lactose-free milk", "mode": "hybrid"}).json()
+    assert body["search"] == "text" and body["meaning_unavailable"] is True
+    assert body["products"][0]["matched_by"] == "words"
+    plain = client.post("/tools/search_products", headers=AGENT, json={"query": "milk"}).json()
+    assert "meaning_unavailable" not in plain
+
+
+@pytest.mark.parametrize("mode", ["meaning", 1, True, ""])
+def test_an_unknown_mode_is_refused(monkeypatch, mode):
+    AGENT = app_tests.AGENT
+    client, _ = _app_client(monkeypatch, lambda db, q, f, n, kitchen_id=None: [])
+    r = client.post("/tools/search_products", headers=AGENT, json={"query": "milk", "mode": mode})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_the_mcp_tool_never_sends_mode():
+    import inspect
+    from gateway import mcp_server
+    source = inspect.getsource(mcp_server.build_server)
+    tool = source[source.index("async def search_products"):source.index("async def get_offer")]
+    assert not re.search(r"\bmode\b", tool)      # model_dump is fine; a `mode` key is not
+
+
+# ---- the meaning search alone: the Buyer's fallback when the words find nothing (#1384) ----
+
+def test_meaning_runs_the_vector_search_with_the_same_filters_whatever_the_switch_says(monkeypatch):
+    calls = fake_store(monkeypatch)
+    monkeypatch.setattr(embeddings, "embed", lambda texts, kind, post=None, sleep=None: (
+        [[0.0] * embeddings.EMBED_DIMENSIONS]))
+    filters = {"exclude_allergens": ["milk"], "allergen_strictness": "strict"}
+    rows = catalog_search.meaning(None, "talon maito", filters, 50, "k1")
+    assert rows == [{"product_id": "462775"}]
+    assert calls == [{"query": "talon maito", "hybrid": True, "limit": 50, "kitchen_id": "k1"}]
+
+
+@pytest.mark.parametrize("failure", [
+    embeddings.EmbeddingError("embedding request failed: rate-limited"),
+    TimeoutError("slow"),
+    RuntimeError("no such index: products_vector"),
+])
+def test_meaning_says_it_cannot_run_and_then_rests(monkeypatch, failure):
+    calls = fake_store(monkeypatch, fail=failure)
+    clock = {"t": 100.0}
+    with pytest.raises(catalog_search.MeaningUnavailable):
+        catalog_search.meaning(None, "talon maito", {}, 50, now=lambda: clock["t"])
+    with pytest.raises(catalog_search.MeaningUnavailable):
+        catalog_search.meaning(None, "other words", {}, 50, now=lambda: clock["t"])
+    assert len(calls) == 1                                 # no second embedding call while it rests
+
+
+def test_meaning_keeps_a_bad_filter_an_error(monkeypatch):
+    fake_store(monkeypatch, fail=ValueError("unknown allergen: 'peanutz'"))
+    with pytest.raises(ValueError):
+        catalog_search.meaning(None, "talon maito", {"exclude_allergens": ["peanutz"]}, 50)
+
+
+def test_meaning_with_no_words_finds_nothing_and_embeds_nothing(monkeypatch):
+    calls = fake_store(monkeypatch)
+    assert catalog_search.meaning(None, "  ", {}, 50) == [] and calls == []
+
+
+def test_meaning_uses_the_gateways_injected_one(monkeypatch):
+    calls = fake_store(monkeypatch)
+    rows = catalog_search.meaning("db", "maito", {}, 8, "k1",
+                                  injected=lambda db, q, f, n, kitchen_id=None: [{"product_id": q}])
+    assert (rows, calls) == ([{"product_id": "maito"}], [])
+
+    def slow(db, q, f, n, kitchen_id=None):
+        raise TimeoutError("slow")
+    with pytest.raises(catalog_search.MeaningUnavailable):
+        catalog_search.meaning("db", "maito", {}, 8, injected=slow)

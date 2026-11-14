@@ -3,6 +3,7 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { LabelChip } from "@/components/purchasing/chips";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
+import { DemoNote, leadTimeText } from "@/components/purchasing/proposal-lines";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/api/types";
 import { formatDateTime, formatEur, formatNumber, formatPercent } from "@/lib/format";
@@ -26,9 +27,13 @@ export const CHOOSE_ERRORS: Record<string, string> = {
   IDEMPOTENCY_KEY_REUSED: "This choice clashed with an earlier one that was still being sent. The current basket is unchanged; try again. Nothing was approved.",
 };
 
-/** Why a person cannot approve this option now; null when they can. */
+/**
+ * Why a person cannot approve this option now; null when they can. Unknown stock is not a
+ * reason (#1221, #1434, docs/contract.md "Chef substitute choices"): the order is placed and
+ * waits for the supplier. Only a passed cut-off blocks; an option that is no longer available
+ * is refused by the gateway (`OPTION_UNAVAILABLE`) and never offered.
+ */
 function blockedReason(option: ProposalOption, t: (text: string) => string): string | null {
-  if (!option.stockConfirmed) return t("Stock is not confirmed. Approval is available once the supplier confirms it.");
   if (option.cutoffPassed) return t("The order cut-off has passed.");
   return null;
 }
@@ -204,7 +209,7 @@ export function OptionCompare({
                 >
                   <span className="flex shrink-0 -space-x-2" data-testid="option-thumbs">
                     {option.lines.map((line, n) => (
-                      <ProductThumb key={`${line.productId}-${n}`} en={line.productName} size="sm" className="ring-2 ring-background" />
+                      <ProductThumb key={`${line.productId}-${n}`} en={line.productName} fi={line.productNameFi} brand={line.brand} size="sm" className="ring-2 ring-background" />
                     ))}
                   </span>
                   <span id={titleId} className="min-w-0 flex-[1_1_16rem] break-words font-medium">
@@ -221,6 +226,11 @@ export function OptionCompare({
                     ) : null}
                     {option.kind === "PARTIAL" ? <span className={BADGE}>{t("Part now, the rest later")}</span> : null}
                     {option.chosen ? <span className={BADGE}>{t("Proposed now")}</span> : null}
+                    {option.stockConfirmed ? null : (
+                      <span className={cn(BADGE, "border-warning/40 bg-warning-surface text-warning")}>
+                        {t("Valio must confirm stock")}
+                      </span>
+                    )}
                     <span className="price-tag min-w-0 break-words text-xs font-normal">
                       {priceLabel === "unknown" ? <span className="unknown-value">{t("unknown")}</span> : priceLabel}
                     </span>
@@ -251,17 +261,43 @@ export function OptionCompare({
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-3">
                 <Fact label={t("Stock")}>{option.stockConfirmed ? t("confirmed") : "unknown"}</Fact>
                 <Fact label={t("Order cut-off")} bad={option.cutoffPassed === true}>
-                  {option.cutoffPassed == null
-                    ? "unknown"
-                    : option.cutoffPassed
-                      ? option.cutoffAt
-                        ? t("missed (closed {date})", { date: formatDateTime(option.cutoffAt) })
-                        : t("missed")
-                      : option.cutoffAt
-                        ? t("met (order by {date})", { date: formatDateTime(option.cutoffAt) })
-                        : t("met")}
+                  {option.cutoffPassed == null && option.cutoffAt == null ? (
+                    "unknown"
+                  ) : (
+                    <>
+                      {option.cutoffPassed == null
+                        ? t("order by {date}", { date: formatDateTime(option.cutoffAt) })
+                        : option.cutoffPassed
+                          ? option.cutoffAt
+                            ? t("missed (closed {date})", { date: formatDateTime(option.cutoffAt) })
+                            : t("missed")
+                          : option.cutoffAt
+                            ? t("met (order by {date})", { date: formatDateTime(option.cutoffAt) })
+                            : t("met")}
+                      <DemoNote source={option.cutoffSource} />
+                    </>
+                  )}
                 </Fact>
-                <Fact label={t("Delivery reliability")}>{formatPercent(option.deliveryReliability)}</Fact>
+                <Fact label={t("Delivery reliability")}>
+                  {option.deliveryReliability == null ? (
+                    "unknown"
+                  ) : (
+                    <>
+                      {formatPercent(option.deliveryReliability)}
+                      <DemoNote source={option.reliabilitySource} />
+                    </>
+                  )}
+                </Fact>
+                <Fact label={t("Lead time")}>
+                  {option.leadTimeDays == null ? (
+                    "unknown"
+                  ) : (
+                    <>
+                      {leadTimeText(option.leadTimeDays, t)}
+                      <DemoNote source={option.leadTimeSource} />
+                    </>
+                  )}
+                </Fact>
                 <Fact label={t("CO2 (product-group average)")}>
                   {co2 == null
                     ? "unknown"

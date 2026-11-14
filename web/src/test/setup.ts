@@ -3,11 +3,15 @@ import { cleanup } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach } from "vitest";
 
+import { dropKeptAnswers } from "@/lib/use-async";
+
 afterEach(() => {
   cleanup();
   // Sonner replays every active toast to the next Toaster that mounts: clear them,
   // or one test's "saved" toast shows up in the next test.
   toast.dismiss();
+  // Kept answers live in the module: one test's list must not open the next test's page.
+  dropKeptAnswers();
 });
 
 // jsdom has no layout. Radix popper parts (tooltip, select) call these;

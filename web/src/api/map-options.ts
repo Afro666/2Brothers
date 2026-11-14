@@ -1,3 +1,4 @@
+import { readDeliveryFacts, type DeliveryFacts } from "@/api/delivery-facts";
 import { mapMoney } from "@/api/map";
 import { ApiError } from "@/api/types";
 import type { OfferTier, ProductLabel, ProposalOption, ProposalOptionLine } from "@/types";
@@ -21,6 +22,11 @@ function row(value: unknown, what: string): Row {
   return value as Row;
 }
 
+/** A name field of a line (#1130): a nonempty string, else null (never invented). */
+function nameOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 function text(value: unknown, what: string): string {
   if (typeof value !== "string" || !value) invalid(`${what} must be a nonempty string`);
   return value as string;
@@ -32,12 +38,26 @@ function everyLine<T>(lines: Row[], read: (line: Row) => T | null): T[] | null {
   return values.every((value) => value !== null) ? (values as T[]) : null;
 }
 
+/** The line whose `value` is the extreme (smallest, or largest with `largest`), or undefined. */
+function extreme(facts: DeliveryFacts[], value: (fact: DeliveryFacts) => number | null, largest = false) {
+  return facts
+    .filter((fact) => value(fact) != null)
+    .reduce<DeliveryFacts | undefined>(
+      (best, fact) =>
+        best === undefined || (largest ? value(fact)! > value(best)! : value(fact)! < value(best)!) ? fact : best,
+      undefined,
+    );
+}
+
 /**
  * Contract `substitute_options` (docs/contract.md, "Chef substitute choices") to UI options.
  * Whatever the gateway does not send stays unknown (null, or false for stock), never zero.
  * `currentOfferId` is the proposal's own `offer_id`; `names` gives product names by id.
  *
- * Read from each line when present: `cutoff_passed` (offer line), `reason_codes`, `reliability`,
+ * Read from each line when present: `product_name`, `product_name_fi` and `brand` (#1130; the
+ * line's own name wins over `names`), `cutoff_passed` (offer line), `reason_codes`, the delivery
+ * facts `cutoff_at`, `lead_time_days` and `delivery_reliability` with their sources (#1453; the old
+ * `reliability` only when a line has no `delivery_reliability`),
  * `carbon_kg_co2e_per_kg` and `labels` (#274, named as on the product row), and `unit_price`
  * (the gateway sends it per `unit`; the contract does not list it yet). Only an explicit `true`
  * from the gateway marks an option as recommended.
@@ -62,15 +82,27 @@ export function mapProposalOptions(
       const productId = text(line.product_id, "product_id");
       return {
         productId,
-        productName: names?.get(productId) ?? null,
+        productName: nameOrNull(line.product_name) ?? names?.get(productId) ?? null,
+        productNameFi: nameOrNull(line.product_name_fi),
+        brand: nameOrNull(line.brand),
         quantity: mapMoney(line.quantity, "quantity"),
         unit: text(line.unit, "unit"),
         unitPrice: line.unit_price == null ? null : mapMoney(line.unit_price, "unit_price"),
       };
     });
-    const reliability = everyLine(rawLines, (line) =>
-      typeof line.reliability === "number" && line.reliability >= 0 && line.reliability <= 1 ? line.reliability : null,
-    );
+    // Cut-off, lead time and reliability to show (#1453). Reliability is the line's
+    // `delivery_reliability`; a proposal stored before #1453 has only Valio's `reliability`.
+    const facts = rawLines.map((line) => {
+      const fact = readDeliveryFacts(line);
+      if (fact.deliveryReliability != null) return fact;
+      const old = line.reliability;
+      return typeof old === "number" && old >= 0 && old <= 1
+        ? { ...fact, deliveryReliability: old, reliabilitySource: "valio" as const }
+        : fact;
+    });
+    const earliestCutoff = extreme(facts, (fact) => (fact.cutoffAt == null ? null : Date.parse(fact.cutoffAt)));
+    const longestLead = extreme(facts, (fact) => fact.leadTimeDays, true);
+    const weakest = extreme(facts, (fact) => fact.deliveryReliability);
     const carbon = everyLine(rawLines, (line) =>
       typeof line.carbon_kg_co2e_per_kg === "number" && Number.isFinite(line.carbon_kg_co2e_per_kg)
         ? line.carbon_kg_co2e_per_kg
@@ -93,9 +125,13 @@ export function mapProposalOptions(
         : rawLines.every((line) => line.cutoff_passed === false)
           ? false
           : null,
-      // The contract has no cut-off time on an offer line.
-      cutoffAt: null,
-      deliveryReliability: reliability && Math.min(...reliability),
+      cutoffAt: earliestCutoff?.cutoffAt ?? null,
+      cutoffSource: earliestCutoff?.cutoffSource ?? null,
+      leadTimeDays: longestLead?.leadTimeDays ?? null,
+      leadTimeSource: longestLead?.leadTimeSource ?? null,
+      // The weakest line that states one (#1453): a line without a value does not hide the rest.
+      deliveryReliability: weakest?.deliveryReliability ?? null,
+      reliabilitySource: weakest?.reliabilitySource ?? null,
       co2KgPerKg: carbon && { min: Math.min(...carbon), max: Math.max(...carbon) },
       labels:
         labels &&

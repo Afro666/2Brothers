@@ -13,6 +13,7 @@ Run: `two-brothers-gateway` (uvicorn on 0.0.0.0:8000). Never logs keys or bodies
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 import time
 from datetime import datetime
@@ -22,11 +23,12 @@ from typing import Any, Literal
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from gateway.service import Gateway, GatewayError
 from gateway.valio_client import ValioBusy
-from gateway.request_docs import (CreateNeedRequest, GetOfferRequest, PlaceOrderRequest,
-                                  RequestApprovalRequest, SearchProductsRequest,
+from gateway.request_docs import (ChangeProposalRequest, CreateNeedRequest, GetOfferRequest,
+                                  PlaceOrderRequest, RequestApprovalRequest, SearchProductsRequest,
                                   SimulateOrderRequest, document_body)
 
 DEFAULT_KITCHEN = "demo-kitchen"
@@ -115,9 +117,11 @@ REFUSAL_WINDOW = 60.0          # seconds: one audit row per repeated refusal (#8
 
 
 def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None,
-               delivery_note_worker=None, menu_photo_worker=None, buying_note_worker=None, price_list_worker=None, explanation_worker=None, label_photo_worker=None, brief_worker=None) -> FastAPI:
+               delivery_note_worker=None, menu_photo_worker=None, buying_note_worker=None, price_list_worker=None, explanation_worker=None, label_photo_worker=None, brief_worker=None,
+               split_worker=None) -> FastAPI:
     from gateway.buyer_worker import Breaker
     buyer_breaker = Breaker()        # one per app: a timeout skips the model for 2 minutes
+    split_breaker = Breaker()        # the same for the split of several products (#1375), its own
     app = FastAPI(
         title="Trusted Kitchen Buyer gateway", version="0.1.0",
         description=("REST and MCP gateway between a kitchen's Buyer agent and its suppliers. "
@@ -184,7 +188,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     async def _supplier_busy(_: Request, exc: ValioBusy) -> JSONResponse:
         return JSONResponse(status_code=503, headers={"Retry-After": str(exc.retry_after)},
                             content={"error": {"code": "SUPPLIER_BUSY", "message": str(exc),
-                                               "retry_after": exc.retry_after}})
+                                               "retry_after_s": exc.retry_after}})   # #1286
 
     @app.exception_handler(ValueError)
     async def _invalid(_: Request, exc: ValueError) -> JSONResponse:
@@ -325,10 +329,17 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need("kitchen:propose", kitchen_id)
         data = await body(request)
         data.pop("buyer_down", None)          # set by the gateway only, never by the client
+        # Gateway work that can call Valio runs in a worker thread: the limiter's wait
+        # (Gate.acquire, a blocking sleep) must never freeze the event loop (#1280).
+        if 'needs' in data:
+            return await run_in_threadpool(gw().create_proposal, kitchen_id, data, who.name)   # list body (#1375)
         if 'text' in data and 'product_ids' not in data:
+            several = gw().prepare_several(kitchen_id, data)
+            if several is not None:
+                return several.get("replay") or await split_and_propose(kitchen_id, data, several["day"], who.name)
             # A request the kitchen's allergen rule removes ends here, with the reason (#974):
             # the Buyer would only see what the rule left and propose another kind of product.
-            refused = gw().refuse_excluded(kitchen_id, data, who.name)
+            refused = await run_in_threadpool(gw().refuse_excluded, kitchen_id, data, who.name)
             if refused is not None:
                 return refused
             from gateway.buyer_worker import run_buyer
@@ -349,7 +360,41 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
                     if exc.code == "BUYER_TIMEOUT":
                         buyer_breaker.trip()
                         data["buyer_down"] = True
-        return gw().create_proposal(kitchen_id, data, who.name)
+        return await run_in_threadpool(gw().create_proposal, kitchen_id, data, who.name)
+
+    async def split_and_propose(kitchen_id: str, data: dict, day: str, actor: str) -> dict:
+        """Several products in one text (#1375): Nemotron splits it, plain code checks the
+        split (the model never sets a quantity), and the needs go as one list body. The model
+        off, slow or out of its schema: the plain-code split. A split that fails the check is
+        refused with the sentence of #288."""
+        import asyncio
+        from gateway import split
+        from gateway.buyer_worker import SPLIT_SECONDS, run_split
+        from gateway.parse import ONE_PRODUCT, ParseError
+        text, reply, split_by = data["text"], None, "rules"
+        if not split_breaker.is_open():
+            try:
+                reply = await asyncio.wait_for((split_worker or run_split)(kitchen_id, text), SPLIT_SECONDS + 1)
+                split_breaker.reset()
+            except asyncio.TimeoutError:
+                split_breaker.trip()          # the next texts skip the model for 2 minutes
+            except Exception:
+                reply = None                  # never upstream text in an answer: the rules split
+        try:
+            if reply is not None:
+                try:
+                    needs, split_by = split.check(text, reply), "model"
+                except ParseError:
+                    # The sentence of before (#288), never the model's words.
+                    raise GatewayError(422, "CANNOT_READ_REQUEST", ONE_PRODUCT) from None
+            else:
+                needs = split.rules_split(text)
+        except ParseError as exc:
+            raise GatewayError(422, "CANNOT_READ_REQUEST", str(exc)) from None
+        body = {"needs": needs, "requested_date": day, "idempotency_key": data["idempotency_key"], "text": text}
+        if data.get("event") is True:
+            body["event"] = True
+        return await run_in_threadpool(gw()._create_list, kitchen_id, body, actor, split_by=split_by)
 
     @app.get(k + "/proposals")
     def list_proposals(kitchen_id: str, who: Principal = Depends(principal)):
@@ -386,7 +431,9 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
             try:
                 return enrich(gw(), kitchen_id, proposal, explanation_language, background_tasks,
                               who.name, explanation_worker)
-            except Exception:
+            except Exception as exc:
+                logging.getLogger(__name__).warning('explanation enrich failed proposal_id=%s error=%s',
+                                                    proposal_id, type(exc).__name__)
                 return {**proposal, 'explanation': None}
         return proposal
 
@@ -399,8 +446,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     async def approve(kitchen_id: str, proposal_id: str, request: Request, who: Principal = Depends(principal)):
         # A person: a signed-in approver, or a personal approval token (decision 2026-11-14).
         who.need("kitchen:read", kitchen_id)
-        return gw().approve(kitchen_id, proposal_id, await body(request), human=who.approver,
-                            via=who.via_audit)
+        return await run_in_threadpool(gw().approve, kitchen_id, proposal_id, await body(request),
+                                       human=who.approver, via=who.via_audit)
 
     @app.post(k + "/proposals/{proposal_id}/reject")
     async def reject(kitchen_id: str, proposal_id: str, request: Request, who: Principal = Depends(principal)):
@@ -413,16 +460,17 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
                             who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
         from gateway import options
-        return options.choose(gw(), kitchen_id, proposal_id, await body(request), human=who.human)
+        return await run_in_threadpool(options.choose, gw(), kitchen_id, proposal_id, await body(request),
+                                       human=who.human)
 
-    @app.post(k + "/proposals/{proposal_id}/change")
+    @app.post(k + "/proposals/{proposal_id}/change", openapi_extra=document_body(ChangeProposalRequest))
     async def change_proposal(kitchen_id: str, proposal_id: str, request: Request,
                               who: Principal = Depends(principal)):
         # A person or an agent may change a proposal (#303); only a person approves it.
         who.need("kitchen:propose", kitchen_id)
         from gateway import change
-        return change.change(gw(), kitchen_id, proposal_id, await body(request), actor=who.name,
-                             person=who.name if who.kind == "human" else None)
+        return await run_in_threadpool(change.change, gw(), kitchen_id, proposal_id, await body(request),
+                                       actor=who.name, person=who.name if who.kind == "human" else None)
 
     @app.post(k + "/recalls/{event_id}/dismiss")
     async def dismiss_recall(kitchen_id: str, event_id: str, request: Request, who: Principal = Depends(principal)):
@@ -669,12 +717,16 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         need_id = data.get("need_id")
         if need_id is not None and not isinstance(need_id, str):
             raise GatewayError(422, "INVALID_REQUEST", "need_id must be a string")
-        return gw().tool_search(kitchen(who), data.get("query") or "", data.get("filters") or {}, limit, need_id)
+        mode = data.get("mode")      # the Catalog page's "Search by meaning" switch (#1382)
+        if mode is not None and mode not in ("text", "hybrid"):
+            raise GatewayError(422, "INVALID_REQUEST", 'mode: "text" or "hybrid"')
+        return await run_in_threadpool(gw().tool_search, kitchen(who), data.get("query") or "",
+                                       data.get("filters") or {}, limit, need_id, mode)
 
     @app.post("/tools/get_offer", openapi_extra=document_body(GetOfferRequest))
     async def get_offer(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose")
-        return gw().tool_get_offer(kitchen(who), await body(request))
+        return await run_in_threadpool(gw().tool_get_offer, kitchen(who), await body(request))
 
     @app.post("/tools/simulate_order", openapi_extra=document_body(SimulateOrderRequest))
     async def simulate(request: Request, who: Principal = Depends(principal)):
@@ -712,8 +764,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         if not isinstance(proposal_id, str) or not proposal_id:
             raise GatewayError(422, "INVALID_REQUEST", "proposal_id is required")
         from gateway import change
-        return change.change(gw(), kitchen(who), proposal_id, data, actor=who.name,
-                             person=who.name if who.kind == "human" else None)
+        return await run_in_threadpool(change.change, gw(), kitchen(who), proposal_id, data, actor=who.name,
+                                       person=who.name if who.kind == "human" else None)
 
     @app.post("/audit/events")
     async def audit_ingest(request: Request, who: Principal = Depends(principal)):
@@ -751,6 +803,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     from gateway.model_usage import mount_model_usage
     mount_model_usage(app, gw, principal)
 
+    # Atlas facts (#1383): vectors, index states, time series, audit chain, for the About page.
+    from gateway.atlas_routes import mount_atlas
+    mount_atlas(app, gw, principal)
+
     # Onboarding lookup (#375): Context.dev brand lookup for the sign-up form.
     from gateway.onboarding import mount_onboarding
     mount_onboarding(app, principal, body)
@@ -766,14 +822,19 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     # Kitchen planning routes (#74): stock, products, recipes, menu plans, suppliers, demand.
     from gateway.kitchen_routes import register as register_kitchen_routes
     register_kitchen_routes(app, gw, principal, body)
+    from gateway.learned import mount_learned   # learned facts for one kitchen (#1305-#1307)
+    mount_learned(app, gw, principal, body)
 
     # Count from a shelf photo (#373): Nemotron VL reads it in the worker; stores no count.
     from gateway.stock_photo import mount_stock_photo
     mount_stock_photo(app, gw, principal, shelf_worker)
 
-    # Check a delivery from a photo of its note (#362): read in the worker; stores nothing.
+    # Check a delivery from a photo of its note (#362): read in the worker; save the facts.
     from gateway.delivery_note import mount_delivery_note
     mount_delivery_note(app, gw, principal, delivery_note_worker)
+    # One-tap "it all arrived" (#1304): a chef or approver's own observation, no stock change.
+    from gateway.received import mount_received
+    mount_received(app, gw, principal, body)
     from gateway.menu_photo import mount_menu_photo
     mount_menu_photo(app, gw, principal, menu_photo_worker)
     from gateway.price_list_photo import mount_price_list_photo   # a supplier's price list from a photo (#1174)

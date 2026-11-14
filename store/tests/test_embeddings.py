@@ -181,6 +181,27 @@ class HybridQueryTests(unittest.TestCase):
                                    {"allergens.contains": {"$nin": ["AM"]}},
                                    {"allergens.may_contain": {"$nin": ["AM"]}}])
 
+    def test_almonds_excluded_also_drops_a_tree_nuts_only_product_on_every_side(self):
+        # #1481: the group rule (#741) holds for the text, the vector and the hybrid search.
+        filters = {"exclude_allergens": ["SA"]}  # almonds
+        nuts_only = {"allergens": {"contains": ["AN"], "may_contain": []}}
+
+        def text_refuses(search):
+            return any(set(nuts_only["allergens"].get(c["in"]["path"].split(".")[1], []))
+                       & set(c["in"]["value"]) for c in search["compound"]["mustNot"] if "in" in c)
+
+        def vector_refuses(vector_filter_doc):
+            return any(set(nuts_only["allergens"].get(path.split(".")[1], [])) & set(cond["$nin"])
+                       for clause in vector_filter_doc["$and"] for path, cond in clause.items()
+                       if path.startswith("allergens."))
+
+        from store.search import build_pipeline
+        self.assertTrue(text_refuses(build_pipeline("drink", filters)[0]["$search"]))
+        self.assertTrue(vector_refuses(vector_filter(filters)))
+        sides = build_hybrid_pipeline("drink", "VECTOR", filters)[0]["$rankFusion"]["input"]["pipelines"]
+        self.assertTrue(text_refuses(sides["text"][0]["$search"]))
+        self.assertTrue(vector_refuses(sides["vector"][0]["$vectorSearch"]["filter"]))
+
     def test_hybrid_pipeline_fuses_text_and_vector_over_the_same_filters(self):
         pipeline = build_hybrid_pipeline("oat drink", "VECTOR", {"exclude_allergens": ["gluten"]}, 5, "k1")
         sides = pipeline[0]["$rankFusion"]["input"]["pipelines"]
@@ -202,6 +223,40 @@ class HybridQueryTests(unittest.TestCase):
             search_products(None, "milk", {"colour": "red"}, hybrid=True,
                             embedder=lambda texts, kind: calls.append(texts))
         self.assertEqual(calls, [])
+
+    def test_each_row_says_how_it_was_found(self):
+        """#1382: the Catalog page marks each row "by words", "by meaning" or "both"."""
+        def fused(pid, **ranks):
+            return {"_id": pid, "names": {"en": pid},
+                    "fusion": {"details": [{"inputPipelineName": side, "rank": rank}
+                                           for side, rank in ranks.items()]}}
+
+        class Products:
+            def __init__(self, docs):
+                self.docs = docs
+
+            def find_one(self, *args, **kwargs):
+                return None              # no stored vectors yet: no model to compare
+
+            def aggregate(self, pipeline):
+                return [dict(doc) for doc in self.docs]
+
+        class Db:
+            client, name = object(), "fake"
+
+            def __init__(self, docs):
+                self.products = Products(docs)
+
+        db = Db([fused("both", text=1, vector=2), fused("meaning", vector=1),
+                 fused("words", text=2)])
+        with mock.patch.object(embeddings, "current_model", return_value=None):
+            rows = search_products(db, "dairy-free drink", hybrid=True, embedder=fake_embedder)
+        self.assertEqual([(r["product_id"], r["matched_by"]) for r in rows],
+                         [("both", "both"), ("meaning", "meaning"), ("words", "words")])
+        self.assertIn("similar meaning, no word match", rows[1]["match_reasons"])
+        self.assertNotIn("similar meaning, no word match", rows[0]["match_reasons"])
+        text_rows = search_products(Db([{"_id": "plain", "names": {"en": "milk"}}]), "milk")
+        self.assertEqual([r["matched_by"] for r in text_rows], ["words"])
 
     @unittest.skipIf(mongomock is None, "mongomock is not installed")
     def test_a_query_model_other_than_the_stored_vectors_is_refused(self):

@@ -37,7 +37,7 @@ def apply_notices(gateway, kitchen_id, notices, *, live_enrichment=False):
             recalls.link(db, kitchen_id, proposal['_id'], recall_replan_error='KITCHEN_POLICY_UNKNOWN')
             continue
         policy, blocked = AllergenPolicy(tuple(exclusions)), recalls.blocked_ids(db, kitchen_id)
-        replacements = []
+        swaps = {}
         for pid in sorted(ids & blocked):
             source = product(db, kitchen_id, pid)
             if not source or not source.get('brand'):
@@ -46,20 +46,32 @@ def apply_notices(gateway, kitchen_id, notices, *, live_enrichment=False):
                 if (candidate['product_id'] not in blocked and candidate.get('brand') and
                     candidate['brand'].casefold() != source['brand'].casefold() and
                     policy.allowed(candidate, substitute=True)):
-                    replacements.append(candidate['product_id'])
+                    swaps.setdefault(pid, []).append(candidate['product_id'])
+        replacements = [c for pid in sorted(swaps) for c in swaps[pid]]
         safe_original = [pid for pid in proposal['request']['product_ids'] if pid not in blocked and
                          policy.allowed(product(db, kitchen_id, pid), substitute=True)]
         basket = list(dict.fromkeys([*safe_original, *replacements]))[:20]
+        needs = _needs(proposal['request'], ids, swaps, lambda pid: pid not in blocked and
+                       policy.allowed(product(db, kitchen_id, pid), substitute=True))
+        if needs is not None:
+            basket = [n['product_id'] for n in needs]
         if not basket:
             recalls.link(db, kitchen_id, proposal['_id'], recall_replan_error='NO_SAFE_REPLACEMENT')
             continue
         key = hashlib.sha256((proposal['_id'] + '|' + '|'.join(sorted(a['event_id'] for a in relevant))).encode()).hexdigest()
         try:
             # Provenance is the actor and the audit entry; the gateway sets made_by itself.
-            request = {k: v for k, v in proposal['request'].items() if k not in ('made_by', 'query')}
+            request = {k: v for k, v in proposal['request'].items()
+                       if k not in ('made_by', 'query', 'needs', 'items')}
+            if needs is not None:
+                request.update(quantity=str(len(needs)), unit='products')
             replacement = gateway.create_proposal(kitchen_id, {**request,
-                'product_ids': basket, 'idempotency_key': 'recall-' + key}, 'recall-buyer')
-            if not replacement['lines'] or replacement.get('shortfall') not in ('0', '0.0', '0.00'):
+                'product_ids': basket, 'idempotency_key': 'recall-' + key}, 'recall-buyer',
+                auto_approve=False, needs=needs)
+            covered = {line['product_id'] for line in replacement['lines']}
+            if (not replacement['lines'] or replacement.get('shortfall') not in ('0', '0.0', '0.00')
+                    or replacement.get('shortfalls')
+                    or (needs is not None and any(n['product_id'] not in covered for n in needs))):
                 recalls.link(db, kitchen_id, proposal['_id'], recall_replan_error='REPLACEMENT_SHORTFALL')
                 if recalls.reject_replacement(db, kitchen_id, replacement['proposal_id'],
                                               'recall replacement shortfall'):
@@ -83,6 +95,33 @@ def apply_notices(gateway, kitchen_id, notices, *, live_enrichment=False):
             recalls.link(db, kitchen_id, proposal['_id'], recall_replan_error='REPLACEMENT_UNAVAILABLE')
         results.append(gateway.get_proposal(kitchen_id, proposal['_id']))
     return results
+
+
+def _needs(request, priced, swaps, safe):
+    """#1482: a menu-plan (`needs`) or list (`items`, #1375) proposal is rebuilt line by line,
+    each with its own quantity and unit; a recalled product is swapped for a safe one.
+    None for a single-product request. [] when a line has no safe product (nothing proposed)."""
+    if request.get('needs'):
+        rows = [(n, [n['product_id']]) for n in request['needs']]
+    elif request.get('items'):
+        rows = [(item, sorted(item.get('product_ids') or [], key=lambda p: p not in priced))
+                for item in request['items'] if item.get('result', 'proposed') == 'proposed']
+    else:
+        return None
+    out = []
+    for row, pids in rows:
+        keep = next((p for p in pids if safe(p)), None)
+        if keep is not None:
+            need = {k: row[k] for k in ('quantity', 'unit', 'stock_counted', 'sales_unit', 'set_by') if k in row}
+            out.append({**need, 'product_id': keep})
+            continue
+        swap = next((s for p in pids for s in swaps.get(p, [])), None)
+        if swap is None:
+            return []
+        # The swap's own sales unit may differ: keep the need in the line's measure.
+        need = {k: row[k] for k in ('quantity', 'unit', 'stock_counted') if k in row}
+        out.append({**need, 'product_id': swap})
+    return out
 
 
 def main():

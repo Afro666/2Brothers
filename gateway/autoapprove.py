@@ -25,7 +25,8 @@ PRODUCT_ORDERS_NEEDED = 3
 MAX_LIMIT_EUR = Decimal("2000")
 NEVER_CODES = {"STOCK_UNKNOWN", "PARTIAL_STOCK", "CLOSING_PASSED", "ALLERGEN_RULE", "ALLERGEN_DATA_MISSING",
                "SUBSTITUTE_NEEDS_OK", "SUBSTITUTE_FAT_LEVEL", "EVENT_LINE", "STANDING_ORDER_DRIFT",
-               "STOCK_COUNT_MISSING", "BLOCKED_BY_RECALL"}
+               "STOCK_COUNT_MISSING", "BLOCKED_BY_RECALL",
+               "NEED_REFUSED"}    # a need of a request with several products was left out (#1375)
 
 
 class AutoApproveError(ValueError):
@@ -138,6 +139,8 @@ def decide(db, kitchen_id: str, simulation: dict, request: dict, now: datetime) 
         why.append("the request is not fully covered")
     if any(n.get("stock_counted") is False for n in request.get("needs") or []):
         why.append("needs a person: kitchen stock not counted")
+    if any(n.get("learned") for n in request.get("needs") or []):
+        why.append("a learned adjustment needs a person")
     if request.get("event") or request.get("made_by") == "recall-buyer":
         why.append("not a routine order")
     try:

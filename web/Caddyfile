@@ -34,6 +34,37 @@
 	# The Buyer agent and other services call the gateway here with their own
 	# bearer token; the gateway checks it. No shared password on this path.
 	handle_path /gateway/* {
+		# The same caps as /api below (#1322): the open demo lets a visitor make a token, and
+		# with it these routes run the paid models too. The Buyer service is not counted: it
+		# calls the gateway inside the Docker network, not through this path.
+		rate_limit {
+			zone gateway_new_proposals {
+				match {
+					method POST
+					path_regexp ^/v1/kitchens/[^/]+/proposals$
+				}
+				key {remote_host}
+				events 10
+				window 1m
+			}
+			zone gateway_shelf_photos {
+				match {
+					method POST
+					path_regexp ^/v1/kitchens/[^/]+/stock/photo$
+				}
+				key {remote_host}
+				events 10
+				window 1m
+			}
+			zone gateway_writes {
+				match {
+					method POST PUT PATCH DELETE
+				}
+				key {remote_host}
+				events 60
+				window 1m
+			}
+		}
 		reverse_proxy gateway:8000 {
 			import wait_for_gateway
 		}
@@ -95,6 +126,15 @@
 		reverse_proxy gateway:8000 {
 			import wait_for_gateway
 		}
+	}
+
+	# OAuth discovery: MCP clients (mcp-remote in Claude Desktop) ask these first. The gateway
+	# uses bearer tokens, not OAuth, so the answer is a 404 in JSON. The web app's index.html
+	# with a 200 made mcp-remote stop with "Unexpected token '<'" (live, 2026-11-14).
+	@oauth_discovery path /.well-known/oauth-* /.well-known/openid-configuration
+	handle @oauth_discovery {
+		header Content-Type application/json
+		respond `{"error":"not_found","message":"no OAuth here: use a bearer token"}` 404
 	}
 
 	handle {

@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from gateway.suppliers import VALIO
 
+# #1384: a product the Buyer's search found by meaning only, because the words found nothing.
+FOUND_BY_MEANING = "found by meaning (Atlas Vector Search) after the word search found nothing"
+
 
 def _supplier_of(sim: dict) -> dict:
     """product_id -> supplier name, from the proposal's supplier blocks (#73).
@@ -40,12 +43,16 @@ def decision_summary(request: dict, sim: dict, names: dict | None = None) -> dic
     ids = list(request.get("product_ids") or [])
     searched = (f"Checked {len(ids)} product(s) with {source} for "
                 f"{request.get('requested_date')}: {', '.join(ids)}.")
+    if request.get("search") == "meaning-fallback":
+        searched += f" {FOUND_BY_MEANING[0].upper()}{FOUND_BY_MEANING[1:]}."
 
     chosen = [f"{ln['quantity']} {ln['unit']} of {_name(ln['product_id'], names)}, "
               f"EUR {ln['total']} ex VAT: {ln['why']}" for ln in sim.get("lines") or []]
     left_out = [f"{_name(e['product_id'], names)} left out: {e['reason']}" for e in sim.get("excluded") or []]
     if sim.get("shortfall") not in (None, "0", "0.0"):
         left_out.append(f"{sim['shortfall']} {sim.get('measure')} of the request cannot be covered for this date.")
+    refused_needs = list(request.get("problems") or []) if request.get("made_by") == "list" else []
+    left_out = [f"Not proposed: {p}" for p in refused_needs] + left_out     # several products (#1375)
 
     fee = sim.get("delivery_fee")
     if not sim.get("lines"):
@@ -65,6 +72,8 @@ def decision_summary(request: dict, sim: dict, names: dict | None = None) -> dic
     elif verdict == "REFUSED":
         # A request the kitchen's allergen rule refuses as a whole says so in its own words (#974).
         refusal = (request.get("refusal") or {}).get("message")
+        if refused_needs and not refusal:
+            refusal = " ".join(refused_needs)      # every need of a list was refused (#1375)
         decide.append(f"Nothing can be ordered. {refusal}" if refusal
                       else "Nothing can be ordered: no line passed the checks.")
     unknown = [ln for ln in sim.get("lines") or [] if ln.get("unknown_stock") is not False]

@@ -2,7 +2,7 @@ import { useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { useApi } from "@/api";
-import { ACTOR_LABEL, AuditTimeline, KIND_META } from "@/components/purchasing/audit-timeline";
+import { ACTOR_LABEL, AuditTimeline, groupSteps, KIND_META } from "@/components/purchasing/audit-timeline";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
@@ -14,13 +14,13 @@ import { useT } from "@/lib/i18n";
 import type { AuditEvent, AuditKind } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
 
-/** Steps shown at first and added per "Show more": a phone stays short (#1142). */
+/** Requests shown at first and added per "Show more": a phone stays short (#1142). */
 export const AUDIT_PAGE = 50;
 
 export function AuditPage() {
   const t = useT();
   const api = useApi();
-  const state = useAsync(() => api.listAudit());
+  const state = useAsync(() => api.listAudit(), [], { keep: "audit" });
   useLiveEvents(["audit"], state.reload);
   const [order, setOrder] = useState("all");
   // `/audit?kind=search` chooses that kind (the Permissions page links here). Follows later
@@ -33,18 +33,19 @@ export function AuditPage() {
 
   const events = state.status === "ready" ? state.data : [];
   const orders = [...new Set(events.flatMap((event) => (event.orderId ? [event.orderId] : [])))];
-  const filtered = events.filter(
-    (event) =>
-      (order === "all" || event.orderId === order) &&
-      (kind === "all" || event.kind === kind) &&
-      (actor === "all" || event.actor === actor),
-  );
-  // The newest steps, still in time order; "Show more" adds earlier ones. Same stable sort as the timeline.
+  const matches = (event: AuditEvent) =>
+    (order === "all" || event.orderId === order) &&
+    (kind === "all" || event.kind === kind) &&
+    (actor === "all" || event.actor === actor);
+  const filtered = groupSteps(events).flatMap((group) => {
+    if (!group.events.some(matches)) return [];
+    return [{ ...group, events: group.events.filter(matches), rows: group.rows.filter(matches) }];
+  });
+  const stepCount = filtered.reduce((count, group) => count + group.rows.length, 0);
   const [shown, setShown] = useState(AUDIT_PAGE);
   useEffect(() => setShown(AUDIT_PAGE), [order, kind, actor]);
-  const inOrder = [...filtered].sort((a, b) => (a.at && b.at ? new Date(a.at).getTime() - new Date(b.at).getTime() : 0));
-  const visible = inOrder.slice(Math.max(0, inOrder.length - shown));
-  const earlier = inOrder.length - visible.length;
+  const visible = filtered.slice(0, shown);
+  const earlier = filtered.length - visible.length;
   function clearFilters() {
     setOrder("all");
     setKind("all");
@@ -115,9 +116,18 @@ export function AuditPage() {
               </label>
             </div>
             <p className="font-mono text-xs text-muted-foreground" aria-live="polite">
-              {filtered.length === 1
-                ? t("{count} step", { count: filtered.length })
-                : t("{count} steps", { count: filtered.length })}
+              <span>
+                {filtered.length === 1
+                  ? stepCount === 1
+                    ? t("{count} request, {steps} step", { count: filtered.length, steps: stepCount })
+                    : t("{count} request, {steps} steps", { count: filtered.length, steps: stepCount })
+                  : stepCount === 1
+                    ? t("{count} requests, {steps} step", { count: filtered.length, steps: stepCount })
+                    : t("{count} requests, {steps} steps", { count: filtered.length, steps: stepCount })}
+              </span>
+              <span className="sr-only">
+                {stepCount === 1 ? t("{count} step", { count: stepCount }) : t("{count} steps", { count: stepCount })}
+              </span>
             </p>
             {events.length === 0 ? (
               <EmptyState title={t("No audit steps yet")}>{t("Recorded events will appear here.")}</EmptyState>
@@ -132,15 +142,16 @@ export function AuditPage() {
                 {earlier > 0 ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm text-muted-foreground">
-                      {t("Showing the newest {count} steps, oldest first.", { count: visible.length })}
+                      {t("Showing the newest {count} requests, newest first.", { count: visible.length })}
                     </p>
-                    {/* Earlier steps go above the ones shown, so the button sits where they appear. */}
                     <Button variant="outline" onClick={() => setShown((value) => value + AUDIT_PAGE)}>
-                      {t("Show more ({count} earlier steps)", { count: earlier })}
+                      {earlier === 1
+                        ? t("Show more ({count} earlier request)", { count: earlier })
+                        : t("Show more ({count} earlier requests)", { count: earlier })}
                     </Button>
                   </div>
                 ) : null}
-                <AuditTimeline events={visible} />
+                <AuditTimeline events={events} groups={visible} />
               </div>
             )}
           </div>

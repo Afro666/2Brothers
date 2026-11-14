@@ -308,8 +308,11 @@ def _event_payload(kind: str, data: dict) -> dict:
 
 def _refused_payload(data: dict, actor: str) -> dict:
     """The audit entry without its path: a developer sees the route pattern, never an id."""
+    route = data.get("route")
+    if not (isinstance(route, str) and "{" in route):
+        route = None                                  # a concrete path carries ids (#1285)
     return {"actor": actor, "code": data.get("code"), "method": data.get("method"),
-            "route": data.get("route")}
+            "route": route}
 
 
 def _checked_payload(data: dict, actor: str) -> dict:

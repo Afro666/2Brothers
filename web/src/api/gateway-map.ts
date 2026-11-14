@@ -1,15 +1,18 @@
 import { mapMoney } from "@/api/map";
+import { readDeliveryFacts } from "@/api/delivery-facts";
 import { mapProposalOptions } from "@/api/map-options";
 import { mapModelTrace } from "@/api/model-trace";
 import { SUPPLIER_ID } from "@/api/supplier-id";
 import { ApiError } from "@/api/types";
-import { codeLabel, plainReason } from "@/lib/codes";
+import { CODE_LABELS, codeLabel, plainReason } from "@/lib/codes";
+import { formatDate } from "@/lib/format";
 import type {
   AddableProduct,
   ApprovalRequest,
   AuditEvent,
   AuditKind,
   BuyerPermissions,
+  MandateReason,
   MovState,
   Offer,
   Order,
@@ -164,11 +167,22 @@ function offerOf(
 function mapLine(row: Json, requestedDate: string): OrderLine {
   const id = text(row.product_id, "a line's product_id");
   const unit = text(row.unit, "a line's unit");
+  // Cut-off, lead time and reliability to show (#1453); an older proposal has none of them.
+  const facts = readDeliveryFacts(row);
   return {
-    product: productOf(id, null, unit),
-    // Only `unknown_stock: false` is a confirmation. The amount in stock is not sent.
-    offer: offerOf(id, unit, requestedDate, decimal(row.unit_price, "unit_price"), row.unknown_stock === false),
+    product: productOf(id, nullableText(row.product_name, "product_name"), unit),
+    offer: {
+      // Only `unknown_stock: false` is a confirmation. The amount in stock is not sent.
+      ...offerOf(id, unit, requestedDate, decimal(row.unit_price, "unit_price"), row.unknown_stock === false),
+      closingTime: facts.cutoffAt,
+      cutoffSource: facts.cutoffSource,
+      leadTimeDays: facts.leadTimeDays,
+      leadTimeSource: facts.leadTimeSource,
+      deliveryReliability: facts.deliveryReliability,
+      reliabilitySource: facts.reliabilitySource,
+    },
     quantity: mapMoney(row.quantity, "quantity"),
+    lineTotal: decimal(row.total, "line total"),
     why: typeof row.why === "string" && row.why ? row.why : "Not recorded with the order.",
   };
 }
@@ -215,6 +229,8 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     lines: source.lines.map((line) => mapLine(object(line, "an order line"), deliveryDate ?? "")),
     supplierMustConfirm: placed ? strings(placed.supplier_must_confirm) : [],
     totalExVat: proposal ? mapMoney(proposal.total_ex_vat, "total_ex_vat") : null,
+    vat: proposal ? decimal(proposal.vat, "vat") : null,
+    deliveryFee: proposal ? decimal(proposal.delivery_fee, "delivery_fee") : null,
     totalInclVat: mapMoney((placed ?? source).expected_total, "expected_total"),
     mov: proposal ? mapMov(proposal) : null,
     supplierOrderRef: placed ? resolutionRecord(placed.resolution)?.supplierOrderRef ?? null : null,
@@ -256,6 +272,7 @@ export function mapReceipt(value: unknown): OrderReceipt | null {
     total,
     supplierOutcome:
       typeof claims.supplier_outcome === "string" && claims.supplier_outcome ? claims.supplier_outcome : null,
+    supplierNote: typeof claims.supplier_note === "string" && claims.supplier_note ? claims.supplier_note : null,
   };
 }
 
@@ -415,6 +432,7 @@ const ACTOR_NAMES: Record<string, string> = {
   "demo-visitor": "a demo visitor",
   "demo-seed": "the demo setup",
   human: "a person",
+  chef: "the chef",
 };
 
 /**
@@ -425,6 +443,7 @@ const ACTOR_NAMES: Record<string, string> = {
 export function askedBy(actor: unknown, request: Json): string | null {
   if (typeof actor === "string" && actor.trim()) {
     if (actor.startsWith("supplier:")) return "Valio's selling agent";
+    if (actor.startsWith("token:")) return "an API client";
     return ACTOR_NAMES[actor] ?? actor;
   }
   if (typeof request.text === "string" && request.text.startsWith("Offer from ")) return "Valio's selling agent";
@@ -451,6 +470,21 @@ export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalR
   });
 }
 
+/** #1227: a known product's name in place of its code, and any code after it in words. */
+function approvalReason(rule: string, productNames: ReadonlyMap<string, string>): MandateReason {
+  // A bare known code gets its title and detail, as CHECK_CODES does, so both go through t().
+  if (Object.hasOwn(CODE_LABELS, rule)) return { rule: CODE_LABELS[rule].title, detail: CODE_LABELS[rule].detail };
+  return { rule: productReason(rule, productNames), detail: "" };
+}
+
+function productReason(rule: string, productNames: ReadonlyMap<string, string>): string {
+  const plain = plainReason(rule, productNames);
+  if (plain !== rule) return plain;
+  const [, productId, rest] = /^([^:]+): (.*)$/s.exec(rule) ?? [];
+  const name = productId == null ? undefined : productNames.get(productId);
+  return name ? `${name}: ${rest}` : rule;
+}
+
 /**
  * The approval card for one proposal. `events` is the kitchen's audit log: the proposal
  * itself does not say who asked or when, the event that created it does.
@@ -469,14 +503,37 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
   const productNames = new Map<string, string>();
   if (Array.isArray(proposal.lines)) {
     for (const line of proposal.lines) {
-      if (typeof line?.product_id === "string" && typeof line.product_name === "string") {
+      if (typeof line?.product_id === "string" && typeof line.product_name === "string" && line.product_name) {
         productNames.set(line.product_id, line.product_name);
+      }
+    }
+  }
+  if (Array.isArray(proposal.excluded)) {
+    for (const line of proposal.excluded) {
+      if (typeof line?.product_id !== "string" || productNames.has(line.product_id)) continue;
+      const name = typeof line.product_name === "string" && line.product_name ? line.product_name : line.name;
+      if (typeof name === "string" && name) productNames.set(line.product_id, name);
+    }
+  }
+  const supplierNames = new Map<string, string>();
+  if (Array.isArray(proposal.blocks)) {
+    for (const block of proposal.blocks) {
+      if (!block || typeof block.supplier_id !== "string" || !Array.isArray(block.lines)) continue;
+      const name =
+        block.supplier_id === SUPPLIER_ID
+          ? "Valio"
+          : typeof block.name === "string" && block.name
+            ? block.name
+            : block.supplier_id || null;
+      if (name == null) continue;
+      for (const line of block.lines) {
+        if (typeof line?.product_id === "string") supplierNames.set(line.product_id, name);
       }
     }
   }
   // #1142: no raw code reaches the screen, in a gateway reason or as an unknown warning.
   const reasons = [
-    ...strings(mandate.reasons).map((rule) => ({ rule: plainReason(rule, productNames), detail: "" })),
+    ...strings(mandate.reasons).map((rule) => approvalReason(rule, productNames)),
     ...Object.entries(CHECK_CODES)
       .filter(([code]) => codes.has(code))
       .map(([, reason]) => reason),
@@ -504,6 +561,12 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
       ? reasons
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],
     suppliersToConfirm: mapSuppliersToConfirm(proposal),
+    cutoffs: Array.isArray(proposal.lines)
+      ? proposal.lines.map((line) => ({
+          closingTime: nullableText(line?.closing_time, "closing_time"),
+          supplierName: typeof line?.product_id === "string" ? supplierNames.get(line.product_id) ?? null : null,
+        }))
+      : undefined,
     status: approvalStatus(proposal.status),
     options: mapProposalOptions(
       proposal.substitute_options,
@@ -561,10 +624,72 @@ const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
 
 /** `expected_total: 148.76; verdict: NEEDS_APPROVAL`: the gateway's own values, as sent. */
 function describe(fields: unknown): string {
-  const parts = Object.entries(fields && typeof fields === "object" ? fields : {}).map(
+  let values = fields;
+  if (typeof fields === "string") {
+    try {
+      values = JSON.parse(fields);
+    } catch {
+      values = fields;
+    }
+  }
+  const parts = Object.entries(values && typeof values === "object" ? values : {}).map(
     ([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
   );
   return parts.join("; ") || "No details recorded.";
+}
+
+function record(value: unknown): Json | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Json;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Json) : null;
+  } catch {
+    return null;
+  }
+}
+
+function auditId(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
+  const parsed = record(value);
+  if (parsed) return null;
+  try {
+    const unquoted: unknown = JSON.parse(value);
+    return typeof unquoted === "string" && unquoted ? unquoted : value;
+  } catch {
+    return value;
+  }
+}
+
+function groupIds(value: unknown, key?: string, ids: string[] = []): string[] {
+  if (key === "run_id" || key === "offer_id" || key === "proposal_id" || key === "order_id") {
+    const id = auditId(value);
+    if (id && !ids.includes(id)) ids.push(id);
+    return ids;
+  }
+  const row = record(value);
+  if (row) for (const [childKey, child] of Object.entries(row)) groupIds(child, childKey, ids);
+  else if (Array.isArray(value)) for (const child of value) groupIds(child, key, ids);
+  return ids;
+}
+
+function toolReason(tool: string, value: unknown): string {
+  const args = record(value);
+  if (!args) return "";
+  if (tool === "search_products") {
+    return typeof args.query === "string" && args.query ? `Looking for “${args.query}”` : "";
+  }
+  if (tool !== "get_offer") return "";
+  const count = Array.isArray(args.product_ids) ? args.product_ids.length : null;
+  const requestedDate = typeof args.requested_date === "string" ? args.requested_date : null;
+  const date =
+    requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) && Number.isFinite(Date.parse(`${requestedDate}T12:00:00+02:00`))
+      ? formatDate(requestedDate)
+      : null;
+  const products = count == null ? null : count === 1 ? "1 product" : `${count} products`;
+  if (products && date) return `${products} for ${date}`;
+  if (products) return products;
+  return date ? `For ${date}` : "";
 }
 
 function mapAuditEvent(event: Json): AuditEvent {
@@ -573,15 +698,20 @@ function mapAuditEvent(event: Json): AuditEvent {
     // Agent tool events carry no `at` today: the time is unknown, not "now".
     at: typeof event.at === "string" ? event.at : null,
     orderId: [event.order_id, event.proposal_id].find((id): id is string => typeof id === "string"),
+    groupIds: groupIds(event),
   };
   if (typeof event.tool === "string") {
     const finished = event.type === "tool_call_finished";
-    const error = object(event.result ?? {}, "an audit result").error;
+    const result = record(event.result ?? {});
+    if (!result) invalid("an audit result");
+    const error = result.error;
     const verb = Object.hasOwn(TOOL_VERBS, event.tool) ? TOOL_VERBS[event.tool] : undefined;
     return {
       ...base,
       kind: TOOL_KINDS[event.tool] ?? "other",
       actor: "agent",
+      reason: toolReason(event.tool, event.arguments),
+      details: describe(finished ? event.result : event.arguments),
       summary: !finished
         ? (verb?.started ?? `Buyer called ${event.tool}`)
         : error == null
@@ -589,7 +719,6 @@ function mapAuditEvent(event: Json): AuditEvent {
           : verb
             ? `${verb.done}: it failed`
             : `${event.tool} failed`,
-      reason: describe(finished ? event.result : event.arguments),
     };
   }
   const {
@@ -604,6 +733,17 @@ function mapAuditEvent(event: Json): AuditEvent {
     ...rest
   } = event;
   const known = typeof kind === "string" ? EVENT_KINDS[kind] : undefined;
+  const humanReason =
+    typeof rest.summary === "string"
+      ? rest.summary
+      : typeof rest.reason === "string" && rest.reason
+        ? rest.reason
+        : "";
+  const details = humanReason
+    ? Object.fromEntries(
+        Object.entries(rest).filter(([key]) => key !== (typeof rest.summary === "string" ? "summary" : "reason")),
+      )
+    : rest;
   return {
     ...base,
     // With sign-in on, the gateway's actor is the account's email: the log says who, not only "a person".
@@ -620,12 +760,8 @@ function mapAuditEvent(event: Json): AuditEvent {
               ? "human"
             : "system",
     summary: known?.summary ?? (typeof kind === "string" ? kind : "Unknown step"),
-    reason:
-      typeof rest.summary === "string"
-        ? rest.summary
-        : typeof rest.reason === "string" && rest.reason
-          ? rest.reason
-          : describe(rest),
+    reason: humanReason || (typeof kind === "string" && kind.startsWith("supplier_offer_") ? describe(rest) : ""),
+    details: describe(details),
   };
 }
 

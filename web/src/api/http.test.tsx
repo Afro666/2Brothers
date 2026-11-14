@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createHttpApi, gatewayRequest, SIGNED_OUT_EVENT } from "@/api/http";
+import { ApiError } from "@/api/types";
 import { auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
 import { renderApp } from "@/test/render";
 
@@ -68,10 +69,12 @@ describe("createHttpApi", () => {
         "changeProposal",
         "chooseOption",
         "getApproval",
+        "getAtlasFacts",
         "getForecastAccuracy",
         "getOrder",
         "getOrderResolution",
         "getPermissions",
+        "getProposalExplanation",
         "listApiTokens",
         "createApiToken",
         "revokeApiToken",
@@ -115,7 +118,9 @@ describe("createHttpApi", () => {
         "readShelfPhoto",
         // Plan from a menu photo (api/http-menu-photo.ts).
         "readMenuPhoto",
+        "readPriceListPhoto",
         "readDeliveryNote",
+        "readLabelPhoto",
         "getDemand",
         "proposeOrderForPlan",
         "getSharing",
@@ -317,6 +322,23 @@ describe("createHttpApi", () => {
     await expect(
       createHttpApi("/api").changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
     ).rejects.toMatchObject({ code, status });
+  });
+
+  // #1286: SUPPLIER_BUSY sends `retry_after_s`, as LOOKUP_RATE_LIMITED does. A gateway from before
+  // #1286 sends `retry_after`; the web reads both for one release.
+  it.each([
+    [{ retry_after_s: 27 }, 27],
+    [{ retry_after: 12 }, 12],
+    [{ retry_after_s: 27, retry_after: 12 }, 27],
+    [{}, undefined],
+    [{ retry_after_s: "soon" }, undefined],
+  ])("reads the wait of a busy answer (%o)", async (extra, seconds) => {
+    gateway({ [`POST ${K}/proposals/prop-1/change`]: () => error(503, "SUPPLIER_BUSY", extra) });
+    const refused = await createHttpApi("/api")
+      .changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human")
+      .catch((reason: unknown) => reason);
+    expect(refused).toBeInstanceOf(ApiError);
+    expect((refused as ApiError).retryAfterS).toBe(seconds);
   });
 
   it("reads standing-order drift from the gateway for the kitchen and for the supplier", async () => {
@@ -534,6 +556,27 @@ describe("createHttpApi", () => {
       expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);
     });
 
+    it("does not reuse a GET that started while a POST was in flight", async () => {
+      const calls: string[] = [];
+      let finishPost: () => void = () => {};
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === `POST ${K}/proposals`) {
+          return new Promise<Response>((reply) => (finishPost = () => reply(new Response("{}"))));
+        }
+        return new Promise<Response>(() => {});
+      });
+      const api = createHttpApi("/api");
+      const write = gatewayRequest("/api", "/v1/kitchens/demo-kitchen/proposals", { method: "POST", body: "{}" });
+      void api.listApprovals();
+      finishPost();
+      await write;
+      void api.listApprovals();
+      expect(calls.filter((call) => call === `GET ${K}/proposals`)).toHaveLength(2);
+      expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);
+    });
+
     it("does not reuse a GET that started before a live event", async () => {
       const calls: string[] = [];
       const encoder = new TextEncoder();
@@ -717,6 +760,20 @@ describe("createHttpApi", () => {
     });
     // Any other 429 stays the rate limit, whatever code it names.
     await expect(api.getSession()).rejects.toMatchObject({ code: "RATE_LIMITED" });
+  });
+
+  it.each(["PRICE_LIST_BUSY", "MENU_PHOTO_BUSY", "LABEL_PHOTO_BUSY"])("keeps the busy code %s of a 429", async (code) => {
+    gateway({ "GET /api/v1/me": () => error(429, code) });
+    await expect(createHttpApi("/api").getSession()).rejects.toMatchObject({ code, status: 429 });
+  });
+
+  it("keeps SUPPLIER_BUSY of a 429 with its retry_after", async () => {
+    gateway({ "GET /api/v1/me": () => error(429, "SUPPLIER_BUSY", { retry_after: 30 }) });
+    await expect(createHttpApi("/api").getSession()).rejects.toMatchObject({
+      code: "SUPPLIER_BUSY",
+      status: 429,
+      details: { retry_after: 30 },
+    });
   });
 
   it("clears the local account when logout fails", async () => {
@@ -1018,7 +1075,7 @@ describe("the app on the gateway", () => {
 
     expect(await screen.findByText("50 L oat drink by Friday")).toBeVisible();
     expect(screen.queryByText("Sample data")).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    await user.click(await screen.findByRole("button", { name: /^Inspect/ }));
     expect(screen.getAllByText("confirmed").length).toBeGreaterThan(0);
     expect(screen.getByText(/Free-delivery threshold and delivery fee unknown/)).toBeVisible();
 
@@ -1059,7 +1116,7 @@ describe("the app on the gateway", () => {
     });
     renderApp("/approvals", createHttpApi("/api"));
 
-    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    await user.click(await screen.findByRole("button", { name: /^Inspect/ }));
     const quantity = await screen.findByLabelText(/Quantity for 900001/);
     await user.clear(quantity);
     await user.type(quantity, "30");

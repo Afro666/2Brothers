@@ -205,3 +205,16 @@ def test_two_failed_runs_are_still_a_safe_fallback(monkeypatch):
         finally:
             await gateway.close()
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("strategy, attempts", [("loop", 3), ("single_pick", 1)])
+def test_default_model_keeps_retries_only_for_the_loop(monkeypatch, strategy, attempts):
+    """The loop fallback keeps its 429/5xx retries; single_pick makes one call (#1259)."""
+    monkeypatch.setenv("VERDA_INFERENCE_KEY", "not-a-real-secret")
+    for name in ("NEMOTRON_BASE_URL", "NEMOTRON_MODEL", "NEMOTRON_BUYER_THINKING", "NEMOTRON_BUYER_MAX_TOKENS"):
+        monkeypatch.delenv(name, raising=False)
+    model = BuyerWorker(mongomock.MongoClient().db, None, strategy=strategy).model_factory()
+    try:
+        assert model.max_attempts == attempts
+    finally:
+        asyncio.run(model.close())

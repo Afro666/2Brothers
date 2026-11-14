@@ -1,4 +1,10 @@
+import json
+import tempfile
 import unittest
+from datetime import date
+from pathlib import Path
+
+from env.catalog import PRODUCTS
 
 from env.chef import Chef, Habits, apply_truth
 from env.learn import correction_ratio, declined
@@ -79,6 +85,61 @@ class LearningRunTest(unittest.TestCase):
         learned = run_arm(seed=1, kitchen_type="restaurant", weeks=3, learning=True)
         self.assertLess(learned[2]["edits"], plain[2]["edits"])
         self.assertLessEqual(learned[2]["habit_stockout_days"], plain[2]["habit_stockout_days"])
+
+class NemotronArmTest(unittest.TestCase):
+    """#1309 part 2: the model arms see the engine's belief, never the patched truth, and
+    the memory arm gets the learned facts in its system prompt."""
+
+    def _policy(self, tmp):
+        from env.llm import LLMPolicy
+        from env.learning_run import LLM_MODEL
+        policy = LLMPolicy(LLM_MODEL, out=Path(tmp))
+        seen = []
+        policy._complete = lambda messages: (seen.append(messages) or ('{"order": {}}', 0))
+        return policy, seen
+
+    def test_the_calculator_sees_the_belief_not_the_truth(self):
+        env = KitchenWeek(seed=4, kitchen_type="restaurant")
+        obs = env.reset()
+        habits = Habits.for_kitchen(env.kitchen, 4)
+        apply_truth(env, habits)
+        while not obs["order_for"]:
+            obs = env.step({})[0]
+        env.believed_expected_use = lambda pid, day: env.forecast(day) * env.believed_usage(day).get(pid, 0.0)
+        pid = next(iter(habits.factor))
+        with tempfile.TemporaryDirectory() as tmp:
+            policy, seen = self._policy(tmp)
+            policy.begin(env)
+            policy(env, obs)
+            policy.end(env)
+        sent = json.loads(seen[0][1]["content"])["expected_use"][pid][0]
+        day = date.fromisoformat(obs["forecast"][0]["date"])
+        self.assertAlmostEqual(sent, round(env.believed_expected_use(pid, day), 3))
+        self.assertNotAlmostEqual(sent, round(env._expected_use(pid, day), 3))   # the truth differs
+
+    def test_memory_goes_into_the_system_prompt_and_nothing_without_it(self):
+        env = KitchenWeek(seed=4, kitchen_type="restaurant")
+        obs = env.reset()
+        while not obs["order_for"]:
+            obs = env.step({})[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            policy, seen = self._policy(tmp)
+            policy.begin(env)
+            policy(env, obs)
+            policy.memory = "What this kitchen taught the tool (facts, computed by code): [...]"
+            policy(env, obs)
+            policy.end(env)
+        self.assertEqual(seen[0][0]["content"], policy.system)
+        self.assertTrue(seen[1][0]["content"].endswith(policy.memory))
+
+    def test_learned_facts_have_the_agent_memory_shape(self):
+        from env.learning_run import learned_facts
+        pid = next(iter(PRODUCTS))
+        rows = [{"kind": "qty_changed", "product_id": pid, "from_qty": 10, "to_qty": 5, "base_qty": 10,
+                 "reason": "TOO_MUCH", "day": "2026-11-1%d" % i} for i in range(3)]
+        facts = learned_facts(rows, [pid], "2026-11-20")
+        self.assertEqual([(f["kind"], f["value"], f["evidence"]["rows"]) for f in facts],
+                         [("CORRECTION_RATIO", 0.5, 3)])
 
 
 if __name__ == "__main__":

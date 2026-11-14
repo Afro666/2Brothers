@@ -36,4 +36,6 @@ export default {
   "Made a call the policy could not read": "Teki kutsun, jota sääntö ei pystynyt lukemaan",
   "{action} — refused by the policy ({code})": "{action} – sääntö hylkäsi ({code})",
   "{action} — the tool failed": "{action} – työkalu epäonnistui",
+  "{action} — found by meaning (Atlas Vector Search) after the word search found nothing":
+    "{action} – löytyi merkityksen perusteella (Atlas Vector Search), kun sanahaku ei löytänyt mitään",
 };

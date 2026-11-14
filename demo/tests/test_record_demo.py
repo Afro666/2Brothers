@@ -5,7 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from demo.record_demo import next_monday, steps
+from demo import record_demo
+from demo.record_demo import next_monday, site_answers, steps
+
+_REAL_SITE_ANSWERS = site_answers        # the real ping, before the fixture below swaps it out
+
+
+@pytest.fixture(autouse=True)
+def _no_live_ping(monkeypatch):
+    """No test here talks to the live site: the ping always answers, unless a test says otherwise."""
+    monkeypatch.setattr(record_demo, "site_answers", lambda base: True)
 
 
 def test_next_monday_is_always_ahead():
@@ -801,3 +810,159 @@ def test_nvidia_on_the_command_line(monkeypatch):
         with pytest.raises(SystemExit) as stop:
             record_demo.main(["--story", "nvidia", *refused])
         assert "never approves" in str(stop.value) and not seen       # nothing was recorded
+
+
+# The site restarts on every deploy (2026-11-14: six deploys in 7 minutes). The recorder waits.
+
+class _Clock:
+    """A fake clock: sleeping moves it on, so a 3-minute wait takes no real time."""
+
+    def __init__(self):
+        self.now = 0.0
+        self.slept = []
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def test_site_answers_is_one_get_of_api_ping():
+    import urllib.error
+    seen = []
+
+    def opener(code):
+        def open_(request, timeout=None):
+            seen.append((request.full_url, request.get_method()))
+            if code is None:
+                raise OSError("connection refused")
+            if code != 200:
+                raise urllib.error.HTTPError(request.full_url, code, "bad gateway", {}, None)
+
+            class _Answer:
+                status = 200
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    return False
+            return _Answer()
+        return open_
+
+    assert _REAL_SITE_ANSWERS("https://x", opener=opener(200)) is True
+    assert _REAL_SITE_ANSWERS("https://x", opener=opener(502)) is False
+    assert _REAL_SITE_ANSWERS("https://x", opener=opener(None)) is False
+    assert seen == [("https://x/api/ping", "GET")] * 3
+
+
+def test_wait_for_site_succeeds_after_some_failures_and_says_it_waits():
+    answers = iter([False, False, False, True])
+    clock, said = _Clock(), []
+    assert record_demo.wait_for_site("https://x", limit=180, every=5, answers=lambda base: next(answers),
+                                     sleep=clock.sleep, clock=clock, say=said.append) is True
+    assert clock.slept == [5, 5, 5]
+    assert said and all("waiting" in line for line in said)
+
+
+def test_wait_for_site_says_nothing_when_the_site_answers_at_once():
+    clock, said = _Clock(), []
+    assert record_demo.wait_for_site("https://x", answers=lambda base: True,
+                                     sleep=clock.sleep, clock=clock, say=said.append) is True
+    assert clock.slept == [] and said == []
+
+
+def test_wait_for_site_gives_up_after_the_limit():
+    clock, said = _Clock(), []
+    assert record_demo.wait_for_site("https://x", limit=180, every=5, answers=lambda base: False,
+                                     sleep=clock.sleep, clock=clock, say=said.append) is False
+    assert sum(clock.slept) <= 180 and clock.now >= 175
+
+
+def test_main_stops_with_a_clear_message_when_the_site_does_not_answer(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(record_demo, "wait_for_site", lambda base, **k: seen.update(base=base, **k) or False)
+    monkeypatch.setattr(record_demo, "site_needs_sign_in", lambda base: pytest.fail("no request after a dead ping"))
+    monkeypatch.setattr(record_demo, "record", lambda *a, **k: pytest.fail("no browser after a dead ping"))
+    with pytest.raises(SystemExit) as stop:
+        record_demo.main(["--story", "nvidia", "--base-url", "https://x/"])
+    assert "the site does not answer" in str(stop.value) and "deploy" in str(stop.value)
+    assert "GitHub Actions" in str(stop.value)
+    assert seen["base"] == "https://x" and seen["limit"] == 180 and seen["every"] == 5
+
+
+class _GotoPage:
+    """A page whose goto fails with the given errors first, then works."""
+
+    def __init__(self, *errors):
+        self.errors = list(errors)
+        self.urls = []
+
+    def goto(self, url):
+        self.urls.append(url)
+        if self.errors:
+            raise self.errors.pop(0)
+        return "answer"
+
+
+RETRYABLE = [
+    "Page.goto: net::ERR_NAME_NOT_RESOLVED at https://x/",
+    "Page.goto: net::ERR_CONNECTION_REFUSED at https://x/stock",
+    'Page.goto: Navigation to "https://x/planner" is interrupted by another navigation to "https://x/"',
+    "Execution context was destroyed, most likely because of a navigation",
+]
+
+
+@pytest.mark.parametrize("message", RETRYABLE)
+def test_goto_retries_a_site_restart_once_after_the_site_answers(monkeypatch, message):
+    waits = []
+    monkeypatch.setattr(record_demo, "wait_for_site", lambda base, **k: waits.append((base, k["limit"])) or True)
+    page = _GotoPage(Exception(message))
+    assert record_demo.goto(page, "https://x/stock?week=1") == "answer"
+    assert page.urls == ["https://x/stock?week=1"] * 2                 # the same goto, once more
+    assert waits == [("https://x", 90)]
+
+
+def test_goto_says_why_it_pauses(monkeypatch, capsys):
+    clock = _Clock()
+    answers = iter([False, True])
+    monkeypatch.setattr(record_demo, "site_answers", lambda base: next(answers))
+    monkeypatch.setattr(record_demo.time, "sleep", clock.sleep)
+    monkeypatch.setattr(record_demo.time, "monotonic", clock)
+    page = _GotoPage(Exception(RETRYABLE[1]))
+    record_demo.goto(page, "https://x/stock")
+    assert "site restarting (deploy?), waiting" in capsys.readouterr().out
+
+
+def test_goto_does_not_retry_any_other_error(monkeypatch):
+    monkeypatch.setattr(record_demo, "wait_for_site", lambda base, **k: pytest.fail("no wait"))
+    page = _GotoPage(ValueError("Timeout 30000ms exceeded"))
+    with pytest.raises(ValueError, match="Timeout"):
+        record_demo.goto(page, "https://x/")
+    assert page.urls == ["https://x/"]
+
+
+def test_a_second_failure_propagates(monkeypatch):
+    monkeypatch.setattr(record_demo, "wait_for_site", lambda base, **k: True)
+    page = _GotoPage(Exception(RETRYABLE[0]), Exception(RETRYABLE[1]), Exception("never reached"))
+    with pytest.raises(Exception, match="ERR_CONNECTION_REFUSED"):
+        record_demo.goto(page, "https://x/")
+    assert page.urls == ["https://x/"] * 2
+
+
+def test_goto_retries_once_even_when_the_site_stays_down(monkeypatch):
+    monkeypatch.setattr(record_demo, "wait_for_site", lambda base, **k: False)
+    page = _GotoPage(Exception(RETRYABLE[1]))
+    assert record_demo.goto(page, "https://x/") == "answer"
+    assert page.urls == ["https://x/"] * 2
+
+
+def test_every_goto_in_the_recorder_goes_through_the_retry():
+    import inspect
+    import re as _re
+    source = Path(record_demo.__file__).read_text(encoding="utf-8")
+    rest = source.replace(inspect.getsource(record_demo.goto), "")
+    assert _re.findall(r"\bpage\.goto\(", rest) == [], "only goto() itself may call page.goto"
+    assert len(_re.findall(r"\bgoto\(page, ", rest)) >= 20                # the steps all use it

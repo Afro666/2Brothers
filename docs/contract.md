@@ -45,14 +45,18 @@ What a caller sees during a rest:
 
 | Where | Answer |
 |---|---|
-| A route that needs a live Valio price or stock (`get_offer`, creating or changing a proposal, addable products, a supplier offer) | 503 `SUPPLIER_BUSY` with `retry_after` (whole seconds) in the error body and a `Retry-After` header. Nothing is stored. Try again after `retry_after`. |
+| A route that needs a live Valio price or stock (`get_offer`, creating or changing a proposal, addable products, a supplier offer) | 503 `SUPPLIER_BUSY` with `retry_after_s` (whole seconds) in the error body and a `Retry-After` header. Nothing is stored. Try again after `retry_after_s`. |
 | `search_products` with `need_id` | 200; `can_arrive` is `null` (unknown), as for any missing live answer. |
 | Supplier planner view (`/demand`) | 200; availability is unknown, `risk` is `UNKNOWN`; the demand still shows. |
 | Buyer agent | The `get_offer` tool fails, so the run ends `CANNOT_FULFIL` and says the tool failed; nothing is ordered. |
 
 ```json
-{"error": {"code": "SUPPLIER_BUSY", "message": "Valio rate limit: wait 27 s", "retry_after": 27}}
+{"error": {"code": "SUPPLIER_BUSY", "message": "Valio rate limit: wait 27 s", "retry_after_s": 27}}
 ```
+
+`retry_after_s` is the same field as on `LOOKUP_RATE_LIMITED` and `RECALL_CHECK_BUSY`
+(#1286), so a client reads any "busy, try again in N s" error the same way. Gateways
+before #1286 sent `retry_after`; the web reads both names for one release.
 
 ### Shared price and availability request
 
@@ -254,6 +258,31 @@ A simulated offer line also carries three optional fields from the Valio dataset
 | `reliability` | number or null | The supplier's delivery reliability for this product: delivered versus ordered, 0 to 1. Null means unknown. |
 | `carbon_kg_co2e_per_kg` | number or null | kg CO2-eq per kg, the average of the product group, not this product's own figure. Null means unknown. |
 | `labels` | string[] | Product labels, for example `EU_ORGANIC_FARMING`. May be empty. |
+
+**Cut-off, lead time and delivery reliability to show (#1453).** A simulated offer line
+(also in `blocks[].lines` and on order lines) carries six more fields, for display only.
+They never change a quantity, a line, `cutoff_passed`, `closing_time` or `reliability`
+(those keep their meaning above), so the engine and every basket are the same. Each
+value says where it came from; real data always wins:
+
+1. `valio`: Valio's own answer (`closingTime` from availability, the delivery
+   reliability CSV).
+2. `supplier_terms`: the supplier's user-set terms (`order_days`, `cutoff_time`,
+   `lead_time_days`, see "Suppliers").
+3. `demo`: demo values for a synthetic demo kitchen only (`python -m demo.delivery_terms`).
+   They are invented for the demo, never Valio's or a supplier's numbers; the screen
+   marks them "(demo)". A real kitchen has no demo values.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `cutoff_at` | timestamp with offset, or null | Order by this moment for the line's delivery. Valio's `closingTime` when Valio gives one. Otherwise the last order day at the cut-off time (kitchen time, Europe/Helsinki) that still delivers, with the lead time, by the delivery date: the later of `available_date` and the requested date. Null when no source knows it. |
+| `cutoff_source` | `"valio"`, `"supplier_terms"`, `"demo"` or null | Where `cutoff_at` came from. `demo` when any part of it (order days, cut-off time or lead time) is a demo value. |
+| `lead_time_days` | integer or null | Days from order to delivery: a per-product demo value, else the supplier's terms, else the supplier's demo value. |
+| `lead_time_source` | `"supplier_terms"`, `"demo"` or null | Where `lead_time_days` came from. |
+| `delivery_reliability` | number or null | Delivered versus ordered, 0 to 1: Valio's `reliability` when known, else the product's demo value, else the supplier's demo value. |
+| `reliability_source` | `"valio"`, `"demo"` or null | Where `delivery_reliability` came from. |
+
+A proposal stored before #1453 has none of these fields: read a missing field as null.
 
 `expected_total` includes fees and tax. Simulation also includes `mov_gap` and
 `delivery_fee` as decimal strings. Expired offers must be refreshed and simulated.
@@ -471,8 +500,8 @@ with `allergen_strictness`, `require_labels`, `temperature`), and does not call 
 query with no filter. With the switch "Search by meaning (Atlas Vector Search)" on, it also
 sends `mode: "hybrid"`; with it off it sends no `mode`. Each row shows its `matched_by`, and
 `meaning_unavailable: true` shows a line that the words were used. `getProducts` reads `GET /v1/kitchens/{kitchen_id}/catalog/products?ids=`
-in groups of 200; while the gateway does not serve that route (a 404 with no `error` envelope,
-before #1172), it answers from the sample products as it did before. A named 404 is an error. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
+in groups of 200. Any failed call (a 404 with or without the `error` envelope, a network
+error) is an error, never sample rows (#1263). Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
 `allergen_data_known: false` is `allergens: null` (unknown), never an empty list.
 
 ### Stored rows: order, approval, audit entry
@@ -596,6 +625,41 @@ A person without the role gets 403 `ROLE_REQUIRED`. The shared human token acts 
 | 403 | `ROLE_REQUIRED` | The person's role cannot do this. |
 | 422 | `WEAK_PASSWORD` | The new password is shorter than 10 characters, or the same as the current one. |
 | 429 | `ACCOUNT_LOCKED` | Too many wrong passwords; try again in a few minutes. |
+
+### Kitchen aliases and unknown items
+
+`GET /v1/kitchens/{kitchen_id}/aliases` (`kitchen:read`) returns the kitchen's aliases
+and unknown phrases. Aliases are sorted by phrase; unknown phrases are sorted by
+ask count descending, at most 100:
+
+```json
+{
+  "aliases": [
+    {"phrase": "house milk", "product_id": "462775",
+     "product_name": "Valio Eila lactose-free milk 1 L", "set_by": "aron", "uses": 2}
+  ],
+  "unknown_items": [
+    {"phrase": "talon maito", "times": 2,
+     "first_asked": "2026-11-14T02:10:00+00:00",
+     "last_asked": "2026-11-14T02:31:00+00:00",
+     "suggestions": [{"product_id": "462775", "product_name": null}],
+     "suggested_by": "meaning"}
+  ]
+}
+```
+
+- An alias has `phrase`, `product_id`, `product_name`, `set_by` and `uses`;
+  `product_name` and `set_by` can be null.
+- An unknown item has `times` and nullable ISO `first_asked` and `last_asked`
+  timestamps. `suggestions` is null until looked up, otherwise a list of at most
+  three `{product_id, product_name}` objects; `product_name` is nullable.
+- `suggested_by` is `meaning` for vector search, `words` for text search, or null
+  when no lookup has completed.
+- Each call looks up at most three phrases without stored suggestions. Successful
+  lookups, including empty lists, are stored and reused without another search.
+  A search failure leaves the item unlooked-up so a later call retries it.
+- Suggestions never create an alias or link a product automatically, and never
+  create or change an order; a person decides whether to link one.
 
 ### Kitchen API tokens (#271)
 
@@ -757,7 +821,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
 | POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver` (create: signed-in session only) | Personal approval tokens. Shape under "Personal approval tokens". |
 | GET | `/model-usage` | `kitchen:read` | How much the Buyer agent used its model for this kitchen: runs, model calls, tokens, seconds. Shape under "Model usage". |
-| GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". Proposed (#1393); the store function exists, the route is not built. |
+| GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". |
 | GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
 | POST, GET | `/webhooks` | human, role `approver` | Register a webhook (body `url`, `events`) or list them. Shape under "Webhooks". |
 | DELETE | `/webhooks/{id}` | human, role `approver` | Remove the webhook and its delivery log. |
@@ -781,6 +845,10 @@ products, menu plans, stock counts, stock, demand, settings and sharing.
   `stock_counted`, `settings_changed`, `share_granted`, `share_revoked`.
 - `POST /stock/photo` writes no kitchen data. It leaves one audit entry per call:
   `stock_photo_read` or `stock_photo_failed` (see "Count from a shelf photo").
+- `POST /orders/{order_id}/delivery-note/photo` leaves stock counts and the order
+  unchanged. Each call records `delivery_note_read` or `delivery_note_failed`; see
+  [Check a delivery from a photo of its note](#check-a-delivery-from-a-photo-of-its-note-362)
+  for fields and the staged structured-result persistence change (#1304).
 - `POST /menu-photo` leaves the stored menu plan unchanged. It writes a
   `menu_photo_read` or `menu_photo_failed` audit entry (see "Plan from a menu photo"),
   plus the pending proposal when matched dishes need ingredients.
@@ -982,9 +1050,33 @@ model or gateway retry and no automatic provider fallback. Usage is metered as
 latency, sentence count or safe error code. No explanation text, prompt or secret
 is written to audit. The signed offer and receipt remain authoritative.
 
+### Product names on proposal and order lines (#1130)
+
+Every line a person reads carries three fields next to `product_id`, so a screen shows
+a name, the kind picture and the brand logo ("Product pictures" below) instead of a code:
+
+| Field | Type | Rule |
+|---|---|---|
+| `product_name` | string or null | The English name of the product row (`names.en`). |
+| `product_name_fi` | string or null | The Finnish name (`names.fi`). |
+| `brand` | string or null | The brand of the product row. |
+
+- Where: `lines`, `blocks[].lines`, `substitute_options[].lines`, `alternative.lines`,
+  `partial_fill.now.lines`, `partial_fill.rest[].lines` and each `excluded` entry, on
+  `GET /proposals`, `GET /proposals/{id}`, the `POST /proposals` answer and the change
+  answer; and `lines` on `GET /orders`, `GET /orders/{id}` and the approve answer.
+- Read at read time from the catalog and this kitchen's own products (never another
+  kitchen's): an order stored before #1130 has them too. Never stored on a line.
+- Unknown is null, never an invented name. One query per proposal (one per order
+  list), never one per line.
+- A mandate reason that starts with a bare product code (`"463203: confirmed in stock,
+  but ..."`) starts with the name when it is known, the code after it in brackets:
+  `"Arla milk 1 L (463203): confirmed in stock, but ..."`. `excluded[].reason` itself is
+  unchanged. Names and reasons are not part of `offer_hash`.
+
 ### Creating a proposal
 
-`POST /v1/kitchens/{kitchen_id}/proposals` takes one of three bodies. All need a nonempty
+`POST /v1/kitchens/{kitchen_id}/proposals` takes one of four bodies. All need a nonempty
 `idempotency_key`.
 
 **Structured body.** The caller names the products; the engine sizes every line.
@@ -1041,7 +1133,7 @@ is written to audit. The signed offer and receipt remain authoritative.
 | Status | Code | When |
 |---|---|---|
 | 422 | `INVALID_REQUEST` | A required field is missing, or `quantity` is 0 or less. |
-| 422 | `CANNOT_READ_REQUEST` | The parser cannot read the text without guessing: no quantity with a unit, no delivery day, a day in the past, no product named, more than 500 characters. The message says what is missing. Also a text that asks for two products, which is a second quantity with a unit after "and", "ja", "sekä", "och", "&", "+" or a comma ("100 L cream and 50 kg cheese"): the message starts with `one product per request`. This one is answered before the Buyer worker is called; no model runs and no proposal is stored. A pack size is not a second product ("200 L milk in 1 l cartons"). |
+| 422 | `CANNOT_READ_REQUEST` | The parser cannot read the text without guessing: no quantity with a unit, no delivery day, a day in the past, no product named, more than 500 characters. The message says what is missing. A text with several products is not refused for that any more (#1375): it is split, see "Free text with several products" below. Its own refusals (two delivery days, a split that fails the check, a part with no product words, more than 30 products) are this code too; no proposal is stored. |
 | 422 | `NO_PRODUCTS_FOUND` | The parser read the text, but no catalog product matches the product words. |
 | 409 | `KITCHEN_POLICY_INVALID` | The kitchen's `excluded_allergens` names an allergen nobody knows (a typo). Fails closed: no offer is made until a person fixes the setting. |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another request (for free text: another `text`). |
@@ -1079,6 +1171,112 @@ gateway reads the product words and searches the catalog with no allergen filter
 
 The delivery day of such a request may come from `requested_date` in the body when the
 text names none. A replay with the same key and text returns the same proposal.
+
+**List body: several products in one request (#1375).** `needs` and no `product_ids`, no
+`from`/`to`. One proposal for all the needs: one total, the supplier `blocks`, one approval,
+signed. This is what a chat bot sends for "20 L oat drink, 5 kg butter and 40 rolls for
+Monday", and what a free text with several products becomes (below).
+
+| Field | Type | Rule |
+|---|---|---|
+| `needs` | object[] | 2 to 30 rows of `{text, quantity, unit}`. |
+| `needs[].text` | string | The product words ("oat drink"), 1 to 120 characters, at least one word. |
+| `needs[].quantity` | decimal string | Above 0, finite, at most 1000000. |
+| `needs[].unit` | string | `L`, `KG`, `G` or `ST` (pieces), any case. `G` is read as kilos (`500 G` = `0.5 KG`). |
+| `requested_date` | `YYYY-MM-DD` | The one delivery day of every need. Required; not in the past. |
+| `idempotency_key` | string | Required. |
+| `text` | string, optional | The person's whole sentence, kept on the proposal. At most 500 characters. |
+| `event` | boolean, optional | As for the structured body: every line gets `EVENT_LINE`. |
+
+Any other shape (1 row, 31 rows, a bad quantity or unit, two rows with the same product
+words, `needs` together with `product_ids` or `from`/`to`): 422 `INVALID_REQUEST`, and
+the message names the row.
+
+Each need is read as a single free-text request is read by the parser, in this order and
+with no model call: (1) the allergen rule of #974 on its product words, before anything
+else; (2) the kitchen's own words for a product (alias memory); (3) the catalog search
+narrowed to the kind and the measure the words name; (4) the quote: recall holds, the
+per-product allergen rule, live offers, the engine sizes the lines. The Buyer worker is not
+called for a list: one model run per need would be N slow runs in series.
+
+A need that cannot be ordered does not stop the others. It stays on the proposal with
+`result: "refused"` and a `problem`, the others are quoted:
+
+| `problem.code` | When |
+|---|---|
+| `ALLERGEN_RULE` | The kitchen's allergen rule removes the products that best match the words (#974). `problem.allergens` names them. |
+| `NO_PRODUCTS_FOUND` | No catalog product matches the words. The words are remembered for a person to link. |
+| `NOT_AVAILABLE` | Products match, but none can be ordered for the day: a recall hold, the cut-off, no stock. Also a need whose products are all on the proposal for an earlier need ("same product as need 1": ask once, with the sum). |
+
+The answer is a normal proposal with these additions:
+
+- `request.made_by` is `list`; `request.quantity` is the number of needs and
+  `request.unit` is `products`; `request.product_ids` are all products priced.
+- `request.items`: one row per need, in the order asked: `{text, quantity, unit, query,
+  product_ids, result, problem}`. `result` is `proposed` or `refused`; `problem` is
+  `{code, message}` (plus `allergens` for `ALLERGEN_RULE`) or `null`. `quantity` and `unit`
+  are the need as read (`G` already in `KG`).
+- `request.problems`: one sentence per refused need, for a person
+  (`5 kg peanut butter: This kitchen excludes peanuts, so "peanut butter" cannot be ordered: ...`).
+  The same sentences are in `mandate.reasons`.
+- `request.split_by`: only on a free text split into needs (below): `model` or `rules`.
+- `NEED_REFUSED` is in `mandate.reason_codes` when any need was refused, and
+  `ALLERGEN_RULE` when the allergen rule refused one. `shortfalls` and `PARTIAL_STOCK` as
+  for the menu-plan body.
+- At least one line: `status: READY`. Every need refused: `status: REJECTED`, no line,
+  `mandate.verdict: REFUSED`.
+
+A replay with the same key and the same body returns the same proposal; the check runs
+before any search, so a changed catalog never makes a replay a conflict. The same key with
+another body: 409 `IDEMPOTENCY_KEY_REUSED`. A kitchen allergen rule nobody knows fails the
+whole request with 409 `KITCHEN_POLICY_INVALID`. Earned auto-approve never applies while a
+need is refused (`NEED_REFUSED`): a person sees what was left out. Approve, reject, change,
+the live re-check and signing work as for any proposal.
+
+**Free text with several products (#1375).** A free-text body whose text asks for two
+products or more: a second quantity after "and", "ja", "sekä", "och", "plus", "&", "+", ";"
+or a comma. A quantity is a number with a unit ("5 kg") or a whole number before a word
+("40 rolls" is 40 pieces). A pack size is not a product ("200 L milk in 1 l cartons",
+"50 kg flour, 25 kg sacks"), and neither is a count of people or days ("for 40 guests",
+"40 hengelle") or a date ("17 nov", "16.11."). Every other text goes the single-product way
+above, unchanged.
+
+1. A stored proposal with this key: the same text returns it, another text is 409
+   `IDEMPOTENCY_KEY_REUSED`. No split, no model call on a replay.
+2. The delivery day: the day the text names, else `requested_date` of the body. A text
+   that names two days or more ("milk for Monday and bread for Tuesday") is 422
+   `CANNOT_READ_REQUEST`, and the message starts with `one delivery day per request`.
+3. Nemotron splits the text (one call to the Buyer worker's `/split`, at most 40 s). It
+   never sets a quantity: plain code checks the split. It must have one need per quantity of
+   the text, each need's quantity and unit must be one of the text's (each used once), and
+   each need's words must be words of the text that follow that quantity. The quantities that
+   go on are the ones read from the text. A split that fails the check is 422
+   `CANNOT_READ_REQUEST` with the sentence of before: `one product per request: ...`.
+4. When the model is not configured, does not answer in time, or answers outside its
+   schema, plain code splits the text: before each quantity, the product words after it. A
+   part with no product words, or product words before the first quantity, is 422
+   `CANNOT_READ_REQUEST` (the message says which). A split timeout skips the model for the
+   next 2 minutes (its own breaker; the Buyer's breaker is not touched). More than 30
+   products is 422 `CANNOT_READ_REQUEST`.
+5. The needs then go the list body's way, with `request.text` the person's sentence and
+   `request.split_by` `model` or `rules`. The trace (`model_trace`) is the parser's rule
+   trace: the model only split the words, the matching is plain code.
+
+The worker's `/split` (internal, gateway to Buyer worker only, #1439). `POST
+BUYER_WORKER_URL/split` with `Authorization: Bearer <GATEWAY_AGENT_TOKEN>`:
+
+- Request: `{"text": "<the person's text, 1 to 500 characters>", "kitchen_id": "<1 to 64
+  characters>"}`. Anything else: 422 `INVALID_REQUEST`; a wrong token: 401
+  `UNAUTHENTICATED`.
+- Answer 200: `{"model": "nemotron-3.5-super-vl", "needs": [{"text", "quantity", "unit"}],
+  "usage": {...} | null}`. At most 30 needs; `text` 1 to 120 characters, `quantity` the
+  number as the person wrote it (a string), `unit` one of `L`, `KG`, `G`, `ST`. One model
+  call with a strict JSON schema (`agent/split.py`), thinking off, 35 s.
+- Errors, `{"error": {"code", ...}}` with no model or upstream text: 504 `SPLIT_TIMEOUT`,
+  502 `REPLY_INVALID` (the reply is outside the schema), 503 `SPLIT_UNAVAILABLE` (no model
+  key, or the model failed). The gateway treats every error, and no answer within 40 s, as
+  "the model is off" and splits with plain code (step 4); it never shows the worker's
+  answer to a person unchecked.
 
 **Menu-plan window body (#74, #701).** `from` and `to` and no `product_ids` and no
 `text`: one proposal for everything the menu plan needs in that window, net of counted
@@ -1744,6 +1942,31 @@ name, a menu, a recipe, a price or a pack size. It is told to write no dates and
 product names (the answer shows both next to each line). A product name inside a line is not read for
 numbers, so the "1 l" of "Valio Eila 1 l" is not a quantity.
 
+The worker's model reply is validated against this strict internal shape:
+
+```json
+{
+  "lines": [
+    {
+      "row": 0,
+      "product_id": "462775",
+      "text": "Forecast 2400 L from 6 kitchens against 1700 L available: buy 700 L more.",
+      "numbers": ["2400", "6", "1700", "700"]
+    }
+  ]
+}
+```
+
+All four line fields are required and additional properties are rejected. There are
+at most eight lines; `text` is at most 240 characters and `numbers` at most six
+strings. Every number is a **string**, exactly as written in `text`, per `SCHEMA`.
+
+`row` is the zero-based index into the selected rows sent with this call, not a
+catalog index. The public `note` omits `row` and `numbers`. The model contributes
+only `product_id` and `text`: `product_id` must match the selected row, whose trusted
+data supplies the returned `product_id`, `product_name`, `date` and `risk`; only the
+validated `text` is copied from the model.
+
 Every line the model writes is checked by plain code before anyone sees it:
 
 - it names one input row (`row`), and its `product_id` is that row's;
@@ -2054,10 +2277,10 @@ A person can always type the count by hand; no error blocks `POST /stock-counts`
 
 ### Check a delivery from a photo of its note (#362)
 
-**Persistence transition (#1300/#1304):** the served response below remains
-`saved:false` until #1304 lands. Its successor persists only structured delivery
-observations (not stock) and returns `saved:true` after a durable save, as specified
-in [Outcomes and delivery observations](#outcomes-and-delivery-observations).
+**Persisted since #1304:** after a successful check the gateway stores only the
+structured delivery observation (not stock) and answers `saved:true` once it is durably
+saved, as specified in
+[Outcomes and delivery observations](#outcomes-and-delivery-observations).
 Photos, note text and lot numbers remain transient in both versions.
 
 
@@ -2085,7 +2308,7 @@ Answer:
 {
   "model": "nemotron-3.5-super-vl",
   "duration_ms": 5120,
-  "saved": false,
+  "saved": true,
   "order_id": "6f1c...",
   "note": {"order_ref": "ORD-DEMO-0001", "delivery_date": "2026-11-16"},
   "complete": false,
@@ -2519,11 +2742,11 @@ reached the Buyer worker):
 - Counts only: no request text, no reply text, no key.
 - Where it shows: the About page.
 
-### Atlas facts (proposed, #1393)
+### Atlas facts (#1393, #1383)
 
 `GET /v1/kitchens/{kitchen_id}/atlas` (`kitchen:read`) answers what MongoDB Atlas holds
-and runs for the product, read live. Proposed: the store function exists
-(`store.atlas.atlas_facts`); the gateway route is not built yet (#1383).
+and runs for the product, read live: `store.atlas.atlas_facts` behind
+`gateway/atlas_routes.py`.
 
 ```json
 {"mongodb_version": "8.0.37", "data_mb": 215, "products": 17548,
@@ -2592,14 +2815,14 @@ webhooks per kitchen. Create and delete are audit entries (`webhook_created`,
 (the events one can subscribe to). These routes take no `idempotency_key`.
 
 Events: `proposal.ready`, `proposal.approved`, `proposal.rejected`, `order.placed`,
-`total_mismatch`, `recall.alert`, and (planned, #1188) `supplier.offer`, `agent.refused`,
-`delivery.checked`. They come from the audit trail, so a webhook says what the audit log
-says. `ping` is sent only by `POST .../webhooks/{id}/test`; it is not a subscription. A
+`total_mismatch`, `recall.alert`, `supplier.offer`, `agent.refused` and `delivery.checked`
+(the last three since #1188: #1281, #1329). They come from the audit trail, so a webhook
+says what the audit log says. `ping` is sent only by `POST .../webhooks/{id}/test`; it is not a subscription. A
 webhook gets only the events it names; the web form ticks `proposal.ready` and
 `recall.alert` for a new webhook and offers the others unticked.
 
-Bodies (`data`) of the planned events and of the second `recall.alert` case. Each holds
-only fields of its audit entry:
+Bodies (`data`) of the three newer events and of the second `recall.alert` case (#1362),
+all served. Each holds only fields of its audit entry:
 
 | Event | From the audit kind | `data` | Sent |
 |---|---|---|---|
@@ -2921,11 +3144,12 @@ The Valio catalog and its API have no product photo (`synkkaData.medias[]` holds
 only, no URL). Photos from the web are not copied: that is a copyright risk. So a
 product shows one of two pictures, and both are honest about what they are:
 
-1. **A kind icon.** The web maps the product's `category` code to a kind (milk,
-   cheese, bread, fish, cleaning ...) and shows that kind's icon. The map is
-   `web/src/lib/product-kinds.json`, made once from the catalog names by
-   `scripts/product_kinds.py` (run it again when the catalog changes). A category
-   that is not in the map gets a neutral package icon. This needs no route.
+1. **A kind icon.** `ProductThumb`
+   (`web/src/components/purchasing/product-thumb.tsx`) uses
+   `web/src/lib/product-picture.ts` to read the product's English and Finnish names
+   and choose a Lucide icon on a tile tinted for its kind. These are icons, not
+   emoji, and represent only the kind, never an actual pack photo. A name matching
+   no rule gets the plain `Package` icon. This needs no route.
 2. **The brand logo, when it is known.** `brand` on the product row (from
    `synkkaData.brand`) is looked up with Context.dev and the answer is kept in
    MongoDB (`brand_logos`, through `store/`). The logo replaces the icon.
@@ -3266,6 +3490,7 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | `CLOSING_PASSED` | reason | `closingTime` is at or before now for this delivery. The product is left out; the code is on the mandate. |
 | `STOCK_UNKNOWN` | reason | Valio's availability is a filler (999999 or more), or the supplier is a manual or csv price list. A missing, null or zero amount is not available, not unknown. A warning on approve: a person may still approve, the order then waits for the supplier (`supplier_must_confirm`). For each supplier with such lines the mandate reasons say "<supplier> must confirm stock for: <product names>." (`Valio` for Valio's lines). |
 | `PARTIAL_STOCK` | reason | less is available than needed |
+| `NEED_REFUSED` | reason | a request with several products (#1375): at least one need cannot be ordered (`request.items[].problem`); the others are proposed. On the mandate. Earned auto-approve never applies. |
 | `SUBSTITUTE_NEEDS_OK` | reason | a substitute changes the product; a human agrees |
 | `SUBSTITUTE_FAT_LEVEL` | reason | two lines of one plan have known fat levels more than 0.5 g per 100 g apart (fat-free and 3 % milk, S01). From the supplier record's `FAT` nutrient; unknown fat is never compared. On the mandate. |
 | `ALLERGEN_RULE` | reason | a kitchen allergen rule refuses a product: its known allergens (CONTAINS, MAY_CONTAIN or UNDECLARED) include an excluded code. That product is left out, listed under `excluded` with reason `ALLERGEN_RULE: the kitchen excludes <codes>` (per product, not the whole mandate), on every path: `POST /proposals` and MCP `get_offer`. Unknown allergen data is not a hit: the line stays with `ALLERGEN_DATA_MISSING`. |
@@ -3376,8 +3601,12 @@ route errors, never an invented empty brief.
 
 ## Learning from kitchen changes and deliveries (#1300)
 
-**Future contract, implemented in stages.** This section does not make every route or field
-available immediately. The existing change route keeps its behaviour until each stage lands.
+**Implemented in stages.** Served so far: change reasons, context and outcomes (#1302),
+delivery results and the one-tap `/received` (#1304), and `GET`/`PUT /learned` with
+correction ratios applied to plan proposals (#1305 phase 2a). In this stage a
+`DECLINED_PRODUCT` fact and a late supplier (`SUPPLIER_LATE` with `on_time_rate` under
+0.7) only add a warning to the plan's `problems`: a declined recipe ingredient is never
+left out silently, and learned lead times do not change safety stock yet.
 Learning adds no model-controlled write endpoint and never changes a typed request quantity.
 
 ### Changes and human feedback

@@ -70,8 +70,10 @@ fallback, which gives the same honest split).
 
 **The sentence first:** "One model, five jobs, one buying loop, and it never sets a number."
 
-Status: written on 2026-11-14, **not run on the live site yet**. The Verda endpoint was
-overloaded that day (too many users, Verda is fixing it). Story A stays the main demo; this
+Status: recorded on the live site on 2026-11-14 at 14:36 UTC, all nine steps ok, with the
+model answering (`demo/out/3e9ea6c0044924f593e525a5b29b6f7a.webm` on Aron's laptop; `demo/out/`
+is not in git). The Verda endpoint was slow that day (the menu read took about 70 s, the shelf
+count about 100 s), so check `agent.ping` before the stage. Story A stays the main demo; this
 one is for the NVIDIA judges, who must see Nemotron do core work live. Rubric points (the
 sponsor's ask, answered in writing in `docs/submission.md`, "NVIDIA: Best Use of Nemotron"):
 **Core** (Nemotron does core work, visibly in the demo), **Model** (which model and what it
@@ -94,7 +96,7 @@ does), **Why** (why it matters) and **Improved** (how we improved its outputs).
    `--no-model` it is `rule`, and beat 3 then says "a rule picked it".
 3. **Clear the inbox** (story A step 2), so the new proposals are easy to find.
 4. **Photos on the laptop:** `demo/menu-photo.png` (beat 1), `agent/fixtures/shelf/demo-shelf.png`
-   (beat 4), the prepared delivery note (beat 5, after #1198).
+   (beat 4), the prepared delivery note `agent/fixtures/receiving/demo-note.png` (beat 5).
 5. **Tabs:** `/planner` (next week), `/requests`, `/` (Home), `/stock`, the newest order in
    `/orders`, `/about`, and `docs/submission.md` at "How we improved its outputs".
 
@@ -104,10 +106,10 @@ does), **Why** (why it matters) and **Improved** (how we improved its outputs).
 |---|---|---|---|---|---|
 | 0:00 | Open | Home. | "One model, five jobs, one buying loop, and it never sets a number. Nemotron 3.5 Super VL on Verda." | - | Model |
 | 0:05 | 1. Plan (#1136, #1140) | `/planner`, next week. "Plan from a menu photo", "Choose a file", `menu-photo.png`. Wait for "Nemotron 3.5 Super VL read ... dishes in ... s". | "The chef photographs next week's menu. Nemotron reads the dishes and the covers, and code matches each dish to a recipe. The engine sizes the ingredients. The proposal waits in the inbox." | The page says "The model is not answering right now. Plan the week by hand". Say: "The model is busy, so the chef plans by hand. Nothing is guessed." Press nothing more. | Core, Why |
-| 0:20 | 2. Buy | `/requests`: type `1,000 L lactose-free milk by Monday`, "Ask the agent". Open the "What Nemotron did" panel (**after #1197**; until then point at "Proposed by the Buyer agent (Nemotron 3.5 Super VL)"). | "A chef writes a sentence, not product codes. The Buyer calls seven MCP tools: search, offer, simulate, request approval and more. It picks the products. It has no approve tool, and the engine sets every quantity and price." | The card says "The Buyer model was not answering, so the gateway's request parser made this proposal". Say: "The model did not answer, so our parser made this one. Same engine, same numbers, no Nemotron." | Core, Model |
+| 0:20 | 2. Buy | `/requests`: type `1,000 L lactose-free milk by Monday`, "Ask the agent". Open the "What Nemotron did" panel. | "A chef writes a sentence, not product codes. The Buyer calls seven MCP tools: search, offer, simulate, request approval and more. It picks the products. It has no approve tool, and the engine sets every quantity and price." | The card says "The Buyer model was not answering, so the gateway's request parser made this proposal". Say: "The model did not answer, so our parser made this one. Same engine, same numbers, no Nemotron." | Core, Model |
 | 0:40 | 3. Sell | Home: the tile "Offer from Valio Aimo". Point at "written by Valio's selling agent (Nemotron 3.5 Super VL)". Do **not** press "Make a proposal". | "Nemotron in a second role, on Valio's side. Code builds a shortlist of substitutes; the model picks one and writes why. No price and no quantity come from the supplier." | The tile says "picked by rule, not by a model". Say: "Today a rule picked this one: the model was busy when the offer was made." | Model |
 | 0:52 | 4. Count | `/stock`, "Count from a photo", "Choose a file", `demo-shelf.png`. Point at the five filled counts and the Edam "please count". | "Nemotron counts the shelf. Code turns packs into litres and kilos. The pack it cannot see well gets no number: unknown is never zero." Press "Save count" only if you decided to (see "Photo beat"). | The panel says "The photo was not read: ... You can still type the counts by hand." Say: "The model is busy; the counts are typed by hand." | Core, Why |
-| 1:05 | 5. Receive (**after #1198**) | The newest order in `/orders`, "Choose a delivery note photo", the prepared note. Point at the short and missing lines and the EUR to claim. | "Nemotron reads the delivery note. Plain code compares it with the order: this line is short, this one is missing. A person checks before stock changes." | The panel says "The note could not be read: ... Check the delivery by hand." Say: "The model is busy; the driver's note is checked by hand." | Core, Why |
+| 1:05 | 5. Receive | The newest order in `/orders`, "Choose a delivery note photo", the prepared note. Point at the short and missing lines and the EUR to claim. | "Nemotron reads the delivery note. Plain code compares it with the order: this line is short, this one is missing. A person checks before stock changes." | The panel says "The note could not be read: ... Check the delivery by hand." Say: "The model is busy; the driver's note is checked by hand." | Core, Why |
 | 1:15 | Numbers | `/about`, the card "The Buyer agent runs on Nemotron 3.5 Super VL" (runs, model calls, prompt and completion tokens, model seconds). Then the table "How we improved its outputs" in `docs/submission.md`. | "Measured, not claimed. These are this kitchen's Buyer runs, counted from the endpoint's own usage field. And we measured before we tuned: thinking on is worth about 5,000 euro a week where the model decides numbers. In the product the engine decides them, so thinking is off: 289 completion tokens instead of 2,251, and every request finished on the first try." | The card counts only runs that happened. If it says "No runs counted yet", show the measured table only. | Model, Improved |
 
 Two honest limits to say if asked: the About card counts the Buyer's runs only (the photo
@@ -121,12 +123,12 @@ python -m demo.record_demo --story nvidia
 python -m demo.record_demo --story nvidia --note-photo PATH-TO-THE-PREPARED-NOTE
 ```
 
-The second line once #1198 has the prepared note; without `--note-photo` the receive beat
-is skipped. Record it as soon as `agent.ping` answers OK. The video goes to `demo/out/`.
+The prepared note is `agent/fixtures/receiving/demo-note.png` (#1198); without `--note-photo`
+the receive beat is skipped. Record it as soon as `agent.ping` answers OK. The video goes to `demo/out/`.
 The recorder **never approves**: it refuses `--approve`, never accepts the offer and never
 presses "Save count". A beat whose model did not answer says so in its caption (the parser
 or a rule answered), or the step prints `SKIP` with the page's own words; record again when
-the model answers. Before #1197 is on main, the `trace` step prints `SKIP` too.
+the model answers.
 
 **What it leaves in demo-kitchen:** up to two WAITING proposals, the menu-photo plan proposal
 (only when a matched dish needs an order) and the Buyer's proposal for
@@ -141,11 +143,12 @@ docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gate
 
 ### Still open for this demo
 
-- [ ] Run every beat once on the live site with the model answering (`agent.ping` OK first).
-- [ ] Record `python -m demo.record_demo --story nvidia` into `demo/out/`.
-- [ ] Beat 2: the "What Nemotron did" panel (#1197).
-- [ ] Beat 5: the prepared delivery-note photo and the EUR to claim (#1198).
-- [ ] Beat 1: the live acceptance of the menu photo (#1136).
+- [x] Run every beat once on the live site with the model answering (2026-11-14, 14:36 UTC).
+- [x] Record `python -m demo.record_demo --story nvidia` into `demo/out/` (same run).
+- [x] Beat 2: the "What Nemotron did" panel (#1197, merged in #1279).
+- [x] Beat 5: the prepared delivery-note photo and the EUR to claim (#1198, merged in #1314).
+- [x] Beat 1: the menu photo read live in the recording (#1136).
+- [ ] Rehearse once by hand on the stage laptop, and clear the inbox afterwards.
 
 ## Recall beat: the recalled coffee is on our shelf (#358)
 
@@ -249,6 +252,16 @@ the order of EUR 178.09 with eggs, cherry tomato and milk drink. Open `/orders/<
 
 The order has no proposal, so it has no delivery day: the stock screens never count it as
 on order. It is marked `approved_by: demo-seed`.
+
+**Cut-off, lead time and delivery reliability (#1453).** The approvals screen shows a
+cut-off and a reliability per line. Where Valio and the supplier terms give none, demo
+values fill in, marked "(demo)": invented, never Valio's numbers. The seed writes them; to
+write only them (safe to run again):
+
+    docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m demo.delivery_terms --apply
+
+Without `--apply` it prints the counts and writes nothing. Only proposals made after it
+show the values.
 
 **Which photo.** `agent/fixtures/receiving/demo-note.png` (drawn by
 `agent/fixtures/receiving/make_demo_note.py`; it says "SYNTHETIC TEST NOTE" on it). Copy it

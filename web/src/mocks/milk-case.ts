@@ -200,6 +200,7 @@ const lineArla: OrderLine = {
   product: products.arlaUht1l,
   offer: offers.arlaUht1l,
   quantity: 51,
+  lineTotal: 131.07,
   why: "51 ST: all the stock that can arrive Mon 16 Nov. The need is 1,000 L, so the rest is split to a second order.",
 };
 
@@ -207,6 +208,7 @@ const lineEila3: OrderLine = {
   product: products.eila3pct1l,
   offer: offers.eila3pct1l,
   quantity: 950,
+  lineTotal: 1947.5,
   why: "950 ST: the other 949 L, rounded up to full cases of 5. The only other lactose-free milk whose cut-off has not passed.",
 };
 
@@ -215,6 +217,7 @@ const lineEilaOrganic: OrderLine = {
   product: products.eilaOrganic1l,
   offer: offers.eilaOrganic1l,
   quantity: 0,
+  lineTotal: 0,
   why: "Not ordered: cheaper per litre and organic, but the order cut-off for Monday passed on Thu 12 Nov 15:00.",
 };
 
@@ -231,6 +234,8 @@ export const orders = {
     lines: [lineArla],
     supplierMustConfirm: [],
     totalExVat: 131.07,
+    vat: 17.69,
+    deliveryFee: null,
     totalInclVat: 148.76,
     mov: { threshold: MOV_THRESHOLD, current: 131.07, deliveryFee: DELIVERY_FEE },
   },
@@ -242,6 +247,8 @@ export const orders = {
     lines: [lineEila3],
     supplierMustConfirm: [],
     totalExVat: 1947.5,
+    vat: 262.91,
+    deliveryFee: null,
     totalInclVat: 2210.41,
     // Same Monday delivery as ORD-1042: together they pass the threshold.
     mov: { threshold: MOV_THRESHOLD, current: 2078.57, deliveryFee: DELIVERY_FEE },
@@ -367,6 +374,7 @@ export const auditEvents: AuditEvent[] = [
     actor: "chef",
     summary: "1,000 L lactose-free milk by Monday",
     reason: "180 covers on Mon 16 Nov; milk for the dessert and coffee service.",
+    groupIds: ["run-milk"],
   },
   {
     id: "ev-2",
@@ -375,6 +383,7 @@ export const auditEvents: AuditEvent[] = [
     actor: "agent",
     summary: "Searched the catalog for lactose-free milk: 5 candidates",
     reason: "Kept 1 L and 10 L packs that are lactose-free; dropped flavoured drinks.",
+    groupIds: ["run-milk"],
   },
   {
     id: "ev-3",
@@ -384,6 +393,7 @@ export const auditEvents: AuditEvent[] = [
     summary: "Price and availability for 5 products, delivery Mon 16 Nov",
     reason:
       "462921, 463038, 464179: order cut-off Thu 12 Nov 15:00 has passed. 462775: 51 ST in stock. 463335: stock not measured.",
+    groupIds: ["run-milk"],
   },
   {
     id: "ev-4",
@@ -393,6 +403,7 @@ export const auditEvents: AuditEvent[] = [
     summary: "Split: 51 ST of 462775 and 950 ST of 463335",
     reason:
       "Only 51 L of the first choice can arrive Monday. The rest comes from the only other product that can make Monday, rounded to full cases (1,001 L in all).",
+    groupIds: ["run-milk"],
   },
   {
     id: "ev-5",
@@ -400,6 +411,7 @@ export const auditEvents: AuditEvent[] = [
     kind: "approval",
     actor: "human",
     orderId: "ORD-1042",
+    groupIds: ["ORD-1042"],
     summary: "Head chef approved ORD-1042 (€131.07 ex VAT)",
     reason: "The exact total matches the proposed order for the same product the chef asked for.",
   },
@@ -409,6 +421,7 @@ export const auditEvents: AuditEvent[] = [
     kind: "order",
     actor: "gateway",
     orderId: "ORD-1042",
+    groupIds: ["ORD-1042"],
     summary: "ORD-1042 placed for Mon 16 Nov",
     reason: "The expected total €131.07 matched the simulate. The idempotency key was stored before the call.",
   },
@@ -418,6 +431,7 @@ export const auditEvents: AuditEvent[] = [
     kind: "mandate_check",
     actor: "gateway",
     orderId: "ORD-1043",
+    groupIds: ["ORD-1043"],
     summary: "ORD-1043 needs approval (€1,947.50 ex VAT)",
     reason: "Above the budget warning; fat % changes by 3 points, and the stock is not measured.",
   },
@@ -427,6 +441,7 @@ export const auditEvents: AuditEvent[] = [
     kind: "approval",
     actor: "agent",
     orderId: "ORD-1043",
+    groupIds: ["ORD-1043"],
     summary: "Asked the buyer to approve ORD-1043",
     reason: "Waiting for a human yes to the exact total: €2,210.41 incl VAT.",
   },
@@ -436,6 +451,8 @@ function optionLine(line: OrderLine, quantity: number) {
   return {
     productId: line.product.id,
     productName: line.product.names.en,
+    productNameFi: line.product.names.fi ?? null,
+    brand: line.product.brand ?? null,
     quantity,
     unit: line.offer.comparisonUnit ?? line.product.salesUnit,
     unitPrice: line.offer.comparisonPrice,

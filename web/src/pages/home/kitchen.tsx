@@ -54,7 +54,7 @@ export function ApprovalTile({ api }: { api: Api }) {
 
 export function CutoffTile({ api, now }: { api: Api; now: Date }) {
   const t = useT();
-  const state = useAsync(() => api.listSuppliers(), [api]);
+  const state = useAsync(() => api.listSuppliers(), [api], { keep: "suppliers" });
   return (
     <Tile title={t("Next order cut-offs")} href="/suppliers" linkLabel={t("Review suppliers")}>
       <SampleData of="listSuppliers" />
@@ -98,7 +98,7 @@ export function CutoffTile({ api, now }: { api: Api; now: Date }) {
 
 export function StockTile({ api, now }: { api: Api; now: Date }) {
   const t = useT();
-  const state = useAsync(() => loadKitchenStock(api, now), [api, now.toISOString()]);
+  const state = useAsync(() => loadKitchenStock(api, now), [api, now.toISOString()], { keep: "home-stock" });
   return (
     <Tile title={t("Stock to check")} href="/stock" linkLabel={t("Count stock")}>
       <SampleData of="getStock" />
@@ -154,7 +154,7 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
 
 export function AuditTile({ api }: { api: Api }) {
   const t = useT();
-  const state = useAsync(() => api.listAudit(), [api]);
+  const state = useAsync(() => api.listAudit(), [api], { keep: "audit" });
   return (
     <Tile title={t("Latest steps")} href="/audit" linkLabel={t("Open activity log")}>
       <TileState

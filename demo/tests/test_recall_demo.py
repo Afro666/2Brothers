@@ -18,6 +18,10 @@ class NoKey:
         raise RuntimeError("CONTEXT_DEV_API_KEY is not set")
 
 
+# #1130: an excluded entry carries the product names too.
+COFFEE_LEFT_OUT = [{"product_id": COFFEE, "reason": "BLOCKED_BY_RECALL", "product_name": "Kulta Katriina Perinteinen kahvi", "product_name_fi": "Kulta Katriina Perinteinen kahvi", "brand": "Kulta Katriina"}]
+
+
 def test_next_monday_is_always_ahead():
     assert next_monday(TODAY) == date(2026, 11, 16)
     assert next_monday(date(2026, 11, 16)) == date(2026, 11, 23)
@@ -41,7 +45,7 @@ def test_seed_after_a_check_says_the_coffee_is_left_out(monkeypatch):
     recalls_view.run_check(gw, "hotel", {"idempotency_key": "first"}, "chef")
     out = seed(gw, today=TODAY, kitchen_id="hotel", key="late")
     assert not out["has_coffee"]
-    assert out["excluded"] == [{"product_id": COFFEE, "reason": "BLOCKED_BY_RECALL"}]
+    assert out["excluded"] == COFFEE_LEFT_OUT
 
 
 class Gw:
@@ -101,7 +105,7 @@ def test_stock_alert_needs_no_seed(monkeypatch):
     assert alert["product_id"] == COFFEE and alert["where"] == ["in stock: 3.253 KG"]
     assert alert["proposals"] == [] and alert["status"] == "active"
     out = seed(gw, today=TODAY, kitchen_id="hotel", key="after")
-    assert not out["has_coffee"] and out["excluded"] == [{"product_id": COFFEE, "reason": "BLOCKED_BY_RECALL"}]
+    assert not out["has_coffee"] and out["excluded"] == COFFEE_LEFT_OUT
 
 
 @pytest.mark.parametrize("reason", ["BLOCKED_BY_RECALL", "BLOCKED_BY_RECALL: exact match"])

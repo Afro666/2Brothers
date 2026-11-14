@@ -108,6 +108,12 @@ describe("live Buyer request page", () => {
     expect(screen.queryByText(/undefined/)).toBeNull();
   });
 
+  it("shows no Covers box, because the gateway takes the sentence and the date only", async () => {
+    renderApp("/requests");
+    expect(await screen.findByLabelText("Needed by")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Covers")).not.toBeInTheDocument();
+  });
+
   it("sends the request to the real gateway without a browser key and shows exact returned figures", async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify(ready)));
     vi.stubGlobal("fetch", fetch);
@@ -171,7 +177,10 @@ describe("live Buyer request page", () => {
     const guards = screen.getByRole("region", { name: "What the guards said" });
     expect(within(guards).getByText("Needs a person’s approval")).toBeVisible();
     expect(within(guards).getByRole("listitem")).toHaveTextContent(shortfall);
-    expect(screen.getByText("Proposed by the Buyer agent (Nemotron 3.5 Super VL)")).toBeVisible();
+    const proposedBy = screen.getByText("Proposed by the Buyer agent (Nemotron 3.5 Super VL)");
+    expect(proposedBy).toBeVisible();
+    // Nemotron made it: the NVIDIA mark sits next to the words.
+    expect(within(proposedBy).getByTestId("nemotron-mark")).toBeInTheDocument();
     expect(screen.getByText(`51 ST · ${name} (462775)`)).toBeVisible();
   });
 
@@ -186,6 +195,28 @@ describe("live Buyer request page", () => {
     await userEvent.click(await screen.findByText("4 model calls, 6.2 s, thinking off"));
     expect(screen.getByText(/Searched the catalog for “lactose free milk”: 12 products/)).toBeVisible();
     expect(screen.getByText("Quantities and prices: the engine. Approval: you.")).toBeVisible();
+  });
+
+  it("labels a proposal made from a list: rules matched it, and Nemotron is named only when it split the text", async () => {
+    const list = { ...ready, request: { ...(ready as { request?: object }).request, made_by: "list" } };
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ...list, model_trace: undefined })));
+    await fill();
+    const rules = await screen.findByText("Matched to products by rules, not by the Buyer model");
+    expect(rules).toBeVisible();
+    expect(within(rules).queryByTestId("nemotron-mark")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Proposed by the Buyer agent/)).not.toBeInTheDocument();
+  });
+
+  it("names Nemotron on a list proposal whose text the model split", async () => {
+    const trace = { made_by: "model", reader: "buyer", model: "nemotron-3.5-super-vl", thinking: false, calls: 1,
+      failed: 0, prompt_tokens: 10, completion_tokens: 5, reasoning_tokens: 0, seconds: 1, attempts: 1,
+      truncated: false, steps: [] };
+    const list = { ...ready, request: { ...(ready as { request?: object }).request, made_by: "list" }, model_trace: trace };
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify(list)));
+    await fill();
+    const split = await screen.findByText("Split into needs by Nemotron 3.5 Super VL, matched to products by rules");
+    expect(split).toBeVisible();
+    expect(within(split).getByTestId("nemotron-mark")).toBeInTheDocument();
   });
 
   it("shows unknown, not a blank or a crash, when the summary and the mandate are absent", async () => {
@@ -215,6 +246,8 @@ describe("live Buyer request page", () => {
     await fill();
     expect(await screen.findByText(/Proposed by the gateway’s request parser/)).toBeVisible();
     expect(screen.getByText("No reasons given.")).toBeVisible();
+    // The parser answered, not the model: no NVIDIA mark anywhere.
+    expect(screen.queryByTestId("nemotron-mark")).not.toBeInTheDocument();
   });
 
   it("says plainly when the parser answered because the Buyer model was not answering", async () => {

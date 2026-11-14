@@ -177,6 +177,9 @@ class LLMPolicy:
         self.out, self.max_tokens = out, max_tokens
         self.key = None
         self.log = None
+        # #1309: the kitchen memory block (agent/memory.py), appended to the system prompt
+        # when set; empty means the prompt is exactly as before.
+        self.memory = ""
 
     # run.py calls begin/end around each episode
     def begin(self, env) -> None:
@@ -198,9 +201,13 @@ class LLMPolicy:
             return {}
         if self.calculator:
             days = [date.fromisoformat(f["date"]) for f in obs["forecast"]]
-            obs = {**obs, "expected_use": {pid: [round(env._expected_use(pid, d), 3) for d in days]
+            # A run that patches the simulation's true use (env/chef.apply_truth) sets
+            # `believed_expected_use`, so the model sees what the engine believes, never the truth.
+            expected = getattr(env, "believed_expected_use", env._expected_use)
+            obs = {**obs, "expected_use": {pid: [round(expected(pid, d), 3) for d in days]
                                            for pid in obs["products"]}}
-        messages = [{"role": "system", "content": self.system},
+        system = self.system + ("\n\n" + self.memory if self.memory else "")
+        messages = [{"role": "system", "content": system},
                     {"role": "user", "content": json.dumps(obs, separators=(",", ":"))}]
         self.finish = None
         text, usage = self._complete(messages)

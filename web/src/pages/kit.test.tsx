@@ -1,5 +1,6 @@
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -77,6 +78,9 @@ describe("/kit", () => {
   it("shows the unknown-stock example as waiting for supplier confirmation, still approvable", async () => {
     await renderKit();
     const approvals = screen.getByRole("region", { name: "ApprovalCard" });
+    // Compact: a chip says who must confirm; the full sentence is under Inspect.
+    expect(within(approvals).getByText("Valio must confirm 1")).toBeVisible();
+    await userEvent.click(within(approvals).getByRole("button", { name: /^Inspect/ }));
     expect(within(approvals).getByText(/wait for the supplier's stock confirmation/)).toBeVisible();
     expect(within(approvals).getByRole("button", { name: /^Approve/ })).toBeEnabled();
     expect(within(approvals).getByRole("button", { name: "Reject" })).toBeEnabled();

@@ -24,6 +24,27 @@ function line(overrides: Record<string, unknown> = {}) {
 }
 
 describe("mapProposalOptions", () => {
+  it("reads the line's own names and brand (#1130), over the names map; empty is unknown", () => {
+    const [mapped] = mapProposalOptions(
+      [
+        option({
+          lines: [
+            line({ product_name: "Arla milk 1 L", product_name_fi: "Arla maito 1 l", brand: "Arla" }),
+            line({ product_id: "P2", product_name: null, product_name_fi: "", brand: "  " }),
+            line({ product_id: "P3" }),
+          ],
+        }),
+      ],
+      undefined,
+      new Map([["P1", "Old name"], ["P3", "From the map"]]),
+    );
+    expect(mapped.lines.map((row) => [row.productId, row.productName, row.productNameFi, row.brand])).toEqual([
+      ["P1", "Arla milk 1 L", "Arla maito 1 l", "Arla"],
+      ["P2", null, null, null],
+      ["P3", "From the map", null, null],
+    ]);
+  });
+
   it("maps a contract option and leaves what the gateway does not send unknown", () => {
     expect(mapProposalOptions([option()], "offer-a")).toEqual([
       {
@@ -31,12 +52,16 @@ describe("mapProposalOptions", () => {
         tier: "good",
         source: "original",
         kind: "FULL",
-        lines: [{ productId: "P1", productName: null, quantity: 51, unit: "ST", unitPrice: null }],
+        lines: [{ productId: "P1", productName: null, productNameFi: null, brand: null, quantity: 51, unit: "ST", unitPrice: null }],
         totalInclVat: 148.76,
         stockConfirmed: true,
         cutoffPassed: null,
         cutoffAt: null,
+        cutoffSource: null,
+        leadTimeDays: null,
+        leadTimeSource: null,
         deliveryReliability: null,
+        reliabilitySource: null,
         co2KgPerKg: null,
         labels: null,
         tradeOff: "Requested product, confirmed portion only.",
@@ -90,7 +115,7 @@ describe("mapProposalOptions", () => {
     ]);
   });
 
-  it("keeps a value unknown when one line does not state it", () => {
+  it("keeps a value unknown when one line does not state it; reliability is the weakest line that states one (#1453)", () => {
     const [mapped] = mapProposalOptions([
       option({
         lines: [
@@ -99,7 +124,51 @@ describe("mapProposalOptions", () => {
         ],
       }),
     ]);
-    expect(mapped).toMatchObject({ deliveryReliability: null, co2KgPerKg: null, labels: null, cutoffPassed: null });
+    expect(mapped).toMatchObject({ co2KgPerKg: null, labels: null, cutoffPassed: null });
+    // An older proposal's `reliability` is Valio's own figure.
+    expect(mapped).toMatchObject({ deliveryReliability: 0.97, reliabilitySource: "valio" });
+  });
+
+  it("reads the delivery facts (#1453): earliest cut-off, longest lead time, weakest reliability, with sources", () => {
+    const [mapped] = mapProposalOptions([
+      option({
+        lines: [
+          line({
+            cutoff_at: "2026-11-15T17:00:00+02:00", cutoff_source: "valio",
+            lead_time_days: 1, lead_time_source: "supplier_terms",
+            delivery_reliability: 0.97, reliability_source: "valio",
+            reliability: 0.5,
+          }),
+          line({
+            product_id: "P2",
+            cutoff_at: "2026-11-14T10:00:00+02:00", cutoff_source: "demo",
+            lead_time_days: 3, lead_time_source: "demo",
+            delivery_reliability: 0.88, reliability_source: "demo",
+          }),
+          line({ product_id: "P3" }),
+        ],
+      }),
+    ]);
+    expect(mapped).toMatchObject({
+      cutoffAt: "2026-11-14T10:00:00+02:00",
+      cutoffSource: "demo",
+      leadTimeDays: 3,
+      leadTimeSource: "demo",
+      // `delivery_reliability` wins over the old `reliability`; the line without one is skipped.
+      deliveryReliability: 0.88,
+      reliabilitySource: "demo",
+    });
+  });
+
+  it("reads unknown or malformed delivery facts as null, never zero", () => {
+    const [mapped] = mapProposalOptions([
+      option({
+        lines: [line({ cutoff_at: "soon", cutoff_source: "demo", lead_time_days: -1, delivery_reliability: 3, reliability_source: "elsewhere" })],
+      }),
+    ]);
+    expect(mapped).toMatchObject({
+      cutoffAt: null, cutoffSource: null, leadTimeDays: null, leadTimeSource: null, deliveryReliability: null, reliabilitySource: null,
+    });
   });
 
   it("keeps a confirmed option distinct and maps its held remainder", () => {

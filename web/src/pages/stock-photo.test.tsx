@@ -1,6 +1,9 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import type { Api, ShelfPhotoRead } from "@/api/types";
@@ -23,8 +26,22 @@ async function choosePhoto(user: ReturnType<typeof userEvent.setup>) {
   await user.upload(screen.getByLabelText("Choose a photo of the shelf"), PHOTO);
 }
 
+const SAMPLE = readFileSync(resolve(process.cwd(), "public", "sample-shelf.png"));
+
+const sampleFetch = (ok = true) =>
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    expect(String(input)).toBe("/sample-shelf.png");
+    return new Response(ok ? SAMPLE : null, { status: ok ? 200 : 404 });
+  }));
+
+async function pressSample(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByText(/not counted: treated as unknown, not as zero/);
+  await user.click(screen.getByRole("button", { name: "Try with a sample shelf photo" }));
+}
+
 describe("StockPage: count from a photo", () => {
   beforeEach(() => localStorage.clear());
+  afterEach(() => vi.unstubAllGlobals());
 
   it("opens the back camera on a phone and takes any image", async () => {
     renderApp("/stock", createMockApi());
@@ -160,5 +177,64 @@ describe("StockPage: count from a photo", () => {
     expect(count("Arla lactose-free milk")).toHaveValue("");
     expect(screen.queryByText(MARK)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save count" })).toBeDisabled();
+  });
+
+  it("reads the sample shelf photo through the same path and saves nothing", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    let reads = 0;
+    const read = api.readShelfPhoto;
+    api.readShelfPhoto = async (file, actor) => {
+      reads += 1;
+      expect(file.type).toBe("image/png");
+      return read(file, actor);
+    };
+    let saves = 0;
+    api.submitStockCount = async () => {
+      saves += 1;
+      throw new Error("must not save");
+    };
+    sampleFetch();
+    renderApp("/stock", api);
+    await pressSample(user);
+
+    await waitFor(() => expect(count("Arla lactose-free milk")).toHaveValue("7"));
+    expect(count("Valio Eila novobox milk")).toHaveValue("20");
+    expect(reads).toBe(1);
+    expect(screen.getByRole("img", { name: "The photo that was read" })).toBeInTheDocument();
+    expect(saves).toBe(0);
+  });
+
+  it("shows the photo that was read above the counts", async () => {
+    const user = userEvent.setup();
+    sampleFetch();
+    renderApp("/stock", createMockApi());
+    await pressSample(user);
+
+    expect(await screen.findByRole("img", { name: "The photo that was read" })).toBeInTheDocument();
+  });
+
+  it("says when the sample photo could not be loaded", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const spy = vi.spyOn(api, "readShelfPhoto");
+    sampleFetch(false);
+    renderApp("/stock", api);
+    await pressSample(user);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The sample photo could not be loaded.");
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("leaves the time out when the gateway sent no timing", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const fixture = await api.readShelfPhoto(PHOTO, "human");
+    api.readShelfPhoto = async () => ({ ...fixture, durationMs: null });
+    renderApp("/stock", api);
+    await user.upload(await screen.findByLabelText("Choose a photo of the shelf"), PHOTO);
+    const status = await screen.findByText(/Nemotron 3.5 Super VL read \d+ products\./);
+    expect(status).not.toHaveTextContent(/ in .* s\./);
+    expect(status).not.toHaveTextContent("0.0 s");
   });
 });

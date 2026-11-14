@@ -1,5 +1,5 @@
 import { CircleCheck, CircleX, Info } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError, useApi } from "@/api";
@@ -43,6 +43,8 @@ export function TrustPage() {
   const api = useApi();
   const rows = useAsync(() => api.listAuditChain(5));
   const [check, setCheck] = useState<AuditChainCheck | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [checkError, setCheckError] = useState<Error | null>(null);
   const [busy, setBusy] = useState(false);
   const live = api.live?.has("verifyAuditChain") === true;
 
@@ -57,14 +59,35 @@ export function TrustPage() {
     }
   }
 
-  const verify = () =>
-    run(async () => {
+  const verify = useCallback(async (announce = true) => {
+    setBusy(true);
+    setChecking(true);
+    setCheck(null);
+    setCheckError(null);
+    try {
       const result = await api.verifyAuditChain();
       setCheck(result);
-      if (result.ok) toast.success(t("Chain OK: {count} lines checked", { count: result.length }));
-      else if (isElsewhere(result)) toast.warning(t(ELSEWHERE));
-      else toast.error(t("Chain broken at line {line}", { line: String(result.brokenAt) }));
-    });
+      if (announce) {
+        if (result.ok) toast.success(t("Chain OK: {count} lines checked", { count: result.length }));
+        else if (isElsewhere(result)) toast.warning(t(ELSEWHERE));
+        else toast.error(t("Chain broken at line {line}", { line: String(result.brokenAt) }));
+      }
+    } catch (error) {
+      setCheckError(error instanceof Error ? error : new Error(String(error)));
+      if (announce) toast.error(plain(error, t));
+    } finally {
+      setBusy(false);
+      setChecking(false);
+    }
+  }, [api, t]);
+
+  // Once per visit: a new language or api object must not start the check again.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current) return;
+    opened.current = true;
+    void verify(false);
+  }, [verify]);
 
   // A changed line makes the last result stale, so it is cleared until the next verify.
   const tamper = () =>
@@ -99,11 +122,16 @@ export function TrustPage() {
 
         <Card>
           <CardContent className="space-y-4">
-            <Button onClick={verify} disabled={busy}>
+            <Button onClick={() => void verify()} disabled={busy || checking}>
               {t("Verify audit chain")}
             </Button>
             <div role="status" className="text-sm">
-              {check === null ? (
+              {checking ? (
+                <p className="text-muted-foreground">{t("Loading audit lines")}</p>
+              ) : checkError ? (
+                // Shown once the lines are in: when they fail too, their error and its retry (below) stand for both.
+                rows.status === "ready" ? <ErrorState message={plain(checkError, t)} onRetry={() => void verify()} /> : null
+              ) : check === null ? (
                 <p className="text-muted-foreground">{t("Not checked yet.")}</p>
               ) : (
                 <div className="flex items-start gap-2">
@@ -146,7 +174,15 @@ export function TrustPage() {
             {t("Newest audit lines")}
           </h2>
           {rows.status === "loading" ? <LoadingState label={t("Loading audit lines")} /> : null}
-          {rows.status === "error" ? <ErrorState message={rows.error.message} onRetry={rows.reload} /> : null}
+          {rows.status === "error" ? (
+            <ErrorState
+              message={rows.error.message}
+              onRetry={() => {
+                rows.reload();
+                if (checkError) void verify(false);
+              }}
+            />
+          ) : null}
           {rows.status === "ready" && rows.data.length === 0 ? (
             <EmptyState title={t("No audit lines yet")}>{t("Recorded events will appear here.")}</EmptyState>
           ) : null}

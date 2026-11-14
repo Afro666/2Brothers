@@ -200,8 +200,23 @@ describe("OptionCompare", () => {
       expect(fact("A", label)).toHaveTextContent(/^unknown$/);
     }
     expect(screen.queryByText("Recommended by the Buyer")).toBeNull();
-    expect(within(row("A")).getAllByRole("button")).toEqual([optionToggle("A")]);
-    expect(within(row("A")).getByText(/Cannot be approved now: Stock is not confirmed/)).toBeVisible();
+    // Unknown stock does not block (#1221, #1434): the order is placed and waits for Valio.
+    expect(within(row("A")).getByText("Valio must confirm stock")).toBeVisible();
+    expect(within(row("A")).getByRole("button", { name: /^Choose option A/ })).toBeEnabled();
+    expect(within(row("A")).queryByText(/Cannot be approved now/)).toBeNull();
+  });
+
+  it("lets a person choose an option with unknown stock and names who must confirm it (#1221, #1434)", async () => {
+    const user = userEvent.setup();
+    const onChoose = vi.fn(() => Promise.resolve());
+    const unknownStock: ProposalOption = { ...optionC, stockConfirmed: false, chosen: false, cutoffPassed: false };
+    render(<OptionCompare options={[optionA, unknownStock]} onChoose={onChoose} onApprove={vi.fn()} />);
+    // Collapsed, the row says who must confirm; it is not a blocked reason.
+    expect(within(optionToggle("B")).getByText("Valio must confirm stock")).toBeVisible();
+    expect(optionToggle("B")).not.toHaveAccessibleDescription(/Cannot be approved|not confirmed\. Approval/);
+    await user.click(optionToggle("B"));
+    await user.click(within(row("B")).getByRole("button", { name: /^Choose option B/ }));
+    expect(onChoose).toHaveBeenCalledWith(unknownStock.id);
   });
 
   it("shows a missed cut-off with its time and offers no approval for it", async () => {
@@ -212,6 +227,29 @@ describe("OptionCompare", () => {
     expect(fact("B", "Stock")).toHaveTextContent("confirmed");
     expect(within(row("B")).getByText(/Cannot be approved now: The order cut-off has passed/)).toBeVisible();
     expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
+  });
+
+  it("shows cut-off, lead time and reliability with (demo) only on demo values (#1453)", () => {
+    render(
+      <OptionCompare
+        options={[
+          {
+            ...choosable,
+            cutoffPassed: null,
+            cutoffAt: "2026-11-15T17:00:00+02:00",
+            cutoffSource: "demo",
+            leadTimeDays: 2,
+            leadTimeSource: "supplier_terms",
+            deliveryReliability: 0.9,
+            reliabilitySource: "demo",
+          },
+        ]}
+        onChoose={vi.fn()}
+      />,
+    );
+    expect(fact("A", "Order cut-off")).toHaveTextContent(/^order by Sun,? 15 Nov,? 17:00 \(demo\)$/);
+    expect(fact("A", "Lead time")).toHaveTextContent(/^2 days$/);
+    expect(fact("A", "Delivery reliability")).toHaveTextContent(/^90 % \(demo\)$/);
   });
 
   it("shows the milk story: price, total, labels, the engine's sentence and the API's recommendation", async () => {
@@ -269,7 +307,7 @@ describe("OptionCompare", () => {
     await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1));
   });
 
-  it("does not open the approval when the chosen basket comes back with unconfirmed stock", async () => {
+  it("opens the approval when the chosen basket comes back with unconfirmed stock (#1221, #1434)", async () => {
     const user = userEvent.setup();
     const onApprove = vi.fn();
     const { rerender } = render(
@@ -283,8 +321,9 @@ describe("OptionCompare", () => {
         onApprove={onApprove}
       />,
     );
-    expect(await screen.findByText(/Cannot be approved now: Stock is not confirmed/)).toBeVisible();
-    expect(onApprove).not.toHaveBeenCalled();
+    await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Cannot be approved now/)).toBeNull();
+    expect(screen.getByText("Valio must confirm stock")).toBeVisible();
   });
 
   it("frees the buttons again when the new options do not hold the chosen basket", async () => {
@@ -386,6 +425,8 @@ describe("ApprovalCard with options", () => {
         onChooseOption={onChooseOption}
       />,
     );
+    // The options sit behind Inspect, which names how many there are.
+    await user.click(screen.getByRole("button", { name: "Inspect (2 options)" }));
     await user.click(screen.getByRole("button", { name: /^Choose option A/ }));
     expect(onChooseOption).toHaveBeenCalledWith(choosable.id);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -430,6 +471,7 @@ describe("ApprovalCard with options", () => {
         onApprove={onApprove}
       />,
     );
+    await user.click(screen.getByRole("button", { name: /^Inspect/ }));
     expect(screen.getByText(/wait for the supplier's stock confirmation/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: /^Choose option B/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
@@ -447,13 +489,16 @@ describe("Approvals page: the milk options", () => {
     const approve = vi.spyOn(api, "approve");
     renderApp("/approvals", api);
 
+    await user.click(await screen.findByRole("button", { name: "Inspect (3 options)" }));
     expect(await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ })).toBeVisible();
     await user.click(optionToggle("B"));
     await user.click(optionToggle("C"));
     expect(fact("A", "Stock")).toHaveTextContent(/^confirmed$/);
     expect(within(row("A")).getByRole("button", { name: /^Choose option A/ })).toBeEnabled();
     expect(fact("C", "Stock")).toHaveTextContent(/^unknown$/);
-    expect(within(row("C")).getAllByRole("button")).toEqual([optionToggle("C")]);
+    // Unknown stock can be chosen (#1221, #1434); a missed cut-off cannot.
+    expect(within(row("C")).getByText("Valio must confirm stock")).toBeVisible();
+    expect(within(row("C")).getByRole("button", { name: /^Choose option C/ })).toBeEnabled();
     expect(fact("B", "Order cut-off")).toHaveTextContent(/^missed/);
     expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
 
@@ -492,6 +537,7 @@ describe("Approvals page: the milk options", () => {
     api.chooseOption = vi.fn(() => Promise.reject(new ApiError("STOCK_UNKNOWN", "STOCK_UNKNOWN")));
     renderApp("/approvals", api);
 
+    await user.click(await screen.findByRole("button", { name: "Inspect (3 options)" }));
     await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ });
     await user.click(optionToggle("C"));
     const choose = await screen.findByRole("button", { name: /^Choose option C/ });

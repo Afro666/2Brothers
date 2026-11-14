@@ -7,13 +7,17 @@ import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
 import { createBuyingNoteHttp } from "@/api/http-buying-note";
 import { createShelfHttp } from "@/api/http-shelf";
 import { createMenuPhotoHttp } from "@/api/http-menu-photo";
+import { createPriceListHttp } from "@/api/http-price-list";
 import { createDeliveryNoteHttp } from "@/api/http-delivery-note";
+import { createLabelPhotoHttp } from "@/api/http-label-photo";
 import { createTrustHttp } from "@/api/http-trust";
 import { createUsageHttp } from "@/api/http-usage";
+import { createAtlasHttp } from "@/api/http-atlas";
 import { createTokensHttp } from "@/api/http-tokens";
 import { createApprovalTokensHttp } from "@/api/http-approval-tokens";
 import { createDeveloperHttp } from "@/api/http-developer";
 import { createEventsHttp } from "@/api/http-events";
+import { createExplanationHttp } from "@/api/http-explanation";
 import {
   type Json,
   mapAddable,
@@ -33,6 +37,7 @@ import { createMockApi } from "@/api/mock";
 import type { Api, AuditActor, Session } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { formatEur } from "@/lib/format";
+import { dropKeptAnswers } from "@/lib/use-async";
 import { randomBytes, randomHex, toHex } from "@/lib/random-id";
 
 function uuid(): string {
@@ -47,13 +52,31 @@ export const SIGNED_OUT_EVENT = "kitchen-buyer:signed-out";
 /** Sent after a successful sign-in, so the event stream that a 401/403 stopped opens again. */
 export const SIGNED_IN_EVENT = "kitchen-buyer:signed-in";
 
-/** Run before every write, so a read that starts after it never joins a request from before it.
+/** Run before and after every write, so a read that starts after it never joins a request from before
+ * it, nor one that started while the write was in flight.
  * shortcut: an entry is never removed; the app makes one api per page. Remove on dispose if that changes. */
-const beforeWrite = new Set<() => void>();
+const beforeWrite = new Set<() => void>([dropKeptAnswers]);
+
+/** The 429 codes that mean "busy", not "rate limited": each panel shows its own text for them. */
+const BUSY_429 = new Map<unknown, string>([
+  ["PRICE_LIST_BUSY", "Another price list is being read."],
+  ["MENU_PHOTO_BUSY", "Another menu photo is being read."],
+  ["LABEL_PHOTO_BUSY", "Another label is being read."],
+  ["SUPPLIER_BUSY", "The supplier is busy - try again shortly."],
+]);
 
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
-  if ((init?.method ?? "GET").toUpperCase() !== "GET") beforeWrite.forEach((drop) => drop());
+  if ((init?.method ?? "GET").toUpperCase() === "GET") return send(baseUrl, path, init);
+  beforeWrite.forEach((drop) => drop());
+  try {
+    return await send(baseUrl, path, init);
+  } finally {
+    beforeWrite.forEach((drop) => drop());
+  }
+}
+
+async function send(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
@@ -68,12 +91,20 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
   const isSessionCheck = method === "GET" && path === "/v1/me";
   const isLogin = method === "POST" && path === "/v1/auth/login";
   if (response.status === 401 && !isSessionCheck && !isLogin) {
+    dropKeptAnswers();
     window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
   }
   if (response.status === 429) {
     // The gateway locks an account for five minutes after five wrong passwords: "wait a minute" would be wrong.
-    const locked = isLogin && (await response.json().catch(() => null))?.error?.code === "ACCOUNT_LOCKED";
-    if (locked) throw new ApiError("ACCOUNT_LOCKED", "Too many wrong passwords. Try again in five minutes.", {}, 429);
+    const error = (await response.json().catch(() => null))?.error;
+    const code = error?.code;
+    if (isLogin && code === "ACCOUNT_LOCKED") {
+      throw new ApiError("ACCOUNT_LOCKED", "Too many wrong passwords. Try again in five minutes.", {}, 429);
+    }
+    // One read per kitchen at a time (#1174, #1451), or the supplier asks us to wait `retry_after`:
+    // "wait a minute" would be wrong too, so the busy code and its details stay for the panel.
+    const busy = BUSY_429.get(code);
+    if (busy) throw new ApiError(code, busy, error && typeof error === "object" ? error : {}, 429);
     throw new ApiError("RATE_LIMITED", "Too many requests - wait a minute and try again.");
   }
   let body: unknown;
@@ -216,14 +247,17 @@ export function createHttpApi(baseUrl: string): Api {
     ...createBrandLogosHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createShelfHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createMenuPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createPriceListHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeliveryNoteHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createLabelPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createUsageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createAtlasHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createApprovalTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen, mock.getProducts),
+    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     // A live event or a new connection means the lists may have changed since a request began.
     subscribeEvents: (onEvent, onStatus) =>
       events.subscribeEvents!(
@@ -236,6 +270,7 @@ export function createHttpApi(baseUrl: string): Api {
           onStatus?.(connected);
         },
       ),
+    ...createExplanationHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));

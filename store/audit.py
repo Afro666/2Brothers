@@ -65,7 +65,12 @@ def _out(doc: dict) -> dict:
 
 
 def append_event(db, event: dict, server: dict | None = None) -> dict:
-    """Append one event and return the stored entry.
+    """Append one event and return the stored entry; see `append_event_new`."""
+    return append_event_new(db, event, server)[0]
+
+
+def append_event_new(db, event: dict, server: dict | None = None) -> tuple[dict, bool]:
+    """Append one event; return the stored entry and whether this call appended it.
 
     `event` is what the client sent; it must hold a string `event_id`. An exact
     replay returns the stored entry and appends nothing; the same `event_id` with
@@ -84,7 +89,7 @@ def append_event(db, event: dict, server: dict | None = None) -> dict:
         if stored:
             if canonical(stored["event"]) != content:
                 raise AuditConflict(event_id)
-            return _out(stored)
+            return _out(stored), False
         last = db.audit_log.find_one(sort=[("_id", -1)])
         entry = {
             "seq": last["seq"] + 1 if last else 1,
@@ -96,7 +101,7 @@ def append_event(db, event: dict, server: dict | None = None) -> dict:
         entry["hash"] = entry_hash(entry)
         try:
             db.audit_log.insert_one({"_id": entry["seq"], **entry})
-            return entry
+            return entry, True
         except DuplicateKeyError:
             continue  # another writer took this seq or this event_id: read again
     raise RuntimeError("audit log append kept losing the race; nothing was stored")

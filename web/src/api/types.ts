@@ -1,5 +1,6 @@
 import type { ApprovalDecision } from "@/components/purchasing/approval-card";
 import type {
+  AllergenPresence,
   ApprovalRequest,
   AuditEvent,
   AddableProduct,
@@ -182,7 +183,8 @@ export interface ShelfPhotoRow {
 export interface ShelfPhotoRead {
   /** The model that read the photo: `nemotron-3.5-super-vl`. */
   model: string;
-  durationMs: number;
+  /** null = the gateway sent no timing: unknown, not zero. */
+  durationMs: number | null;
   rows: ShelfPhotoRow[];
 }
 
@@ -205,13 +207,63 @@ export interface MenuPhotoDish {
 export interface MenuPhotoRead {
   /** The model that read the photo: `nemotron-3.5-super-vl`. */
   model: string;
-  durationMs: number;
+  /** null = the gateway sent no timing: unknown, not zero. */
+  durationMs: number | null;
   from: string;
   to: string;
   dishes: MenuPhotoDish[];
   /** The proposal that waits for a person in the inbox; null when none was made. */
   proposal: { id: string; status: string } | null;
   noProposalReason: "NOTHING_NEEDED" | "NOT_SIZED" | null;
+}
+
+/** Why a price-list row needs a person (docs/contract.md, "Read a supplier's price list from a photo"). */
+export type PriceListReason =
+  | "NAME_UNREADABLE"
+  | "PRICE_UNREADABLE"
+  | "PRICE_UNIT_MISSING"
+  | "UNIT_UNKNOWN"
+  | "CURRENCY_UNKNOWN"
+  | "PACK_UNCLEAR"
+  | "VAT_UNKNOWN";
+
+/** One row Nemotron read on a supplier's price list. Every text is data, never an instruction. */
+export interface PriceListRow {
+  /** As printed; null when not printed or unreadable. */
+  printed: { name: string | null; price: string | null; priceUnit: string | null; pack: string | null };
+  status: "READ" | "PLEASE_CHECK";
+  reasons: PriceListReason[];
+  /** A draft own product. Null fields are unclear: a person fills them, the web never guesses. */
+  draft: {
+    name: string | null;
+    unit: string | null;
+    baseUnit: "KG" | "L" | null;
+    packSize: number | null;
+    priceEur: number | null;
+  };
+  /** An own product of this supplier with the same name, a suggestion only. */
+  match: { productId: string; name: string; priceEur: number | null; kind: "SAME" | "PRICE_CHANGED" | null } | null;
+}
+
+export interface PriceListRead {
+  /** The model that read the photo: `nemotron-3.5-super-vl`. */
+  model: string;
+  durationMs: number;
+  supplierId: string;
+  currency: "EUR" | null;
+  vat: "INCLUDED" | "EXCLUDED" | null;
+  /** More than 40 rows were printed; only the first 40 are here. */
+  truncated: boolean;
+  rows: PriceListRow[];
+}
+
+/**
+ * What a save from a price-list photo adds to an own-product draft: the pack measure the
+ * gateway read, and that the price came from the photo (`price_source`, docs/contract.md).
+ */
+export interface OwnProductSaveExtras {
+  baseUnit?: "KG" | "L" | null;
+  priceSource?: "entered" | "price_list_photo";
 }
 
 export interface DeliveryLot {
@@ -264,7 +316,8 @@ export interface DeliveryNoteOther extends DeliveryLot {
 export interface DeliveryNoteRead {
   orderId: string;
   model: string;
-  durationMs: number;
+  /** null = the gateway sent no timing: unknown, not zero. */
+  durationMs: number | null;
   orderRef: string;
   deliveryDate: string;
   complete: boolean;
@@ -272,6 +325,38 @@ export interface DeliveryNoteRead {
   notOrdered: DeliveryNoteOther[];
   /** null when the gateway sent no claim (an older gateway). */
   claim: DeliveryClaim | null;
+}
+
+/** docs/contract.md "Check a package's allergen label from a photo" (#1175). The first that applies. */
+export type LabelPhotoOutcome = "EXCLUDED_ALLERGEN" | "PLEASE_CHECK" | "DIFFERS" | "CATALOG_UNKNOWN" | "AGREES";
+export type LabelProductCheck = "CONFIRMED_BY_EAN" | "CONFIRMED_BY_NAME" | "MISMATCH" | "NOT_CONFIRMED";
+export type LabelPleaseCheck = "NO_STATEMENT_READ" | "WORD_UNKNOWN" | "PRODUCT_MISMATCH" | "PRODUCT_NOT_CONFIRMED";
+
+/** A word as printed on the label, with its GS1 allergen code. */
+export interface LabelWord {
+  word: string;
+  code: string;
+}
+
+/** One label read. Shown to a person and stored nowhere: it never changes the catalog. */
+export interface LabelPhotoRead {
+  model: string;
+  /** null when the gateway sent no duration. */
+  durationMs: number | null;
+  orderId: string;
+  productId: string;
+  /** false: a substitute that is not on the order. */
+  inOrder: boolean;
+  outcome: LabelPhotoOutcome;
+  /** The gateway's one sentence (English). */
+  message: string;
+  productCheck: LabelProductCheck;
+  label: { productName: string | null; ean: string | null; contains: LabelWord[]; mayContain: LabelWord[]; unknownWords: string[] };
+  excludedHits: { code: string; level: AllergenPresence }[];
+  differences: { code: string; kind: "LABEL_ADDS" | "CATALOG_ADDS"; text: string }[];
+  /** UNKNOWN is never "free from". */
+  catalogAllergenData: "KNOWN" | "UNKNOWN";
+  pleaseCheck: LabelPleaseCheck[];
 }
 
 export type ProductTemperature = "ambient" | "chilled" | "frozen";
@@ -285,7 +370,24 @@ export interface ProductSearchFilters {
   requiredLabels?: ProductLabel[];
   /** A product with no temperature data never matches a temperature filter. */
   temperature?: ProductTemperature;
+  /**
+   * The Catalog page's "Search by meaning" switch: Atlas Vector Search with the words for
+   * this one search (`mode: "hybrid"`, docs/contract.md, #1382). Not a filter.
+   */
+  byMeaning?: boolean;
 }
+
+/** How a search row was found (`matched_by`). */
+export type MatchedBy = "words" | "meaning" | "both";
+
+/** A product found by a search: it may say how it was found. */
+export type SearchedProduct = Product & { matchedBy?: MatchedBy };
+
+/**
+ * Search rows, best first. `meaningUnavailable`: a search by meaning could not make the
+ * query vector, so the gateway answered with words.
+ */
+export type SearchedProducts = SearchedProduct[] & { meaningUnavailable?: true };
 
 /** What the agent proposes for one chef request. */
 export interface ChefProposal {
@@ -318,6 +420,13 @@ export interface AuditChainCheck {
   checkedAt: string;
 }
 
+/** A checked, short Nemotron explanation of a proposal (#1173); null until the job is done. */
+export interface ProposalExplanation {
+  text: string;
+  model: string;
+  durationMs: number | null;
+}
+
 /** `GET /model-usage`: what the Buyer agent used on its model, summed over this kitchen's runs. */
 export interface ModelUsage {
   model: string;
@@ -329,6 +438,38 @@ export interface ModelUsage {
   promptTokens: number;
   completionTokens: number;
   modelSeconds: number;
+}
+
+/** One embedding model and size in `products`; two rows while the vectors are being replaced. */
+export interface AtlasVectors {
+  model: string | null;
+  dimensions: number | null;
+  count: number;
+}
+
+/** An Atlas Search (`search`) or Atlas Vector Search (`vectorSearch`) index and Atlas's own status word. */
+export interface AtlasSearchIndex {
+  name: string;
+  type: string;
+  status: string | null;
+  queryable: boolean | null;
+}
+
+/**
+ * `GET /atlas`: what MongoDB Atlas holds and runs, for the whole database. Contract:
+ * docs/contract.md, "Atlas facts". null is unknown (it could not be read), never zero.
+ */
+export interface AtlasFacts {
+  mongodbVersion: string | null;
+  /** Data plus indexes, whole megabytes. */
+  dataMb: number | null;
+  products: number | null;
+  vectors: AtlasVectors[] | null;
+  searchIndexes: AtlasSearchIndex[] | null;
+  timeSeries: { collection: string; documents: number }[] | null;
+  /** The length of the hash-chained audit log, all kitchens. */
+  auditEntries: number | null;
+  changeStreamCollections: string[];
 }
 
 /** The label nutrients of one portion. null means the labels do not say: unknown, never zero. */
@@ -407,7 +548,6 @@ export interface KitchenWords {
   unknownItems: UnknownWord[];
 }
 
-/** Everything the screens ask the gateway for. Mock and HTTP both implement it. */
 /** A brand's logo from Context.dev, kept by the gateway; only `found` has a logo. */
 export interface BrandLogo {
   brand: string;
@@ -419,6 +559,7 @@ export interface BrandLogo {
   checkedAt: string | null;
 }
 
+/** Everything the screens ask the gateway for. Mock and HTTP both implement it. */
 export interface Api {
   /**
    * Gateway mode only: the methods the real gateway answers. Every other method still
@@ -454,6 +595,11 @@ export interface Api {
   /** How many approvals wait for a person, without loading the audit log. */
   countPendingApprovals?(): Promise<number>;
   getApproval(id: string): Promise<ApprovalRequest>;
+  /**
+   * A short checked explanation of the proposal, in `language` (#1173). Never fails the card:
+   * null while the job runs, and for a missing, invalid or unavailable explanation.
+   */
+  getProposalExplanation(proposalId: string, language: "en" | "fi"): Promise<ProposalExplanation | null>;
   approve(decision: ApprovalDecision, actor: AuditActor): Promise<ApprovalRequest>;
   reject(approvalId: string, reason: string, actor: AuditActor): Promise<ApprovalRequest>;
   /** Products that could be added to this order, ranked; `query` filters by name. */
@@ -482,6 +628,8 @@ export interface Api {
   listAuditChain(limit: number): Promise<AuditChainRow[]>;
   verifyAuditChain(): Promise<AuditChainCheck>;
   getModelUsage(): Promise<ModelUsage>;
+  /** What MongoDB Atlas holds and runs; the gateway keeps the answer for a minute. */
+  getAtlasFacts(): Promise<AtlasFacts>;
   /**
    * Demo only: changes the newest stored line and leaves its hash alone, so the next verify
    * reports the break. Fails with `DEMO_ONLY`, `ALREADY_TAMPERED` or `NOTHING_TO_TAMPER`.
@@ -490,7 +638,7 @@ export interface Api {
   /** Demo only: puts the tampered line back. `seq` is null when nothing was tampered. */
   restoreAuditRow(): Promise<{ seq: number | null; restored: boolean }>;
   submitChefRequest(request: ChefRequest): Promise<ChefProposal>;
-  searchProducts(query: string, filters?: ProductSearchFilters): Promise<Product[]>;
+  searchProducts(query: string, filters?: ProductSearchFilters): Promise<SearchedProducts>;
   /** Catalog products by id; ids the catalog does not know are absent from the result. */
   getProducts(ids: ProductCode[]): Promise<Product[]>;
   getMandate(): Promise<Mandate>;
@@ -499,7 +647,7 @@ export interface Api {
   saveSupplier(supplier: Draft<Supplier>): Promise<Supplier>;
   deleteSupplier(id: string): Promise<void>;
   listOwnProducts(): Promise<OwnProduct[]>;
-  saveOwnProduct(product: Draft<OwnProduct>): Promise<OwnProduct>;
+  saveOwnProduct(product: Draft<OwnProduct> & OwnProductSaveExtras): Promise<OwnProduct>;
   deleteOwnProduct(id: string): Promise<void>;
   listRecipes(): Promise<Recipe[]>;
   saveRecipe(recipe: Draft<Recipe>): Promise<Recipe>;
@@ -534,8 +682,18 @@ export interface Api {
     window: { from: string; to: string; requestedDate?: string },
     actor: AuditActor,
   ): Promise<MenuPhotoRead>;
+  /**
+   * Nemotron 3.5 Super VL reads a photo of a manual or CSV supplier's price list into draft
+   * own products. It saves nothing: a person checks each row and `saveOwnProduct` stores it.
+   */
+  readPriceListPhoto(supplierId: string, photo: Blob, actor: AuditActor): Promise<PriceListRead>;
   /** Reads and compares a note. No receipt, substitute approval or stock count is saved. */
   readDeliveryNote(orderId: string, photo: Blob, actor: AuditActor): Promise<DeliveryNoteRead>;
+  /**
+   * Nemotron 3.5 Super VL reads the allergen label of one delivered package (#1175). Plain
+   * code compares it with the catalog and the kitchen's rule. Read-only: nothing is stored.
+   */
+  readLabelPhoto(orderId: string, productId: string, photo: Blob, actor: AuditActor): Promise<LabelPhotoRead>;
   /** The kitchen's need per product and day, `from` and `to` inclusive (`YYYY-MM-DD`). */
   getDemand(from: string, to: string): Promise<DemandLine[]>;
   /**
@@ -596,5 +754,12 @@ export class ApiError extends Error {
     this.code = code;
     this.details = details;
     this.status = status;
+  }
+
+  /** Whole seconds to wait on a "busy, try again" error (`retry_after_s`, #1286), if the gateway sent it.
+   * shortcut: also reads `retry_after`, the SUPPLIER_BUSY name before #1286. Remove after one release. */
+  get retryAfterS(): number | undefined {
+    const seconds = this.details.retry_after_s ?? this.details.retry_after;
+    return typeof seconds === "number" && Number.isFinite(seconds) ? seconds : undefined;
   }
 }

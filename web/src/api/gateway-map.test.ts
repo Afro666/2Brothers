@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, mapRecalls } from "@/api/gateway-map";
+import { askedBy, mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, mapRecalls } from "@/api/gateway-map";
 import { addable, auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
 
 describe("mapPermissions", () => {
@@ -50,6 +50,7 @@ describe("mapApproval", () => {
         },
       ],
       suppliersToConfirm: [],
+      cutoffs: [{ closingTime: null, supplierName: null }],
       status: "PENDING",
       options: [],
       modelTrace: null, // no model_trace on this proposal (#1197)
@@ -78,6 +79,50 @@ describe("mapApproval", () => {
     const sentence = "Valio must confirm stock for: Valio Eila 3 % 1 L.";
     const result = mapApproval({ ...proposal, mandate: { ...proposal.mandate, reasons: [sentence] } });
     expect(result.reasons.map((reason) => reason.rule)).toContain(sentence);
+  });
+
+  it("maps each line's closing time and the name of its supplier block", () => {
+    const closingTime = "2026-11-15T17:00:00+02:00";
+    const result = mapApproval({
+      ...proposal,
+      lines: [{ ...proposal.lines[0], closing_time: closingTime }],
+      blocks: [{ supplier_id: "sup-valio", name: "Valio Aimo", lines: proposal.lines }],
+    });
+    expect(result.cutoffs).toEqual([{ closingTime, supplierName: "Valio" }]);
+  });
+
+  it("uses product names and plain sentences for known reason codes, leaving unknown codes alone", () => {
+    const result = mapApproval({
+      ...proposal,
+      lines: [{ ...proposal.lines[0], product_name: "Oat drink 1 L" }],
+      excluded: [{ product_id: "461332", name: "Coffee 500 g", reason: "BLOCKED_BY_RECALL" }],
+      mandate: {
+        ...proposal.mandate,
+        warnings: [],
+        reasons: [
+          "461332: BLOCKED_BY_RECALL",
+          "900001: order cut-off has passed for this delivery",
+          "900001: pack size unknown; check the pack",
+          "CLOSING_PASSED",
+          "STOCK_UNKNOWN",
+          "PACK_SIZE_UNKNOWN",
+          "NEW_GATEWAY_REASON",
+          "777777: NEW_LINE_CODE",
+        ],
+      },
+    });
+    expect(result.reasons.map(({ rule, detail }) => ({ rule, detail }))).toEqual([
+      { rule: "Coffee 500 g: Blocked by a recall. A product on this order matches a food recall. It cannot be approved.", detail: "" },
+      { rule: "Oat drink 1 L: order cut-off has passed for this delivery", detail: "" },
+      { rule: "Oat drink 1 L: pack size unknown; check the pack", detail: "" },
+      // A bare known code is a title and a detail, as CHECK_CODES are, so both have Finnish.
+      { rule: "Order cut-off passed", detail: "The supplier's cut-off for this delivery date has passed." },
+      { rule: "Stock not confirmed", detail: "The supplier does not report stock for some lines. They confirm it later." },
+      { rule: "PACK_SIZE_UNKNOWN", detail: "" },
+      { rule: "NEW_GATEWAY_REASON", detail: "" },
+      // #1142: a code after a product id is still put in words, even an unknown one.
+      { rule: "777777: New line code. The gateway flagged this. Check the order before you approve.", detail: "" },
+    ]);
   });
 
   it("uses no supplier confirmations when blocks are missing", () => {
@@ -115,6 +160,27 @@ describe("mapApproval", () => {
     expect(approval.reasons).toEqual([expect.objectContaining({ rule: "A person approves every order" })]);
   });
 
+  it("maps the gateway's line names, Finnish names and brands onto the option lines (#1130)", () => {
+    const named = { product_id: "462775", quantity: "51", unit: "ST", why: "x", unknown_stock: false,
+      product_name: "Valio Eila milk 1 L", product_name_fi: "Valio Eila maito 1 l", brand: "Valio" };
+    const approval = mapApproval({
+      ...proposal,
+      lines: [named],
+      mandate: { verdict: "NEEDS_APPROVAL", reasons: ["Valio Eila milk 1 L (462775): ALLERGEN_RULE: the kitchen excludes AN"] },
+      substitute_options: [{
+        tier: "good", source: "confirmed", offer_id: "offer-2", expected_total: "10.00", currency: "EUR",
+        lines: [named, { ...named, product_id: "463335", product_name: null, product_name_fi: null, brand: null }],
+        why: "Confirmed stock only.", requires_chef_approval: true, stock_confirmed: true,
+      }],
+    });
+    expect(approval.options?.[0]?.lines.map((line) => [line.productName, line.productNameFi, line.brand])).toEqual([
+      ["Valio Eila milk 1 L", "Valio Eila maito 1 l", "Valio"],
+      [null, null, null],
+    ]);
+    expect(approval.reasons[0].rule.startsWith("Valio Eila milk 1 L (462775): ")).toBe(true);
+    expect(approval.reasons[0].rule).not.toContain("ALLERGEN_RULE");
+  });
+
   it("explains why confirmed stock has a high certainty premium", () => {
     const withWarning = {
       ...proposal,
@@ -139,6 +205,12 @@ describe("mapApproval", () => {
     });
   });
 
+  it("names an API token and the chef in words, not raw actor codes", () => {
+    expect(askedBy("token:x", {})).toBe("an API client");
+    expect(askedBy("token:demo", {})?.startsWith("token:")).toBe(false);
+    expect(askedBy("chef", {})).toBe("the chef");
+  });
+
   it("names Valio's selling agent for a supplier offer proposal", () => {
     const offer = { ...proposal, request: { ...proposal.request, text: "Offer from Valio Aimo: Flounder in place of Salmon" } };
     expect(mapApproval(offer).requestedBy).toBe("Valio's selling agent");
@@ -155,6 +227,11 @@ describe("mapApproval", () => {
     const approval = mapApproval(refused, [{ kind: "proposal_created", proposal_id: "prop-1", actor: "chef@kitchen.example" }]);
     expect(approval.requestedBy).toBe("chef@kitchen.example");
     expect(approval.reasons[0].rule).toBe("472710: Excluded allergen: the kitchen excludes AN");
+    const named = mapApproval({
+      ...refused,
+      lines: [{ ...proposal.lines[0], product_id: "472710", product_name: "Milk 1 L" }],
+    });
+    expect(named.reasons[0].rule).toBe("Milk 1 L: Excluded allergen: the kitchen excludes AN");
   });
 
   it("lists ALLERGEN_DATA_MISSING under what to check, from a line or the mandate", () => {
@@ -348,6 +425,36 @@ describe("mapOrder", () => {
     }
   });
 
+  it("reads a line's cut-off, lead time and reliability with their sources (#1453)", () => {
+    const line = {
+      ...proposal.lines[0],
+      cutoff_at: "2026-11-19T10:00:00+02:00", cutoff_source: "demo",
+      lead_time_days: 2, lead_time_source: "supplier_terms",
+      delivery_reliability: 0.94, reliability_source: "valio",
+    };
+    const { offer } = mapOrder({ ...proposal, lines: [line] }, null).lines[0];
+    expect(offer).toMatchObject({
+      closingTime: "2026-11-19T10:00:00+02:00",
+      cutoffSource: "demo",
+      leadTimeDays: 2,
+      leadTimeSource: "supplier_terms",
+      deliveryReliability: 0.94,
+      reliabilitySource: "valio",
+    });
+  });
+
+  it("reads a proposal stored before #1453 (no delivery facts) as unknown", () => {
+    const { offer } = mapOrder(proposal, null).lines[0];
+    expect(offer).toMatchObject({
+      closingTime: null,
+      cutoffSource: null,
+      leadTimeDays: null,
+      leadTimeSource: null,
+      deliveryReliability: null,
+      reliabilitySource: null,
+    });
+  });
+
   it("maps a waiting proposal; what the gateway does not send stays unknown, never zero", () => {
     const order = mapOrder(proposal, null);
     expect(order).toMatchObject({
@@ -356,11 +463,13 @@ describe("mapOrder", () => {
       urgency: "UNKNOWN",
       deliveryDate: "2026-11-20",
       totalExVat: 80,
+      vat: 11.2,
+      deliveryFee: null,
       totalInclVat: 91.2,
       mov: null,
     });
     expect(order.lines).toHaveLength(1);
-    expect(order.lines[0]).toMatchObject({ quantity: 40, why: "40 ST of oat drink = 40 L, confirmed in stock." });
+    expect(order.lines[0]).toMatchObject({ quantity: 40, lineTotal: 80, why: "40 ST of oat drink = 40 L, confirmed in stock." });
     expect(order.lines[0].product).toMatchObject({
       id: "900001",
       names: { en: "900001" },
@@ -376,6 +485,19 @@ describe("mapOrder", () => {
       closingTime: null,
       availableDate: null,
     });
+  });
+
+  it("keeps the line's product name and the order's delivery fee", () => {
+    const order = mapOrder(
+      {
+        ...proposal,
+        delivery_fee: "4.50",
+        lines: [{ ...proposal.lines[0], product_name: "Oat drink 1 L" }],
+      },
+      null,
+    );
+    expect(order.deliveryFee).toBe(4.5);
+    expect(order.lines[0]!.product.names.en).toBe("Oat drink 1 L");
   });
 
   it.each([true, undefined, "false"])("treats unknown_stock %j as not confirmed", (unknown_stock) => {
@@ -434,11 +556,12 @@ describe("mapOrder", () => {
       signedAt: new Date(1_763_107_200_000).toISOString(),
       total: 91.2,
       supplierOutcome: null,
+      supplierNote: null,
     });
     expect(mapOrder(null, { ...placedOrder, receipt: null }).receipt).toBeNull();
     expect(mapOrder(null, placedOrder).receipt).toBeNull();
     expect(mapOrder(null, { ...placedOrder, receipt: "not-a-jws" }).receipt).toEqual({
-      jws: "not-a-jws", approvedBy: null, signedAt: null, total: null, supplierOutcome: null,
+      jws: "not-a-jws", approvedBy: null, signedAt: null, total: null, supplierOutcome: null, supplierNote: null,
     });
     expect(mapOrder(proposal, null).receipt).toBeUndefined();
   });
@@ -454,7 +577,9 @@ describe("mapAudit", () => {
         kind: "offer",
         actor: "agent",
         summary: "Buyer is asking for an offer",
-        reason: 'product_ids: ["900001"]; requested_date: 2026-11-20',
+        reason: "1 product for Fri 20 Nov",
+        details: 'product_ids: ["900001"]; requested_date: 2026-11-20',
+        groupIds: ["run-1"],
       },
       {
         id: "ev-2",
@@ -463,7 +588,9 @@ describe("mapAudit", () => {
         kind: "approval",
         actor: "agent",
         summary: "Buyer asked for approval: it failed",
-        reason: "error: Rejected by buyer policy; reason_code: POLICY_VIOLATION",
+        reason: "",
+        details: "error: Rejected by buyer policy; reason_code: POLICY_VIOLATION",
+        groupIds: ["run-1"],
       },
       {
         id: "ev-3",
@@ -472,7 +599,9 @@ describe("mapAudit", () => {
         kind: "approval",
         actor: "agent",
         summary: "Approval requested",
-        reason: "expected_total: 91.20",
+        reason: "",
+        details: "expected_total: 91.20",
+        groupIds: ["prop-1", "offer-1"],
       },
       {
         id: "ev-4",
@@ -481,7 +610,9 @@ describe("mapAudit", () => {
         kind: "order",
         actor: "chef",
         summary: "Order placed",
-        reason: "expected_total: 91.20",
+        reason: "",
+        details: "expected_total: 91.20",
+        groupIds: ["prop-1", "ord-1"],
       },
       {
         id: "ev-5",
@@ -490,7 +621,9 @@ describe("mapAudit", () => {
         kind: "other",
         actor: "human",
         summary: "something_new",
-        reason: "No details recorded.",
+        reason: "",
+        details: "No details recorded.",
+        groupIds: [],
       },
     ]);
   });
@@ -514,7 +647,9 @@ describe("mapAudit", () => {
         kind: "refused",
         actor: "system",
         summary: "Refused: the gateway said no (403)",
-        reason: "code: SCOPE_MISSING; method: POST; path: /kitchens/k-1/orders",
+        reason: "",
+        details: "code: SCOPE_MISSING; method: POST; path: /kitchens/k-1/orders",
+        groupIds: [],
       },
     ]);
     expect(mapAudit([{ ...refused, actor: "buyer-agent" }])[0].actor).toBe("agent");
@@ -541,6 +676,41 @@ describe("mapAudit", () => {
     expect(mapAudit(auditEvents, "ord-1").map((event) => event.id)).toEqual(["ev-3", "ev-4"]);
     expect(mapAudit(auditEvents, "prop-1").map((event) => event.id)).toEqual(["ev-3", "ev-4"]);
     expect(mapAudit(auditEvents, "ord-none")).toEqual([]);
+  });
+
+  it("keeps every old raw reason in details and only readable words in reason", () => {
+    const [tool] = mapAudit([
+      {
+        event_id: "tool",
+        run_id: "run",
+        type: "tool_call_started",
+        tool: "get_offer",
+        arguments: '{"product_ids":["1","2","3"],"requested_date":"2026-11-17","need_id":"need"}',
+      },
+    ]);
+    const oldToolReason = 'product_ids: ["1","2","3"]; requested_date: 2026-11-17; need_id: need';
+    expect(tool.reason).toBe("3 products for Tue 17 Nov");
+    expect(tool.details).toBe(oldToolReason);
+    expect(`${tool.reason}\n${tool.details}`).toContain("need_id: need");
+
+    const [gateway] = mapAudit([
+      {
+        event_id: "gateway",
+        kind: "decision_summary",
+        summary: "Asked for milk",
+        reason: "An additional explanation",
+        expected_total: "12.30",
+      },
+    ]);
+    expect(gateway.reason).toBe("Asked for milk");
+    expect(gateway.details).toContain("reason: An additional explanation");
+    expect(gateway.details).toContain("expected_total: 12.30");
+
+    const [search] = mapAudit([
+      { event_id: "search", type: "tool_call_finished", tool: "search_products", arguments: { query_present: true }, result: {} },
+    ]);
+    expect(search.reason).toBe("");
+    expect(search.details).toBe("No details recorded.");
   });
 });
 

@@ -33,7 +33,7 @@ export function mapDeliveryNote(body: unknown, orderId: string): DeliveryNoteRea
       received: status === "UNREADABLE" ? null : quantity(r.received), baseUnit: text(r.base_unit), needsApproval: status === "SUBSTITUTE" };
   });
   const note = object(raw.note, "the note reference");
-  return { orderId, model: text(raw.model), durationMs: typeof raw.duration_ms === "number" ? raw.duration_ms : 0,
+  return { orderId, model: text(raw.model), durationMs: typeof raw.duration_ms === "number" ? raw.duration_ms : null,
     orderRef: text(note.order_ref), deliveryDate: text(note.delivery_date),
     complete: raw.complete === true && lines.length > 0 && lines.every((r) => r.status === "RECEIVED") && !notOrdered.length,
     lines, notOrdered, claim: claimOf(raw.claim) };

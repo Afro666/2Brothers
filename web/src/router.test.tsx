@@ -22,7 +22,7 @@ describe("application routes", () => {
     ["/requests", "Request an order"],
     ["/approvals", "To approve"],
     ["/orders", "Order history"],
-    ["/orders/ORD-1", "Order ORD-1"],
+    ["/orders/ORD-1", "Order"],
     ["/audit", "Activity log"],
     ["/catalog", "Products"],
     ["/stock", "Stock count"],
@@ -69,6 +69,8 @@ describe("application routes", () => {
       "Reports",
       "Settings",
       "About",
+      // The open demo (the default mock) is offered sign-in, not sign-out (#1446).
+      "Sign in",
     ]);
     expect(menu.getByRole("link", { name: "Orders" })).toHaveAttribute("aria-current", "page");
     const tabs = within(screen.getByRole("navigation", { name: "Orders" }));

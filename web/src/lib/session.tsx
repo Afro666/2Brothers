@@ -3,6 +3,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useR
 
 import { useApi } from "@/api";
 import { SIGNED_OUT_EVENT } from "@/api/http";
+import { dropKeptAnswers } from "@/lib/use-async";
 import { ApiError, type Session } from "@/api/types";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
@@ -14,7 +15,8 @@ interface SessionContextValue {
   signInRevision: number;
   signIn(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
-  reload(): Promise<void>;
+  /** The session, null when signed out, undefined when `/v1/me` failed (the error screen shows). */
+  reload(): Promise<Session | null | undefined>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -35,13 +37,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const next = await api.getSession();
       setSession(next);
       setStatus(next ? "signed-in" : "signed-out");
+      return next;
     } catch (cause) {
       if (cause instanceof ApiError && (cause.code === "UNAUTHENTICATED" || cause.status === 401)) {
         setSession(null);
         setStatus("signed-out");
-      } else {
-        setFailure(cause instanceof Error ? cause : new Error(String(cause)));
+        return null;
       }
+      setFailure(cause instanceof Error ? cause : new Error(String(cause)));
+      return undefined;
     }
   }, [api]);
 
@@ -70,14 +74,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    // Also for an api that signs out without a gateway write (the mock): nothing kept outlives the session.
+    dropKeptAnswers();
     try {
       await api.signOut();
     } catch {
+      setFailure(null);
+      setSession(null);
+      setStatus("signed-out");
+      await navigate({ to: "/sign-in" });
+      return;
     }
     setFailure(null);
-    setSession(null);
-    setStatus("signed-out");
-    await navigate({ to: "/sign-in" });
+    const next = await reload();
+    // Only a gateway that says "signed out" sends a person to sign-in; a failed read keeps "/" behind the retry.
+    await navigate({ to: next === null ? "/sign-in" : "/" });
   }
 
   let content = children;

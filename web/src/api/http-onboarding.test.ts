@@ -85,7 +85,7 @@ describe("Onboarding lookup on the real gateway", () => {
   });
 
   it("passes the gateway's refusals on with their codes", async () => {
-    // api/http.ts reports every 429 as RATE_LIMITED, whatever code the gateway names.
+    // api/http.ts reports a 429 as RATE_LIMITED unless it names a busy code.
     for (const [status, sent, code] of [
       [422, "FREE_EMAIL", "FREE_EMAIL"],
       [429, "LOOKUP_RATE_LIMITED", "RATE_LIMITED"],

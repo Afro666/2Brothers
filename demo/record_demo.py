@@ -9,7 +9,9 @@
 
 It drives a real browser through the live site, the way docs/demo.md says. Each step shows a
 caption, so the video explains itself without sound. A step that fails is reported and
-skipped; the recording goes on.
+skipped; the recording goes on. Every deploy restarts the site, so the recorder first waits
+until GET /api/ping answers (at most 3 minutes), and a page load that hits a restart waits for
+the site again (at most 90 s) and is tried once more.
 
 Three stories (`--story`):
 
@@ -67,6 +69,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 CAPTION_JS = """
@@ -125,11 +128,62 @@ def site_needs_sign_in(base: str, opener=urllib.request.urlopen) -> bool:
         return False
 
 
+SITE_DOWN = ("the site does not answer; a deploy may be running: look at GitHub Actions, deploy "
+             "(every deploy restarts the site), then run the recorder again")
+
+# A goto that fails like this hit a site restart or a network blip (2026-11-14: a DNS blip, then
+# Chrome's error page reloading by itself; six deploys in 7 minutes): worth one more try.
+RETRYABLE_GOTO = ("net::ERR_", "interrupted by another navigation", "Execution context was destroyed")
+
+
+def site_answers(base: str, opener=urllib.request.urlopen) -> bool:
+    """True when GET <base>/api/ping answers 200. Any other answer, or no answer, is False."""
+    request = urllib.request.Request(base + "/api/ping", headers={"User-Agent": "record-demo/0.1"})
+    try:
+        with opener(request, timeout=10) as answer:
+            return getattr(answer, "status", 200) == 200
+    except OSError:          # HTTPError, URLError and a refused connection are all OSErrors
+        return False
+
+
+def wait_for_site(base: str, limit: float = 180, every: float = 5, answers=None, sleep=None, clock=None,
+                  say=print, waiting: str = "waiting for the site to answer") -> bool:
+    """Polls /api/ping every `every` seconds for at most `limit` seconds. True once it answers 200;
+    False when it never did. Says one line per failed poll, so a pause is never silent."""
+    answers = answers or site_answers      # looked up per call, so a test can swap it
+    sleep = sleep or time.sleep
+    clock = clock or time.monotonic
+    started = clock()
+    while True:
+        if answers(base):
+            return True
+        waited = clock() - started
+        if waited + every > limit:
+            return False
+        say(f"      {waiting} ({base}/api/ping, {waited:.0f} of {limit:.0f} s)")
+        sleep(every)
+
+
+def goto(page, url: str):
+    """The page goto, with one retry after a site restart: on a net::ERR_* failure, an interrupted
+    navigation or a destroyed execution context it waits until the site answers (at most 90 s)
+    and tries the same goto once more. Any other error, and a second failure, propagate."""
+    try:
+        return page.goto(url)
+    except Exception as error:
+        if not any(mark in str(error) for mark in RETRYABLE_GOTO):
+            raise
+    parts = urllib.parse.urlsplit(url)
+    wait_for_site(f"{parts.scheme}://{parts.netloc}", limit=90, every=5,
+                  waiting="site restarting (deploy?), waiting")
+    return page.goto(url)
+
+
 def sign_in(page, base: str, email: str, password: str) -> bool:
     """Signs in on the site's sign-in page. False when the site shows no sign-in page (the open
     demo sends a visitor on to Home). Raises when the site refuses: every later step would
     only record the sign-in page."""
-    page.goto(base + "/sign-in")
+    goto(page, base + "/sign-in")
     form = page.get_by_label("Password")
     try:
         form.wait_for(timeout=10_000)
@@ -189,7 +243,7 @@ def offer_title(product: str | None) -> re.Pattern:
 
 
 def _ask(page, base: str, text: str, needed_by: str) -> None:
-    page.goto(base + "/requests")
+    goto(page, base + "/requests")
     page.get_by_label("What do you need?").fill(text)
     for label, value in (("Covers", "180"), ("Needed by", needed_by)):
         field = page.get_by_label(label)
@@ -203,16 +257,16 @@ def _common(base: str) -> dict:
     """Steps both stories share: the tamper check and the two discovery files."""
 
     def tamper(page):
-        page.goto(base + "/trust")
+        goto(page, base + "/trust")
         page.get_by_role("button", name="Verify audit chain").click()
         page.wait_for_timeout(3000)
 
     def llms(page):
-        page.goto(base + "/llms.txt")
+        goto(page, base + "/llms.txt")
         page.wait_for_timeout(3500)
 
     def card(page):
-        page.goto(base + "/.well-known/agent-card.json")
+        goto(page, base + "/.well-known/agent-card.json")
         page.wait_for_timeout(3000)
 
     return {
@@ -235,7 +289,7 @@ def steps(base: str, text: str, needed_by: str, approve: bool, story: str = "mil
     common = _common(base)
 
     def home(page):
-        page.goto(base + "/")
+        goto(page, base + "/")
         page.wait_for_timeout(1500)
 
     def ask(page):
@@ -248,7 +302,7 @@ def steps(base: str, text: str, needed_by: str, approve: bool, story: str = "mil
         page.wait_for_timeout(3000)
 
     def inbox(page):
-        page.goto(base + "/approvals")
+        goto(page, base + "/approvals")
         page.wait_for_timeout(3500)
 
     def decide(page):
@@ -261,7 +315,7 @@ def steps(base: str, text: str, needed_by: str, approve: bool, story: str = "mil
         approve_in(page, cards, f'"{text.strip()}"')
 
     def log(page):
-        page.goto(base + "/audit")
+        goto(page, base + "/audit")
         page.wait_for_timeout(3500)
 
     plan = [
@@ -291,7 +345,7 @@ def offer_steps(base: str, needed_by: str, approve: bool, press_recall: bool) ->
         return page.locator('[aria-labelledby="supplier-offer-title"]')
 
     def offer(page):
-        page.goto(base + "/")
+        goto(page, base + "/")
         box = tile(page)
         box.wait_for(timeout=15_000)
         box.scroll_into_view_if_needed()
@@ -303,7 +357,7 @@ def offer_steps(base: str, needed_by: str, approve: bool, press_recall: bool) ->
     def accept(page):
         box = tile(page)
         if not box.count():
-            page.goto(base + "/")
+            goto(page, base + "/")
             box.wait_for(timeout=15_000)
         box.get_by_role("button", name="Make a proposal", exact=True).click()
         try:
@@ -316,7 +370,7 @@ def offer_steps(base: str, needed_by: str, approve: bool, press_recall: bool) ->
 
     def decide(page):
         if "/approvals" not in page.url:
-            page.goto(base + "/approvals")
+            goto(page, base + "/approvals")
         title = offer_title(seen.get("product"))
         page.get_by_text(title).first.wait_for(timeout=20_000)
         cards = page.locator('[data-slot="card"]').filter(has=page.get_by_text(title))
@@ -326,11 +380,11 @@ def offer_steps(base: str, needed_by: str, approve: bool, press_recall: bool) ->
         approve_in(page, cards, f"the offer ({title.pattern})")
 
     def receipt(page):
-        page.goto(base + "/orders")
+        goto(page, base + "/orders")
         page.wait_for_timeout(1500)
         order_id = page.evaluate(NEWEST_RECEIPT_JS, f"/api/v1/kitchens/{KITCHEN_ID}/orders")
         if order_id:
-            page.goto(f"{base}/orders/{order_id}")
+            goto(page, f"{base}/orders/{order_id}")
         else:               # no gateway answer (mock mode): the newest order in the list
             link = page.locator('a[href^="/orders/"]')
             link.first.wait_for(timeout=15_000)
@@ -343,7 +397,7 @@ def offer_steps(base: str, needed_by: str, approve: bool, press_recall: bool) ->
         page.wait_for_timeout(1500)
 
     def recall(page):
-        page.goto(base + "/approvals")
+        goto(page, base + "/approvals")
         panel = page.get_by_role("region", name="Food recalls")
         panel.wait_for(timeout=20_000)
         panel.scroll_into_view_if_needed()
@@ -363,7 +417,7 @@ def offer_steps(base: str, needed_by: str, approve: bool, press_recall: bool) ->
 
     def demand(page):
         page.evaluate(SET_VALIO_ROLE_JS)          # this browser only: the Valio side of the app
-        page.goto(base + "/demand")
+        goto(page, base + "/demand")
         page.get_by_role("heading", name="Demand", exact=True).wait_for(timeout=20_000)
         page.wait_for_timeout(3500)
 
@@ -498,11 +552,11 @@ def nvidia_steps(base: str, text: str, needed_by: str, photos: dict | None) -> l
     photos = {**DEFAULT_PHOTOS, **(photos or {})}
 
     def intro(page):
-        page.goto(base + "/")
+        goto(page, base + "/")
         page.wait_for_timeout(1500)
 
     def plan(page):
-        page.goto(f"{base}/planner?week={iso_week(needed_by)}")
+        goto(page, f"{base}/planner?week={iso_week(needed_by)}")
         _read_photo(page, '[aria-labelledby="menu-photo-title"]', "Choose a photo of the menu",
                     _photo(photos, "menu"), "is reading the menu")
 
@@ -524,7 +578,7 @@ def nvidia_steps(base: str, text: str, needed_by: str, photos: dict | None) -> l
         page.wait_for_timeout(2500)
 
     def sell(page):
-        page.goto(base + "/")
+        goto(page, base + "/")
         box = page.locator('[aria-labelledby="supplier-offer-title"]')
         box.wait_for(timeout=15_000)
         box.scroll_into_view_if_needed()
@@ -535,7 +589,7 @@ def nvidia_steps(base: str, text: str, needed_by: str, photos: dict | None) -> l
         return None
 
     def count(page):
-        page.goto(base + "/stock")
+        goto(page, base + "/stock")
         _read_photo(page, '[aria-labelledby="shelf-photo-title"]', "Choose a photo of the shelf",
                     _photo(photos, "shelf"), "is reading the photo")
 
@@ -544,12 +598,12 @@ def nvidia_steps(base: str, text: str, needed_by: str, photos: dict | None) -> l
         order_id = page.evaluate(NEWEST_ORDER_JS, f"/api/v1/kitchens/{KITCHEN_ID}/orders")
         if not order_id:
             raise RuntimeError("no order to check a delivery note against")
-        page.goto(f"{base}/orders/{order_id}")
+        goto(page, f"{base}/orders/{order_id}")
         _read_photo(page, '[aria-labelledby="delivery-note-title"]', "Choose a delivery note photo",
                     photo, "Reading the delivery note")
 
     def numbers(page):
-        page.goto(base + "/about")
+        goto(page, base + "/about")
         heading = page.locator("#about-model")
         heading.wait_for(timeout=20_000)
         heading.scroll_into_view_if_needed()
@@ -659,6 +713,8 @@ def main(argv=None) -> None:
     base = args.base_url.rstrip("/")
     photos = {"menu": args.menu_photo, "shelf": args.shelf_photo, "note": args.note_photo}
     password = os.environ.get("DEMO_PASSWORD") or None
+    if not wait_for_site(base, limit=180, every=5):     # a deploy restarts the site: wait for it first
+        sys.exit(SITE_DOWN)
     problem = sign_in_problem(args.email, password, lambda: site_needs_sign_in(base))
     if problem:
         sys.exit(problem)

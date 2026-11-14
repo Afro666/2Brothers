@@ -242,16 +242,18 @@ def test_a_need_for_plain_butter_is_searched_as_before(kitchen):
 
 
 @pytest.mark.parametrize("rule", [["AP", "AN", "AS"], []])
-def test_two_products_in_one_text_are_refused_before_the_buyer_runs(kitchen, rule):
-    """Live on 2026-11-14: "100 L cream and 50 kg cheese" ended as a cleaning product.
-    One request names one product, with or without an allergen rule on the kitchen."""
+def test_two_products_in_one_text_are_split_and_the_buyer_never_runs(kitchen, rule, monkeypatch):
+    """Live on 2026-11-14: "100 L cream and 50 kg cheese" ended as a cleaning product (#288).
+    Since #1375 the text is split into two needs, each read on its own; the Buyer, which
+    would take one of the two, is still never called. With or without an allergen rule."""
+    monkeypatch.delenv("BUYER_WORKER_URL", raising=False)      # the model is off: plain code splits
     with_buyer, without_buyer, db, calls = kitchen
     db.kitchen_settings.update_one({"_id": "demo-kitchen"}, {"$set": {"excluded_allergens": rule}})
     body = {"text": "100 L cream and 50 kg cheese by Monday", "requested_date": "2026-11-17",
             "idempotency_key": "two1"}
     for client in (with_buyer, without_buyer):
-        r = client.post(K + "/proposals", headers=AGENT, json=body)
-        assert r.status_code == 422, r.text
-        assert r.json()["error"]["code"] == "CANNOT_READ_REQUEST"
-        assert r.json()["error"]["message"].startswith("one product per request")
-    assert calls == [] and db.proposals.count_documents({}) == 0
+        p = client.post(K + "/proposals", headers=AGENT, json=body).json()
+        assert p["request"]["made_by"] == "list" and p["request"]["split_by"] == "rules"
+        assert [(i["text"], i["quantity"], i["unit"]) for i in p["request"]["items"]] == [
+            ("cream", "100", "L"), ("cheese", "50", "KG")]
+    assert calls == [] and db.proposals.count_documents({}) == 1
