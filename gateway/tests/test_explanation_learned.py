@@ -94,3 +94,34 @@ def test_a_learned_fact_survives_the_explanation_fact_cap():
 
     assert len(payload['facts']) <= MAX_FACTS
     assert len([fact for fact in payload['facts'] if fact['kind'] == 'learned']) == 8
+    assert len([fact for fact in payload['facts'] if fact['required']]) <= 3
+
+
+@pytest.mark.parametrize('language', ['en', 'fi'])
+def test_two_learned_lines_and_a_shortfall_still_fit_the_three_sentence_reply(language):
+    proposal = learned_proposal()
+    proposal['lines'][1]['learned'] = {
+        'fact_id': 'lf-cream', 'from_qty': '4', 'to_qty': '2', 'unit': 'L',
+        'ratio': 0.5, 'evidence': {'rows': 2}}
+    proposal['shortfall'], proposal['measure'] = '1', 'L'
+
+    payload = context(proposal, NAMES, language)
+    required = [fact for fact in payload['facts'] if fact['required']]
+
+    assert len(required) <= 3
+    assert len([fact for fact in payload['facts'] if fact['kind'] == 'learned']) == 2
+    assert checked_reply(bound_reply(payload, language), payload['facts'], language)
+
+
+def test_two_learned_lines_without_a_warning_make_only_the_first_required():
+    proposal = learned_proposal()
+    proposal['lines'][1]['learned'] = {
+        'fact_id': 'lf-cream', 'from_qty': '4', 'to_qty': '2', 'unit': 'L',
+        'ratio': 0.5, 'evidence': {'rows': 2}}
+
+    payload = context(proposal, NAMES, 'en')
+    learned = [fact for fact in payload['facts'] if fact['kind'] == 'learned']
+
+    assert [fact['required'] for fact in learned] == [True, False]
+    assert len([fact for fact in payload['facts'] if fact['required']]) <= 3
+    assert checked_reply(bound_reply(payload, 'en'), payload['facts'])
