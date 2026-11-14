@@ -119,3 +119,25 @@ def test_meaning_search_falls_back_to_words_and_a_limit_per_call(monkeypatch):
         memory.note_unknown(db, "k", f"word {i}")
     rows = memory.list_unknown(db, "k", with_suggestions=True)
     assert sum(1 for r in rows if r["suggestions"] is not None) == memory.NEW_SUGGESTIONS_PER_CALL
+
+
+def test_a_failed_search_stores_nothing_and_the_next_call_fills_it(monkeypatch):
+    import mongomock
+    import store.search
+    db = mongomock.MongoClient(tz_aware=True)["t"]
+    db.products.insert_one({"_id": "p1", "names": {"en": "Valio butter 500 g"}})
+    down = [True]
+
+    def fake(db, phrase, filters, limit, kitchen_id=None, hybrid=False, embedder=None):
+        if down[0]:
+            raise RuntimeError("Atlas Search briefly unavailable")
+        return [{"product_id": "p1"}]
+    monkeypatch.setattr(store.search, "search_products", fake)
+    memory.note_unknown(db, "k", "voi")
+    rows = memory.list_unknown(db, "k", with_suggestions=True)
+    assert rows[0]["suggestions"] is None
+    assert "suggestions" not in db.unknown_items.find_one({"_id": "k:voi"})
+    down[0] = False
+    rows = memory.list_unknown(db, "k", with_suggestions=True)
+    assert rows[0]["suggestions"] == [{"product_id": "p1", "product_name": "Valio butter 500 g"}]
+    assert db.unknown_items.find_one({"_id": "k:voi"})["suggestions"] == rows[0]["suggestions"]
