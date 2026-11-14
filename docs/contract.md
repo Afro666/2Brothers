@@ -1684,7 +1684,9 @@ What the view adds to an alert:
 - One check at a time per kitchen (#652): a second check for the same kitchen waits for
   the running one and then gets the cooldown answer, so two clicks make one scrape. When
   the running check does not end in time: 429 `RECALL_CHECK_BUSY` with a `Retry-After`
-  header (whole seconds) and `error.retry_after_s`. A 429 says nothing about recalls: the
+  header (whole seconds, 10) and `error.retry_after_s`. "In time" is the scrape timeout
+  plus 30 seconds, so 75 seconds by default (`RECALL_CHECK_LOCK_WAIT_S` sets it directly;
+  0 answers 429 at once): a click never hangs longer than that. A 429 says nothing about recalls: the
   screens keep what they showed and never say "no recalls".
 - One check makes at most one Context.dev call, with one attempt and a timeout (45 seconds;
   `RECALL_CHECK_TIMEOUT_S`, at most 120). It never retries and never loops. A live list
