@@ -21,7 +21,8 @@ concurrency:
 
 jobs:
   advisory-review:
-    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    # Eligibility is checked against the live PR by prepare, including forks/drafts.
+    # Avoid stale draft/head metadata in the triggering event payload.
     runs-on: ubuntu-latest
     timeout-minutes: 8
     continue-on-error: true

@@ -27,11 +27,12 @@ def prepare(folder):
     repo = os.environ['GITHUB_REPOSITORY']
     head = f"{facts['headRepositoryOwner']['login']}/{facts['headRepository']['name']}"
     eligible = facts['state'] == 'OPEN' and not facts['isDraft'] and head.lower() == repo.lower()
-    eligible = eligible and any(f['path'].startswith(('agent/', 'env/')) for f in facts['files'])
+    eligible = eligible and (os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' or
+                             any(f['path'].startswith(('agent/', 'env/')) for f in facts['files']))
     with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
         out.write(f'eligible={str(eligible).lower()}\n')
     if not eligible:
-        print('Skipped: requires an open, ready, same-repository agent/env PR.')
+        print('Skipped: requires an open, ready, same-repository PR in the review scope.')
         return
     diff = gh('pr', 'diff', pr)
     if len(diff.encode('utf-8')) > 120_000:
@@ -62,8 +63,10 @@ def review(folder):
     # CLI sees no GitHub credential, repository, project instructions, or user config.
     # Tool execution and web search are disabled, and its sandbox is read-only.
     with tempfile.TemporaryDirectory(prefix='codex-advisory-') as working:
+        home = Path(working) / 'home'
+        home.mkdir()
         env = {k: os.environ[k] for k in ('PATH', 'HOME', 'SystemRoot') if k in os.environ}
-        env.update(OPENAI_API_KEY=key, CODEX_HOME=str(Path(working) / 'home'))
+        env.update(OPENAI_API_KEY=key, CODEX_HOME=str(home))
         output = Path(working) / 'reply.md'
         cmd = ['codex', 'exec', '--ignore-user-config', '--skip-git-repo-check',
                '--ephemeral', '--sandbox', 'read-only', '--disable', 'shell_tool',
