@@ -43,6 +43,7 @@ class SinglePickModel:
         self.need_id, self.exclusions, self.timeout = need_id, exclusions, timeout
         self.query = parse_request(need['text'], today, default_day=today).query
         self.phase, self.products, self.offer_id, self.cached = 'search', [], None, False
+        self.selected_ids = []
         self.timed_out = False
 
     def offer(self, ids):
@@ -92,6 +93,7 @@ class SinglePickModel:
                 except BaseException:
                     await asyncio.to_thread(buyer_picks.finish, self.db, key, token, None)
                     raise
+            self.selected_ids = list(ids)
             if set(ids) == allowed:
                 self.offer_id, self.phase = result['offer_id'], 'approve'
                 return call('simulate_order', {'offer_id': self.offer_id})

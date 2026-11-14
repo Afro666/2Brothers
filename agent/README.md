@@ -241,8 +241,10 @@ offers and approval are never reused by this cache: every new request re-quotes 
 simulates live. The same idempotency key replays its original result as before.
 An identical choice already in flight does not start another model call; its
 60-second lease outlives the bounded worker and expires after interruption. Lost
-claim ownership stops the run before approval is requested. Cache failures cool down for five
+claim ownership stops the run before approval is requested. Failed model selections cool down for five
 seconds. Pick calls are metered under `buyer_pick`; a cache hit uses zero calls.
+The model trace marks orchestration tools as code and the selection as a model
+`pick`, or a code `pick` with `CACHED_PICK` when reusing an earlier choice.
 
 Set `NEMOTRON_BUYER_STRATEGY=loop` to retain the previous multi-turn implementation.
 The CLI tool agent still uses that audited loop. The legacy worker-mode tests set

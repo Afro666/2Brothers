@@ -115,7 +115,16 @@ class BuyerWorker:
                                   substitute_planner=SubstitutePlanner(lookup, policy) if policy else None,
                                   attempt=attempt)
                     outcome = await buyer.run(need['text'])
-                steps += buyer.trace
+                if self.strategy == 'single_pick':
+                    # The new trace distinguishes host orchestration from the one model pick.
+                    trace = [{**step, 'by': 'code'} for step in buyer.trace]
+                    if selected_model.selected_ids:
+                        trace.insert(2, model_trace.step('pick', by='code' if selected_model.cached else 'model',
+                            attempt=attempt, products=len(selected_model.selected_ids),
+                            code='CACHED_PICK' if selected_model.cached else 'PICKED'))
+                    steps += trace
+                else:
+                    steps += buyer.trace
                 if getattr(selected_model, 'timed_out', False):
                     raise WorkerError(504, 'BUYER_TIMEOUT', fallback_safe=not buyer.mutations)
                 if outcome['status'] == 'SENT_FOR_APPROVAL' or buyer.mutations:
@@ -137,7 +146,8 @@ class BuyerWorker:
             # What the model did (#1197): kept with the run, served on the proposal later.
             result['model_trace'] = model_trace.build(
                 reader='buyer', made_by='model', usage=meter.total() if meter is not None else None,
-                thinking=getattr(model, 'thinking', None), steps=steps, attempts=attempt)
+                thinking=False if self.strategy == 'single_pick' else getattr(model, 'thinking', None),
+                steps=steps, attempts=attempt)
             return result
         try:
             result = await asyncio.wait_for(execute(), timeout=self.timeout)

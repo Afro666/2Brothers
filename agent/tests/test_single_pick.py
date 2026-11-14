@@ -62,6 +62,9 @@ def test_one_model_call_then_cached_ids_with_fresh_price_and_new_offer(monkeypat
             assert second['offer_id'] != first['offer_id'] and model.calls == 1
             assert float(second['expected_total']) > float(first['expected_total'])
             assert first['lines'][0]['quantity'] == '51'
+            assert next(s for s in first['model_trace']['steps'] if s['tool'] == 'pick')['by'] == 'model'
+            assert next(s for s in second['model_trace']['steps'] if s['tool'] == 'pick')['code'] == 'CACHED_PICK'
+            assert all(s['by'] == 'code' for s in first['model_trace']['steps'] if s['tool'] != 'pick')
             assert db.orders.count_documents({}) == 0 and db.proposals.count_documents({}) == 2
             sent = json.loads(model.prompts[0][1]['content'])
             assert len(json.dumps(model.prompts[0])) < 2500
