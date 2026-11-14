@@ -11,6 +11,7 @@ import type {
   Offer,
   Order,
   OrderLine,
+  OrderReceipt,
   OrderResolution,
   OrderResolutionRecord,
   OrderResolutionResult,
@@ -213,6 +214,42 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     totalInclVat: mapMoney((placed ?? source).expected_total, "expected_total"),
     mov: proposal ? mapMov(proposal) : null,
     supplierOrderRef: placed ? resolutionRecord(placed.resolution)?.supplierOrderRef ?? null : null,
+    ...(placed ? { receipt: mapReceipt(placed.receipt) } : {}),
+  };
+}
+
+/** The JWS payload as JSON, or null when it cannot be read. Display only: no signature check. */
+function receiptClaims(jws: string): Json | null {
+  const parts = jws.split(".");
+  if (parts.length !== 3 || !parts[1]) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const claims: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    return claims && typeof claims === "object" && !Array.isArray(claims) ? (claims as Json) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `receipt` of an order answer: a compact JWS, or null for old orders and failed signing. */
+export function mapReceipt(value: unknown): OrderReceipt | null {
+  if (value == null || value === "") return null;
+  const jws = text(value, "an order receipt");
+  const claims = receiptClaims(jws) ?? {};
+  const iat = claims.iat;
+  let total: number | null = null;
+  try {
+    total = decimal(claims.expected_total, "receipt expected_total");
+  } catch {
+    total = null;
+  }
+  return {
+    jws,
+    approvedBy: typeof claims.approved_by === "string" && claims.approved_by ? claims.approved_by : null,
+    signedAt: typeof iat === "number" && Number.isFinite(iat) ? new Date(iat * 1000).toISOString() : null,
+    total,
   };
 }
 
