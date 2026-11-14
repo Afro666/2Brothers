@@ -59,6 +59,11 @@ def apply_notices(gateway, kitchen_id, notices, *, live_enrichment=False):
                 'made_by': 'recall-buyer'}, 'recall-buyer')
             if not replacement['lines'] or replacement.get('shortfall') not in ('0', '0.0', '0.00'):
                 recalls.link(db, kitchen_id, proposal['_id'], recall_replan_error='REPLACEMENT_SHORTFALL')
+                if recalls.reject_replacement(db, kitchen_id, replacement['proposal_id'],
+                                              'recall replacement shortfall'):
+                    gateway._audit(kitchen_id, 'recall_replacement_rejected', 'recall-monitor',
+                                   proposal_id=proposal['_id'], replacement_proposal_id=replacement['proposal_id'],
+                                   reason='REPLACEMENT_SHORTFALL')
                 continue
             recalls.link(db, kitchen_id, proposal['_id'], replacement_proposal_id=replacement['proposal_id'],
                          recall_replan_error=None)
