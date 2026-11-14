@@ -17,6 +17,17 @@ describe("ProductsPage", () => {
     expect(bun).toHaveTextContent("Allergen data missing: unknown");
   });
 
+  it("still shows own products and marks recipes unknown when the catalog lookup fails", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    api.getProducts = () => Promise.reject(new Error("NOT_SERVED"));
+    renderApp("/products", api);
+    expect(await screen.findByText("Rye bread loaf")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Recipes" }));
+    const pudding = (await screen.findByText("Rice pudding")).closest("[data-slot='card-content']");
+    expect(pudding).toHaveTextContent("Allergen data missing: unknown");
+  });
+
   it("saves a new product with unknown allergens as null", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
