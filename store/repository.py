@@ -26,7 +26,7 @@ from typing import Callable
 
 from bson.decimal128 import Decimal128
 
-from store.search import ALLERGENS
+from store.search import allergen_codes
 
 ADAPTERS = ("valio_api", "manual", "csv")
 WEEKDAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
@@ -40,7 +40,6 @@ COVER_CATEGORIES = ("fresh_dairy", "vegetables", "meat", "fish", "frozen", "dry"
 BUDGET_WARNINGS = ("budget_warning_order_eur", "budget_warning_week_eur")
 SETTINGS = ("service_level", "max_cover_days", "stockout_cap", *BUDGET_WARNINGS,
             "excluded_allergens")
-_GS1_CODE = re.compile(r"[A-Z][A-Z0-9]{1,2}")
 _CLOCK = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 _WEEK = re.compile(r"\d{4}-W(0[1-9]|[1-4]\d|5[0-3])")
 
@@ -264,11 +263,14 @@ def settings_fields(data: dict) -> dict:
             out[field] = _decimal(data[field], field)  # None: no warning
     if "excluded_allergens" in data:
         codes = data["excluded_allergens"]
-        if not isinstance(codes, list) or not all(
-                isinstance(code, str) and (code in ALLERGENS or _GS1_CODE.fullmatch(code))
-                for code in codes):
-            raise ValueError("excluded_allergens must be a list of GS1 codes or allergen names; "
-                             "[] means no exclusions")
+        message = ("excluded_allergens must be a list of GS1 codes or allergen names; "
+                   "[] means no exclusions")
+        if not isinstance(codes, list) or not all(isinstance(code, str) for code in codes):
+            raise ValueError(message)
+        try:  # read as the Buyer's AllergenPolicy reads them: AW is the gluten group
+            allergen_codes(["gluten" if code.upper() == "AW" else code for code in codes])
+        except ValueError:
+            raise ValueError(message) from None
         out["excluded_allergens"] = codes
     return out
 
