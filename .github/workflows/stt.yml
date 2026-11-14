@@ -42,7 +42,7 @@ jobs:
           exit 1
       - name: A spoken request comes back as text
         run: |
-          curl -fsS -X POST --data-binary @clip.ogg -H "Content-Type: audio/ogg" \
+          curl -sS -X POST --data-binary @clip.ogg -H "Content-Type: audio/ogg" \
             "http://localhost:8002/transcribe" | tee answer.json
           python3 - <<'EOF'
           import json
@@ -61,3 +61,6 @@ jobs:
           cat long.json
           test "$code" = "422"
           grep -q AUDIO_TOO_LONG long.json
+      - name: The container's log, when a step failed
+        if: failure()
+        run: docker logs stt 2>&1 | tail -40
