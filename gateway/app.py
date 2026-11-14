@@ -87,6 +87,8 @@ REFUSAL_WINDOW = 60.0          # seconds: one audit row per repeated refusal (#8
 
 def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None,
                delivery_note_worker=None) -> FastAPI:
+    from gateway.buyer_worker import Breaker
+    buyer_breaker = Breaker()        # one per app: a timeout skips the model for 2 minutes
     app = FastAPI(
         title="Trusted Kitchen Buyer gateway", version="0.1.0",
         description=("REST and MCP gateway between a kitchen's Buyer agent and its suppliers. "
@@ -262,6 +264,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     async def create_proposal(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose", kitchen_id)
         data = await body(request)
+        data.pop("buyer_down", None)          # set by the gateway only, never by the client
         if 'text' in data and 'product_ids' not in data:
             # A request the kitchen's allergen rule removes ends here, with the reason (#974):
             # the Buyer would only see what the rule left and propose another kind of product.
@@ -269,15 +272,23 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
             if refused is not None:
                 return refused
             from gateway.buyer_worker import run_buyer
-            try:
-                return await (buyer_worker or run_buyer)(kitchen_id, data)
-            except GatewayError as exc:
-                # Fall back to the deterministic parser (#276) only when the Buyer is not
-                # there at all. An ambiguous failure (it may have made a proposal) must be
-                # reconciled first, never answered with a second proposal.
-                not_configured = exc.code == "BUYER_UNAVAILABLE" and "fallback_safe" not in exc.extra
-                if not (not_configured or exc.extra.get("fallback_safe") is True):
-                    raise
+            if buyer_breaker.is_open():
+                data["buyer_down"] = True     # the model timed out under 2 minutes ago: parser now
+            else:
+                try:
+                    out = await (buyer_worker or run_buyer)(kitchen_id, data)
+                    buyer_breaker.reset()
+                    return out
+                except GatewayError as exc:
+                    # Fall back to the deterministic parser (#276) only when the Buyer is not
+                    # there at all. An ambiguous failure (it may have made a proposal) must be
+                    # reconciled first, never answered with a second proposal.
+                    not_configured = exc.code == "BUYER_UNAVAILABLE" and "fallback_safe" not in exc.extra
+                    if not (not_configured or exc.extra.get("fallback_safe") is True):
+                        raise
+                    if exc.code == "BUYER_TIMEOUT":
+                        buyer_breaker.trip()
+                        data["buyer_down"] = True
         return gw().create_proposal(kitchen_id, data, who.name)
 
     @app.get(k + "/proposals")

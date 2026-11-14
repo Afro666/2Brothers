@@ -18,7 +18,7 @@ interface Proposal {
   expected_total: string;
   total_ex_vat: string;
   buyer_model?: string;
-  request?: { made_by?: string; refusal?: { code?: string; allergens?: string[]; message?: string } };
+  request?: { made_by?: string; buyer_down?: boolean; refusal?: { code?: string; allergens?: string[]; message?: string } };
   decision_summary?: { asked?: string; searched?: string; chosen?: string[]; left_out?: string[]; text?: string };
   mandate?: { verdict?: string; reasons?: string[] };
   lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
@@ -100,6 +100,8 @@ const refusal = (row: Proposal) =>
 
 function proposedBy(row: Proposal, t: (text: string, vars?: Record<string, string | number>) => string) {
   if (refusal(row) !== undefined) return t("Refused by the kitchen’s allergen rule");
+  if (row.request?.made_by === "parser" && row.request?.buyer_down === true)
+    return t("The Buyer model was not answering, so the gateway’s request parser made this proposal");
   if (row.status === "REJECTED" && row.request?.made_by === "parser")
     return t("Made by the fallback parser because the Buyer agent was not available");
   const model = text(row.buyer_model);

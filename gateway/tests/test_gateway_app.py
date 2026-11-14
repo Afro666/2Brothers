@@ -581,3 +581,54 @@ def test_refusals_with_varied_made_up_kitchens_are_one_row(env):
         assert client.get(f"/v1/kitchens/made-up-{i}/proposals", headers=pos).status_code == 403
     refused = [e for e in list_events(db, kitchen_id="demo-kitchen") if e["event"]["kind"] == "refused"]
     assert len(refused) == 1 and refused[0]["event"]["path"] == "/v1/kitchens/made-up-0/proposals"
+
+
+def test_after_one_buyer_timeout_the_parser_answers_at_once_for_two_minutes(monkeypatch):
+    """Live 2026-11-14: Nemotron did not answer, every typed request waited about 150 s.
+    One timeout opens a 2-minute window where the model is skipped; then it is tried again."""
+    from gateway import buyer_worker as bw
+    clock = [5000.0]
+    monkeypatch.setattr(bw, "_clock", lambda: clock[0])
+    calls = []
+
+    async def worker(kitchen_id, body):
+        calls.append(body["idempotency_key"])
+        if len(calls) == 1:
+            raise GatewayError(504, "BUYER_TIMEOUT", "timed out before any write", fallback_safe=True)
+        return {"proposal_id": "from-model", "status": "READY"}
+
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    db = mongomock.MongoClient(tz_aware=True)["test"]
+    for pid, raw in RAW.items():
+        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
+    fake = FakeValio()
+    gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: NOW), now=lambda: NOW,
+                 search=lambda db, q, f, n, kitchen_id=None: [{"product_id": "462775"}])
+    client = TestClient(create_app(gw, buyer_worker=worker))
+
+    def ask(key, extra=None):
+        return client.post(K + "/proposals", headers=AGENT,
+                           json={"text": "60 l milk by Monday", "idempotency_key": key, **(extra or {})})
+
+    first = ask("t1")                                  # the model times out: parser, marked
+    assert first.status_code == 200 and first.json()["request"]["made_by"] == "parser"
+    assert first.json()["request"]["buyer_down"] is True
+    second = ask("t2")                                 # window open: the model is not asked
+    assert calls == ["t1"] and second.json()["request"]["buyer_down"] is True
+    clock[0] += 120
+    third = ask("t3")                                  # window over: the model is asked and answers
+    assert calls == ["t1", "t3"] and third.json()["proposal_id"] == "from-model"
+    assert ask("t4").json()["proposal_id"] == "from-model"
+
+
+def test_a_client_cannot_mark_its_own_request_as_buyer_down(monkeypatch):
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    db = mongomock.MongoClient(tz_aware=True)["test"]
+    for pid, raw in RAW.items():
+        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
+    fake = FakeValio()
+    gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: NOW), now=lambda: NOW,
+                 search=lambda db, q, f, n, kitchen_id=None: [{"product_id": "462775"}])
+    r = TestClient(create_app(gw)).post(K + "/proposals", headers=AGENT, json={
+        "text": "60 l milk by Monday", "idempotency_key": "c1", "buyer_down": True})
+    assert r.status_code == 200 and "buyer_down" not in r.json()["request"]
