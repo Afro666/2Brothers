@@ -93,11 +93,12 @@ class Gateway:
         doc = self.db.suppliers.find_one({"kitchen_id": kitchen_id, "adapter": "valio_api"}) or {}
         return doc.get("terms") or {}
 
-    def _offers(self, product_ids: list[str], measure: str, requested: date) -> tuple[list[Offer], list[tuple[str, str]], dict]:
-        """Live Valio offers for these products, converted for the engine."""
+    def _offers(self, product_ids: list[str], measure: str, requested: date) -> tuple[list[Offer], list[tuple[str, str]], dict, dict]:
+        """Live Valio offers for these products, converted for the engine, plus per product the
+        delivery facts each offer line shows: available_date, cutoff_passed, closing_time (#531)."""
         prices = {p["productId"]: p for p in self.valio.price(product_ids, requested.isoformat())["products"]}
         avail = {p["productId"]: p for p in self.valio.availability(product_ids, requested.isoformat())["products"]}
-        offers, skipped, tax = [], [], {}
+        offers, skipped, tax, when = [], [], {}, {}
         for pid in product_ids:
             doc = get_product(self.db, pid, raw=True)
             price, stock = prices.get(pid) or {}, avail.get(pid) or {}
@@ -133,9 +134,13 @@ class Gateway:
                 labels=tuple(doc.get("labels") or ()),
             ))
             tax[pid] = _dec((price.get("tax") or {}).get("taxRate")) or Decimal(0)
-        return offers, skipped, tax
+            when[pid] = {"available_date": available_date, "cutoff_passed": stock.get("cutoff_passed"),
+                         "closing_time": stock.get("closingTime")}
+        return offers, skipped, tax, when
 
-    def _simulate(self, kitchen_id: str, plan: RequestPlan, tax: dict, skipped: list) -> dict:
+    def _simulate(self, kitchen_id: str, plan: RequestPlan, tax: dict, skipped: list, when: dict | None = None) -> dict:
+        when = when or {}
+        unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None}
         terms = self._terms(kitchen_id)
         threshold = _dec(terms.get("free_delivery_threshold_eur"))
         fee_value = _dec(terms.get("delivery_fee_eur"))
@@ -168,7 +173,7 @@ class Gateway:
                        "why": ln.why, "unknown_stock": ln.unknown_stock,
                        "reason_codes": list(ln.reason_codes),
                        "reliability": ln.reliability, "carbon_kg_co2e_per_kg": ln.carbon,
-                       "labels": list(ln.labels)} for ln in plan.lines],
+                       "labels": list(ln.labels), **when.get(ln.product_id, unknown)} for ln in plan.lines],
             "excluded": [{"product_id": pid, "reason": why} for pid, why in excluded],
             "alternative": None if plan.alternative is None else {
                 "total_ex_vat": _money(plan.alternative.total),
@@ -184,11 +189,11 @@ class Gateway:
         if need <= 0:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
         blocked = recalls.blocked_ids(self.db, kitchen_id)
-        offers, skipped, tax = self._offers([p for p in request["product_ids"] if p not in blocked], measure, requested)
+        offers, skipped, tax, when = self._offers([p for p in request["product_ids"] if p not in blocked], measure, requested)
         skipped.extend((p, 'BLOCKED_BY_RECALL') for p in request['product_ids'] if p in blocked)
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
-        sim = self._simulate(kitchen_id, plan, tax, skipped)
+        sim = self._simulate(kitchen_id, plan, tax, skipped, when)
         now = self.now()
         offer = orders.save_offer(self.db, {
             "offer_id": uuid4().hex, "kitchen_id": kitchen_id, "supplier_id": VALIO,
