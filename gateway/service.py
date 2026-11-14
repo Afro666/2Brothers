@@ -522,17 +522,22 @@ class Gateway:
 
     # ---- addable products (#129) ------------------------------------------------------
 
-    def _daily_demand(self, kitchen_id: str, product_id: str, days: int = DEMAND_DAYS) -> float:
-        """Average of used + short per recorded day. No usage recorded: 0, so no order."""
+    def _daily_demands(self, kitchen_id: str, product_ids: list, days: int = DEMAND_DAYS) -> dict:
+        """Average of used + short per recorded day, per product, in one query.
+        No usage recorded: 0, so no order."""
+        if not product_ids:
+            return {}
         since = self.now() - timedelta(days=days)
         totals: dict = {}
-        for row in self.db.kitchen_stock.find({"meta.kitchen_id": kitchen_id, "meta.product_id": product_id,
+        for row in self.db.kitchen_stock.find({"meta.kitchen_id": kitchen_id,
+                                               "meta.product_id": {"$in": list(product_ids)},
                                                "ts": {"$gte": since}}):
             if row.get("used") is None:
                 continue
+            per_day = totals.setdefault(row["meta"]["product_id"], {})
             day = row["ts"].date()
-            totals[day] = totals.get(day, Decimal(0)) + _dec(row["used"]) + (_dec(row.get("short")) or Decimal(0))
-        return float(sum(totals.values()) / len(totals)) if totals else 0.0
+            per_day[day] = per_day.get(day, Decimal(0)) + _dec(row["used"]) + (_dec(row.get("short")) or Decimal(0))
+        return {pid: float(sum(d.values()) / len(d)) if d else 0.0 for pid, d in totals.items()}
 
     def addable(self, kitchen_id: str, proposal_id: str) -> dict:
         """What the buyer can add to this proposal, most probable first (engine.rank_addable).
@@ -555,10 +560,13 @@ class Gateway:
         terms = self._terms(kitchen_id)
         lead = float(terms.get("lead_time_days") or 1)
         standing = self._standing_orders(kitchen_id)
+        pids = list(dict.fromkeys(str(c["product_id"]) for c in counts))
+        products = {d["_id"]: d for d in self.db.products.find({"_id": {"$in": pids}})} if pids else {}
+        demands = self._daily_demands(kitchen_id, pids)
         candidates, skipped = [], []
         for count in counts:
             pid = count["product_id"]
-            product = get_product(self.db, pid, raw=True)
+            product = products.get(str(pid))
             if product is None or not product.get("raw"):
                 skipped.append({"product_id": pid, "reason": "not in the catalog"})
                 continue
@@ -574,7 +582,7 @@ class Gateway:
                 skipped.append({"product_id": pid, "reason": f"pack size unknown: {exc}"})
                 continue
             on_hand = count.get("on_hand")
-            item = Item(pid, pack, daily_demand=self._daily_demand(kitchen_id, pid), lead_time_days=lead,
+            item = Item(pid, pack, daily_demand=demands.get(pid, 0.0), lead_time_days=lead,
                         review_days=REVIEW_DAYS, on_hand=None if on_hand is None else float(on_hand),
                         abc=product.get("abc"), category=product.get("category"),
                         standing_order=standing.get(pid))
