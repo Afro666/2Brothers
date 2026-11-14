@@ -374,6 +374,7 @@ export const auditEvents: AuditEvent[] = [
     actor: "chef",
     summary: "1,000 L lactose-free milk by Monday",
     reason: "180 covers on Mon 16 Nov; milk for the dessert and coffee service.",
+    groupIds: ["run-milk"],
   },
   {
     id: "ev-2",
@@ -382,6 +383,7 @@ export const auditEvents: AuditEvent[] = [
     actor: "agent",
     summary: "Searched the catalog for lactose-free milk: 5 candidates",
     reason: "Kept 1 L and 10 L packs that are lactose-free; dropped flavoured drinks.",
+    groupIds: ["run-milk"],
   },
   {
     id: "ev-3",
@@ -391,6 +393,7 @@ export const auditEvents: AuditEvent[] = [
     summary: "Price and availability for 5 products, delivery Mon 16 Nov",
     reason:
       "462921, 463038, 464179: order cut-off Thu 12 Nov 15:00 has passed. 462775: 51 ST in stock. 463335: stock not measured.",
+    groupIds: ["run-milk"],
   },
   {
     id: "ev-4",
@@ -400,6 +403,7 @@ export const auditEvents: AuditEvent[] = [
     summary: "Split: 51 ST of 462775 and 950 ST of 463335",
     reason:
       "Only 51 L of the first choice can arrive Monday. The rest comes from the only other product that can make Monday, rounded to full cases (1,001 L in all).",
+    groupIds: ["run-milk"],
   },
   {
     id: "ev-5",
@@ -407,6 +411,7 @@ export const auditEvents: AuditEvent[] = [
     kind: "approval",
     actor: "human",
     orderId: "ORD-1042",
+    groupIds: ["ORD-1042"],
     summary: "Head chef approved ORD-1042 (€131.07 ex VAT)",
     reason: "The exact total matches the proposed order for the same product the chef asked for.",
   },
@@ -416,6 +421,7 @@ export const auditEvents: AuditEvent[] = [
     kind: "order",
     actor: "gateway",
     orderId: "ORD-1042",
+    groupIds: ["ORD-1042"],
     summary: "ORD-1042 placed for Mon 16 Nov",
     reason: "The expected total €131.07 matched the simulate. The idempotency key was stored before the call.",
   },
@@ -425,6 +431,7 @@ export const auditEvents: AuditEvent[] = [
     kind: "mandate_check",
     actor: "gateway",
     orderId: "ORD-1043",
+    groupIds: ["ORD-1043"],
     summary: "ORD-1043 needs approval (€1,947.50 ex VAT)",
     reason: "Above the budget warning; fat % changes by 3 points, and the stock is not measured.",
   },
@@ -434,6 +441,7 @@ export const auditEvents: AuditEvent[] = [
     kind: "approval",
     actor: "agent",
     orderId: "ORD-1043",
+    groupIds: ["ORD-1043"],
     summary: "Asked the buyer to approve ORD-1043",
     reason: "Waiting for a human yes to the exact total: €2,210.41 incl VAT.",
   },
