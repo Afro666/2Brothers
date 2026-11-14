@@ -119,7 +119,7 @@ describe("ApprovalsPage", () => {
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
-    expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved: €131.07 ex VAT, €148.76 incl VAT. The order may now be sent.");
+    expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved and recorded: €148.76 in all (€131.07 ex VAT). Nothing is sent to the supplier.");
     expect(await screen.findByRole("heading", { name: "Waiting for you (3)" })).toBeVisible();
     expect((await api.getApproval("APR-312")).status).toBe("APPROVED");
     expect(screen.queryByText("Proposal APR-312 has already been decided.")).toBeNull();
@@ -146,7 +146,7 @@ describe("ApprovalsPage", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €131.07 ex VAT, €148.76 incl VAT. The order may now be sent.");
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved and recorded: €148.76 in all (€131.07 ex VAT). Nothing is sent to the supplier.");
     expect(close).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1999);
@@ -168,7 +168,7 @@ describe("ApprovalsPage", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
-    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €131.07 ex VAT, €148.76 incl VAT. The order may now be sent.");
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved and recorded: €148.76 in all (€131.07 ex VAT). Nothing is sent to the supplier.");
     expect(postEvent).toHaveBeenCalledWith("web_app_close", "{}");
   });
 
@@ -187,7 +187,7 @@ describe("ApprovalsPage", () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
     expect(postEvent).toHaveBeenCalledWith("web_app_close", "{}");
-    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €131.07 ex VAT, €148.76 incl VAT. The order may now be sent.");
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved and recorded: €148.76 in all (€131.07 ex VAT). Nothing is sent to the supplier.");
     expect(screen.getByRole("heading", { name: "Waiting for you (3)" })).toBeVisible();
   });
 
@@ -253,7 +253,7 @@ describe("ApprovalsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Decided" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Waiting for you (3)" })).toBeInTheDocument();
-    expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved: €131.07 ex VAT, €148.76 incl VAT. The order may now be sent.");
+    expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved and recorded: €148.76 in all (€131.07 ex VAT). Nothing is sent to the supplier.");
     await waitFor(async () => {
       const events = await api.listAudit();
       expect(events.filter((event) => event.kind === "approval").at(-1)).toMatchObject({

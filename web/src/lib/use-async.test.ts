@@ -55,6 +55,26 @@ describe("useAsync", () => {
     expect(result.current.data).toBe("second");
   });
 
+  it("does not end a reload with the answer of a load that began before it", async () => {
+    let resolveFirst: (value: string) => void = () => {};
+    let resolveSecond: (value: string) => void = () => {};
+    const load = vi.fn()
+      .mockImplementationOnce(() => new Promise<string>((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise<string>((resolve) => { resolveSecond = resolve; }));
+    const { result } = renderHook(() => useAsync(load));
+
+    let reloaded = false;
+    const waiting = result.current.reload().then(() => { reloaded = true; });
+    resolveFirst("first");
+    await act(async () => { await Promise.resolve(); });
+    expect(reloaded).toBe(false);
+
+    await act(async () => resolveSecond("second"));
+    await waiting;
+    expect(reloaded).toBe(true);
+    expect(result.current.data).toBe("second");
+  });
+
   it("resets to loading when the dependencies change", async () => {
     const load = (key: string) => (key === "a" ? Promise.resolve(key) : new Promise<string>(() => {}));
     const { result, rerender } = renderHook(({ key }) => useAsync(() => load(key), [key]), {

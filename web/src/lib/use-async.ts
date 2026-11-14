@@ -49,7 +49,9 @@ export function useAsync<T>(
   const { keep } = options;
   const [version, setVersion] = useState(0);
   const lastVersion = useRef(version);
-  const reloadWaiters = useRef<(() => void)[]>([]);
+  const requested = useRef(0);
+  /** Each reload's promise and the version that answers it. */
+  const reloadWaiters = useRef<{ version: number; resolve: () => void }[]>([]);
   const [state, setState] = useState<{ status: "loading" | "error" | "ready"; data: T | null; error: Error | null }>(
     () =>
       keep !== undefined && kept.has(keep)
@@ -59,8 +61,9 @@ export function useAsync<T>(
   const reload = useCallback(
     () =>
       new Promise<void>((resolve) => {
-        reloadWaiters.current.push(resolve);
-        setVersion((value) => value + 1);
+        requested.current += 1;
+        reloadWaiters.current.push({ version: requested.current, resolve });
+        setVersion(requested.current);
       }),
     [],
   );
@@ -78,10 +81,12 @@ export function useAsync<T>(
     const mine = keep === undefined ? 0 : (newest.get(keep) ?? 0) + 1;
     if (keep !== undefined) newest.set(keep, mine);
     const current = () => keep !== undefined && drops === dropsAtStart && newest.get(keep) === mine;
+    // Only the reloads this load answers: a load that began earlier and lands late must not end a newer one.
     const finishReload = () => {
       if (!active) return;
-      const waiters = reloadWaiters.current.splice(0);
-      waiters.forEach((resolve) => resolve());
+      const done = reloadWaiters.current.filter((waiter) => waiter.version <= version);
+      reloadWaiters.current = reloadWaiters.current.filter((waiter) => waiter.version > version);
+      done.forEach((waiter) => waiter.resolve());
     };
     const run = (attemptsLeft: number) => {
       load()

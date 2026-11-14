@@ -1227,7 +1227,7 @@ describe("the app on the gateway", () => {
     const approve = calls.find((call) => call.route === `POST ${K}/proposals/prop-1/approve`);
     expect(approve?.body).toMatchObject({ expected_total: "80.00" });
     expect(await screen.findByTestId("approval-toast")).toHaveTextContent(
-      "Approved: €80.00 ex VAT, incl VAT: unknown (Oat drink). The order may now be sent.",
+      "Approved and recorded: €80.00 in all (€80.00 ex VAT). Nothing is sent to the supplier.",
     );
     expect(screen.getByTestId("approval-toast")).not.toHaveTextContent("€80.00 incl VAT");
   });
@@ -1257,7 +1257,7 @@ describe("the app on the gateway", () => {
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €91.20" }));
 
     expect(await screen.findByTestId("approval-toast")).toHaveTextContent(
-      "Approved: €80.00 ex VAT, €91.20 incl VAT. The order may now be sent.",
+      "Approved and recorded: €91.20 in all (€80.00 ex VAT). Nothing is sent to the supplier.",
     );
     expect(await screen.findByRole("heading", { name: "Decided" })).toBeVisible();
     expect(screen.queryByText("UNAVAILABLE")).not.toBeInTheDocument();
@@ -1347,7 +1347,7 @@ describe("the app on the gateway", () => {
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €68.40" }));
 
     expect(await screen.findByTestId("approval-toast")).toHaveTextContent(
-      "Approved: €60.00 ex VAT, €68.40 incl VAT. The order may now be sent.",
+      "Approved and recorded: €68.40 in all (€60.00 ex VAT). Nothing is sent to the supplier.",
     );
     const approve = calls.find((call) => call.route === `POST ${K}/proposals/prop-1/approve`);
     expect(approve?.body).toMatchObject({ expected_total: "68.40" });

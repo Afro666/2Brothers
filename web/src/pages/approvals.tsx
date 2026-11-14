@@ -21,7 +21,6 @@ import { supplierName } from "@/lib/supplier-name";
 import { LiveConnectionLabel, useLiveEvents } from "@/lib/live-events";
 import { useSession } from "@/lib/session";
 import { closeTelegram, inTelegram } from "@/lib/telegram";
-import { inclVatText } from "@/lib/vat";
 import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
 import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
 import { LiveApprovalsPage } from "@/pages/live-approvals";
@@ -104,9 +103,10 @@ function ApiApprovalsPage() {
         const supplier = waitingFor.map((supplierId) => supplierName(supplierId, supplierNames)).join(", ");
         toast.success(t("Order placed. Call {supplier} to confirm.", { supplier }), { testId: "approval-toast" });
       } else {
-        toast.success(t("Approved: {exVat} ex VAT, {total}. The order may now be sent.", {
+        // The card's own approved sentence: the gateway's total "in all", never called incl VAT (#1817).
+        toast.success(t("Approved and recorded: {total} in all ({exVat} ex VAT). Nothing is sent to the supplier.", {
           exVat: formatEur(decided.totalExVat),
-          total: inclVatText(decided, t, formatEur),
+          total: formatEur(decided.totalInclVat),
         }), {
           testId: "approval-toast",
         });
