@@ -128,6 +128,15 @@
 		}
 	}
 
+	# OAuth discovery: MCP clients (mcp-remote in Claude Desktop) ask these first. The gateway
+	# uses bearer tokens, not OAuth, so the answer is a 404 in JSON. The web app's index.html
+	# with a 200 made mcp-remote stop with "Unexpected token '<'" (live, 2026-11-14).
+	@oauth_discovery path /.well-known/oauth-* /.well-known/openid-configuration
+	handle @oauth_discovery {
+		header Content-Type application/json
+		respond `{"error":"not_found","message":"no OAuth here: use a bearer token"}` 404
+	}
+
 	handle {
 		root * /srv
 		# Vite puts a content hash in every file name under /assets: a browser may keep them for
