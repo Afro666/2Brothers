@@ -178,6 +178,24 @@ update and no delete. `watch_kitchen` covers `proposals`, `approvals` and `audit
 and carries only that kitchen's rows; on the free tier an insert arrived in
 about 0.03 s (five tries).
 
+## Atlas facts (for the About page)
+
+```python
+from store.atlas import atlas_facts
+
+atlas_facts(db)   # {"mongodb_version": "8.0.37", "data_mb": 215, "products": 17548,
+                  #  "vectors": [{"model": "voyage-4", "dimensions": 1024, "count": 17546}],
+                  #  "search_indexes": [{"name": "products_search", "type": "search",
+                  #                      "status": "READY", "queryable": True}, ...],
+                  #  "time_series": [{"collection": "covers", "documents": 1780}, ...],
+                  #  "audit_entries": 1487,
+                  #  "change_stream_collections": ["proposals", "approvals", "audit_log"]}
+```
+
+Counts and index states for the whole database: no address, no key, no document. A part
+that cannot be read (not Atlas, no rights) is `None`, never zero. It makes about ten
+small reads; a caller that serves it on a page keeps the answer for a minute.
+
 ## Search
 
 `store.search.search_products(db, query, filters, limit)` implements `search_products`
