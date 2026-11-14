@@ -297,6 +297,38 @@ million tokens (the meter's own count).
 
 Tests: `agent/tests/test_buyer_settings.py` pins the settings and the prompt lines.
 
+## Price list from a photo (#1174)
+
+`POST /v1/kitchens/{k}/suppliers/{s}/price-list/photo` (contract: "Read a supplier's
+price list from a photo"), for manual suppliers such as the demo's Corner Bakery.
+Nemotron VL copies per row the printed name, price, the unit the price is for, and the
+pack size, plus the list's currency and VAT note (`agent/price_list_service.py`).
+
+Plain code (`agent/price_list.py`) reads those texts into draft own products:
+- `2,50` is 2.50;
+- the unit codes come from a fixed table (`kpl` → ST, `ltk` → KI, `pussi` → BAG, and so on);
+- pack sizes are read as g, kg, ml, cl, dl or l;
+- the currency is EUR only if `€` or `EUR` is printed;
+- VAT is never assumed.
+
+Anything uncertain is PLEASE_CHECK with a reason, and an uncertain price stays empty. A
+name match with an existing product is a suggestion with both prices, never an overwrite.
+The route writes nothing; a person saves each row with `POST /products`, and the saved
+row keeps `price_source: price_list_photo`.
+
+Measured on 2026-11-14 with the live endpoint and `demo/price-list-photo.png` (8 rows):
+
+| What | Result |
+|---|---|
+| Time | 1.1 s |
+| Tokens | about 2,200 |
+| Rows READ | 7 |
+| PLEASE_CHECK | 1 ("Seed rolls": no unit printed, so the price stays empty) |
+| Rye loaf | price changed, 4.20 → 4.40 |
+| Cinnamon bun | same price |
+
+The recorded reply is `agent/fixtures/price_list/demo.reply.json`.
+
 ## Buying note for Valio's planner (#1176)
 
 `GET /v1/suppliers/{id}/demand/buying-note` (contract: "Buying note for the supplier's
