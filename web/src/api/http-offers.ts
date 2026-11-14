@@ -49,7 +49,15 @@ export function createOffersHttp(call: GatewayCall, kitchen: string): OffersApi 
     call(path, { method: "POST", headers: { "X-User": actor }, body: JSON.stringify(body) });
   return {
     async listSupplierOffers() {
-      return rows(await call(`${kitchen}/supplier-offers`), "offers").map(mapSupplierOffer);
+      // One bad or newer-shaped row is skipped, so it cannot hide the valid offers.
+      return rows(await call(`${kitchen}/supplier-offers`), "offers").flatMap((row) => {
+        try {
+          return [mapSupplierOffer(row)];
+        } catch (error) {
+          console.warn("Skipped a supplier offer the web cannot read:", error);
+          return [];
+        }
+      });
     },
     async acceptSupplierOffer(offerId, actor) {
       const body = object(await send(`${offerPath(offerId)}/accept`, {}, actor), "the accept answer");
