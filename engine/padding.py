@@ -56,8 +56,10 @@ def pad_to_free_delivery(draft_total: Decimal, *, threshold: Decimal | None, fee
     if threshold is None or fee is None:
         return none("Delivery terms unknown: no padding.")
     gap = threshold - draft_total
-    if gap <= 0 or fee <= 0:
+    if gap <= 0:
         return none("Free delivery already reached.")
+    if fee <= 0:
+        return none("No delivery fee: no padding.")
     usable = sorted((w for w in wanted if w.keeps_until_used and w.quantity > 0),
                     key=lambda w: (w.value, w.product_id))
     pick = next(([w] for w in usable if w.value >= gap), None)
