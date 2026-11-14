@@ -29,6 +29,7 @@ import {
   formatNumber,
   formatOfferStock,
   formatStock,
+  formatTime,
   isPassed,
   isStockUnconfirmed,
 } from "@/lib/format";
@@ -90,6 +91,39 @@ function requestDescription(request: ApprovalRequest, t: ReturnType<typeof useT>
 /** Wait this long after the last keystroke before searching addable products. */
 export const ADD_SEARCH_DEBOUNCE_MS = 250;
 
+type CutoffLine = NonNullable<ApprovalRequest["cutoffs"]>[number];
+
+export interface EarliestCutoff {
+  closingTime: string;
+  supplierName: string | null;
+  earliestOf: number | null;
+  passed: boolean;
+  warning: boolean;
+  minutesLeft: number;
+}
+
+export function earliestCutoff(lines: readonly CutoffLine[], now: Date): EarliestCutoff | null {
+  const known = lines.flatMap((line) => {
+    if (line.closingTime == null) return [];
+    const timestamp = new Date(line.closingTime).getTime();
+    return Number.isFinite(timestamp)
+      ? [{ closingTime: line.closingTime, supplierName: line.supplierName, timestamp }]
+      : [];
+  });
+  if (known.length === 0) return null;
+  const earliest = known.reduce((first, line) => line.timestamp < first.timestamp ? line : first);
+  const millisecondsLeft = earliest.timestamp - now.getTime();
+  const passed = millisecondsLeft <= 0;
+  return {
+    closingTime: earliest.closingTime,
+    supplierName: earliest.supplierName,
+    earliestOf: new Set(known.map((line) => line.timestamp)).size > 1 ? known.length : null,
+    passed,
+    warning: passed || millisecondsLeft < 2 * 60 * 60 * 1000,
+    minutesLeft: Math.max(0, Math.floor(millisecondsLeft / 60_000)),
+  };
+}
+
 const CHANGE_ERRORS: Record<string, string> = {
   NOT_PENDING: "This proposal is no longer waiting for approval. Refresh the page to see its current status.",
   LINE_NOT_FOUND: "That product is not on this proposal. Add it as a new product instead.",
@@ -104,7 +138,7 @@ const CHANGE_ERRORS: Record<string, string> = {
 export function ApprovalCard({
   request,
   order,
-  now = new Date(),
+  now,
   onApprove,
   onReject,
   onChangeProposal,
@@ -135,6 +169,7 @@ export function ApprovalCard({
   const [status, setStatus] = useState(request.status);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [, setClock] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [changeError, setChangeError] = useState<string | null>(null);
   const changing = useRef(false);
@@ -160,7 +195,14 @@ export function ApprovalCard({
     [debouncedSearch],
   );
   const reasonId = useId();
+  const stockBlockId = useId();
+  const accountBlockId = useId();
   const pending = status === "PENDING";
+  useEffect(() => {
+    if (!pending) return;
+    const timer = window.setInterval(() => setClock((tick) => tick + 1), 60_000);
+    return () => window.clearInterval(timer);
+  }, [pending]);
   // A proposal held by a recall cannot be approved, but it can be rejected to close it.
   const held = status === "BLOCKED_BY_RECALL";
   const canDecide = pending || (held && onReject != null);
@@ -174,6 +216,26 @@ export function ApprovalCard({
       ? t("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")
       : null;
   const editing = pending && onChangeProposal != null && listAddableProducts != null;
+  const clock = now ?? new Date();
+  const cutoff = earliestCutoff(
+    request.cutoffs ?? order?.lines.map((line) => ({ closingTime: line.offer.closingTime, supplierName: null })) ?? [],
+    clock,
+  );
+  // No supplier block names the line: say no name rather than a generic one.
+  const cutoffOrigin = cutoff?.supplierName ? ` · ${t("{supplier}'s cut-off", { supplier: cutoff.supplierName })}` : "";
+  const cutoffEarliest = cutoff?.earliestOf == null ? "" : t(" (earliest of {count})", { count: cutoff.earliestOf });
+  const cutoffTimeLeft = cutoff && !cutoff.passed && cutoff.warning
+    ? cutoff.minutesLeft >= 60
+      ? t("{hours} h {minutes} min left", {
+          hours: Math.floor(cutoff.minutesLeft / 60),
+          minutes: cutoff.minutesLeft % 60,
+        })
+      : cutoff.minutesLeft > 0
+        ? t("{minutes} min left", { minutes: cutoff.minutesLeft })
+        : t("Less than 1 min left")
+    : null;
+  const approveBlockDescription = [stockMessage ? stockBlockId : null, approvalBlockedReason ? accountBlockId : null]
+    .filter(Boolean).join(" ") || undefined;
 
   async function changeProposal(change: ProposalChange) {
     // The ref closes the gap before `busy` disables the buttons: two fast presses are one change.
@@ -274,6 +336,15 @@ export function ApprovalCard({
             </dd>
           </div>
         </dl>
+        {pending && cutoff ? (
+          <p className={cn("break-words text-sm", cutoff.warning ? "hatch text-warning" : "text-muted-foreground")}>
+            {cutoff.passed
+              ? `${t("The cut-off has passed")}${cutoffOrigin}${cutoffEarliest}`
+              : `${t("Approve before {time}", {
+                  time: `${formatDate(cutoff.closingTime)} ${formatTime(cutoff.closingTime)}`,
+                })}${cutoffOrigin}${cutoffEarliest}${cutoffTimeLeft ? ` · ${cutoffTimeLeft}` : ""}`}
+          </p>
+        ) : null}
         {folded ? (
           <Button
             type="button"
@@ -315,7 +386,9 @@ export function ApprovalCard({
         </section>
         <RecallLines alerts={recalls} />
         {pending && (stockMessage ?? waitingNotice) ? (
-          <p className="hatch text-sm text-warning">{stockMessage ?? waitingNotice}</p>
+          <p id={stockMessage ? stockBlockId : undefined} className="hatch text-sm text-warning">
+            {stockMessage ?? waitingNotice}
+          </p>
         ) : null}
         {pending && request.options?.length ? (
           <OptionCompare
@@ -361,7 +434,7 @@ export function ApprovalCard({
                           <dt className="text-muted-foreground">{t("Cut-off")}</dt>
                           <dd>
                             {t(formatDateTime(line.offer.closingTime))}
-                            {isPassed(line.offer.closingTime, now) ? t(" (passed)") : ""}
+                            {isPassed(line.offer.closingTime, clock) ? t(" (passed)") : ""}
                           </dd>
                           <dt className="text-muted-foreground">{t("Unit price")}</dt>
                           <dd>{t("{amount} ex VAT", { amount: t(formatEur(line.offer.priceExVat)) })}</dd>
@@ -422,7 +495,7 @@ export function ApprovalCard({
                     ))}
                   </ul>
                 ) : (
-                  <OrderLinesTable lines={order.lines} now={now} />
+                  <OrderLinesTable lines={order.lines} now={clock} />
                 )}
                 {editing ? (
                   <section className="space-y-3 border-t pt-4" aria-labelledby={`add-products-${request.id}`}>
@@ -494,9 +567,16 @@ export function ApprovalCard({
               {t("Reject")}
             </Button>
             {pending ? (
-              <Button className="w-full sm:w-auto" disabled={busy || !!stockMessage || !!approvalBlockedReason} onClick={() => setOpen("approve")}>
+              <Button
+                className="w-full sm:w-auto"
+                disabled={busy || !!stockMessage || !!approvalBlockedReason}
+                aria-describedby={approveBlockDescription}
+                onClick={() => setOpen("approve")}
+              >
                 <Check aria-hidden />
-                {t("Approve {amount} incl VAT", { amount: formatEur(request.totalInclVat) })}
+                {stockMessage || approvalBlockedReason
+                  ? t("Approve")
+                  : t("Approve {amount} incl VAT", { amount: formatEur(request.totalInclVat) })}
               </Button>
             ) : null}
           </>
@@ -526,7 +606,7 @@ export function ApprovalCard({
           </p>
         )}
         {canDecide && approvalBlockedReason ? (
-          <p className="w-full text-sm text-muted-foreground sm:mr-auto">{approvalBlockedReason}</p>
+          <p id={accountBlockId} className="w-full text-sm text-muted-foreground sm:mr-auto">{approvalBlockedReason}</p>
         ) : null}
       </CardFooter>
 
