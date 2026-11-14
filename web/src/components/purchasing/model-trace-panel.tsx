@@ -64,6 +64,10 @@ function stepText(step: ModelTraceStep, t: T): string {
   if (step.code && POLICY_CODES.has(step.code))
     return t("{action} — refused by the policy ({code})", { action: what, code: step.code });
   if (step.code === "TOOL_FAILED") return t("{action} — the tool failed", { action: what });
+  if (step.code === "MEANING_FALLBACK" && step.tool === "search_products")
+    return t("{action} — found by meaning (Atlas Vector Search) after the word search found nothing", {
+      action: what,
+    });
   return what;
 }
 

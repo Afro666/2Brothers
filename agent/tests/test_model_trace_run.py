@@ -117,3 +117,15 @@ def test_a_model_without_a_meter_still_gets_a_trace_with_zero_counts(monkeypatch
     _, proposal, *_ = run_worker(monkeypatch, ScriptedBuyer(), key="trace-4")
     trace = proposal["model_trace"]
     assert trace["calls"] == 0 and trace["thinking"] is None and len(trace["steps"]) == 4
+
+
+def test_a_search_found_by_meaning_is_marked_in_the_trace():
+    """#1384: the gateway answered search "meaning-fallback"; the step says so with a code."""
+    from agent.runner import Buyer
+    buyer = Buyer(None, None, None, need_id="n1", requested_date="2026-11-16")
+    buyer.record_step("search_products", {"query": "talon maito"},
+                      {"products": [{"product_id": "462775"}], "search": "meaning-fallback"})
+    buyer.record_step("search_products", {"query": "lactose-free milk"},
+                      {"products": [{"product_id": "462775"}], "search": "text"})
+    assert buyer.trace[0]["code"] == "MEANING_FALLBACK" and buyer.trace[0]["count"] == 1
+    assert "code" not in buyer.trace[1]
