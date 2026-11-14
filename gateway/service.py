@@ -19,7 +19,7 @@ from uuid import uuid4
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 
-from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, pack_info,
+from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, allergen_rule_hits, pack_info,
                     pad_to_free_delivery, plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
@@ -231,27 +231,137 @@ class Gateway:
             "partial_fill": partial_out(plan.partial),   # confirmed stock now, a plan for the rest (#288)
         }
 
+    def _allergen_refusals(self, kitchen_id: str, product_ids: list[str]) -> dict[str, tuple[str, ...]]:
+        """S03: the kitchen's allergen rule always wins, on every path (REST, MCP, any agent).
+        A product whose known allergens include an excluded code is left out. A misspelt
+        rule fails closed: no offer at all, never a silently wider one."""
+        from store.buyer_context import excluded_allergens
+        from store.search import allergen_codes as to_codes
+        values = excluded_allergens(self.db, kitchen_id)
+        if not values:
+            return {}
+        try:
+            # AW is the gluten-cereals group, as in agent/substitutes.AllergenPolicy.
+            rule = tuple(to_codes(["gluten" if v.upper() == "AW" else v for v in values]))
+        except ValueError:
+            raise GatewayError(409, "KITCHEN_POLICY_INVALID",
+                               "the kitchen's allergen rule names an unknown allergen; fix it in settings") from None
+        from store.products import get_products
+        refused = {}
+        for row in get_products(self.db, product_ids, kitchen_id=kitchen_id):
+            hits = allergen_rule_hits(row, rule)
+            if hits:
+                refused[row["product_id"]] = hits
+        return refused
+
+    def _mixed_fat(self, plan: RequestPlan) -> bool:
+        """S01: the lines of one plan have different fat levels (fat-free and 3 % milk)."""
+        from engine.fat import fat_levels_differ, fat_per_100g
+        ids = [ln.product_id for ln in plan.lines]
+        if len(ids) < 2:
+            return False
+        docs = self.db.products.find({"_id": {"$in": ids}}, {"raw.synkkaData.nutritionalContent": 1})
+        return fat_levels_differ([fat_per_100g(d.get("raw")) for d in docs])
+
     def _quote(self, kitchen_id: str, request: dict) -> dict:
+        if request.get("needs"):
+            sim = self._basket(kitchen_id, request)
+            return self._save_offer(kitchen_id, request, sim)
         requested = date.fromisoformat(request["requested_date"])
         measure = request["unit"]
         need = Decimal(str(request["quantity"]))
         if need <= 0:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
         blocked = recalls.blocked_ids(self.db, kitchen_id)
+        refused = self._allergen_refusals(kitchen_id, request["product_ids"])
         offers, skipped, tax, supplier_of, when = self._offers(
-            kitchen_id, [p for p in request["product_ids"] if p not in blocked], measure, requested)
+            kitchen_id, [p for p in request["product_ids"] if p not in blocked and p not in refused],
+            measure, requested)
         skipped.extend((p, 'BLOCKED_BY_RECALL') for p in request['product_ids'] if p in blocked)
+        skipped.extend((p, f"ALLERGEN_RULE: the kitchen excludes {', '.join(hits)}")
+                       for p, hits in refused.items())
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
         tiers = {sid: (self._supplier(kitchen_id, sid).get("terms") or {}).get("discount_tiers") or []
                  for sid in set(supplier_of.values())}
         plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
         sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
+        if refused and "ALLERGEN_RULE" not in sim["mandate"]["reason_codes"]:
+            sim["mandate"]["reason_codes"].append("ALLERGEN_RULE")
+        if self._mixed_fat(plan) and "SUBSTITUTE_FAT_LEVEL" not in sim["mandate"]["reason_codes"]:
+            sim["mandate"]["reason_codes"].append("SUBSTITUTE_FAT_LEVEL")   # S01: a person picks
+        return self._save_offer(kitchen_id, request, sim)
+
+    def _basket(self, kitchen_id: str, request: dict) -> dict:
+        """One simulation for several needs (an order for a menu plan, #74): each product is
+        sized by the engine for its own need, in its own measure; then one total, one set of
+        supplier blocks, one approval."""
+        from engine.offers import RequestPlan
+        requested = date.fromisoformat(request["requested_date"])
+        needs = request["needs"]
+        ids = [n["product_id"] for n in needs]
+        blocked = recalls.blocked_ids(self.db, kitchen_id)
+        refused = self._allergen_refusals(kitchen_id, ids)
+        params = self._params(kitchen_id)
+        lines, excluded, codes, short = [], [], [], []
+        skipped = [(p, "BLOCKED_BY_RECALL") for p in ids if p in blocked]
+        skipped += [(p, f"ALLERGEN_RULE: the kitchen excludes {', '.join(hits)}") for p, hits in refused.items()]
+        tax, supplier_of, when = {}, {}, {}
+        by_measure: dict[str, list[dict]] = {}
+        for n in needs:
+            if n["product_id"] in blocked or n["product_id"] in refused:
+                continue
+            by_measure.setdefault(n["unit"] if n["unit"] in ("L", "KG") else "ST", []).append(n)
+        for measure, group in by_measure.items():
+            offers, skip, t, s, w = self._offers(kitchen_id, [n["product_id"] for n in group], measure, requested)
+            skipped += skip
+            tax.update(t)
+            supplier_of.update(s)
+            when.update(w)
+            for n in group:
+                mine = [o for o in offers if o.product_id == n["product_id"]]
+                if not mine:
+                    continue
+                plan = plan_request(Decimal(str(n["quantity"])), measure, mine, requested, None)
+                lines += list(plan.lines)
+                excluded += list(plan.excluded)
+                codes += [c for c in plan.reason_codes if c not in codes]
+                if plan.shortfall > 0:
+                    short.append((n["product_id"], plan.shortfall, n["unit"]))
+        total = sum((ln.total for ln in lines), Decimal("0.00"))
+        warnings = ()
+        if params.budget_warning_order_eur is not None and total > params.budget_warning_order_eur:
+            warnings = ("OVER_BUDGET_WARNING",)
+        plan = RequestPlan(Decimal(len(needs)), "products", tuple(lines), total, Decimal(0),
+                           tuple(excluded), tuple(codes), warnings)
+        tiers = {sid: (self._supplier(kitchen_id, sid).get("terms") or {}).get("discount_tiers") or []
+                 for sid in set(supplier_of.values())}
+        plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
+        sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
+        sim["shortfalls"] = [{"product_id": p, "shortfall": f"{q.normalize():f}", "unit": u} for p, q, u in short]
+        for p, q, u in short:
+            sim["mandate"]["reasons"].append(f"{p}: {q.normalize():f} {u} of the plan's need cannot be covered for this date.")
+        for code in (["PARTIAL_STOCK"] if short else []) + (["ALLERGEN_RULE"] if refused else []):
+            if code not in sim["mandate"]["reason_codes"]:
+                sim["mandate"]["reason_codes"].append(code)
+        return sim
+
+    def _save_offer(self, kitchen_id: str, request: dict, sim: dict) -> dict:
         now = self.now()
+        offer_id = uuid4().hex
+        signed = {}
+        try:    # signed offers (#290): never a reason to fail a quote
+            from gateway import signing
+            token, digest = signing.sign_offer(
+                self.db, offer_id=offer_id, kitchen_id=kitchen_id, simulation=sim,
+                requested_date=request["requested_date"], as_of=now, valid_until=now + OFFER_TTL)
+            signed = {"signature": token, "offer_hash": digest}
+        except Exception:
+            signed = {}
         offer = orders.save_offer(self.db, {
-            "offer_id": uuid4().hex, "kitchen_id": kitchen_id, "supplier_id": VALIO,
+            "offer_id": offer_id, "kitchen_id": kitchen_id, "supplier_id": VALIO,
             "request": request, "valid_until": (now + OFFER_TTL).isoformat(),
-            "simulation": sim, "fetched_at": now})
+            "simulation": sim, "fetched_at": now, **signed})
         return offer
 
     # ---- kitchen side ---------------------------------------------------------------
@@ -278,7 +388,51 @@ class Gateway:
         return {**body, "product_ids": ids, **{k: v for k, v in parsed.as_need().items() if k != "query"},
                 "made_by": "parser", "query": parsed.query}
 
+    def _from_plan(self, kitchen_id: str, body: dict) -> dict:
+        """`from` and `to` and no products: an order for what the menu plan needs in that
+        window (net of stock). Unknown stock is not treated as zero stock silently: the full
+        need is proposed and the line says the count is missing."""
+        from gateway.kitchen_routes import demand_rows
+        try:
+            start, end = date.fromisoformat(str(body["from"])), date.fromisoformat(str(body["to"]))
+        except ValueError:
+            raise GatewayError(422, "INVALID_REQUEST", "from and to must be YYYY-MM-DD") from None
+        if end < start or (end - start).days > 31:
+            raise GatewayError(422, "INVALID_REQUEST", "from must be on or before to, at most 31 days apart")
+        rows, problems = demand_rows(self.db, kitchen_id, start, end)
+        total: dict[tuple[str, str], Decimal] = {}
+        uncounted: set[str] = set()
+        for row in rows:
+            need = row["net_need"]
+            if need is None:
+                need = row["gross_need"]
+                uncounted.add(row["product_id"])
+            key = (row["product_id"], row["unit"])
+            total[key] = total.get(key, Decimal(0)) + need
+        needs = [{"product_id": pid, "quantity": f"{q.normalize():f}", "unit": unit,
+                  "stock_counted": pid not in uncounted}
+                 for (pid, unit), q in sorted(total.items()) if q > 0]
+        if not needs:
+            raise GatewayError(422, "NOTHING_NEEDED", "the plan needs nothing beyond the stock in this window",
+                               problems=problems)
+        return {"product_ids": [n["product_id"] for n in needs], "quantity": str(len(needs)), "unit": "products",
+                "requested_date": str(body.get("requested_date") or body["from"]), "needs": needs,
+                "text": body.get("text") or f"Order for the menu plan {start.isoformat()} to {end.isoformat()}",
+                "window": {"from": start.isoformat(), "to": end.isoformat()}, "problems": problems,
+                "idempotency_key": body.get("idempotency_key")}
+
     def create_proposal(self, kitchen_id: str, body: dict, actor: str) -> dict:
+        planned = False
+        if body.get("from") and body.get("to") and not body.get("product_ids") and not body.get("text"):
+            if not body.get("idempotency_key"):
+                raise GatewayError(422, "INVALID_REQUEST", "idempotency_key is required")
+            stored = self.db.proposals.find_one({"kitchen_id": kitchen_id, "idempotency_key": body["idempotency_key"]})
+            if stored:
+                if (stored["request"].get("window") or {}) != {"from": str(body["from"]), "to": str(body["to"])}:
+                    raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
+                return self._proposal_out(stored)
+            body = self._from_plan(kitchen_id, body)
+            planned = True
         if body.get("text") and not body.get("product_ids"):
             if not body.get("idempotency_key"):
                 raise GatewayError(422, "INVALID_REQUEST", "idempotency_key is required")
@@ -297,7 +451,9 @@ class Gateway:
         request = {k: body[k] for k in ("product_ids", "quantity", "unit", "requested_date")}
         request["text"] = body.get("text") or ""
         # Set by the gateway, never by the client: a structured body cannot claim the parser.
-        request["made_by"] = "parser" if parsed else "structured"
+        request["made_by"] = "menu_plan" if planned else ("parser" if parsed else "structured")
+        if planned:
+            request.update({key: body[key] for key in ("needs", "window", "problems")})
         if parsed and body.get("query"):
             request["query"] = body["query"]
         if body.get("event"):
@@ -355,7 +511,8 @@ class Gateway:
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
                 **offer["simulation"],
-                "decision_summary": self._summary(doc["request"], offer["simulation"])}
+                "decision_summary": self._summary(doc["request"], offer["simulation"]),
+                "signature": offer.get("signature"), "offer_hash": offer.get("offer_hash")}
         result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
         result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []))
         blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
@@ -471,6 +628,7 @@ class Gateway:
             expected_total=Decimal128(sim["expected_total"]),   # exact decimal in any Mongo
             lines=[{k: v for k, v in ln.items() if k != "why"} for ln in sim["lines"]],
             payload_hash=_hash(payload), proposal_id=proposal_id, approved_by=human,
+            offer_hash=stored.get("offer_hash"),     # the exact offer this yes covers (#290)
             # One order for the proposal (#73); the supplier split is stored on it.
             supplier_id=blocks[0]["supplier_id"] if len(blocks) == 1 else None,
             blocks=[{k: v for k, v in b.items() if k != "lines"}
@@ -590,7 +748,8 @@ class Gateway:
         rows = rows[:max(limit, 20)]
         arrival: dict[str, bool | None] = {}
         try:
-            ids = [r["product_id"] for r in rows if str(r.get("supplier_id") or "sup-valio") == VALIO]
+            # Catalog rows (source "valio") can be asked live; a kitchen's own products cannot.
+            ids = [r["product_id"] for r in rows if r.get("source", "valio") != "own"]
             if ids:
                 requested = date.fromisoformat(need["requested_date"])
                 for product in self.valio.availability(ids, need["requested_date"])["products"]:
@@ -677,6 +836,8 @@ class Gateway:
         if doc is None or doc["status"] != "APPROVED" or not doc.get("order_id"):
             raise GatewayError(403, "NEEDS_APPROVAL", "a person must approve this order in the approval inbox")
         order = orders.get_order(self.db, doc["order_id"])
+        if order.get("offer_hash") and offer.get("offer_hash") != order["offer_hash"]:
+            raise GatewayError(409, "APPROVAL_MISMATCH", "the approval covers another offer than this one")
         if abs(Decimal(str(body.get("expected_total") or "0")) - Decimal(str(order["expected_total"]))) > TOLERANCE:
             raise GatewayError(409, "TOTAL_MISMATCH", "this is not the approved total",
                                expected_total=_money(Decimal(str(order["expected_total"]))))
@@ -787,22 +948,34 @@ class Gateway:
         lo = datetime.combine(d0, datetime.min.time(), tzinfo=timezone.utc)
         hi = datetime.combine(d1, datetime.max.time(), tzinfo=timezone.utc)
         rows = self.db.forecasts.find({"meta.kitchen_id": kitchen_id, "ts": {"$gte": lo, "$lte": hi}}).sort("ts", 1)
-        # The band (p10-p90) comes from this kitchen's own forecast errors of the last 8
-        # weeks (engine.newsvendor, #432); with too few, a normal with 15% spread.
-        from engine.newsvendor import interval
+        # The band (p10-p90) comes from forecast errors of the last 8 weeks (engine.newsvendor,
+        # #432): the product's own when it has enough, else the kitchen's pooled ones, else a
+        # normal with 15% spread.
+        from engine.newsvendor import MIN_RESIDUALS, interval
         from store.history import forecast_vs_actual
         today = self.now().date()
         past = forecast_vs_actual(self.db, kitchen_id, today - timedelta(days=56), today - timedelta(days=1))
-        ratios = [actual / predicted for _, _, predicted, actual in past if predicted > 0]
+        pooled: list[float] = []
+        by_product: dict[str, list[float]] = {}
+        for pid, _, predicted, actual in past:
+            if predicted > 0:
+                pooled.append(actual / predicted)
+                by_product.setdefault(pid, []).append(actual / predicted)
+        kitchen_band = "own forecast errors" if len(pooled) >= MIN_RESIDUALS else "default spread"
         lines = []
         for r in rows:
+            pid = r["meta"]["product_id"]
             need = float(str(r["need"]))
-            lines.append({"product_id": r["meta"]["product_id"], "date": r["ts"].date().isoformat(),
+            own = by_product.get(pid, [])
+            if len(own) >= MIN_RESIDUALS:
+                ratios, band = own, "product forecast errors"
+            else:
+                ratios, band = pooled, kitchen_band
+            lines.append({"product_id": pid, "date": r["ts"].date().isoformat(),
                           "need": f"{Decimal(str(r['need'])).normalize():f}", "unit": r["unit"],
                           "made_on": r.get("made_on"), "why": r.get("why"),
-                          **interval(need, ratios=ratios)})
-        return {"kitchen_id": kitchen_id, "band_from": "own forecast errors" if len(ratios) >= 20 else "default spread",
-                "lines": lines}
+                          **interval(need, ratios=ratios), "band_from": band})
+        return {"kitchen_id": kitchen_id, "band_from": kitchen_band, "lines": lines}
 
     def audit_log(self, kitchen_id: str) -> list[dict]:
         return [{"seq": e["seq"], **e["event"], "at": e["server"].get("at")}
@@ -835,7 +1008,8 @@ def offer_out(offer: dict) -> dict:
     sim = offer["simulation"]
     lines = [_line_out(ln) for ln in sim["lines"]]
     return {"offer_id": offer["offer_id"], "valid_until": offer["valid_until"], **sim,
-            "lines": lines, "blocks": _blocks_out(sim, lines)}
+            "lines": lines, "blocks": _blocks_out(sim, lines),
+            "signature": offer.get("signature"), "offer_hash": offer.get("offer_hash")}
 
 
 __all__ = ["Gateway", "GatewayError", "offer_out", "asdict"]

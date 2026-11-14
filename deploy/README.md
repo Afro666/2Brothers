@@ -76,7 +76,14 @@ not the human token or upstream Valio key. No worker port is published.
 
 - Deploys never overlap: the workflow queues runs (`concurrency: deploy`) and `deploy/update.sh`
   takes a lock on the server, so a second deploy waits for the first.
-- Every deploy rebuilds and restarts the containers, which cuts off requests in flight. To pause
+- A deploy always takes the newest commit on main and writes its sha to `/opt/2brothers.deployed`;
+  a run that finds that commit already deployed does nothing. Merges that land back to back
+  usually cause one restart instead of one each. The sha is written only after the gateway
+  answers `/health`.
+- Only what changed restarts: a web-only commit rebuilds the web image and leaves the gateway and
+  the buyer running. While the gateway restarts, Caddy holds a request for up to 15 seconds
+  instead of answering 502.
+- A deploy that changes the gateway restarts it, which cuts off requests in flight. To pause
   deploys (recording the demo, a long job on the server): `touch /opt/2brothers.hold` on the
   server. Merges still pass; their deploy run says "on hold" and changes nothing. `rm
   /opt/2brothers.hold` to resume; the next merge, or "Run workflow" on the deploy action, deploys

@@ -191,6 +191,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         gw()._audit(person["kitchen_id"], "password_changed", person["email"])
         return {"changed": True}
 
+    @app.get("/.well-known/jwks.json")
+    def jwks():
+        """The public key that signs every offer (#290). No token needed: it is public."""
+        from gateway import signing
+        return signing.jwks(gw().db)
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
@@ -337,6 +343,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     async def create_token(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
+        who.need("kitchen:read", kitchen_id)        # a session is bound to its kitchen
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can create a token")
         data = await body(request)
@@ -352,6 +359,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     def list_tokens(kitchen_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
+        who.need("kitchen:read", kitchen_id)
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can list tokens")
         return {"tokens": tokens.list_tokens(gw().db, kitchen_id)}
@@ -360,6 +368,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     def revoke_token(kitchen_id: str, token_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
+        who.need("kitchen:read", kitchen_id)
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can revoke a token")
         out = tokens.revoke(gw().db, kitchen_id, token_id)
@@ -495,6 +504,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     # Standing-order drift (#377): kitchen and supplier views.
     from gateway.drift_routes import mount_drift
     mount_drift(app, gw, principal)
+    from gateway.supplier_routes import mount_supplier   # the wholesaler's demand view (#33)
+    mount_supplier(app, gw, principal)
 
     # Onboarding lookup (#375): Context.dev brand lookup for the sign-up form.
     from gateway.onboarding import mount_onboarding

@@ -317,3 +317,37 @@ a line:
 "write" = a signed-in person who is not a viewer, or an API token with the new scope
 `kitchen:write` (a POS or stock system). The Buyer agent token cannot write. `on_order` is
 0 with `on_order_known: false` until open orders are converted to kitchen units.
+
+## Supplier demand view (#33)
+
+`GET /v1/suppliers/{supplier_id}/demand?from=&to=[&product=]` and
+`GET .../demand/shortage-risk?from=&to=` (at most 14 days). Per product and day: the forecast
+`demand` summed over the kitchens whose consent names this supplier (`kitchens`, `by_kitchen`),
+the supplier's live `available` in kitchen units (null when unknown), `shortage`, `risk`
+(`OK`, `SHORT`, `UNKNOWN`) and `suggested_buy`. A kitchen without active consent is in no sum
+and no list. The Buyer agent token cannot read it (403).
+
+## Signed offers (#290)
+
+Every offer and proposal carries `signature` (a JWS, EdDSA) and `offer_hash`. The signed
+claims: offer id, kitchen, delivery date, as-of and valid-until times, each line (product,
+quantity, unit, unit price, `stock: confirmed | unknown`), the total and the `offer_hash`.
+The public key is at `/.well-known/jwks.json` (no token). Check one offer:
+
+    python -m gateway.verify_offer --base-url https://<host>/gateway --offer offer.json
+
+A changed line, price or total, another key or an expired offer fails (exit code 1). The
+approved order stores the `offer_hash`; `place_order` for any other offer is 409
+`APPROVAL_MISMATCH`. The key comes from `GATEWAY_SIGNING_KEY` (base64 of 32 bytes) or is
+created once and kept in the database. A signed JWT mandate is the next step, not in this PR.
+
+## An order for the menu plan (#74)
+
+`POST /v1/kitchens/{k}/proposals` with `{"from": "2026-11-16", "to": "2026-11-22",
+"requested_date": "2026-11-16", "idempotency_key": "..."}` (no products, no text) proposes
+one order for everything the menu plan needs in that window, net of counted stock. Each
+product is sized by the engine for its own need and measure; the proposal has one total, the
+supplier blocks, one approval. `request.needs` lists the need per product (`stock_counted:
+false` when the stock was never counted: then the full need is proposed, not a guess);
+`shortfalls` lists what cannot be covered per product; 422 `NOTHING_NEEDED` when stock covers
+the plan. Approve, reject, signing and the live re-check work as for any proposal.

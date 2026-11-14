@@ -68,9 +68,10 @@ export function ChefRequestBox({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor={textId}>What do you need?</Label>
+        <Label htmlFor={textId} className="label-caps text-[11px] leading-4 font-semibold">What do you need?</Label>
         <Textarea
           id={textId}
+          className="text-[17px] md:text-[17px]"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="1,000 L lactose-free milk by Monday"
@@ -79,7 +80,7 @@ export function ChefRequestBox({
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor={coversId}>Covers</Label>
+          <Label htmlFor={coversId} className="label-caps text-[11px] leading-4 font-semibold">Covers</Label>
           <Input
             id={coversId}
             type="number"
@@ -91,7 +92,7 @@ export function ChefRequestBox({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor={dateId}>Needed by</Label>
+          <Label htmlFor={dateId} className="label-caps text-[11px] leading-4 font-semibold">Needed by</Label>
           <Input id={dateId} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
       </div>

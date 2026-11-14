@@ -435,3 +435,31 @@ def test_api_docs_load_the_spec_relative_to_their_own_path(env):
     assert page.status_code == 200 and "url: 'openapi.json'" in page.text
     spec = client.get("/openapi.json").json()
     assert spec["servers"][0]["url"] == "/api" and "docs/choices.md" in spec["info"]["description"]
+
+
+def test_the_kitchen_allergen_rule_leaves_a_product_out_on_every_path(env):
+    """S03: a product listing an excluded allergen is never offered, with ALLERGEN_RULE.
+    Unknown allergen data is not a hit: it stays, flagged ALLERGEN_DATA_MISSING (S04)."""
+    client, _, db = env
+    db.kitchen_settings.insert_one({"_id": "demo-kitchen", "excluded_allergens": ["milk"]})
+    db.products.update_one({"_id": "463335"}, {"$set": {
+        "allergen_data_known": True, "allergens": {"contains": ["AM"], "may_contain": [], "undeclared": []}}})
+    p = milk(client, quantity="100")
+    assert [ln["product_id"] for ln in p["lines"]] == ["462775"]
+    assert any(e["product_id"] == "463335" and e["reason"].startswith("ALLERGEN_RULE")
+               for e in p["excluded"])
+    assert "ALLERGEN_RULE" in p["mandate"]["reason_codes"]
+    need = client.post(K + "/needs", headers=AGENT, json={
+        "quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
+    offer = client.post("/tools/get_offer", headers=AGENT,
+                        json={"need_id": need["need_id"], "product_ids": ["463335"]}).json()
+    assert offer["lines"] == [] and "ALLERGEN_RULE" in offer["mandate"]["reason_codes"]
+
+
+def test_a_misspelt_allergen_rule_fails_closed(env):
+    client, _, db = env
+    db.kitchen_settings.insert_one({"_id": "demo-kitchen", "excluded_allergens": ["mlik"]})
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "10", "unit": "L", "requested_date": "2026-11-16",
+        "idempotency_key": "typo"})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "KITCHEN_POLICY_INVALID"

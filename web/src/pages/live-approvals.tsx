@@ -120,30 +120,30 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
       setError(e instanceof Error ? e.message : "The decision could not be confirmed.");
     } finally { setBusy(false); }
   }
-  return <article id={`proposal-${row.proposal_id}`} className="space-y-3 rounded-xl border p-5" aria-label={`Proposal ${row.proposal_id}`}>
-    <h2 className="font-semibold">Proposal {row.proposal_id}</h2>
-    {typeof row.decision_summary?.text === "string" && <p className="whitespace-pre-line">{row.decision_summary.text}</p>}
-    <ul>{row.lines.map(l => <li key={l.product_id}>{l.quantity} {l.unit} · {l.product_id} · {l.why}</li>)}</ul>
+  return <article id={`proposal-${row.proposal_id}`} className="docket space-y-4 rounded-sm border bg-card p-4 text-card-foreground sm:p-5" aria-label={`Proposal ${row.proposal_id}`}>
+    <h2 className="text-[19px] leading-[25px] font-[650]">Proposal {row.proposal_id}</h2>
+    {typeof row.decision_summary?.text === "string" && <p className="max-w-[68ch] text-[15px] leading-[22px] whitespace-pre-line">{row.decision_summary.text}</p>}
+    <ul className="divide-y">{row.lines.map(l => <li key={l.product_id} className="py-2 font-mono text-[13px]">{l.quantity} {l.unit} · {l.product_id} · {l.why}</li>)}</ul>
     {row.label_checks?.map(c => <LabelEvidence key={`${c.product_id}-${c.label}`} check={c} />)}
     {row.recall_alerts?.map((alert, index) => <RecallNotice key={alert.event_id ?? index} alert={alert} reload={reload} />)}
     {row.replacement_proposal_id && <p><a className="underline" href={`#proposal-${row.replacement_proposal_id}`}>Review replacement proposal {row.replacement_proposal_id}</a>. A fresh human approval is required.</p>}
     {row.recall_replan_error && <p>No complete safe replacement is available ({row.recall_replan_error}). The original remains blocked.</p>}
     {row.product_evidence?.map(e => <div key={e.product_id} className="rounded border p-3 text-sm">
       <p>Manufacturer evidence for {e.product_id} · checked {e.checked_at} · {e.via}</p>
-      <p>Page pack: {e.pack ?? "unknown"} · Bean/ingredient origins: {e.origin ?? "unknown"} · Allergen statement: {e.allergens ?? "unknown — use trusted catalog data"}</p>
+      <p>Page pack: {e.pack ?? <span className="unknown-value">unknown</span>} · Bean/ingredient origins: {e.origin ?? <span className="unknown-value">unknown</span>} · Allergen statement: {e.allergens ?? <><span className="unknown-value">unknown</span> — use trusted catalog data</>}</p>
       <p>Informational page claims; the catalog and engine still control allergens and quantities.</p>
       {/^https:\/\//.test(e.source_url) && <a className="underline" href={e.source_url} target="_blank" rel="noreferrer">Manufacturer source</a>}
     </div>)}
-    <p>{formatEur(mapMoney(row.total_ex_vat))} ex VAT · {formatEur(mapMoney(row.expected_total))} including VAT and delivery</p>
-    {unknown && <p>Waiting for supplier stock confirmation. Approval is unavailable.</p>}
+    <p className="text-xl font-bold">{formatEur(mapMoney(row.total_ex_vat))} ex VAT · {formatEur(mapMoney(row.expected_total))} including VAT and delivery</p>
+    {unknown && <p><span className="unknown-value">Waiting for supplier stock confirmation. Approval is unavailable.</span></p>}
     {expired && pending && <p>This offer has expired. You can review it here: the gateway rechecks price and stock before recording an order. Any change requires a fresh confirmation.</p>}
-    {placed ? <p role="status">Order recorded: {placed.id} · {formatEur(mapMoney(placed.total))}. Recorded in our gateway; not submitted to Valio.</p> :
-      row.status === "APPROVED" ? <p>Order recorded: {row.order_id ?? "reload to reconcile"}. Recorded in our gateway; not submitted to Valio.</p> :
+    {placed ? <p role="status" className="stamp-mark border-success text-sm font-medium text-success">Order recorded: {placed.id} · {formatEur(mapMoney(placed.total))}. Recorded in our gateway; not submitted to Valio.</p> :
+      row.status === "APPROVED" ? <p className="stamp-mark border-success text-sm font-medium text-success">Order recorded: {row.order_id ?? "reload to reconcile"}. Recorded in our gateway; not submitted to Valio.</p> :
       !pending ? <p>{rejected ? "REJECTED" : row.status}</p> : null}
     {error && <div role="alert">{error} Check the current proposal before repeating a decision. <Button onClick={reload}>Reload proposals</Button></div>}
     {rejectable && <div className="flex flex-wrap gap-3">
-      {pending && <Button disabled={busy || unknown || !row.lines.length} onClick={() => setConfirm("approve")}>Approve {formatEur(mapMoney(row.expected_total))}</Button>}
-      <Button variant="outline" disabled={busy} onClick={() => setConfirm("reject")}>Reject proposal</Button>
+      {pending && <Button className="w-full sm:w-auto" disabled={busy || unknown || !row.lines.length} onClick={() => setConfirm("approve")}>Approve {formatEur(mapMoney(row.expected_total))}</Button>}
+      <Button className="w-full sm:w-auto" variant="outline" disabled={busy} onClick={() => setConfirm("reject")}>Reject proposal</Button>
     </div>}
     {confirm === "approve" && pending && <div role="dialog" aria-label="Confirm approval" className="space-y-3 rounded border p-4">
       <p>Confirm this exact basket for {formatEur(mapMoney(row.expected_total))}? The gateway checks price and stock again.</p>
@@ -165,8 +165,8 @@ export function LiveApprovalsPage() {
     return result.proposals.map(parse);
   }, []);
   return <AppShell activeId="approvals"><main className="mx-auto max-w-5xl space-y-5">
-    <h1 className="text-2xl font-semibold">To approve</h1>
-    <p>Live demo proposals. A person confirms the exact basket and total before an order is recorded.</p>
+    <h1 className="text-[28px] leading-8 font-bold tracking-[-0.015em]">To approve</h1>
+    <p className="max-w-[68ch] text-[15px] leading-[22px]">Live demo proposals. A person confirms the exact basket and total before an order is recorded.</p>
     <Button variant="outline" onClick={proposals.reload}>Refresh proposals</Button>
     {proposals.status === "loading" && <p>Loading proposals…</p>}
     {proposals.status === "error" && <p role="alert">{proposals.error.message}</p>}

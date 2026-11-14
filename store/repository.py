@@ -57,6 +57,15 @@ def _require(doc: dict, *fields: str) -> None:
         raise ValueError(f"missing fields: {', '.join(missing)}")
 
 
+def _objects(value, field: str) -> list[dict]:
+    """A list of objects, or empty when missing; anything else is a clear ValueError."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise ValueError(f"{field} must be a list of objects")
+    return value
+
+
 def _decimal(value, field: str) -> Decimal | None:
     """Decimal strings on the wire, `Decimal` in the store, never a binary float."""
     if value is None:
@@ -100,7 +109,11 @@ def supplier_fields(data: dict) -> dict:
     _require(data, "name", "adapter")
     if data["adapter"] not in ADAPTERS:
         raise ValueError(f"adapter must be one of {ADAPTERS}")
-    terms = data.get("terms") or {}
+    terms = data.get("terms")
+    if terms is None:
+        terms = {}
+    if not isinstance(terms, dict):
+        raise ValueError("terms must be an object")
     unknown = set(terms) - set(SUPPLIER_TERMS)
     if unknown:
         raise ValueError(f"unknown terms: {sorted(unknown)}")
@@ -112,7 +125,7 @@ def supplier_fields(data: dict) -> dict:
         raise ValueError("cutoff_time must be HH:MM")
     lead = terms.get("lead_time_days")
     tiers = []
-    for tier in terms.get("discount_tiers") or []:
+    for tier in _objects(terms.get("discount_tiers"), "discount_tiers"):
         _require(tier, "min_qty", "unit", "unit_price_eur")
         tiers.append({"product_id": tier.get("product_id"),  # None: every product
                       "min_qty": _decimal(tier["min_qty"], "min_qty"), "unit": tier["unit"],
@@ -130,7 +143,7 @@ def recipe_fields(data: dict) -> dict:
     """Validate a recipe body: products x quantity per portion, with an optional yield."""
     _require(data, "name")
     ingredients = []
-    for item in data.get("ingredients") or []:
+    for item in _objects(data.get("ingredients"), "ingredients"):
         _require(item, "product_id", "qty_per_portion", "unit")
         quantity = _decimal(item["qty_per_portion"], "qty_per_portion")
         if quantity <= 0:
@@ -152,7 +165,7 @@ def menu_days(week: str, days: list) -> list[dict]:
     if not _WEEK.fullmatch(str(week)):
         raise ValueError("week must look like 2026-W47")
     checked = []
-    for day in days or []:
+    for day in _objects(days, "days"):
         _require(day, "date", "meal", "recipe_id")
         iso = date.fromisoformat(str(day["date"])).isocalendar()
         if f"{iso.year}-W{iso.week:02d}" != week:

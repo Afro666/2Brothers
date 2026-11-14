@@ -7,7 +7,6 @@ import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAsync } from "@/lib/use-async";
 import type { AuditEvent, AuditKind } from "@/types";
@@ -43,7 +42,7 @@ export function AuditPage() {
     <AppShell activeId="audit">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Activity log</h1>
+          <h1 className="text-[28px] leading-8 font-bold tracking-[-0.015em]">Activity log</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Every step the Buyer, the gateway and people took, with who did it and why.
           </p>
@@ -53,7 +52,7 @@ export function AuditPage() {
         {state.status === "ready" ? (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-3">
-              <label className="grid gap-1 text-sm font-medium" htmlFor="audit-order">
+              <label className="label-caps grid gap-1" htmlFor="audit-order">
                 Order
                 <Select value={order} onValueChange={setOrder}>
                   <SelectTrigger id="audit-order" className="w-full">
@@ -69,7 +68,7 @@ export function AuditPage() {
                   </SelectContent>
                 </Select>
               </label>
-              <label className="grid gap-1 text-sm font-medium" htmlFor="audit-kind">
+              <label className="label-caps grid gap-1" htmlFor="audit-kind">
                 Kind
                 <Select value={kind} onValueChange={setKind}>
                   <SelectTrigger id="audit-kind" className="w-full">
@@ -85,7 +84,7 @@ export function AuditPage() {
                   </SelectContent>
                 </Select>
               </label>
-              <label className="grid gap-1 text-sm font-medium" htmlFor="audit-actor">
+              <label className="label-caps grid gap-1" htmlFor="audit-actor">
                 Actor
                 <Select value={actor} onValueChange={setActor}>
                   <SelectTrigger id="audit-actor" className="w-full">
@@ -102,7 +101,7 @@ export function AuditPage() {
                 </Select>
               </label>
             </div>
-            <p className="text-sm tabular-nums text-muted-foreground" aria-live="polite">
+            <p className="font-mono text-xs text-muted-foreground" aria-live="polite">
               {filtered.length} {filtered.length === 1 ? "step" : "steps"}
             </p>
             {events.length === 0 ? (
@@ -114,11 +113,7 @@ export function AuditPage() {
                 </Button>
               </EmptyState>
             ) : (
-              <Card>
-                <CardContent>
-                  <AuditTimeline events={filtered} />
-                </CardContent>
-              </Card>
+              <AuditTimeline events={filtered} />
             )}
           </div>
         ) : null}
