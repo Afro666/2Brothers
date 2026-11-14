@@ -65,5 +65,6 @@ export function useProposalExplanation(
     };
   }, [api, enabled, identity, language, proposalId]);
 
-  return asked === identity ? explanation : null;
+  // A decided proposal shows no explanation, also one loaded while it was waiting.
+  return enabled && asked === identity ? explanation : null;
 }

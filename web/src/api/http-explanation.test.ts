@@ -60,12 +60,9 @@ describe("proposal explanation on the real gateway (#1173)", () => {
     expect(mapProposalExplanation({ proposal_id: "prop-1" }, "en")).toBeNull();
   });
 
-  it("keeps a missing duration or model without failing", () => {
-    expect(mapProposalExplanation({ ...explanation, duration_ms: null, model: undefined }, "en")).toEqual({
-      text: explanation.text,
-      model: "",
-      durationMs: null,
-    });
+  it("keeps a missing duration, and shows nothing without a model name", () => {
+    expect(mapProposalExplanation({ ...explanation, duration_ms: null }, "en")?.durationMs).toBeNull();
+    expect(mapProposalExplanation({ ...explanation, model: undefined }, "en")).toBeNull();
   });
 
   it.each([404, 422, 500])("answers null, never an error, when the gateway says %i", async (status) => {

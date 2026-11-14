@@ -46,7 +46,7 @@ export function ProposalExplanationBlock({
       </p>
       <p className="text-xs leading-4 text-muted-foreground">
         {t("Written by {model} from the checked decision record", {
-          model: explanationModelName(explanation.model) || "Nemotron 3.5 Super VL",
+          model: explanationModelName(explanation.model),
         })}
       </p>
       {openDetails ? (

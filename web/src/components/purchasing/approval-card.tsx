@@ -145,7 +145,9 @@ export function ApprovalCard({
   const explanation = useCardExplanation(
     request.id,
     request.status === "PENDING",
-    `${request.orderId}\u0000${request.totalExVat}\u0000${request.totalInclVat}`,
+    // The gateway's offer for this card: its approval, its lines and its totals. A changed
+    // basket with the same total is still another offer, and must drop the old text.
+    `${request.approvalRef}\u0000${order?.lines.map((line) => `${line.product.id}:${line.quantity}`).join(",")}\u0000${request.totalExVat}\u0000${request.totalInclVat}`,
   );
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [debouncedSearch, setDebouncedSearch] = useState(search);

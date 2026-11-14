@@ -14,9 +14,11 @@ export function mapProposalExplanation(value: unknown, language: "en" | "fi"): P
     const row = object(value, "the explanation");
     if (row.checked !== true || row.language !== language) return null;
     if (typeof row.text !== "string" || row.text.trim() === "") return null;
+    // "Written by" names the model the gateway names; without one the text is not shown.
+    if (typeof row.model !== "string" || !row.model) return null;
     return {
       text: row.text,
-      model: typeof row.model === "string" && row.model ? row.model : "",
+      model: row.model,
       durationMs: typeof row.duration_ms === "number" && Number.isFinite(row.duration_ms) ? row.duration_ms : null,
     };
   } catch {
