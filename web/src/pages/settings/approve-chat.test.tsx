@@ -34,7 +34,8 @@ describe("Approve from chat settings", () => {
     expect(create).toHaveBeenCalledWith({ hours: 8 });
     expect(await screen.findByText("tka_demo_0001", { selector: "code" })).toBeVisible();
     const config = screen.getByLabelText("claude_desktop_config.json");
-    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "tka_demo_0001"));
+    // The config never carries the token (#1595): it is shown once, in its own box.
+    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "<token>"));
     const list = await screen.findByRole("list", { name: "Approval tokens" });
     expect(within(list).getByText("open-demo")).toBeVisible();
     expect(within(list).queryByText(/tka_demo_0001/)).not.toBeInTheDocument();
@@ -79,7 +80,12 @@ describe("Approve from chat settings", () => {
     expect(await screen.findByText("tka_demo_0001", { selector: "code" })).toBeVisible();
     expect(screen.getByText("This is the only time the token is shown.")).toBeVisible();
     const config = screen.getByLabelText("claude_desktop_config.json");
-    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "tka_demo_0001"));
+    // The config never carries the token: the token is shown once, in its own box.
+    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "<token>"));
+    expect(config.textContent).not.toContain("tka_demo_0001");
+    expect(config).toHaveClass("max-w-full", "overflow-x-auto");
+    expect(config.querySelector("code")).toHaveClass("whitespace-pre-wrap", "break-all");
+    expect(screen.getByText(/mcp-remote sends AUTH_HEADER as the Authorization header/)).toBeVisible();
     expect(screen.getByRole("link", { name: `${window.location.origin}/.well-known/agent-card.json` })).toBeVisible();
     expect(screen.getByText(/must show you the total and get your clear yes/)).toBeVisible();
 
@@ -123,7 +129,7 @@ describe("Approve from chat settings", () => {
     await user.click(await screen.findByRole("button", { name: "Copy approval token" }));
     expect(writeText).toHaveBeenLastCalledWith("tka_demo_0001");
     await user.click(screen.getByRole("button", { name: "Copy config" }));
-    expect(writeText).toHaveBeenLastCalledWith(desktopConfig(`${window.location.origin}/gateway/mcp`, "tka_demo_0001"));
+    expect(writeText).toHaveBeenLastCalledWith(desktopConfig(`${window.location.origin}/gateway/mcp`, "<token>"));
   });
 
   it("revokes a token after a confirmation and hides the shown value", async () => {

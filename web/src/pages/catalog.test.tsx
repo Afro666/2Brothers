@@ -185,6 +185,29 @@ describe("catalog page", () => {
     expect(screen.queryByRole("heading", { name: "No products match this search" })).not.toBeInTheDocument();
   });
 
+  it("keeps text typed while the first search loads instead of running the example", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const actual = api.searchProducts;
+    const calls: string[] = [];
+    let finishFirst: (rows: Awaited<ReturnType<typeof actual>>) => void = () => {};
+    api.searchProducts = (query, filters) => {
+      calls.push(query);
+      if (!query.trim()) return new Promise((resolve) => (finishFirst = resolve));
+      return actual(query, filters);
+    };
+    renderApp("/catalog", api);
+    const box = await screen.findByRole("searchbox", { name: "Search the catalog" });
+    await waitFor(() => expect(calls).toContain(""));
+
+    await user.type(box, "but");
+    finishFirst([]);
+
+    expect(await screen.findByRole("heading", { name: "Search the Valio Aimo catalog" })).toBeInTheDocument();
+    expect(box).toHaveValue("but");
+    expect(calls).not.toContain("lactose-free milk");
+  });
+
   it("shows the start state with the examples once the person clears the box", async () => {
     const user = userEvent.setup();
     const api = createMockApi();

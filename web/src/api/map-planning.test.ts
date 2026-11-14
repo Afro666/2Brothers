@@ -560,6 +560,33 @@ describe("kitchen settings", () => {
     expect(mapKitchenSettings({ ...stored, approve_unconfirmed_manual: false }).approveUnconfirmedManual).toBe(false);
   });
 
+  it("uses gateway defaults for unset fields without replacing saved values or null budgets", () => {
+    const effective = mapKitchenSettings({
+      service_level: { A: "0.98" },
+      max_cover_days: { fresh_dairy: 5 },
+      budget_warning_order_eur: null,
+      excluded_allergens: null,
+      defaults: {
+        service_level: { A: "0.975", B: "0.95", C: "0.9" },
+        max_cover_days: { fresh_dairy: 4, dry: 30 },
+        stockout_cap: 1.8,
+        budget_warning_order_eur: "1500",
+        budget_warning_week_eur: "5000",
+      },
+    });
+
+    expect(effective).toMatchObject({
+      serviceLevelPercent: { A: 98, B: 95, C: 90 },
+      stockOutDemandCap: 1.8,
+      budgetWarningPerOrderExVat: null,
+      budgetWarningPerWeekExVat: 5000,
+    });
+    expect(effective.maxDaysOfCover).toEqual([
+      { category: "fresh_dairy", maxDays: 5 },
+      { category: "dry", maxDays: 30 },
+    ]);
+  });
+
   it("keeps what the kitchen never set as not set, never an invented default", () => {
     const empty = mapKitchenSettings({ excluded_allergens: null });
     expect(empty.serviceLevelPercent).toEqual({ A: Number.NaN, B: Number.NaN, C: Number.NaN });

@@ -799,7 +799,8 @@ So a person adds approve-from-chat in Claude without editing a config file:
 - Only a personal approval token (`tka_...`). Any other token kind (agent, kitchen,
   human), an unknown, expired or revoked token: 401 `UNAUTHENTICATED`, one identical
   answer for every case, so it never says why. An `Authorization` header on this path is ignored: the path token is the caller.
-- The same tools as a personal token on `/mcp`: `list_proposals`, `get_proposal`,
+- The same tools as a personal token on `/mcp`: the read tools (`search_products`,
+  `get_order_status`, `get_audit_log`) plus `list_proposals`, `get_proposal`,
   `list_orders`, `approve_proposal`, `reject_proposal`. Approve still needs
   `expected_total`; the chat must show the total and get a yes first.
 - In Claude (claude.ai or Claude Desktop): Settings, Connectors, Add custom connector,

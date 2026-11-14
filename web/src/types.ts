@@ -581,9 +581,9 @@ export interface CoverRule {
 }
 
 /**
- * How the engine sizes orders for this kitchen. Defaults come from the engine. From the gateway,
- * a service level or stock-out cap the kitchen never set is NaN (the form shows an empty field):
- * the engine's default applies and the gateway does not send it.
+ * How the engine sizes orders for this kitchen. A field the kitchen never set carries the engine's
+ * default from the gateway's `defaults` and is named in `engineDefaults`; with no default sent
+ * it is NaN (the form shows an empty field), never a guess.
  */
 export interface KitchenSettings {
   /** Whether a person may approve a manual supplier's unconfirmed-stock lines. */
@@ -599,6 +599,8 @@ export interface KitchenSettings {
   budgetWarningPerWeekExVat: number | null;
   /** A product that contains or may contain one of these is refused. GS1 codes. */
   excludedAllergens: string[];
+  /** Fields shown with the engine's default (the gateway's `defaults`), e.g. `serviceLevelPercent.B`. */
+  engineDefaults?: string[];
 }
 
 /** One thing the Buyer does, asks for or is refused, with the audit kind that shows it happening. */

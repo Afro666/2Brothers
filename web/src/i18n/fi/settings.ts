@@ -12,6 +12,7 @@ export default {
   "Developer": "Kehittäjä",
   "Data & privacy": "Tiedot ja tietosuoja",
   "Ordering engine": "Tilausmoottori",
+  "Engine default": "Tilausmoottorin oletus",
   "Download kitchen records, control forecast sharing and request deletion without deleting anything silently.": "Lataa keittiön tiedot, hallitse ennusteen jakamista ja pyydä poistoa ilman, että mitään poistetaan ilman lupaa.",
   "API documentation, signed event webhooks and status-only diagnostics. Request and response bodies are never shown.": "API-ohjeet, allekirjoitetut webhook-tapahtumat ja vain tilan näyttävät diagnostiikat. Pyyntöjen tai vastausten runkoja ei koskaan näytetä.",
   "How the Buyer sizes orders for this kitchen. A person still approves every order.": "Miten Ostaja mitoittaa tämän keittiön tilaukset. Ihminen hyväksyy edelleen jokaisen tilauksen.",

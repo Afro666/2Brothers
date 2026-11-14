@@ -24,7 +24,7 @@ from decimal import Decimal
 import re
 
 from gateway.parse import (_PACK, _QTY, MONTHS, RELATIVE, UNITS, WEEKDAYS, ParseError,
-                           _number, _written_date, language, product_words)
+                           _is_weekday, _number, _written_date, language, product_words)
 
 MIN_NEEDS, MAX_NEEDS = 2, 30
 MAX_NEED_TEXT = 120
@@ -109,8 +109,9 @@ def days(text: str, today: date) -> set[date]:
         if when is None:
             break
         out.add(when)
-    for word in _WORD.findall(rest):
-        if word in WEEKDAYS:
+    words = _WORD.findall(rest)
+    for i, word in enumerate(words):
+        if _is_weekday(words, i):
             ahead = (WEEKDAYS[word] - today.weekday()) % 7
             out.add(today + timedelta(days=ahead or 7))
         elif word in RELATIVE:

@@ -1,8 +1,9 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
+import { mapKitchenSettings } from "@/api/map-planning";
 import { renderApp } from "@/test/render";
 
 describe("Ordering engine settings", () => {
@@ -21,6 +22,49 @@ describe("Ordering engine settings", () => {
     expect(screen.getByRole("checkbox", { name: "AN Tree nuts" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "AS Sesame" })).toBeChecked();
     expect(screen.getByRole("button", { name: "Save settings" })).toBeDisabled();
+  });
+
+  it("labels the engine's defaults the gateway sent, and only while they are unchanged", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    // The live answer's shape: only what the kitchen set, plus the engine's `defaults`.
+    const live = mapKitchenSettings({
+      standing_orders: { "463335": "110" },
+      excluded_allergens: ["AP", "AN", "AS"],
+      service_level: { A: "0.98" },
+      defaults: {
+        service_level: { A: "0.975", B: "0.95", C: "0.90" },
+        max_cover_days: { fresh_dairy: 4, dry: 30 },
+        stockout_cap: 1.8,
+        budget_warning_order_eur: "1500",
+        budget_warning_week_eur: "5000",
+      },
+    });
+    api.getKitchenSettings = async () => structuredClone(live);
+    renderApp("/settings/engine", api);
+
+    expect(await screen.findByLabelText("A — Menu-critical")).toHaveValue(98);
+    expect(screen.getByLabelText("B — Regular")).toHaveValue(95);
+    expect(screen.getByLabelText("Maximum scaling factor")).toHaveValue(1.8);
+    expect(screen.getByLabelText("Per order (ex VAT, €)")).toHaveValue(1500);
+    // B, C, two cover rows, the cap and both budgets; not A, which the kitchen set.
+    expect(screen.getAllByText("Engine default")).toHaveLength(7);
+
+    const b = screen.getByLabelText("B — Regular");
+    expect(b).toHaveAccessibleDescription("Engine default");
+    expect(screen.getByLabelText("A — Menu-critical")).not.toHaveAccessibleDescription("Engine default");
+    await user.clear(b);
+    await user.type(b, "96");
+    expect(screen.getAllByText("Engine default")).toHaveLength(6);
+    expect(b).not.toHaveAccessibleDescription("Engine default");
+
+    // The save names the defaults still untouched, so the adapter leaves them to the engine.
+    const save = vi.spyOn(api, "saveKitchenSettings");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    const sent = save.mock.calls[0][0].engineDefaults;
+    expect(sent).toContain("serviceLevelPercent.C");
+    expect(sent).not.toContain("serviceLevelPercent.B");
   });
 
   it("saves a service level and writes an audit event", async () => {
