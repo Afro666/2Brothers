@@ -374,6 +374,13 @@ Product row (the catalog row from the shared repository, without the raw record)
 The contract is snake_case. The web client maps these rows to its own camelCase
 types in `web/src/api/`.
 
+The web Catalog page and screens that hold product codes use these rows: `searchProducts`
+posts `search_products` with `limit: 50` and only the filters the person set (`exclude_allergens`
+with `allergen_strictness`, `require_labels`, `temperature`), and does not call it for an empty
+query with no filter. `getProducts` reads `GET /v1/kitchens/{kitchen_id}/catalog/products?ids=`
+in groups of 200. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
+`allergen_data_known: false` is `allergens: null` (unknown), never an empty list.
+
 ### Stored rows: order, approval, audit entry
 
 What the shared repository keeps, and what list and detail routes return. Money
