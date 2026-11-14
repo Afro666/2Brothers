@@ -2656,14 +2656,14 @@ webhooks per kitchen. Create and delete are audit entries (`webhook_created`,
 (the events one can subscribe to). These routes take no `idempotency_key`.
 
 Events: `proposal.ready`, `proposal.approved`, `proposal.rejected`, `order.placed`,
-`total_mismatch`, `recall.alert`, and (planned, #1188) `supplier.offer`, `agent.refused`,
-`delivery.checked`. They come from the audit trail, so a webhook says what the audit log
-says. `ping` is sent only by `POST .../webhooks/{id}/test`; it is not a subscription. A
+`total_mismatch`, `recall.alert`, `supplier.offer`, `agent.refused` and `delivery.checked`
+(the last three since #1188: #1281, #1329). They come from the audit trail, so a webhook
+says what the audit log says. `ping` is sent only by `POST .../webhooks/{id}/test`; it is not a subscription. A
 webhook gets only the events it names; the web form ticks `proposal.ready` and
 `recall.alert` for a new webhook and offers the others unticked.
 
-Bodies (`data`) of the planned events and of the second `recall.alert` case. Each holds
-only fields of its audit entry:
+Bodies (`data`) of the three newer events and of the second `recall.alert` case (#1362),
+all served. Each holds only fields of its audit entry:
 
 | Event | From the audit kind | `data` | Sent |
 |---|---|---|---|
