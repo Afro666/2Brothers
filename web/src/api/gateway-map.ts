@@ -242,6 +242,14 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
       warning: true,
     })),
   ];
+  const productNames = new Map<string, string>();
+  if (Array.isArray(proposal.lines)) {
+    for (const line of proposal.lines) {
+      if (typeof line?.product_id === "string" && typeof line.product_name === "string") {
+        productNames.set(line.product_id, line.product_name);
+      }
+    }
+  }
   return {
     id,
     // The approval's order is the proposal's basket; a placed order gets its own id in `listOrders`.
@@ -263,6 +271,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
     options: mapProposalOptions(
       proposal.substitute_options,
       typeof proposal.offer_id === "string" ? proposal.offer_id : undefined,
+      productNames,
     ),
   };
 }

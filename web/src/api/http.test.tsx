@@ -37,6 +37,20 @@ const inbox = (row = proposal) => ({
   [`GET ${K}/audit`]: () => ({ events: auditEvents }),
 });
 
+const substituteOption = (offerId: string, overrides: Record<string, unknown> = {}) => ({
+  tier: "good",
+  source: "original",
+  offer_id: offerId,
+  expected_total: "91.20",
+  currency: "EUR",
+  lines: proposal.lines,
+  why: "Re-simulated basket.",
+  requires_chef_approval: true,
+  stock_confirmed: true,
+  allergen_data_known: true,
+  ...overrides,
+});
+
 beforeEach(() => localStorage.clear());
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -51,6 +65,7 @@ describe("createHttpApi", () => {
       [
         "approve",
         "changePassword",
+        "chooseOption",
         "getApproval",
         "getCurrentSession",
         "getForecastAccuracy",
@@ -109,7 +124,87 @@ describe("createHttpApi", () => {
     ).rejects.toMatchObject({
       code: "NOT_SERVED",
     });
-    expect(api.chooseOption).toBeUndefined();
+    expect(api.chooseOption).toBeTypeOf("function");
+  });
+
+  it("chooses an option and maps the answered proposal, including its refreshed offer ids", async () => {
+    const lines = proposal.lines.map((line) => ({ ...line, product_name: "Oat drink 1 L" }));
+    const answered = {
+      ...proposal,
+      lines,
+      offer_id: "offer-refreshed",
+      total_ex_vat: "131.07",
+      expected_total: "148.76",
+      substitute_options: [
+        substituteOption("offer-requested"),
+        substituteOption("offer-refreshed", {
+          tier: "better",
+          source: "confirmed",
+          lines,
+          recommended: true,
+          held: { quantity: "949", unit: "L" },
+        }),
+      ],
+    };
+    const calls = gateway({ [`POST ${K}/proposals/prop-1/choose-option`]: () => answered });
+
+    const result = await createHttpApi("/api").chooseOption!("prop-1", "offer-requested", "chef");
+
+    expect(calls).toEqual([
+      expect.objectContaining({
+        route: `POST ${K}/proposals/prop-1/choose-option`,
+        headers: expect.objectContaining({ "X-User": "chef" }),
+        body: { offer_id: "offer-requested", idempotency_key: expect.stringMatching(/^web-choose-option:/) },
+      }),
+    ]);
+    expect(result).toMatchObject({ totalExVat: 131.07, totalInclVat: 148.76 });
+    expect(result.options).toEqual([
+      expect.objectContaining({ id: "offer-requested", chosen: false }),
+      expect.objectContaining({
+        id: "offer-refreshed",
+        source: "confirmed",
+        recommended: true,
+        held: { quantity: 949, unit: "L" },
+        chosen: true,
+        lines: [expect.objectContaining({ productName: "Oat drink 1 L" })],
+      }),
+    ]);
+  });
+
+  it("repeats the key when a failed choice is retried, and uses a new one for every answered choice", async () => {
+    const answered = {
+      ...proposal,
+      offer_id: "offer-refreshed",
+      substitute_options: [substituteOption("offer-refreshed")],
+    };
+    let down = true;
+    const calls = gateway({
+      [`POST ${K}/proposals/prop-1/choose-option`]: () => (down ? error(503, "UNAVAILABLE") : answered),
+    });
+    const api = createHttpApi("/api");
+
+    await expect(api.chooseOption!("prop-1", "offer-a", "human")).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    down = false;
+    await api.chooseOption!("prop-1", "offer-a", "human");
+    await api.chooseOption!("prop-1", "offer-b", "human");
+    await api.chooseOption!("prop-1", "offer-a", "human");
+
+    const keys = calls.map((call) => call.body.idempotency_key);
+    expect(keys[1]).toBe(keys[0]);
+    expect(new Set(keys.slice(1)).size).toBe(3);
+  });
+
+  it.each([
+    [409, "STOCK_UNKNOWN"],
+    [409, "CLOSING_PASSED"],
+    [409, "OPTION_UNAVAILABLE"],
+    [409, "NOT_PENDING"],
+    [403, "HUMAN_SESSION_REQUIRED"],
+  ])("passes %i %s back to the option card", async (status, code) => {
+    gateway({ [`POST ${K}/proposals/prop-1/choose-option`]: () => error(status, code) });
+    await expect(createHttpApi("/api").chooseOption!("prop-1", "offer-a", "human")).rejects.toMatchObject({
+      code,
+    });
   });
 
   it("reads standing-order drift from the gateway for the kitchen and for the supplier", async () => {

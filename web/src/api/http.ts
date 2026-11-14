@@ -172,6 +172,20 @@ export function createHttpApi(baseUrl: string): Api {
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));
     },
     getApproval: approval,
+    async chooseOption(approvalId, optionId, actor) {
+      // One key per choice: kept only while that choice has not been answered, so a retry after
+      // a network failure repeats it, and choosing the same option again later is a new choice.
+      const identity = `${approvalId}:${optionId}`;
+      const key = requestKeys.get(identity) ?? `web-choose-option:${uuid()}`;
+      requestKeys.set(identity, key);
+      const answered = await post(
+        `${proposalPath(approvalId)}/choose-option`,
+        { offer_id: optionId, idempotency_key: key },
+        actor,
+      );
+      requestKeys.delete(identity);
+      return mapApproval(answered as Json);
+    },
     async approve(decision, actor) {
       const total = decision.expectedTotalInclVat.toFixed(2);
       const baseKey = `web-approve:${decision.approvalId}:${total}`;
@@ -312,7 +326,6 @@ export function createHttpApi(baseUrl: string): Api {
     ...real,
     // Never the mock for what acts on real input: it would change a sample order, not the real
     // proposal.
-    chooseOption: undefined,
     async changeProposal() {
       throw new ApiError("NOT_SERVED", "The gateway cannot change a proposal yet. Reject it and ask the Buyer again");
     },

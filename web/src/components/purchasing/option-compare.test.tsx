@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
+import { ApiError } from "@/api/types";
 import { ApprovalCard } from "@/components/purchasing/approval-card";
 import { CHOOSE_TIMEOUT_MS, OptionCompare } from "@/components/purchasing/option-compare";
 import { confirmedDemoApproval, confirmedDemoOrder, milkOptions } from "@/mocks/milk-case";
@@ -20,12 +21,13 @@ function fact(letter: string, label: string) {
 }
 
 /** Option A with confirmed stock: a basket a person may choose that the proposal does not hold yet. */
-const choosable: ProposalOption = { ...optionA, stockConfirmed: true };
+const choosable: ProposalOption = { ...optionA, stockConfirmed: true, chosen: false };
 
 describe("OptionCompare", () => {
   it("shows unknown values as unknown, never as zero and never as recommended", () => {
     const unknown: ProposalOption = {
       ...optionA,
+      stockConfirmed: false,
       lines: [{ ...optionA.lines[0], unitPrice: null }],
       cutoffPassed: null,
       cutoffAt: null,
@@ -60,16 +62,19 @@ describe("OptionCompare", () => {
 
   it("shows the milk story: price, total, labels, the engine's sentence and the API's recommendation", () => {
     render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
-    expect(fact("A", "Price ex VAT")).toHaveTextContent("€2.05 per L");
-    expect(fact("A", "Total")).toHaveTextContent("€2,326.75 incl VAT");
-    expect(fact("A", "Delivery reliability")).toHaveTextContent("unknown");
+    expect(fact("A", "Price ex VAT")).toHaveTextContent("€2.57 per L");
+    expect(fact("A", "Total")).toHaveTextContent("€148.76 incl VAT");
+    expect(fact("A", "Delivery reliability")).toHaveTextContent("97 %");
     expect(fact("B", "Labels")).toHaveTextContent("Organic (EU)");
     expect(fact("C", "Order cut-off")).toHaveTextContent(/^met \(order by Sun,? 15 Nov,? 17:00\)$/);
     expect(fact("C", "CO2 (product-group average)")).toHaveTextContent("1.3 kg CO2e/kg");
     expect(within(row("C")).getByText(optionC.tradeOff)).toBeVisible();
-    expect(within(row("C")).getByText("Part now, the rest later")).toBeVisible();
-    expect(within(row("C")).getByText("Recommended by the Buyer")).toBeVisible();
-    expect(within(row("A")).queryByText("Recommended by the Buyer")).toBeNull();
+    expect(within(row("A")).getByText("Part now, the rest later")).toBeVisible();
+    expect(within(row("A")).getByText("Recommended by the Buyer")).toBeVisible();
+    const held = within(row("A")).getByText("949 L waits for stock confirmation");
+    expect(held).toBeVisible();
+    expect(held).toHaveClass("hatch", "text-warning");
+    expect(within(row("C")).queryByText("Recommended by the Buyer")).toBeNull();
     expect(within(row("B")).getByText(optionB.tradeOff)).toBeVisible();
   });
 
@@ -78,7 +83,7 @@ describe("OptionCompare", () => {
     const onChoose = vi.fn();
     const onApprove = vi.fn();
     render(<OptionCompare options={milkOptions} onChoose={onChoose} onApprove={onApprove} />);
-    await user.click(screen.getByRole("button", { name: "Choose option C: approve €148.76 incl VAT" }));
+    await user.click(screen.getByRole("button", { name: "Choose option A: approve €148.76 incl VAT" }));
     expect(onApprove).toHaveBeenCalledTimes(1);
     expect(onChoose).not.toHaveBeenCalled();
   });
@@ -90,14 +95,14 @@ describe("OptionCompare", () => {
     const { rerender } = render(
       <OptionCompare options={[choosable, optionC]} onChoose={onChoose} onApprove={onApprove} />,
     );
-    await user.click(screen.getByRole("button", { name: "Choose option A: approve €2,326.75 incl VAT" }));
+    await user.click(screen.getByRole("button", { name: "Choose option A: approve €148.76 incl VAT" }));
     expect(onChoose).toHaveBeenCalledWith(choosable.id);
     expect(onApprove).not.toHaveBeenCalled();
 
     rerender(
       <OptionCompare
         options={[
-          { ...choosable, chosen: true },
+          { ...choosable, id: "offer-refreshed-by-gateway", chosen: true },
           { ...optionC, chosen: false },
         ]}
         onChoose={onChoose}
@@ -114,7 +119,13 @@ describe("OptionCompare", () => {
       <OptionCompare options={[choosable]} onChoose={() => Promise.resolve()} onApprove={onApprove} />,
     );
     await user.click(screen.getByRole("button", { name: /^Choose option A/ }));
-    rerender(<OptionCompare options={[{ ...optionA, chosen: true }]} onChoose={vi.fn()} onApprove={onApprove} />);
+    rerender(
+      <OptionCompare
+        options={[{ ...optionA, stockConfirmed: false, chosen: true }]}
+        onChoose={vi.fn()}
+        onApprove={onApprove}
+      />,
+    );
     expect(await screen.findByText(/Cannot be approved now: Stock is not confirmed/)).toBeVisible();
     expect(onApprove).not.toHaveBeenCalled();
   });
@@ -167,9 +178,36 @@ describe("OptionCompare", () => {
   });
 
   it("offers no way to switch baskets when the API cannot", () => {
-    render(<OptionCompare options={[choosable, optionC]} onApprove={vi.fn()} />);
+    render(
+      <OptionCompare
+        options={[choosable, { ...optionC, stockConfirmed: true, chosen: true }]}
+        onApprove={vi.fn()}
+      />,
+    );
     expect(within(row("A")).queryByRole("button")).toBeNull();
     expect(within(row("B")).getByRole("button", { name: /^Choose option B/ })).toBeEnabled();
+  });
+
+  it.each([
+    ["STOCK_UNKNOWN", "Stock is not confirmed for this option"],
+    ["CLOSING_PASSED", "The order cut-off for this option has passed"],
+    ["OPTION_UNAVAILABLE", "This option is no longer available"],
+    ["NOT_PENDING", "This proposal is no longer waiting for approval"],
+    ["HUMAN_SESSION_REQUIRED", "Only a person signed in to the kitchen can choose an option"],
+  ])("explains %s without exposing a gateway code", async (code, message) => {
+    const user = userEvent.setup();
+    render(
+      <OptionCompare
+        options={[choosable]}
+        onChoose={() => Promise.reject(new ApiError(code, code))}
+        onApprove={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /^Choose option A/ }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(message);
+    expect(alert).toHaveTextContent("Nothing was");
+    expect(alert).not.toHaveTextContent(code);
   });
 });
 
@@ -197,7 +235,7 @@ describe("ApprovalCard with options", () => {
       totalExVat: 2050,
       totalInclVat: 2326.75,
       options: [
-        { ...choosable, chosen: true },
+        { ...choosable, id: "offer-refreshed-by-gateway", totalInclVat: 2326.75, chosen: true },
         { ...optionC, chosen: false },
       ],
     };
@@ -224,7 +262,13 @@ describe("ApprovalCard with options", () => {
     const onApprove = vi.fn();
     const order = structuredClone(confirmedDemoOrder);
     order.lines[0].offer.availableAmount = 999999;
-    render(<ApprovalCard request={request} order={order} onApprove={onApprove} />);
+    render(
+      <ApprovalCard
+        request={{ ...request, options: [choosable, { ...optionC, stockConfirmed: true, chosen: true }] }}
+        order={order}
+        onApprove={onApprove}
+      />,
+    );
     await user.click(screen.getByRole("button", { name: /^Choose option B/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     const yes = within(dialog).getByRole("button", { name: /^Yes, approve/ });
@@ -241,13 +285,15 @@ describe("Approvals page: the milk options", () => {
     const approve = vi.spyOn(api, "approve");
     renderApp("/approvals", api);
 
-    expect(await screen.findByRole("heading", { name: /^Option A: 1,000 L Valio Eila 3 %/ })).toBeVisible();
-    expect(fact("A", "Stock")).toHaveTextContent(/^unknown$/);
-    expect(within(row("A")).queryByRole("button")).toBeNull();
+    expect(await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ })).toBeVisible();
+    expect(fact("A", "Stock")).toHaveTextContent(/^confirmed$/);
+    expect(within(row("A")).getByRole("button", { name: /^Choose option A/ })).toBeEnabled();
+    expect(fact("C", "Stock")).toHaveTextContent(/^unknown$/);
+    expect(within(row("C")).queryByRole("button")).toBeNull();
     expect(fact("B", "Order cut-off")).toHaveTextContent(/^missed/);
     expect(within(row("B")).queryByRole("button")).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Choose option C: approve €148.76 incl VAT" }));
+    await user.click(screen.getByRole("button", { name: "Choose option A: approve €148.76 incl VAT" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     expect(approve).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
@@ -260,5 +306,36 @@ describe("Approvals page: the milk options", () => {
     );
     expect(await screen.findByRole("heading", { name: "Decided" })).toBeVisible();
     expect((await api.getOrder(confirmedDemoOrder.id)).status).toBe("PLACED");
+  });
+
+  it("reloads the unchanged basket after the gateway refuses a choice", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const list = api.listApprovals.bind(api);
+    const listSpy = vi.spyOn(api, "listApprovals").mockImplementation(async () => {
+      const approvals = await list();
+      return approvals.map((approval) =>
+        approval.id === confirmedDemoApproval.id
+          ? {
+              ...approval,
+              options: approval.options?.map((option) =>
+                option.id === optionC.id ? { ...option, stockConfirmed: true } : option,
+              ),
+            }
+          : approval,
+      );
+    });
+    api.chooseOption = vi.fn(() => Promise.reject(new ApiError("STOCK_UNKNOWN", "STOCK_UNKNOWN")));
+    renderApp("/approvals", api);
+
+    const choose = await screen.findByRole("button", { name: /^Choose option C/ });
+    const initialLoads = listSpy.mock.calls.length;
+    await user.click(choose);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Stock is not confirmed for this option");
+    await waitFor(() => expect(listSpy.mock.calls.length).toBeGreaterThan(initialLoads));
+    expect(screen.getByRole("heading", { name: /^Option A: 51 L Arla 1 L/ })).toBeVisible();
+    expect(within(row("A")).getByText("Proposed now")).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

@@ -168,9 +168,13 @@ function ApiApprovalsPage() {
                       onChooseOption={
                         api.chooseOption &&
                         (async (optionId) => {
-                          await api.chooseOption?.(approval.id, optionId, actor);
-                          toast.success("Option chosen. Check the new total before you approve.");
-                          approvals.reload();
+                          try {
+                            await api.chooseOption?.(approval.id, optionId, actor);
+                            toast.success("Option chosen. Check the new total before you approve.");
+                          } finally {
+                            // A refused choice keeps its basket; reload that same proposal after either answer.
+                            approvals.reload();
+                          }
                         })
                       }
                       listAddableProducts={

@@ -214,20 +214,20 @@ describe("mock API options", () => {
 
   it("re-simulates the chosen option to its exact total and approves nothing", async () => {
     const api = createMockApi();
-    const chosen = await api.chooseOption!(approval.id, optionA.id, "human");
-    expect(chosen).toMatchObject({ status: "PENDING", totalExVat: 2050, totalInclVat: optionA.totalInclVat });
-    expect(chosen.options?.filter((option) => option.chosen).map((option) => option.id)).toEqual([optionA.id]);
+    const chosen = await api.chooseOption!(approval.id, optionC.id, "human");
+    expect(chosen).toMatchObject({ status: "PENDING", totalExVat: 2050, totalInclVat: optionC.totalInclVat });
+    expect(chosen.options?.filter((option) => option.chosen).map((option) => option.id)).toEqual([optionC.id]);
     expect((await api.getOrder(approval.orderId)).status).toBe("NEEDS_APPROVAL");
-    // Option A's stock is not measured: the existing approval rule still refuses it.
+    // Option C's stock is not measured: the existing approval rule still refuses it.
     await expect(
       api.approve(
-        { approvalId: approval.id, expectedTotalExVat: 2050, expectedTotalInclVat: optionA.totalInclVat },
+        { approvalId: approval.id, expectedTotalExVat: 2050, expectedTotalInclVat: optionC.totalInclVat },
         "human",
       ),
     ).rejects.toMatchObject({ code: "STOCK_UNKNOWN" });
 
-    const back = await api.chooseOption!(approval.id, optionC.id, "human");
-    expect(back).toMatchObject({ totalExVat: approval.totalExVat, totalInclVat: optionC.totalInclVat });
+    const back = await api.chooseOption!(approval.id, optionA.id, "human");
+    expect(back).toMatchObject({ totalExVat: approval.totalExVat, totalInclVat: optionA.totalInclVat });
   });
 
   it("refuses an option whose cut-off has passed, and an option it does not know", async () => {

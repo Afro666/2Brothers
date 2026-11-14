@@ -3,6 +3,7 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { LabelChip } from "@/components/purchasing/chips";
 import { Button } from "@/components/ui/button";
+import { ApiError } from "@/api/types";
 import { formatDateTime, formatEur, formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { OfferTier, ProposalOption } from "@/types";
@@ -12,6 +13,13 @@ export const CHOOSE_TIMEOUT_MS = 5000;
 
 const TIER_ORDER: OfferTier[] = ["good", "better", "best"];
 const BADGE = "label-caps rounded-sm border border-input px-2 py-0.5 whitespace-nowrap";
+const CHOOSE_ERRORS: Record<string, string> = {
+  STOCK_UNKNOWN: "Stock is not confirmed for this option. The current basket is unchanged; wait for the supplier or choose another option. Nothing was approved.",
+  CLOSING_PASSED: "The order cut-off for this option has passed. The current basket is unchanged; choose another option. Nothing was approved.",
+  OPTION_UNAVAILABLE: "This option is no longer available. The current basket is unchanged; choose another option. Nothing was approved.",
+  NOT_PENDING: "This proposal is no longer waiting for approval. Its current status is being reloaded. Nothing was changed or approved by this choice.",
+  HUMAN_SESSION_REQUIRED: "Only a person signed in to the kitchen can choose an option. Nothing was changed or approved.",
+};
 
 /** Why a person cannot approve this option now; null when they can. */
 function blockedReason(option: ProposalOption): string | null {
@@ -62,7 +70,7 @@ export function OptionCompare({
 }) {
   const headingId = useId();
   const [busy, setBusy] = useState(false);
-  const [awaiting, setAwaiting] = useState<{ id: string; from: ProposalOption[] } | null>(null);
+  const [awaiting, setAwaiting] = useState<{ from: ProposalOption[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sorted = [...options].sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
 
@@ -71,7 +79,10 @@ export function OptionCompare({
   // or the new options do not hold it.
   useEffect(() => {
     if (!awaiting) return;
-    const chosen = options.find((option) => option.id === awaiting.id && option.chosen);
+    // Re-simulation refreshes offer ids: trust `chosen`, mapped from the answered proposal,
+    // rather than looking for the option id that was sent.
+    const previouslyChosen = awaiting.from.find((option) => option.chosen)?.id;
+    const chosen = options.find((option) => option.chosen && option.id !== previouslyChosen);
     if (!chosen && options === awaiting.from) return;
     setAwaiting(null);
     if (chosen && !blockedReason(chosen)) onApprove?.();
@@ -94,10 +105,12 @@ export function OptionCompare({
     setError(null);
     try {
       await onChoose?.(option.id);
-      setAwaiting({ id: option.id, from: options });
+      setAwaiting({ from: options });
     } catch (e) {
       setError(
-        `Could not choose this option: ${e instanceof Error ? e.message : String(e)}. Nothing was changed or approved.`,
+        e instanceof ApiError && CHOOSE_ERRORS[e.code]
+          ? `Could not choose this option. ${CHOOSE_ERRORS[e.code]}`
+          : `Could not choose this option: ${e instanceof Error ? e.message : String(e)}. Nothing was changed or approved.`,
       );
     } finally {
       setBusy(false);
@@ -186,6 +199,11 @@ export function OptionCompare({
                 </Fact>
               </dl>
               <p className="max-w-[68ch] text-[15px] leading-[22px] sm:col-start-2">{option.tradeOff}</p>
+              {option.held ? (
+                <p className="hatch text-sm text-warning sm:col-start-2">
+                  {formatNumber(option.held.quantity)} {option.held.unit} waits for stock confirmation
+                </p>
+              ) : null}
               {blocked ? (
                 <p className="hatch text-warning sm:col-start-2">
                   Cannot be approved now: {blocked}
