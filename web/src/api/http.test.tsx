@@ -68,6 +68,14 @@ describe("createHttpApi", () => {
     expect(api.chooseOption).toBeUndefined();
   });
 
+  it("is not a thenable, so awaiting the Api itself settles", async () => {
+    gateway({});
+    const api = createHttpApi("/api");
+    expect((api as unknown as { then?: unknown }).then).toBeUndefined();
+    await expect(Promise.resolve(api)).resolves.toBe(api);
+    await expect(api.lookupKitchenBrand({ website: "example.fi" })).rejects.toMatchObject({ code: "NOT_SERVED" });
+  });
+
   it("approves the exact total the person read, as that person, with no token from the browser", async () => {
     const approved = { ...proposal, status: "APPROVED", order_id: "ord-1" };
     const calls = gateway({
