@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,6 +29,31 @@ describe("orders pages", () => {
         "Waiting for sup-unknown to confirm. Call or e-mail them: this order was sent without a stock confirmation.",
       ),
     ).toBeVisible();
+  });
+
+  it("names Valio Aimo when the kitchen has no supplier row for sup-valio", async () => {
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    const listOrders = api.listOrders;
+    api.listSuppliers = async () => [];
+    api.getOrder = async (id) => ({ ...(await getOrder(id)), supplierMustConfirm: ["sup-valio"] });
+    api.listOrders = async () =>
+      (await listOrders()).map((order) =>
+        order.id === "ORD-1047" ? { ...order, supplierMustConfirm: ["SUP-VALIO"] } : order,
+      );
+    renderApp("/orders/ORD-1047", api);
+
+    expect(
+      await screen.findByText(
+        "Waiting for Valio Aimo to confirm. Call or e-mail them: this order was sent without a stock confirmation.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(/sup-valio/i)).not.toBeInTheDocument();
+    cleanup();
+
+    renderApp("/orders", api);
+    const row = await screen.findByRole("link", { name: /ORD-1047/ });
+    expect(within(row).getByText("Call Valio Aimo to confirm")).toBeVisible();
   });
 
   it("badges the order history row without replacing its gateway status", async () => {

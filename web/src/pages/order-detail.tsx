@@ -109,8 +109,9 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
     new Set([
       ...order.lines.map((line) => line.product.vendorName).filter((name) => name.length > 0),
       ...order.supplierMustConfirm
-        .map((supplierId) => supplierNames.get(supplierId))
-        .filter((name): name is string => name !== undefined),
+        .map((supplierId) => ({ supplierId, name: supplierName(supplierId, supplierNames) }))
+        .filter(({ supplierId, name }) => name !== supplierId)
+        .map(({ name }) => name),
     ]),
   );
   return (
