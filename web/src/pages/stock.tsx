@@ -5,6 +5,7 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { PhotoMark, ShelfPhotoCount } from "@/components/purchasing/shelf-photo-count";
 import { useApi } from "@/api";
 import type { StockCount } from "@/api/types";
 import { Button } from "@/components/ui/button";
@@ -104,6 +105,8 @@ export function StockPage() {
   const [drafts, setDrafts] = useState<Drafts>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** Products whose draft came from the shelf photo and was not changed by the person since. */
+  const [fromPhoto, setFromPhoto] = useState<ReadonlySet<string>>(new Set());
 
   const rows = stock.status === "ready" ? stock.data : [];
   const uncounted = rows.filter((row) => row.onHand == null).length;
@@ -120,6 +123,18 @@ export function StockPage() {
       }
       return { ...current, [productId]: next };
     });
+    setFromPhoto((ids) => (ids.has(productId) ? new Set([...ids].filter((id) => id !== productId)) : ids));
+    setSaveError(null);
+  }
+
+  /** Counts read from a shelf photo become drafts to check. Nothing is saved here. */
+  function fillFromPhoto(counts: Record<string, number>) {
+    const read = Object.entries(counts).map(([id, count]) => [id, String(Math.round(count * 1000) / 1000)] as const);
+    setDrafts((current) => ({
+      ...current,
+      ...Object.fromEntries(read.map(([id, value]) => [id, { value, notCounted: false }])),
+    }));
+    setFromPhoto(new Set(read.map(([id]) => id)));
     setSaveError(null);
   }
 
@@ -130,6 +145,7 @@ export function StockPage() {
     try {
       await api.submitStockCount(pending, actor);
       setDrafts({});
+      setFromPhoto(new Set());
       stock.reload();
       toast.success("Count saved", { testId: "stock-count-saved-toast" });
     } catch (error) {
@@ -165,6 +181,8 @@ export function StockPage() {
                 ? `${uncounted} of ${rows.length} not counted: treated as unknown, not as zero`
                 : `All ${rows.length} products counted`}
             </p>
+
+            <ShelfPhotoCount items={rows} actor={actor} disabled={saving} onCounts={fillFromPhoto} />
 
             <Card>
               <CardContent>
@@ -223,6 +241,7 @@ export function StockPage() {
                                   }
                                 />
                               </label>
+                              {fromPhoto.has(item.productId) ? <PhotoMark /> : null}
                               {error ? (
                                 <p id={errorId} role="alert" className="mt-1 text-xs text-destructive">
                                   {error}
@@ -313,6 +332,7 @@ export function StockPage() {
                             </label>
                           </span>
                         </div>
+                        {fromPhoto.has(item.productId) ? <PhotoMark /> : null}
                         {error ? (
                           <p id={errorId} role="alert" className="text-xs text-destructive">
                             {error}

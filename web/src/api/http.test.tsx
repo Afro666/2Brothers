@@ -96,6 +96,7 @@ describe("createHttpApi", () => {
         "saveMenuPlan",
         "getStock",
         "submitStockCount",
+        "readShelfPhoto",
         "getDemand",
         "proposeOrderForPlan",
         "getSharing",
