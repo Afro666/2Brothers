@@ -147,8 +147,9 @@ def test_human_approves_order_is_placed_once(env):
     tool = client.post("/tools/place_order", headers=AGENT, json={
         "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"})
     assert tool.status_code == 200 and tool.json()["order_id"] == order["order_id"]
-    kinds = [e["kind"] for e in client.get(K + "/audit", headers=AGENT).json()["events"]]
-    assert kinds == ["proposal_created", "decision_summary", "order_placed"]
+    events = client.get(K + "/audit", headers=AGENT).json()["events"]
+    assert [e["kind"] for e in events] == ["proposal_created", "decision_summary", "order_placed"]
+    assert events[-1]["supplier_must_confirm"] == []      # #884: empty when every line is confirmed
 
 
 def test_second_approve_with_other_key_during_first_places_one_order(env):

@@ -40,7 +40,7 @@ DEMAND_CLASSES = ("A", "B", "C")
 COVER_CATEGORIES = ("fresh_dairy", "vegetables", "meat", "fish", "frozen", "dry", "other")
 BUDGET_WARNINGS = ("budget_warning_order_eur", "budget_warning_week_eur")
 SETTINGS = ("service_level", "max_cover_days", "stockout_cap", *BUDGET_WARNINGS,
-            "excluded_allergens", "standing_orders", "approve_unconfirmed_manual")
+            "certainty_premium_max", "excluded_allergens", "standing_orders", "approve_unconfirmed_manual")
 _CLOCK = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 _WEEK = re.compile(r"\d{4}-W(0[1-9]|[1-4]\d|5[0-3])")
 _PRODUCT_CODE = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -276,6 +276,11 @@ def settings_fields(data: dict) -> dict:
     for field in BUDGET_WARNINGS:
         if field in data:
             out[field] = _decimal(data[field], field)  # None: no warning
+    if "certainty_premium_max" in data:
+        limit = _decimal(data["certainty_premium_max"], "certainty_premium_max")
+        if limit is not None and limit < 1:
+            raise ValueError("certainty_premium_max must be at least 1; null means no limit")
+        out["certainty_premium_max"] = limit  # None: no limit
     if "excluded_allergens" in data:
         codes = data["excluded_allergens"]
         message = ("excluded_allergens must be a list of GS1 codes or allergen names; "

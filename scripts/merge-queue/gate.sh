@@ -51,7 +51,11 @@ for n in "$@"; do
     # only the tests that import a changed file (vitest related); tsc above checks everything
     rel=$(echo "$files" | grep '^web/' | sed 's#^web/##' | tr '\n' ' ')
     (cd web && npx vitest related $rel --run --maxWorkers=3 > "$LOG/$n-web.txt" 2>&1)
-    if grep -q " FAIL " "$LOG/$n-web.txt"; then
+    rc=$?
+    if [ $rc != 0 ] && ! grep -q " FAIL " "$LOG/$n-web.txt"; then
+      # vitest crashed before it reported files (config error, missing dep, OOM): never merge
+      ok=0; echo "#$n web FAILED (vitest exit $rc)"
+    elif grep -q " FAIL " "$LOG/$n-web.txt"; then
       # rerun only the failed files: timeouts under load pass when run alone
       failed=$(grep -oE "FAIL +src/[^ ]+\.test\.tsx?" "$LOG/$n-web.txt" | awk '{print $2}' | sort -u)
       # twice: other sessions run test suites on this laptop too, and 5 s timeouts flake under load
