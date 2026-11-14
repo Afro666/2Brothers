@@ -35,11 +35,20 @@ PERSON = [
      "rule": "Only a person grants or revokes sharing with a supplier; each change is an audit entry."},
     {"action": "API tokens and webhooks", "audit_kind": "token_created",
      "rule": "Only an approver creates or revokes them; a token can read or propose, never approve."},
+    {"action": "Approve from your own chat", "audit_kind": "approval_token_created",
+     "rule": "A signed-in approver (never the open demo) creates a personal approval token: it stands for "
+             "that person only, approves and rejects only, never proposes, ends after 8 hours (at most 24), "
+             "can be revoked, and every use is audited with via: personal_token."},
 ]
 
 NEVER = [
     {"action": "Approve or reject an order", "audit_kind": "approval", "id": "approve",
-     "rule": "Approve and reject need a signed-in approver: 403 HUMAN_SESSION_REQUIRED for the agent and for every API token; kitchen:approve cannot be put on a token."},
+     "rule": "Approve and reject need a person, through a signed-in session or a personal approval token: "
+             "403 HUMAN_SESSION_REQUIRED for the agent and for every kitchen API token; kitchen:approve "
+             "cannot be put on a token."},
+    {"action": "Approve with the credential that proposed", "audit_kind": "approval", "id": "propose_and_approve",
+     "rule": "A personal approval token never proposes (403 SCOPE_REQUIRED on every propose route), and the "
+             "agent and kitchen tokens never approve: one credential proposes, a different one approves."},
     {"action": "Place an order nobody approved", "audit_kind": "order", "id": "place_unapproved",
      "rule": "place_order returns 403 NEEDS_APPROVAL until a person approved that exact offer."},
     {"action": "Cancel an order", "audit_kind": "order", "id": "cancel",

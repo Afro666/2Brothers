@@ -12,6 +12,7 @@ def test_kit_passes_against_our_own_gateway_with_the_agent_token(env):
     assert [r.id for r in results if r.status == "FAIL"] == [], table(results)
     assert by_id["C06"].status == "PASS" and by_id["C07"].status == "PASS"
     assert by_id["C10"].status == "SKIP"            # a server agent token is not kitchen-bound
+    assert by_id["C12"].status == "PASS" and by_id["C13"].status == "PASS"   # hidden, and refused by name
     assert db.orders.count_documents({}) == 0 and db.proposals.count_documents({}) == 0
 
 
@@ -30,7 +31,8 @@ def test_a_gateway_that_lets_the_agent_approve_fails_the_kit(env, monkeypatch):
     monkeypatch.setattr(Gateway, "approve", lambda self, *a, **k: {"order_id": "x"})
     with client:
         results = Kit("http://testserver", "agent-test-token", "demo-kitchen", client=client).run()
-    assert {r.id: r.status for r in results}["C07"] == "FAIL"
+    status = {r.id: r.status for r in results}
+    assert status["C07"] == "FAIL" and status["C13"] == "FAIL"
 
 
 def _sse_kit(tools):

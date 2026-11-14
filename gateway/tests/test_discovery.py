@@ -151,3 +151,19 @@ def test_the_files_are_not_in_the_openapi_and_need_no_token_under_login_mode(cli
     assert client.get(CARD).status_code == 200 and client.get("/llms.txt").status_code == 200
     paths = client.get("/openapi.json").json()["paths"]
     assert CARD not in paths and "/llms.txt" not in paths
+
+
+def test_person_approval_is_described_apart_from_the_agent_tools(client):
+    """Decision 2026-11-14: the approve tools are listed for a personal approval token only,
+    so the card's agent tools and skills still have no approve tool."""
+    c = card(client).json()
+    pa = c["personApproval"]
+    assert pa["token_prefix"] == "tka_" and pa["hours_default"] == 8 and pa["hours_max"] == 24
+    assert pa["create"] == "/v1/kitchens/{kitchen_id}/approval-tokens"
+    assert {t["name"] for t in pa["mcp_tools"]} == {"list_proposals", "get_proposal", "list_orders",
+                                                     "approve_proposal", "reject_proposal"}
+    mcp = next(i for i in c["additionalInterfaces"] if i["transport"].startswith("MCP"))
+    assert not {t["name"] for t in pa["mcp_tools"]} & set(mcp["tools"])
+    assert "signed-in session or a personal approval token" in c["humanOnly"][0]["reason"]
+    text = client.get("/llms.txt", headers=PUBLIC).text
+    assert "## A person approving from their own chat" in text and "`approve_proposal`" in text
