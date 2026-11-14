@@ -69,7 +69,7 @@ function StockText({ f }: { f: Facts }) {
   const t = useT();
   if (f.blocked) return <span className="font-medium text-danger">{t("sales block")}</span>;
   return f.stockUnknown ? (
-    <span className="font-medium text-warning" title={t("Valio did not measure the stock for this product")}>
+    <span className="font-medium text-warning" title={t("The supplier did not measure the stock for this product")}>
       {t("unknown")}
     </span>
   ) : (

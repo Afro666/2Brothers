@@ -32,9 +32,11 @@ describe("Delivery note gateway boundary", () => {
     const r = { ...DELIVERY_NOTE, not_ordered: [{ ...DELIVERY_NOTE.not_ordered[0], status: "EXTRA", replaces: undefined, lot: "" }] };
     expect(mapDeliveryNote(r, "ORD-1042").notOrdered[0]).toMatchObject({ replaces: "none", lot: "unknown", needsApproval: false });
   });
-  it("rejects a reply for another order or an unexpected saved mutation", () => {
+  it("rejects a reply for another order, and reads one the gateway saved with the order", () => {
     expect(() => mapDeliveryNote(DELIVERY_NOTE, "another-order")).toThrow();
-    expect(() => mapDeliveryNote({ ...DELIVERY_NOTE, saved: true }, "ORD-1042")).toThrow();
+    // The live gateway answers `saved: true` once the checked result is stored (seen 14 Nov).
+    expect(mapDeliveryNote({ ...DELIVERY_NOTE, saved: true }, "ORD-1042").orderId).toBe("ORD-1042");
+    expect(() => mapDeliveryNote({ ...DELIVERY_NOTE, saved: "yes" }, "ORD-1042")).toThrow();
   });
   const invalidResponse = (fn: () => unknown) => {
     try { fn(); } catch (e) { expect(e).toBeInstanceOf(ApiError); expect((e as ApiError).code).toBe("INVALID_RESPONSE"); return; }
@@ -64,7 +66,7 @@ describe("Delivery note gateway boundary", () => {
   });
   it("throws ApiError INVALID_RESPONSE on a wrong order, a saved answer or an unknown status", () => {
     invalidResponse(() => mapDeliveryNote(DELIVERY_NOTE, "another-order"));
-    invalidResponse(() => mapDeliveryNote({ ...DELIVERY_NOTE, saved: true }, "ORD-1042"));
+    invalidResponse(() => mapDeliveryNote({ ...DELIVERY_NOTE, saved: undefined }, "ORD-1042"));
     const line = structuredClone(DELIVERY_NOTE); line.lines[0].status = "DAMAGED";
     invalidResponse(() => mapDeliveryNote(line, "ORD-1042"));
     const other = structuredClone(DELIVERY_NOTE); other.not_ordered[0].status = "GIFT";

@@ -65,13 +65,18 @@ function checkText({ text, detail }: ProductCheck, t: T): string {
 
 type T = ReturnType<typeof useT>;
 
-function stockState(line: OrderLine, confirmBy: string, t: T): { tone: Tone; text: string } {
+function stockState(line: OrderLine, confirmBy: string | null | undefined, t: T): { tone: Tone; text: string } {
   if (line.offer.salesBlock) return { tone: "danger", text: t("Not available") };
-  if (isStockUnconfirmed(line.offer)) return { tone: "warning", text: t("{supplier} must confirm", { supplier: confirmBy }) };
+  if (isStockUnconfirmed(line.offer)) {
+    return {
+      tone: "warning",
+      text: confirmBy ? t("{supplier} must confirm", { supplier: confirmBy }) : t("The supplier must confirm"),
+    };
+  }
   return { tone: "success", text: t(formatOfferStock(line.offer)) };
 }
 
-export function StockChip({ line, confirmBy }: { line: OrderLine; confirmBy: string }) {
+export function StockChip({ line, confirmBy }: { line: OrderLine; confirmBy: string | null | undefined }) {
   const t = useT();
   const state = stockState(line, confirmBy, t);
   return (
@@ -197,8 +202,8 @@ export function ProposalLines({
 }: {
   lines: OrderLine[];
   now: Date;
-  /** Who confirms unknown stock ("Valio", or a manual supplier). */
-  confirmBy: string;
+  /** Who confirms unknown stock for a line ("Valio", or a manual supplier); null when the line names none. */
+  confirmBy: (line: OrderLine) => string | null;
   checks: ReadonlyMap<string, ProductCheck[]>;
   leftOut?: LeftOutProduct[];
   editing?: LineEditing;
@@ -325,7 +330,7 @@ export function ProposalLines({
                   {t(formatEur(line.lineTotal))}
                 </div>
                 <div role="cell" className="col-start-1 row-start-2 flex flex-wrap items-center gap-x-2 gap-y-1 md:col-auto md:row-auto">
-                  <StockChip line={line} confirmBy={confirmBy} />
+                  <StockChip line={line} confirmBy={confirmBy(line)} />
                   <span className="md:hidden">
                     <CutoffText line={line} now={now} />
                   </span>

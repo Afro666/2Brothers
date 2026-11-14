@@ -9,6 +9,8 @@ import type { Supplier } from "@/types";
 import { approval } from "@/mocks/milk-case";
 import { renderApp } from "@/test/render";
 import { nextCutoff } from "@/pages/home/cutoff";
+import { oldestWaiting } from "@/pages/home/kitchen";
+import type { ApprovalRequest } from "@/types";
 
 const DEMO_NOW = "2026-11-13T21:00:00%2B02:00";
 
@@ -24,6 +26,18 @@ function supplier(orderDays: number[] | null, cutoffTime: string | null): Suppli
     leadTimeDays: null,
   };
 }
+
+describe("oldestWaiting", () => {
+  const approval = (id: string, createdAt: string | null) => ({ id, createdAt }) as ApprovalRequest;
+
+  it("treats a proposal with no creation time as the oldest", () => {
+    expect(oldestWaiting([approval("new", "2026-11-14T09:00:00+02:00"), approval("no-time", null)])?.id).toBe("no-time");
+  });
+
+  it("picks the earliest known creation time", () => {
+    expect(oldestWaiting([approval("new", "2026-11-14T09:00:00+02:00"), approval("old", "2026-11-13T09:00:00+02:00")])?.id).toBe("old");
+  });
+});
 
 describe("HomePage", () => {
   beforeEach(() => localStorage.clear());

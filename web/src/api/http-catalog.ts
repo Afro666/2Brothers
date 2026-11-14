@@ -125,8 +125,25 @@ export function mapCatalogProduct(value: unknown): Product {
   });
   const salesUnit = optionalText(row.sales_unit);
   const net = row.net_content == null ? null : object(row.net_content, "net_content");
+  const netValue = net ? nullableNumber(net.value, "net_content.value") : null;
+  const netUnit = typeof net?.unit === "string" && net.unit ? net.unit : null;
   // The unit prices compare in: L or KG from the net content, else KG when sold by weight.
-  const baseUnit = typeof net?.unit === "string" ? net.unit : row.base_unit === "KG" ? "KG" : "";
+  const baseUnit = netUnit ?? (row.base_unit === "KG" ? "KG" : "");
+  const packSize = units.find((unit) => unit.unitId === salesUnit)?.sizeInBaseUnits ?? null;
+  // `size_in_base_units` counts base units (pieces), `net_content` is what one base unit holds:
+  // 6 pieces of 0.5 L are 3 L. Without net content the count is shown only for pieces (ST, PCS) or
+  // kilos (KG); any other base unit (a box code) makes the pack unknown.
+  const countedBase = row.base_unit === "ST" || row.base_unit === "PCS" || row.base_unit === "KG";
+  const baseUnitsPerSalesUnit =
+    packSize === null
+      ? null
+      : net !== null
+        ? netUnit !== null && netValue !== null
+          ? Math.round(packSize * netValue * 1e6) / 1e6
+          : null
+        : countedBase
+          ? packSize
+          : null;
 
   return {
     id,
@@ -136,7 +153,7 @@ export function mapCatalogProduct(value: unknown): Product {
     category: optionalText(row.category),
     salesUnit,
     baseUnit,
-    baseUnitsPerSalesUnit: units.find((unit) => unit.unitId === salesUnit)?.sizeInBaseUnits ?? null,
+    baseUnitsPerSalesUnit,
     units,
     // The product row has no nutrition data.
     fatPercent: null,

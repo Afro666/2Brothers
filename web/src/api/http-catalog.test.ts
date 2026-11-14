@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createHttpApi } from "@/api/http";
 import { mapCatalogProduct } from "@/api/http-catalog";
+import { formatPack } from "@/lib/format";
 import { products } from "@/mocks/milk-case";
 
 const K = "/api/v1/kitchens/demo-kitchen";
@@ -232,6 +233,43 @@ describe("Products by code on the real gateway", () => {
 });
 
 describe("mapCatalogProduct", () => {
+  it.each([
+    ["Arla 10 L Novobox", "ST", 1, { value: 10, unit: "L" }, "1 piece = 10 l"],
+    ["6 × Arla 5 dl", "KI", 6, { value: 0.5, unit: "L" }, "1 case = 3 l"],
+    ["Valio coffee milk 5 dl", "KI", 10, { value: 0.5, unit: "L" }, "1 case = 5 l"],
+    ["Valio skimmed sour milk 5 kg", "ST", 1, { value: 5, unit: "KG" }, "1 piece = 5 kg"],
+  ])("uses pieces and net content for the pack line: %s", (_name, salesUnit, pieces, netContent, expected) => {
+    const product = mapCatalogProduct({
+      ...MILK,
+      sales_unit: salesUnit,
+      units: [{ unit: salesUnit, size_in_base_units: pieces }],
+      net_content: netContent,
+    });
+    expect(formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit)).toBe(expected);
+  });
+
+  it.each([
+    ["no net content, counted", { base_unit: "ST", net_content: null }, "KI", 6, "1 case = 6 pieces", ""],
+    ["no net content, a box code: unknown, not pieces", { base_unit: "RAS", net_content: null }, "KI", 12, "case (pack size unknown)", ""],
+    ["no net content, sold by weight", { base_unit: "KG", net_content: null }, "KI", 6, "1 case = 6 kg", "KG"],
+    ["10 x 0.24 kg", { base_unit: "ST", net_content: { value: 0.24, unit: "KG" } }, "KI", 10, "1 case = 2.4 kg", "KG"],
+    ["a case of one 2.25 kg base unit", { base_unit: "KI", net_content: { value: 2.25, unit: "KG" } }, "KI", 1, "1 case = 2.25 kg", "KG"],
+  ])("pack line, %s", (_name, extra, salesUnit, pieces, expected, baseUnit) => {
+    const product = mapCatalogProduct({ ...MILK, ...extra, sales_unit: salesUnit, units: [{ unit: salesUnit, size_in_base_units: pieces }] });
+    expect(product.baseUnit).toBe(baseUnit);
+    expect(formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit)).toBe(expected);
+  });
+
+  it("leaves the pack unknown when the net content has a unit but no value, or the sales unit has no size", () => {
+    const noValue = mapCatalogProduct({ ...MILK, sales_unit: "KI", units: [{ unit: "KI", size_in_base_units: 6 }], net_content: { value: null, unit: "L" } });
+    expect(noValue.baseUnitsPerSalesUnit).toBeNull();
+    expect(formatPack(noValue.salesUnit, noValue.baseUnitsPerSalesUnit, noValue.baseUnit)).toBe("case (pack size unknown)");
+    const noUnit = mapCatalogProduct({ ...MILK, sales_unit: "KI", units: [{ unit: "ST", size_in_base_units: 1 }] });
+    expect(noUnit.baseUnitsPerSalesUnit).toBeNull();
+    const noNetUnit = mapCatalogProduct({ ...MILK, sales_unit: "KI", units: [{ unit: "KI", size_in_base_units: 6 }], net_content: { value: 0.5, unit: null } });
+    expect(noNetUnit.baseUnitsPerSalesUnit).toBeNull();
+  });
+
   it("maps a full row to the web Product", () => {
     expect(mapCatalogProduct(MILK)).toEqual({
       id: "463335",
