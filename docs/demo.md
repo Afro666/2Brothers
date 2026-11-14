@@ -12,18 +12,23 @@ model makes the offer before the demo, and the seller has a `--no-model` fallbac
 ## Before you go on stage
 
 1. **An open offer on Home.** The tile "Offer from Valio Aimo" needs an open offer. An
-   accepted or declined offer is final, so after a rehearsal make a new one. On the server:
+   accepted or declined offer is final within a round, and a rehearsal or a recording uses
+   the open one up. So before each run, on the server, start a new round and make a fresh
+   offer (#1182):
 
    ```
    cd /opt/2brothers
+   docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m demo.reset_offers --kitchen demo-kitchen --apply
    docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m agent.seller --dry-run --limit 1 --kitchen demo-kitchen --days 14
    docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m agent.seller --apply --limit 1 --kitchen demo-kitchen --days 14
    ```
 
-   Read the dry-run line first: a sensible substitute (same kind of food), `made_by`
-   `nemotron-3.5-super-vl`. If the model does not answer, add `--no-model` (a rule picks,
-   `made_by: rule`); then do not say "Nemotron picked it" on stage. The open offer on
-   14 Nov: flounder fillet in place of salmon fillet, for Fri 20 Nov, 12.226 kg.
+   Skip the first line when an offer is still open (the tile shows). Read the dry-run line
+   first: a sensible substitute (same kind of food), `made_by` `nemotron-3.5-super-vl`. The
+   model can take over a minute per answer (on 14 Nov: 67 s and 75 s). If it does not
+   answer, add `--no-model` (a rule picks, `made_by: rule`); then do not say "Nemotron
+   picked it" on stage. The open offer at 14:45 Helsinki on 14 Nov: Rosamunda washed potato
+   in place of washed potato 1 kg, for Mon 16 Nov, 10.48 kg, picked by Nemotron.
 2. **Clear the inbox.** On the server: `python -m demo.clear_inbox` lists the waiting
    proposals, `python -m demo.clear_inbox --apply` removes them (not a reject, so it is
    not a person's decision). Then the card made from the offer is the only one.
