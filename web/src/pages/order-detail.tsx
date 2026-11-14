@@ -19,9 +19,10 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, formatDateTime, formatEur, shortOrderId } from "@/lib/format";
 import { getLanguage, translate, useT } from "@/lib/i18n";
+import { placedStatuses } from "@/lib/order-status";
 import { orderTitle } from "@/lib/order-title";
 import { useAsync } from "@/lib/use-async";
-import type { Order, OrderReceipt, OrderStatus } from "@/types";
+import type { Order, OrderReceipt } from "@/types";
 import { supplierName } from "@/lib/supplier-name";
 
 function OrderHistory({ orderId }: { orderId: string }) {
@@ -97,8 +98,6 @@ function SignedReceipt({ receipt }: { receipt?: OrderReceipt | null }) {
     </section>
   );
 }
-
-export const placedStatuses = new Set<OrderStatus>(["PLACED", "NOT_SENT", "UNCONFIRMED", "SENT_READ_FAILED"]);
 
 function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Map<string, string> }) {
   const t = useT();
