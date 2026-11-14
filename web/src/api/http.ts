@@ -4,6 +4,7 @@ import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
 import { createShelfHttp } from "@/api/http-shelf";
 import { createTrustHttp } from "@/api/http-trust";
 import { createTokensHttp } from "@/api/http-tokens";
+import { createDeveloperHttp } from "@/api/http-developer";
 import {
   type Json,
   mapAddable,
@@ -168,6 +169,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));
