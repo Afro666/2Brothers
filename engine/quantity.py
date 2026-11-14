@@ -32,7 +32,7 @@ class Item:
     standing_order: Decimal | None = None   # in sales units per delivery (S08)
 
 
-DRIFT_TOLERANCE = Decimal("0.10")          # standing order more than 10% off the need: drift
+DRIFT_TOLERANCE = Decimal("0.10")          # standing order more than 10% off usage per delivery (demand x review days): drift
 
 
 def _drift(item: Item, qty: Decimal) -> str | None:
