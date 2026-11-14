@@ -134,7 +134,8 @@ def test_order_stores_the_supplier_blocks(env):
     order = db.orders.find_one({})
     assert order["supplier_id"] == "sup-valio"
     assert order["blocks"] == [{"supplier_id": "sup-valio", "name": "Valio Aimo", "total_ex_vat": p["total_ex_vat"],
-                                "vat": p["vat"], "mov_gap": None, "delivery_fee": None,
+                                "vat": p["vat"], "total_incl_vat": p["total_incl_vat"], "vat_unknown": [],
+                                "mov_gap": None, "delivery_fee": None,
                                 "expected_total": p["expected_total"], "product_ids": ["462775"]}]
 
 

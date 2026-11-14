@@ -136,7 +136,16 @@ describe("ApprovalsPage recalls", () => {
     const panel = await screen.findByRole("region", { name: "Food recalls" });
     await user.click(within(panel).getByRole("button", { name: "Check recalls now" }));
 
-    expect(await within(panel).findByText("1 recall matches a product in your kitchen")).toBeInTheDocument();
+    // Folded: one row says what, where and what to do. The rest waits behind "Details".
+    expect(await within(panel).findByRole("button", { name: "Details" })).toHaveAttribute("aria-expanded", "false");
+    expect(within(panel).getByRole("status")).toHaveTextContent(
+      "1 recall: Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg is in your stock (5.673 KG).",
+    );
+    expect(within(panel).getByTestId("recall-next")).toHaveTextContent("Do not use it until checked.");
+    expect(within(panel).queryByRole("list", { name: "Recalled products in your kitchen" })).not.toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "Details" }));
+
+    expect(within(panel).getByText("1 recall matches a product in your kitchen")).toBeVisible();
     expect(within(panel).queryByText("No recall matches your open orders.")).not.toBeInTheDocument();
     const list = within(panel).getByRole("list", { name: "Recalled products in your kitchen" });
     const item = within(list).getAllByRole("listitem")[0];
@@ -152,7 +161,9 @@ describe("ApprovalsPage recalls", () => {
     expect(within(item).getByText("No open order holds it. New orders leave it out.")).toBeInTheDocument();
     expect(item).toHaveTextContent("Do not use it until checked.");
     expect(screen.queryByRole("heading", { name: /Held by a recall/ })).not.toBeInTheDocument();
-    expect(panel).toHaveClass("bg-danger-surface");
+    // The warning colour is an accent on the row, not a red block.
+    expect(panel).toHaveClass("border-l-danger");
+    expect(panel).not.toHaveClass("bg-danger-surface");
   });
 
   it("lists no product in the panel when the alert is on a held order", async () => {
@@ -161,6 +172,12 @@ describe("ApprovalsPage recalls", () => {
     renderApp("/approvals", api);
     const panel = await screen.findByRole("region", { name: "Food recalls" });
     expect(await within(panel).findByText("1 recall affects your open order")).toBeInTheDocument();
+    // The panel folds; the held order still says it in full on its own card.
+    expect(within(panel).getByRole("button", { name: "Details" })).toHaveAttribute("aria-expanded", "false");
+    expect(await within(coffeeCard()).findByText("Blocked by recall")).toBeVisible();
+    expect(within(coffeeCard()).getByText("Blocked by a recall. This proposal cannot be approved as it is.")).toBeVisible();
+    expect(within(coffeeCard()).queryByRole("button", { name: /^Approve/ })).not.toBeInTheDocument();
+    await userEvent.setup().click(within(panel).getByRole("button", { name: "Details" }));
     expect(within(panel).queryByRole("list", { name: "Recalled products in your kitchen" })).not.toBeInTheDocument();
     expect(within(panel).queryByText(/No open order holds it/)).not.toBeInTheDocument();
   });
@@ -181,7 +198,9 @@ describe("ApprovalsPage recalls", () => {
     });
     renderApp("/approvals", api);
     const panel = await screen.findByRole("region", { name: "Food recalls" });
-    const list = await within(panel).findByRole("list", { name: "Recalled products in your kitchen" });
+    await userEvent.setup().click(await within(panel).findByRole("button", { name: "Details" }));
+    expect(within(panel).getByRole("status")).toHaveTextContent("1 recall notice may be about 461332.");
+    const list = within(panel).getByRole("list", { name: "Recalled products in your kitchen" });
     const items = within(list).getAllByRole("listitem");
     expect(items).toHaveLength(1);
     expect(items[0]).toHaveTextContent("A recall notice may be about 461332.");
@@ -189,8 +208,8 @@ describe("ApprovalsPage recalls", () => {
     expect(within(items[0]).queryByText(/New orders leave it out/)).not.toBeInTheDocument();
     expect(within(items[0]).queryByRole("link")).not.toBeInTheDocument();
     expect(items[0]).toHaveTextContent("Suodatinkahvissa vierasesineriski");
-    expect(panel).toHaveClass("bg-warning-surface");
-    expect(panel).not.toHaveClass("bg-danger-surface");
+    expect(panel).toHaveClass("border-l-warning");
+    expect(panel).not.toHaveClass("border-l-danger");
   });
 
   it("refuses direct approval of a held order while allowing its rejection", async () => {

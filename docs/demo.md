@@ -166,6 +166,18 @@ recipes too (`store/recalls.py` `context`). The hold of an open proposal and its
 basket (`python -m demo.recall_demo`) need a product whose ordering is open at Valio; for the
 coffee it closed on 12 Nov, so that part is not shown this weekend.
 
+**Dry run before pressing again (#1076).** `python -m demo.recall_dry_run` builds the
+kitchen as the check does and matches the recorded notices; it writes nothing (no alert,
+no hold, no audit entry). It exits 0 when only 461332 would alert. On the server, through
+the container:
+`cd /opt/2brothers && docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m demo.recall_dry_run`.
+Result 2026-11-14, local seed (`demo.seed`, today 14 Nov, the full Valio catalog): 23
+products (19 in stock, 23 in recipes), 38 notices, one alert: `possible` 461332 (same brand,
+"kahvi, perinteinen"), in stock 3.253 KG and in three recipes. Nothing else matches. The
+live kitchen has not been dry-run yet: run the command above and paste its last two lines
+here. A product added to the live stock by hand (for example an Elovena oat drink, a
+Barebells bar or a Göran's kebab) would give a `possible` alert of its own.
+
 ## Photo beat: Nemotron VL counts a shelf (#373)
 
 Live since 2026-11-14. This is the beat that shows the vision half of Nemotron 3.5 Super VL
@@ -231,7 +243,8 @@ receipt): order, delivery, check. About 20 seconds.
 
 **Which order.** A fixed demo order, reference `DEMO-1198`, made by `demo/delivery_order.py`
 (the seed places it too). It never changes, unlike the order beat 2 places. Three Valio lines
-at the catalog prices of 13 Nov, EUR 178.09 ex VAT:
+at the catalog prices of 13 Nov, EUR 178.09 ex VAT. Its order page shows "Placed by the demo
+seed" where a signed receipt would be: no person approved it, so it has no receipt (#1560).
 
 | Product | Ordered | On the note | Status | To claim |
 |---|---|---|---|---|

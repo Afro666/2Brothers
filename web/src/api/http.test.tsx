@@ -866,7 +866,8 @@ describe("createHttpApi", () => {
   it("gets an order by its order id or by the id of a waiting proposal", async () => {
     gateway({
       ...inbox(),
-      [`GET ${K}/proposals/ord-1`]: () => error(404, "PROPOSAL_NOT_FOUND"),
+      // No `GET /proposals/ord-1` route: asking the proposal route for an order id (a 404 on
+      // every order page) would fail this test with NO_ROUTE.
       [`GET ${K}/orders/ord-1`]: () => placedOrder,
       [`GET ${K}/proposals`]: () => ({ proposals: [{ ...proposal, status: "APPROVED", order_id: "ord-1" }] }),
     });

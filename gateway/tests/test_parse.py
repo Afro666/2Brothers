@@ -112,6 +112,9 @@ def test_refuses_instead_of_guessing(text, why):
     ("50 kg cheese next Mon", MON),
     ("30 kg sat fat free spread", None),
     ("20 kg tomatoes sunday", date(2026, 11, 15)), # a full name is always a day
+    ("20 kg sun dried tomatoes perjantaiksi", date(2026, 11, 20)),  # Finnish full name: a day
+    ("20 kg sun kuivattuja tomaatteja sunnuntaina", date(2026, 11, 15)),
+    ("2 kg sun kuivattuja tomaatteja", None),      # Finnish text, a short form in the name: no day
     ("", None),
 ])
 def test_named_day_reads_the_day_a_text_names(text, when):
@@ -141,6 +144,9 @@ def test_a_short_weekday_in_a_product_name_keeps_the_form_date_and_the_word():
     by_day = parse_request("20 kg sun dried tomatoes by sun", FRI, default_day=picked)
     assert by_day.requested_date == date(2026, 11, 15) and by_day.query == "sun dried tomatoes"
     assert parse_request("50 kg cheese by Monday", FRI, default_day=picked).requested_date == MON
+    fi = parse_request("20 kg sun kuivattuja tomaatteja", FRI, default_day=picked)
+    assert fi.requested_date == picked                               # Finnish text: the form date stays
+    assert parse_request("20 kg tomaatteja maanantaiksi", FRI, default_day=picked).requested_date == MON
     with pytest.raises(ParseError, match="no delivery day"):       # no form date: never a guess
         parse_request("20 kg sun dried tomatoes", FRI)
 

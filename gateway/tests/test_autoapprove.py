@@ -96,6 +96,24 @@ def test_auto_approvals_do_not_count_as_learning_and_switching_off_is_instant(en
     assert propose(client, "p2", quantity="5")["status"] == "READY"
 
 
+def test_the_demo_seed_is_not_a_person(env):
+    """#1560: an order the seed placed, and a decision in its name, earn nothing."""
+    from gateway import autoapprove
+    client, _, db = env
+    history(db, orders_with_product=2)                  # two orders by a person: one short of trusted
+    line = {"lines": [{"product_id": "462775"}], "kitchen_id": "demo-kitchen", "outcome": "CONFIRMED"}
+    db.orders.insert_one({**line, "_id": "seed-new", "idempotency_key": "s1", "placed_by": "demo-seed"})
+    # the live order of 14 Nov, stored before `placed_by`
+    db.orders.insert_one({**line, "_id": "seed-old", "idempotency_key": "s2", "approved_by": "demo-seed"})
+    assert autoapprove._trusted_products(db, "demo-kitchen") == set()
+    before = client.get(K + "/auto-approve", headers=AGENT).json()["learning"]["decisions"]
+    db.approvals.insert_one({"_id": "seed-a", "kitchen_id": "demo-kitchen", "idempotency_key": "sa",
+                             "status": "APPROVED", "decided_by": "demo-seed", "decided_at": NOW})
+    assert client.get(K + "/auto-approve", headers=AGENT).json()["learning"]["decisions"] == before
+    db.orders.insert_one({**line, "_id": "o-real", "idempotency_key": "r1", "approved_by": "aron"})
+    assert autoapprove._trusted_products(db, "demo-kitchen") == {"462775"}     # a person's third order counts
+
+
 def test_failed_approve_writes_no_auto_approved_entry_and_the_proposal_waits(env, monkeypatch):
     from gateway.service import Gateway, GatewayError
     client, _, db = env

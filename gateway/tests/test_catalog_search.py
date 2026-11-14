@@ -106,6 +106,94 @@ def test_a_query_whose_vector_is_kept_stays_hybrid_while_hybrid_rests(monkeypatc
     assert [c["hybrid"] for c in calls] == [True, True, False, False, True]
 
 
+# ---- #1452: the Catalog page and the Buyer rest apart, and the Buyer keeps one call a minute ----
+
+def _counting_embed(monkeypatch, fail_for=()):
+    """embeddings.embed that records each text and fails (a 429) for the texts in `fail_for`."""
+    embedded = []
+
+    def embed(texts, kind, post=None, sleep=None):
+        embedded.append(texts[0])
+        if texts[0] in fail_for:
+            raise embeddings.EmbeddingError("embedding request failed: HTTP 429")
+        return [[0.0] * embeddings.EMBED_DIMENSIONS]
+    monkeypatch.setattr(embeddings, "embed", embed)
+    return embedded
+
+
+def test_a_catalog_page_429_never_sends_the_buyers_search_to_words(monkeypatch):
+    monkeypatch.setenv("SEARCH_HYBRID", "true")
+    fake_store(monkeypatch)
+    embedded = _counting_embed(monkeypatch, fail_for={"oat drink"})
+    clock = {"t": 100.0}
+    now = lambda: clock["t"]
+    assert catalog_search.search(None, "oat drink", {}, 20, hybrid=True, caller="catalog", now=now)[1] == "text"
+    assert catalog_search.search(None, "rye bread", {}, 20, hybrid=True, caller="catalog", now=now)[1] == "text"
+    assert catalog_search.search(None, "plain yoghurt", {}, 20, now=now)[1] == "hybrid"    # the Buyer
+    assert embedded == ["oat drink", "plain yoghurt"]       # the Catalog page rests; the Buyer does not
+
+
+def test_a_buyer_429_never_rests_the_catalog_page(monkeypatch):
+    monkeypatch.setenv("SEARCH_HYBRID", "true")
+    fake_store(monkeypatch)
+    embedded = _counting_embed(monkeypatch, fail_for={"oat drink"})
+    clock = {"t": 100.0}
+    now = lambda: clock["t"]
+    assert catalog_search.search(None, "oat drink", {}, 20, now=now)[1] == "text"           # the Buyer
+    assert catalog_search.search(None, "rye bread", {}, 20, now=now)[1] == "text"           # rests
+    with pytest.raises(catalog_search.MeaningUnavailable):
+        catalog_search.meaning(None, "talon maito", {}, 50, now=now)                         # the Buyer rests
+    assert catalog_search.search(None, "rye bread", {}, 20, hybrid=True, caller="catalog", now=now)[1] == "hybrid"
+    assert embedded == ["oat drink", "rye bread"]
+
+
+def test_the_catalog_page_leaves_the_last_embedding_call_of_a_minute_to_the_buyer(monkeypatch):
+    fake_store(monkeypatch)
+    embedded = _counting_embed(monkeypatch)
+    clock = {"t": 100.0}
+    now = lambda: clock["t"]
+    page = lambda q: catalog_search.search(None, q, {}, 20, hybrid=True, caller="catalog", now=now)[1]
+    assert page("oat drink") == "hybrid"
+    assert page("rye bread") == "hybrid"
+    assert page("plain yoghurt") == "text"            # the third call of the minute is the Buyer's
+    assert page("oat drink") == "hybrid"              # a kept vector needs no call
+    assert catalog_search.meaning(None, "talon maito", {}, 50, now=now) == [{"product_id": "462775"}]
+    assert embedded == ["oat drink", "rye bread", "talon maito"]
+    clock["t"] += 61
+    assert page("plain yoghurt") == "hybrid"          # a new minute: no rest, the page may ask again
+    assert embedded[-1] == "plain yoghurt"
+
+
+def test_the_buyer_is_never_held_back_by_the_slot_it_keeps(monkeypatch):
+    monkeypatch.setenv("SEARCH_HYBRID", "true")
+    fake_store(monkeypatch)
+    embedded = _counting_embed(monkeypatch)
+    clock = {"t": 100.0}
+    for q in ("oat drink", "rye bread", "plain yoghurt"):
+        assert catalog_search.search(None, q, {}, 20, now=lambda: clock["t"])[1] == "hybrid"
+    assert embedded == ["oat drink", "rye bread", "plain yoghurt"]
+
+
+def test_the_catalog_page_route_searches_as_the_catalog_caller(monkeypatch):
+    AGENT = app_tests.AGENT
+    seen = []
+
+    def search(db, query, filters, limit, kitchen_id=None, *, injected=None, now=None,
+               hybrid_ok=True, hybrid=None, caller="buyer"):
+        seen.append(caller)
+        return [{"product_id": "3"}], "text"
+
+    monkeypatch.setattr(catalog_search, "search", search)
+    client, _ = _app_client(monkeypatch, None)
+    client.post("/tools/search_products", headers=AGENT, json={"query": "milk", "mode": "hybrid"})
+    need = client.post(app_tests.K + "/needs", headers=AGENT,
+                       json={"quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
+    seen_page = list(seen)
+    seen.clear()
+    client.post("/tools/search_products", headers=AGENT, json={"query": "milk", "need_id": need["need_id"]})
+    assert seen_page == ["catalog"] and seen and set(seen) == {"buyer"}
+
+
 def test_hybrid_can_be_switched_off_for_one_call(monkeypatch):
     monkeypatch.setenv("SEARCH_HYBRID", "true")
     calls = fake_store(monkeypatch)
@@ -200,7 +288,7 @@ def test_mode_hybrid_runs_meaning_for_the_catalog_page_only(monkeypatch):
     asked = []
 
     def search(db, query, filters, limit, kitchen_id=None, *, injected=None, now=None,
-               hybrid_ok=True, hybrid=None):
+               hybrid_ok=True, hybrid=None, caller="buyer"):
         asked.append(hybrid)
         if hybrid:
             return [{"product_id": "1", "matched_by": "meaning"},

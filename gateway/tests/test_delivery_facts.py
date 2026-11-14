@@ -48,10 +48,30 @@ def test_supplier_terms_give_the_cutoff_when_valio_has_none():
 
 
 def test_a_demo_product_lead_time_makes_the_cutoff_demo():
-    facts = delivery_facts({"fish": when()}, [offer("fish")], TERMS, DEMO, MON)["fish"]
+    # No supplier terms: the product's demo value is the lead time, so the cut-off is demo too.
+    facts = delivery_facts({"fish": when()}, [offer("fish")], {}, DEMO, MON)["fish"]
     assert (facts["lead_time_days"], facts["lead_time_source"]) == (1, "demo")
     assert facts["cutoff_source"] == "demo"
     assert (facts["delivery_reliability"], facts["reliability_source"]) == ("0.88", "demo")
+
+
+def test_supplier_terms_lead_time_wins_over_a_product_demo_value():
+    # #1462: real data always wins; a per-product demo value never hides the supplier's terms.
+    demo = {**DEMO, "products": {"fish": {"lead_time_days": 3, "reliability": 0.88}}}
+    facts = delivery_facts({"fish": when()}, [offer("fish")], TERMS, demo, MON)["fish"]
+    assert (facts["lead_time_days"], facts["lead_time_source"]) == (1, "supplier_terms")
+    assert (facts["cutoff_at"], facts["cutoff_source"]) == ("2026-11-13T17:00:00+02:00", "supplier_terms")
+    assert (facts["delivery_reliability"], facts["reliability_source"]) == ("0.88", "demo")
+
+
+def test_a_product_demo_lead_time_wins_over_the_supplier_demo_value():
+    demo = {**DEMO, "products": {"fish": {"lead_time_days": 1}}}
+    terms = {"order_days": ["MON", "TUE", "WED", "THU", "FRI"], "cutoff_time": "17:00"}   # no lead time
+    facts = delivery_facts({"fish": when()}, [offer("fish")], terms, demo, MON)["fish"]
+    assert (facts["lead_time_days"], facts["lead_time_source"]) == (1, "demo")
+    assert facts["cutoff_source"] == "demo"
+    other = delivery_facts({"p": when()}, [offer("p")], terms, demo, MON)["p"]
+    assert (other["lead_time_days"], other["lead_time_source"]) == (2, "demo")
 
 
 def test_no_terms_fall_back_to_the_supplier_demo_values():
