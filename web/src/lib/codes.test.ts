@@ -61,6 +61,12 @@ describe("plainReason", () => {
     );
   });
 
+  it("explains a code that stands alone after the product id", () => {
+    expect(plainReason("461332: BLOCKED_BY_RECALL")).toBe(
+      "461332: Blocked by a recall. A product on this order matches a food recall. It cannot be approved.",
+    );
+  });
+
   it("leaves a plain sentence alone", () => {
     expect(plainReason("15 KG of the request cannot be covered for this date.")).toBe(
       "15 KG of the request cannot be covered for this date.",

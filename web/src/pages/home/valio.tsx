@@ -1,10 +1,10 @@
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { formatDate, formatNumber } from "@/lib/format";
 import { isoWeekOf, weekDates } from "@/lib/week";
 import { useAsync, type AsyncState } from "@/lib/use-async";
 import type { Api } from "@/api/types";
 import type { SupplierDemandRow } from "@/types";
 
-import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
 import { Tile, TileState } from "@/pages/home/tile";
@@ -86,24 +86,24 @@ export function ShortageTile({ state, now }: { state: AsyncState<SupplierDemandR
               </p>
               <ul className="space-y-3 text-sm">
                 {worst.map((row) => (
-                  <li key={`${row.productId}-${row.date}`} className="flex items-start gap-2">
-                    <ProductThumb en={row.productName} size="sm" />
-                    <div className="min-w-0 space-y-1">
-                      <p className="font-medium break-words">
+                  <li key={`${row.productId}-${row.date}`} className="space-y-1">
+                    <p className="flex items-center gap-2 font-medium">
+                      <ProductThumb size="sm" en={row.productName} />
+                      <span className="min-w-0">
                         {row.productName} · {formatDate(row.date)}
-                      </p>
-                      <p className="tabular-nums text-muted-foreground">
-                        {t("Forecast {forecast} {unit}; available", {
-                          forecast: formatNumber(row.forecastDemand),
-                          unit: row.unit,
-                        })}{" "}
-                        {row.available === null ? (
-                          <span className="unknown-value">{t("unknown")}</span>
-                        ) : (
-                          `${formatNumber(row.available)} ${row.unit}`
-                        )}
-                      </p>
-                    </div>
+                      </span>
+                    </p>
+                    <p className="tabular-nums text-muted-foreground">
+                      {t("Forecast {forecast} {unit}; available", {
+                        forecast: formatNumber(row.forecastDemand),
+                        unit: row.unit,
+                      })}{" "}
+                      {row.available === null ? (
+                        <span className="unknown-value">{t("unknown")}</span>
+                      ) : (
+                        `${formatNumber(row.available)} ${row.unit}`
+                      )}
+                    </p>
                   </li>
                 ))}
               </ul>

@@ -213,6 +213,30 @@ async def model_pick(model, row: dict, demand: Decimal, entries: list[dict]) -> 
     return (index, reason) if reason else None
 
 
+def _pick_usage(model) -> dict:
+    """The meter's running counts for the pick role (agent/usage.py); zeros without a meter."""
+    from agent.usage import FIELDS
+    meter = getattr(model, "meter", None)
+    roles = getattr(meter, "roles", None)
+    row = roles.get(ROLE) if isinstance(roles, dict) else None
+    return {field: (row or {}).get(field, 0) for field in FIELDS}
+
+
+def pick_trace(model, before: dict, shortlisted: int) -> dict:
+    """What the model did for one offer (#1197): the code's shortlist and the pick, with the
+    meter's counts of this pick only. No shortlist facts, no names, no reason text."""
+    from gateway import model_trace
+    steps = [model_trace.step("shortlist", by="code", count=shortlisted)]
+    if model is None:
+        return model_trace.build(reader="seller", made_by="rule", model=None,
+                                 steps=steps + [model_trace.step("pick", by="code", code="PICKED")])
+    after = _pick_usage(model)
+    usage = {field: after[field] - before.get(field, 0) for field in after}
+    # complete_json always sends enable_thinking false (agent/model.py)
+    return model_trace.build(reader="seller", made_by="model", usage=usage, thinking=False,
+                             steps=steps + [model_trace.step("pick", code="PICKED")])
+
+
 def rule_pick(row: dict, entries: list[dict]) -> tuple[int, str]:
     return 0, (f"{entries[0]['name']} is the closest match in our catalog to {row['product_name']} "
                f"and is in stock for {row['date']}. Picked by rule, not by the model.")[:300]
@@ -256,6 +280,7 @@ async def run(gw, *, today: date, apply: bool, limit: int = 3, kitchen: str | No
             if not entries:
                 entry["result"] = "NO_SUBSTITUTE"
                 continue
+            before = _pick_usage(model)
             picked = rule_pick(row, entries) if model is None else await model_pick(model, row, demand, entries)
             if picked is None:
                 entry["result"] = "NO_VALID_PICK"       # the model's answer was not usable: no offer
@@ -272,7 +297,8 @@ async def run(gw, *, today: date, apply: bool, limit: int = 3, kitchen: str | No
                 offer = create(gw, supplier_id, {
                     "kitchen_id": kitchen_id, "product_id": choice["product_id"],
                     "replaces_product_id": row["product_id"], "requested_date": row["date"],
-                    "reason": picked[1], "made_by": entry["made_by"], "idempotency_key": key}, "seller-agent")
+                    "reason": picked[1], "made_by": entry["made_by"], "idempotency_key": key,
+                    "model_trace": pick_trace(model, before, len(entries))}, "seller-agent")
                 entry.update(result=offer["status"], offer_id=offer["offer_id"], quantity=offer["quantity"])
             except GatewayError as exc:
                 entry["result"] = exc.code        # refused: not counted, a later date may still be tried

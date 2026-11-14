@@ -14,6 +14,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 from agent.model import Nemotron
 from agent.runner import Buyer
 from agent.usage import emit
+from gateway import model_trace
 from gateway.mcp_server import GatewayClient, build_server
 from store import agent_runs
 from store import buyer_context
@@ -90,6 +91,7 @@ class BuyerWorker:
             # The model does not finish every run (seen live: about 1 in 3 stopped without asking
             # for approval). A run that wrote nothing is safe to start once more, under its own
             # run id so its audit steps stay separate. A run that wrote something is never repeated.
+            steps = []
             for attempt in (1, 2):
                 run_id = row['_id'] if attempt == 1 else f"{row['_id']}-retry"
                 async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
@@ -98,8 +100,10 @@ class BuyerWorker:
                                   run_id=run_id,
                                   max_steps=12, now=self.now,
                                   catalog_lookup=lookup, allergen_policy=policy,
-                                  substitute_planner=SubstitutePlanner(lookup, policy) if policy else None)
+                                  substitute_planner=SubstitutePlanner(lookup, policy) if policy else None,
+                                  attempt=attempt)
                     outcome = await buyer.run(need['text'])
+                steps += buyer.trace
                 if outcome['status'] == 'SENT_FOR_APPROVAL' or buyer.mutations:
                     break
             if outcome['status'] != 'SENT_FOR_APPROVAL':
@@ -116,6 +120,10 @@ class BuyerWorker:
             if meter is not None:
                 # Model calls, tokens and seconds of this request, both attempts (agent/usage.py).
                 result['buyer_usage'] = meter.total()
+            # What the model did (#1197): kept with the run, served on the proposal later.
+            result['model_trace'] = model_trace.build(
+                reader='buyer', made_by='model', usage=meter.total() if meter is not None else None,
+                thinking=getattr(model, 'thinking', None), steps=steps, attempts=attempt)
             return result
         try:
             result = await asyncio.wait_for(execute(), timeout=self.timeout)

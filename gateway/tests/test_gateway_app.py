@@ -307,6 +307,23 @@ def test_free_text_uses_the_parser_and_the_engine(env):
     assert again.json()["proposal_id"] == p["proposal_id"]
 
 
+def test_a_parser_proposal_says_the_parser_answered_and_has_no_model_steps(env):
+    """#1197: the panel says the parser answered; a structured proposal has no trace."""
+    client, _, _ = env
+    p = client.post(K + "/proposals", headers=AGENT, json={
+        "text": "1000 l laktoositonta maitoa maanantaiksi", "idempotency_key": "trace-parser"}).json()
+    for served in (p, client.get(K + f"/proposals/{p['proposal_id']}", headers=HUMAN).json(),
+                   next(row for row in client.get(K + "/proposals", headers=HUMAN).json()["proposals"]
+                        if row["proposal_id"] == p["proposal_id"])):
+        trace = served["model_trace"]
+        assert (trace["made_by"], trace["reader"], trace["model"], trace["steps"]) == ("rule", "parser", None, [])
+        assert trace["calls"] == 0 and trace["attempts"] == 0
+    structured = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "50", "unit": "L", "requested_date": "2026-11-16",
+        "idempotency_key": "trace-structured"}).json()
+    assert structured["model_trace"] is None
+
+
 def test_the_parser_takes_the_day_of_the_form_when_the_text_names_none(env):
     """A request typed without a day, with the date picked in the form: the parser fallback
     must use that date, not answer CANNOT_READ_REQUEST."""

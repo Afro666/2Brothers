@@ -27,7 +27,23 @@ def finish(db, run_id, *, state, result):
         'state': state, 'result': result, 'finished_at': datetime.now(timezone.utc)}})
 
 
-USAGE_SUMS = ('calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens')
+def traces(db, kitchen_id, proposal_ids):
+    """What the model did (#1197): `{proposal_id: result.model_trace}` of this kitchen's
+    finished Buyer runs for these proposals. A run without a trace is left out."""
+    ids = [pid for pid in proposal_ids if isinstance(pid, str)]
+    if not ids:
+        return {}
+    rows = db.agent_runs.find({'kitchen_id': kitchen_id, 'state': 'READY', 'result.proposal_id': {'$in': ids}},
+                              {'result.proposal_id': 1, 'result.model_trace': 1})
+    out = {}
+    for row in rows:
+        result = row.get('result') or {}
+        if isinstance(result.get('model_trace'), dict):
+            out[result['proposal_id']] = result['model_trace']
+    return out
+
+
+USAGE_SUMS =('calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens')
 
 
 def _count(value):

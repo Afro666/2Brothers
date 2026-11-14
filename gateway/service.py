@@ -97,7 +97,7 @@ class Gateway:
         audit.append_event(self.db, event, {"kitchen_id": kitchen_id, "at": self.now().isoformat()})
         try:    # webhooks (#277): after the event is stored; a receiver can never break an order
             from gateway import webhooks
-            webhooks.dispatch(self.db, kitchen_id, kind, data)
+            webhooks.dispatch(self.db, kitchen_id, kind, data, actor=actor)
         except Exception:
             pass
 
@@ -729,7 +729,17 @@ class Gateway:
         except Exception:
             pass
 
-    def _proposal_out(self, doc: dict) -> dict:
+    def _trace(self, doc: dict, traces: dict | None = None) -> dict | None:
+        """What the model did (#1197): the Buyer run's trace, the parser's rule trace, or None."""
+        from gateway import model_trace
+        from store import agent_runs
+        if (doc.get("request") or {}).get("made_by") == "parser":
+            return model_trace.parser_trace()
+        if traces is None:
+            traces = agent_runs.traces(self.db, doc["kitchen_id"], [doc["_id"]])
+        return model_trace.stored(traces.get(doc["_id"]))
+
+    def _proposal_out(self, doc: dict, traces: dict | None = None) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
         result = {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
                 "substitute_options": options.merged(doc),
@@ -748,6 +758,7 @@ class Gateway:
         from store.products import get_products
         result['label_checks'] = checks(get_products(self.db,
             [line['product_id'] for line in result['lines']], doc['kitchen_id']), now=self.now())
+        result['model_trace'] = self._trace(doc, traces)
         return result
 
     def _summary(self, request: dict, sim: dict) -> dict:
@@ -763,11 +774,15 @@ class Gateway:
         return self._proposal_out(doc)
 
     def list_proposals(self, kitchen_id: str) -> list[dict]:
-        return [self._proposal_out(d) for d in
-                self.db.proposals.find({"kitchen_id": kitchen_id}).sort("created_at", -1).limit(100)]
+        from store import agent_runs
+        docs = list(self.db.proposals.find({"kitchen_id": kitchen_id}).sort("created_at", -1).limit(100))
+        traces = agent_runs.traces(self.db, kitchen_id, [d["_id"] for d in docs])     # one read for all
+        return [self._proposal_out(d, traces) for d in docs]
 
-    def approve(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None) -> dict:
-        """A human says yes to the figure they saw. Re-check live; place only if unchanged."""
+    def approve(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None,
+                via: dict | None = None) -> dict:
+        """A human says yes to the figure they saw. Re-check live; place only if unchanged.
+        `via`: audit fields of a personal approval token ({"via": "personal_token", "token_id"})."""
         if not human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can approve an order")
         key, seen = body.get("idempotency_key"), body.get("expected_total")
@@ -792,7 +807,7 @@ class Gateway:
         if claimed is None:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
         try:
-            return self._place(kitchen_id, proposal_id, doc, stored, seen, key, human)
+            return self._place(kitchen_id, proposal_id, doc, stored, seen, key, human, via)
         except BaseException:
             # A write may have succeeded before its response failed. Only a
             # confirmed absence permits releasing the post-quote commit claim.
@@ -855,7 +870,9 @@ class Gateway:
             raise GatewayError(409, "NOT_PENDING", "this proposal is already approved")
         raise GatewayError(409, "NOT_PENDING", f"proposal is {doc.get('status')}")
 
-    def _place(self, kitchen_id: str, proposal_id: str, doc: dict, stored: dict, seen, key: str, human: str) -> dict:
+    def _place(self, kitchen_id: str, proposal_id: str, doc: dict, stored: dict, seen, key: str, human: str,
+               via: dict | None = None) -> dict:
+        via = via or {}
         # Live re-check: price or stock may have moved since the human looked.
         fresh = self._quote(kitchen_id, doc["request"])
         new_total = Decimal(fresh["simulation"]["expected_total"])
@@ -863,7 +880,7 @@ class Gateway:
                 fresh["simulation"]["lines"] != stored["simulation"]["lines"]:
             self.db.proposals.update_one({"_id": proposal_id}, {"$set": {"offer_id": fresh["offer_id"]}})
             self._audit(kitchen_id, "total_mismatch", human, proposal_id=proposal_id,
-                        seen=str(seen), now=fresh["simulation"]["expected_total"])
+                        seen=str(seen), now=fresh["simulation"]["expected_total"], **via)
             raise GatewayError(409, "TOTAL_MISMATCH", "the price or stock moved; look at the new total",
                                expected_total=fresh["simulation"]["expected_total"])
         # Unchanged basket on an expired offer: place it on the fresh live quote, so the
@@ -911,13 +928,14 @@ class Gateway:
                                          {"$set": {"status": "APPROVED", "order_id": order["order_id"]}})
             self._audit(kitchen_id, "order_placed", human, proposal_id=proposal_id,
                         order_id=order["order_id"], expected_total=sim["expected_total"],
-                        supplier_must_confirm=must_confirm)
+                        supplier_must_confirm=must_confirm, **via)
         else:   # the key already placed an order: nothing new placed here, release the claim
             self.db.proposals.update_one({"_id": proposal_id, "status": "COMMITTING", "approving_key": key},
                                          {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
         return {"proposal_id": proposal_id, **self._order_out(order)}
 
-    def reject(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None) -> dict:
+    def reject(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None,
+               via: dict | None = None) -> dict:
         if not human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can reject an order")
         reason = body.get('reason', '')
@@ -933,13 +951,14 @@ class Gateway:
         first_time = self.db.audit_log.find_one({'event.event_id': event_id}, {'_id': 1}) is None
         audit.append_event(self.db, {'event_id': event_id,
             'kind': 'proposal_rejected', 'actor': doc.get('rejected_by', human),
-            'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')},
+            'proposal_id': proposal_id, 'reason': doc.get('reject_reason', ''), **(via or {})},
             {'kitchen_id': kitchen_id, 'at': doc.get('rejected_at', self.now().isoformat())})
         if first_time:   # this path writes its audit event itself, so it also tells the webhooks (#277)
             try:
                 from gateway import webhooks
                 webhooks.dispatch(self.db, kitchen_id, 'proposal_rejected',
-                                  {'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')})
+                                  {'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')},
+                                  actor=doc.get('rejected_by', human))
             except Exception:
                 pass
         return {"proposal_id": proposal_id, "status": "REJECTED"}
