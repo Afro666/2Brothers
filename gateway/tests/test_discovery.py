@@ -56,6 +56,7 @@ def test_card_has_the_required_fields(client):
     assert "kitchen:approve" not in str(c["security"])
     assert c["capabilities"]["a2aMessaging"] is False      # honest: discovery only, no A2A RPC
     assert c["links"]["openapi"] == BASE + "/openapi.json" and c["links"]["mcp"] == BASE + "/mcp"
+    assert c["links"]["docs"] == BASE + "/docs" and client.get("/docs").status_code == 200
 
 
 def test_every_skill_is_a_route_this_app_serves(client):

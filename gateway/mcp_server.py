@@ -81,10 +81,13 @@ def build_server(gateway: GatewayClient) -> FastMCP:
 
     @server.tool(annotations=read)
     async def search_products(query: Annotated[str, Field(min_length=1, max_length=1000)],
-                              filters: SearchFilters | None = None) -> dict:
-        """Find catalog products. Missing allergen data is unknown, never safe. Do not invent quantities."""
-        return await gateway.request("POST", "/tools/search_products", payload={
-            "query": query, "filters": (filters or SearchFilters()).model_dump()})
+                              filters: SearchFilters | None = None,
+                              need_id: Identifier | None = None) -> dict:
+        """Find catalog products. Pass the need_id: the result is then limited to products sold in the need's measure, and each product has can_arrive (true: it can still be delivered on the requested date; prefer those, and put several in one get_offer). Missing allergen data is unknown, never safe. Do not invent quantities."""
+        payload = {"query": query, "filters": (filters or SearchFilters()).model_dump()}
+        if need_id:
+            payload["need_id"] = need_id
+        return await gateway.request("POST", "/tools/search_products", payload=payload)
 
     @server.tool(annotations=read)
     async def get_offer(product_ids: Annotated[list[Identifier], Field(min_length=1, max_length=1000)],

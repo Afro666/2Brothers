@@ -50,7 +50,10 @@ def parse_need(body, *, today=None):
         requested = date.fromisoformat(requested).isoformat()
     except (ValueError, TypeError):
         raise WorkerError(422, 'INVALID_DATE') from None
-    return {'quantity': quantity, 'unit': unit, 'requested_date': requested, 'text': text.strip()}
+    need = {'quantity': quantity, 'unit': unit, 'requested_date': requested, 'text': text.strip()}
+    if body.get('event') is True:
+        need['event'] = True    # one-off demand: the gateway marks every line EVENT_LINE (#530)
+    return need
 
 
 class BuyerWorker:

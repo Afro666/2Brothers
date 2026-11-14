@@ -379,6 +379,21 @@ def test_lost_attempt_response_retains_claim_for_reconciliation(env, monkeypatch
     assert db.orders.count_documents({}) == 1
 
 
+def test_an_event_need_marks_every_offer_line_event_line(env):
+    """#530: the trusted need carries the event flag; offers quoted for it get EVENT_LINE."""
+    client, _, _ = env
+    need = client.post(K + "/needs", headers=AGENT, json={
+        "quantity": "60", "unit": "L", "requested_date": "2026-11-16", "event": True}).json()
+    offer = client.post("/tools/get_offer", headers=AGENT,
+                        json={"need_id": need["need_id"], "product_ids": ["462775"]}).json()
+    assert offer["lines"] and all("EVENT_LINE" in ln["reason_codes"] for ln in offer["lines"])
+    plain = client.post(K + "/needs", headers=AGENT, json={
+        "quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
+    offer = client.post("/tools/get_offer", headers=AGENT,
+                        json={"need_id": plain["need_id"], "product_ids": ["462775"]}).json()
+    assert not any("EVENT_LINE" in ln["reason_codes"] for ln in offer["lines"])
+
+
 def test_offer_lines_carry_delivery_date_and_cut_off(env):
     """#531: each line says when it arrives and whether its order cut-off has passed (S01)."""
     client, _, _ = env

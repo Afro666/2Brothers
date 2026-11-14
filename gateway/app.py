@@ -39,8 +39,8 @@ class Principal:
         """403 unless this caller holds `scope` for `kitchen_id`."""
         if self.kind != "human" and scope not in self.scopes:
             raise GatewayError(403, "SCOPE_REQUIRED", f"this token lacks {scope}")
-        if self.kind == "human" and scope == "kitchen:propose" and self.role == "viewer":
-            raise GatewayError(403, "ROLE_REQUIRED", "a viewer can read, not ask for orders")
+        if self.kind == "human" and scope in ("kitchen:propose", "kitchen:write") and self.role == "viewer":
+            raise GatewayError(403, "ROLE_REQUIRED", "a viewer can read, not change or ask")
         if kitchen_id is not None and self.kitchen_id is not None and kitchen_id != self.kitchen_id:
             raise GatewayError(403, "KITCHEN_SCOPE", "this token belongs to another kitchen")
 
@@ -418,12 +418,14 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     @app.post("/tools/search_products")
     async def search(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:read")
-        from store.search import search_products
         data = await body(request)
         limit = data.get("limit", 20)
         if not isinstance(limit, int) or not 1 <= limit <= 50:
             raise GatewayError(422, "INVALID_REQUEST", "limit: 1 to 50")
-        return {"products": search_products(gw().db, data.get("query") or "", data.get("filters") or {}, limit)}
+        need_id = data.get("need_id")
+        if need_id is not None and not isinstance(need_id, str):
+            raise GatewayError(422, "INVALID_REQUEST", "need_id must be a string")
+        return gw().tool_search(kitchen(who), data.get("query") or "", data.get("filters") or {}, limit, need_id)
 
     @app.post("/tools/get_offer")
     async def get_offer(request: Request, who: Principal = Depends(principal)):
@@ -479,6 +481,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     # Recall list and "check now" (#358): views over the monitor's holds and replacements.
     from gateway.recalls_view import mount_recalls
     mount_recalls(app, gw, principal, body)
+
+    # Kitchen planning routes (#74): stock, products, recipes, menu plans, suppliers, demand.
+    from gateway.kitchen_routes import register as register_kitchen_routes
+    register_kitchen_routes(app, gw, principal, body)
 
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp

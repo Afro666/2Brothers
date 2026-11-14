@@ -183,6 +183,18 @@ The first approver comes from the server `.env`: `DEMO_USER_EMAIL`, `DEMO_USER_P
 Set `GATEWAY_REQUIRE_LOGIN=true` to switch off the shared human token: then only a signed-in
 person can approve (the open demo stops being open). The Buyer agent token is not affected.
 
+## Conformance kit (#286)
+
+Any agent builder can check a running gateway's trust rules with an agent-level token:
+
+    python -m gateway.conformance --base-url https://<host>/gateway --token <token> [--markdown | --json]
+
+Twelve live checks (no order is placed, no approval is opened): no token no access, the
+gateway sizes the order from the stored need and ignores a quantity from the model,
+`place_order` without a human approval is refused, an agent token cannot approve, reject
+or create tokens, no cancel or edit route exists, a kitchen token cannot read another
+kitchen, the MCP server exposes no approve tool. Exit code 1 on any FAIL. The offline
+golden scenarios S01-S13 are `python -m gateway.scenarios`.
 ## Standing-order drift (#377)
 
 `gateway/drift_routes.py` serves the two contract routes from `store.drift`:
@@ -273,3 +285,22 @@ a line:
 - The `recall_check` audit entry is also the idempotency record: a repeat key scrapes and
   applies nothing. A check never orders, approves or cancels.
 - Demo: `python -m demo.recall_demo` makes the open coffee proposal the check blocks.
+
+## Kitchen planning routes (#74)
+
+`gateway/kitchen_routes.py`, all under `/v1/kitchens/{k}`:
+
+| Route | Who | What |
+|---|---|---|
+| `GET/POST /suppliers`, `GET/PUT/DELETE /suppliers/{id}` | read / write | Suppliers and their user-set terms (null = unknown) |
+| `GET/POST /recipes`, `GET/PUT/DELETE /recipes/{id}` | read / write | Ingredients with `qty_per_portion`, `unit`, `yield_pct` |
+| `GET/POST /products`, `GET/PUT/DELETE /products/{id}` | read / write | The kitchen's own products |
+| `GET/PUT /menu-plans/{YYYY-Www}` | read / write | `days: [{date, meal, recipe_id, covers}]`; an empty week returns `days: []` |
+| `POST /stock-counts`, `GET /stock` | write / read | A null count is "not counted", never zero; replay by `idempotency_key` |
+| `GET /demand?from=&to=` | read | Per product and day: `gross_need` (covers x recipe / yield), `net_need` (null when stock is unknown), `why`, `source` (`menu_plan`, else the stored forecast: `history`), plus `problems` |
+| `GET/PUT /settings` | read / approver | Engine settings; decimals as strings |
+| `GET/PUT /sharing` | read / approver | `{supplier_id, share_forecast}`; each change is an audit entry |
+
+"write" = a signed-in person who is not a viewer, or an API token with the new scope
+`kitchen:write` (a POS or stock system). The Buyer agent token cannot write. `on_order` is
+0 with `on_order_known: false` until open orders are converted to kitchen units.
