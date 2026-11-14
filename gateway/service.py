@@ -502,12 +502,25 @@ class Gateway:
             if not ok:
                 return
             by = f"auto-approve (rule set by {evidence['rule_set_by']})"
-            self._audit(kitchen_id, "auto_approved", by, proposal_id=doc["_id"],
-                        expected_total=sim["expected_total"], evidence=evidence)
-            self.approve(kitchen_id, doc["_id"], {"expected_total": sim["expected_total"],
-                                                  "idempotency_key": "auto:" + doc["_id"]}, human=by)
         except Exception:
             return
+        # Approve first: the audit log must never show an auto-approval that placed no order.
+        try:
+            placed = self.approve(kitchen_id, doc["_id"], {"expected_total": sim["expected_total"],
+                                                           "idempotency_key": "auto:" + doc["_id"]}, human=by)
+        except Exception as exc:
+            try:
+                self._audit(kitchen_id, "auto_approve_skipped", by, proposal_id=doc["_id"],
+                            reason=getattr(exc, "code", None) or type(exc).__name__)
+            except Exception:
+                pass
+            return
+        try:
+            self._audit(kitchen_id, "auto_approved", by, proposal_id=doc["_id"],
+                        order_id=placed.get("order_id"), expected_total=sim["expected_total"],
+                        evidence=evidence)
+        except Exception:
+            pass
 
     def _proposal_out(self, doc: dict) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
