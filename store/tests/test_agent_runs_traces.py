@@ -30,3 +30,11 @@ def test_traces_reads_finished_runs_of_this_kitchen_only(db):
 def test_traces_of_no_proposals_reads_nothing(db):
     assert agent_runs.traces(db, "K01", []) == {}
     assert agent_runs.traces(db, "K01", [None, 3]) == {}
+
+
+def test_startup_indexes_cover_the_trace_read(db):
+    from store.db import ensure_indexes
+
+    ensure_indexes(db)
+    keys = [spec["key"] for spec in db.agent_runs.index_information().values()]
+    assert [("kitchen_id", 1), ("result.proposal_id", 1)] in keys
