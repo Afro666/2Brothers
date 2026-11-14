@@ -11,7 +11,7 @@ kitchen units (`L`, `KG`, `PCS`), as docs/contract.md says.
 from __future__ import annotations
 
 import argparse
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -267,6 +267,9 @@ def product_docs(db, product_ids) -> dict[str, dict]:
 
 # Stock counts from the kitchen (POST /stock-counts)
 
+STALE_CLAIM = timedelta(seconds=60)
+
+
 class StockCountBusy(RuntimeError):
     """The same idempotency key is being stored right now by another request."""
 
@@ -277,16 +280,28 @@ def stock_count_once(db, kitchen_id: str, key: str, store) -> tuple[str, int, bo
 
     The key row is claimed first, with the key as `_id`, so two replays at the same moment
     cannot both store (#646). A failed store releases the claim, so the key can be retried.
+    A claim older than `STALE_CLAIM` (its process died) is taken over.
     """
     from pymongo.errors import DuplicateKeyError
     count_id = f"{kitchen_id}:{key}"
+    now = datetime.now(timezone.utc)
     try:
-        db.stock_count_keys.insert_one({"_id": count_id, "stock_count_id": count_id, "stored": None})
+        db.stock_count_keys.insert_one({"_id": count_id, "stock_count_id": count_id, "stored": None,
+                                        "claimed_at": now})
     except DuplicateKeyError:
         done = db.stock_count_keys.find_one({"_id": count_id}) or {}
-        if done.get("stored") is None:
+        if done.get("stored") is not None:
+            return count_id, done["stored"], True
+        claimed = done.get("claimed_at")
+        if claimed is not None and claimed.tzinfo is None:
+            claimed = claimed.replace(tzinfo=timezone.utc)
+        # A claim left by a process that died before storing is taken over (#873).
+        if claimed is not None and now - claimed < STALE_CLAIM:
             raise StockCountBusy(count_id) from None
-        return count_id, done["stored"], True
+        if not db.stock_count_keys.find_one_and_update(
+                {"_id": count_id, "stored": None, "claimed_at": done.get("claimed_at")},
+                {"$set": {"claimed_at": now}}):
+            raise StockCountBusy(count_id) from None
     try:
         stored = store()
     except BaseException:
