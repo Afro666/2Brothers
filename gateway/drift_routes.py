@@ -82,5 +82,5 @@ def mount_drift(app: FastAPI, gw, principal) -> None:
     @app.get("/v1/suppliers/{supplier_id}/demand/drift")
     def demand_drift(supplier_id: str, who=Depends(principal)):
         # No kitchen id on purpose: the answer spans kitchens, and consent decides which.
-        who.need("supplier:demand")
+        who.need_supplier("supplier:demand")
         return supplier_drift(gw().db, supplier_id, gw().now())

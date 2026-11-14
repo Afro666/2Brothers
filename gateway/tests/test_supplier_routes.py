@@ -62,3 +62,19 @@ def test_revoked_consent_disappears_and_the_buyer_token_cannot_read_it(env):
     assert milk["demand"] == "40" and milk["kitchens"] == 1
     assert client.get(URL, headers=AGENT).status_code == 403
     assert client.get("/v1/suppliers/sup-valio/demand?from=2026-11-16&to=2027-01-16", headers=HUMAN).status_code == 422
+
+
+def test_a_kitchen_bound_person_cannot_read_a_suppliers_view(env):
+    """#599: consent names the supplier, not other kitchens. A person signed in to one
+    kitchen never sees the supplier's cross-kitchen view; the demo's server session does."""
+    from gateway import users
+    client, _, db = env
+    seed(db)
+    users.create_user(db, "chef@k1.example", "chef pass 1234", name="C", role="approver", kitchen_id="K1")
+    client.post("/v1/auth/login", json={"email": "chef@k1.example", "password": "chef pass 1234"})
+    for url in (URL, "/v1/suppliers/sup-valio/demand/shortage-risk?from=2026-11-16&to=2026-11-16",
+                "/v1/suppliers/sup-valio/demand/drift"):
+        r = client.get(url)
+        assert r.status_code == 403 and r.json()["error"]["code"] == "SCOPE_REQUIRED", url
+    client.cookies.clear()
+    assert client.get(URL, headers=HUMAN).status_code == 200

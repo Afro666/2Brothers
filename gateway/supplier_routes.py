@@ -106,13 +106,13 @@ def mount_supplier(app, gw, principal) -> None:
 
     @app.get("/v1/suppliers/{supplier_id}/demand")
     def demand(supplier_id: str, request: Request, who=Depends(principal)):
-        who.need("supplier:demand")
+        who.need_supplier("supplier:demand")
         start, end = window(request)
         return supplier_demand(gw().db, gw().valio, supplier_id, start, end, request.query_params.get("product"))
 
     @app.get("/v1/suppliers/{supplier_id}/demand/shortage-risk")
     def shortage_risk(supplier_id: str, request: Request, who=Depends(principal)):
-        who.need("supplier:demand")
+        who.need_supplier("supplier:demand")
         start, end = window(request)
         answer = supplier_demand(gw().db, gw().valio, supplier_id, start, end)
         answer["rows"] = [row for row in answer["rows"] if row["risk"] != "OK"]

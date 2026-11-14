@@ -44,6 +44,14 @@ class Principal:
         if kitchen_id is not None and self.kitchen_id is not None and kitchen_id != self.kitchen_id:
             raise GatewayError(403, "KITCHEN_SCOPE", "this token belongs to another kitchen")
 
+    def need_supplier(self, scope: str) -> None:
+        """A supplier's view across kitchens (#599). A caller bound to one kitchen (its
+        people, its tokens) never reads it: consent names the supplier, not other kitchens.
+        Until supplier accounts exist, only unbound server sessions (the demo) pass."""
+        self.need(scope)
+        if self.kitchen_id is not None:
+            raise GatewayError(403, "SCOPE_REQUIRED", "a kitchen's session cannot read a supplier's view")
+
     @property
     def human(self) -> str | None:
         """The name of a person who may approve, reject and manage tokens; else None."""
