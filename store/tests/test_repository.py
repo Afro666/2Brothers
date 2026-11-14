@@ -184,6 +184,29 @@ class RepositoryTest(unittest.TestCase):
             with self.assertRaises((ValueError, TypeError), msg=bad):
                 self.repo.own_products.create("k1", {**good, **bad})
 
+    def test_a_hand_typed_price_sets_price_source_back_to_entered(self):
+        photo = {**OWN, "unit_price_eur": "4.40", "price_source": "price_list_photo"}
+        p = self.repo.own_products.create("k1", photo)
+        self.assertEqual(p["price_source"], "price_list_photo")
+
+        # The same price written "4.4" has not changed: the stored source stays.
+        p = self.repo.own_products.update("k1", p["product_id"], {"unit_price_eur": "4.4"})
+        self.assertEqual(p["price_source"], "price_list_photo")
+        self.assertEqual(p["unit_price_eur"], Decimal("4.4"))
+
+        # A new price without a source was typed by a person, not read from the photo.
+        p = self.repo.own_products.update("k1", p["product_id"], {"unit_price_eur": "4.60"})
+        self.assertEqual(p["price_source"], "entered")
+
+        # A body that sends the source keeps what it sends, even with a new price.
+        p = self.repo.own_products.update("k1", p["product_id"], {
+            "unit_price_eur": "4.80", "price_source": "price_list_photo"})
+        self.assertEqual(p["price_source"], "price_list_photo")
+
+        # A PUT that does not change the price keeps the stored source.
+        p = self.repo.own_products.update("k1", p["product_id"], {"name": "Rye loaf"})
+        self.assertEqual(p["price_source"], "price_list_photo")
+
     # Settings
 
     def test_settings_change_only_the_fields_given(self):

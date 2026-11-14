@@ -2537,7 +2537,8 @@ strings in the stated unit.
 
 - `price_source` is `entered` (typed in by a person, the default) or `price_list_photo`
   (read from a photo of the supplier's price list and checked by a person, #1174). It
-  says where `unit_price_eur` came from; it never changes how the price is used.
+  says where `unit_price_eur` came from; it never changes how the price is used. A
+  change of `unit_price_eur` without `price_source` sets it back to `entered`.
 - `allergen_data` is `ENTERED` or `UNKNOWN`. An empty `allergens` list with `UNKNOWN`
   means unknown, never "free from".
 - Codes are the GS1 allergen codes the Valio catalog uses; `level` is `CONTAINS` or
