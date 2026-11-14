@@ -168,6 +168,9 @@ export function OptionCompare({
           const co2 = option.co2KgPerKg;
           const open = openOptions.has(option.id);
           const contentId = `${headingId}-option-${index}`;
+          const titleId = `${contentId}-title`;
+          const metaId = `${contentId}-meta`;
+          const blockedId = `${contentId}-blocked`;
           return (
             <li
               key={option.id}
@@ -178,9 +181,11 @@ export function OptionCompare({
               )}
             >
               <div className={cn(open && "grid gap-x-5 gap-y-2 p-3 sm:grid-cols-[9.5rem_minmax(0,1fr)]")}>
-              <h5 className={cn("min-w-0 font-medium", open && "sm:col-span-2")}>
+              <h5 aria-labelledby={titleId} className={cn("min-w-0 font-medium", open && "sm:col-span-2")}>
                 <button
                   type="button"
+                  aria-labelledby={titleId}
+                  aria-describedby={blocked && !open ? `${metaId} ${blockedId}` : metaId}
                   aria-expanded={open}
                   aria-controls={contentId}
                   onClick={() => toggle(option.id)}
@@ -189,21 +194,23 @@ export function OptionCompare({
                     open ? "p-0" : "px-3 py-2 font-normal hover:bg-muted/60",
                   )}
                 >
-                  <span className="min-w-0 flex-[1_1_16rem] break-words font-medium">
+                  <span id={titleId} className="min-w-0 flex-[1_1_16rem] break-words font-medium">
                     Option {letter}:{" "}
                     {option.lines
                       .map((line) => `${formatNumber(line.quantity)} ${line.unit} ${line.productName ?? line.productId}`)
                       .join(" + ")}
                   </span>
-                  {recommended ? (
-                    <span className="stamp rounded-sm bg-primary px-2 py-0.5 text-xs whitespace-nowrap text-primary-foreground">
-                      Recommended by the Buyer
+                  <span id={metaId} className="contents">
+                    {recommended ? (
+                      <span className="stamp rounded-sm bg-primary px-2 py-0.5 text-xs whitespace-nowrap text-primary-foreground">
+                        Recommended by the Buyer
+                      </span>
+                    ) : null}
+                    {option.kind === "PARTIAL" ? <span className={BADGE}>Part now, the rest later</span> : null}
+                    {option.chosen ? <span className={BADGE}>Proposed now</span> : null}
+                    <span className="price-tag min-w-0 break-words text-xs font-normal">
+                      {priceLabel === "unknown" ? <span className="unknown-value">unknown</span> : priceLabel}
                     </span>
-                  ) : null}
-                  {option.kind === "PARTIAL" ? <span className={BADGE}>Part now, the rest later</span> : null}
-                  {option.chosen ? <span className={BADGE}>Proposed now</span> : null}
-                  <span className="price-tag min-w-0 break-words text-xs font-normal">
-                    {priceLabel === "unknown" ? <span className="unknown-value">unknown</span> : priceLabel}
                   </span>
                   <ChevronDown
                     aria-hidden
@@ -213,7 +220,9 @@ export function OptionCompare({
                     )}
                   />
                   {blocked && !open ? (
-                    <span className="min-w-0 basis-full break-words text-xs font-normal text-warning">{blocked}</span>
+                    <span id={blockedId} className="min-w-0 basis-full break-words text-xs font-normal text-warning">
+                      {blocked}
+                    </span>
                   ) : null}
                 </button>
               </h5>
