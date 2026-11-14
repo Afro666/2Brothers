@@ -40,7 +40,7 @@ Live site: <https://31-22-104-201.sslip.io>. For agents:
 | B. Matches what the buyer asked (20%) | The engine sizes each line from the stored need. The model picks products only. Each line has a `why` sentence. | `engine/README.md`, `docs/choices.md` |
 | C. Autonomy and controls (20%) | Approve is human-only. A moved price refuses the old yes (`TOTAL_MISMATCH`). Auto-approve exists, is off by default, and must be earned (4 weeks, 20 human decisions). Twelve live conformance checks. | `gateway/README.md` ("Earned auto-approve", "Conformance kit"), `gateway/conformance.py` |
 | D. Robustness to exceptions (15%) | 13 golden scenarios in one command: all 13 PASS (table below). Unknown stock is never treated as stock. A recall blocks a proposal. | `gateway/scenarios.py`, `docs/scenarios.md`, `docs/recall-contract.md` |
-| E. Openness and path to production (15%) | The same rules over MCP and OpenAPI. Public `llms.txt` and agent card. Scoped tokens, signed webhooks, one adapter per supplier. | `docs/byoa.md`, `gateway/discovery.py`, `gateway/suppliers.py` |
+| E. Openness and path to production (15%) | The same rules over MCP and OpenAPI. Public `llms.txt` and agent card. Scoped tokens, signed offers and signed order receipts (one public key), signed webhooks, one adapter per supplier. An outside MCP client reaches a waiting proposal and gets 403 on approve (`python -m demo.second_agent`). | `docs/byoa.md`, `gateway/discovery.py`, `gateway/signing.py`, `gateway/suppliers.py`, `demo/second_agent.py` |
 
 **Optional features**
 
