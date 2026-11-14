@@ -231,7 +231,8 @@ receipt): order, delivery, check. About 20 seconds.
 
 **Which order.** A fixed demo order, reference `DEMO-1198`, made by `demo/delivery_order.py`
 (the seed places it too). It never changes, unlike the order beat 2 places. Three Valio lines
-at the catalog prices of 13 Nov, EUR 178.09 ex VAT:
+at the catalog prices of 13 Nov, EUR 178.09 ex VAT. Its order page shows "Placed by the demo
+seed" where a signed receipt would be: no person approved it, so it has no receipt (#1560).
 
 | Product | Ordered | On the note | Status | To claim |
 |---|---|---|---|---|

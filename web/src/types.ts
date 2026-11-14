@@ -150,6 +150,11 @@ export interface Order {
    * null = a placed order without one; undefined = not a placed order (or not known).
    */
   receipt?: OrderReceipt | null;
+  /**
+   * `placed_by` of the order answer (#1560): set only when the demo seed placed the order.
+   * No person approved such an order, so it has no receipt.
+   */
+  placedBy?: "demo-seed";
 }
 
 /** The compact JWS plus a few claims decoded for display only; never verified in the browser. */

@@ -181,6 +181,24 @@ def menu_days(week: str, days: list) -> list[dict]:
 
 
 PRICE_SOURCES = ("entered", "price_list_photo")
+_CATEGORY = re.compile(r"\d{5}")
+
+
+def _own_extras(data: dict) -> dict:
+    """Optional own-product fields (#1603, #1604): an entered VAT rate, the catalog category of
+    the same kind of product, and the catalog product it is the same as. None: not given."""
+    rate = _decimal(data.get("vat_rate"), "vat_rate")
+    if rate is not None and rate > 100:
+        raise ValueError("vat_rate must be a percent from 0 to 100")
+    category = data.get("category")
+    if category is not None and not (isinstance(category, str) and _CATEGORY.fullmatch(category)):
+        raise ValueError("category must be a 5-digit catalog category code")
+    same = data.get("catalog_product_id")
+    if same is not None and not (isinstance(same, str) and same.strip()):
+        raise ValueError("catalog_product_id must be a product code")
+    return {"vat_code": None, "vat_rate": None if rate is None else f"{rate.normalize():f}",
+            "vat_source": None if rate is None else "entered",
+            "category": category, "catalog_product_id": None if same is None else same.strip()}
 
 
 def own_product_row(data: dict, product_id: str) -> dict:
@@ -215,7 +233,7 @@ def own_product_row(data: dict, product_id: str) -> dict:
         "supplier_id": data["supplier_id"],
         # One entered name, indexed under each language's analyzer so search finds it.
         "names": {"en": name, "fi": name, "sv": name},
-        "brand": None, "category": None, "vendor": None, "country": None,
+        "brand": None, "vendor": None, "country": None,
         "base_unit": data["unit"], "sales_unit": data["unit"], "lot_size": None,
         "units": [{"unit": data["unit"], "size_in_base_units": 1.0, "gtin": None}],
         "net_content": None if size is None else {"value": float(size), "unit": measure},
@@ -230,6 +248,7 @@ def own_product_row(data: dict, product_id: str) -> dict:
         "substitutions": [],
         "unit_price_eur": price if price is None else Decimal128(price),
         "price_source": source,
+        **_own_extras(data),
     }
 
 
@@ -250,6 +269,8 @@ def own_product_out(row: dict | None) -> dict | None:
         "allergens": ([{"code": code, "level": "CONTAINS"} for code in allergens["contains"]]
                       + [{"code": code, "level": "MAY_CONTAIN"} for code in allergens["may_contain"]]),
         "allergen_data": "ENTERED" if row["allergen_data_known"] else "UNKNOWN",
+        "vat_rate": row.get("vat_rate"), "category": row.get("category"),
+        "catalog_product_id": row.get("catalog_product_id"),
     }
 
 

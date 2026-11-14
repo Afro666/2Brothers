@@ -21,6 +21,24 @@ _TEMPERATURE_BY_CODE = {1: "chilled", 2: "chilled", 3: "chilled", 4: "chilled",
 _TEMPERATURE_BY_TAG = {"coolTemperature": "chilled", "freezeTemperature": "frozen",
                        "warmTemperature": "ambient"}
 
+# Finnish VAT in 2026, in percent, per catalog `vatCode` (#1603). The reduced rate covers all
+# foodstuffs (fish and vegetables alike): 13.5 % from 1 Jan 2026 (Law 1358/2025; it was 14 %).
+VAT_RATES = {"STANDARD": "25.5", "MEDIUM": "13.5", "LOW": "10", "NOT_APPLICABLE": "0"}
+VAT_SOURCE = "Valio product data, vatCode"
+
+
+def vat(code) -> tuple[str | None, str | None]:
+    """`(vat_code, vat_rate)` for a catalog `vatCode`. "MEDIUM MEDIUM" is MEDIUM; missing,
+    empty, two different codes ("STANDARD MEDIUM") or an unknown code: `(None, None)`."""
+    if not isinstance(code, str):
+        return None, None
+    parts = set(code.split())
+    if len(parts) != 1:
+        return None, None
+    one = parts.pop()
+    return (one, VAT_RATES[one]) if one in VAT_RATES else (None, None)
+
+
 # GS1 unit code -> (our unit, factor). Pieces (H87) and portions (PTN) are not sizes.
 _MEASURES = {"LTR": ("L", 1), "MLT": ("L", 0.001), "CLT": ("L", 0.01),
              "KGM": ("KG", 1), "GRM": ("KG", 0.001)}
@@ -107,6 +125,7 @@ def flatten(raw: dict, reliability: float | None = None, carbon: float | None = 
 
     lot_size = raw.get("allowedLotSize")
     net_content, net_content_source = _net_content(raw, names)
+    vat_code, vat_rate = vat(synkka.get("vatCode"))
     return {
         "_id": str(raw["id"]),
         "source": "valio",
@@ -140,6 +159,7 @@ def flatten(raw: dict, reliability: float | None = None, carbon: float | None = 
         "reliability": reliability,
         "carbon_kg_co2e_per_kg": carbon,
         "substitutions": [s["substituteProduct"] for s in raw.get("substitutions") or []],
+        "vat_code": vat_code, "vat_rate": vat_rate, "vat_source": VAT_SOURCE,
         "raw": raw,
     }
 

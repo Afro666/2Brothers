@@ -444,6 +444,9 @@ Buyer's shortlist), and the MCP tool `search_products` never sends it, so the Bu
 searches do not change. When `mode: "hybrid"` cannot make the query vector (no key, the
 embedding service's limit of 3 new texts a minute, more than 2 seconds, the rest time after
 a failure), the answer is the text search with `search: "text"` and `meaning_unavailable: true`.
+The Catalog page rests on its own: its failed embedding call never sends the Buyer's search to
+words. It also leaves the last new embedding call of each minute to the Buyer, so after 2 new
+texts in a minute it answers with words (#1452).
 A query asked before keeps its vector in the gateway's memory, so asking it again runs hybrid
 without a new embedding call.
 
