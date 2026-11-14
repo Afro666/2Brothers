@@ -64,6 +64,17 @@ def test_coffee_hold_replans_different_brand_without_ordering():
     assert verify_chain(db)['ok']
 
 
+def test_repeated_polls_keep_one_alert_per_event():
+    db, gw, p = setup()
+    apply_notices(gw, 'hotel', NOTICES)
+    first = db.proposals.find_one({'_id': p['proposal_id']})['recall_alerts']
+    db.recall_alerts.update_many({}, {'$set': {'detected_at': 'later'}})  # a later poll's snapshot
+    apply_notices(gw, 'hotel', NOTICES)
+    again = db.proposals.find_one({'_id': p['proposal_id']})['recall_alerts']
+    assert len(again) == len(first) >= 1
+    assert len({a['event_id'] for a in again}) == len(again)
+
+
 def test_unknown_policy_or_unsafe_substitute_keeps_hold():
     db, gw, p = setup()
     db.kitchen_settings.delete_many({})

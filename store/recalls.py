@@ -27,7 +27,9 @@ def blocked_ids(db, kitchen_id):
 
 def hold(db, kitchen_id, proposal_id, alert):
     query = {'_id': proposal_id, 'kitchen_id': kitchen_id}
-    db.proposals.update_one(query, {'$addToSet': {'recall_alerts': alert}})
+    # One entry per event_id: repeated monitor polls must not stack copies.
+    db.proposals.update_one({**query, 'recall_alerts.event_id': {'$ne': alert['event_id']}},
+        {'$push': {'recall_alerts': alert}})
     if alert['match'] == 'review':
         return False
     # Shares the approval state machine. COMMITTING is the order commit point;
