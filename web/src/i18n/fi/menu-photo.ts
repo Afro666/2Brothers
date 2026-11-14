@@ -9,6 +9,8 @@ export default {
   "{model} is reading the menu. This takes a few seconds.": "{model} lukee ruokalistaa. Tämä kestää muutaman sekunnin.",
   "{model} read {count} dishes in {seconds} s: {matched} matched to your recipes, {unknown} not known.":
     "{model} luki {count} ruokaa {seconds} sekunnissa: {matched} yhdistettiin resepteihisi, {unknown} ei tunnettu.",
+  "{model} read {count} dishes: {matched} matched to your recipes, {unknown} not known.":
+    "{model} luki {count} ruokaa: {matched} yhdistettiin resepteihisi, {unknown} ei tunnettu.",
   "A proposal for the matched dishes waits in ": "Ehdotus yhdistetyistä ruoista odottaa kohdassa ",
   ". A person approves it there. Nothing is ordered from this page.": ". Ihminen hyväksyy sen siellä. Tältä sivulta ei tilata mitään.",
   "Stock covers the matched dishes. No proposal was made, and nothing is ordered.":

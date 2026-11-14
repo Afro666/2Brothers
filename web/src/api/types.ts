@@ -183,7 +183,8 @@ export interface ShelfPhotoRow {
 export interface ShelfPhotoRead {
   /** The model that read the photo: `nemotron-3.5-super-vl`. */
   model: string;
-  durationMs: number;
+  /** null = the gateway sent no timing: unknown, not zero. */
+  durationMs: number | null;
   rows: ShelfPhotoRow[];
 }
 
@@ -206,7 +207,8 @@ export interface MenuPhotoDish {
 export interface MenuPhotoRead {
   /** The model that read the photo: `nemotron-3.5-super-vl`. */
   model: string;
-  durationMs: number;
+  /** null = the gateway sent no timing: unknown, not zero. */
+  durationMs: number | null;
   from: string;
   to: string;
   dishes: MenuPhotoDish[];
@@ -314,7 +316,8 @@ export interface DeliveryNoteOther extends DeliveryLot {
 export interface DeliveryNoteRead {
   orderId: string;
   model: string;
-  durationMs: number;
+  /** null = the gateway sent no timing: unknown, not zero. */
+  durationMs: number | null;
   orderRef: string;
   deliveryDate: string;
   complete: boolean;

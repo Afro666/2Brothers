@@ -146,4 +146,9 @@ describe("Plan from a menu photo on the real gateway", () => {
       createHttpApi("/api").readMenuPhoto(new Blob(["x"]), { from: "2026-11-16", to: "2026-11-22" }, "human"),
     ).rejects.toMatchObject({ code: "VISION_UNAVAILABLE", status: 503 });
   });
+
+  it("keeps a missing timing unknown, not zero", () => {
+    const { duration_ms: _timing, ...untimed } = ANSWER;
+    expect(mapMenuPhoto(untimed).durationMs).toBeNull();
+  });
 });

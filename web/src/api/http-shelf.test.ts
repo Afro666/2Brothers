@@ -70,6 +70,11 @@ describe("Count from a photo on the real gateway", () => {
     expect(read.rows[2]).toMatchObject({ kind: "UNMATCHED", productId: null, count: null, unit: null });
   });
 
+  it("keeps a missing timing unknown, not zero", () => {
+    const { duration_ms: _timing, ...untimed } = ANSWER;
+    expect(mapShelfPhoto(untimed).durationMs).toBeNull();
+  });
+
   it("never lets a number through on a row that is not COUNTED", () => {
     const read = mapShelfPhoto({
       ...ANSWER,

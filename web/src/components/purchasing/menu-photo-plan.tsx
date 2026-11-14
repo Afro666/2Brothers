@@ -106,18 +106,24 @@ function Outcome({ read }: { read: MenuPhotoRead }) {
   const t = useT();
   const matched = read.dishes.filter((dish) => dish.status === "MATCHED").length;
   const unknown = read.dishes.length - matched;
-  const seconds = (read.durationMs / 1000).toFixed(1);
   return (
     <div className="space-y-1 text-sm">
       <p>
         <NemotronMark />
-        {t("{model} read {count} dishes in {seconds} s: {matched} matched to your recipes, {unknown} not known.", {
-          model: MODEL_NAME,
-          count: read.dishes.length,
-          seconds,
-          matched,
-          unknown,
-        })}
+        {read.durationMs == null
+          ? t("{model} read {count} dishes: {matched} matched to your recipes, {unknown} not known.", {
+              model: MODEL_NAME,
+              count: read.dishes.length,
+              matched,
+              unknown,
+            })
+          : t("{model} read {count} dishes in {seconds} s: {matched} matched to your recipes, {unknown} not known.", {
+              model: MODEL_NAME,
+              count: read.dishes.length,
+              seconds: (read.durationMs / 1000).toFixed(1),
+              matched,
+              unknown,
+            })}
       </p>
       {read.proposal ? (
         <p>
