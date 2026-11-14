@@ -73,6 +73,18 @@ def test_session_is_bound_to_its_kitchen_and_logout_ends_it(env):
     assert client.get(K + "/orders").status_code == 401
 
 
+def test_session_cannot_manage_tokens_of_another_kitchen(env):
+    client, _, db = env
+    people(db)
+    sign_in(client, "aron@example.com")
+    other = "/v1/kitchens/other/tokens"
+    for r in (client.post(other, json={"name": "x", "scopes": ["kitchen:read"]}),
+              client.get(other),
+              client.delete(other + "/some-token")):
+        assert r.status_code == 403 and r.json()["error"]["code"] == "KITCHEN_SCOPE", r.text
+    assert db.api_tokens.count_documents({}) == 0
+
+
 def test_change_password_ends_other_sessions(env):
     client, _, db = env
     people(db)
