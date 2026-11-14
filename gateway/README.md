@@ -195,6 +195,13 @@ gateway sizes the order from the stored need and ignores a quantity from the mod
 or create tokens, no cancel or edit route exists, a kitchen token cannot read another
 kitchen, the MCP server exposes no approve tool. Exit code 1 on any FAIL. The offline
 golden scenarios S01-S13 are `python -m gateway.scenarios`.
+## Model usage (#365)
+
+`gateway/model_usage.py` serves `GET /v1/kitchens/{k}/model-usage` (`kitchen:read`): runs,
+model calls, tokens and seconds the Buyer used on Nemotron 3.5 Super VL, summed by
+`store.agent_runs.usage_totals` from `buyer_usage` on the kitchen's runs. A run without
+usage is counted in `runs_without_usage` and adds nothing to the sums.
+
 ## Standing-order drift (#377)
 
 `gateway/drift_routes.py` serves the two contract routes from `store.drift`:
