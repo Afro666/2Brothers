@@ -94,3 +94,18 @@ def test_auto_approvals_do_not_count_as_learning_and_switching_off_is_instant(en
     off = client.put(K + "/auto-approve", headers=HUMAN, json={"enabled": False})
     assert off.status_code == 200 and off.json()["enabled"] is False
     assert propose(client, "p2", quantity="5")["status"] == "READY"
+
+
+def test_menu_plan_line_with_uncounted_stock_waits_for_a_person(env):
+    from gateway import autoapprove
+    client, _, db = env
+    history(db)
+    switch_on(client)
+    simulation = {"mandate": {"verdict": "NEEDS_APPROVAL", "reason_codes": [], "warnings": []},
+                  "lines": [{"product_id": "462775", "unknown_stock": False, "reason_codes": []}],
+                  "expected_total": "50", "shortfall": "0"}
+    need = {"product_id": "462775", "quantity": "40", "unit": "L"}
+    ok, why, _ = autoapprove.decide(db, "demo-kitchen", simulation, {"needs": [{**need, "stock_counted": True}]}, NOW)
+    assert ok, why
+    ok, why, _ = autoapprove.decide(db, "demo-kitchen", simulation, {"needs": [{**need, "stock_counted": False}]}, NOW)
+    assert not ok and "needs a person: kitchen stock not counted" in why
