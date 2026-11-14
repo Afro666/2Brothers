@@ -16,6 +16,7 @@ import { auditActorForRole, useRole } from "@/lib/role";
 import { formatEur } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
+import { supplierName } from "@/lib/supplier-name";
 import { LiveConnectionLabel, useLiveEvents } from "@/lib/live-events";
 import { useSession } from "@/lib/session";
 import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
@@ -91,7 +92,7 @@ function ApiApprovalsPage() {
       if (waitingFor.length > 0) {
         const suppliers = await api.listSuppliers().catch(() => []);
         const supplierNames = new Map(suppliers.map((supplier) => [supplier.id, supplier.name]));
-        const supplier = waitingFor.map((supplierId) => supplierNames.get(supplierId) ?? supplierId).join(", ");
+        const supplier = waitingFor.map((supplierId) => supplierName(supplierId, supplierNames)).join(", ");
         toast.success(t("Order placed. Call {supplier} to confirm.", { supplier }), { testId: "approval-toast" });
       } else {
         toast.success(t("Approved: {amount} incl VAT", { amount: formatEur(decision.expectedTotalInclVat) }), {
