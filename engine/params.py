@@ -43,8 +43,12 @@ class KitchenParams:
             return base
         changes: dict = {}
         if "service_level" in data:
-            changes["service_level"] = {**base.service_level,
-                                        **{k: Decimal(str(v)) for k, v in data["service_level"].items()}}
+            levels = {k: Decimal(str(v)) for k, v in data["service_level"].items()}
+            for k, v in levels.items():
+                if not Decimal(0) < v < Decimal(1):
+                    raise ValueError(f"service_level for class {k} must be between 0 and 1 "
+                                     f"(exclusive), got {v}")
+            changes["service_level"] = {**base.service_level, **levels}
         if "max_cover_days" in data:
             changes["max_cover_days"] = {**base.max_cover_days,
                                          **{k: int(v) for k, v in data["max_cover_days"].items()}}
