@@ -221,6 +221,11 @@ search_products(db, "", {"require_labels": ["EU_ORGANIC_FARMING"], "temperature"
   (`home_category`: one extra count query per text search). Category codes have no
   names, so non-food is a list of code prefixes measured on the catalog
   (`NON_FOOD_PREFIXES`). A query for a non-food product still finds it.
+- A query whose last word is at home in a food category asks for a food ("almond milk":
+  "milk" lives among the milks; `food_word_query`, one more count query when the query
+  has several words). Then a non-food row gets no boost for holding every word, and
+  comes after every food row that was read (#1658: the only name with "almond milk" is
+  a hand wash). "milk jug", "hand wash" and "coffee cup" are not such queries.
 - Rows with the same score come in a fixed order, by product code (#1657). Many names
   score exactly the same, and Atlas gives equal rows in no fixed order; the search reads
   200 rows past the limit (`TIE_ROOM`), orders them and cuts to the limit. So the same

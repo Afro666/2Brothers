@@ -49,6 +49,24 @@ class SearchAcceptance(unittest.TestCase):
         cups = search_products(self.db, "coffee cup", limit=5)
         self.assertTrue(all("cup" in row["names"]["en"].lower() for row in cups))
 
+    def test_almond_milk_gives_food_first_not_the_hand_wash(self):
+        # #1658: the only name with both words is "Palmolive Naturals Almond Milk liquid hand wash".
+        from store.search import ALL_WORDS_BOOST, NON_FOOD_PREFIXES
+        rows = search_products(self.db, "almond milk", limit=50)
+        self.assertFalse(rows[0]["category"].startswith(NON_FOOD_PREFIXES), rows[0]["names"])
+        for row in rows[:3]:
+            self.assertNotIn("hand wash", row["names"]["en"].lower())
+        # No row holds both words in a food name, so none may look like a full match
+        # (gateway/candidates.py would hand the Buyer only that row: the hand wash).
+        self.assertTrue(all(row["score"] < ALL_WORDS_BOOST for row in rows))
+        foods = [not row["category"].startswith(NON_FOOD_PREFIXES) for row in rows]
+        self.assertEqual(foods, sorted(foods, reverse=True))  # every food row before any non-food row
+        # A food name with every word keeps its full-match score in such a query.
+        self.assertGreaterEqual(search_products(self.db, "lactose free milk", limit=1)[0]["score"],
+                                ALL_WORDS_BOOST)
+        jugs = search_products(self.db, "milk jug", limit=3)  # the last word is tableware
+        self.assertEqual([row["category"] for row in jugs], ["20033"] * 3)
+
     def test_a_row_with_some_of_the_words_stays_under_the_all_words_line(self):
         from store.search import ALL_WORDS_BOOST
         rows = search_products(self.db, "almond milk", limit=20)
