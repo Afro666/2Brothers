@@ -35,6 +35,8 @@ export function mapSupplierOffer(value: unknown): SupplierOffer {
     status,
     createdAt: optional(row.created_at),
     proposalId: optional(row.proposal_id),
+    // Anything but an explicit true is unknown: the tile then asks for a label check.
+    allergenDataKnown: row.allergen_data_known === true,
   };
 }
 

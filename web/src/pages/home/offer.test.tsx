@@ -25,6 +25,17 @@ describe("SupplierOfferTile", () => {
     expect(screen.getByText(sampleSupplierOffer.reason)).toBeInTheDocument();
     expect(screen.getByText(/written by Valio's selling agent \(\s*Nemotron 3.5 Super VL\)/)).toBeInTheDocument();
     expect(screen.getByText(/This is a suggestion, not an order/)).toBeInTheDocument();
+    expect(screen.queryByText(/no allergen data/)).toBeNull();
+  });
+
+  it("asks for a label check when the catalog has no allergen data for the product", async () => {
+    const api = createMockApi();
+    api.listSupplierOffers = async () => [{ ...sampleSupplierOffer, allergenDataKnown: false }];
+    renderApp("/", api);
+
+    expect(
+      await screen.findByText("The catalog has no allergen data for this product. Check the label before you approve."),
+    ).toBeInTheDocument();
   });
 
   it("shows the supplier's text as text, never as markup", async () => {

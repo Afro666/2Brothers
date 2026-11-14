@@ -320,6 +320,8 @@ export interface SupplierOffer {
   status: "OPEN" | "ACCEPTED" | "DECLINED" | "EXPIRED";
   createdAt: string | null;
   proposalId: string | null;
+  /** false = the catalog declares no allergens for the offered product: a person checks the label. */
+  allergenDataKnown: boolean;
 }
 
 /** The answer to accepting an offer: the proposal it became. `REJECTED` = nothing waits in the inbox. */

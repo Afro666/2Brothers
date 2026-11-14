@@ -72,6 +72,7 @@ describe("Supplier offers on the real gateway", () => {
         status: "OPEN",
         createdAt: "2026-11-14T05:10:00+00:00",
         proposalId: null,
+        allergenDataKnown: false,
       },
     ]);
     expect(calls.map((call) => call.route)).toEqual([`GET ${K}/supplier-offers`]);
@@ -124,6 +125,12 @@ describe("Supplier offers on the real gateway", () => {
   it("refuses an offer with an unknown status; missing names stay null", () => {
     expect(() => mapSupplierOffer({ ...OFFER, status: "PAID" })).toThrow(/unknown status/);
     expect(mapSupplierOffer({ ...OFFER, product_name: null }).productName).toBeNull();
+  });
+
+  it("reads allergen data as known only when the gateway says true", () => {
+    expect(mapSupplierOffer({ ...OFFER, allergen_data_known: true }).allergenDataKnown).toBe(true);
+    expect(mapSupplierOffer({ ...OFFER, allergen_data_known: false }).allergenDataKnown).toBe(false);
+    expect(mapSupplierOffer({ ...OFFER, allergen_data_known: "yes" }).allergenDataKnown).toBe(false);
   });
 });
 
