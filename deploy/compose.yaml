@@ -9,6 +9,10 @@ services:
       context: ../web
       args:
         VITE_LIVE_BUYER: "true"
+        # Proposals, approvals, orders and the audit log come from the gateway behind /api;
+        # the screens it does not serve yet stay on the mock, marked "Sample data".
+        VITE_GATEWAY_URL: /api
+        VITE_USE_MOCKS: "false"
     restart: unless-stopped
     depends_on:
       - gateway

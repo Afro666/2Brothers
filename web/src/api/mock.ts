@@ -5,9 +5,11 @@ import { nameProducts } from "@/api/map";
 import { permissionsMock } from "@/api/mock-permissions";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
+import { driftMock, supplierDriftMock } from "@/api/mock-drift";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
 import { createRecallMock } from "@/api/mock-recalls";
 import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
+import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import {
   approval as seedApproval,
   confirmedDemoApproval,
@@ -149,11 +151,11 @@ export function createMockApi(): MockApi {
     });
   }
 
-  function resimulate(lines: OrderLine[], proposalOrder: Order): Order {
+  function resimulate(lines: OrderLine[], proposalOrder: Order): Order & { totalExVat: number } {
     let exVat = 0;
     let inclVat = 0;
     for (const line of lines) {
-      if (line.offer.priceExVat == null) {
+      if (line.offer.priceExVat == null || line.offer.taxRatePercent == null) {
         throw new ApiError("PRICE_UNKNOWN", `Price for ${line.product.id} is unknown.`);
       }
       const lineEx = line.offer.priceExVat * line.quantity;
@@ -167,7 +169,7 @@ export function createMockApi(): MockApi {
       lines,
       totalExVat,
       totalInclVat,
-      mov: { ...proposalOrder.mov, current: totalExVat },
+      mov: proposalOrder.mov && { ...proposalOrder.mov, current: totalExVat },
     };
   }
 
@@ -175,18 +177,22 @@ export function createMockApi(): MockApi {
     ...createPlanningMock(recordAudit),
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),
+    getDrift: async () => driftMock(),
+    getSupplierDrift: async () => supplierDriftMock(),
     ...permissionsMock,
     ...createRecallMock({
       getOrder: (id) => demoOrders.get(id),
       isPending: (orderId) => [...approvals.values()].some((row) => row.orderId === orderId && row.status === "PENDING"),
       replan(orderId, lines) {
         const order = demoOrders.get(orderId)!;
-        Object.assign(order, resimulate(lines, order));
+        const next = resimulate(lines, order);
+        Object.assign(order, next);
         const approval = [...approvals.values()].find((row) => row.orderId === orderId)!;
-        approvals.set(approval.id, { ...approval, totalExVat: order.totalExVat, totalInclVat: order.totalInclVat, lineCount: lines.length });
+        approvals.set(approval.id, { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length });
       },
       recordAudit: (event) => audit.push({ ...event, id: `EV-${audit.length + 1}`, at: new Date().toISOString() }),
     }),
+    lookupKitchenBrand: lookupKitchenBrandMock,
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
     },
@@ -328,10 +334,11 @@ export function createMockApi(): MockApi {
       const lines = structuredClone(milkOptionLines[optionId]);
       if (!lines) throw new ApiError("NOT_FOUND", `Option ${optionId} has no basket.`);
       const order = demoOrders.get(current.orderId)!;
-      Object.assign(order, resimulate(lines, order));
+      const next = resimulate(lines, order);
+      Object.assign(order, next);
       const approval = {
         ...current,
-        totalExVat: order.totalExVat,
+        totalExVat: next.totalExVat,
         totalInclVat: order.totalInclVat,
         lineCount: lines.length,
         options: current.options?.map((row) => ({ ...row, chosen: row.id === optionId })),

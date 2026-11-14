@@ -22,9 +22,11 @@ import type {
   SubstituteOption,
   KitchenSettings,
   ForecastAccuracy,
+  DriftReport,
   BuyerPermissions,
   AutoApproveLearning,
   RecallList,
+  KitchenBrandLookup,
 } from "@/types";
 
 /** Who a decision is recorded as in the audit log. */
@@ -150,6 +152,10 @@ export interface Api {
   saveKitchenSettings(settings: KitchenSettings, actor: AuditActor): Promise<KitchenSettings>;
   /** Predicted against actual for the last 12 full weeks, and the forecast for this week and the 3 after. */
   getForecastAccuracy(): Promise<ForecastAccuracy>;
+  /** Standing-order drift for the last full week (`GET /drift`). */
+  getDrift(): Promise<DriftReport>;
+  /** Drift warnings of the kitchens that share with this supplier (`GET /demand/drift`). */
+  getSupplierDrift(): Promise<DriftReport>;
   getPermissions(): Promise<BuyerPermissions>;
   /** Progress only. There is no method to switch auto-approve on: a person approves every order. */
   getAutoApproveLearning(): Promise<AutoApproveLearning>;
@@ -161,15 +167,23 @@ export interface Api {
   listRecalls?(): Promise<RecallList>;
   /** Runs the recall monitor now (Context.dev scrape, or its recording when Context.dev is slow). */
   checkRecalls?(actor: AuditActor): Promise<RecallList>;
+  /**
+   * Onboarding: the gateway looks the kitchen up with Context.dev (`POST /v1/brand/retrieve`)
+   * from a work email or a website. It saves nothing; a person confirms the fields first.
+   */
+  lookupKitchenBrand(query: { email: string } | { website: string }): Promise<KitchenBrandLookup>;
 }
 
 /** A gateway error: `code` is the contract's error code, e.g. `TOTAL_MISMATCH`. */
 export class ApiError extends Error {
   readonly code: string;
+  /** The other fields of the gateway's error object, e.g. `expected_total` on `TOTAL_MISMATCH`. */
+  readonly details: Record<string, unknown>;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, details: Record<string, unknown> = {}) {
     super(message);
     this.name = "ApiError";
     this.code = code;
+    this.details = details;
   }
 }

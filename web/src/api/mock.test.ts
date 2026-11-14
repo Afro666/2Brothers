@@ -162,7 +162,7 @@ describe("mock API proposal changes", () => {
 
     expect(result.order.totalExVat).toBe(1845);
     expect(result.order.totalInclVat).toBe(2094.08);
-    expect(result.order.mov.current).toBe(1845);
+    expect(result.order.mov?.current).toBe(1845);
     expect(result.approval).toMatchObject({ totalExVat: 1845, totalInclVat: 2094.08, lineCount: 1 });
   });
 

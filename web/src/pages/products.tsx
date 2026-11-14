@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { useApi } from "@/api";
 import type { Draft } from "@/api/types";
@@ -240,6 +241,7 @@ function ProductsPageContent() {
         allergens: unknown ? null : allergens,
       } as Draft<OwnProduct>);
       resetProductForm();
+      toast.success("Product saved");
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -292,6 +294,7 @@ function ProductsPageContent() {
         items: resolved,
       } as Draft<Recipe>);
       setItems([]);
+      toast.success("Recipe saved");
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -306,6 +309,7 @@ function ProductsPageContent() {
     setError("");
     try {
       await api.deleteOwnProduct(deletingProduct.id);
+      toast.success("Product deleted");
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -320,6 +324,7 @@ function ProductsPageContent() {
     setError("");
     try {
       await api.deleteRecipe(deletingRecipe.id);
+      toast.success("Recipe deleted");
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {

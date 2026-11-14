@@ -86,6 +86,10 @@ def get_offer(db, offer_id: str) -> dict | None:
 
 # Orders
 
+def attempt_for_key(db, kitchen_id: str, idempotency_key: str) -> dict | None:
+    return _out(db.orders.find_one({'kitchen_id': kitchen_id, 'idempotency_key': idempotency_key}), 'order_id')
+
+
 def record_attempt(db, *, kitchen_id: str, idempotency_key: str, offer_id: str,
                    expected_total, lines: list, payload_hash: str,
                    **extra) -> tuple[dict, bool]:

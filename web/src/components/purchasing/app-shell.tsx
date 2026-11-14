@@ -21,6 +21,9 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 
+import type { Api } from "@/api/types";
+import { KitchenLogo } from "@/components/purchasing/kitchen-logo";
+import { SampleData } from "@/components/purchasing/sample-data";
 import { ThemePicker } from "@/components/purchasing/theme-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -103,6 +106,17 @@ function menuEntries(items: NavItem[]): NavItem[] {
   }
   return entries;
 }
+
+/** The method each screen's own data comes from: in gateway mode the screen is marked while that is still the mock. */
+const SCREEN_DATA: Record<string, keyof Api> = {
+  stock: "getStock",
+  planner: "getMenuPlan",
+  forecast: "getForecastAccuracy",
+  suppliers: "listSuppliers",
+  products: "listOwnProducts",
+  catalog: "searchProducts",
+  demand: "getSupplierDemand",
+};
 
 /** The kitchen side's items; the kit page builds its own list from these. */
 export const NAV_ITEMS = KITCHEN_NAV;
@@ -246,6 +260,7 @@ function Brand() {
         <ChefHat className="size-5" aria-hidden />
       </span>
       Kitchen Buyer
+      <KitchenLogo />
     </span>
   );
 }
@@ -299,6 +314,11 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
       {/* Safe-area insets are 0px on devices without a notch, so the gutters stay 1rem / 2rem there. */}
       <main className="min-w-0 flex-1 pt-6 pr-[calc(1rem+env(safe-area-inset-right,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pl-[calc(1rem+env(safe-area-inset-left,0px))] md:pr-[calc(2rem+env(safe-area-inset-right,0px))] md:pl-[calc(2rem+env(safe-area-inset-left,0px))]">
         {group && tabs.length > 1 ? <SectionTabs label={group} items={tabs} activeId={current} /> : null}
+        {current && SCREEN_DATA[current] ? (
+          <div className="mx-auto mb-3 max-w-5xl empty:hidden">
+            <SampleData of={SCREEN_DATA[current]} />
+          </div>
+        ) : null}
         {children}
       </main>
     </div>

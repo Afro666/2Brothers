@@ -5,12 +5,15 @@ import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { RecallPanel, type RecallStatus } from "@/components/purchasing/recall-panel";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { useApi } from "@/api";
 import { ApiError, type Api } from "@/api/types";
 import { auditActorForRole, useRole } from "@/lib/role";
+import { formatEur } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
 import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
+import { LiveApprovalsPage } from "@/pages/live-approvals";
 
 interface ApprovalWithOrder {
   approval: ApprovalRequest;
@@ -32,7 +35,9 @@ async function loadApprovals(api: Api): Promise<ApprovalWithOrder[]> {
 
 /** null when this gateway does not serve recalls yet (hidden, never shown as "no recalls"). */
 async function loadRecalls(api: Api): Promise<RecallList | null> {
-  if (!api.listRecalls) return null;
+  // In gateway mode an unserved method answers from the mock: sample recalls must never
+  // stand in for the real orders' recalls.
+  if (!api.listRecalls || (api.live && !api.live.has("listRecalls"))) return null;
   try {
     return await api.listRecalls();
   } catch (error) {
@@ -43,25 +48,46 @@ async function loadRecalls(api: Api): Promise<RecallList | null> {
 
 export function ApprovalsPage() {
   const api = useApi();
+  // In gateway mode the Api itself reads and decides the real proposals, so the inbox below is the live one.
+  // The standalone live page is for a build whose Api is still the mock.
+  return import.meta.env.VITE_LIVE_BUYER === "true" && !api.live?.has("listApprovals") ? (
+    <LiveApprovalsPage />
+  ) : (
+    <ApiApprovalsPage />
+  );
+}
+
+function ApiApprovalsPage() {
+  const api = useApi();
   const { role } = useRole();
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
   const recalls = useAsync(() => loadRecalls(api), [api]);
 
+  // The gateway has no route to change a proposal yet, so its proposals are read-only.
+  const canEdit = !api.live || api.live.has("changeProposal");
+
   async function approve(decision: ApprovalDecision): Promise<void> {
-    await api.approve(decision, actor);
-    approvals.reload();
+    try {
+      await api.approve(decision, actor);
+      toast.success(`Approved: ${formatEur(decision.expectedTotalInclVat)} incl VAT`, { testId: "approval-toast" });
+    } finally {
+      // Also after a refusal: when the total moved, the card must show the new one before asking again.
+      approvals.reload();
+    }
   }
 
   async function reject(approvalId: string, reason: string): Promise<void> {
     await api.reject(approvalId, reason, actor);
+    toast.success("Rejected. The reason goes back to the Buyer.", { testId: "approval-toast" });
     approvals.reload();
   }
 
   async function change(orderId: string, proposalChange: ProposalChange): Promise<void> {
     await api.changeProposal(orderId, proposalChange, actor);
     setEditCounts((counts) => ({ ...counts, [orderId]: (counts[orderId] ?? 0) + 1 }));
+    toast.success("Proposal updated. Check the new total before you approve.");
     approvals.reload();
   }
 
@@ -130,15 +156,20 @@ export function ApprovalsPage() {
                       order={order ?? undefined}
                       onApprove={approve}
                       onReject={reject}
-                      onChangeProposal={(proposalChange) => change(approval.orderId, proposalChange)}
+                      onChangeProposal={
+                        canEdit ? (proposalChange) => change(approval.orderId, proposalChange) : undefined
+                      }
                       onChooseOption={
                         api.chooseOption &&
                         (async (optionId) => {
                           await api.chooseOption?.(approval.id, optionId, actor);
+                          toast.success("Option chosen. Check the new total before you approve.");
                           approvals.reload();
                         })
                       }
-                      listAddableProducts={(query) => api.listAddableProducts(approval.orderId, query)}
+                      listAddableProducts={
+                        canEdit ? (query) => api.listAddableProducts(approval.orderId, query) : undefined
+                      }
                       editCount={editCounts[approval.orderId] ?? 0}
                       recalls={recallsFor(approval.orderId)}
                     />

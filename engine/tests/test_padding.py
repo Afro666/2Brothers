@@ -20,6 +20,14 @@ def test_already_over_the_threshold_adds_nothing():
     pad = pad_to_free_delivery(D("310.00"), threshold=D(300), fee=D(25), wanted=[MILK])
     assert pad.add == () and pad.saves_fee == 0 and pad.reason_codes == ()
 
+    assert pad.why == "Free delivery already reached."
+
+
+def test_no_fee_under_the_threshold_adds_nothing():
+    pad = pad_to_free_delivery(D("271.40"), threshold=D(300), fee=D(0), wanted=[MILK])
+    assert pad.add == () and pad.saves_fee == 0 and pad.reason_codes == ()
+    assert pad.why == "No delivery fee: no padding."
+
 
 def test_nothing_wanted_fits_pay_the_fee():
     pad = pad_to_free_delivery(D("271.40"), threshold=D(300), fee=D(25), wanted=[CARROT])

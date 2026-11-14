@@ -154,8 +154,19 @@ The gateway loads quantities from that stored need; neither `get_offer` nor
 `product_id`, `quantity`, `unit`, `why`, `available_date`, `unknown_stock` and
 `cutoff_passed`. A line also carries `unit_price` (decimal string, per `unit`, before
 tax) and `closing_time` (the order cut-off for that line as a timestamp with an offset,
-or null when the supplier gives none). Unknown stock is never represented as a measured
-sentinel value.
+or null when the supplier gives none). `closing_time` is proposed: the gateway does not
+send it yet, so a client treats a missing field as null. Unknown stock is never
+represented as a measured sentinel value.
+
+A simulated offer line also carries three optional fields from the Valio datasets
+(see "Static datasets"). They are for display and choice; they never change a quantity.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `reliability` | number or null | The supplier's delivery reliability for this product: delivered versus ordered, 0 to 1. Null means unknown. |
+| `carbon_kg_co2e_per_kg` | number or null | kg CO2-eq per kg, the average of the product group, not this product's own figure. Null means unknown. |
+| `labels` | string[] | Product labels, for example `EU_ORGANIC_FARMING`. May be empty. |
+
 `expected_total` includes fees and tax. Simulation also includes `mov_gap` and
 `delivery_fee` as decimal strings. Expired offers must be refreshed and simulated.
 
@@ -356,11 +367,14 @@ IDs) apply here too. Base path: `/v1`.
 | GET | `/menu-plans/{week}` | `kitchen:read` | The week's menu plan (shape below). |
 | PUT | `/menu-plans/{week}` | `kitchen:write` | Menus per day: recipe + expected covers. `week` is ISO `YYYY-Www`. |
 | GET | `/demand?from=&to=` | `kitchen:read` | Future need per product and day, from the menu plan and history. |
+| GET | `/forecast?from=&to=` | `kitchen:read` | The engine's forecast per product and day. Shape under "Forecasts". |
+| GET | `/forecast-accuracy?from=&to=` | `kitchen:read` | Past forecasts against what the kitchen really needed, per week. Shape under "Forecasts". |
 | GET | `/suppliers`, `/suppliers/{id}` | `kitchen:read` | Suppliers and their terms: free-delivery threshold, fee, order days, cut-off, lead time, discount tiers. User-set; demo values are placeholders. |
 | POST, PUT, DELETE | `/suppliers`, `/suppliers/{id}` | `kitchen:write` | Create, change or delete a supplier and its terms. |
-| POST | `/proposals` | `kitchen:propose` | Ask the Buyer: free text ("1,000 L milk by Monday") or a demand window `from`/`to`. Returns `proposal_id`, `status: PENDING`. |
+| POST | `/proposals` | `kitchen:propose` | Ask the Buyer: free text ("1,000 L milk by Monday") or a demand window `from`/`to`. Returns `proposal_id`, `status: PENDING`. Body, the free-text path and errors under "Creating a proposal". |
 | GET | `/proposals/{id}` | `kitchen:read` | Lines with `why`, one block per supplier, simulated totals (`expected_total`, `mov_gap`, `delivery_fee`), mandate reasons, warnings. |
-| POST | `/proposals/{id}/approve` | `kitchen:approve` (human) | Body: `blocks: [{supplier_id, expected_total}]` + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH`; nothing is sent. |
+| GET | `/proposals/{id}/addable` | `kitchen:read` | What the buyer can add to this proposal, most probable first, and the lines that reach free delivery. Shape under "Addable products". |
+| POST | `/proposals/{id}/approve` | `kitchen:approve` (human) | Body: `blocks: [{supplier_id, expected_total}]` + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH`; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN`. In both cases nothing is sent. |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". Proposed; the gateway does not serve it yet. |
 | GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). |
@@ -374,6 +388,8 @@ IDs) apply here too. Base path: `/v1`.
 | POST | `/audit/demo-tamper` | `kitchen:approve` (human) | Demo only: edit one audit row of the synthetic demo kitchen, so `/audit/verify` shows the break. 403 `DEMO_ONLY` for any other kitchen. |
 | POST | `/audit/demo-restore` | `kitchen:approve` (human) | Demo only: put the tampered row back exactly as it was. |
 | GET | `/events` | `kitchen:read` | Server-sent events: this kitchen's new and changed proposals, approvals and audit entries, as they happen. Shape below. |
+| GET | `/recalls` | `kitchen:read` | This kitchen's open `recall.alert`s and the last check. Shape below. Proposed, like the next row; the gateway does not serve them yet (#358). |
+| POST | `/recalls/check` | `kitchen:write` | Run the recall monitor now: Context.dev scrape of the Ruokavirasto list, matched to stock, recipes and open proposals. Body: `idempotency_key`. |
 
 Proposal `status`: `PENDING`, `READY`, `APPROVED`, `REJECTED`, `EXPIRED`. An approved
 proposal places one order per supplier block, through the same `place_order` guards.
@@ -382,6 +398,151 @@ Order `status` is the supplier side of the order: `SENT`, `CONFIRMED`, `PARTIAL`
 `REJECTED`, `UNCONFIRMED`. The order `outcome` is the gateway result from "Team gateway
 interfaces": `CONFIRMED`, `NOT_SENT`, `UNCONFIRMED`, `SENT_READ_FAILED`. An outcome of
 `NOT_SENT` means no order exists at the supplier, so it has no order `status`.
+
+### Creating a proposal
+
+`POST /v1/kitchens/{kitchen_id}/proposals` takes one of two bodies. Both need a nonempty
+`idempotency_key`.
+
+**Structured body.** The caller names the products; the engine sizes every line.
+
+| Field | Type | Rule |
+|---|---|---|
+| `product_ids` | string[] | Product codes to quote. Required. |
+| `quantity` | decimal string | The need, in `unit`. Above 0, else 422 `INVALID_REQUEST`. |
+| `unit` | string | The measure of `quantity`, for example `L` or `KG`. |
+| `requested_date` | `YYYY-MM-DD` | The delivery day. |
+| `text` | string, optional | The person's own words, kept on the proposal. |
+| `event` | boolean, optional | Default `false`. `true` means one-off demand (a party): every line gets `EVENT_LINE`, and the demand is kept out of the base forecast. |
+
+`event` is part of the idempotency payload only when it is `true`. A replay without
+`event` and one with `event: false` are the same request.
+
+**Free-text body.** `text` (for example "1,000 L lactose-free milk by Monday") and no
+`product_ids`. The gateway tries two readers, in this order:
+
+1. The Buyer worker. Its answer is returned as it is.
+2. The deterministic parser (`gateway/parse.py`), only when the worker is not
+   configured, or when its error carries `fallback_safe: true`. Any other worker error is
+   returned as it is: the worker may already have made a proposal, so the gateway never
+   makes a second one. The parser reads English and Finnish: a quantity with a unit, a
+   delivery day and the product words. It searches the catalog with the product words,
+   takes the first 8 matches, and the engine sizes the lines. It never guesses.
+
+| Status | Code | When |
+|---|---|---|
+| 422 | `INVALID_REQUEST` | A required field is missing, or `quantity` is 0 or less. |
+| 422 | `CANNOT_READ_REQUEST` | The parser cannot read the text without guessing: no quantity with a unit, no delivery day, a day in the past, no product named, more than 500 characters. The message says what is missing. |
+| 422 | `NO_PRODUCTS_FOUND` | The parser read the text, but no catalog product matches the product words. |
+| 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another request (for free text: another `text`). |
+
+The proposal's `request` object echoes what was quoted: `product_ids`, `quantity`,
+`unit`, `requested_date`, `text`, and:
+
+- `made_by`: `parser` when the parser read the free text, `structured` for a body with
+  `product_ids`.
+- `query`: the product words the parser searched for. Only on `made_by: parser`.
+- `event`: `true`, only when the request was an event.
+
+### Addable products
+
+`GET /v1/kitchens/{kitchen_id}/proposals/{proposal_id}/addable` lists what the buyer can
+add to this proposal, most probable first. Candidates are the products in the kitchen's
+latest stock count that are not on the proposal yet. Quantities come from the engine,
+prices from the live supplier. It changes nothing.
+
+```json
+{
+  "proposal_id": "p-1",
+  "rows": [{
+    "rank": 1, "product_id": "469549", "name": "Butter 500 g",
+    "on_hand": "4", "on_order": "0", "suggested_qty": "12", "unit": "ST",
+    "unit_price": "3.85", "addable": true, "timing": "TODAY", "days_of_stock": "1.5",
+    "reason_codes": [], "why": "..."
+  }],
+  "skipped": [{"product_id": "470863", "reason": "pack size unknown: ..."}],
+  "mov_padding": {
+    "add": [{"product_id": "469549", "quantity": "12", "unit": "ST", "value": "46.20"}],
+    "total_ex_vat": "312.40", "saves_fee": "25.00",
+    "reason_codes": ["MOV_PADDED"], "why": "Added ... already wanted for the next order: ..."
+  }
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `rank` | integer | 1 is the most probable addition. |
+| `on_hand`, `on_order` | decimal string or null | The last count and stock on order. Null means unknown. |
+| `suggested_qty` | decimal string or null | The engine's quantity, in `unit`. |
+| `unit_price` | decimal string or null | Null when the supplier gives no price. |
+| `addable` | boolean | False when the row is shown but cannot be added (for example, no price). |
+| `timing` | `TODAY`, `THIS_WEEK`, `THIS_MONTH`, `NO_ACTION` | When the product needs ordering. |
+| `days_of_stock` | decimal string or null | Days the current stock lasts. |
+| `reason_codes`, `why` | string[], string | Codes from "Reason codes", and the engine's own sentence. |
+| `skipped` | `{product_id, reason}[]` | Counted products that cannot be ranked: not in the catalog, or the pack size is unknown. |
+
+`mov_padding` is the engine's answer to "what closes the free-delivery gap" (S06). `add`
+holds the smallest set of rows the engine wants anyway (`addable`, `suggested_qty` above
+0) that brings the proposal to free delivery; `value` is the line value before tax.
+`total_ex_vat` is the proposal total before tax after these lines are added, and
+`saves_fee` is the delivery fee that is saved. When nothing sensible closes the gap,
+free delivery is already reached, or the terms are unknown, `add` is `[]`,
+`total_ex_vat` is the proposal's own total, `saves_fee` is `"0.00"`, `reason_codes` is
+`[]`, and `why` says which case it is. A suggestion only: nothing is added until a
+person changes the proposal.
+
+| Status | Code | When |
+|---|---|---|
+| 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
+
+### Forecasts
+
+Both routes need `from` and `to` (`YYYY-MM-DD`, inclusive).
+
+`GET /v1/kitchens/{kitchen_id}/forecast?from=&to=` returns the engine's forecast per
+product and day, oldest first. A future day is the forecast made today.
+
+```json
+{"kitchen_id": "demo-kitchen", "lines": [
+  {"product_id": "469549", "date": "2026-11-16", "need": "42.5", "unit": "L",
+   "made_on": "2026-11-14", "why": "..."}
+]}
+```
+
+- `need` is a decimal string in `unit`. `made_on` is the day the forecast was made;
+  `made_on` and `why` may be null.
+- The window is at most 120 days.
+
+`GET /v1/kitchens/{kitchen_id}/forecast-accuracy?from=&to=` compares past forecasts (as
+made the Monday before) with what the kitchen really needed. It compares two methods:
+the engine and a plain weekday average.
+
+```json
+{"kitchen_id": "demo-kitchen", "from": "2026-09-01", "to": "2026-11-09", "methods": {
+  "engine": {
+    "total": {"predicted": 1200.0, "actual": 1150.0, "wape": 0.113, "bias": 0.0435,
+              "under": 40.0, "over": 90.0, "series": 48},
+    "weeks": [{"week": "2026-W36", "predicted": 120.0, "actual": 115.0, "wape": 0.0957,
+               "bias": 0.0435, "under": 3.0, "over": 8.0, "series": 5}]
+  },
+  "weekday-average": {"total": {"predicted": 1180.0, "actual": 1150.0, "wape": 0.1913,
+                                "bias": 0.0261, "under": 95.0, "over": 125.0, "series": 48},
+                      "weeks": []}
+}}
+```
+
+- `methods` has the keys `engine` and `weekday-average`; each has the same shape.
+- Errors are counted per product and ISO week. `predicted` and `actual` are the sums.
+  `wape` is the sum of the absolute errors divided by `actual`. `bias` is
+  (`predicted` - `actual`) / `actual`. `under` is the sum of actual above predicted,
+  `over` the sum of predicted above actual. `series` counts the product-weeks.
+- These are numbers for display, never figures to approve.
+- `weeks` has one row per ISO week (`YYYY-Www`), oldest first.
+- The window is at most 400 days.
+
+| Status | Code | When (both routes) |
+|---|---|---|
+| 422 | `INVALID_REQUEST` | `from` or `to` is missing or not a date, `to` is before `from`, or the window is too long (120 days for `/forecast`, 400 for `/forecast-accuracy`). |
 
 ### Chef substitute choices
 
@@ -770,8 +931,11 @@ engine's default, except `excluded_allergens`, which is `null` until a person se
 
 `PUT /settings` takes any subset of these fields plus `idempotency_key`. A field that is
 left out keeps its value, so a partial save can never drop the allergen policy.
-`excluded_allergens` cannot be set back to `null`. The answer is the full settings as
-`GET` returns them.
+`excluded_allergens` cannot be set back to `null`. A `standing_orders` in the body
+replaces the whole map; it never merges with the stored one. Send `{}` to clear every
+standing order; to drop one product, send the map without it. Each value must be a
+positive decimal string; 0, a negative number or another type is a 422. The answer is
+the full settings as `GET` returns them.
 
 - Only a human user session may change settings; an API key or the Buyer's token gets
   403 `HUMAN_SESSION_REQUIRED`. The settings decide what the Buyer may propose, so the
@@ -856,6 +1020,81 @@ Rules:
 - The web client maps `logo_url` to `logoUrl`, `kitchen_type` to `kitchenType`,
   `opening_hours` to `openingHours` and `postal_code` to `postalCode`.
 
+### Recall alerts (Context.dev)
+
+The recall monitor (`monitor/recalls.py`) scrapes the Ruokavirasto recall list with
+Context.dev `POST /v1/web/scrape` and writes one `recall.alert` per notice, kitchen and
+product. These two routes show the alerts in the approval inbox and let a person run a
+check now. The gateway serves the routes (Aron); the monitor and the re-plan are #358
+(Maciek).
+
+`GET /v1/kitchens/{kitchen_id}/recalls` and `POST .../recalls/check` both answer:
+
+```json
+{
+  "last_check": {
+    "checked_at": "2026-11-14T00:30:00+02:00",
+    "source": "recording",
+    "fetched_at": "2026-11-13T22:17:51+00:00",
+    "via": "/v1/web/scrape",
+    "notices_scanned": 38
+  },
+  "alerts": [
+    {
+      "event_id": "recall-3f1c9a0b5e7d2c4a8b6e1f0d",
+      "type": "recall.alert",
+      "kitchen_id": "K10",
+      "product_id": "461332",
+      "product_name": "Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg",
+      "match": "possible",
+      "why": "same brand Kulta Katriina, shared word(s) kahvi, perinteinen",
+      "where": ["in stock: 5.673 KG", "in recipes: breakfast_buffet", "on the open purchase proposal"],
+      "recall": {
+        "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suodatinkahvissa-vierasesineriski/",
+        "date": "2026-03-06", "title": "Suodatinkahvissa vierasesineriski",
+        "reason": "...", "action": "...",
+        "recalled_product": "Kulta Katriina Perinteinen suodatinkahvi", "brand": "Kulta Katriina",
+        "gtin": null, "package_size": "500 g",
+        "lot": "23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027"
+      },
+      "next_step": "Do not use it until checked. Check your packs: ...",
+      "proposal_id": "prop-7c2e",
+      "line_status": "BLOCKED_BY_RECALL",
+      "replacement_line": {"product_id": "475842", "product_name": "12 x Löfbergs Crescendo Ground Coffee 500g Rainforest Alliance",
+                           "quantity": "2", "unit": "KI"},
+      "replacement_proposal": [{"product_id": "475842", "name": "...", "brand": "Löfbergs"}],
+      "detected_at": "2026-11-14T00:30:00+02:00"
+    }
+  ]
+}
+```
+
+- The alert fields are the monitor's `recall.alert` as it is (monitor/README.md), plus three
+  fields the re-plan adds: `proposal_id`, `line_status` and `replacement_line`.
+- `last_check` is `null` when no check has run for this kitchen. Then the screens say "not
+  checked yet", never "no recalls". An empty `alerts` list with a `last_check` means the
+  check found nothing on this kitchen's stock, recipes or open proposals.
+- `source`: `live` when the scrape ran now; `recording` when Context.dev was slow or down
+  and the last saved scrape was used. `fetched_at` says how old the scrape is. The screens
+  show which one, so a recording is never shown as live.
+- `proposal_id` is the open proposal the alert hits, else `null`. `line_status` is
+  `BLOCKED_BY_RECALL` for an `exact` or `possible` match on a proposal line, `WARNING` for a
+  `review` match (shown, never blocking on its own).
+- `replacement_line` is the line the Buyer re-planned in place of the blocked one, sized by
+  the engine (`quantity` a decimal string in `unit`); `null` while it has not. A proposal
+  that still holds a `BLOCKED_BY_RECALL` line cannot be approved: approve answers 409
+  `RECALL_BLOCKED`. After the re-plan the proposal has a new `expected_total`, and a person
+  approves that exact figure as usual. `replacement_proposal` stays ideas for the chef;
+  nothing is ordered from an alert.
+- `POST /recalls/check` with a repeat `idempotency_key` returns the stored result. A new
+  check that finds an alert already known (same `event_id`) does not re-plan again.
+- Every check and every re-plan is an audit entry (`store.audit`).
+- `CONTEXT_DEV_API_KEY` stays on the gateway and the monitor; the browser never calls
+  Context.dev. A check that cannot scrape and has no recording answers 502
+  `RECALL_CHECK_UNAVAILABLE`; the screens then show recalls as unknown.
+- The web client maps snake_case to camelCase, `proposal_id` to `orderId`, `replacement_proposal`
+  to `replacementIdeas` and `quantity` to a number.
+
 ## Daily weather and holiday signals
 
 `signals.weather` writes `daily_signals` through `store.signals`; forecast/engine
@@ -935,5 +1174,6 @@ Engine, gateway, web and agent use exactly these strings in `mandate.reason_code
 | `SENT_READ_FAILED` | It landed; only reading the answer failed | Re-read the order status. Never resend |
 
 Refusals before any send are errors, not outcomes: `TOTAL_MISMATCH` (409: re-simulate
-and ask the human again), `HUMAN_SESSION_REQUIRED` (403), `IDEMPOTENCY_KEY_REUSED`
-(409). No adapter retries a POST automatically.
+and ask the human again), `STOCK_UNKNOWN` (409: the supplier has not confirmed the stock
+of a line; nothing is recorded and the proposal stays `READY`), `HUMAN_SESSION_REQUIRED`
+(403), `IDEMPOTENCY_KEY_REUSED` (409). No adapter retries a POST automatically.

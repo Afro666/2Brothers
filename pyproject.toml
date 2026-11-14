@@ -21,7 +21,8 @@ two-brothers-buyer-worker = "agent.service:main"
 [tool.setuptools.package-data]
 store = ["*.json"]
 signals = ["*.json"]
+monitor = ["fixtures/*.json"]
 
 [tool.setuptools.packages.find]
-include = ["gateway*", "engine*", "agent*", "store*", "signals*"]
+include = ["gateway*", "engine*", "agent*", "store*", "signals*", "monitor*"]
 exclude = ["*.tests*"]

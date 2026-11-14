@@ -89,7 +89,6 @@ export function StockPage() {
   const [drafts, setDrafts] = useState<Drafts>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   const rows = stock.status === "ready" ? stock.data : [];
   const uncounted = rows.filter((row) => row.onHand == null).length;
@@ -101,19 +100,16 @@ export function StockPage() {
       ...current,
       [productId]: { ...draftFor(current, productId), ...change },
     }));
-    setSaved(false);
     setSaveError(null);
   }
 
   async function saveCounts() {
     if (pending.length === 0 || invalidCount > 0 || saving) return;
     setSaving(true);
-    setSaved(false);
     setSaveError(null);
     try {
       await api.submitStockCount(pending, actor);
       setDrafts({});
-      setSaved(true);
       stock.reload();
       toast.success("Count saved", { testId: "stock-count-saved-toast" });
     } catch (error) {
@@ -313,11 +309,6 @@ export function StockPage() {
               <Button onClick={saveCounts} disabled={!canSave} aria-busy={saving || undefined}>
                 {saving ? "Saving count" : "Save count"}
               </Button>
-              {saved ? (
-                <p role="status" className="text-sm font-medium text-success">
-                  Count saved
-                </p>
-              ) : null}
               {pending.length === 0 && invalidCount === 0 ? (
                 <p className="text-sm text-muted-foreground">Enter a count or mark a product as not counted.</p>
               ) : null}

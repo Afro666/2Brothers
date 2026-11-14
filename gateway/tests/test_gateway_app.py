@@ -113,6 +113,18 @@ def test_agent_cannot_approve(env):
     assert r.status_code == 403 and r.json()["error"]["code"] == "NEEDS_APPROVAL"
 
 
+def test_non_numeric_quantity_and_total_are_422(env):
+    client, _, _ = env
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "abc", "unit": "L",
+        "requested_date": "2026-11-16", "idempotency_key": "bad-q"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_REQUEST", r.text
+    p = milk(client)
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                    json={"expected_total": "abc", "idempotency_key": "bad-t"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_REQUEST", r.text
+
+
 def test_no_token_no_access(env):
     client, _, _ = env
     assert client.get(K + "/orders").status_code == 401
@@ -308,3 +320,49 @@ def test_parser_is_not_used_after_an_ambiguous_buyer_failure(monkeypatch):
     assert r.status_code == 503 and db.proposals.count_documents({}) == 0
     r = TestClient(create_app(gw, buyer_worker=safe)).post(K + "/proposals", headers=AGENT, json=body)
     assert r.status_code == 200 and r.json()["request"]["made_by"] == "parser"
+
+
+def test_a_structured_body_cannot_claim_the_parser_made_it(env):
+    """made_by and query are set by the gateway, never by the client."""
+    client, _, _ = env
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "51", "unit": "L", "requested_date": "2026-11-16",
+        "idempotency_key": "spoof", "made_by": "parser", "query": "milk"})
+    assert r.status_code == 200, r.text
+    assert r.json()["request"]["made_by"] == "structured"
+    assert "query" not in r.json()["request"]
+
+
+def test_failed_attempt_without_a_write_releases_commit_claim(env, monkeypatch):
+    from store import orders
+    client, _, db = env
+    p = milk(client)
+    real = orders.record_attempt
+    def fail(**kwargs):
+        raise RuntimeError('write failed')
+    monkeypatch.setattr(orders, 'record_attempt', lambda *a, **kw: fail(**kw))
+    body = {'expected_total': p['expected_total'], 'idempotency_key': 'recovery'}
+    with pytest.raises(RuntimeError):
+        client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
+    assert db.proposals.find_one({'_id': p['proposal_id']})['status'] == 'READY'
+    monkeypatch.setattr(orders, 'record_attempt', real)
+    assert client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body).status_code == 200
+    assert db.orders.count_documents({}) == 1
+
+
+def test_lost_attempt_response_retains_claim_for_reconciliation(env, monkeypatch):
+    from store import orders
+    client, _, db = env
+    p = milk(client)
+    real = orders.record_attempt
+    def write_then_fail(*args, **kwargs):
+        real(*args, **kwargs)
+        raise RuntimeError('response lost')
+    monkeypatch.setattr(orders, 'record_attempt', write_then_fail)
+    body = {'expected_total': p['expected_total'], 'idempotency_key': 'ambiguous'}
+    with pytest.raises(RuntimeError):
+        client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
+    assert db.proposals.find_one({'_id': p['proposal_id']})['status'] == 'COMMITTING'
+    body['idempotency_key'] = 'different-key'
+    assert client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body).status_code == 409
+    assert db.orders.count_documents({}) == 1

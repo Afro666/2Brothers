@@ -1,9 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
+import { toast } from "sonner";
 import { afterEach } from "vitest";
 
 afterEach(() => {
   cleanup();
+  // Sonner replays every active toast to the next Toaster that mounts: clear them,
+  // or one test's "saved" toast shows up in the next test.
+  toast.dismiss();
 });
 
 // jsdom has no layout. Radix popper parts (tooltip, select) call these;

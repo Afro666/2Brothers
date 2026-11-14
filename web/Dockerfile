@@ -5,6 +5,11 @@ RUN npm ci
 COPY . .
 ARG VITE_LIVE_BUYER=false
 ENV VITE_LIVE_BUYER=$VITE_LIVE_BUYER
+# Unset: every screen runs on the mock. The deploy sets both, so the order flow uses the gateway.
+ARG VITE_GATEWAY_URL=
+ENV VITE_GATEWAY_URL=$VITE_GATEWAY_URL
+ARG VITE_USE_MOCKS=true
+ENV VITE_USE_MOCKS=$VITE_USE_MOCKS
 RUN npm run build
 
 # Caddy serves the built files. Its config is in the image, so a config change

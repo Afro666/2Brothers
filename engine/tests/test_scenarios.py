@@ -1,5 +1,6 @@
 """Golden scenarios from docs/scenarios.md. Offers are the live values of 2026-11-13 22:04."""
 
+import json
 from datetime import date
 from decimal import Decimal as D
 
@@ -185,6 +186,15 @@ def test_s11_cover_ceiling_stops_cheap_hoarding():
     assert not cover_limit(item, params, extra=30)["over_ceiling"]
 
 
+def test_cover_limit_zero_demand_gives_json_safe_none():
+    parm = pack_info(row("469648", "ST", "ST", [("ST", 1)]), measure="ST")
+    item = Item("469648", parm, daily_demand=0, lead_time_days=3, review_days=1, on_hand=10,
+                safety_stock=0, category="dry")
+    check = cover_limit(item, KitchenParams.from_dict({}), extra=5)
+    assert check["days_of_cover"] is None
+    json.dumps(check, allow_nan=False)
+
+
 def test_rounding_up_to_lot():
     info = pack_info(row("x", "KG", "KG", [("KG", 1)], lot=2.5), measure="KG")
     assert to_sales_units(D(6), info) == (D("7.5"), True)
@@ -226,3 +236,11 @@ def test_unknown_reliability_is_never_best_then_carbon_decides():
     green = _milk("C", "1.02", reliability=0.90, carbon=1.1)
     plan = plan_request(D(50), "L", [known.__class__(**{**known.__dict__, "carbon": 1.6}), green], MON, P)
     assert plan.lines[0].product_id == "C" and "lower carbon" in plan.lines[0].why
+
+
+def test_zero_reliability_beats_unknown_and_note_says_reliability():
+    unknown = _milk("A", "1.00", reliability=None)
+    zero = _milk("B", "1.01", reliability=0.0)
+    plan = plan_request(D(50), "L", [unknown, zero], MON, P)
+    assert plan.lines[0].product_id == "B"
+    assert "delivery reliability 0% vs unknown" in plan.lines[0].why

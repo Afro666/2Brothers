@@ -58,13 +58,13 @@ export const coffeeProducts = {
   },
 } satisfies Record<string, Product>;
 
-function coffeeOffer(product: Product, priceExVat: number, availableAmount: number): Offer {
+function coffeeOffer(product: Product, priceExVat: number, kgPerCase: number, availableAmount: number): Offer {
   return {
     productId: product.id,
     requestedDate: REQUESTED,
     priceExVat, // placeholder
     taxRatePercent: FOOD_VAT,
-    comparisonPrice: Math.round((priceExVat / product.baseUnitsPerSalesUnit) * 100) / 100,
+    comparisonPrice: Math.round((priceExVat / kgPerCase) * 100) / 100,
     comparisonUnit: "KG",
     availableAmount, // placeholder, measured (not a sentinel)
     salesUnit: product.salesUnit,
@@ -75,8 +75,8 @@ function coffeeOffer(product: Product, priceExVat: number, availableAmount: numb
 }
 
 export const coffeeOffers = {
-  kultaKatriina: coffeeOffer(coffeeProducts.kultaKatriina, 72.65, 40),
-  lofbergsCrescendo: coffeeOffer(coffeeProducts.lofbergsCrescendo, 64.8, 25),
+  kultaKatriina: coffeeOffer(coffeeProducts.kultaKatriina, 72.65, 5, 40),
+  lofbergsCrescendo: coffeeOffer(coffeeProducts.lofbergsCrescendo, 64.8, 6, 25),
 };
 
 export const coffeeLine: OrderLine = {
@@ -113,8 +113,8 @@ export const coffeeApproval: ApprovalRequest = {
   summary: "Breakfast buffet coffee for next week",
   lineCount: 1,
   deliveryDate: REQUESTED,
-  totalExVat: coffeeOrder.totalExVat,
-  totalInclVat: coffeeOrder.totalInclVat,
+  totalExVat: 145.3,
+  totalInclVat: 164.92,
   reasons: [{ rule: "Human approval required", detail: "Every order the Buyer proposes waits for a person." }],
   status: "PENDING",
 };

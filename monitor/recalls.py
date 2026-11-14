@@ -270,7 +270,10 @@ def audit(db, alerts: list, now: datetime) -> list:
         event = {"event_id": a["event_id"], "run_id": "recall-monitor", "type": "recall.alert",
                  "tool": "recall_monitor", "arguments": {"recall_url": a["recall"]["url"],
                                                           "product_id": a["product_id"]},
-                 "result": {k: v for k, v in a.items() if k not in ("event_id", "detected_at")}}
+                 # Snapshot-changing stock/recipes/replacement ideas are not part
+                 # of a stable notice event (#238). Proposal effects have own events.
+                 "result": {k: a[k] for k in ("type", "kitchen_id", "product_id", "product_name",
+                                              "match", "why", "recall", "next_step")}}
         entries.append(append_event(db, event, server={"kitchen_id": a["kitchen_id"],
                                                        "principal": "recall-monitor", "at": now}))
     return entries

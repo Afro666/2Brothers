@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { useApi } from "@/api";
 import { EmptyState } from "@/components/purchasing/empty-state";
@@ -12,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { useAsync } from "@/lib/use-async";
+import { SampleData } from "@/components/purchasing/sample-data";
 import { SettingsSection } from "@/pages/settings/section";
 import type { DemandClass, KitchenSettings } from "@/types";
 
@@ -45,7 +47,6 @@ export function EngineSection() {
   const [original, setOriginal] = useState<KitchenSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (state.status === "ready") {
@@ -59,19 +60,17 @@ export function EngineSection() {
   function update(updateDraft: (current: KitchenSettings) => KitchenSettings) {
     setDraft((current) => (current ? updateDraft(current) : current));
     setSaveError(null);
-    setSaved(false);
   }
 
   async function saveSettings() {
     if (!draft) return;
     setSaving(true);
     setSaveError(null);
-    setSaved(false);
     try {
       const settings = await api.saveKitchenSettings(clone(draft), actor);
       setDraft(clone(settings));
       setOriginal(clone(settings));
-      setSaved(true);
+      toast.success("Settings saved", { testId: "settings-saved-toast" });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -82,7 +81,6 @@ export function EngineSection() {
   function resetChanges() {
     if (original) setDraft(clone(original));
     setSaveError(null);
-    setSaved(false);
   }
 
   const allergenCodes = draft ? [...new Set([...Object.keys(ALLERGENS), ...draft.excludedAllergens])].sort() : [];
@@ -92,6 +90,7 @@ export function EngineSection() {
       title="Ordering engine"
       description="How the Buyer sizes orders for this kitchen. A person still approves every order."
     >
+      <SampleData of="getKitchenSettings" />
       {state.status === "loading" ? <LoadingState label="Loading settings" /> : null}
       {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
       {state.status === "ready" && draft === null ? (
@@ -155,7 +154,8 @@ export function EngineSection() {
             <CardContent className="space-y-3">
               {draft.maxDaysOfCover.map((rule, index) => (
                 <div
-                  key={`${index}-${rule.category}`}
+                  // Index, not category: a key that changes while typing remounts the row and drops focus.
+                  key={index}
                   className="grid gap-2 sm:grid-cols-[1fr_10rem_auto] sm:items-end"
                 >
                   <div className="space-y-1.5">
@@ -322,11 +322,6 @@ export function EngineSection() {
             <div role="alert" className="rounded-lg border border-destructive/40 p-4 text-sm">
               {saveError}
             </div>
-          ) : null}
-          {saved ? (
-            <p role="status" className="text-sm font-medium text-primary">
-              Settings saved
-            </p>
           ) : null}
           <div className="flex flex-wrap gap-3">
             <Button type="submit" disabled={!changed || saving}>

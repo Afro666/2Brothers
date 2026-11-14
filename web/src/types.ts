@@ -44,8 +44,8 @@ export interface Product {
   salesUnit: string;
   /** The unit prices compare in (L or KG). */
   baseUnit: string;
-  /** Base units in one sales unit (1 for a 1 L carton sold per piece). */
-  baseUnitsPerSalesUnit: number;
+  /** Base units in one sales unit (1 for a 1 L carton sold per piece); null when not known. */
+  baseUnitsPerSalesUnit: number | null;
   units: PackUnit[];
   /** Fat % from nutrition data; null when not given. */
   fatPercent: number | null;
@@ -66,12 +66,15 @@ export interface Offer {
   requestedDate: string;
   /** Catalog price per sales unit before tax; null when `error: true`. */
   priceExVat: number | null;
-  taxRatePercent: number;
+  /** null when the gateway sends only the order's VAT total. */
+  taxRatePercent: number | null;
   /** Price per comparison unit before tax, e.g. € per L. */
   comparisonPrice: number | null;
   comparisonUnit: "L" | "KG" | null;
-  /** In `salesUnit`. 999999 and 9999999999 are "unknown" sentinels. */
-  availableAmount: number;
+  /** In `salesUnit`. 999999, 9999999999 and null are "unknown". */
+  availableAmount: number | null;
+  /** The supplier confirmed stock for the ordered quantity, without saying how much there is. */
+  stockConfirmed?: boolean;
   salesUnit: string;
   /** Earliest date it can arrive; can be later than `requestedDate`. */
   availableDate: string | null;
@@ -117,11 +120,12 @@ export interface Order {
   id: string;
   status: OrderStatus;
   urgency: Urgency;
-  deliveryDate: string;
+  deliveryDate: string | null;
   lines: OrderLine[];
-  totalExVat: number;
+  totalExVat: number | null;
   totalInclVat: number;
-  mov: MovState;
+  /** null = the supplier's delivery terms are not known. */
+  mov: MovState | null;
 }
 
 /** One rule of the mandate that this order breaks or touches. */
@@ -135,7 +139,7 @@ export interface ApprovalRequest {
   id: string;
   orderId: string;
   requestedBy: string;
-  createdAt: string;
+  createdAt: string | null;
   /** One line: what the chef asked and what this order covers. */
   summary: string;
   lineCount: number;
@@ -221,11 +225,13 @@ export type AuditKind =
   | "order"
   | "stock"
   | "forecast_share"
-  | "settings";
+  | "settings"
+  | "other";
 
 export interface AuditEvent {
   id: string;
-  at: string;
+  /** null = the gateway did not record when. */
+  at: string | null;
   kind: AuditKind;
   actor: "chef" | "agent" | "gateway" | "human" | "valio" | "system";
   /** What happened, short. */
@@ -474,6 +480,86 @@ export interface ForecastAccuracy {
   kitchen: ForecastSeries;
   /** null when the gateway does not say per product (unknown, not "no products"). */
   products: ForecastSeries[] | null;
+}
+
+/** Standing-order drift (docs/contract.md, "Standing-order drift"). */
+export type DriftKind = "portion_creep" | "cost_creep";
+
+export interface DriftWarning {
+  productId: ProductCode;
+  /** null when the gateway sends only the code. */
+  productName: string | null;
+  kind: DriftKind;
+  /** 0.4 = 40% above the baseline. */
+  change: number;
+  unit: string;
+  qtyPer100: number;
+  baselineQty: number;
+  spendPer100: number;
+  baselineSpend: number;
+  baselineWeeks: number;
+  why: string;
+  /** Set on the supplier side only: the consenting kitchen it belongs to. */
+  kitchenId?: string;
+  kitchenName?: string | null;
+}
+
+export interface DriftReport {
+  /** Monday of the last full week, `YYYY-MM-DD`. */
+  week: string;
+  warnings: DriftWarning[];
+}
+
+/** The kitchen-type guess onboarding offers. Anything else stays unknown. */
+export type KitchenType = "hotel" | "school" | "hospital" | "restaurant";
+
+/** Where a looked-up field came from: the provider and the endpoint the gateway called. */
+export interface FieldSource {
+  provider: "Context.dev";
+  /** e.g. `POST /v1/brand/retrieve`. */
+  endpoint: string;
+}
+
+/** One looked-up field. `value` null = unknown: the lookup did not find it, so nothing is guessed. */
+export interface LookedUpField<T> {
+  value: T | null;
+  /** null when `value` is null. */
+  source: FieldSource | null;
+}
+
+export interface KitchenAddress {
+  street: string | null;
+  postalCode: string | null;
+  city: string | null;
+  country: string | null;
+}
+
+/** What onboarding found for a kitchen's email or website. Nothing is saved until a person confirms. */
+export interface KitchenBrandLookup {
+  /** The domain the lookup used, e.g. `hotelkuusi.fi`. */
+  domain: string;
+  /** false when the provider knew nothing about the domain: every field is then unknown. */
+  found: boolean;
+  name: LookedUpField<string>;
+  /** An https URL or a `data:image/svg+xml` URI. */
+  logoUrl: LookedUpField<string>;
+  /** Brand colours as `#rrggbb`, the main one first. */
+  colors: LookedUpField<string[]>;
+  address: LookedUpField<KitchenAddress>;
+  kitchenType: LookedUpField<KitchenType>;
+  /** Free text as the website says it, e.g. "Mon-Fri 06:30-22:00". */
+  openingHours: LookedUpField<string>;
+}
+
+/** The profile a person confirmed on the onboarding page. */
+export interface KitchenBrandProfile {
+  domain: string;
+  name: string;
+  logoUrl: string | null;
+  colors: string[];
+  address: KitchenAddress;
+  kitchenType: KitchenType | null;
+  openingHours: string | null;
 }
 
 /**

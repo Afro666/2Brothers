@@ -41,6 +41,7 @@ describe("ApprovalsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Decided" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Waiting for you (2)" })).toBeInTheDocument();
+    expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
     await waitFor(async () => {
       const events = await api.listAudit();
       expect(events.filter((event) => event.kind === "approval").at(-1)).toMatchObject({
@@ -63,6 +64,7 @@ describe("ApprovalsPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The total moved.");
     expect(screen.getByRole("heading", { name: "Waiting for you (3)" })).toBeInTheDocument();
+    expect(screen.queryByTestId("approval-toast")).not.toBeInTheDocument();
   });
 
   it("records a rejection reason in the audit log", async () => {
