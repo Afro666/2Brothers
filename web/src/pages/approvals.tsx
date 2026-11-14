@@ -113,10 +113,15 @@ function ApiApprovalsPage() {
   }
 
   async function change(orderId: string, proposalChange: ProposalChange): Promise<void> {
-    await api.changeProposal(orderId, proposalChange, actor);
-    setEditCounts((counts) => ({ ...counts, [orderId]: (counts[orderId] ?? 0) + 1 }));
-    toast.success(t("Proposal updated. Check the new total before you approve."));
-    approvals.reload();
+    try {
+      await api.changeProposal(orderId, proposalChange, actor);
+      setEditCounts((counts) => ({ ...counts, [orderId]: (counts[orderId] ?? 0) + 1 }));
+      toast.success(t("Proposal updated. Check the new total before you approve."));
+    } finally {
+      // Also after a failure: the gateway may have saved a change whose answer was lost, and the
+      // card must show the gateway's basket and total before anyone approves.
+      approvals.reload();
+    }
   }
 
   const pending =
