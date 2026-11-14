@@ -484,7 +484,9 @@ def improved_tables(submission: Path | None = None) -> list[list[list[str]]]:
     start = source.find("**How we improved its outputs.**")
     if start < 0:
         raise RuntimeError("docs/submission.md has no 'How we improved its outputs' part")
-    end = source.find("**Not built:**", start)
+    # The part ends where the next paragraph opens with a bold heading (#1722): a later
+    # part with its own table is not an "improved" table.
+    end = source.find("\n**", start)
     tables, current = [], []
     for line in source[start:end if end > 0 else None].splitlines():
         if line.startswith("|"):
