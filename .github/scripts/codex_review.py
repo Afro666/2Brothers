@@ -15,7 +15,7 @@ def gh(*args):
 def redact(text, key=''):
     if key:
         text = text.replace(key, '[REDACTED]')
-    return re.sub(r'sk-[A-Za-z0-9_-]{12,}', '[REDACTED]', text)
+    return re.sub(r'sk-[A-Za-z0-9_.*-]+', '[REDACTED]', text)
 
 
 def prepare(folder):
@@ -27,11 +27,12 @@ def prepare(folder):
     repo = os.environ['GITHUB_REPOSITORY']
     head = f"{facts['headRepositoryOwner']['login']}/{facts['headRepository']['name']}"
     eligible = facts['state'] == 'OPEN' and not facts['isDraft'] and head.lower() == repo.lower()
-    eligible = eligible and any(f['path'].startswith(('agent/', 'env/')) for f in facts['files'])
+    eligible = eligible and (os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' or
+                             any(f['path'].startswith(('agent/', 'env/')) for f in facts['files']))
     with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
         out.write(f'eligible={str(eligible).lower()}\n')
     if not eligible:
-        print('Skipped: requires an open, ready, same-repository agent/env PR.')
+        print('Skipped: requires an open, ready, same-repository PR in the review scope.')
         return
     diff = gh('pr', 'diff', pr)
     if len(diff.encode('utf-8')) > 120_000:
@@ -62,8 +63,23 @@ def review(folder):
     # CLI sees no GitHub credential, repository, project instructions, or user config.
     # Tool execution and web search are disabled, and its sandbox is read-only.
     with tempfile.TemporaryDirectory(prefix='codex-advisory-') as working:
+        home = Path(working) / 'home'
+        home.mkdir()
         env = {k: os.environ[k] for k in ('PATH', 'HOME', 'SystemRoot') if k in os.environ}
-        env.update(OPENAI_API_KEY=key, CODEX_HOME=str(Path(working) / 'home'))
+        env.update(CODEX_HOME=str(home))
+        # The OpenAI provider requires CLI login; merely setting OPENAI_API_KEY
+        # does not authenticate this CLI version. stdin avoids argv/log exposure.
+        try:
+            login = subprocess.run(['codex', 'login', '--with-api-key', '-c',
+                                    'cli_auth_credentials_store="file"'],
+                                   cwd=working, env=env, input=key, text=True,
+                                   capture_output=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            login = None
+        if login is None or login.returncode:
+            (folder / 'comment.md').write_text(heading + 'Unavailable: private CLI authentication setup failed. No model review ran.\n', encoding='utf-8')
+            print('Private CLI authentication setup failed; diagnostics suppressed.')
+            return
         output = Path(working) / 'reply.md'
         cmd = ['codex', 'exec', '--ignore-user-config', '--skip-git-repo-check',
                '--ephemeral', '--sandbox', 'read-only', '--disable', 'shell_tool',
@@ -77,7 +93,12 @@ def review(folder):
                                     text=True, capture_output=True, timeout=300)
             if result.returncode or not output.exists():
                 body = 'Unavailable: Codex CLI failed. No model review result is claimed.'
-                print('Codex CLI failed; raw diagnostics suppressed to protect credentials.')
+                if 'Quota exceeded' in result.stderr or 'insufficient_quota' in result.stderr:
+                    body = 'Unavailable: OpenAI API quota is exhausted. Enable API credits/billing for the key\'s project before retrying. No model review ran.'
+                # This process receives only the OpenAI secret; redact its complete
+                # value and masked key-shaped fragments before exposing diagnostics.
+                print('Codex CLI failed (sanitized diagnostic):')
+                print(redact(result.stderr, key)[-2000:])
             else:
                 body = redact(output.read_text(encoding='utf-8'), key).strip()[:12_000]
                 if not body:
