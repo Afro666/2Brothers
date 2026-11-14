@@ -6,6 +6,7 @@ import { permissionsMock } from "@/api/mock-permissions";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
+import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import {
   approval as seedApproval,
   confirmedDemoApproval,
@@ -174,6 +175,7 @@ export function createMockApi(): MockApi {
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),
     ...permissionsMock,
+    lookupKitchenBrand: lookupKitchenBrandMock,
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
     },

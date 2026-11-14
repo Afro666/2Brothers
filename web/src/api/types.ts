@@ -24,6 +24,7 @@ import type {
   ForecastAccuracy,
   BuyerPermissions,
   AutoApproveLearning,
+  KitchenBrandLookup,
 } from "@/types";
 
 /** Who a decision is recorded as in the audit log. */
@@ -152,6 +153,11 @@ export interface Api {
   getPermissions(): Promise<BuyerPermissions>;
   /** Progress only. There is no method to switch auto-approve on: a person approves every order. */
   getAutoApproveLearning(): Promise<AutoApproveLearning>;
+  /**
+   * Onboarding: the gateway looks the kitchen up with Context.dev (`POST /v1/brand/retrieve`)
+   * from a work email or a website. It saves nothing; a person confirms the fields first.
+   */
+  lookupKitchenBrand(query: { email: string } | { website: string }): Promise<KitchenBrandLookup>;
 }
 
 /** A gateway error: `code` is the contract's error code, e.g. `TOTAL_MISMATCH`. */
