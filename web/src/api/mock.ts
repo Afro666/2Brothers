@@ -6,6 +6,7 @@ import { permissionsMock } from "@/api/mock-permissions";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
 import { driftMock, supplierDriftMock } from "@/api/mock-drift";
+import { createOffersMock } from "@/api/mock-offers";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
 import { createRecallMock } from "@/api/mock-recalls";
 import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
@@ -239,6 +240,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     getForecastAccuracy: async () => forecastAccuracyMock(),
     getDrift: async () => driftMock(),
     getSupplierDrift: async () => supplierDriftMock(),
+    ...createOffersMock(),
     ...permissionsMock,
     ...createRecallMock({
       getOrder: (id) => demoOrders.get(id),

@@ -303,6 +303,40 @@ export interface AuditEvent {
   orderId?: string;
 }
 
+/**
+ * A suggestion a supplier's selling agent sent to this kitchen (docs/contract.md, "Supplier
+ * offers"). Never an order: it has no price, and the quantity is the kitchen's own forecast.
+ */
+export interface SupplierOffer {
+  id: string;
+  supplierId: string;
+  productId: ProductCode;
+  /** null = the catalog has no English name for it. */
+  productName: string | null;
+  /** The product that is predicted short. */
+  replacesProductId: ProductCode;
+  replacesProductName: string | null;
+  /** The day of the predicted shortage, `YYYY-MM-DD`. */
+  requestedDate: string;
+  /** A decimal string, as the gateway sent it. */
+  quantity: string;
+  unit: string;
+  /** Text the supplier's agent wrote. Show it as plain text, with its author. */
+  reason: string;
+  /** Who chose the product: a model name, `rule` or a person. */
+  madeBy: string;
+  status: "OPEN" | "ACCEPTED" | "DECLINED" | "EXPIRED";
+  createdAt: string | null;
+  proposalId: string | null;
+}
+
+/** The answer to accepting an offer: the proposal it became. `REJECTED` = nothing waits in the inbox. */
+export interface SupplierOfferAccepted {
+  offer: SupplierOffer;
+  proposalId: string;
+  proposalStatus: string;
+}
+
 export type OfferTier = "good" | "better" | "best";
 
 export interface TradeOff {
