@@ -20,6 +20,7 @@ from datetime import date
 import unicodedata
 
 from fastapi import Depends, Request
+from starlette.concurrency import run_in_threadpool
 
 from gateway import model_trace
 from gateway import webhooks
@@ -302,7 +303,8 @@ def mount_supplier_offers(app, gw, principal, body) -> None:
     @app.post("/v1/suppliers/{supplier_id}/offers")
     async def send_offer(supplier_id: str, request: Request, who=Depends(principal)):
         who.need_supplier("supplier:offers")
-        return create(gw(), supplier_id, await body(request), who.name)
+        # create() asks Valio for availability: off the event loop, the limiter may wait (#1280).
+        return await run_in_threadpool(create, gw(), supplier_id, await body(request), who.name)
 
     k = "/v1/kitchens/{kitchen_id}/supplier-offers"
 
