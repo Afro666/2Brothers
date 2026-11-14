@@ -236,7 +236,8 @@ existing explicit parser fallback and circuit breaker. This is a complete-call
 deadline, not streaming first-token instrumentation.
 
 Only product IDs are cached for ten minutes, scoped to kitchen, request, day,
-quantity/unit, allergen policy and the eligible catalog shortlist. Prices, stock,
+quantity/unit, allergen policy, eligible catalog shortlist and the compact kitchen
+memory hash. Prices, stock,
 offers and approval are never reused by this cache: every new request re-quotes and
 simulates live. The same idempotency key replays its original result as before.
 An identical choice already in flight does not start another model call; its
@@ -245,6 +246,17 @@ claim ownership stops the run before approval is requested. Failed model selecti
 seconds. Pick calls are metered under `buyer_pick`; a cache hit uses zero calls.
 The model trace marks orchestration tools as code and the selection as a model
 `pick`, or a code `pick` with `CACHED_PICK` when reusing an earlier choice.
+
+Feedback stays in the store as history; the prompt carries only relevant computed
+facts (at most 12 entries and 2,400 characters), never the full feedback history.
+Each Buyer worker keeps computed facts per kitchen and calendar day for 60 seconds,
+with at most 128 cached entries. Reads and memory assembly run in a worker thread;
+concurrent reads share a load, and failed reads are not cached. New feedback or an
+undo is reflected after the next refresh (up to 60 seconds). The resulting memory
+is checked before looking up a cached pick, so a changed summary cannot reuse the
+previous ten-minute product choice. Idempotent request replay stays exact. This
+changes context freshness, not Nemotron's weights or the engine's authority over
+quantities. It does not establish a latency guarantee during provider congestion.
 
 Set `NEMOTRON_BUYER_STRATEGY=loop` to retain the previous multi-turn implementation.
 The CLI tool agent still uses that audited loop. The legacy worker-mode tests set
