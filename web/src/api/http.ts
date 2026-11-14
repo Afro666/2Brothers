@@ -1,6 +1,7 @@
-import { createPlanningHttp } from "@/api/http-planning";
+import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
 import { type Json, mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, rows } from "@/api/gateway-map";
 import { mapMoney } from "@/api/map";
+import { mapDrift } from "@/api/map-drift";
 import { forecastWindow, mapForecastAccuracy } from "@/api/map-forecast";
 import { createMockApi } from "@/api/mock";
 import type { Api, AuditActor } from "@/api/types";
@@ -161,6 +162,12 @@ export function createHttpApi(baseUrl: string): Api {
     },
     async getPermissions() {
       return mapPermissions(await get(`${kitchen}/permissions`));
+    },
+    async getDrift() {
+      return mapDrift(await get(`${kitchen}/drift`));
+    },
+    async getSupplierDrift() {
+      return mapDrift(await get(`/v1/suppliers/${encodeURIComponent(SUPPLIER_ID)}/demand/drift`));
     },
     async submitChefRequest(request) {
       const ask = { text: request.text.trim(), requested_date: request.deliveryDate };

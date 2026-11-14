@@ -48,7 +48,7 @@ type PlanningApi = Pick<
 type GatewayCall = (path: string, init?: RequestInit) => Promise<unknown>;
 
 /** The supplier whose demand view this is. The gateway's consenting kitchens share with this id. */
-const SUPPLIER_ID = "sup-valio";
+export const SUPPLIER_ID = "sup-valio";
 
 /**
  * The planning screens against the real gateway (gateway/kitchen_routes.py,
