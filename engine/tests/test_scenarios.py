@@ -160,6 +160,25 @@ def test_service_level_inside_unit_interval_is_kept():
     assert KitchenParams.from_dict({"service_level": {"B": 0.99}}).service_level["B"] == D("0.99")
 
 
+@pytest.mark.parametrize("cover", [{"Dairy": 4}, {"fresh_dairy": 0}, {"dry": -3}])
+def test_bad_max_cover_days_is_rejected(cover):
+    with pytest.raises(ValueError, match="max_cover_days"):
+        KitchenParams.from_dict({"max_cover_days": cover})
+
+
+@pytest.mark.parametrize("cap", [0.5, 3.5, 10])
+def test_stockout_cap_outside_one_to_three_is_rejected(cap):
+    with pytest.raises(ValueError, match="stockout_cap"):
+        KitchenParams.from_dict({"stockout_cap": cap})
+
+
+def test_valid_settings_still_load():
+    params = KitchenParams.from_dict({"service_level": {"A": "0.99"}, "stockout_cap": "3",
+                                      "max_cover_days": {"fish": 1, "other": 10}})
+    assert params.stockout_cap == 3 and params.max_cover_days["fish"] == 1
+    assert params.max_cover_days["other"] == 10 and params.service_level["A"] == D("0.99")
+
+
 def test_s11_inbound_is_not_an_emergency():
     parm = pack_info(row("469648", "ST", "ST", [("KI", 12), ("ST", 1)]), measure="ST")
     item = Item("469648", parm, daily_demand=4, lead_time_days=3, review_days=1, on_hand=10,
