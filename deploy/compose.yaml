@@ -39,6 +39,8 @@ services:
       GATEWAY_HUMAN_TOKEN: ${GATEWAY_HUMAN_TOKEN:?set GATEWAY_HUMAN_TOKEN in .env}
       GATEWAY_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}
       BUYER_WORKER_URL: http://buyer:8001
+      # Caddy strips this prefix (web/Caddyfile); the agent card and llms.txt print it in their URLs (#293).
+      GATEWAY_PUBLIC_PREFIX: /gateway
 
   # Internal worker: no human token, upstream Valio key or published port.
   buyer:

@@ -460,6 +460,9 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp
     mount_mcp(app)
+    # Agent discovery (#293): /.well-known/agent-card.json and /llms.txt, built from this app.
+    from gateway.discovery import mount_discovery
+    mount_discovery(app)
     return app
 
 
