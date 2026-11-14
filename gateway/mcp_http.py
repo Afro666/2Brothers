@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 
 import httpx
 from fastapi import FastAPI
@@ -25,6 +26,9 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from gateway.mcp_server import GatewayClient, build_server
 
 PATH = "/mcp"
+# The caller's own token for this request: a kitchen API token keeps its kitchen and scopes
+# all the way through the /tools routes (#271). Empty = the server agent token.
+_CALLER: ContextVar[str] = ContextVar("mcp_caller_token", default="")
 
 
 class AgentTokenGatewayClient(GatewayClient):
@@ -34,7 +38,7 @@ class AgentTokenGatewayClient(GatewayClient):
         super().__init__("http://gateway.internal", transport=httpx.ASGITransport(app=app))
 
     async def request(self, method, path, *, payload=None, params=None, headers=None):
-        token = os.environ.get("GATEWAY_AGENT_TOKEN", "")
+        token = _CALLER.get() or os.environ.get("GATEWAY_AGENT_TOKEN", "")
         return await super().request(method, path, payload=payload, params=params,
                                      headers={**(headers or {}), "Authorization": "Bearer " + token})
 
@@ -50,7 +54,20 @@ class RequireAgentToken:
             from gateway.app import _token_matches  # one token check for the whole gateway
             auth = dict(scope.get("headers") or []).get(b"authorization", b"").decode("latin-1")
             token = auth[7:] if auth.lower().startswith("bearer ") else ""
-            if not (token and _token_matches(token, "GATEWAY_AGENT_TOKEN")):
+            allowed = bool(token) and _token_matches(token, "GATEWAY_AGENT_TOKEN")
+            if not allowed and token:
+                # A kitchen API token with kitchen:propose may drive the Buyer tools (#271).
+                verify = getattr(getattr(scope.get("app"), "state", None), "verify_token", None)
+                doc = verify(token) if verify else None
+                if doc is not None and "kitchen:propose" in doc["scopes"]:
+                    allowed = True
+                    reset = _CALLER.set(token)
+                    try:
+                        await self.app(scope, receive, send)
+                    finally:
+                        _CALLER.reset(reset)
+                    return
+            if not allowed:
                 body = b'{"error":{"code":"UNAUTHENTICATED","message":"the agent bearer token is required"}}'
                 await send({"type": "http.response.start", "status": 401, "headers": [
                     (b"content-type", b"application/json"), (b"www-authenticate", b'Bearer realm="mcp"')]})

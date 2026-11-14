@@ -111,3 +111,15 @@ an order a person already approved; otherwise 403 `NEEDS_APPROVAL`.
 
 Image: `docker build -f gateway/Dockerfile .` (context is the repo root).
 Tests: `python -m pytest gateway/tests/test_gateway_app.py`.
+
+## API tokens (#271)
+
+A person (human session) creates a token for one kitchen:
+`POST /v1/kitchens/{k}/tokens {"name": "claude", "scopes": ["kitchen:read", "kitchen:propose"]}`.
+The token (`tkb_...`) is returned once; only its SHA-256 is stored. `GET .../tokens` lists
+them (prefix, scopes, last used), `DELETE .../tokens/{id}` revokes. `kitchen:approve` is
+refused: a token can never approve. A token acts only for its own kitchen (403
+`KITCHEN_SCOPE`), and a missing scope gives 403 `SCOPE_REQUIRED`. Create and revoke are
+audit entries. A token with `kitchen:propose` can also drive `/mcp`:
+
+    claude mcp add --transport http kitchen-buyer https://<host>/api/mcp --header "Authorization: Bearer tkb_..."
