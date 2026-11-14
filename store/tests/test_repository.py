@@ -225,6 +225,20 @@ class RepositoryTest(unittest.TestCase):
         self.assertEqual(params.budget_warning_week_eur, Decimal("6000"))
         self.assertEqual(excluded_allergens(db, "k1"), [])  # explicitly none, not unknown
 
+    def test_certainty_premium_max_saves_and_null_means_no_limit(self):
+        from engine.params import KitchenParams
+        settings, changed = self.repo.settings.put("k1", {"certainty_premium_max": "3"})
+        self.assertEqual(settings["certainty_premium_max"], Decimal("3"))
+        self.assertEqual(sorted(changed), ["certainty_premium_max"])
+        self.assertEqual(self.repo.settings.get("k1")["certainty_premium_max"], Decimal("3"))
+        doc = self.repo.settings._coll.database.kitchen_settings.find_one({"_id": "k1"})
+        self.assertIn("certainty_premium_max", doc["engine"])
+        params = KitchenParams.from_dict(self.repo.settings.get("k1"))
+        self.assertEqual(params.certainty_premium_max, Decimal("3"))
+        self.repo.settings.put("k1", {"certainty_premium_max": None})
+        self.assertIsNone(self.repo.settings.get("k1")["certainty_premium_max"])
+        self.assertIsNone(KitchenParams.from_dict(self.repo.settings.get("k1")).certainty_premium_max)
+
     def test_settings_validation(self):
         for bad in ({"service_level": {"A": "97.5"}}, {"service_level": {"A": "1"}},
                     {"service_level": {"A": "0"}}, {"service_level": {"D": "0.9"}},
@@ -236,6 +250,7 @@ class RepositoryTest(unittest.TestCase):
                     {"excluded_allergens": None}, {"excluded_allergens": "AP"},
                     {"excluded_allergens": ["peanut butter"]}, {"excluded_allergens": [7]},
                     {"excluded_allergens": ["ZZ"]}, {"excluded_allergens": ["AP", "ZZ"]},
+                    {"certainty_premium_max": "0.5"}, {"certainty_premium_max": 3.0},
                     {"auto_approve": True}):
             with self.assertRaises((ValueError, TypeError), msg=bad):
                 self.repo.settings.put("k1", bad)
