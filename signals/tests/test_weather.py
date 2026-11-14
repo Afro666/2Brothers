@@ -111,9 +111,23 @@ class StorageTests(unittest.TestCase):
         self.assertNotIn("secret", err.getvalue())
 
     def test_idempotent_snapshots_and_kitchen_isolation(self):
+        calls = []
+
+        def bulk_write(collection, requests, ordered=True):
+            # mongomock cannot run this pymongo's UpdateOne in bulk_write: apply each one.
+            calls.append(len(requests))
+            for op in requests:
+                collection.update_one(op._filter, op._doc, upsert=op._upsert)
+
+        patcher = mock.patch.object(mongomock.Collection, "bulk_write", bulk_write)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         db = mongomock.MongoClient().signals_test
         rows = normalize(fixture(), LOCATION, AS_OF, fetched_at=FETCHED)
         self.assertEqual(save_daily(db, rows), 98)
+        self.assertEqual(calls, [98])
+        self.assertEqual(save_daily(db, []), 0)
+        self.assertEqual(calls, [98])
         changed = deepcopy(rows); changed[0]["weather"]["temperature_2m_max"] = 42
         save_daily(db, changed)
         self.assertEqual(db.daily_signals.count_documents({}), 98)

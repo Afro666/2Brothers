@@ -1,6 +1,8 @@
 """Daily physical weather measurements and holiday flags; all Mongo access stays here."""
 from datetime import date
 
+from pymongo import UpdateOne
+
 
 def save_daily(db, rows):
     rows = list(rows)
@@ -13,9 +15,11 @@ def save_daily(db, rows):
             raise ValueError("invalid signal kind")
     collection = db.daily_signals
     collection.create_index([("kitchen_id", 1), ("date", 1), ("as_of", 1)], unique=True)
-    for row in rows:
-        key = {k: row[k] for k in ("kitchen_id", "date", "as_of")}
-        collection.update_one(key, {"$set": {k: v for k, v in row.items() if k != "_id"}}, upsert=True)
+    ops = [UpdateOne({k: row[k] for k in ("kitchen_id", "date", "as_of")},
+                     {"$set": {k: v for k, v in row.items() if k != "_id"}}, upsert=True)
+           for row in rows]
+    if ops:
+        collection.bulk_write(ops, ordered=False)
     return len(rows)
 
 
