@@ -1793,13 +1793,17 @@ Answer:
   "lines": [
     {"product_id": "462775", "status": "SHORT", "ordered": "51", "received": "36",
      "missing": "15", "base_unit": "ST",
+     "order_quantity": "51", "order_unit": "ST", "missing_order_qty": "15",
+     "unit_price": "1.10", "claim_eur": "16.50",
      "lots": [{"lot": "L2611A", "best_before": "unknown", "quantity": "3", "unit": "KI"}]}
   ],
   "not_ordered": [
     {"product_id": "462921", "status": "SUBSTITUTE", "replaces": "462775",
      "quantity": "2", "unit": "KI", "received": "10", "base_unit": "ST",
      "lot": "L2611B", "best_before": "2026-11-28", "needs_approval": true}
-  ]
+  ],
+  "claim": {"currency": "EUR", "total_eur": "16.50", "lines": 1, "quantity": "15",
+            "unit": "ST", "not_valued": 0, "supplier_name": "Valio Aimo"}
 }
 ```
 
@@ -1809,6 +1813,16 @@ Answer:
 | `complete` | boolean | True only when every ordered line is `RECEIVED` and nothing else came. |
 | `lines[]` | one per ordered line | `status`: `RECEIVED`, `SHORT`, `MISSING` or `UNKNOWN`. |
 | `lines[].ordered`, `received`, `missing` | decimal string or null | In `base_unit` (the catalog's base unit, converted with the catalog's pack sizes). Null when unknown. |
+| `lines[].order_quantity`, `order_unit` | decimal string, string | The ordered quantity and unit as stored on the order (the supplier's sales unit). (#1198) |
+| `lines[].missing_order_qty` | decimal string or null | `missing` in `order_unit`: `missing` x `order_quantity` / `ordered`. Null when `missing` is null. (#1198) |
+| `lines[].unit_price` | money string or null | EUR ex VAT per `order_unit`, the price stored on the order. Null when the order has none. (#1198) |
+| `lines[].claim_eur` | money string or null | The value of what did not come: `missing_order_qty` x `unit_price`, rounded half up to cents. `"0.00"` for `RECEIVED`. Null for `UNKNOWN` and for a line without a price. (#1198) |
+| `claim` | object | One total to claim from the supplier, for the `SHORT` and `MISSING` lines (#1198). |
+| `claim.total_eur` | money string | The sum of the `claim_eur` of the `SHORT` and `MISSING` lines (each rounded first). `"0.00"` when there are none. Ex VAT. |
+| `claim.lines` | integer | How many lines are `SHORT` or `MISSING`. |
+| `claim.quantity`, `claim.unit` | decimal string and string, or both null | The sum of `missing_order_qty` when every `SHORT` and `MISSING` line has the same `order_unit` and a known value; else both null. |
+| `claim.not_valued` | integer | Lines that may be short but have no value: `UNKNOWN` lines, and `SHORT` or `MISSING` lines without a price. They are not in `total_eur`; a person checks them. |
+| `claim.supplier_name` | string or null | The supplier's name when the order is for one supplier; else null. |
 | `lines[].lots` | list | The note's lines for this product: `lot`, `best_before` (`"unknown"` when unreadable), quantity and unit as printed. |
 | `not_ordered[]` | one per note line not on the order | `status`: `SUBSTITUTE` (it says it replaces an ordered product, or that part is unreadable), `EXTRA` (not ordered, replaces nothing), `UNREADABLE` (no readable product code). |
 | `not_ordered[].needs_approval` | boolean | True for every `SUBSTITUTE`: a person says yes or no before it counts as received. |
@@ -1817,6 +1831,11 @@ Unknown is never a number. An unreadable quantity makes the line `UNKNOWN`, neve
 `MISSING` or zero. A line absent from the note is `MISSING` only when every product
 code on the note was readable; otherwise it is `UNKNOWN`, because the unreadable line
 may be that product.
+
+The money is plain code in the gateway, from the stored order's own lines and prices; the
+model gives no price and no value (#1198). A `SUBSTITUTE` is not taken off the claim: a
+person decides if it counts. Nothing is sent to the supplier (Valio's API has no claim
+route); the web app copies the claim as plain text for a person to send.
 
 Errors: those of `POST /stock/photo` (with `DELIVERY_NOTE_BUSY` in place of
 `STOCK_PHOTO_BUSY`), plus 404 `ORDER_NOT_FOUND`. In every case nothing was read and
