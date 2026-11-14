@@ -42,7 +42,11 @@ describe("ForecastPage", () => {
     expect(tile("Weekly error (WAPE)")).toHaveTextContent("Our engine4.5 %Weekday average12.8 %");
     expect(tile("Bias")).toHaveTextContent("Our engine+0.5 %Weekday average+0.1 %");
     expect(tile("Stock-out days")).toHaveTextContent("Our engine13Weekday average29");
-    expect(tile("Waste")).toHaveTextContent("Our engine440Weekday average1,131");
+    // The whole kitchen has L, KG and PCS: euros and one line per unit, never one sum (#1618).
+    expect(tile("Waste")).not.toHaveTextContent("Our engine440");
+    expect(tile("Waste")).toHaveTextContent(
+      "WasteOur engine€1,443.9024 KG183 L233 PCSWeekday average€3,949.3572 KG453 L606 PCS",
+    );
 
     const chart = screen.getByRole("img", { name: "Needed and predicted per week" });
     expect(chart).toHaveAccessibleDescription(/^12 past weeks .* 4 future weeks with the forecast only\./);

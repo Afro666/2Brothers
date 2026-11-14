@@ -6,11 +6,12 @@ const FUTURE_WEEKS = 4;
 const WEEKS = Array.from({ length: PAST_WEEKS + FUTURE_WEEKS }, (_, index) => `2026-W${34 + index}`);
 
 const PRODUCTS = [
-  { productId: "463335", name: "Valio Eila 3 % milk", unit: "L", level: 420 },
-  { productId: "462775", name: "Arla lactose-free milk", unit: "L", level: 180 },
-  { productId: "OWN-SALMON", name: "Salmon fillet", unit: "KG", level: 95 },
-  { productId: "OWN-RYE", name: "Rye bread loaf", unit: "PCS", level: 140 },
-  { productId: "OWN-BUN", name: "Cinnamon bun", unit: "PCS", level: 610 },
+  // `price`: EUR before VAT per kitchen unit.
+  { productId: "463335", name: "Valio Eila 3 % milk", unit: "L", level: 420, price: 1.4 },
+  { productId: "462775", name: "Arla lactose-free milk", unit: "L", level: 180, price: 1.55 },
+  { productId: "OWN-SALMON", name: "Salmon fillet", unit: "KG", level: 95, price: 24.85 },
+  { productId: "OWN-RYE", name: "Rye bread loaf", unit: "PCS", level: 140, price: 4.2 },
+  { productId: "OWN-BUN", name: "Cinnamon bun", unit: "PCS", level: 610, price: 2.1 },
 ];
 
 type Method = "engine" | "baseline";
@@ -53,6 +54,25 @@ function score(cells: Cell[], method: Method): ForecastScore {
   };
 }
 
+/** The whole kitchen has L, KG and PCS: like the gateway, short and waste per unit and in euros (#1618). */
+function perUnit(method: Method): ForecastScore {
+  const past = (index: number) => GRID[index].slice(0, PAST_WEEKS);
+  const units = [...new Set(PRODUCTS.map((product) => product.unit))].sort();
+  const eur = (key: "short" | "waste") =>
+    Math.round(sum(PRODUCTS.map((product, index) => score(past(index), method)[key]! * product.price)) * 100) / 100;
+  return {
+    ...score(PRODUCTS.flatMap((_, index) => past(index)), method),
+    short: null,
+    waste: null,
+    byUnit: units.map((unit) => {
+      const scores = PRODUCTS.flatMap((product, index) => (product.unit === unit ? [score(past(index), method)] : []));
+      return { unit, short: sum(scores.map((s) => s.short!)), waste: sum(scores.map((s) => s.waste!)) };
+    }),
+    shortEur: eur("short"),
+    wasteEur: eur("waste"),
+  };
+}
+
 /** `rows` is one product, or every product for the whole kitchen. */
 function series(productId: string | null, name: string, unit: string | null, rows: Cell[][]): ForecastSeries {
   const past = rows.flatMap((row) => row.slice(0, PAST_WEEKS));
@@ -60,8 +80,8 @@ function series(productId: string | null, name: string, unit: string | null, row
     productId,
     name,
     unit,
-    engine: score(past, "engine"),
-    baseline: score(past, "baseline"),
+    engine: productId ? score(past, "engine") : perUnit("engine"),
+    baseline: productId ? score(past, "baseline") : perUnit("baseline"),
     weeks: WEEKS.map((week, index) => {
       const cells = rows.map((row) => row[index]);
       const over = index < PAST_WEEKS;

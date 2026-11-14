@@ -74,6 +74,28 @@ describe("mapForecastAccuracy", () => {
     ]);
   });
 
+  it("keeps short and waste per unit, with euros only when every product has a price (#1618)", () => {
+    const mixed = structuredClone(accuracy) as unknown as { methods: Record<string, { total: Record<string, unknown> }> };
+    const byUnit = [
+      { unit: "KG", under: 25, over: 60, series: 30, under_eur: "170.20", over_eur: "331.70" },
+      { unit: "L", under: 15, over: 30, series: 18, under_eur: "42.20", over_eur: "56.40" },
+    ];
+    Object.assign(mixed.methods.engine.total, {
+      under: null, over: null, under_eur: "212.40", over_eur: "388.10", unpriced_series: 0, by_unit: byUnit,
+    });
+    Object.assign(mixed.methods["weekday-average"].total, {
+      under: null, over: null, under_eur: "42.20", over_eur: "56.40", unpriced_series: 30, by_unit: byUnit,
+    });
+    const { kitchen } = mapForecastAccuracy(mixed, forecast);
+    expect(kitchen.engine).toMatchObject({ short: null, waste: null, shortEur: 212.4, wasteEur: 388.1 });
+    expect(kitchen.engine.byUnit).toEqual([
+      { unit: "KG", short: 25, waste: 60 },
+      { unit: "L", short: 15, waste: 30 },
+    ]);
+    // Some products have no price: a euro total would leave them out, so it is unknown.
+    expect(kitchen.baseline).toMatchObject({ short: null, shortEur: null, wasteEur: null });
+  });
+
   it("keeps a zero bias when weeks were compared, and reads zeros with nothing compared as unknown", () => {
     expect(mapForecastAccuracy(accuracy, forecast).kitchen.weeks[1].engineWape).toBe(0.054);
     const empty = {
@@ -137,7 +159,11 @@ describe("forecastAccuracyMock", () => {
       expect(series.engine.wape).toBeLessThan(series.baseline.wape ?? 0);
     }
     expect(products).toHaveLength(5);
-    expect(kitchen.engine).toEqual({ wape: 0.045, bias: 0.0054, short: 346, waste: 440, stockOutDays: 13 });
+    // L, KG and PCS: no single sum, the same totals split per unit (#1618).
+    expect(kitchen.engine).toMatchObject({ wape: 0.045, bias: 0.0054, short: null, waste: null, stockOutDays: 13 });
+    expect(kitchen.engine.byUnit?.map((row) => row.unit)).toEqual(["KG", "L", "PCS"]);
+    expect(kitchen.engine.byUnit?.reduce((total, row) => total + row.short, 0)).toBe(346);
+    expect(kitchen.engine.byUnit?.reduce((total, row) => total + row.waste, 0)).toBe(440);
     // The kitchen's week is the sum of its products.
     expect(kitchen.weeks[0].actual).toBe((products ?? []).reduce((total, p) => total + (p.weeks[0].actual ?? 0), 0));
   });
