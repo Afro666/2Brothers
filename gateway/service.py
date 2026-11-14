@@ -817,22 +817,34 @@ class Gateway:
         lo = datetime.combine(d0, datetime.min.time(), tzinfo=timezone.utc)
         hi = datetime.combine(d1, datetime.max.time(), tzinfo=timezone.utc)
         rows = self.db.forecasts.find({"meta.kitchen_id": kitchen_id, "ts": {"$gte": lo, "$lte": hi}}).sort("ts", 1)
-        # The band (p10-p90) comes from this kitchen's own forecast errors of the last 8
-        # weeks (engine.newsvendor, #432); with too few, a normal with 15% spread.
-        from engine.newsvendor import interval
+        # The band (p10-p90) comes from forecast errors of the last 8 weeks (engine.newsvendor,
+        # #432): the product's own when it has enough, else the kitchen's pooled ones, else a
+        # normal with 15% spread.
+        from engine.newsvendor import MIN_RESIDUALS, interval
         from store.history import forecast_vs_actual
         today = self.now().date()
         past = forecast_vs_actual(self.db, kitchen_id, today - timedelta(days=56), today - timedelta(days=1))
-        ratios = [actual / predicted for _, _, predicted, actual in past if predicted > 0]
+        pooled: list[float] = []
+        by_product: dict[str, list[float]] = {}
+        for pid, _, predicted, actual in past:
+            if predicted > 0:
+                pooled.append(actual / predicted)
+                by_product.setdefault(pid, []).append(actual / predicted)
+        kitchen_band = "own forecast errors" if len(pooled) >= MIN_RESIDUALS else "default spread"
         lines = []
         for r in rows:
+            pid = r["meta"]["product_id"]
             need = float(str(r["need"]))
-            lines.append({"product_id": r["meta"]["product_id"], "date": r["ts"].date().isoformat(),
+            own = by_product.get(pid, [])
+            if len(own) >= MIN_RESIDUALS:
+                ratios, band = own, "product forecast errors"
+            else:
+                ratios, band = pooled, kitchen_band
+            lines.append({"product_id": pid, "date": r["ts"].date().isoformat(),
                           "need": f"{Decimal(str(r['need'])).normalize():f}", "unit": r["unit"],
                           "made_on": r.get("made_on"), "why": r.get("why"),
-                          **interval(need, ratios=ratios)})
-        return {"kitchen_id": kitchen_id, "band_from": "own forecast errors" if len(ratios) >= 20 else "default spread",
-                "lines": lines}
+                          **interval(need, ratios=ratios), "band_from": band})
+        return {"kitchen_id": kitchen_id, "band_from": kitchen_band, "lines": lines}
 
     def audit_log(self, kitchen_id: str) -> list[dict]:
         return [{"seq": e["seq"], **e["event"], "at": e["server"].get("at")}
