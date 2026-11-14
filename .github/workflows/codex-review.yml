@@ -1,0 +1,56 @@
+name: codex-review
+
+# Advisory only. The required Opus review remains the merge gate.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ['agent/**', 'env/**']
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Open same-repository PR to review
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  advisory-review:
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    continue-on-error: true
+    steps:
+      # Never check out PR code or run its scripts, even for a same-repo PR.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned Codex CLI
+        run: npm install --global @openai/codex@0.169.0
+      - name: Prepare trusted review input
+        id: input
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: python .github/scripts/codex_review.py prepare
+      - name: Review with OpenAI Codex (no execution tools)
+        if: steps.input.outputs.eligible == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CODEX_REVIEW_MODEL: ${{ vars.CODEX_REVIEW_MODEL || 'gpt-5.4' }}
+        run: python .github/scripts/codex_review.py review
+      - name: Publish advisory comment
+        if: steps.input.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: gh pr comment "$PR" --body-file "$RUNNER_TEMP/codex-review/comment.md"
