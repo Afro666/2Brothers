@@ -113,6 +113,20 @@ def test_same_choice_in_flight_waits_for_the_leader_pick(monkeypatch):
     asyncio.run(run())
 
 
+def test_number_word_in_a_pick_reason_still_makes_a_proposal(monkeypatch):
+    async def run():
+        db, gateway = environment(monkeypatch)
+        model = Pick({'picks': [{'index': 0, 'reason': 'the only one in stock'}]})
+        try:
+            worker = BuyerWorker(db, gateway, model_factory=lambda: model, now=lambda: NOW)
+            result = await worker.run('demo-kitchen', NEED)
+            assert result['status'] == 'READY' and model.calls == 1
+            assert result['lines'] and db.proposals.count_documents({}) == 1
+        finally:
+            await gateway.close()
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('reply', [
     {'picks': [{'index': 19, 'reason': 'not in this shortlist'}]},
     {'picks': [{'index': 0, 'reason': 'x', 'quantity': '10000'}]},
