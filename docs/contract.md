@@ -277,7 +277,7 @@ value says where it came from; real data always wins:
 |---|---|---|
 | `cutoff_at` | timestamp with offset, or null | Order by this moment for the line's delivery. Valio's `closingTime` when Valio gives one. Otherwise the last order day at the cut-off time (kitchen time, Europe/Helsinki) that still delivers, with the lead time, by the delivery date: the later of `available_date` and the requested date. Null when no source knows it. |
 | `cutoff_source` | `"valio"`, `"supplier_terms"`, `"demo"` or null | Where `cutoff_at` came from. `demo` when any part of it (order days, cut-off time or lead time) is a demo value. |
-| `lead_time_days` | integer or null | Days from order to delivery: a per-product demo value, else the supplier's terms, else the supplier's demo value. |
+| `lead_time_days` | integer or null | Days from order to delivery: the supplier's terms, else the product's demo value, else the supplier's demo value (real data always wins, #1462). |
 | `lead_time_source` | `"supplier_terms"`, `"demo"` or null | Where `lead_time_days` came from. |
 | `delivery_reliability` | number or null | Delivered versus ordered, 0 to 1: Valio's `reliability` when known, else the product's demo value, else the supplier's demo value. |
 | `reliability_source` | `"valio"`, `"demo"` or null | Where `delivery_reliability` came from. |
@@ -1236,7 +1236,7 @@ the Buyer). A Valio error never fails the page: `live.error` says it.
   price per `net_content` unit. For an own product page: its own supplier, then the catalog
   product it names and the other own products that name the same one. A manual supplier has
   `stock_known: false`: a person may still approve it (docs/decisions.md). The lead time comes
-  as on a proposal line: the demo value, then the supplier's terms; `lead_time_source` says which.
+  as on a proposal line: the supplier's terms, then the demo value; `lead_time_source` says which.
 - `kitchen.orders`: the last 5 orders with this product, newest first; `proposals_waiting`: the
   `READY` proposals with it; `stock`: the latest count or null; `recipes`: the recipes that use
   it; `demand`: the menu plan and forecast need for the next 14 days (`GET /demand`), null when
