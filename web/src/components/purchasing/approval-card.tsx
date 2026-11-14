@@ -500,16 +500,37 @@ export function ApprovalCard({
             ) : null}
           </div>
         </div>
-        <dl className="flex items-baseline gap-3 sm:block sm:text-right">
-          <dt className="sr-only">{t("Total incl VAT")}</dt>
-          <dd className="inline-block border-b-[3px] border-double border-foreground text-xl leading-7 font-bold tabular-nums">
-            {inclVat !== null ? formatEur(inclVat) : inclVatText(request, t, formatEur)}
-          </dd>
-          <dt className="sr-only">{t("Total ex VAT")}</dt>
-          <dd className="font-mono text-xs text-muted-foreground tabular-nums">
-            {t("{amount} ex VAT", { amount: formatEur(request.totalExVat) })}
-          </dd>
-        </dl>
+        {request.lineCount === 0 ? (
+          <p className="text-sm font-medium sm:max-w-64 sm:text-right">
+            {checks.leftOut.length > 0
+              ? t("Nothing could be ordered: {count} products left out", { count: checks.leftOut.length })
+              : t("Nothing could be ordered")}
+          </p>
+        ) : (
+          <dl className="flex flex-wrap items-baseline gap-x-3 sm:block sm:text-right">
+            <dt className="sr-only">{t("Total incl VAT")}</dt>
+            <dd className="inline-block border-b-[3px] border-double border-foreground text-xl leading-7 font-bold tabular-nums">
+              {inclVat !== null ? formatEur(inclVat) : inclVatText(request, t, formatEur)}
+            </dd>
+            <dt className="sr-only">{t("Total ex VAT")}</dt>
+            <dd className="font-mono text-xs text-muted-foreground tabular-nums">
+              {t("{amount} ex VAT", { amount: formatEur(request.totalExVat) })}
+            </dd>
+            {order?.deliveryFee != null ? (
+              <>
+                <dt className="sr-only">{t("Delivery fee")}</dt>
+                <dd className="w-full font-mono text-xs text-muted-foreground tabular-nums">
+                  {order.mov
+                    ? t("Delivery fee {amount} (free from {threshold} ex VAT)", {
+                        amount: formatEur(order.deliveryFee),
+                        threshold: formatEur(order.mov.threshold),
+                      })
+                    : t("Delivery fee {amount}", { amount: formatEur(order.deliveryFee) })}
+                </dd>
+              </>
+            ) : null}
+          </dl>
+        )}
       </CardHeader>
       <CardContent className="space-y-3 px-0">
         {chips.length > 0 ? (
@@ -749,7 +770,7 @@ export function ApprovalCard({
               </span>
             ) : null}
             {status === "APPROVED"
-              ? t("Approved: {exVat} ex VAT, {total}. The order may now be sent.", {
+              ? t("Approved and recorded: {exVat} ex VAT, {total}. Nothing is sent to the supplier.", {
                   exVat: formatEur(request.totalExVat),
                   total: inclVatText(request, t, formatEur),
                 })

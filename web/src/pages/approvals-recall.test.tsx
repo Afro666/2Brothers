@@ -113,7 +113,7 @@ describe("ApprovalsPage recalls", () => {
     });
     expect(approve).toHaveBeenCalledTimes(1);
     expect((await api.getApproval("APR-313-R")).status).toBe("APPROVED");
-    expect(await within(replacementCard()).findByText(/Approved: €129\.60 ex VAT, €147\.10 incl VAT/)).toBeInTheDocument();
+    expect(await within(replacementCard()).findByText(/Approved and recorded: €129\.60 ex VAT, €147\.10 incl VAT\. Nothing is sent to the supplier\./)).toBeInTheDocument();
     expect((await api.getApproval("APR-313")).status).toBe("BLOCKED_BY_RECALL");
     expect(within(coffeeCard()).queryByRole("button", { name: /^Approve/ })).not.toBeInTheDocument();
   });
@@ -139,7 +139,7 @@ describe("ApprovalsPage recalls", () => {
     // Folded: one row says what, where and what to do. The rest waits behind "Details".
     expect(await within(panel).findByRole("button", { name: "Details" })).toHaveAttribute("aria-expanded", "false");
     expect(within(panel).getByRole("status")).toHaveTextContent(
-      "1 recall: Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg is in your stock (5.673 KG).",
+      "1 recall: Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg is in your stock (5.7 kg).",
     );
     expect(within(panel).getByTestId("recall-next")).toHaveTextContent("Do not use it until checked.");
     expect(within(panel).queryByRole("list", { name: "Recalled products in your kitchen" })).not.toBeInTheDocument();
@@ -155,7 +155,7 @@ describe("ApprovalsPage recalls", () => {
       "href",
       "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suodatinkahvissa-vierasesineriski/",
     );
-    expect(within(item).getByText("In stock: 5.673 KG")).toBeInTheDocument();
+    expect(within(item).getByText("In stock: 5.7 kg")).toBeInTheDocument();
     expect(within(item).getByText("In recipes: breakfast_buffet")).toBeInTheDocument();
     expect(within(item).queryByText(/on the open purchase proposal/i)).not.toBeInTheDocument();
     expect(within(item).getByText("No open order holds it. New orders leave it out.")).toBeInTheDocument();

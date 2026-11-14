@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createMockApi } from "@/api/mock";
 import type { Api } from "@/api/types";
 import type { Supplier } from "@/types";
+import { approval } from "@/mocks/milk-case";
 import { renderApp } from "@/test/render";
 import { nextCutoff } from "@/pages/home/cutoff";
 
@@ -47,6 +48,15 @@ describe("HomePage", () => {
     ]);
     // The mock is not Atlas, so nothing on the page says it is.
     expect(screen.queryByTestId("atlas-mark")).not.toBeInTheDocument();
+  });
+
+  it("shows the gateway's approval figure, including its delivery fee", async () => {
+    const api = createMockApi();
+    api.listApprovals = async () => [{ ...approval, totalInclVat: 62.74, inclVat: 37.74 }];
+    renderApp(`/?now=${DEMO_NOW}`, api);
+
+    expect(await screen.findByText("€62.74 incl VAT")).toBeInTheDocument();
+    expect(screen.queryByText("€37.74 incl VAT")).not.toBeInTheDocument();
   });
 
   it.each<keyof Api>(["listAudit", "getDrift"])("marks only the tile fed by %s as MongoDB Atlas", async (method) => {

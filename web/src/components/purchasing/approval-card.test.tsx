@@ -166,6 +166,50 @@ describe("ApprovalCard", () => {
     expect(screen.getByRole("button", { name: "Inspect" })).toHaveAttribute("aria-expanded", "true");
   });
 
+  it("shows the delivery fee below the totals and keeps the gateway's approve total", () => {
+    const feeRequest = { ...approval, totalExVat: 33.1, totalInclVat: 62.74, inclVat: 37.74 };
+    const feeOrder = {
+      ...confirmedOrder,
+      totalExVat: 33.1,
+      totalInclVat: 62.74,
+      inclVat: 37.74,
+      deliveryFee: 25,
+      mov: { threshold: 300, current: 33.1, deliveryFee: 25 },
+    };
+    render(<ApprovalCard request={feeRequest} order={feeOrder} onApprove={vi.fn()} />);
+
+    expect(screen.getByText("€37.74")).toBeVisible();
+    expect(screen.getByText("Delivery fee €25.00 (free from €300.00 ex VAT)")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Approve €62.74 incl VAT" })).toBeEnabled();
+  });
+
+  it("replaces empty order totals with the number of products left out", () => {
+    const emptyRequest = {
+      ...approval,
+      status: "REJECTED" as const,
+      lineCount: 0,
+      totalExVat: 0,
+      totalInclVat: 0,
+      inclVat: 0,
+      reasons: Array.from({ length: 35 }, (_, index) => ({ rule: `${10000 + index}: no stock`, detail: "" })),
+    };
+    const emptyOrder = { ...confirmedOrder, lines: [], totalExVat: 0, totalInclVat: 0, inclVat: 0, deliveryFee: 0 };
+    render(<ApprovalCard request={emptyRequest} order={emptyOrder} />);
+
+    expect(screen.getByText("Nothing could be ordered: 35 products left out")).toBeVisible();
+    expect(screen.getByText("35 products left out")).toBeVisible();
+    expect(screen.queryByText("€0.00")).not.toBeInTheDocument();
+  });
+
+  it("does not invent a left-out count for an empty order without reasons", () => {
+    const emptyRequest = { ...approval, lineCount: 0, totalExVat: 0, totalInclVat: 0, reasons: [] };
+    render(<ApprovalCard request={emptyRequest} order={{ ...confirmedOrder, lines: [] }} />);
+
+    expect(screen.getByText("Nothing could be ordered")).toBeVisible();
+    expect(screen.queryByText(/0 products left out/)).not.toBeInTheDocument();
+    expect(screen.queryByText("€0.00")).not.toBeInTheDocument();
+  });
+
   it("shows who asked and when when both are known", () => {
     render(<ApprovalCard request={approval} order={confirmedOrder} />);
     expect(screen.getByText(
@@ -376,7 +420,10 @@ describe("ApprovalCard", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     confirm();
-    expect(await screen.findByRole("status")).toHaveTextContent("Approved: €1,947.50 ex VAT");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Approved and recorded: €1,947.50 ex VAT, €2,210.41 incl VAT. Nothing is sent to the supplier.",
+    );
+    expect(screen.queryByText(/The order may now be sent/)).not.toBeInTheDocument();
   });
 
   it("stays pending with an error when the gateway refuses the approval", async () => {
