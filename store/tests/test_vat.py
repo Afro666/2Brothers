@@ -41,8 +41,12 @@ class VatCodeTest(unittest.TestCase):
         self.assertEqual((row["vat_code"], row["vat_rate"], row["vat_source"]),
                          ("STANDARD", "25.5", VAT_SOURCE))
         row = flatten(with_code(None))
-        self.assertEqual((row["vat_code"], row["vat_rate"]), (None, None))
-        self.assertEqual(row["vat_source"], VAT_SOURCE)       # where we looked; it said nothing
+        self.assertEqual((row["vat_code"], row["vat_rate"], row["vat_source"]), (None, None, None))
+
+    def test_the_row_source_is_the_line_enum_not_free_text(self):
+        # #1609: one vocabulary for `vat_source` on a row and on a line
+        self.assertEqual(VAT_SOURCE, "catalog")
+        self.assertEqual(flatten(with_code("MEDIUM"))["vat_source"], "catalog")
 
     def test_rate_is_text_so_the_store_never_holds_a_float(self):
         self.assertIsInstance(flatten(with_code("MEDIUM"))["vat_rate"], str)
@@ -76,6 +80,21 @@ class BackfillTest(unittest.TestCase):
         self.assertEqual(backfill(self.db, apply=True)["changed"], 0)
         own = self.db.products.find_one({"_id": "own-x"})
         self.assertIsNone(own["vat_rate"])                   # an own product is never touched
+        src = {d["_id"]: d["vat_source"] for d in self.db.products.find({"source": "valio"})}
+        self.assertEqual(src, {"1": "catalog", "2": None, "3": None, "4": "catalog"})
+
+    def test_apply_rewrites_the_old_free_text_source_and_is_idempotent(self):
+        # #1609: rows filled with the old text get the enum; null when the rate is unknown
+        from store.vat import backfill
+        old = "Valio product data, vatCode"
+        self.db.products.update_many({"source": "valio"}, {"$set": {"vat_source": old}})
+        backfill(self.db, apply=True)
+        self.db.products.update_many({"_id": {"$in": ["1", "3"]}}, {"$set": {"vat_source": old}})
+        self.assertEqual(backfill(self.db, apply=False)["changed"], 2)
+        backfill(self.db, apply=True)
+        src = {d["_id"]: d["vat_source"] for d in self.db.products.find({"source": "valio"})}
+        self.assertEqual(src, {"1": "catalog", "2": None, "3": None, "4": "catalog"})
+        self.assertEqual(backfill(self.db, apply=True)["changed"], 0)
 
 
 class OwnProductVatTest(unittest.TestCase):

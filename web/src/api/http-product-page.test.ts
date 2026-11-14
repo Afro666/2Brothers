@@ -24,7 +24,7 @@ const SALMON = {
     max_temperature_c: 2,
     vat_code: "MEDIUM",
     vat_rate: "13.5",
-    vat_source: "Valio product data, vatCode",
+    vat_source: "catalog",
   },
   about: {
     marketing_text: { en: "Salmon fillet." },
