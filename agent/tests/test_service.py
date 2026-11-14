@@ -26,6 +26,12 @@ def test_explicit_need_parser_does_not_invent_quantities():
             parse_need({'text': text, 'requested_date': '2026-11-16'})
 
 
+def test_event_flag_goes_into_the_need():
+    need = parse_need({'text': '60 L milk', 'requested_date': '2026-11-16', 'event': True})
+    assert need['event'] is True
+    assert 'event' not in parse_need({'text': '60 L milk', 'requested_date': '2026-11-16'})
+
+
 class ScriptedBuyer:
     def __init__(self):
         self.calls = 0
