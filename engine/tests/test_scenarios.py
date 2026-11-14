@@ -1,5 +1,6 @@
 """Golden scenarios from docs/scenarios.md. Offers are the live values of 2026-11-13 22:04."""
 
+import json
 from datetime import date
 from decimal import Decimal as D
 
@@ -183,6 +184,15 @@ def test_s11_cover_ceiling_stops_cheap_hoarding():
     assert check["over_ceiling"] and check["reason_codes"] == ("COVER_CEILING",)
     assert check["days_of_cover"] == pytest.approx(47.5)
     assert not cover_limit(item, params, extra=30)["over_ceiling"]
+
+
+def test_cover_limit_zero_demand_gives_json_safe_none():
+    parm = pack_info(row("469648", "ST", "ST", [("ST", 1)]), measure="ST")
+    item = Item("469648", parm, daily_demand=0, lead_time_days=3, review_days=1, on_hand=10,
+                safety_stock=0, category="dry")
+    check = cover_limit(item, KitchenParams.from_dict({}), extra=5)
+    assert check["days_of_cover"] is None
+    json.dumps(check, allow_nan=False)
 
 
 def test_rounding_up_to_lot():
