@@ -14,7 +14,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 // The inline script in index.html reads the same key and uses the same bar colours.
 const STORAGE_KEY = "purchasing-theme";
-const BAR_COLOUR: Record<ResolvedTheme, string> = { light: "#ffffff", dark: "#0a0a0a" };
+const BAR_COLOUR: Record<ResolvedTheme, string> = { light: "#F4F1E9", dark: "#151410" };
 
 function storedChoice(): ThemeChoice {
   try {
