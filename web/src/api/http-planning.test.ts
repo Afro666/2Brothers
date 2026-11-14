@@ -499,6 +499,9 @@ describe("planning methods of createHttpApi", () => {
       }),
     });
     expect(await createHttpApi("/api").getAutoApproveLearning()).toEqual({
+      enabled: false,
+      limitEur: null,
+      setBy: null,
       weeks: 2,
       weeksNeeded: 4,
       decisions: 8,
