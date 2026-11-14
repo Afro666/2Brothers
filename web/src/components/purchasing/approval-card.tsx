@@ -46,6 +46,7 @@ import type {
   ProposalChangeReason,
   RecallAlert,
 } from "@/types";
+import { ProductLink } from "@/components/purchasing/product-link";
 
 /** What the gateway gets on approve: the exact totals the human read. */
 export interface ApprovalDecision {
@@ -911,7 +912,9 @@ function AddableRow({
       <div className="flex min-w-0 items-center gap-2">
         <ProductThumb size="sm" en={item.product.names.en} fi={item.product.names.fi} brand={item.product.brand} />
         <div className="min-w-0">
-          <div className="text-sm font-medium break-words">{item.product.names.en}</div>
+          <div className="text-sm font-medium break-words">
+            <ProductLink productId={item.product.id}>{item.product.names.en}</ProductLink>
+          </div>
           <div className="font-mono text-[11px] leading-4 text-muted-foreground">
             {item.product.id} · {t("{amount} ex VAT", { amount: t(formatEur(item.offer.priceExVat)) })} ·{" "}
             {t("Stock on hand")}{" "}

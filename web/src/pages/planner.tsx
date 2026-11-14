@@ -23,6 +23,7 @@ import { randomHex } from "@/lib/random-id";
 import { getLanguage, useT } from "@/lib/i18n";
 import { MenuPhotoPlan } from "@/components/purchasing/menu-photo-plan";
 import { auditActorForRole, useRole } from "@/lib/role";
+import { ProductLink } from "@/components/purchasing/product-link";
 
 function todayIso(): string {
   const now = new Date();
@@ -100,7 +101,7 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <div className="flex min-w-0 items-center gap-3">
                   <ProductThumb en={first.productName} size="md" />
-                  <h3 className="min-w-0 font-medium break-words">{first.productName}</h3>
+                  <h3 className="min-w-0 font-medium break-words"><ProductLink productId={first.productId}>{first.productName}</ProductLink></h3>
                 </div>
                 <p className="text-sm font-medium tabular-nums">
                   {t("{amount} {unit} total", { amount: formatNumber(total), unit: first.unit })}

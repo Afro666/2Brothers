@@ -28,6 +28,7 @@ import { OrderDetailPage } from "@/pages/order-detail";
 import { OrdersPage } from "@/pages/orders";
 import { OnboardingPage } from "@/pages/onboarding";
 import { PlannerPage } from "@/pages/planner";
+import { ProductPageView } from "@/pages/product";
 import { ProductsPage } from "@/pages/products";
 import { RequestsPage } from "@/pages/requests";
 import { StockPage } from "@/pages/stock";
@@ -106,6 +107,11 @@ const catalogRoute = createRoute({
   validateSearch: validateCatalogSearch,
   component: CatalogPage,
 });
+const productRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/catalog/$productId",
+  component: ProductPageView,
+});
 const stockRoute = createRoute({ getParentRoute: () => rootRoute, path: "/stock", component: StockPage });
 const suppliersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/suppliers", component: SuppliersPage });
 const productsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/products", component: ProductsPage });
@@ -151,6 +157,7 @@ const routeTree = rootRoute.addChildren([
   orderDetailRoute,
   auditRoute,
   catalogRoute,
+  productRoute,
   stockRoute,
   suppliersRoute,
   productsRoute,

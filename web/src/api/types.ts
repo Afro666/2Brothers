@@ -1,3 +1,4 @@
+import type { ProductPage } from "@/api/http-product-page";
 import type { ApprovalDecision } from "@/components/purchasing/approval-card";
 import type {
   AllergenPresence,
@@ -642,6 +643,8 @@ export interface Api {
   searchProducts(query: string, filters?: ProductSearchFilters): Promise<SearchedProducts>;
   /** Catalog products by id; ids the catalog does not know are absent from the result. */
   getProducts(ids: ProductCode[]): Promise<Product[]>;
+  /** One product's page (docs/contract.md "Product page"); 404 `PRODUCT_NOT_FOUND` for an unknown code. */
+  getProductPage(productId: ProductCode, date?: string): Promise<ProductPage>;
   getMandate(): Promise<Mandate>;
   listSuppliers(): Promise<Supplier[]>;
   /** Creates when `id` is missing, otherwise replaces. */

@@ -14,6 +14,7 @@ import { useT } from "@/lib/i18n";
 import { ProductThumb } from "./product-thumb";
 import { cn } from "@/lib/utils";
 import type { OrderLine } from "@/types";
+import { ProductLink } from "@/components/purchasing/product-link";
 
 /** What one line shows, computed once for both layouts. */
 function lineFacts(line: OrderLine, now: Date) {
@@ -186,7 +187,7 @@ export function OrderLinesTable({
                   <div className="flex items-center gap-2">
                     <ProductThumb en={f.name} fi={f.nameFi} brand={f.brand} size="sm" />
                     <div>
-                      <div className="font-medium">{f.name}</div>
+                      <div className="font-medium"><ProductLink productId={f.code}>{f.name}</ProductLink></div>
                       {f.name !== f.code ? <div className="text-xs text-muted-foreground">{f.code}</div> : null}
                     </div>
                   </div>
@@ -225,7 +226,7 @@ export function OrderLinesTable({
               <div className="flex min-w-0 items-start gap-2">
                 <ProductThumb en={f.name} fi={f.nameFi} brand={f.brand} size="sm" />
                 <div className="min-w-0">
-                <div className="font-medium">{f.name}</div>
+                <div className="font-medium"><ProductLink productId={f.code}>{f.name}</ProductLink></div>
                 <div className="text-xs text-muted-foreground">
                     {f.name !== f.code ? <>{f.code} · </> : null}
                     <PackText f={f} />

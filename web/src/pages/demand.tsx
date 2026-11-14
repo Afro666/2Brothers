@@ -19,6 +19,7 @@ import { useAsync } from "@/lib/use-async";
 import { isValidWeek, isoWeekOf, shiftWeek, weekDates, weekRangeLabel } from "@/lib/week";
 import type { BuyingNote, ShortageRisk, SupplierDemandRow } from "@/types";
 import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
+import { ProductLink } from "@/components/purchasing/product-link";
 
 /** Worst first: a short week matters more than an unmeasured one. */
 const RISK_ORDER: Record<ShortageRisk, number> = { SHORT: 0, UNKNOWN: 1, AT_RISK: 2, COVERED: 3 };
@@ -179,7 +180,7 @@ function ProductSummary({ group }: { group: ProductGroup }) {
     <span className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
       <ProductThumb en={group.productName} size="sm" />
       <span className="block min-w-40 flex-1">
-        <span className="block font-medium break-words">{group.productName}</span>
+        <span className="block font-medium break-words"><ProductLink productId={group.productId}>{group.productName}</ProductLink></span>
         <span className="block text-xs text-muted-foreground">{group.productId}</span>
       </span>
       <RiskBadge risk={group.worst} />

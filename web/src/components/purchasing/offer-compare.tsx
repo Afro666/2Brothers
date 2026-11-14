@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { useT } from "@/lib/i18n";
 import type { OfferTier, SubstituteOption } from "@/types";
+import { ProductLink } from "@/components/purchasing/product-link";
 
 export const TIER_LABEL: Record<OfferTier, string> = { good: "Good", better: "Better", best: "Best" };
 const TIER_ORDER: OfferTier[] = ["good", "better", "best"];
@@ -56,7 +57,9 @@ export function OfferCompare({
             <CardHeader>
               <div className="flex items-start justify-between gap-2">
                 <ProductThumb en={product.names.en} fi={product.names.fi} brand={product.brand} size="md" />
-                <CardTitle className="min-w-0 flex-1 leading-snug break-words">{product.names.en}</CardTitle>
+                <CardTitle className="min-w-0 flex-1 leading-snug break-words">
+                  <ProductLink productId={product.id}>{product.names.en}</ProductLink>
+                </CardTitle>
                 <span
                   className={cn(
                     "shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium",

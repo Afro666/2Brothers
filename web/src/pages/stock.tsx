@@ -20,6 +20,7 @@ import { auditActorForRole, useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { useAsync } from "@/lib/use-async";
 import type { StockItem } from "@/types";
+import { ProductLink } from "@/components/purchasing/product-link";
 
 export interface RowDraft {
   /** What the user typed; kept even when the save fails. */
@@ -223,7 +224,7 @@ export function StockPage() {
                               <div className="flex items-center gap-2">
                                 <ProductThumb en={item.productName} size="sm" />
                                 <div className="min-w-0">
-                                  <div className="font-medium">{item.productName}</div>
+                                  <div className="font-medium"><ProductLink productId={item.productId}>{item.productName}</ProductLink></div>
                                   <div className="text-xs text-muted-foreground">{item.productId}</div>
                                 </div>
                               </div>
@@ -298,7 +299,7 @@ export function StockPage() {
                         <div className="flex items-center gap-2">
                           <ProductThumb en={item.productName} size="sm" />
                           <div className="min-w-0">
-                            <div className="font-medium break-words">{item.productName}</div>
+                            <div className="font-medium break-words"><ProductLink productId={item.productId}>{item.productName}</ProductLink></div>
                             <div className="text-xs text-muted-foreground">
                               {item.productId} · {item.unit}
                             </div>
