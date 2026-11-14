@@ -562,7 +562,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | POST | `/audit/demo-restore` | `kitchen:approve` (human, role `approver`) | Demo only: put the tampered row back exactly as it was. |
 | GET | `/events` | `kitchen:read` | Server-sent events: this kitchen's new and changed proposals, approvals and audit entries, as they happen. Shape below. |
 | GET | `/recalls` | `kitchen:read` | This kitchen's recall alerts, the proposals they hold and the last check. Shape under "Recall alerts (Context.dev)". |
-| POST | `/recalls/check` | `kitchen:write` | Run the recall monitor now: one Context.dev scrape of the Ruokavirasto list (the recording when Context.dev is slow, down or has no key), applied to the open proposals. Body: `idempotency_key`. Never orders. Same answer as `GET /recalls`. |
+| POST | `/recalls/check` | `kitchen:write` | Run the recall monitor now: one Context.dev scrape of the Ruokavirasto list (the recording when Context.dev is slow, down or has no key), matched to the kitchen's stock, recipes and open proposals. Body: `idempotency_key`. Never orders. Same answer as `GET /recalls`. |
 | POST | `/recalls/{event_id}/dismiss` | `kitchen:approve` (human) | A person dismisses one alert after checking the packs. Body: `reason`. Shape in [recall-contract.md](recall-contract.md). |
 | GET | `/label-checks` | `kitchen:read` | Recorded Hyvää Suomesta producer checks for catalog products 462535, 462576 and 462775, plus one synthetic `negative_control`. Answer: `{"checks": [...], "negative_control": {...}}`. Shape in [product-evidence-contract.md](product-evidence-contract.md). |
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
@@ -2102,9 +2102,11 @@ Rules:
 ### Recall alerts (Context.dev)
 
 The recall monitor (`monitor/recalls.py`) reads the Ruokavirasto recall list with
-Context.dev `POST /v1/web/scrape`. `monitor/proposals.py` applies the notices to the
-kitchen's open proposals: a recalled line puts the proposal on hold and the Buyer plans a
-separate replacement proposal. These two routes show that state and let a person run a
+Context.dev `POST /v1/web/scrape`. `monitor/proposals.py` matches the notices to what the
+kitchen has: its newest stock count, its recipes and the lines of its open proposals
+(`store/recalls.py` `context`). A recalled line puts an open proposal on hold and the Buyer
+plans a separate replacement proposal. A recalled product that is only in stock or in a
+recipe gives an alert with no proposal. These two routes show that state and let a person run a
 check now. They are views: they keep no second recall store and no second matching logic.
 The code is `gateway/recalls_view.py`.
 
@@ -2177,8 +2179,18 @@ What the view adds to an alert:
 
 - `status` is always there: `active` or `dismissed` (the stored alert may omit it).
   Dismissed alerts stay in the list with `dismissed_by`, `dismissed_at`, `dismiss_reason`.
+- `where`: plain English lines that say why the product matters to this kitchen, as they
+  were at the first detection (an alert is stored once). The lines are
+  `"in stock: 3.253 KG"` (the newest count, above zero),
+  `"on the stock list: amount not counted"` (a count of `null`: unknown, never zero),
+  `"in recipes: <recipe name>, <recipe name>"` and `"on the open purchase proposal"`.
+  A count of zero gives no line. The screens show the lines as they are.
 - `proposals`: every proposal of this kitchen that carries this alert, newest first; `[]`
-  when none does. `status` is the proposal status. An `exact` or `possible` alert holds the
+  when none does. An alert with `proposals: []` is for a product in stock or in a recipe
+  that no open proposal holds: its `status` is `active`, nothing is held, and a later
+  request for that product leaves it out with `BLOCKED_BY_RECALL` (`exact` and `possible`
+  alerts; a `review` alert blocks nothing). The screens then say that no open order holds
+  it and that new orders leave it out. `status` is the proposal status. An `exact` or `possible` alert holds the
   proposal (`BLOCKED_BY_RECALL`) and its line of `product_id` has
   `recall_status: "BLOCKED_BY_RECALL"`; a `review` alert is a warning and holds nothing.
 - `replacement_proposal_id` and `recall_replan_error` are the proposal's own fields
@@ -2196,7 +2208,7 @@ What the view adds to an alert:
 
 - `null` when no check has run for this kitchen. Then the screens say "not checked yet",
   never "no recalls". An empty `alerts` list with a `last_check` means the check found
-  nothing on this kitchen's open proposals.
+  nothing in this kitchen's stock, recipes and open proposals.
 - `source`: `live` when Context.dev scraped the Ruokavirasto list during this check;
   `recording` when it did not, and the saved scrape (`monitor/fixtures/ruokavirasto.json`)
   was used. The screens show which one, so a recording is never shown as live.
@@ -2206,7 +2218,7 @@ What the view adds to an alert:
   recording was made). `details_fetched_at`: when the notice pages (product, brand, EAN,
   lot) were scraped; a check makes one scrape, the list, so the pages always come from the
   recording.
-- `notices_scanned`: notices matched against the open proposals. `scanned_since`: the date
+- `notices_scanned`: notices matched against the kitchen's stock, recipes and open proposals. `scanned_since`: the date
   of the oldest of them (`YYYY-MM-DD`); the recording starts there and older notices were
   left out when it was made.
 - `notices_listed`: notices on the live list, of any age; `null` for `recording`.

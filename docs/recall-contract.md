@@ -24,7 +24,7 @@ return these alerts as they are, plus `proposals` and an always-present `status`
 | `product_name` | string or null | Catalog English name, when known. |
 | `match` | `exact`, `possible`, `review` | Barcode match, brand/product match, or human review warning. |
 | `why` | string | Explanation of the product match. |
-| `where` | string[] | Detection-time stock/recipe/proposal context; not live inventory. |
+| `where` | string[] | Detection-time stock/recipe/proposal context; not live inventory. The lines are listed in contract.md, "Recall alerts (Context.dev)". |
 | `next_step` | string | Pack/lot checking instructions. |
 | `detected_at` | ISO 8601 datetime string | First recorded detection time. |
 | `replacement_proposal` | object[] | Up to three unapproved ideas: `product_id` string, `name` and `brand` string or null. Not engine quotes. |
@@ -98,7 +98,10 @@ trusted product or allergen data. Failure to find a safe replacement leaves
 the original blocked. No monitor call places an order.
 
 The internal monitor applies recorded notices to currently open proposals
-through the shared store and gateway modules. There is no public mutation
+through the shared store and gateway modules. It also matches them to the
+kitchen's newest stock count and its recipes: such an alert has no proposal
+to hold (`proposals: []` in the list), and it blocks later quotes like any
+other active `exact` or `possible` alert. There is no public mutation
 route accepting arbitrary recall alerts from a browser or model. Repeated
 polls preserve the original notice event and replacement identity.
 
