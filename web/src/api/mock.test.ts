@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createMockApi } from "@/api/mock";
-import { confirmedDemoApproval as approval, approval as unknownApproval } from "@/mocks/milk-case";
+import { confirmedDemoApproval as approval, approval as unknownApproval, milkOptions } from "@/mocks/milk-case";
 
 const DECISION = {
   approvalId: approval.id,
@@ -180,5 +180,44 @@ describe("mock API proposal changes", () => {
         "human",
       ),
     ).rejects.toMatchObject({ code: "ALREADY_DECIDED" });
+  });
+});
+
+describe("mock API options", () => {
+  const [optionA, optionB, optionC] = milkOptions;
+
+  it("re-simulates the chosen option to its exact total and approves nothing", async () => {
+    const api = createMockApi();
+    const chosen = await api.chooseOption!(approval.id, optionA.id, "human");
+    expect(chosen).toMatchObject({ status: "PENDING", totalExVat: 2050, totalInclVat: optionA.totalInclVat });
+    expect(chosen.options?.filter((option) => option.chosen).map((option) => option.id)).toEqual([optionA.id]);
+    expect((await api.getOrder(approval.orderId)).status).toBe("NEEDS_APPROVAL");
+    // Option A's stock is not measured: the existing approval rule still refuses it.
+    await expect(
+      api.approve(
+        { approvalId: approval.id, expectedTotalExVat: 2050, expectedTotalInclVat: optionA.totalInclVat },
+        "human",
+      ),
+    ).rejects.toMatchObject({ code: "STOCK_UNKNOWN" });
+
+    const back = await api.chooseOption!(approval.id, optionC.id, "human");
+    expect(back).toMatchObject({ totalExVat: approval.totalExVat, totalInclVat: optionC.totalInclVat });
+  });
+
+  it("refuses an option whose cut-off has passed, and an option it does not know", async () => {
+    const api = createMockApi();
+    await expect(api.chooseOption!(approval.id, optionB.id, "human")).rejects.toMatchObject({ code: "CLOSING_PASSED" });
+    await expect(api.chooseOption!(approval.id, "nope", "human")).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect((await api.getApproval(approval.id)).totalInclVat).toBe(approval.totalInclVat);
+  });
+
+  it("marks no option as proposed once a person edits the basket", async () => {
+    const api = createMockApi();
+    const result = await api.changeProposal(
+      approval.orderId,
+      { type: "SET_QUANTITY", productId: "462775", quantity: 40 },
+      "human",
+    );
+    expect(result.approval.options?.some((option) => option.chosen)).toBe(false);
   });
 });

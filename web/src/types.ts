@@ -144,6 +144,51 @@ export interface ApprovalRequest {
   totalInclVat: number;
   reasons: MandateReason[];
   status: "PENDING" | "APPROVED" | "REJECTED";
+  /** The baskets the engine offers for this request; absent or empty when it offers one. */
+  options?: ProposalOption[];
+}
+
+export interface ProposalOptionLine {
+  productId: ProductCode;
+  /** null when the API names only the product id. */
+  productName: string | null;
+  quantity: number;
+  unit: string;
+  /** Ex VAT, per `unit`. */
+  unitPrice: number | null;
+}
+
+/**
+ * One basket the engine offers for a request (contract `substitute_options`).
+ * null means unknown: never zero, never none, and never the best value.
+ */
+export interface ProposalOption {
+  /** The option's engine offer id. */
+  id: string;
+  /** Presentation order only; it does not say an option is better. */
+  tier: OfferTier;
+  /** PARTIAL covers part of the ask now and leaves the rest for later. */
+  kind: "FULL" | "PARTIAL";
+  lines: ProposalOptionLine[];
+  /** With fees and tax: the exact figure a person approves. */
+  totalInclVat: number;
+  /** False unless every line's stock is measured. */
+  stockConfirmed: boolean;
+  /** true = the order cut-off is missed; null = the API did not say. */
+  cutoffPassed: boolean | null;
+  cutoffAt: string | null;
+  /** Delivered vs ordered, 0..1, of the weakest line. */
+  deliveryReliability: number | null;
+  /** Product-group average (not this product's own figure): lowest and highest line. */
+  co2KgPerKg: { min: number; max: number } | null;
+  /** Labels every line carries. */
+  labels: ProductLabel[] | null;
+  /** The engine's sentence, shown verbatim. */
+  tradeOff: string;
+  /** Only what the API says: the UI never ranks options. */
+  recommended: boolean;
+  /** The basket the proposal holds now. */
+  chosen: boolean;
 }
 
 export interface SubstitutionRule {
