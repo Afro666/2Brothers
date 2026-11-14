@@ -6,6 +6,7 @@ type SettingsApi = Pick<Api, "getKitchenSettings" | "saveKitchenSettings">;
 type AuditRecorder = (event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason">) => void;
 
 const DEFAULT_SETTINGS: KitchenSettings = {
+  approveUnconfirmedManual: false,
   serviceLevelPercent: { A: 97.5, B: 95, C: 90 },
   maxDaysOfCover: [
     { category: "Dairy", maxDays: 5 },

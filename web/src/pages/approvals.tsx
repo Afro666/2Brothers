@@ -68,6 +68,10 @@ function ApiApprovalsPage() {
   const { session } = useSession();
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
+  const approveUnconfirmedManual = useAsync(
+    () => api.getKitchenSettings().then((settings) => settings.approveUnconfirmedManual).catch(() => false),
+    [api],
+  );
   const { refresh: refreshWaiting } = usePendingApprovals();
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
   const recalls = useAsync(() => loadRecalls(api), [api]);
@@ -223,6 +227,9 @@ function ApiApprovalsPage() {
                         canEdit ? (query) => api.listAddableProducts(approval.orderId, query) : undefined
                       }
                       editCount={editCounts[approval.orderId] ?? 0}
+                      approveUnconfirmedManual={
+                        approveUnconfirmedManual.status === "ready" && approveUnconfirmedManual.data
+                      }
                       approvalBlockedReason={
                         session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined
                       }
@@ -248,6 +255,9 @@ function ApiApprovalsPage() {
                       request={approval}
                       order={order ?? undefined}
                       onReject={reject}
+                      approveUnconfirmedManual={
+                        approveUnconfirmedManual.status === "ready" && approveUnconfirmedManual.data
+                      }
                       approvalBlockedReason={
                         session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined
                       }
@@ -268,6 +278,9 @@ function ApiApprovalsPage() {
                       key={approval.id}
                       request={approval}
                       order={order ?? undefined}
+                      approveUnconfirmedManual={
+                        approveUnconfirmedManual.status === "ready" && approveUnconfirmedManual.data
+                      }
                       recalls={recallsFor(approval.orderId)}
                     />
                   ))}

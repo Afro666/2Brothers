@@ -541,6 +541,7 @@ describe("kitchen settings", () => {
     excluded_allergens: ["AP", "AN"],
   };
   const settings: KitchenSettings = {
+    approveUnconfirmedManual: false,
     serviceLevelPercent: { A: 97.5, B: 95, C: 90 },
     maxDaysOfCover: [
       { category: "fresh_dairy", maxDays: 5 },
@@ -555,6 +556,8 @@ describe("kitchen settings", () => {
   it("maps fractions to percent and the cover table to rules", () => {
     expect(mapKitchenSettings(stored)).toEqual(settings);
     expect(mapKitchenSettings({ ...stored, stockout_cap: "2" }).stockOutDemandCap).toBe(2);
+    expect(mapKitchenSettings({ ...stored, approve_unconfirmed_manual: true }).approveUnconfirmedManual).toBe(true);
+    expect(mapKitchenSettings({ ...stored, approve_unconfirmed_manual: false }).approveUnconfirmedManual).toBe(false);
   });
 
   it("keeps what the kitchen never set as not set, never an invented default", () => {
@@ -577,6 +580,7 @@ describe("kitchen settings", () => {
 
   it("writes only the changed fields, decimals as strings", () => {
     const next: KitchenSettings = {
+      approveUnconfirmedManual: false,
       serviceLevelPercent: { A: 98, B: 95, C: 90 },
       maxDaysOfCover: [
         { category: "fresh_dairy", maxDays: 4 },

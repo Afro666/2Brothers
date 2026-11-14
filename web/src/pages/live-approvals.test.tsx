@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { mapKitchenSettings } from "@/api/map-planning";
 import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
 
@@ -12,6 +13,34 @@ const row = {
 beforeEach(() => vi.stubEnv("VITE_LIVE_BUYER", "true"));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const json = (body: unknown) => new Response(JSON.stringify(body));
+
+it.each([
+  ["on", "Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them."],
+  ["off", "Leipomo Demo must confirm stock before this order can be approved."],
+  ["absent", "Leipomo Demo must confirm stock before this order can be approved."],
+  ["failed", "Leipomo Demo must confirm stock before this order can be approved."],
+] as const)("shows the supplier-confirm notice when the kitchen setting is %s", async (setting, expected) => {
+  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [{
+    ...row,
+    blocks: [{ supplier_id: "sup-bakery", name: "Leipomo Demo", lines: [{ unknown_stock: true }] }],
+  }] })));
+  const api = createMockApi();
+  const getKitchenSettings = api.getKitchenSettings;
+  api.getKitchenSettings = vi.fn(async () => {
+    if (setting === "failed") throw new Error("Settings unavailable");
+    if (setting === "absent") return mapKitchenSettings({});
+    return { ...(await getKitchenSettings()), approveUnconfirmedManual: setting === "on" };
+  });
+  renderApp("/approvals", api);
+
+  expect(await screen.findByText(expected)).toBeVisible();
+  if (setting === "on") {
+    expect(screen.queryByText("Leipomo Demo must confirm stock before this order can be approved.")).toBeNull();
+  } else {
+    expect(screen.queryByText(/Leipomo Demo must confirm stock\. If you approve/)).toBeNull();
+  }
+  expect(api.getKitchenSettings).toHaveBeenCalledTimes(1);
+});
 
 it("disables live approval decisions with the reason for a read-only account", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [row] })));
