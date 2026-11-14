@@ -8,7 +8,9 @@ next Monday whose order cut-off has not passed (`--date` to pick one), as a
 person would on the Requests page: a live Valio quote, a READY proposal, a pending
 approval. It orders nothing. Then "Check recalls now" in the inbox has a line to block.
 
-It says so when the proposal does not hold the coffee, with the gateway's reason. The usual
+It says so when the proposal does not hold the coffee, with the gateway's reason. On the
+live mock API that is the normal case (the coffee closed on 2026-11-12); the recall beat then
+uses the coffee in stock instead (#1068), and this seed is not needed. The usual
 one is BLOCKED_BY_RECALL: an earlier check already recorded the recall, so new quotes leave
 the coffee out. The banner then needs the proposal that check held, not a new one.
 
@@ -80,8 +82,12 @@ def main(argv=None) -> None:
     out = seed(Gateway(get_db(), ValioClient()), today=a.today, key=a.key, day=a.date)
     print(out)
     if not out["has_coffee"]:
+        # Valio's mock API closes this Terminal product on a fixed past date (2026-11-12), so on
+        # the live site no day can hold it. The beat still works through stock (#1068): the
+        # coffee is in demo-kitchen's stock count, so "Check recalls now" alerts on the shelf.
         raise SystemExit(f"The proposal does not hold {COFFEE}: {out['excluded'] or out['status']}. "
-                         "The recall check will have nothing new to block.")
+                         "No open proposal to block; the recall check still alerts on the coffee "
+                         "in stock (the seed gives demo-kitchen a stock count of it).")
 
 
 if __name__ == "__main__":
