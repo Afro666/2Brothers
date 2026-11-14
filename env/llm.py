@@ -143,7 +143,8 @@ class LLMPolicy:
 
     def end(self, env) -> None:
         if self.log:
-            self._write({"report": env.report(), "events": env.score.events,
+            # finished is False when the episode raised mid-week (run.py ends it in a finally)
+            self._write({"finished": env.today >= env.end, "report": env.report(), "events": env.score.events,
                          "calls": self.calls, "tokens": self.tokens, "problems": self.problems})
             self.log.close()
             self.log = None
