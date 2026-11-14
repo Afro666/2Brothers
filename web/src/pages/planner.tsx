@@ -188,7 +188,7 @@ export function PlannerPage() {
       return;
     }
     const entry: MenuPlanEntry = {
-      id: dialog?.entry?.id ?? `draft-${Date.now()}`,
+      id: dialog?.entry?.id ?? `draft-${crypto.randomUUID()}`,
       date: dialog?.date ?? dates[0],
       meal: meal.trim(),
       recipeId,
