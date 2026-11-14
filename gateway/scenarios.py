@@ -30,6 +30,7 @@ from pathlib import Path
 import sys
 from typing import Callable
 
+from engine.gap import fill_gap
 from engine import (Item, KitchenParams, Offer, Wanted, allergen_codes, pack_info, pad_to_free_delivery,
                     plan_request, replenish, stockout_adjusted)
 from engine.quantity import cover_limit
@@ -187,8 +188,16 @@ def s02() -> Result:
     r.expect("lines", _lines(plan), [("465138", "16")])
     r.expect("total", f"{plan.total:f}", "1028.32")
     r.expect("shortfall cases", f"{plan.shortfall.normalize():f}", "4")
-    r.codes(plan.reason_codes, ["PARTIAL_STOCK", "SUBSTITUTE_NEEDS_OK", "ALLERGEN_DATA_MISSING"])
-    r.checks.append("substitute 462300 x 84 by weight: not built (#281)")
+    # Valio's own substitute: Elovena rolls, 400 g bags. Fill the 4-case gap by weight.
+    by_kg = pack_info(_row("465138", "KI", "KI", [("KI", 1)]), price=D("64.27"), comparison_price=D("7.65"),
+                      comparison_unit="KG", measure="KG")
+    rolls = _offer("462300", "Elovena gluten free oat-carrot rolls 400 g", _row("462300", "BAG", "BAG", [("BAG", 1)]),
+                   "3.58", "8.95", "KG", None, False, measure="KG")
+    sub = fill_gap(plan, by_kg, [rolls], MON, P)
+    r.expect("substitute (by weight)", _lines(sub) if sub else None, [("462300", "84")])
+    r.expect("substitute total", f"{sub.total:f}" if sub else None, "300.72")
+    r.codes([*plan.reason_codes, *(sub.reason_codes if sub else ())],
+            ["PARTIAL_STOCK", "SUBSTITUTE_NEEDS_OK", "ALLERGEN_DATA_MISSING"])
     return r.finish()
 
 
