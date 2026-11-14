@@ -15,6 +15,7 @@ import {
   isPassed,
   isStockUnconfirmed,
 } from "@/lib/format";
+import { translateReason } from "@/lib/codes";
 import { useT } from "@/lib/i18n";
 import { TONE_CLASSES, type Tone } from "@/lib/tone";
 import { cn } from "@/lib/utils";
@@ -57,7 +58,7 @@ export interface ProductCheck {
 
 /** A check as the reader's language shows it: sentence, then its detail. */
 function checkText({ text, detail }: ProductCheck, t: T): string {
-  return detail ? `${t(text)} ${t(detail)}` : t(text);
+  return detail ? `${translateReason(text, t)} ${t(detail)}` : translateReason(text, t);
 }
 
 type T = ReturnType<typeof useT>;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { CODE_LABELS, codeLabel, plainReason } from "@/lib/codes";
+import { CODE_LABELS, codeLabel, plainReason, translateReason } from "@/lib/codes";
+import { translate } from "@/lib/i18n";
 
 describe("codeLabel", () => {
   it("gives the over-budget warning a plain title and says it does not block", () => {
@@ -65,6 +66,23 @@ describe("plainReason", () => {
     expect(plainReason("461332: BLOCKED_BY_RECALL")).toBe(
       "461332: Blocked by a recall. A product on this order matches a food recall. It cannot be approved.",
     );
+  });
+
+  it("shows the code title in Finnish in Finnish mode (#1169)", () => {
+    const fi = (text: string) => translate("fi", text);
+    const reason = plainReason("472710: ALLERGEN_RULE: the kitchen excludes AN", new Map([["472710", "Peanut butter"]]));
+    expect(translateReason(reason, fi)).toBe("Peanut butter: Poissuljettu allergeeni: the kitchen excludes AN");
+    expect(translateReason("Excluded allergen: the kitchen excludes AN", fi)).toBe(
+      "Poissuljettu allergeeni: the kitchen excludes AN",
+    );
+    expect(translateReason(plainReason("461332: BLOCKED_BY_RECALL"), fi)).toMatch(/^461332: Takaisinveto estää\. /);
+    expect(translateReason(reason, (text) => translate("en", text))).toBe(reason);
+  });
+
+  it("has a Finnish entry for every code title", () => {
+    for (const [code, { title }] of Object.entries(CODE_LABELS)) {
+      expect(translate("fi", title), code).not.toBe(title);
+    }
   });
 
   it("leaves a plain sentence alone", () => {

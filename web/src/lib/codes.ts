@@ -117,3 +117,26 @@ export function plainReason(reason: string, names?: ReadonlyMap<string, string>)
   const name = names?.get(product) ?? product;
   return rest === undefined ? `${name}: ${label.title}. ${label.detail}` : `${name}: ${label.title}: ${rest}`;
 }
+
+const ESCAPE = /[.*+?^${}()|[\]\\]/g;
+const TITLES = new RegExp(
+  `(^|: )(${Object.values(CODE_LABELS)
+    .map((label) => label.title.replace(ESCAPE, "\\$&"))
+    .sort((a, b) => b.length - a.length)
+    .join("|")})(?=$|[:.])`,
+  "g",
+);
+
+/**
+ * #1169: a reason built by plainReason ("Peanut butter: Excluded allergen: ...") is never in
+ * the dictionary whole, so translate the code title (and its sentence) inside it.
+ */
+export function translateReason(text: string, t: (text: string) => string): string {
+  const whole = t(text);
+  if (whole !== text) return whole;
+  let out = text.replace(TITLES, (_, before: string, title: string) => before + t(title));
+  for (const { detail } of Object.values(CODE_LABELS)) {
+    if (out.endsWith(` ${detail}`)) out = out.slice(0, -detail.length) + t(detail);
+  }
+  return out;
+}
