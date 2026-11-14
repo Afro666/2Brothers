@@ -30,14 +30,17 @@ RATIO = Decimal("0.5")        # the person keeps cutting this product to about h
 ROWS = 4                      # more than the rule's minimum of 3
 
 
-def pick_product(db, kitchen_id: str, today: date) -> dict | None:
+def pick_product(db, kitchen_id: str, today: date, product_id: str | None = None) -> dict | None:
     """The product with the largest need in next week's plan: the one the weekly
-    proposal will show. None when the plan needs nothing."""
+    proposal will show. With `product_id`, only that product's plan line (its real unit
+    and need). None when the plan needs nothing (for that product)."""
     from gateway.kitchen_routes import demand_rows
     start = today + timedelta(days=(7 - today.weekday()) % 7 or 7)       # next Monday
     rows, _ = demand_rows(db, kitchen_id, start, start + timedelta(days=6), today, timezone.utc)
     totals: dict[tuple[str, str], Decimal] = {}
     for row in rows:
+        if product_id is not None and row["product_id"] != product_id:
+            continue
         need = row.get("net_need")
         need = row.get("gross_need") if need is None else need
         if need is None or Decimal(str(need)) <= 0:
@@ -80,8 +83,9 @@ def seed(db, kitchen_id: str = DEMO_ID, today: date | None = None, product_id: s
     today = today or datetime.now(timezone.utc).date()
     if already_seeded(db, kitchen_id):
         return {"kitchen_id": kitchen_id, "written": 0, "note": "sample learning history already present"}
-    product = ({"product_id": product_id, "unit": "ST", "need": Decimal(10)} if product_id
-               else pick_product(db, kitchen_id, today))
+    product = pick_product(db, kitchen_id, today, product_id)
+    if product is None and product_id:      # not in next week's plan: a plain guess
+        product = {"product_id": product_id, "unit": "ST", "need": Decimal(10)}
     if product is None:
         return {"kitchen_id": kitchen_id, "written": 0, "note": "next week's plan needs nothing; pass --product"}
     plan = sample_rows(product, today)
