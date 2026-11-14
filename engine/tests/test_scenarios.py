@@ -193,3 +193,25 @@ def test_rounding_up_to_lot():
 
 def test_unknown_class_gets_a_level():
     assert P.z(None) == P.z("A") > P.z("C")
+
+
+@pytest.mark.parametrize("data", [
+    {"service_level": {"A": 97.5}},
+    {"service_level": {"B": 0}},
+    {"service_level": {"C": 1}},
+    {"max_cover_days": {"Dairy": 4}},
+    {"max_cover_days": {"dry": 0}},
+    {"stockout_cap": 0.5},
+    {"stockout_cap": 3.5},
+])
+def test_from_dict_rejects_bad_kitchen_settings(data):
+    with pytest.raises(ValueError):
+        KitchenParams.from_dict(data)
+
+
+def test_from_dict_accepts_valid_kitchen_settings():
+    params = KitchenParams.from_dict({"service_level": {"A": 0.99}, "max_cover_days": {"fresh_dairy": 1},
+                                      "stockout_cap": 3})
+    assert params.service_level["A"] == D("0.99")
+    assert params.max_cover_days["fresh_dairy"] == 1
+    assert params.stockout_cap == 3.0
