@@ -3,7 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ADD_SEARCH_DEBOUNCE_MS, ApprovalCard } from "@/components/purchasing/approval-card";
+import { mapApproval } from "@/api/gateway-map";
 import { ApiError } from "@/api/types";
+import { proposal } from "@/test/gateway-fixtures";
 import { approval, orders } from "@/mocks/milk-case";
 
 const confirmedOrder = {
@@ -55,6 +57,19 @@ describe("ApprovalCard", () => {
     expect(screen.getByRole("heading", { name: "What to check" })).toBeVisible();
     expect(screen.getByText("3 % fat instead of 0 % in the first choice.")).toBeVisible();
     expect(screen.queryByText(/without approval/)).not.toBeInTheDocument();
+  });
+
+  it("shows missing allergen data under what to check", () => {
+    const unknownAllergens = mapApproval({
+      ...proposal,
+      lines: [{ ...proposal.lines[0], reason_codes: ["ALLERGEN_DATA_MISSING"] }],
+    });
+    render(<ApprovalCard request={unknownAllergens} order={confirmedOrder} />);
+    const check = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
+    expect(within(check).getByText("Allergen data missing")).toBeVisible();
+    expect(
+      within(check).getByText("The catalog has no allergen data for one or more products. Check the label."),
+    ).toBeVisible();
   });
 
   it("blocks missing order details", () => {

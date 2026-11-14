@@ -345,6 +345,17 @@ function approvalStatus(status: unknown): ApprovalRequest["status"] {
 }
 
 /**
+ * Reason codes a person must check before approving, in plain words for "What to check".
+ * Unknown is never "safe": a code here is shown even when `mandate.reasons` says nothing.
+ */
+const CHECK_CODES: Record<string, { rule: string; detail: string }> = {
+  ALLERGEN_DATA_MISSING: {
+    rule: "Allergen data missing",
+    detail: "The catalog has no allergen data for one or more products. Check the label.",
+  },
+};
+
+/**
  * The approval card for one proposal. `events` is the kitchen's audit log: the proposal
  * itself does not say who asked or when, the event that created it does.
  */
@@ -355,8 +366,15 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
   const created = events.find(
     (event) => event.proposal_id === id && (event.kind === "proposal_created" || event.kind === "approval_requested"),
   );
+  const codes = new Set(strings(mandate.reason_codes));
+  if (Array.isArray(proposal.lines)) {
+    for (const line of proposal.lines) for (const code of strings(line?.reason_codes)) codes.add(code);
+  }
   const reasons = [
     ...strings(mandate.reasons).map((rule) => ({ rule, detail: "" })),
+    ...Object.entries(CHECK_CODES)
+      .filter(([code]) => codes.has(code))
+      .map(([, reason]) => reason),
     ...strings(mandate.warnings).map((rule) => ({
       rule,
       detail: "A warning. It does not block the order.",
