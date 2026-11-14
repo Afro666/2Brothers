@@ -180,7 +180,7 @@ function ProductSummary({ group }: { group: ProductGroup }) {
     <span className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
       <ProductThumb en={group.productName} size="sm" />
       <span className="block min-w-40 flex-1">
-        <span className="block font-medium break-words"><ProductLink productId={group.productId}>{group.productName}</ProductLink></span>
+        <span className="block font-medium break-words">{group.productName}</span>
         <span className="block text-xs text-muted-foreground">{group.productId}</span>
       </span>
       <RiskBadge risk={group.worst} />
@@ -211,6 +211,21 @@ function ProductSummary({ group }: { group: ProductGroup }) {
   );
 }
 
+/** The product page link, kept outside the toggle button: an <a> may not sit inside a <button>. */
+function ProductPageLink({ group }: { group: ProductGroup }) {
+  const t = useT();
+  if (!group.productId) return null;
+  return (
+    <ProductLink
+      productId={group.productId}
+      className="ml-2 inline-block text-xs"
+      label={t("Product page: {product}", { product: group.productName })}
+    >
+      {t("Product page")}
+    </ProductLink>
+  );
+}
+
 /** One product's days, in their own body so its name heads the row group. */
 function ProductSection({
   group,
@@ -236,6 +251,7 @@ function ProductSection({
           >
             <ProductSummary group={group} />
           </Button>
+          <ProductPageLink group={group} />
         </TableHead>
       </TableRow>
       {group.rows.map((row) => (
@@ -348,6 +364,7 @@ function MobileGroup({
       >
         <ProductSummary group={group} />
       </Button>
+      <ProductPageLink group={group} />
       <ul className="space-y-3" hidden={!open}>
         {group.rows.map((row) => (
           <li key={row.date} className="rounded-md border p-3 text-sm">

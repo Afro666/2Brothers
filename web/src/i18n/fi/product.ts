@@ -62,4 +62,6 @@ export default {
   "Salt (g)": "Suola (g)",
   "Valio is busy right now: price and stock unknown.": "Valio on juuri nyt kiireinen: hinta ja varasto tuntemattomia.",
   "Valio did not answer: price and stock unknown.": "Valio ei vastannut: hinta ja varasto tuntemattomia.",
+  "Product page": "Tuotesivu",
+  "Product page: {product}": "Tuotesivu: {product}",
 };
