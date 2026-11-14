@@ -466,6 +466,12 @@ class _OwnProducts:
         current = self.get(kitchen_id, product_id)
         if current is None:
             return None
+        changes = dict(changes)
+        # A new price typed by a person no longer came from a price-list photo (#1220).
+        if ("unit_price_eur" in changes and "price_source" not in changes
+                and _decimal(changes["unit_price_eur"], "unit_price_eur")
+                != _decimal(current.get("unit_price_eur"), "unit_price_eur")):
+            changes["price_source"] = "entered"
         row = own_product_row(_merge(current, changes, ("product_id", "kitchen_id")), product_id)
         self._coll.replace_one(self._query(kitchen_id, product_id), row)
         return own_product_out(row)
