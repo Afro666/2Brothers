@@ -547,3 +547,16 @@ def test_refusals_cannot_flood_or_invent_another_kitchens_log(env):
     assert not list_events(db, kitchen_id="no-such-kitchen")
     refused = [e for e in list_events(db, kitchen_id="demo-kitchen") if e["event"]["kind"] == "refused"]
     assert len(refused) == 1 and refused[0]["event"]["code"] == "KITCHEN_SCOPE"
+
+
+def test_refusals_with_varied_made_up_kitchens_are_one_row(env):
+    """#863: the throttle keys on the route template, so 5 made-up kitchen ids are one row."""
+    from gateway import tokens
+    from store.audit import list_events
+    client, _, db = env
+    made = tokens.create(db, "demo-kitchen", "pos", ["kitchen:read"], "aron")
+    pos = {"Authorization": "Bearer " + made["token"]}
+    for i in range(5):
+        assert client.get(f"/v1/kitchens/made-up-{i}/proposals", headers=pos).status_code == 403
+    refused = [e for e in list_events(db, kitchen_id="demo-kitchen") if e["event"]["kind"] == "refused"]
+    assert len(refused) == 1 and refused[0]["event"]["path"] == "/v1/kitchens/made-up-0/proposals"
