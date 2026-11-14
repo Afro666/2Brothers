@@ -399,7 +399,7 @@ IDs) apply here too. Base path: `/v1`.
 - Every organisation (kitchen or supplier) gets API keys with scopes.
 - Scopes: `kitchen:read`, `kitchen:write` (stock, menus, products, suppliers),
   `kitchen:propose`, `kitchen:approve`, `supplier:read-orders`, `supplier:confirm`,
-  `supplier:demand`.
+  `supplier:demand`, `supplier:offers` (a write: sending an offer to a kitchen, #110).
 - **`kitchen:approve` is only on a human user session.** No API key and no agent MCP
   token can hold it. The Buyer proposes; it never approves. A call to approve or reject
   without a human session returns 403 `HUMAN_SESSION_REQUIRED`.
@@ -523,6 +523,9 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
 | PUT | `/sharing` | human, role `approver` | Consent for one supplier: body `supplier_id`, `share_forecast` (boolean). Answer: the whole list, as `GET`. Every change is an audit entry. |
+| GET | `/supplier-offers` | `kitchen:read` | Suggestions a supplier sent to this kitchen, open ones first. Shape under "Supplier offers". |
+| POST | `/supplier-offers/{offer_id}/accept` | human, role `approver` | Turn an open offer into a normal proposal. It approves and orders nothing: the proposal waits in the inbox like any other. |
+| POST | `/supplier-offers/{offer_id}/decline` | human, role `approver` | Say no to an open offer. Optional body: `reason`. |
 | GET | `/settings` | `kitchen:read` | Kitchen settings: how the engine sizes orders and what the Buyer may propose. Shape below. |
 | PUT | `/settings` | human, role `approver` | Change settings. Only the fields in the body change. Every change is an audit entry. |
 | GET | `/auto-approve` | `kitchen:read` | Earned auto-approve: the setting and the learning progress. Shape under "Earned auto-approve". |
@@ -1133,9 +1136,10 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. Served (#662). |
 | GET | `/demand/shortage-risk?from=&to=` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability, or the availability is unknown. Served (#662). |
 | GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Only the server's unbound session passes: no token can hold `supplier:demand` yet, and a person signed in to a kitchen gets 403 `SCOPE_REQUIRED` (#599). |
-| POST | `/offers` | `supplier:read-orders` | Proactive offer to a kitchen (substitute, promotion). It shows up as a suggestion, never as an order. |
+| POST | `/offers` | `supplier:offers` | A substitute offered to one kitchen before a predicted shortage. It shows up as a suggestion, never as an order. Shape under "Supplier offers". |
 
-A supplier only sees demand from kitchens whose `/sharing` consent names it.
+A supplier only sees demand from kitchens whose `/sharing` consent names it, and only
+sends offers to those kitchens.
 
 ### Body shapes: stock and demand
 
@@ -1226,6 +1230,124 @@ token can hold `supplier:demand` yet). A person signed in to a kitchen also gets
 `SCOPE_REQUIRED` (#599): consent names the supplier, not other kitchens, so one kitchen's
 people never read another kitchen's demand. Until supplier accounts exist, only the
 server's unbound session (the demo's Valio view) passes.
+
+### Supplier offers (#374)
+
+A supplier's selling agent sees a predicted shortage and offers one kitchen a substitute.
+The kitchen sees a suggestion. A person turns it into a normal proposal, and that proposal
+still needs the normal approval. An offer is never an order, and nothing in it is trusted
+as a price or a quantity.
+
+**Scope (decided for #110).** `POST /offers` needs `supplier:offers`, not
+`supplier:read-orders`: a write does not sit under a read scope. No token can hold
+`supplier:offers` yet. As for `supplier:demand`, only the server's unbound session passes;
+a kitchen token, the Buyer agent token and a person signed in to a kitchen get 403
+`SCOPE_REQUIRED`.
+
+**Consent.** A kitchen that shares its forecast with a supplier accepts suggestions from
+that supplier. No other kitchen can get one: without active `/sharing` consent for this
+supplier the answer is 403 `SHARING_REQUIRED`, also for a kitchen that does not exist (the
+answer does not tell a supplier which kitchens exist). Revoking the consent stops new
+offers and stops accepting the open ones.
+
+**`POST /v1/suppliers/{supplier_id}/offers`**
+
+| Field | Type | Notes |
+|---|---|---|
+| `kitchen_id` | string | The kitchen the offer is for. |
+| `product_id` | string | The offered product: a catalog product of this supplier. |
+| `replaces_product_id` | string | The product that is predicted short. Not the same as `product_id`. |
+| `requested_date` | `YYYY-MM-DD` | The day of the shortage. Not in the past. |
+| `reason` | string | Plain text, at most 300 characters. Control characters are removed. |
+| `made_by` | string | Who chose the product: a model name, `rule` or a person. At most 100 characters. |
+| `idempotency_key` | string | Scoped to the supplier. |
+
+There is no price and no quantity in the body. The gateway takes the quantity and the unit
+from the kitchen's own forecast: its `demand` for `replaces_product_id` on that date, in
+the `SHORT` row of the supplier's shortage view (`/demand/shortage-risk`). The price and the
+stock are read live from the supplier when a person accepts.
+
+The answer is the stored offer:
+
+```json
+{
+  "offer_id": "5f0c...",
+  "supplier_id": "sup-valio",
+  "kitchen_id": "demo-kitchen",
+  "product_id": "400123",
+  "product_name": "Lactose free milk drink 1 L",
+  "replaces_product_id": "400555",
+  "replaces_product_name": "Lactose free semi-skimmed milk 1 L",
+  "requested_date": "2026-11-17",
+  "quantity": "42",
+  "unit": "L",
+  "reason": "Same fat level and pack size; in stock for Monday.",
+  "made_by": "nemotron-3.5-super-vl",
+  "status": "OPEN",
+  "created_at": "2026-11-14T05:10:00+00:00",
+  "proposal_id": null,
+  "decided_by": null,
+  "decided_at": null
+}
+```
+
+`status` is `OPEN`, `ACCEPTED`, `DECLINED` or `EXPIRED`. An open offer whose
+`requested_date` is before today reads as `EXPIRED`; nothing runs in the background.
+
+Refusals, in this order. A refused offer stores nothing and writes nothing in a kitchen's
+audit log.
+
+| Status | Code | When |
+|---|---|---|
+| 403 | `SCOPE_REQUIRED` | The caller does not hold `supplier:offers` (see "Scope"). |
+| 422 | `INVALID_REQUEST` | A field is missing or has the wrong type, the date is not a date or is in the past, `reason` is longer than 300 characters, or `product_id` equals `replaces_product_id`. |
+| 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. The same key with the same body answers the stored offer. |
+| 403 | `SHARING_REQUIRED` | The kitchen does not share its forecast with this supplier, or does not exist. |
+| 404 | `PRODUCT_NOT_FOUND` | `product_id` is not a catalog product of the supplier. |
+| 422 | `NO_SHORTAGE` | The supplier's shortage view has no `SHORT` row for `replaces_product_id` on that date with this kitchen in it. A supplier cannot push a product without a shortage behind it. |
+| 422 | `ALLERGEN_RULE` | The kitchen's allergen rule refuses the product, or the product's allergen data is not known. The answer does not name the kitchen's allergens. |
+| 409 | `OFFER_LIMIT` | The kitchen already has 3 open offers from this supplier. |
+
+One open offer per supplier, kitchen, offered product and date: a second one (another key)
+answers the first offer and stores nothing.
+
+**`GET /v1/kitchens/{kitchen_id}/supplier-offers`** answers `{"offers": [...]}` in the shape
+above: open offers first, then the newest, at most 50.
+
+**`POST /v1/kitchens/{kitchen_id}/supplier-offers/{offer_id}/accept`** takes no body. Only
+a person passes (403 `HUMAN_SESSION_REQUIRED` for a token or the Buyer agent, 403
+`ROLE_REQUIRED` for a chef or a viewer). The gateway creates a normal proposal
+(`POST /proposals` rules: live price and stock, the engine sizes the lines, the allergen
+rule and recall holds apply) for `product_id`, the offer's `quantity` and `unit`, on
+`requested_date`, with the idempotency key `offer:<offer_id>`. Then the offer becomes
+`ACCEPTED` and keeps the `proposal_id`. Answer:
+
+```json
+{"offer": {"offer_id": "5f0c...", "status": "ACCEPTED", "proposal_id": "9a1b..."},
+ "proposal_id": "9a1b...", "proposal_status": "READY"}
+```
+
+- `offer` is the whole offer, as above.
+- A second accept (a double click) answers the same proposal; there is never a second one.
+- `proposal_status: "REJECTED"`: the supplier cannot deliver the product for that date
+  after all. The offer stays `OPEN`; nothing waits in the inbox.
+- 404 `OFFER_NOT_FOUND`: no such offer in this kitchen. 409 `OFFER_NOT_OPEN`: the offer is
+  `DECLINED` or `EXPIRED`. 403 `SHARING_REQUIRED`: the kitchen revoked its consent.
+- The supplier's `reason` is shown to the person and stops there: it is not part of the
+  proposal, and no Buyer prompt or tool reads it. The proposal's `text` is a fixed sentence
+  the gateway writes from catalog names.
+
+**`POST /v1/kitchens/{kitchen_id}/supplier-offers/{offer_id}/decline`** takes an optional
+`reason` (string, at most 500 characters). Only a person passes, as for accept. Answer: the
+offer, `status: "DECLINED"`. Declining a declined offer answers the same; an `ACCEPTED` or
+`EXPIRED` offer is 409 `OFFER_NOT_OPEN`.
+
+**Audit.** Each step is one entry in the kitchen's audit log, written once (a retry does
+not add a line): `supplier_offer_received` (actor `supplier:<supplier_id>`, with `offer_id`,
+`supplier_id`, `product_id`, `replaces_product_id`, `requested_date`, `quantity`, `unit`,
+`made_by`), `supplier_offer_accepted` (the person, `offer_id`, `proposal_id`) and
+`supplier_offer_declined` (the person, `offer_id`, `reason`). The supplier's `reason` text
+is stored on the offer only, not in the audit entry.
 
 ### Count from a shelf photo (#373)
 
