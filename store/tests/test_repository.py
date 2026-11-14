@@ -87,6 +87,11 @@ class RepositoryTest(unittest.TestCase):
                     {"terms": {"discount_tiers": [{"min_qty": "100", "unit": "ST"}]}}):
             with self.assertRaises((ValueError, TypeError), msg=bad):
                 self.repo.suppliers.create("k1", {**good, **bad})
+        for bad in ({"terms": ["delivery_fee_eur"]}, {"terms": "free delivery"},
+                    {"terms": {"discount_tiers": "10%"}}, {"terms": {"discount_tiers": ["10%"]}},
+                    {"terms": {"discount_tiers": {"min_qty": "100"}}}):
+            with self.assertRaises(ValueError, msg=bad):  # a clear 400, not a crash
+                self.repo.suppliers.create("k1", {**good, **bad})
 
     # Kitchen isolation
 
@@ -253,6 +258,10 @@ class RepositoryTest(unittest.TestCase):
                     {"name": "X", "portions": 0}, {"name": ""}):
             with self.assertRaises((ValueError, TypeError), msg=bad):
                 self.repo.recipes.create("k1", bad)
+        for bad in ({"name": "X", "ingredients": "carrot"}, {"name": "X", "ingredients": ["carrot"]},
+                    {"name": "X", "ingredients": {"product_id": "900002"}}):
+            with self.assertRaises(ValueError, msg=bad):  # a clear 400, not a crash
+                self.repo.recipes.create("k1", bad)
 
     # Menu plans
 
@@ -280,6 +289,9 @@ class RepositoryTest(unittest.TestCase):
                           ("2026-W47", {**day, "date": "16.11.2026"})):
             with self.assertRaises(ValueError, msg=(week, bad)):
                 self.repo.menu_plans.put("k1", week, [bad])
+        for bad in ("2026-11-16", {"date": "2026-11-16"}, ["2026-11-16"], [7]):
+            with self.assertRaises(ValueError, msg=bad):  # a clear 400, not a crash
+                self.repo.menu_plans.put("k1", "2026-W47", bad)
 
 
 if __name__ == "__main__":

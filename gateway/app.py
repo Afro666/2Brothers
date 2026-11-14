@@ -191,6 +191,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         gw()._audit(person["kitchen_id"], "password_changed", person["email"])
         return {"changed": True}
 
+    @app.get("/.well-known/jwks.json")
+    def jwks():
+        """The public key that signs every offer (#290). No token needed: it is public."""
+        from gateway import signing
+        return signing.jwks(gw().db)
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}

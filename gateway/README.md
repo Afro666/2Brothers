@@ -326,3 +326,17 @@ a line:
 the supplier's live `available` in kitchen units (null when unknown), `shortage`, `risk`
 (`OK`, `SHORT`, `UNKNOWN`) and `suggested_buy`. A kitchen without active consent is in no sum
 and no list. The Buyer agent token cannot read it (403).
+
+## Signed offers (#290)
+
+Every offer and proposal carries `signature` (a JWS, EdDSA) and `offer_hash`. The signed
+claims: offer id, kitchen, delivery date, as-of and valid-until times, each line (product,
+quantity, unit, unit price, `stock: confirmed | unknown`), the total and the `offer_hash`.
+The public key is at `/.well-known/jwks.json` (no token). Check one offer:
+
+    python -m gateway.verify_offer --base-url https://<host>/gateway --offer offer.json
+
+A changed line, price or total, another key or an expired offer fails (exit code 1). The
+approved order stores the `offer_hash`; `place_order` for any other offer is 409
+`APPROVAL_MISMATCH`. The key comes from `GATEWAY_SIGNING_KEY` (base64 of 32 bytes) or is
+created once and kept in the database. A signed JWT mandate is the next step, not in this PR.

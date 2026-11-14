@@ -41,6 +41,34 @@ describe("mock API planning data", () => {
     });
   });
 
+  it("rejects a stock count with an unknown product and leaves stock unchanged", async () => {
+    const api = createMockApi();
+    const before = (await api.getStock()).find((item) => item.productId === "462775");
+    const auditBefore = (await api.listAudit()).length;
+
+    await expect(
+      api.submitStockCount(
+        [
+          { productId: "462775", onHand: 999 },
+          { productId: "NOPE", onHand: 1 },
+        ],
+        "chef",
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    expect((await api.getStock()).find((item) => item.productId === "462775")).toEqual(before);
+    expect(await api.listAudit()).toHaveLength(auditBefore);
+  });
+
+  it("rejects negative or non-finite stock counts", async () => {
+    const api = createMockApi();
+    for (const onHand of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(api.submitStockCount([{ productId: "462775", onHand }], "chef")).rejects.toMatchObject({
+        code: "INVALID",
+      });
+    }
+  });
+
   it("calculates daily product demand from menu covers", async () => {
     const api = createMockApi();
     const demand = await api.getDemand("2026-11-16", "2026-11-16");

@@ -183,9 +183,16 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
     },
     async submitStockCount(counts: StockCount[], actor: AuditActor) {
       const countedAt = new Date().toISOString();
-      for (const count of counts) {
+      const items = counts.map((count) => {
         const item = stock.find((row) => row.productId === count.productId);
         if (!item) throw new ApiError("NOT_FOUND", `Stock product ${count.productId} was not found.`);
+        if (count.onHand !== null && (!Number.isFinite(count.onHand) || count.onHand < 0)) {
+          throw new ApiError("INVALID", "Stock on hand must be a number greater than or equal to zero, or unknown.");
+        }
+        return item;
+      });
+      for (const [index, count] of counts.entries()) {
+        const item = items[index];
         item.onHand = count.onHand;
         item.countedAt = countedAt;
       }
