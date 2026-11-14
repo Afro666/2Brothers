@@ -179,3 +179,19 @@ def test_command_line_adds_lists_and_removes_accounts(env, monkeypatch, capsys):
     assert users.main(["add", "--email", "x@example.com"]) == 1          # the two passwords differ
     assert users.main(["remove", "--email", "judge@example.com"]) == 0
     assert client.get("/v1/me").status_code == 401                      # its session ended
+
+
+def test_command_line_refuses_to_remove_the_last_approver(env, monkeypatch, capsys):
+    import store.db
+    client, _, db = env
+    monkeypatch.setattr(store.db, "get_db", lambda *a, **k: db)
+    people(db)
+    assert sign_in(client, "aron@example.com").status_code == 200
+    assert users.main(["remove", "--email", "aron@example.com"]) == 1
+    assert "last approver" in capsys.readouterr().out
+    assert db.users.find_one({"_id": "aron@example.com"})
+    assert client.get("/v1/me").status_code == 200                     # its session stays
+    assert users.main(["remove", "--email", "view@example.com"]) == 0   # a viewer still goes
+    users.create_user(db, "boss@example.com", PW, name="Boss", role="approver", kitchen_id="demo-kitchen")
+    assert users.main(["remove", "--email", "aron@example.com"]) == 0   # not the last one now
+    assert db.users.find_one({"_id": "aron@example.com"}) is None
