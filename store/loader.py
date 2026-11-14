@@ -1,8 +1,9 @@
-"""Load the Valio catalog into MongoDB: `python -m store.loader [--dir vendor/valio]`.
+"""Load the Valio catalog into MongoDB: `python -m store.loader [--dir vendor/valio] [--skip-embeddings]`.
 
 Reads the three files downloaded from the Valio API (see store/README.md), flattens
 every product, upserts in batches and creates the indexes, including the Atlas
-Search index. Safe to run again.
+Search index. Safe to run again. `--skip-embeddings` skips the product vectors (they
+can take hours on a free-tier embedding API); run `python -m store.embeddings` later.
 """
 
 from __future__ import annotations
@@ -48,6 +49,8 @@ def load(directory: Path, db) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dir", type=Path, default=Path("vendor/valio"))
+    parser.add_argument("--skip-embeddings", action="store_true",
+                        help="do not embed products or create the vector index")
     args = parser.parse_args()
     db = get_db()
     count = load(args.dir, db)
@@ -60,7 +63,9 @@ def main() -> None:
     except OperationFailure as exc:  # not Atlas, or no search-index rights
         print(f"search index: not created ({exc})")
     from store import embeddings
-    if embeddings.provider() is None:
+    if args.skip_embeddings:
+        print("embeddings skipped (--skip-embeddings); run `python -m store.embeddings` later")
+    elif embeddings.provider() is None:
         print("embeddings skipped: no embedding key is set (hybrid search needs them)")
     else:
         try:
