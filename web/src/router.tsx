@@ -14,6 +14,7 @@ import { ApprovalsPage } from "@/pages/approvals";
 import { AuditPage } from "@/pages/audit";
 import { CatalogPage } from "@/pages/catalog";
 import { DemandPage } from "@/pages/demand";
+import { ForecastPage } from "@/pages/forecast";
 import { OrderDetailPage } from "@/pages/order-detail";
 import { OrdersPage } from "@/pages/orders";
 import { PlannerPage } from "@/pages/planner";
@@ -51,6 +52,7 @@ const suppliersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/su
 const productsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/products", component: ProductsPage });
 const plannerRoute = createRoute({ getParentRoute: () => rootRoute, path: "/planner", component: PlannerPage });
 const demandRoute = createRoute({ getParentRoute: () => rootRoute, path: "/demand", component: DemandPage });
+const forecastRoute = createRoute({ getParentRoute: () => rootRoute, path: "/forecast", component: ForecastPage });
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
@@ -84,6 +86,7 @@ const routeTree = rootRoute.addChildren([
   productsRoute,
   plannerRoute,
   demandRoute,
+  forecastRoute,
   settingsRoute,
   settingsSectionRoute,
   aboutRoute,

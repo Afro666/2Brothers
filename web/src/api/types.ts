@@ -21,6 +21,7 @@ import type {
   SupplierDemandRow,
   SubstituteOption,
   KitchenSettings,
+  ForecastAccuracy,
 } from "@/types";
 
 /** Who a decision is recorded as in the audit log. */
@@ -99,6 +100,8 @@ export interface Api {
   getSupplierDemand(from: string, to: string): Promise<SupplierDemandRow[]>;
   getKitchenSettings(): Promise<KitchenSettings>;
   saveKitchenSettings(settings: KitchenSettings, actor: AuditActor): Promise<KitchenSettings>;
+  /** Predicted against actual for the last 12 full weeks, and the forecast for this week and the 3 after. */
+  getForecastAccuracy(): Promise<ForecastAccuracy>;
 }
 
 /** A gateway error: `code` is the contract's error code, e.g. `TOTAL_MISMATCH`. */
