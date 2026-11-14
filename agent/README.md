@@ -280,9 +280,9 @@ prompt; results include fixture and actual-prompt hashes. In three repeats per c
 the final version passed 24/24 feedback-choice/safeguard checks (baseline 17/24).
 All nine avoidance checks and all fifteen diet/delivery/partial-stock/explicit-intent/
 only-option safeguards passed. The reported original case returns to its pre-feedback
-choice after undo. Six reversed-shortlist no-feedback/undo checks still fail the
+choice after undo. In that v1 measurement, six reversed-shortlist no-feedback/undo checks fail the
 frozen lower-index expectation, as at baseline: the model prefers the original
-engine-selected product; this existing tie-break limitation is not hidden or fixed.
+engine-selected product. The v1 fixture and these failures remain unchanged.
 Overall: 23/36 to 30/36, with mean prompt tokens 809 to 1,088. All attempted iterations,
 including unsuccessful drafts and their stock/alias misses, are in
 `agent/benchmarks/feedback-choice-v1-report.json`. The final stock/diet/unit-price
@@ -291,6 +291,21 @@ recorded synthetic removals through the memory module selected A before feedback
 B after feedback, and A after undo in all three repeats at each stage.
 This is synthetic development evidence, not a guarantee on unseen requests, and no
 live kitchen history or orders are created by this check.
+
+The exact-tie policy is now explicit (#1752): after product/alias fit, diet,
+delivery/coverage, removal preference, comparable price and prior orders all tie,
+retain the engine-selected product before using the lower index. This keeps an
+equivalent existing basket stable when shortlist order changes. It never overrides
+an earlier criterion. The separately frozen `feedback-choice-v2.json` changes only
+the reversed-shortlist no-feedback/undo expectation to match this policy:
+
+```
+python -m agent.feedback_choice_bench --mode current --fixture agent/fixtures/feedback-choice-v2.json --out .local/feedback-policy-v2.json
+```
+
+The new policy check passed 36/36 live-model attempts (three repeats per stage),
+recorded in `agent/benchmarks/feedback-choice-v2-report.json`. This verifies policy
+agreement, not a model-quality gain from changing the v1 expectation.
 
 The pick now also reads a structured need and exact-quote facts: confirmed/unknown/zero
 stock, coverage, price per proven base unit, sales-unit size and packs needed, arrival,

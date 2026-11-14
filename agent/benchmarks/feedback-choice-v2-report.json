@@ -1,0 +1,196 @@
+{
+  "fixture_sha256": "f5f112ecacaa6f54d6300cbff18996ea5f4c25f95b1715a443b0a0fa6e397e67",
+  "raw_sha256": "3bae39c749ba03e73bba496f414d4c3fcbdabc09aac221ba2fe635757659f6a0",
+  "design": "New v2 policy fixture: exact ties prefer the existing engine basket, then index. Copied from frozen v1 with only equal-b no-feedback/undo expectation changed from p1 to p0. Not a new model-quality gain and not a retroactive change to v1. Frozen before v2 calls.",
+  "mode": "current",
+  "passed": 36,
+  "total": 36,
+  "mean_prompt_tokens": 1105,
+  "median_model_seconds": 0.5,
+  "by_case_stage": {
+    "equal-a/after_feedback": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p1"
+        ],
+        [
+          "p1"
+        ],
+        [
+          "p1"
+        ]
+      ]
+    },
+    "equal-a/without_feedback": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ]
+      ]
+    },
+    "equal-a/after_undo": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ]
+      ]
+    },
+    "equal-b/after_feedback": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ]
+      ]
+    },
+    "equal-b/without_feedback": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ]
+      ]
+    },
+    "equal-b/after_undo": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ]
+      ]
+    },
+    "declined-cheaper/after_feedback": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p1"
+        ],
+        [
+          "p1"
+        ],
+        [
+          "p1"
+        ]
+      ]
+    },
+    "diet-wins/after_feedback": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ]
+      ]
+    },
+    "delivery-wins/after_feedback": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ]
+      ]
+    },
+    "partial-keeps-complement/after_feedback": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p0",
+          "p1"
+        ],
+        [
+          "p0",
+          "p1"
+        ],
+        [
+          "p0",
+          "p1"
+        ]
+      ]
+    },
+    "explicit-intent-wins/after_feedback": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ]
+      ]
+    },
+    "only-option/after_feedback": {
+      "passed": 3,
+      "total": 3,
+      "picks": [
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ],
+        [
+          "p0"
+        ]
+      ]
+    }
+  },
+  "note": "36/36 verifies agreement with the new engine-first exact-tie policy, not a quality gain from rescoring v1. V1 fixture and measured failures remain untouched. All earlier criteria still precede this tie-break."
+}
