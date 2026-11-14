@@ -42,6 +42,20 @@ class FlagTests(unittest.TestCase):
         warning = drift.flag(row(10.0, 10.0, spend_per_100="13.00", baseline_spend="10.00"))
         self.assertEqual(warning["kind"], "cost_creep")
         self.assertIn("price went up", warning["why"])
+        self.assertIn("(+30%) for the same amount.", warning["why"])
+        nearly = drift.flag(row(10.04, 10.0, spend_per_100="13.00", baseline_spend="10.00"))
+        self.assertIn("(+30%) for the same amount.", nearly["why"])  # +0.4% reads as 0%: the same
+
+    def test_cost_creep_names_an_amount_that_also_moved(self):
+        # The amount rose 10%, under the threshold: the text must not say "the same amount".
+        up = drift.flag(row(11.0, 10.0, spend_per_100="13.00", baseline_spend="10.00"))
+        self.assertEqual(up["kind"], "cost_creep")
+        self.assertIn("(+30%), while the amount went up 10%. The price went up.", up["why"])
+        self.assertNotIn("same amount", up["why"])
+        down = drift.flag(row(9.0, 10.0, spend_per_100="12.00", baseline_spend="10.00"))
+        self.assertIn("(+20%), while the amount went down 10%. The price went up.", down["why"])
+        unknown = drift.flag(row(5.0, 0, spend_per_100="13.00", baseline_spend="10.00"))
+        self.assertTrue(unknown["why"].endswith("(+30%). Check the price."))  # no baseline amount: no claim
 
     def test_within_threshold_or_a_drop_is_not_drift(self):
         self.assertIsNone(drift.flag(row(11.0, 10.0)))
