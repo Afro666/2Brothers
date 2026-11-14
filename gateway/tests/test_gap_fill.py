@@ -52,3 +52,19 @@ def test_without_a_substitute_the_order_stays_short():
     p = _ask(_gateway(), [BREAD], "s02-short")
     assert [(ln["product_id"], ln["quantity"]) for ln in p["lines"]] == [(BREAD, "16")]
     assert "SUBSTITUTE_NEEDS_OK" not in p["mandate"]["reason_codes"]
+
+
+def test_private_pick_evidence_includes_a_gap_filled_product():
+    g = _gateway()
+    need = g.client.post(g.k + '/needs', headers=g.agent, json={
+        'text': '20 cases of gluten free bread by Monday', 'quantity': '20', 'unit': 'KI',
+        'requested_date': MON.isoformat()}).json()
+    result = g.client.post('/tools/get_offer', headers=g.agent, json={
+        'product_ids': [BREAD, ROLLS], 'need_id': need['need_id'],
+        'requested_date': MON.isoformat()})
+    assert result.status_code == 200, result.text
+    stored = g.db.offers.find_one({'_id': result.json()['offer_id']})
+    facts = stored['selection_facts'][ROLLS]
+    assert facts['base_unit'] == 'KG' and facts['stock_state'] == 'unknown'
+    assert facts['substitute_for'] == BREAD
+    assert 'selection_facts' not in result.json()  # private context, no API payload expansion

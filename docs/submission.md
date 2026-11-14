@@ -258,6 +258,31 @@ The first offer now has three products every time (before: 1 to 5), and repeated
 one request give the same products much more often. So thinking is on where the model
 decides numbers (the benchmark) and off where the engine does (the product).
 
+**Buyer read context (#1605, 14 Nov).** A new synthetic shortlist benchmark has 30
+distinct requests in five families (stock, diet, price, prior orders and product fit),
+three repeats per condition, interleaved on the same Nemotron endpoint. It is not the
+old #1025 live request set and is an exploratory development set, not held-out evidence.
+The fixture and all three iterations are in `agent/fixtures/pick-context-v1.json` and
+`agent/benchmarks/pick-context-v1-report.json`.
+
+| Read context / pipeline | Exact expected product sets | Same product set on all 3 repeats | Valid replies | Mean prompt tokens | Median model round trip |
+|---|---|---|---|---|---|
+| Previous compact rows | 27/90 | 26/30 cases | 89/90 | 346 | 0.242 s |
+| Quote facts + ranked prompt, model output alone | 54/90 | 20/30 cases | 90/90 | 964 | 0.281 s |
+| Same replies + exact-quote full-coverage guard | 69/90 | 30/30 cases | 90/90 | 964 | 0.281 s |
+
+The guard keeps the model's first choice alone only when the quote proves confirmed
+stock covers its rounded packs and it can arrive in time; partial-stock baskets keep
+their complements. Its improvement is code, not a claim of better raw model stability.
+The richer prompt costs more tokens and was slightly slower; these are model-call
+timings, not end-to-end gateway timings or a guarantee during provider congestion.
+The history-family expected sets still fail, so we claim no demonstrated benefit from
+the new prior-order counts. An initial draft rejected 32/90 enriched replies because
+its claim validator omitted trusted pack/need numbers; the report retains that failure.
+On a separate live-quote milk snapshot, both prompts retained the confirmed-stock
+product in all three repeats; that snapshot had 51 L confirmed, not the older 698 L.
+The frozen stock cases also cover the saved 698 L scenario. No order was placed.
+
 **Not built:** fine-tuning. The gate decided no-go: no GPU budget and no validated
 recipe, so we claim no adapter gain (`docs/fine-tuning-gate.md`). Nemotron embeddings:
 Verda serves no embedding model (#1199). A test of the photo readers on real phone photos:
