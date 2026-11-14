@@ -83,10 +83,11 @@ _DMY = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})?")
 _DMON = re.compile(r"\b(\d{1,2})\s+(" + "|".join(MONTHS) + r")[a-z]*\b", re.I)
 
 
-def _number(raw: str) -> Decimal:
+def _number(raw: str, language: str = "en") -> Decimal:
     s = raw.replace(" ", " ").strip()
-    if re.fullmatch(r"\d{1,3}(?:[ ,.]\d{3})+", s):
-        s = re.sub(r"[ ,.]", "", s)               # 1,000 / 1 000 / 1.000 = thousands
+    groups = r"[ .]" if language == "fi" else r"[ ,.]"   # Finnish: comma is the decimal mark
+    if re.fullmatch(r"\d{1,3}(?:" + groups + r"\d{3})+", s):
+        s = re.sub(groups, "", s)                 # 1,000 / 1 000 / 1.000 = thousands
     else:
         s = s.replace(",", ".")                   # 1,5 = one and a half
     try:
@@ -114,7 +115,7 @@ def parse_request(text: str, today: date) -> ParsedRequest:
     m = _QTY.search(low)
     if not m:
         raise ParseError("no quantity with a unit (for example '1000 L' or '20 kg')")
-    quantity, unit = _number(m.group(1)), UNITS[m.group(2).lower()]
+    quantity, unit = _number(m.group(1), language), UNITS[m.group(2).lower()]
     if unit == "G":
         quantity, unit = quantity / 1000, "KG"
     rest = low[:m.start()] + " " + low[m.end():]

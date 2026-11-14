@@ -31,6 +31,10 @@ import { ProductPicker, type PickerProduct } from "@/pages/products/product-pick
 import { recipeAllergens } from "@/pages/products/recipe-allergens";
 import { catalogProductIdsInRecipes } from "@/pages/products/recipe-products";
 
+/** How long whenSteady waits for a previous dialog to leave the DOM before it runs anyway. */
+const STEADY_LIMIT_MS = 400;
+const STEADY_RETRY_MS = 16;
+
 const ALLERGENS = [
   ["AM", "Milk"],
   ["AW", "Gluten cereals"],
@@ -167,13 +171,15 @@ function ProductsPageContent() {
   );
 
   /** Opens or closes a dialog once the browser has removed its previous one; a remount would drop a half-typed form. */
+  /** Gives up waiting after STEADY_LIMIT_MS and runs the callback anyway, so a stray dialog cannot block a click. */
   function whenSteady(callback: () => void) {
     const expected = dialog === null ? 0 : 1;
-    const attempts = (left: number) => {
-      if (document.querySelectorAll("[role='dialog']").length === expected) callback();
-      else if (left > 0) window.queueMicrotask(() => attempts(left - 1));
+    const deadline = Date.now() + STEADY_LIMIT_MS;
+    const attempt = () => {
+      if (document.querySelectorAll("[role='dialog']").length === expected || Date.now() >= deadline) callback();
+      else window.setTimeout(attempt, STEADY_RETRY_MS);
     };
-    window.queueMicrotask(() => attempts(100));
+    window.queueMicrotask(attempt);
   }
   function openProduct(product: OwnProduct | null = null) {
     setEditingProduct(product);

@@ -378,6 +378,8 @@ IDs) apply here too. Base path: `/v1`.
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". Proposed; the gateway does not serve it yet. |
 | GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). |
+| GET | `/orders/{id}/resolution` | `kitchen:approve` (human) | What our store knows about an order whose send result is unknown. Shape under "Resolving an unknown send". |
+| POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
 | PUT | `/sharing` | `kitchen:write` | Consent: which suppliers may see this kitchen's forecast. Every change is an audit entry. |
 | GET | `/settings` | `kitchen:read` | Kitchen settings: how the engine sizes orders and what the Buyer may propose. Shape below. |
@@ -398,6 +400,112 @@ Order `status` is the supplier side of the order: `SENT`, `CONFIRMED`, `PARTIAL`
 `REJECTED`, `UNCONFIRMED`. The order `outcome` is the gateway result from "Team gateway
 interfaces": `CONFIRMED`, `NOT_SENT`, `UNCONFIRMED`, `SENT_READ_FAILED`. An outcome of
 `NOT_SENT` means no order exists at the supplier, so it has no order `status`.
+
+### Resolving an unknown send
+
+An order with outcome `UNCONFIRMED` or `SENT_READ_FAILED` is never sent again. A
+person finds out what happened and records it. Both routes need a human session of an
+approver: an API key or an agent token gets 403 `HUMAN_SESSION_REQUIRED`, a chef or
+viewer gets 403 `ROLE_REQUIRED`.
+
+The Valio mock API has no order endpoint: orders are ours. So "look up the real state"
+means two things. The gateway returns what our own store knows. The person checks the
+supplier by their own means (phone, e-mail, the supplier's portal) and types the result.
+The gateway never asks the supplier and never guesses.
+
+An attempt whose approval call failed after the attempt row was written is stored as
+`UNCONFIRMED` (order `status` null); its proposal stays held, so no second approval can
+place a duplicate.
+
+`GET /v1/kitchens/{kitchen_id}/orders/{order_id}/resolution` returns what is known.
+Each call writes an `order_lookup` audit entry.
+
+```json
+{
+  "order_id": "9f1c...",
+  "proposal_id": "5b2e...",
+  "proposal_status": "COMMITTING",
+  "idempotency_key": "approve-7",
+  "payload_hash": "sha256 hex of {offer_id, expected_total, lines}",
+  "offer_id": "c41d...",
+  "supplier_id": "sup-valio",
+  "approved_by": "aron",
+  "outcome": "UNCONFIRMED",
+  "status": null,
+  "expected_total": "74.51",
+  "lines": [],
+  "created_at": "2026-11-14T02:10:00+00:00",
+  "updated_at": "2026-11-14T02:10:01+00:00",
+  "resolvable": true,
+  "resolution": null
+}
+```
+
+`status` is the supplier-side status when the store has one, else null. `resolvable`
+is true only while `outcome` is `UNCONFIRMED` or `SENT_READ_FAILED`. `resolution` is
+null until a person resolves the order; after that it is the object below.
+
+`POST /v1/kitchens/{kitchen_id}/orders/{order_id}/resolve`
+
+```json
+{"resolution": "placed", "supplier_order_ref": "VAL-2026-00123", "idempotency_key": "r-1"}
+```
+
+```json
+{"resolution": "not_sent", "note": "Valio sales desk: no such order", "idempotency_key": "r-2"}
+```
+
+- `resolution`: `placed` or `not_sent`. Required.
+- `supplier_order_ref`: the supplier's own order reference, 1 to 200 characters.
+  Required with `placed`; refused with `not_sent`.
+- `note`: optional free text, at most 500 characters.
+- `idempotency_key`: required, like every mutation.
+
+What each resolution does:
+
+| `resolution` | Order | Proposal | Approval |
+|---|---|---|---|
+| `placed` | `outcome: CONFIRMED`, `status: SENT`, the reference stored | `APPROVED`, linked to this order | stays `APPROVED` |
+| `not_sent` | `outcome: NOT_SENT`, `status: null` | back to `READY` (or `BLOCKED_BY_RECALL` when a recall holds a line), so a person can decide again | a new `PENDING` approval replaces the used one |
+
+Neither resolution sends anything, and neither writes a second attempt row: the stored
+order row changes in place. After `not_sent`, a new decision is a new approve call with
+a new `idempotency_key` (it passes every guard again and writes its own attempt row);
+the old key only replays the closed attempt.
+
+Response (200), also returned by a repeat:
+
+```json
+{
+  "order_id": "9f1c...",
+  "proposal_id": "5b2e...",
+  "proposal_status": "APPROVED",
+  "outcome": "CONFIRMED",
+  "status": "SENT",
+  "resolution": {
+    "resolution": "placed",
+    "supplier_order_ref": "VAL-2026-00123",
+    "note": "",
+    "resolved_by": "aron",
+    "resolved_at": "2026-11-14T02:31:00+00:00",
+    "from_outcome": "UNCONFIRMED"
+  }
+}
+```
+
+An order is resolved once. Repeating the same resolution (and the same reference)
+returns the stored result and changes nothing, with any `idempotency_key`. Each
+resolution writes one `order_resolved` audit entry: who, when, the resolution, the
+reference, the outcome before.
+
+| Error | Status | When |
+|---|---|---|
+| `HUMAN_SESSION_REQUIRED` | 403 | The caller is not a person (agent token, API key) |
+| `ROLE_REQUIRED` | 403 | The person is not an approver |
+| `ORDER_NOT_FOUND` | 404 | No such order in this kitchen |
+| `INVALID_REQUEST` | 422 | `resolution` is not `placed` or `not_sent`; `placed` without `supplier_order_ref`; `not_sent` with one; a field too long; no `idempotency_key` |
+| `ORDER_NOT_RESOLVABLE` | 409 | The order's outcome is not `UNCONFIRMED` or `SENT_READ_FAILED` and no resolution is stored. The error carries `outcome` |
+| `ALREADY_RESOLVED` | 409 | A different resolution, or another reference, is already stored. The error carries the stored `resolution` |
 
 ### Creating a proposal
 
@@ -1177,3 +1285,7 @@ Refusals before any send are errors, not outcomes: `TOTAL_MISMATCH` (409: re-sim
 and ask the human again), `STOCK_UNKNOWN` (409: the supplier has not confirmed the stock
 of a line; nothing is recorded and the proposal stays `READY`), `HUMAN_SESSION_REQUIRED`
 (403), `IDEMPOTENCY_KEY_REUSED` (409). No adapter retries a POST automatically.
+
+The way out of `UNCONFIRMED` and `SENT_READ_FAILED` is "Resolving an unknown send": a
+person records `placed` or `not_sent`. Its refusals are `ORDER_NOT_RESOLVABLE` (409) and
+`ALREADY_RESOLVED` (409).

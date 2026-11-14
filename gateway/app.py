@@ -235,6 +235,11 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         who.need("kitchen:read", kitchen_id)
         return gw().reject(kitchen_id, proposal_id, await body(request), human=who.human)
 
+    @app.post(k + "/recalls/{event_id}/dismiss")
+    async def dismiss_recall(kitchen_id: str, event_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need('kitchen:read', kitchen_id)
+        return gw().dismiss_recall(kitchen_id, event_id, await body(request), human=who.human)
+
     @app.post(k + "/needs")
     async def create_need(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose", kitchen_id)
@@ -265,6 +270,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         if not q.get("from") or not q.get("to"):
             raise GatewayError(422, "INVALID_REQUEST", "from and to (YYYY-MM-DD) are required")
         return gw().forecast(kitchen_id, q["from"], q["to"])
+
+    @app.get(k + "/permissions")
+    def permissions_matrix(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
+        from gateway import permissions
+        return permissions.matrix()
 
     @app.get(k + "/audit")
     def audit(kitchen_id: str, who: Principal = Depends(principal)):
@@ -303,6 +314,68 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
             raise GatewayError(404, "TOKEN_NOT_FOUND", "no such token")
         gw()._audit(kitchen_id, "token_revoked", who.human, token_id=token_id)
         return out
+
+    # ---- Webhooks (#277): an approver registers them; the secret is shown once ---------
+    def hook_admin(who: Principal, kitchen_id: str) -> str:
+        who.need("kitchen:read", kitchen_id)        # a session is bound to its kitchen
+        if not who.human:
+            raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can manage webhooks")
+        return who.human
+
+    def hook_or_404(kitchen_id: str, webhook_id: str) -> dict:
+        from gateway import webhooks
+        hook = webhooks.get(gw().db, kitchen_id, webhook_id)
+        if hook is None:
+            raise GatewayError(404, "WEBHOOK_NOT_FOUND", "no such webhook")
+        return hook
+
+    @app.post(k + "/webhooks")
+    async def create_webhook(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        from gateway import webhooks
+        person = hook_admin(who, kitchen_id)
+        data = await body(request)
+        try:
+            out = webhooks.register(gw().db, kitchen_id, data.get("url"), data.get("events"), person)
+        except webhooks.WebhookError as exc:
+            raise GatewayError(422, "INVALID_REQUEST", str(exc)) from None
+        gw()._audit(kitchen_id, "webhook_created", person, webhook_id=out["webhook_id"],
+                    url=out["url"], events=out["events"])
+        return out
+
+    @app.get(k + "/webhooks")
+    def list_webhooks(kitchen_id: str, who: Principal = Depends(principal)):
+        from gateway import webhooks
+        hook_admin(who, kitchen_id)
+        return {"webhooks": webhooks.list_hooks(gw().db, kitchen_id), "events": list(webhooks.EVENTS)}
+
+    @app.delete(k + "/webhooks/{webhook_id}")
+    def delete_webhook(kitchen_id: str, webhook_id: str, who: Principal = Depends(principal)):
+        from gateway import webhooks
+        person = hook_admin(who, kitchen_id)
+        out = webhooks.delete(gw().db, kitchen_id, webhook_id)
+        if out is None:
+            raise GatewayError(404, "WEBHOOK_NOT_FOUND", "no such webhook")
+        gw()._audit(kitchen_id, "webhook_deleted", person, webhook_id=webhook_id)
+        return {**out, "deleted": True}
+
+    @app.post(k + "/webhooks/{webhook_id}/test")
+    def test_webhook(kitchen_id: str, webhook_id: str, who: Principal = Depends(principal)):
+        """One signed `ping`, one attempt, so the person sees the result at once."""
+        from gateway import webhooks
+        hook_admin(who, kitchen_id)
+        hook_or_404(kitchen_id, webhook_id)
+        rows = webhooks.deliver(gw().db, kitchen_id, webhooks.PING, {"webhook_id": webhook_id},
+                                hook_id=webhook_id, attempts=1)
+        if not rows:
+            raise GatewayError(502, "WEBHOOK_TEST_FAILED", "the ping could not be sent")
+        return rows[0]
+
+    @app.get(k + "/webhooks/{webhook_id}/deliveries")
+    def webhook_deliveries(kitchen_id: str, webhook_id: str, who: Principal = Depends(principal)):
+        from gateway import webhooks
+        hook_admin(who, kitchen_id)
+        hook_or_404(kitchen_id, webhook_id)
+        return {"deliveries": webhooks.deliveries(gw().db, kitchen_id, webhook_id)}
 
     # ---- Buyer agent tools (one kitchen per agent token in the demo) ----------------
     def kitchen(who: Principal | None = None) -> str:

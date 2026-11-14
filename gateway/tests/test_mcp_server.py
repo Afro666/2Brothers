@@ -44,6 +44,25 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.close()
 
+    async def test_search_products_filters_optional_and_typed(self):
+        mock = MockGateway()
+        gateway = GatewayClient(transport=httpx.MockTransport(mock))
+        try:
+            async with create_connected_server_and_client_session(build_server(gateway)) as session:
+                tools = {t.name: t for t in (await session.list_tools()).tools}
+                self.assertEqual(tools["search_products"].inputSchema["required"], ["query"])
+                self.assertIn("exclude_allergens", json.dumps(tools["search_products"].inputSchema))
+                result = await session.call_tool("search_products", {"query": "milk"})
+                self.assertFalse(result.isError)
+                self.assertEqual(unpack(result)["products"][0]["product_id"], "462775")
+                excluded = unpack(await session.call_tool("search_products", {
+                    "query": "milk", "filters": {"exclude_allergens": ["AM"], "temperature": "chilled"}}))
+                self.assertEqual(excluded["products"], [])
+                sent = json.loads(mock.requests[-1].content)["filters"]
+                self.assertEqual(sent, {"exclude_allergens": ["AM"], "temperature": "chilled"})
+        finally:
+            await gateway.close()
+
     async def test_request_approval_key_reuse(self):
         mock = MockGateway()
         async with httpx.AsyncClient(transport=httpx.MockTransport(mock), base_url="http://mock") as client:
