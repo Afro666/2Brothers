@@ -248,10 +248,20 @@ class Gateway:
         plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
         sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
         now = self.now()
+        offer_id = uuid4().hex
+        signed = {}
+        try:    # signed offers (#290): never a reason to fail a quote
+            from gateway import signing
+            token, digest = signing.sign_offer(
+                self.db, offer_id=offer_id, kitchen_id=kitchen_id, simulation=sim,
+                requested_date=request["requested_date"], as_of=now, valid_until=now + OFFER_TTL)
+            signed = {"signature": token, "offer_hash": digest}
+        except Exception:
+            signed = {}
         offer = orders.save_offer(self.db, {
-            "offer_id": uuid4().hex, "kitchen_id": kitchen_id, "supplier_id": VALIO,
+            "offer_id": offer_id, "kitchen_id": kitchen_id, "supplier_id": VALIO,
             "request": request, "valid_until": (now + OFFER_TTL).isoformat(),
-            "simulation": sim, "fetched_at": now})
+            "simulation": sim, "fetched_at": now, **signed})
         return offer
 
     # ---- kitchen side ---------------------------------------------------------------
@@ -355,7 +365,8 @@ class Gateway:
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
                 **offer["simulation"],
-                "decision_summary": self._summary(doc["request"], offer["simulation"])}
+                "decision_summary": self._summary(doc["request"], offer["simulation"]),
+                "signature": offer.get("signature"), "offer_hash": offer.get("offer_hash")}
         result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
         result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []))
         blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
@@ -471,6 +482,7 @@ class Gateway:
             expected_total=Decimal128(sim["expected_total"]),   # exact decimal in any Mongo
             lines=[{k: v for k, v in ln.items() if k != "why"} for ln in sim["lines"]],
             payload_hash=_hash(payload), proposal_id=proposal_id, approved_by=human,
+            offer_hash=stored.get("offer_hash"),     # the exact offer this yes covers (#290)
             # One order for the proposal (#73); the supplier split is stored on it.
             supplier_id=blocks[0]["supplier_id"] if len(blocks) == 1 else None,
             blocks=[{k: v for k, v in b.items() if k != "lines"}
@@ -677,6 +689,8 @@ class Gateway:
         if doc is None or doc["status"] != "APPROVED" or not doc.get("order_id"):
             raise GatewayError(403, "NEEDS_APPROVAL", "a person must approve this order in the approval inbox")
         order = orders.get_order(self.db, doc["order_id"])
+        if order.get("offer_hash") and offer.get("offer_hash") != order["offer_hash"]:
+            raise GatewayError(409, "APPROVAL_MISMATCH", "the approval covers another offer than this one")
         if abs(Decimal(str(body.get("expected_total") or "0")) - Decimal(str(order["expected_total"]))) > TOLERANCE:
             raise GatewayError(409, "TOTAL_MISMATCH", "this is not the approved total",
                                expected_total=_money(Decimal(str(order["expected_total"]))))
@@ -835,7 +849,8 @@ def offer_out(offer: dict) -> dict:
     sim = offer["simulation"]
     lines = [_line_out(ln) for ln in sim["lines"]]
     return {"offer_id": offer["offer_id"], "valid_until": offer["valid_until"], **sim,
-            "lines": lines, "blocks": _blocks_out(sim, lines)}
+            "lines": lines, "blocks": _blocks_out(sim, lines),
+            "signature": offer.get("signature"), "offer_hash": offer.get("offer_hash")}
 
 
 __all__ = ["Gateway", "GatewayError", "offer_out", "asdict"]
