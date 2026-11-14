@@ -41,6 +41,7 @@ export function LearnedBadge({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [switchedOff, setSwitchedOff] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   async function useForecast() {
     if (!canSwitch || busy) return;
@@ -48,17 +49,26 @@ export function LearnedBadge({
     setError(null);
     try {
       await api.setLearnedFactActive(learned.factId, false, "human");
-      await onChanged?.();
-      setSwitchedOff(true);
-      setOpen(false);
     } catch (caught) {
       setError(t("Could not use the forecast instead: {message}", { message: caught instanceof Error ? caught.message : String(caught) }));
+      setBusy(false);
+      return;
+    }
+    // The fact is off on the server now, so a failed plan refresh must not read as a failed switch.
+    setSwitchedOff(true);
+    setOpen(false);
+    try {
+      await onChanged?.();
+    } catch (caught) {
+      setRefreshError(t("Switched off. The plan could not refresh: {message}", { message: caught instanceof Error ? caught.message : String(caught) }));
     } finally {
       setBusy(false);
     }
   }
 
-  if (switchedOff) return null;
+  if (switchedOff) {
+    return refreshError ? <p role="alert" className="text-sm text-destructive">{refreshError}</p> : null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

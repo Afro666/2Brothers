@@ -505,21 +505,16 @@ export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalR
   });
 }
 
-/**
- * Each supplier block's own delivery fee above zero (#1865). A proposal of two suppliers has no
- * `delivery_fee` of its own, so the fee inside `expected_total` is named only here.
- */
-function mapBlockFees(proposal: { blocks?: unknown }): { deliveryFees?: NonNullable<ApprovalRequest["deliveryFees"]> } {
-  if (!Array.isArray(proposal.blocks)) return {};
-  const deliveryFees = proposal.blocks.flatMap((block) => {
-    if (!block || typeof block !== "object") return [];
-    const amount = decimal((block as Json).delivery_fee, "delivery_fee");
-    const name = (block as Json).name;
-    const id = (block as Json).supplier_id;
-    const supplier = typeof name === "string" && name ? name : typeof id === "string" ? id : "";
-    return amount != null && amount > 0 && supplier ? [{ supplier, amount }] : [];
+/** #1858: each supplier block's own delivery fee above zero, as the gateway sent it (never a sum). */
+export function mapBlockDeliveryFees(proposal: { blocks?: unknown }): NonNullable<ApprovalRequest["blockDeliveryFees"]> {
+  if (!Array.isArray(proposal.blocks)) return [];
+  return proposal.blocks.flatMap((block) => {
+    const amount = block ? decimal(block.delivery_fee, "delivery_fee") : null;
+    const supplierName = typeof block?.name === "string" && block.name ? block.name : block?.supplier_id;
+    return amount !== null && amount > 0 && typeof supplierName === "string" && supplierName
+      ? [{ supplierName, amount }]
+      : [];
   });
-  return deliveryFees.length ? { deliveryFees } : {};
 }
 
 /** #1227: a known product's name in place of its code, and any code after it in words. */
@@ -615,7 +610,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
       ? reasons
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],
     suppliersToConfirm: mapSuppliersToConfirm(proposal),
-    ...mapBlockFees(proposal),
+    blockDeliveryFees: mapBlockDeliveryFees(proposal),
     cutoffs: Array.isArray(proposal.lines)
       ? proposal.lines.map((line) => ({
           closingTime: nullableText(line?.closing_time, "closing_time"),

@@ -254,7 +254,9 @@ export function KitchenWords() {
             </h2>
             {words.data.aliases.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {t("No own names yet. Link a word above, and a request that uses it goes to that product.")}
+                {words.data.unknownItems.length === 0
+                  ? t("No own names yet. They appear here when you link a word of a request to a product.")
+                  : t("No own names yet. Link a word above, and a request that uses it goes to that product.")}
               </p>
             ) : (
               <ul className="divide-y rounded-lg border">

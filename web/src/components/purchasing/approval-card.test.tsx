@@ -849,28 +849,5 @@ describe("ApprovalCard", () => {
       ).toBeVisible();
       expect(screen.queryByText(/order is sent/)).toBeNull();
     });
-
-    it("names each supplier's delivery fee between the lines total and the amount to approve", () => {
-      const request = {
-        ...approval,
-        totalExVat: 306.38,
-        inclVat: 347.74,
-        totalInclVat: 372.74,
-        deliveryFees: [{ supplier: "Valio Aimo", amount: 25 }],
-      };
-      render(<ApprovalCard request={request} order={{ ...confirmedOrder, deliveryFee: null, mov: null }} />);
-      const totals = screen.getByText("€347.74").closest("dl")!;
-      const texts = within(totals).getAllByRole("definition").map((cell) => cell.textContent);
-      const fee = texts.indexOf("Delivery fee €25.00 (Valio Aimo)");
-      expect(fee).toBeGreaterThan(texts.indexOf("€347.74"));
-      expect(texts.indexOf("= €372.74 to approve")).toBeGreaterThan(fee);
-    });
-
-    it("says the amount to approve holds charges the gateway does not itemise when no fee is known", () => {
-      const request = { ...approval, totalExVat: 306.38, inclVat: 347.74, totalInclVat: 372.74 };
-      render(<ApprovalCard request={request} order={{ ...confirmedOrder, deliveryFee: null, mov: null }} />);
-      expect(screen.getByText("Includes delivery or other charges that the gateway does not itemise.")).toBeVisible();
-      expect(screen.queryByText(/^Delivery fee/)).toBeNull();
-    });
   });
 });

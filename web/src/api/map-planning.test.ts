@@ -156,6 +156,7 @@ describe("own products", () => {
       name: "Salmon fillet",
       unit: "KG",
       packSize: 2.5,
+      packMeasure: "KG",
       priceEur: 18.9,
       supplierId: "sup-fish",
       allergens: [

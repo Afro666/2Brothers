@@ -293,8 +293,8 @@ export interface ApprovalRequest {
   reasons: MandateReason[];
   /** Suppliers other than Valio with unconfirmed stock; `count` is how many of the proposal's lines (the gateway's `blocks`). */
   suppliersToConfirm: { supplierId: string; name: string; count?: number }[];
-  /** Each supplier block's own delivery fee above zero (`blocks[].delivery_fee`); absent when no block has one. */
-  deliveryFees?: { supplier: string; amount: number }[];
+  /** The gateway's per-supplier fees (`blocks[].delivery_fee` above zero), for a proposal with no single fee (#1858). */
+  blockDeliveryFees?: { supplierName: string; amount: number }[];
   /** Proposal-line cut-offs and the supplier block each line belongs to. */
   cutoffs?: { closingTime: OrderLine["offer"]["closingTime"]; supplierName: string | null }[];
   /** Only PENDING can be approved; IN_PROGRESS and BLOCKED_BY_RECALL wait, they are not decided. */
@@ -519,7 +519,10 @@ export interface OwnProduct {
   id: string;
   name: string;
   unit: string;
+  /** In `packMeasure` per `unit` ("5" with KG: 5 kg in one ST). */
   packSize: number | null;
+  /** The measure the pack size is in (not `baseUnit`: the pages tell a catalog product from an own one by that key). */
+  packMeasure?: "KG" | "L" | null;
   priceEur: number | null;
   supplierId: string;
   /** null = unknown, NOT allergen-free. */

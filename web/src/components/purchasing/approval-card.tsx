@@ -1,5 +1,5 @@
 import { Check, ChevronDown, Plus, X } from "lucide-react";
-import { Fragment, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { ModelTraceLine, ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { MovProgress } from "@/components/purchasing/mov-progress";
@@ -207,6 +207,12 @@ export function ApprovalCard({
   // The approve figure (`expected_total`) holds the delivery fee; when it is not the figure shown
   // as incl VAT, the card names the sum, so the total above and the approve button agree.
   const approveDiffers = inclVat === null || Math.abs(inclVat - request.totalInclVat) >= 0.005;
+  // #1858: with no single fee, both gateway figures keep their names and nothing is summed or
+  // subtracted on screen; the suppliers' own fees are listed. With no fee at all and a higher
+  // approve figure, one line says it holds charges the gateway does not itemise.
+  const named = approveDiffers && order?.deliveryFee == null;
+  const blockFees = named ? (request.blockDeliveryFees ?? []) : [];
+  const unitemised = named && inclVat !== null && blockFees.length === 0 && request.totalInclVat > inclVat;
   const [open, setOpen] = useState<"approve" | "reject" | null>(null);
   const [status, setStatus] = useState(request.status);
   const [reason, setReason] = useState("");
@@ -327,8 +333,6 @@ export function ApprovalCard({
           limit: formatEur(budgetWarningExVat),
         })
       : t("The total is above your kitchen's budget warning per order. A warning only.");
-  // #1865: a proposal of two suppliers has no fee of its own; each supplier block names its fee.
-  const blockFees = order?.deliveryFee == null ? (request.deliveryFees ?? []) : [];
 
   async function changeProposal(change: ProposalChange) {
     // The ref closes the gap before `busy` disables the buttons: two fast presses are one change.
@@ -564,7 +568,9 @@ export function ApprovalCard({
           </p>
         ) : (
           <dl className="flex flex-wrap items-baseline gap-x-3 sm:block sm:text-right">
-            <dt className="sr-only">{t("Total incl VAT")}</dt>
+            <dt className={named && inclVat !== null ? "label-caps w-full" : "sr-only"}>
+              {named && inclVat !== null ? t("Lines incl VAT") : t("Total incl VAT")}
+            </dt>
             <dd className="inline-block border-b-[3px] border-double border-foreground text-xl leading-7 font-bold tabular-nums">
               {inclVat !== null ? formatEur(inclVat) : inclVatText(request, t, formatEur)}
             </dd>
@@ -585,24 +591,28 @@ export function ApprovalCard({
                 </dd>
               </>
             ) : null}
-            {blockFees.map((fee) => (
-              <Fragment key={fee.supplier}>
+            {blockFees.length > 0 ? (
+              <>
                 <dt className="sr-only">{t("Delivery fee")}</dt>
-                <dd className="w-full font-mono text-xs text-muted-foreground tabular-nums">
-                  {t("Delivery fee {amount} ({supplier})", { amount: formatEur(fee.amount), supplier: fee.supplier })}
-                </dd>
-              </Fragment>
-            ))}
+                {blockFees.map((fee, index) => (
+                  <dd key={`${index}-${fee.supplierName}`} className="w-full font-mono text-xs text-muted-foreground tabular-nums">
+                    {t("Delivery fee {amount} ({supplier})", { amount: formatEur(fee.amount), supplier: fee.supplierName })}
+                  </dd>
+                ))}
+              </>
+            ) : null}
             {/* Mock jury, 14 Nov: "€37.74" here and "Approve €62.74" below, with no sum between. */}
             {approveDiffers ? (
               <>
                 <dt className="sr-only">{t("Amount you approve")}</dt>
                 <dd className="w-full font-mono text-xs font-semibold tabular-nums">
-                  {t("= {amount} to approve", { amount: formatEur(request.totalInclVat) })}
+                  {named
+                    ? t("Total to approve {amount}", { amount: formatEur(request.totalInclVat) })
+                    : t("= {amount} to approve", { amount: formatEur(request.totalInclVat) })}
                 </dd>
-                {inclVat !== null && order?.deliveryFee == null && blockFees.length === 0 ? (
+                {unitemised ? (
                   <dd className="w-full text-xs text-muted-foreground sm:ml-auto sm:max-w-64">
-                    {t("Includes delivery or other charges that the gateway does not itemise.")}
+                    {t("The total to approve includes delivery or other charges the gateway does not itemise.")}
                   </dd>
                 ) : null}
               </>
