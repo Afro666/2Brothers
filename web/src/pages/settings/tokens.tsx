@@ -27,6 +27,18 @@ import { useT } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { SettingsSection } from "@/pages/settings/section";
 
+/** Renders a translated sentence with its {scope} placeholder as a code element, so word order can differ per language. */
+function withScope(sentence: string, scope: string) {
+  const [before, ...after] = sentence.split("{scope}");
+  return (
+    <>
+      {before}
+      <code className="font-mono">{scope}</code>
+      {after.join("{scope}")}
+    </>
+  );
+}
+
 export const SCOPES: { value: ApiTokenScope; title: string; description: string }[] = [
   { value: "kitchen:read", title: "Read kitchen", description: "Read stock, menus and orders." },
   { value: "kitchen:propose", title: "Propose orders", description: "Use the Buyer agent and MCP tools to propose." },
@@ -153,7 +165,7 @@ export function TokensSection() {
     >
       <div className="min-w-0 space-y-5">
         <p className="max-w-prose text-sm text-muted-foreground">
-          {t("Tokens cannot have")} <code className="font-mono">kitchen:approve</code>: {t("only a signed-in person approves.")}
+          {withScope(t("Tokens cannot have {scope}: only a signed-in person approves."), "kitchen:approve")}
         </p>
 
         {actionError ? (
@@ -331,7 +343,7 @@ export function TokensSection() {
           <CardHeader>
             <CardTitle>{t("Connect your own agent")}</CardTitle>
             <CardDescription>
-              {t("Use")} <code className="font-mono">kitchen:propose</code> {t("for MCP tools and proposals.")}
+              {withScope(t("Use {scope} for MCP tools and proposals."), "kitchen:propose")}
             </CardDescription>
           </CardHeader>
           <CardContent className="min-w-0 space-y-5">
