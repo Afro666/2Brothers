@@ -19,7 +19,7 @@ from uuid import uuid4
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 
-from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, pack_info,
+from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, allergen_rule_hits, pack_info,
                     pad_to_free_delivery, plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
@@ -231,6 +231,29 @@ class Gateway:
             "partial_fill": partial_out(plan.partial),   # confirmed stock now, a plan for the rest (#288)
         }
 
+    def _allergen_refusals(self, kitchen_id: str, product_ids: list[str]) -> dict[str, tuple[str, ...]]:
+        """S03: the kitchen's allergen rule always wins, on every path (REST, MCP, any agent).
+        A product whose known allergens include an excluded code is left out. A misspelt
+        rule fails closed: no offer at all, never a silently wider one."""
+        from store.buyer_context import excluded_allergens
+        from store.search import allergen_codes as to_codes
+        values = excluded_allergens(self.db, kitchen_id)
+        if not values:
+            return {}
+        try:
+            # AW is the gluten-cereals group, as in agent/substitutes.AllergenPolicy.
+            rule = tuple(to_codes(["gluten" if v.upper() == "AW" else v for v in values]))
+        except ValueError:
+            raise GatewayError(409, "KITCHEN_POLICY_INVALID",
+                               "the kitchen's allergen rule names an unknown allergen; fix it in settings") from None
+        from store.products import get_products
+        refused = {}
+        for row in get_products(self.db, product_ids, kitchen_id=kitchen_id):
+            hits = allergen_rule_hits(row, rule)
+            if hits:
+                refused[row["product_id"]] = hits
+        return refused
+
     def _quote(self, kitchen_id: str, request: dict) -> dict:
         requested = date.fromisoformat(request["requested_date"])
         measure = request["unit"]
@@ -238,15 +261,21 @@ class Gateway:
         if need <= 0:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
         blocked = recalls.blocked_ids(self.db, kitchen_id)
+        refused = self._allergen_refusals(kitchen_id, request["product_ids"])
         offers, skipped, tax, supplier_of, when = self._offers(
-            kitchen_id, [p for p in request["product_ids"] if p not in blocked], measure, requested)
+            kitchen_id, [p for p in request["product_ids"] if p not in blocked and p not in refused],
+            measure, requested)
         skipped.extend((p, 'BLOCKED_BY_RECALL') for p in request['product_ids'] if p in blocked)
+        skipped.extend((p, f"ALLERGEN_RULE: the kitchen excludes {', '.join(hits)}")
+                       for p, hits in refused.items())
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
         tiers = {sid: (self._supplier(kitchen_id, sid).get("terms") or {}).get("discount_tiers") or []
                  for sid in set(supplier_of.values())}
         plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
         sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
+        if refused and "ALLERGEN_RULE" not in sim["mandate"]["reason_codes"]:
+            sim["mandate"]["reason_codes"].append("ALLERGEN_RULE")
         now = self.now()
         offer = orders.save_offer(self.db, {
             "offer_id": uuid4().hex, "kitchen_id": kitchen_id, "supplier_id": VALIO,

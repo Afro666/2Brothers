@@ -11,13 +11,14 @@ from engine.quantity import Item, LinePlan, replenish
 from engine.offers import Offer, RequestPlan, plan_request
 from engine.partial import FillPart, PartialFill, partial_fill
 from engine.urgency import Urgency, urgency
-from engine.allergens import allergen_codes
+from engine.allergens import allergen_codes, allergen_rule_hits
 from engine.padding import Padding, Wanted, pad_to_free_delivery
 from engine.addable import AddableRow, Candidate, Timing, rank_addable, rank_key
 
 __all__ = [
     "Padding", "Wanted", "pad_to_free_delivery",
     "allergen_codes",
+    "allergen_rule_hits",
     "AddableRow", "Candidate", "Timing", "rank_addable", "rank_key",
     "Item", "KitchenParams", "LinePlan", "Offer", "PackInfo", "RequestPlan", "Urgency",
     "pack_info", "plan_request", "replenish", "safety_stock", "stockout_adjusted",

@@ -121,6 +121,23 @@ class _Gateway:
         data["products"] = [p for p in data["products"] if p["productId"] in payload["products"]]
         return data
 
+    def add_product(self, pid, name, price, available, contains):
+        """A product from docs/scenarios.md: price and stock as written there, cloned from a
+        recorded Valio answer, so no challenge data is copied. 9999999999 is Valio's
+        "unknown" sentinel."""
+        self.db.products.insert_one({"_id": pid, "names": {"en": name}, "allergen_data_known": True,
+                                     "allergens": {"contains": list(contains), "may_contain": [], "undeclared": []},
+                                     "raw": _row(pid, "ST", "ST", [("ST", 1.0)])})
+        base_price = deepcopy(next(p for p in self.price["products"] if p["productId"] == "463335"))
+        base_price.update(productId=pid)
+        base_price["catalogPrice"]["value"] = price
+        base_price["comparisonPrice"]["value"] = price
+        self.price["products"].append(base_price)
+        base_avail = deepcopy(next(p for p in self.avail["products"] if p["productId"] == "463335"))
+        base_avail.update(productId=pid)
+        base_avail["scheduleLines"][0]["availableAmount"] = available
+        self.avail["products"].append(base_avail)
+
     def reprice(self, pid, value):
         for p in self.price["products"]:
             if p["productId"] == pid:
@@ -174,17 +191,22 @@ def _row_allergens(pid, contains):
 
 
 def s03() -> Result:
-    from agent.substitutes import AllergenPolicy
-
-    r = Result("S03", "Allergen-safe substitute for a school", "agent (substitutes policy)")
-    school = AllergenPolicy(excluded=("AW",))                 # coeliac pupils: no gluten cereals
-    oddly = _row_allergens("468465", ["GO"])                  # oat drink, gluten free: oats only
-    oatly = _row_allergens("470863", ["AW", "GO"])            # Valio's own substitute, 1,414 in stock
-    r.expect("requested oat drink allowed", school.allowed(oddly), True)
-    r.expect("Oatly refused as substitute", school.allowed(oatly, substitute=True), False)
-    r.expect("same Oatly fine without the rule", AllergenPolicy().allowed(oatly, substitute=True), True)
-    r.codes([], ["ALLERGEN_RULE", "STOCK_UNKNOWN"])
-    r.checks.append("the refusal holds; no line carries ALLERGEN_RULE yet")
+    r = Result("S03", "Allergen-safe substitute for a school", "gateway HTTP")
+    g = _Gateway()
+    g.db.kitchen_settings.insert_one({"_id": "demo-kitchen", "excluded_allergens": ["AW"]})   # coeliac pupils
+    g.add_product("468465", "Oddlygood oat drink 1 l gluten free", 1.17, 9999999999.0, ["GO"])
+    g.add_product("470863", "Oatly Oat Drink Semi 1 L", 1.40, 1414.0, ["AW", "GO"])   # Valio's own substitute
+    resp = g.client.post(g.k + "/proposals", headers=g.agent, json={
+        "product_ids": ["468465", "470863"], "quantity": "60", "unit": "ST",
+        "requested_date": MON.isoformat(), "idempotency_key": "s03",
+        "text": "60 litres of the gluten-free oat drink for the coeliac pupils"})
+    resp.raise_for_status()
+    p = resp.json()
+    r.expect("lines", [(ln["product_id"], ln["quantity"]) for ln in p["lines"]], [("468465", "60")])
+    r.expect("total ex VAT", p["total_ex_vat"], "70.20")
+    r.expect("Oatly refused (contains AW)",
+             any(e["product_id"] == "470863" and e["reason"].startswith("ALLERGEN_RULE") for e in p["excluded"]), True)
+    r.codes(p["mandate"]["reason_codes"], ["ALLERGEN_RULE", "STOCK_UNKNOWN"])
     return r.finish()
 
 
