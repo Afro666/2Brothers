@@ -16,18 +16,21 @@ describe("mock API approvals", () => {
     expect(approvals.every((approval) => approval.approvalRef === approval.id)).toBe(true);
   });
 
-  it("places the measured-stock demo once while leaving unknown stock pending", async () => {
+  it("places the measured-stock demo once, and places unknown stock as waiting for the supplier", async () => {
     const api = createMockApi();
     await api.approve(DECISION, "human");
     expect((await api.getOrder(approval.orderId)).status).toBe("PLACED");
     await expect(api.approve(DECISION, "human")).rejects.toMatchObject({ code: "ALREADY_DECIDED" });
     const events = await api.listAudit({ orderId: approval.orderId });
     expect(events.filter((event) => event.kind === "order")).toHaveLength(1);
-    await expect(api.approve({ approvalId: unknownApproval.id,
+    const decided = await api.approve({ approvalId: unknownApproval.id,
       approvalRef: unknownApproval.approvalRef,
       expectedTotalExVat: unknownApproval.totalExVat,
-      expectedTotalInclVat: unknownApproval.totalInclVat }, "human")).rejects.toMatchObject({ code: "STOCK_UNKNOWN" });
-    expect((await api.getApproval(unknownApproval.id)).status).toBe("PENDING");
+      expectedTotalInclVat: unknownApproval.totalInclVat }, "human");
+    expect(decided.status).toBe("APPROVED");
+    const waiting = await api.getOrder(unknownApproval.orderId);
+    expect(waiting.status).toBe("PLACED");
+    expect(waiting.supplierMustConfirm.length).toBeGreaterThan(0);
   });
 
   it("approves, and records who approved in the audit log", async () => {
@@ -225,13 +228,7 @@ describe("mock API options", () => {
     expect(chosen).toMatchObject({ status: "PENDING", totalExVat: 2050, totalInclVat: optionC.totalInclVat });
     expect(chosen.options?.filter((option) => option.chosen).map((option) => option.id)).toEqual([optionC.id]);
     expect((await api.getOrder(approval.orderId)).status).toBe("NEEDS_APPROVAL");
-    // Option C's stock is not measured: the existing approval rule still refuses it.
-    await expect(
-      api.approve(
-        { approvalId: approval.id, approvalRef: approval.approvalRef, expectedTotalExVat: 2050, expectedTotalInclVat: optionC.totalInclVat },
-        "human",
-      ),
-    ).rejects.toMatchObject({ code: "STOCK_UNKNOWN" });
+    // Option C's stock is not measured: a person may still approve it (Aron, 2026-11-14).
 
     const back = await api.chooseOption!(approval.id, optionA.id, "human");
     expect(back).toMatchObject({ totalExVat: approval.totalExVat, totalInclVat: optionA.totalInclVat });

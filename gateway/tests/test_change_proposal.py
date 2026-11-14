@@ -68,7 +68,7 @@ def test_quantity_zero_removes_a_line_and_the_rest_can_be_approved(env):
     client, _, db = env
     p = milk(client, quantity="1000")
     assert qty(p) == [("462775", "51"), ("463335", "949")]
-    assert approve(client, p, p["expected_total"]).json()["error"]["code"] == "STOCK_UNKNOWN"
+    assert p["lines"][1]["unknown_stock"] is True     # a yes now would send it waiting for Valio (2026-11-14)
     out = change(client, p, lines=[{"product_id": "463335", "quantity": 0}]).json()
     assert qty(out) == [("462775", "51")]
     ok = approve(client, out, out["expected_total"], key="a2")

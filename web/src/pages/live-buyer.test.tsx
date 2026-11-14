@@ -175,6 +175,19 @@ describe("live Buyer request page", () => {
     expect(screen.getByText(`51 ST · ${name} (462775)`)).toBeVisible();
   });
 
+  it("shows what Nemotron did on the proposal, and the parser line for a parser answer (#1197)", async () => {
+    const trace = {
+      made_by: "model", reader: "buyer", model: "nemotron-3.5-super-vl", thinking: false, calls: 4,
+      seconds: 6.214, attempts: 1, truncated: false,
+      steps: [{ by: "model", attempt: 1, tool: "search_products", query: "lactose free milk", count: 12 }],
+    };
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ...ready, model_trace: trace })));
+    await fill();
+    await userEvent.click(await screen.findByText("4 model calls, 6.2 s, thinking off"));
+    expect(screen.getByText(/Searched the catalog for “lactose free milk”: 12 products/)).toBeVisible();
+    expect(screen.getByText("Quantities and prices: the engine. Approval: you.")).toBeVisible();
+  });
+
   it("shows unknown, not a blank or a crash, when the summary and the mandate are absent", async () => {
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ...ready, buyer_model: undefined })));
     await fill();

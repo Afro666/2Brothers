@@ -7,6 +7,7 @@ import { ApiError, type Draft, type KitchenNutrition } from "@/api/types";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -97,7 +98,10 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
           <Card key={first.productId}>
             <CardContent className="space-y-2 pt-6">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h3 className="font-medium">{first.productName}</h3>
+                <div className="flex min-w-0 items-center gap-3">
+                  <ProductThumb en={first.productName} size="md" />
+                  <h3 className="min-w-0 font-medium break-words">{first.productName}</h3>
+                </div>
                 <p className="text-sm font-medium tabular-nums">
                   {t("{amount} {unit} total", { amount: formatNumber(total), unit: first.unit })}
                 </p>

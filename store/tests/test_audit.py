@@ -116,6 +116,12 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(len(list_events(db)), 2)
         self.assertNotIn("_id", list_events(db)[0])
 
+    def test_list_events_keeps_the_newest_when_over_the_limit(self):
+        db = FakeDb()
+        for n in range(1, 6):
+            append_event(db, event(n))
+        self.assertEqual([e["seq"] for e in list_events(db, limit=3)], [3, 4, 5])
+
     def test_canonical_survives_the_mongo_round_trip(self):
         helsinki = timezone(timedelta(hours=2))
         sent = datetime(2026, 11, 13, 22, 5, 1, 123456, tzinfo=helsinki)

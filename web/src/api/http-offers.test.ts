@@ -73,6 +73,7 @@ describe("Supplier offers on the real gateway", () => {
         createdAt: "2026-11-14T05:10:00+00:00",
         proposalId: null,
         allergenDataKnown: false,
+        modelTrace: null, // an offer sent without model_trace (#1197)
       },
     ]);
     expect(calls.map((call) => call.route)).toEqual([`GET ${K}/supplier-offers`]);

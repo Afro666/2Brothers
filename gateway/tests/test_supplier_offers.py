@@ -318,3 +318,43 @@ def test_decline_is_a_persons_no_and_it_is_final(w):
     assert w.offer(key="again").json()["status"] == "DECLINED"                  # no second ask
     assert w.db.supplier_offers.count_documents({}) == 1 and w.db.proposals.count_documents({}) == 0
     assert NOW + timedelta(0) == w.at
+
+
+SELLER_TRACE = {"made_by": "model", "reader": "seller", "model": "nemotron-3.5-super-vl", "thinking": False,
+                "calls": 1, "failed": 0, "prompt_tokens": 812, "completion_tokens": 48,
+                "reasoning_tokens": 0, "seconds": 1.204, "attempts": 1, "truncated": False,
+                "steps": [{"by": "code", "attempt": 1, "tool": "shortlist", "count": 4},
+                          {"by": "model", "attempt": 1, "tool": "pick", "code": "PICKED"}]}
+
+
+def test_an_offer_keeps_the_selling_agents_trace_and_drops_unknown_fields(w):
+    """#1197: the trace is stored on the offer and served with it; nothing else rides along."""
+    sent = {**SELLER_TRACE, "system_prompt": "You work for a food wholesaler", "reply": "model words"}
+    offer = w.offer(model_trace=sent).json()
+    assert offer["model_trace"] == SELLER_TRACE
+    listed = w.client.get(K1, headers=HUMAN).json()["offers"][0]
+    assert listed["model_trace"] == SELLER_TRACE
+    stored = w.db.supplier_offers.find_one({})
+    assert "system_prompt" not in str(stored) and "model words" not in str(stored)
+
+
+def test_an_offer_without_a_trace_serves_null_and_a_retry_with_a_trace_is_the_same_offer(w):
+    first = w.offer().json()
+    assert first["model_trace"] is None
+    again = w.offer(model_trace=SELLER_TRACE)            # same key and body: not part of the payload
+    assert again.status_code == 200 and again.json()["offer_id"] == first["offer_id"]
+
+
+@pytest.mark.parametrize("trace", [
+    "a string", {**SELLER_TRACE, "calls": -1}, {**SELLER_TRACE, "reader": "buyer"},
+    {**SELLER_TRACE, "made_by": "rule"},                  # the offer's made_by is the model
+    {**SELLER_TRACE, "steps": [{"tool": "search_products", "query": "milk"}]},
+])
+def test_a_wrong_trace_is_refused_and_stores_nothing(w, trace):
+    assert code(w.offer(model_trace=trace)) == (422, "INVALID_REQUEST")
+    assert w.db.supplier_offers.count_documents({}) == 0
+
+
+def test_a_rule_offer_takes_a_rule_trace(w):
+    trace = {**SELLER_TRACE, "made_by": "rule", "model": None, "thinking": None, "calls": 0}
+    assert w.offer(made_by="rule", model_trace=trace).json()["model_trace"]["made_by"] == "rule"
