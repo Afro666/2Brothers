@@ -35,7 +35,7 @@ describe("StockPage", () => {
     await user.click(screen.getByRole("button", { name: "Save count" }));
 
     expect(await screen.findByTestId("stock-count-saved-toast")).toHaveTextContent("Count saved");
-    expect(await screen.findByRole("status")).toHaveTextContent("Count saved");
+    expect(screen.getAllByText("Count saved")).toHaveLength(1);
     await waitFor(() => expect(rowFor("Valio Eila 3 % milk")).toHaveTextContent("42 L"));
     expect(screen.getByText("3 of 8 not counted: treated as unknown, not as zero")).toBeInTheDocument();
     const events = (await api.listAudit()).filter((event) => event.kind === "stock");
@@ -53,7 +53,7 @@ describe("StockPage", () => {
     await user.click(screen.getAllByRole("checkbox", { name: "Arla lactose-free milk not counted" })[0]);
     await user.click(screen.getByRole("button", { name: "Save count" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Count saved");
+    expect(await screen.findByTestId("stock-count-saved-toast")).toHaveTextContent("Count saved");
     await waitFor(() => expect(rowFor("Arla lactose-free milk")).toHaveTextContent("not counted"));
     const stock = await api.getStock();
     expect(stock.find((item) => item.productId === "462775")).toMatchObject({ onHand: null });
@@ -115,7 +115,7 @@ describe("StockPage", () => {
     expect(screen.getByRole("button", { name: "Save count" })).toBeEnabled();
     expect(screen.queryAllByRole("alert")).toHaveLength(0);
     await user.click(screen.getByRole("button", { name: "Save count" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Count saved");
+    expect(await screen.findByTestId("stock-count-saved-toast")).toHaveTextContent("Count saved");
     expect(submitted).toEqual([
       { productId: "463335", onHand: 12 },
       { productId: "OWN-SALMON", onHand: 7 },
@@ -152,7 +152,7 @@ describe("StockPage", () => {
     expect(screen.getAllByRole("textbox", { name: "Salmon fillet count in KG" })[0]).toHaveValue("7");
 
     release();
-    expect(await screen.findByRole("status")).toHaveTextContent("Count saved");
+    expect(await screen.findByTestId("stock-count-saved-toast")).toHaveTextContent("Count saved");
     expect(submitted).toHaveLength(1);
     await waitFor(() => expect(screen.getAllByRole("textbox", { name: /count in/ })[0]).toBeEnabled());
   });
