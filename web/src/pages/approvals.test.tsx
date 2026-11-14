@@ -147,6 +147,25 @@ describe("ApprovalsPage", () => {
     expect(postEvent).toHaveBeenCalledWith("web_app_close", "{}");
   });
 
+  it("keeps the approval result when the Telegram web view's proxy throws", async () => {
+    const postEvent = vi.fn(() => {
+      throw new Error("web view gone");
+    });
+    window.TelegramWebviewProxy = { postEvent };
+    renderApp("/approvals?proposal=APR-312", withConfirmedStock());
+
+    fireEvent.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
+    expect(postEvent).toHaveBeenCalledWith("web_app_ready", "{}");
+    vi.useFakeTimers();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Yes, approve €148.76" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(postEvent).toHaveBeenCalledWith("web_app_close", "{}");
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(screen.getByRole("heading", { name: "Waiting for you (3)" })).toBeVisible();
+  });
+
   it("keeps the Mini App open when the gateway refuses the approval", async () => {
     const close = vi.fn();
     window.Telegram = { WebApp: { ready: vi.fn(), expand: vi.fn(), close } };
