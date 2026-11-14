@@ -1,0 +1,41 @@
+[
+ {
+  "row": 0,
+  "product_id": "462775",
+  "product_name": "Valio Eila lactose-free milk drink 1 l",
+  "date": "2026-11-16",
+  "unit": "L",
+  "demand": "2400",
+  "kitchens": 6,
+  "available": "1700",
+  "shortage": "700",
+  "suggested_buy": "700",
+  "risk": "SHORT"
+ },
+ {
+  "row": 1,
+  "product_id": "462921",
+  "product_name": "Valio whipping cream 38% 1 l",
+  "date": "2026-11-16",
+  "unit": "L",
+  "demand": "1250",
+  "kitchens": 4,
+  "available": "1012.4",
+  "shortage": "237.6",
+  "suggested_buy": "238",
+  "risk": "SHORT"
+ },
+ {
+  "row": 2,
+  "product_id": "463335",
+  "product_name": "Washed potato 10 kg",
+  "date": "2026-11-17",
+  "unit": "KG",
+  "demand": "380.5",
+  "kitchens": 3,
+  "available": null,
+  "shortage": null,
+  "suggested_buy": null,
+  "risk": "UNKNOWN"
+ }
+]

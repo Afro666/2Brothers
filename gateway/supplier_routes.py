@@ -85,17 +85,26 @@ def supplier_demand(db, valio, supplier_id: str, start: date, end: date, product
             "kitchens_sharing": len(names), "rows": rows}
 
 
-def mount_supplier(app, gw, principal) -> None:
-    def window(request: Request) -> tuple[date, date]:
-        q = request.query_params
-        try:
-            start, end = date.fromisoformat(q.get("from", "")), date.fromisoformat(q.get("to", ""))
-        except ValueError:
-            raise GatewayError(422, "INVALID_REQUEST", "from and to (YYYY-MM-DD) are required") from None
-        if end < start or end - start > timedelta(days=MAX_DAYS - 1):
-            raise GatewayError(422, "INVALID_REQUEST", f"from must be on or before to, at most {MAX_DAYS} days")
-        return start, end
+def window(request: Request) -> tuple[date, date]:
+    """The `from`/`to` window of a supplier view: both days included, at most MAX_DAYS."""
+    q = request.query_params
+    try:
+        start, end = date.fromisoformat(q.get("from", "")), date.fromisoformat(q.get("to", ""))
+    except ValueError:
+        raise GatewayError(422, "INVALID_REQUEST", "from and to (YYYY-MM-DD) are required") from None
+    if end < start or end - start > timedelta(days=MAX_DAYS - 1):
+        raise GatewayError(422, "INVALID_REQUEST", f"from must be on or before to, at most {MAX_DAYS} days")
+    return start, end
 
+
+def shortage_rows(db, valio, supplier_id: str, start: date, end: date) -> dict:
+    """The shortage-risk answer: the demand answer with only the rows that are not OK."""
+    answer = supplier_demand(db, valio, supplier_id, start, end)
+    answer["rows"] = [row for row in answer["rows"] if row["risk"] != "OK"]
+    return answer
+
+
+def mount_supplier(app, gw, principal) -> None:
     @app.get("/v1/suppliers/{supplier_id}/demand")
     def demand(supplier_id: str, request: Request, who=Depends(principal)):
         who.need_supplier("supplier:demand")
@@ -106,6 +115,4 @@ def mount_supplier(app, gw, principal) -> None:
     def shortage_risk(supplier_id: str, request: Request, who=Depends(principal)):
         who.need_supplier("supplier:demand")
         start, end = window(request)
-        answer = supplier_demand(gw().db, gw().valio, supplier_id, start, end)
-        answer["rows"] = [row for row in answer["rows"] if row["risk"] != "OK"]
-        return answer
+        return shortage_rows(gw().db, gw().valio, supplier_id, start, end)

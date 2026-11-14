@@ -1,0 +1,33 @@
+{
+ "model": "nemotron-3.5-super-vl",
+ "lines": [
+  {
+   "row": 0,
+   "product_id": "462775",
+   "text": "Tarve 2400 L, saatavilla 1700 L, ostoehdotus 700 L.",
+   "numbers": [
+    "2400",
+    "1700",
+    "700"
+   ]
+  },
+  {
+   "row": 1,
+   "product_id": "462921",
+   "text": "Tarve 1250 L, saatavilla 1012.4 L, ostoehdotus 238 L.",
+   "numbers": [
+    "1250",
+    "1012.4",
+    "238"
+   ]
+  },
+  {
+   "row": 2,
+   "product_id": "463335",
+   "text": "Saatavuus ei tiedossa, tarkista tuottajalta tai varastosta, koskee 3 keittiötä.",
+   "numbers": [
+    "3"
+   ]
+  }
+ ]
+}
