@@ -1239,6 +1239,31 @@ describe("the app on the gateway", () => {
     expect(screen.getByRole("button", { name: /Approve €101\.10 incl VAT/ })).toBeVisible();
   });
 
+  it("shows goods incl VAT + the delivery fee = the amount a person approves, on one card (mock jury, 14 Nov)", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    gateway({
+      ...inbox({ ...proposal, delivery_fee: "25.00", total_incl_vat: "37.74", vat_unknown: [], expected_total: "62.74" }),
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    expect(await screen.findByText("€37.74")).toBeVisible();
+    expect(screen.getByText(/^Delivery fee €25\.00/)).toBeVisible();
+    expect(screen.getByText("= €62.74 to approve")).toBeVisible();
+  });
+
+  it("shows no breakdown when the amount to approve is the total incl VAT", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    gateway({
+      ...inbox({ ...proposal, delivery_fee: "0.00", total_incl_vat: "91.20", vat_unknown: [], expected_total: "91.20" }),
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    expect(await screen.findByText("€91.20")).toBeVisible();
+    expect(screen.queryByText(/to approve/)).not.toBeInTheDocument();
+  });
+
   it("lets a person change the pcs of a READY proposal and then approve the new total", async () => {
     vi.stubEnv("VITE_LIVE_BUYER", "true");
     const user = userEvent.setup();
