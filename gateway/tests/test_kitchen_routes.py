@@ -118,6 +118,8 @@ def test_names_defaults_and_unknown_edit_rate(env):
     settings = client.get(K + "/settings", headers=AGENT).json()
     assert settings["defaults"]["stockout_cap"] == 1.8 and settings["defaults"]["service_level"]["A"] == "0.975"
     assert settings["defaults"]["certainty_premium_max"] == "3"
+    assert settings["defaults"]["approve_unconfirmed_manual"] is False      # #631: off until a person says yes
+    assert settings["defaults"]["standing_orders"] == {}
     assert client.get(K + "/auto-approve", headers=AGENT).json()["learning"]["edit_rate"] is None
 
 
