@@ -24,6 +24,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from gateway.service import Gateway, GatewayError
+from gateway.valio_client import ValioBusy
 from gateway.request_docs import (CreateNeedRequest, GetOfferRequest, PlaceOrderRequest,
                                   RequestApprovalRequest, SearchProductsRequest,
                                   SimulateOrderRequest, document_body)
@@ -178,6 +179,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
                 pass                # a failed audit write never turns a refusal into a 500
         return JSONResponse(status_code=exc.status,
                             content={"error": {"code": exc.code, "message": exc.message, **exc.extra}})
+
+    @app.exception_handler(ValioBusy)   # #1237: Valio rests after a 429, or our queue is too long
+    async def _supplier_busy(_: Request, exc: ValioBusy) -> JSONResponse:
+        return JSONResponse(status_code=503, headers={"Retry-After": str(exc.retry_after)},
+                            content={"error": {"code": "SUPPLIER_BUSY", "message": str(exc),
+                                               "retry_after": exc.retry_after}})
 
     @app.exception_handler(ValueError)
     async def _invalid(_: Request, exc: ValueError) -> JSONResponse:
@@ -348,6 +355,16 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     def list_proposals(kitchen_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
         return {"proposals": gw().list_proposals(kitchen_id)}
+
+    @app.get(k + "/catalog/products")
+    def catalog_products(kitchen_id: str, ids: str = "", who: Principal = Depends(principal)):
+        """Product rows by code, in the order asked (#304): for screens that hold codes."""
+        who.need("kitchen:read", kitchen_id)
+        codes = [c.strip() for c in ids.split(",") if c.strip()]
+        if not 1 <= len(codes) <= 200:
+            raise GatewayError(422, "INVALID_REQUEST", "ids is 1 to 200 product codes, comma-separated")
+        from store.products import get_products
+        return {"products": get_products(gw().db, codes, kitchen_id)}
 
     @app.get(k + "/label-checks")
     def label_checks(kitchen_id: str, who: Principal = Depends(principal)):

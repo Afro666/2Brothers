@@ -23,6 +23,7 @@ describe("settings area", () => {
       "Team",
       "Permissions",
       "API & MCP tokens",
+      "Approve from chat",
       "Notifications",
       "Developer",
       "Data & privacy",

@@ -80,7 +80,7 @@ function ApiApprovalsPage() {
   const [allDecided, setAllDecided] = useState(false);
   const recalls = useAsync(() => loadRecalls(api), [api]);
 
-  // The gateway has no route to change a proposal yet, so its proposals are read-only.
+  // An Api that cannot change a proposal shows it read-only (the gateway serves the change, #303).
   const canEdit = !api.live || api.live.has("changeProposal");
 
   async function approve(decision: ApprovalDecision): Promise<void> {

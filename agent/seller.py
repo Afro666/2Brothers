@@ -249,6 +249,7 @@ async def run(gw, *, today: date, apply: bool, limit: int = 3, kitchen: str | No
     when the nearer one gave no offer."""
     from gateway.service import GatewayError
     from gateway.supplier_offers import create
+    from gateway.valio_client import ValioBusy
     from store import supplier_offers as store
     from store.history import consenting_kitchens
     if kitchen is not None and kitchen not in consenting_kitchens(gw.db, supplier_id):
@@ -275,7 +276,11 @@ async def run(gw, *, today: date, apply: bool, limit: int = 3, kitchen: str | No
                 done.add((kitchen_id, row["product_id"]))
                 continue
             demand = Decimal(part["demand"])
-            entries = shortlist(gw, row, kitchen_id, demand, not_ok)
+            try:
+                entries = shortlist(gw, row, kitchen_id, demand, not_ok)
+            except ValioBusy as exc:        # #1237: Valio rests after a 429; every next read fails too
+                entry.update(result="SUPPLIER_BUSY", retry_after=exc.retry_after)
+                return report
             entry["shortlist"] = [f"{e['product_id']} {e['name']}" for e in entries]
             if not entries:
                 entry["result"] = "NO_SUBSTITUTE"
@@ -344,13 +349,17 @@ def main(argv=None) -> None:
                 emit(model.meter, run="seller", apply=a.apply)
                 await model.close()
 
-    report = asyncio.run(go())
-    for entry in report:
-        print(json.dumps(entry, ensure_ascii=False))
-    sent = sum(1 for e in report if e.get("result") == "OPEN")
-    would = sum(1 for e in report if e.get("result") == "DRY_RUN")
-    print(f"{len(report)} kitchen and product pairs looked at; "
-          + (f"{sent} offers sent" if a.apply else f"{would} offers would be sent (dry run, nothing sent)"))
+    try:
+        report = asyncio.run(go())
+        for entry in report:
+            print(json.dumps(entry, ensure_ascii=False))
+        sent = sum(1 for e in report if e.get("result") == "OPEN")
+        would = sum(1 for e in report if e.get("result") == "DRY_RUN")
+        print(f"{len(report)} kitchen and product pairs looked at; "
+              + (f"{sent} offers sent" if a.apply else f"{would} offers would be sent (dry run, nothing sent)"))
+    finally:
+        from gateway import webhooks
+        webhooks.wait_for_deliveries()
 
 
 if __name__ == "__main__":

@@ -75,7 +75,7 @@ async function copyText(text: string, element: HTMLElement | null, t: ReturnType
 }
 
 // The ref, not its value: the element exists only after the first render.
-function CopyButton({ text, label, target }: { text: string; label: string; target: RefObject<HTMLElement | null> }) {
+export function CopyButton({ text, label, target }: { text: string; label: string; target: RefObject<HTMLElement | null> }) {
   const t = useT();
   return (
     <Button type="button" variant="outline" size="sm" onClick={() => void copyText(text, target.current, t)}>
