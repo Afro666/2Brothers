@@ -25,6 +25,15 @@ function loadKitchenStock(api: Api, now: Date): Promise<{ stock: StockItem[]; de
   return Promise.all([api.getStock(), api.getDemand(from, to)]).then(([stock, demand]) => ({ stock, demand }));
 }
 
+/** The proposal that has waited longest. A null time (its creation step is outside the audit window) counts as oldest. */
+export function oldestWaiting(pending: ApprovalRequest[]): ApprovalRequest | undefined {
+  const createdAt = (approval: ApprovalRequest) => {
+    const time = approval.createdAt == null ? NaN : Date.parse(approval.createdAt);
+    return Number.isFinite(time) ? time : -Infinity;
+  };
+  return [...pending].sort((a, b) => createdAt(a) - createdAt(b))[0];
+}
+
 export function ApprovalTile({ api }: { api: Api }) {
   const t = useT();
   const state = useAsync(() => api.listApprovals(), [api]);
@@ -45,7 +54,7 @@ export function ApprovalTile({ api }: { api: Api }) {
       >
         {(approvals: ApprovalRequest[]) => {
           const pending = approvals.filter((approval) => approval.status === "PENDING");
-          const oldest = [...pending].sort((a, b) => Date.parse(a.createdAt ?? "") - Date.parse(b.createdAt ?? ""))[0];
+          const oldest = oldestWaiting(pending);
           const byNemotron = oldest?.modelTrace?.madeBy === "model" && isNemotron(oldest.modelTrace.model);
           return pending.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("Nothing is waiting.")}</p>
