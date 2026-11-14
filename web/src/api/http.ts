@@ -208,7 +208,7 @@ export function createHttpApi(baseUrl: string): Api {
   beforeWrite.add(dropReads);
   const events = createEventsHttp(baseUrl, kitchen, () => currentSession);
   const approval = async (id: string) => {
-    const [proposal, events] = await Promise.all([get(proposalPath(id)), auditEvents()]);
+    const [proposal, events] = await Promise.all([get(proposalPath(id)), auditEvents().catch(() => [])]);
     return mapApproval(proposal as Json, events);
   };
   // One key per ask, kept after a failure: a new key could create a second proposal.
@@ -278,7 +278,7 @@ export function createHttpApi(baseUrl: string): Api {
       ),
     ...createExplanationHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     async listApprovals() {
-      const [list, events] = await Promise.all([proposals(), auditEvents()]);
+      const [list, events] = await Promise.all([proposals(), auditEvents().catch(() => [])]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));
     },
     async countPendingApprovals() {

@@ -7,6 +7,12 @@ import { createMockApi } from "@/api/mock";
 import { ApiError } from "@/api/types";
 import { renderApp } from "@/test/render";
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
 function withConfirmedStock() {
   const api = createMockApi();
   const getOrder = api.getOrder;
@@ -113,7 +119,7 @@ describe("ApprovalsPage", () => {
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
-    expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved: €131.07 ex VAT, €148.76 incl VAT. The order may now be sent.");
     expect(await screen.findByRole("heading", { name: "Waiting for you (3)" })).toBeVisible();
     expect((await api.getApproval("APR-312")).status).toBe("APPROVED");
     expect(screen.queryByText("Proposal APR-312 has already been decided.")).toBeNull();
@@ -140,7 +146,7 @@ describe("ApprovalsPage", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €131.07 ex VAT, €148.76 incl VAT. The order may now be sent.");
     expect(close).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1999);
@@ -162,7 +168,7 @@ describe("ApprovalsPage", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
-    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €131.07 ex VAT, €148.76 incl VAT. The order may now be sent.");
     expect(postEvent).toHaveBeenCalledWith("web_app_close", "{}");
   });
 
@@ -181,7 +187,7 @@ describe("ApprovalsPage", () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
     expect(postEvent).toHaveBeenCalledWith("web_app_close", "{}");
-    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €131.07 ex VAT, €148.76 incl VAT. The order may now be sent.");
     expect(screen.getByRole("heading", { name: "Waiting for you (3)" })).toBeVisible();
   });
 
@@ -247,7 +253,7 @@ describe("ApprovalsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Decided" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Waiting for you (3)" })).toBeInTheDocument();
-    expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved: €131.07 ex VAT, €148.76 incl VAT. The order may now be sent.");
     await waitFor(async () => {
       const events = await api.listAudit();
       expect(events.filter((event) => event.kind === "approval").at(-1)).toMatchObject({
@@ -350,6 +356,69 @@ describe("ApprovalsPage", () => {
         ]),
       );
     });
+  });
+
+  it("keeps Approve and the edit controls disabled until a changed proposal has reloaded", async () => {
+    const user = userEvent.setup();
+    const api = withConfirmedStock();
+    const reload = deferred();
+    let holdReload = false;
+    const listApprovals = api.listApprovals;
+    api.listApprovals = vi.fn(async () => {
+      const rows = await listApprovals();
+      if (holdReload) await reload.promise;
+      return rows;
+    });
+    renderApp("/approvals", api);
+
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[0]);
+    const quantity = screen.getByRole("spinbutton", {
+      name: "Quantity for Arla 1 L lactose free fat free UHT milk drink (pieces)",
+    });
+    await user.clear(quantity);
+    await user.type(quantity, "40");
+    holdReload = true;
+    await user.click(screen.getByRole("button", { name: "Update Arla 1 L lactose free fat free UHT milk drink" }));
+
+    expect(screen.getByRole("button", { name: /Approve €148\.76 incl VAT/ })).toBeDisabled();
+    expect(quantity).toBeDisabled();
+
+    reload.resolve();
+    expect(await screen.findByRole("button", { name: /Approve €116\.68 incl VAT/ })).toBeEnabled();
+    expect(quantity).toBeEnabled();
+  });
+
+  it("keeps Approve and the edit controls disabled until an option choice has reloaded", async () => {
+    const user = userEvent.setup();
+    const api = withConfirmedStock();
+    const reload = deferred();
+    let holdReload = false;
+    const listApprovals = api.listApprovals;
+    api.listApprovals = vi.fn(async () => {
+      const rows = await listApprovals();
+      if (holdReload) await reload.promise;
+      return rows;
+    });
+    renderApp("/approvals", api);
+
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[0]);
+    const quantity = screen.getByRole("spinbutton", {
+      name: "Quantity for Arla 1 L lactose free fat free UHT milk drink (pieces)",
+    });
+    await user.click(screen.getByRole("button", { name: /^Option C:/ }));
+    holdReload = true;
+    await user.click(screen.getByRole("button", { name: "Choose option C: approve €2,326.75 incl VAT" }));
+
+    expect(screen.getByRole("button", { name: /Approve €148\.76 incl VAT/ })).toBeDisabled();
+    expect(quantity).toBeDisabled();
+
+    reload.resolve();
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    expect(within(dialog).getByRole("button", { name: "Yes, approve €2,326.75" })).toBeEnabled();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("spinbutton", {
+      name: "Quantity for Valio Eila 3 % lactose free milk drink 1 L (pieces)",
+    })).toBeEnabled();
   });
 
   it("adds a product using its suggested quantity", async () => {

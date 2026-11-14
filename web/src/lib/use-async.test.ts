@@ -28,11 +28,30 @@ describe("useAsync", () => {
     const { result } = renderHook(() => useAsync(load));
     await waitFor(() => expect(result.current.status).toBe("ready"));
 
-    act(() => result.current.reload());
+    act(() => { result.current.reload(); });
     expect(result.current.status).toBe("ready");
     expect(result.current.data).toBe("first");
 
     await act(async () => resolveNext("second"));
+    expect(result.current.data).toBe("second");
+  });
+
+  it("answers a reload only after the new data has arrived", async () => {
+    let resolveNext: (value: string) => void = () => {};
+    const load = vi.fn()
+      .mockResolvedValueOnce("first")
+      .mockImplementationOnce(() => new Promise<string>((resolve) => { resolveNext = resolve; }));
+    const { result } = renderHook(() => useAsync(load));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    let reloaded = false;
+    const waiting = result.current.reload().then(() => { reloaded = true; });
+    await act(async () => { await Promise.resolve(); });
+    expect(reloaded).toBe(false);
+
+    await act(async () => resolveNext("second"));
+    await waiting;
+    expect(reloaded).toBe(true);
     expect(result.current.data).toBe("second");
   });
 
@@ -130,7 +149,7 @@ describe("useAsync", () => {
       await act(async () => vi.advanceTimersByTimeAsync(0));
       expect(result.current.status).toBe("ready");
 
-      act(() => result.current.reload());
+      act(() => { result.current.reload(); });
       await act(async () => vi.advanceTimersByTimeAsync(0));
       expect(result.current.status).toBe("ready");
       expect(result.current.data).toBe("first");

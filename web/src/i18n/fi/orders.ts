@@ -341,6 +341,7 @@ export default {
   "The order cut-off for this line has passed. Choose another product or reject the proposal.": "Tämän rivin tilausaika on umpeutunut. Valitse toinen tuote tai hylkää ehdotus.",
   "The order cut-off has passed.": "Tilausaika on umpeutunut.",
   "The order is still pending.": "Tilaus odottaa edelleen.",
+  "The outcome is unknown: reload before you try again": "Lopputulos ei ole tiedossa: lataa uudelleen ennen kuin yrität uudelleen",
   "The order landed, but reading the answer failed. Re-read the order. Never resend.": "Tilaus saapui perille, mutta vastauksen luku epäonnistui. Lue tilaus uudelleen. Älä koskaan lähetä uudelleen.",
   "The order stays held by the recall.": "Takaisinveto pitää tilauksen edelleen pidossa.",
   "The outcome was never recorded. It may be placed. A human must check before anything else. Never resend.": "Tulosta ei koskaan tallennettu. Tilaus on ehkä tehty. Ihmisen on tarkistettava tämä ennen muita toimia. Älä koskaan lähetä uudelleen.",

@@ -1226,6 +1226,41 @@ describe("the app on the gateway", () => {
     await waitFor(() => expect(calls.some((call) => call.route === `POST ${K}/proposals/prop-1/approve`)).toBe(true));
     const approve = calls.find((call) => call.route === `POST ${K}/proposals/prop-1/approve`);
     expect(approve?.body).toMatchObject({ expected_total: "80.00" });
+    expect(await screen.findByTestId("approval-toast")).toHaveTextContent(
+      "Approved: €80.00 ex VAT, incl VAT: unknown (Oat drink). The order may now be sent.",
+    );
+    expect(screen.getByTestId("approval-toast")).not.toHaveTextContent("€80.00 incl VAT");
+  });
+
+  it("shows the approval and keeps the inbox readable when the audit log fails after approval", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    const user = userEvent.setup();
+    let current = proposal;
+    let auditBroken = false;
+    gateway({
+      "GET /api/v1/me": () => ({ kind: "human", name: "Demo approver", role: "approver", can_approve: true }),
+      [`GET ${K}/proposals`]: () => ({ proposals: [current] }),
+      [`GET ${K}/proposals/prop-1`]: () => current,
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
+      [`GET ${K}/audit`]: () => (auditBroken ? error(503, "UNAVAILABLE") : { events: auditEvents }),
+      [`POST ${K}/proposals/prop-1/approve`]: () => {
+        current = { ...proposal, status: "APPROVED", order_id: "ord-1" };
+        auditBroken = true;
+        return { proposal_id: "prop-1", ...placedOrder };
+      },
+      [`GET ${K}/orders/ord-1`]: () => placedOrder,
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    await user.click(await screen.findByRole("button", { name: /Approve €91\.20 incl VAT/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €91.20" }));
+
+    expect(await screen.findByTestId("approval-toast")).toHaveTextContent(
+      "Approved: €80.00 ex VAT, €91.20 incl VAT. The order may now be sent.",
+    );
+    expect(await screen.findByRole("heading", { name: "Decided" })).toBeVisible();
+    expect(screen.queryByText("UNAVAILABLE")).not.toBeInTheDocument();
   });
 
   it("shows a proposal's incl VAT from total_incl_vat, not from expected_total (#1630)", async () => {
@@ -1311,7 +1346,9 @@ describe("the app on the gateway", () => {
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €68.40" }));
 
-    await screen.findByText(/Approved: €68\.40 incl VAT/);
+    expect(await screen.findByTestId("approval-toast")).toHaveTextContent(
+      "Approved: €60.00 ex VAT, €68.40 incl VAT. The order may now be sent.",
+    );
     const approve = calls.find((call) => call.route === `POST ${K}/proposals/prop-1/approve`);
     expect(approve?.body).toMatchObject({ expected_total: "68.40" });
   });
