@@ -111,3 +111,18 @@ def test_failed_approve_writes_no_auto_approved_entry_and_the_proposal_waits(env
     kinds = [e["kind"] for e in events]
     assert "auto_approved" not in kinds and "order_placed" not in kinds
     assert [e for e in events if e["kind"] == "auto_approve_skipped"][0]["reason"] == "TOTAL_MISMATCH"
+
+
+def test_menu_plan_with_uncounted_kitchen_stock_is_never_auto_approved(env):
+    from gateway import autoapprove
+    client, _, db = env
+    history(db)
+    switch_on(client, "2000")
+    sim = {"mandate": {"verdict": "NEEDS_APPROVAL", "reason_codes": []}, "expected_total": "50",
+           "lines": [{"product_id": "462775", "reason_codes": [], "unknown_stock": False}]}
+    need = {"product_id": "462775", "quantity": "20", "unit": "L", "stock_counted": True}
+    counted = {"made_by": "menu_plan", "needs": [need]}
+    assert autoapprove.decide(db, "demo-kitchen", sim, counted, NOW)[0] is True
+    uncounted = {"made_by": "menu_plan", "needs": [{**need, "stock_counted": False}]}
+    ok, why, _ = autoapprove.decide(db, "demo-kitchen", sim, uncounted, NOW)
+    assert ok is False and "needs a person: kitchen stock not counted" in why

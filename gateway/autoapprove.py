@@ -6,7 +6,7 @@ Rules, all checked here in one place:
   decisions, and at most 10% of the approved proposals were edited before approval.
 - Only an approver switches it on, with a limit in EUR that they choose.
 - A proposal is approved automatically only when ALL of these hold: total at or under the
-  limit; no warning; every line has confirmed stock; nothing was excluded for a cut-off,
+  limit; no warning; every line has confirmed stock and counted kitchen stock; nothing was excluded for a cut-off,
   allergen, recall or sales block; nothing is short; no substitute; and every product on it
   was already on at least 3 human-approved orders of this kitchen without being edited.
 - The approval is recorded as "auto-approve (rule set by <person>)", with the evidence, and
@@ -136,6 +136,8 @@ def decide(db, kitchen_id: str, simulation: dict, request: dict, now: datetime) 
         why.append("stock is not confirmed")
     if Decimal(str(simulation.get("shortfall") or "0")) > 0:
         why.append("the request is not fully covered")
+    if any(n.get("stock_counted") is False for n in request.get("needs") or []):
+        why.append("needs a person: kitchen stock not counted")
     if request.get("event") or request.get("made_by") == "recall-buyer":
         why.append("not a routine order")
     try:
