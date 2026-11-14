@@ -155,6 +155,10 @@ export interface Order {
    * No person approved such an order, so it has no receipt.
    */
   placedBy?: "demo-seed";
+  /** What the person asked for (the proposal's request text); null or absent when not known. */
+  requestText?: string | null;
+  /** When the order was placed (the order's `created_at`); null or absent when not known. */
+  createdAt?: string | null;
 }
 
 /** The compact JWS plus a few claims decoded for display only; never verified in the browser. */
