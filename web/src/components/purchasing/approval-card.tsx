@@ -1,6 +1,7 @@
 import { Check, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 
+import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OptionCompare } from "@/components/purchasing/option-compare";
 import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
@@ -245,6 +246,7 @@ export function ApprovalCard({
         ) : null}
         {showDetails ? (
           <>
+        <ModelTracePanel trace={request.modelTrace} />
         {editCount > 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("Changed by you: {count} edits. The Buyer learns from these.", { count: editCount })}
