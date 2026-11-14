@@ -118,3 +118,46 @@ def test_names_defaults_and_unknown_edit_rate(env):
     settings = client.get(K + "/settings", headers=AGENT).json()
     assert settings["defaults"]["stockout_cap"] == 1.8 and settings["defaults"]["service_level"]["A"] == "0.975"
     assert client.get(K + "/auto-approve", headers=AGENT).json()["learning"]["edit_rate"] is None
+
+
+def _replays(client, coll, path, data):
+    """#754: a retried POST with the same key returns the first row and stores one row."""
+    before = coll.count_documents({})
+    first = client.post(K + path, headers=HUMAN, json={**data, "idempotency_key": "k1"})
+    assert first.status_code == 200, first.text
+    again = client.post(K + path, headers=HUMAN, json={**data, "idempotency_key": "k1"})
+    assert again.status_code == 200 and again.json() == first.json()
+    assert coll.count_documents({}) == before + 1
+    other = client.post(K + path, headers=HUMAN, json={**data, "name": "Other", "idempotency_key": "k1"})
+    assert other.status_code == 409 and other.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+    assert client.post(K + path, headers=HUMAN, json={**data, "idempotency_key": ""}).status_code == 422
+    assert coll.count_documents({}) == before + 1
+
+
+def test_supplier_post_replays_by_key(env):
+    client, _, db = env
+    _replays(client, db.suppliers, "/suppliers", {"name": "Bakery", "adapter": "manual"})
+
+
+def test_recipe_post_replays_by_key(env):
+    client, _, db = env
+    _replays(client, db.recipes, "/recipes", {"name": "Soup", "ingredients": SOUP["ingredients"]})
+    # the same key in another collection is another request
+    made = client.post(K + "/suppliers", headers=HUMAN, json={"name": "B", "adapter": "manual", "idempotency_key": "k1"})
+    assert made.status_code == 200
+
+
+def test_product_post_replays_by_key(env):
+    client, _, db = env
+    _replays(client, db.products, "/products", {"name": "Own oats", "unit": "KG", "supplier_id": "sup-bakery"})
+
+
+def test_menu_plan_put_twice_stores_one_week(env):
+    client, _, db = env
+    client.post(K + "/recipes", headers=HUMAN, json=SOUP)
+    plan = {"days": [{"date": "2026-11-16", "meal": "lunch", "recipe_id": "soup", "covers": 100}],
+            "idempotency_key": "m1"}
+    first = client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan)
+    again = client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan)
+    assert first.status_code == again.status_code == 200 and first.json() == again.json()
+    assert db.menu_plans.count_documents({}) == 1

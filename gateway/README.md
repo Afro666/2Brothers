@@ -317,6 +317,10 @@ a line:
 "write" = a signed-in person who is not a viewer, or an API token with the new scope
 `kitchen:write` (a POS or stock system). The Buyer agent token cannot write. `on_order` is
 0 with `on_order_known: false` until open orders are converted to kitchen units.
+A `POST /suppliers`, `/recipes` or `/products` with an `idempotency_key` replays: the same
+key (per kitchen and collection) with the same body returns the first row, with another
+body 409 `IDEMPOTENCY_KEY_REUSED`. A `PUT /menu-plans/{week}` replaces the week, so a repeat
+stores one plan.
 
 ## Supplier demand view (#33)
 

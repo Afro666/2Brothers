@@ -13,8 +13,9 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import Depends, Request
+from pymongo.errors import DuplicateKeyError
 
-from gateway.service import GatewayError
+from gateway.service import GatewayError, _hash
 
 
 def _json(value):
@@ -80,10 +81,34 @@ def register(app, gw, principal, body) -> None:
         async def create(kitchen_id: str, request: Request, who=Depends(principal)):
             actor = writer(who, kitchen_id)
             data = await body(request)
-            data.pop("idempotency_key", None)
-            item = guarded(lambda: collection().create(kitchen_id, data))
+            key = data.pop("idempotency_key", None)
+            if key is None:
+                item = guarded(lambda: collection().create(kitchen_id, data))
+                gw()._audit(kitchen_id, f"{name}_created", actor, name=item.get("name"))
+                return _json(item)
+            if not isinstance(key, str) or not key.strip() or len(key) > 200:
+                raise GatewayError(422, "INVALID_REQUEST", "idempotency_key: a string of 1 to 200 characters")
+            # One key per kitchen and collection. The claim is written before the row, so a
+            # retry that races the first request cannot make a second row.
+            keys, key_id, digest = gw().db.planning_keys, f"{kitchen_id}:{name}:{key}", _hash(data)
+            try:
+                keys.insert_one({"_id": key_id, "payload_hash": digest, "item": None})
+            except DuplicateKeyError:
+                done = keys.find_one({"_id": key_id}) or {}
+                if done.get("payload_hash") != digest:
+                    raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request") from None
+                if done.get("item") is None:
+                    raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "the first request with this key is still running") from None
+                return done["item"]
+            try:
+                item = guarded(lambda: collection().create(kitchen_id, data))
+            except Exception:
+                keys.delete_one({"_id": key_id})
+                raise
+            out = _json(item)
+            keys.update_one({"_id": key_id}, {"$set": {"item": out}})
             gw()._audit(kitchen_id, f"{name}_created", actor, name=item.get("name"))
-            return _json(item)
+            return out
 
         @app.put(k + path + "/{item_id}", name=f"update_{name}")
         async def update(kitchen_id: str, item_id: str, request: Request, who=Depends(principal)):
