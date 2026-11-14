@@ -4,7 +4,7 @@ import type { Order, OrderLine } from "@/types";
 
 type Translate = (text: string, vars?: TranslationVariables) => string;
 
-/** "…5kg MSC × 15 kg" reads as 5 kg times 15 kg (#1803): a name with a size before a weighed quantity takes a comma. */
+/** "…5kg MSC × 15 kg" reads as 5 kg times 15 kg (#1803): a name with a size before a quantity in kg or litres takes a comma. */
 const SIZE_IN_NAME = /\d\s*(?:kg|g|l|dl|cl|ml)\b/i;
 
 function lineTitle(line: OrderLine, t: Translate): string {

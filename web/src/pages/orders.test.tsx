@@ -163,14 +163,14 @@ describe("orders pages", () => {
   });
 
   it("shows the gateway's standard supplier note in Finnish (#1803)", async () => {
-    updateLanguage("fi", false);
+    updateLanguage("fi");
     try {
       renderApp("/orders/ORD-1042");
       const block = (await screen.findByRole("heading", { name: "Allekirjoitettu kuitti" })).closest("section")!;
       expect(within(block).getByText(/^Yhdyskäytävä kirjasi tilauksen\./)).toBeVisible();
       expect(within(block).queryByText(/Recorded by the gateway/)).not.toBeInTheDocument();
     } finally {
-      updateLanguage("en", false);
+      updateLanguage("en");
     }
   });
 
@@ -181,13 +181,13 @@ describe("orders pages", () => {
       ...order,
       receipt: { ...order.receipt!, supplierOutcome: "NOT_SENT", supplierNote: "Sent by e-mail to the sales desk." },
     });
-    updateLanguage("fi", false);
+    updateLanguage("fi");
     try {
       renderApp("/orders/ORD-1042", api);
       const block = (await screen.findByRole("heading", { name: "Allekirjoitettu kuitti" })).closest("section")!;
       expect(within(block).getByText("Sent by e-mail to the sales desk.")).toBeVisible();
     } finally {
-      updateLanguage("en", false);
+      updateLanguage("en");
     }
   });
 
@@ -208,7 +208,7 @@ describe("orders pages", () => {
     const mocked = (await api.getOrder("ORD-1042")).lines[0]!.offer;
     expect(mocked.closingTime).toBeNull();
     expect(lines.textContent).not.toContain("unknown");
-    expect(within(lines).queryByText("Compare")).not.toBeInTheDocument();
+    expect(within(lines).queryByText(/^(Compare|Price per)/)).not.toBeInTheDocument();
     expect(within(lines).queryByText("Available")).not.toBeInTheDocument();
     expect(within(lines).queryByText("Order by")).not.toBeInTheDocument();
     expect(within(lines).getByText(/Sold by weight, per kg/)).toBeVisible();
@@ -236,7 +236,7 @@ describe("orders pages", () => {
     renderApp("/orders/ORD-1043", api);
 
     const lines = await screen.findByRole("list", { name: "Lines" });
-    expect(within(lines).getByText("Compare").nextElementSibling).toHaveTextContent("unknown");
+    expect(within(lines).getByText("Price per l").nextElementSibling).toHaveTextContent("unknown");
     expect(within(lines).getByText("Available").nextElementSibling).toHaveTextContent("unknown");
     expect(within(lines).getByText("Order by").nextElementSibling).toHaveTextContent("unknown");
   });
