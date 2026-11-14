@@ -107,7 +107,8 @@ def match_delivery(order: dict, note: dict) -> dict:
             continue
         if code == UNKNOWN:
             kind = "UNREADABLE"
-        elif ln["replaces"] in ordered_ids:
+        elif ln["replaces"] in ordered_ids or ln["replaces"] == UNKNOWN:
+            # An unreadable "replaces" may be a substitute: unknown is never safe, a person checks.
             kind = "SUBSTITUTE"
         else:
             kind = "EXTRA"

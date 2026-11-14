@@ -120,3 +120,13 @@ def test_cli_offline(capsys):
     assert main([str(FIXTURES / "short.png")]) == 0
     out = capsys.readouterr().out
     assert "SHORT      462775" in out and "missing 15" in out and "next suggestion: 4 ST" in out
+
+
+def test_unreadable_replaces_needs_a_persons_ok():
+    reply = deepcopy(note("short"))
+    sub = next(ln for ln in reply["lines"] if ln["replaces"] != "none")
+    sub["replaces"] = "unknown"
+    result, _ = run("short", {"role": "assistant", "content": json.dumps(reply)})
+    [other] = result["not_ordered"]
+    assert other["status"] == "SUBSTITUTE" and other["replaces"] == "unknown"
+    assert other["needs_approval"] is True
