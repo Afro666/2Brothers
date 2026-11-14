@@ -157,6 +157,19 @@ def test_reject_writes_one_row_with_its_free_text_and_total(env):
     assert len(decision_rows(db, p, "rejected")) == 1
 
 
+def test_reject_without_a_reason_writes_one_row_with_a_null_reason(env):
+    client, _, db = env
+    p = milk(client, quantity="51")
+    url = f"{K}/proposals/{p['proposal_id']}/reject"
+    first = client.post(url, headers=HUMAN, json={})
+    assert first.status_code == 200, first.text
+    rows = decision_rows(db, p, "rejected")
+    assert len(rows) == 1 and rows[0]["reason"] is None
+    assert Decimal(str(rows[0]["total"])) == Decimal(p["expected_total"])
+    assert client.post(url, headers=HUMAN, json={}).status_code == 200
+    assert len(decision_rows(db, p, "rejected")) == 1
+
+
 def test_auto_approval_writes_no_human_decision_row(env):
     client, _, db = env
     history(db)
