@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 
+import { KitchenLogo } from "@/components/purchasing/kitchen-logo";
 import { ThemePicker } from "@/components/purchasing/theme-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -246,6 +247,7 @@ function Brand() {
         <ChefHat className="size-5" aria-hidden />
       </span>
       Kitchen Buyer
+      <KitchenLogo />
     </span>
   );
 }
