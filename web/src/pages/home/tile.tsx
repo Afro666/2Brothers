@@ -29,7 +29,7 @@ export function Tile({
   footer?: ReactNode;
 }) {
   return (
-    <Card className={emphasis ? "docket" : undefined}>
+    <Card className={emphasis ? "docket md:col-span-2" : undefined}>
       <CardHeader className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <CardTitle className="label-caps leading-4">{title}</CardTitle>
         {mark}

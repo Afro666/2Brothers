@@ -1,4 +1,6 @@
 export default {
+  "Today's docket": "Tämän päivän tilauslappu",
+  "Oldest waiting": "Vanhin odottava",
   "Who decides what": "Kuka päättää mistä",
   "Buyer agent": "Ostaja-agentti",
   "chooses the products": "valitsee tuotteet",
