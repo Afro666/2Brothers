@@ -1,6 +1,6 @@
 """Deterministic chef choices from supplier links, then catalog search."""
 from dataclasses import dataclass
-from store.search import allergen_codes
+from store.allergen_groups import excluded_allergen_codes
 
 
 @dataclass(frozen=True)
@@ -8,9 +8,8 @@ class AllergenPolicy:
     excluded: tuple[str, ...] = ()
 
     def __post_init__(self):
-        # AW is the gluten-cereals group, including its individual cereals.
-        wanted = ['gluten' if value.upper() == 'AW' else value for value in self.excluded]
-        object.__setattr__(self, 'excluded', tuple(allergen_codes(wanted)))
+        # A group code (AW, AN) means its whole group; the shared rule is in store.allergen_groups.
+        object.__setattr__(self, 'excluded', tuple(excluded_allergen_codes(self.excluded)))
 
     def allowed(self, product, *, substitute=False):
         if not isinstance(product, dict):

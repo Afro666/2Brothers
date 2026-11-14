@@ -236,13 +236,13 @@ class Gateway:
         A product whose known allergens include an excluded code is left out. A misspelt
         rule fails closed: no offer at all, never a silently wider one."""
         from store.buyer_context import excluded_allergens
-        from store.search import allergen_codes as to_codes
+        from store.allergen_groups import excluded_allergen_codes
         values = excluded_allergens(self.db, kitchen_id)
         if not values:
             return {}
         try:
-            # AW is the gluten-cereals group, as in agent/substitutes.AllergenPolicy.
-            rule = tuple(to_codes(["gluten" if v.upper() == "AW" else v for v in values]))
+            # A group code (AW, AN) means its whole group: the same helper as the Buyer agent.
+            rule = tuple(excluded_allergen_codes(values))
         except ValueError:
             raise GatewayError(409, "KITCHEN_POLICY_INVALID",
                                "the kitchen's allergen rule names an unknown allergen; fix it in settings") from None
