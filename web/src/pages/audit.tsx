@@ -20,7 +20,7 @@ export const AUDIT_PAGE = 50;
 export function AuditPage() {
   const t = useT();
   const api = useApi();
-  const state = useAsync(() => api.listAudit());
+  const state = useAsync(() => api.listAudit(), [], { keep: "audit" });
   useLiveEvents(["audit"], state.reload);
   const [order, setOrder] = useState("all");
   // `/audit?kind=search` chooses that kind (the Permissions page links here). Follows later

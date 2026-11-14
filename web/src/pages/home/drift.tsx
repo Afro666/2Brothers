@@ -96,6 +96,7 @@ function DriftTileBody({
         side === "kitchen" ? api.getDrift() : api.getSupplierDrift(),
       ),
     [api, side],
+    { keep: `drift-${side}` },
   );
   const showKitchen = side === "supplier";
   if (state.status === "ready" && state.data === null) return null;
