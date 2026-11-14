@@ -159,7 +159,7 @@ def test_person_approval_is_described_apart_from_the_agent_tools(client):
     c = card(client).json()
     pa = c["personApproval"]
     assert pa["token_prefix"] == "tka_" and pa["hours_default"] == 8 and pa["hours_max"] == 24
-    assert pa["create"] == K + "/approval-tokens"
+    assert pa["create"] == "/v1/kitchens/{kitchen_id}/approval-tokens"
     assert {t["name"] for t in pa["mcp_tools"]} == {"list_proposals", "get_proposal", "list_orders",
                                                      "approve_proposal", "reject_proposal"}
     mcp = next(i for i in c["additionalInterfaces"] if i["transport"].startswith("MCP"))
