@@ -168,3 +168,19 @@ Roles: `approver` approves, rejects and manages tokens; `chef` asks; `viewer` re
 The first approver comes from the server `.env`: `DEMO_USER_EMAIL`, `DEMO_USER_PASSWORD`.
 Set `GATEWAY_REQUIRE_LOGIN=true` to switch off the shared human token: then only a signed-in
 person can approve (the open demo stops being open). The Buyer agent token is not affected.
+
+## Standing-order drift (#377)
+
+`gateway/drift_routes.py` serves the two contract routes from `store.drift`:
+
+- `GET /v1/kitchens/{k}/drift` (`kitchen:read`): `{"week": "<Monday>", "warnings": [...]}`,
+  biggest change first. `week` is the Monday of the last full week, also with no warnings.
+  A warning carries `product_name` when the catalog knows the product.
+- `GET /v1/suppliers/{s}/demand/drift` (`supplier:demand`): the same shape over every
+  kitchen whose consent names the supplier, each warning with `kitchen_id` and
+  `kitchen_name`. A kitchen without active consent is never read. No token can hold
+  `supplier:demand` yet, so today only a person's session reaches this route.
+- A database failure is 503 `DRIFT_UNAVAILABLE`, without the driver's message.
+
+The aggregation needs Atlas or MongoDB 7; the tests replace it
+(`gateway/tests/test_drift_routes.py`).

@@ -453,6 +453,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
             raise GatewayError(409, "IDEMPOTENCY_CONFLICT", "event_id reused with other content") from None
         return {"event_id": entry["event"]["event_id"], "stored": True}
 
+    # Standing-order drift (#377): kitchen and supplier views.
+    from gateway.drift_routes import mount_drift
+    mount_drift(app, gw, principal)
+
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp
     mount_mcp(app)
