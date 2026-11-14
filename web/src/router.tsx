@@ -12,7 +12,7 @@ import { KitPage } from "@/pages/kit";
 import { RoleProvider } from "@/lib/role";
 import { ApprovalsPage } from "@/pages/approvals";
 import { AuditPage } from "@/pages/audit";
-import { CatalogPage } from "@/pages/catalog";
+import { CatalogPage, validateCatalogSearch } from "@/pages/catalog";
 import { DemandPage } from "@/pages/demand";
 import { ForecastPage } from "@/pages/forecast";
 import { OrderDetailPage } from "@/pages/order-detail";
@@ -48,7 +48,12 @@ const orderDetailRoute = createRoute({
   component: OrderDetailPage,
 });
 const auditRoute = createRoute({ getParentRoute: () => rootRoute, path: "/audit", component: AuditPage });
-const catalogRoute = createRoute({ getParentRoute: () => rootRoute, path: "/catalog", component: CatalogPage });
+const catalogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/catalog",
+  validateSearch: validateCatalogSearch,
+  component: CatalogPage,
+});
 const stockRoute = createRoute({ getParentRoute: () => rootRoute, path: "/stock", component: StockPage });
 const suppliersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/suppliers", component: SuppliersPage });
 const productsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/products", component: ProductsPage });
