@@ -10,6 +10,7 @@ import {
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import { TONE_CLASSES, type Tone } from "@/lib/tone";
 import type { OrderStatus } from "@/types";
 
@@ -74,6 +75,7 @@ export const STATUS_META: Record<OrderStatus, StatusMeta> = {
 
 /** Order state as a badge; the tooltip (hover or keyboard focus) says what it means. */
 export function StatusBadge({ status, className }: { status: OrderStatus; className?: string }) {
+  const t = useT();
   const meta = STATUS_META[status];
   const Icon = meta.icon;
   return (
@@ -89,10 +91,10 @@ export function StatusBadge({ status, className }: { status: OrderStatus; classN
           )}
         >
           <Icon className="size-3" aria-hidden />
-          {meta.label}
+          {t(meta.label)}
         </span>
       </TooltipTrigger>
-      <TooltipContent className="max-w-64">{meta.meaning}</TooltipContent>
+      <TooltipContent className="max-w-64">{t(meta.meaning)}</TooltipContent>
     </Tooltip>
   );
 }

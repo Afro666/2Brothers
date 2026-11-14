@@ -9,9 +9,11 @@ import { StatusBadge } from "@/components/purchasing/status-badge";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatEur } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 
 export function OrdersPage() {
+  const t = useT();
   const api = useApi();
   const state = useAsync(() => api.listOrders());
 
@@ -19,15 +21,15 @@ export function OrdersPage() {
     <AppShell activeId="orders">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Order history</h1>
+          <h1 className="text-2xl font-semibold">{t("Order history")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Orders a person approved, and where each one stands.
+            {t("Orders a person approved, and where each one stands.")}
           </p>
         </header>
         {state.status === "loading" ? <LoadingState /> : null}
         {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
         {state.status === "ready" && state.data.length === 0 ? (
-          <EmptyState title="No orders yet">Orders will appear here.</EmptyState>
+          <EmptyState title={t("No orders yet")}>{t("Orders will appear here.")}</EmptyState>
         ) : null}
         {state.status === "ready" && state.data.length > 0 ? (
           <ul className="space-y-3">
@@ -46,7 +48,10 @@ export function OrdersPage() {
                         <UrgencyBadge urgency={order.urgency} />
                       </div>
                       <p className="text-sm tabular-nums text-muted-foreground">
-                        Delivery {formatDate(order.deliveryDate)} · {formatEur(order.totalInclVat)} incl VAT
+                        {t("Delivery {date} · {amount} incl VAT", {
+                          date: t(formatDate(order.deliveryDate)),
+                          amount: formatEur(order.totalInclVat),
+                        })}
                       </p>
                     </Link>
                   </CardContent>

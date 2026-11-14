@@ -2,6 +2,7 @@ import { CircleCheck, CircleQuestionMark, TriangleExclamationPoint, Ban, type Lu
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TONE_CLASSES, type Tone } from "@/lib/tone";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ShortageRisk } from "@/types";
 
@@ -42,6 +43,7 @@ export const RISK_META: Record<ShortageRisk, RiskMeta> = {
 
 /** Shortage risk as a badge; unknown has a dashed border so it never looks measured. */
 export function RiskBadge({ risk, className }: { risk: ShortageRisk; className?: string }) {
+  const t = useT();
   const meta = RISK_META[risk];
   const Icon = meta.icon;
   return (
@@ -58,10 +60,10 @@ export function RiskBadge({ risk, className }: { risk: ShortageRisk; className?:
           )}
         >
           <Icon className="size-3" aria-hidden />
-          {meta.label}
+          {t(meta.label)}
         </span>
       </TooltipTrigger>
-      <TooltipContent className="max-w-64">{meta.meaning}</TooltipContent>
+      <TooltipContent className="max-w-64">{t(meta.meaning)}</TooltipContent>
     </Tooltip>
   );
 }

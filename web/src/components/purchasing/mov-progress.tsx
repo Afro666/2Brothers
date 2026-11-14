@@ -1,6 +1,7 @@
 import { Truck } from "lucide-react";
 
 import { formatEur } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { MovState } from "@/types";
 
@@ -9,11 +10,12 @@ import type { MovState } from "@/types";
  * not a wall: below it the order can still go, and pays the delivery fee.
  */
 export function MovProgress({ mov, className }: { mov: MovState | null; className?: string }) {
+  const t = useT();
   if (mov == null) {
     return (
       <p className={cn("inline-flex items-center gap-1.5 text-sm text-muted-foreground", className)}>
         <Truck className="size-4" aria-hidden />
-        Free-delivery threshold and delivery fee unknown: the supplier's terms are not set.
+        {t("Free-delivery threshold and delivery fee unknown: the supplier's terms are not set.")}
       </p>
     );
   }
@@ -25,20 +27,25 @@ export function MovProgress({ mov, className }: { mov: MovState | null; classNam
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
         <span className="inline-flex items-center gap-1.5 font-medium">
           <Truck className="size-4 text-muted-foreground" aria-hidden />
-          {met ? "Free delivery reached" : `${formatEur(gap)} to free delivery`}
+          {met ? t("Free delivery reached") : t("{amount} to free delivery", { amount: formatEur(gap) })}
         </span>
         <span className="text-muted-foreground tabular-nums">
           {/* Once reached, a gateway order knows the threshold only as "met", so it is not named. */}
-          {met ? formatEur(mov.current) : `${formatEur(mov.current)} of ${formatEur(mov.threshold)}`} ex VAT
+          {met
+            ? t("{amount} ex VAT", { amount: formatEur(mov.current) })
+            : t("{current} of {threshold} ex VAT", {
+                current: formatEur(mov.current),
+                threshold: formatEur(mov.threshold),
+              })}
         </span>
       </div>
       <div
         role="progressbar"
-        aria-label="Order value toward free delivery"
+        aria-label={t("Order value toward free delivery")}
         aria-valuemin={0}
         aria-valuemax={mov.threshold}
         aria-valuenow={Math.min(mov.current, mov.threshold)}
-        aria-valuetext={met ? "Free delivery reached" : `${formatEur(gap)} to go`}
+        aria-valuetext={met ? t("Free delivery reached") : t("{amount} to go", { amount: formatEur(gap) })}
         className="h-2 overflow-hidden rounded-full bg-muted"
       >
         <div
@@ -48,7 +55,9 @@ export function MovProgress({ mov, className }: { mov: MovState | null; classNam
       </div>
       {met ? null : (
         <p className="text-xs text-muted-foreground">
-          Below the threshold the order still goes, with a {formatEur(mov.deliveryFee)} delivery fee.
+          {t("Below the threshold the order still goes, with a {fee} delivery fee.", {
+            fee: formatEur(mov.deliveryFee),
+          })}
         </p>
       )}
     </div>

@@ -29,6 +29,7 @@ import {
   isPassed,
   isStockUnconfirmed,
 } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
@@ -79,6 +80,7 @@ export function ApprovalCard({
   /** Recall alerts on this order; a blocked line still on it holds the approval. */
   recalls?: RecallAlert[];
 }) {
+  const t = useT();
   const [open, setOpen] = useState<"approve" | "reject" | null>(null);
   const [status, setStatus] = useState(request.status);
   const [reason, setReason] = useState("");
@@ -102,11 +104,11 @@ export function ApprovalCard({
   const held = status === "BLOCKED_BY_RECALL";
   const canDecide = pending || (held && onReject != null);
   const stockMessage =
-    recallHold(recalls, order) ??
+    recallHold(recalls, order, t) ??
     (!order || order.lines.length === 0
-      ? "Order details are unavailable. Reload them before approving."
+      ? t("Order details are unavailable. Reload them before approving.")
       : order.lines.some((line) => isStockUnconfirmed(line.offer))
-        ? "Waiting for supplier stock confirmation. You can review or reject this proposal; approval is available once stock is confirmed."
+        ? t("Waiting for supplier stock confirmation. You can review or reject this proposal; approval is available once stock is confirmed.")
         : null);
   const editing = pending && onChangeProposal != null && listAddableProducts != null;
 
@@ -145,16 +147,20 @@ export function ApprovalCard({
       await call();
       setStatus(next);
     } catch (e) {
-      const what = next === "APPROVED" ? "Approval" : "Rejection";
+      const what = next === "APPROVED" ? t("Approval") : t("Rejection");
       const recallBlocked = next === "APPROVED" && e instanceof ApiError && e.code === "BLOCKED_BY_RECALL";
       const message =
         recallBlocked
-          ? "This order is blocked by a recall. Reject it and approve the replacement order instead"
+          ? t("This order is blocked by a recall. Reject it and approve the replacement order instead")
           : e instanceof Error
             ? e.message
             : String(e);
       setError(
-        `${what} failed: ${message}. ${recallBlocked || held ? "The order stays held by the recall." : "The order is still pending."}`,
+        t("{what} failed: {message}. {outcome}", {
+          what,
+          message,
+          outcome: recallBlocked || held ? t("The order stays held by the recall.") : t("The order is still pending."),
+        }),
       );
     } finally {
       setBusy(false);
@@ -171,18 +177,29 @@ export function ApprovalCard({
       <CardHeader className="px-0">
         <CardTitle className="text-[19px] leading-[25px] font-[650]">{request.summary}</CardTitle>
         <CardDescription className="font-mono text-xs leading-4 font-[450]">
-          {request.lineCount} {request.lineCount === 1 ? "line" : "lines"} · delivery {formatDate(request.deliveryDate)}{" "}
-          · asked by {request.requestedBy}, {formatDateTime(request.createdAt)}
+          {request.lineCount === 1
+            ? t("{count} line · delivery {date} · asked by {name}, {created}", {
+                count: request.lineCount,
+                date: formatDate(request.deliveryDate),
+                name: request.requestedBy,
+                created: t(formatDateTime(request.createdAt)),
+              })
+            : t("{count} lines · delivery {date} · asked by {name}, {created}", {
+                count: request.lineCount,
+                date: formatDate(request.deliveryDate),
+                name: request.requestedBy,
+                created: t(formatDateTime(request.createdAt)),
+              })}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-0">
         <dl className="space-y-3 border-t pt-3">
           <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-sm text-muted-foreground">Total ex VAT</dt>
+            <dt className="text-sm text-muted-foreground">{t("Total ex VAT")}</dt>
             <dd className="font-mono text-sm tabular-nums">{formatEur(request.totalExVat)}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-sm text-muted-foreground">Total incl VAT</dt>
+            <dt className="text-sm text-muted-foreground">{t("Total incl VAT")}</dt>
             <dd className="inline-block border-b-[3px] border-double border-foreground text-2xl leading-7 font-bold tabular-nums">
               {formatEur(request.totalInclVat)}
             </dd>
@@ -190,11 +207,11 @@ export function ApprovalCard({
         </dl>
         {editCount > 0 ? (
           <p className="text-sm text-muted-foreground">
-            Changed by you: {editCount} edits. The Buyer learns from these.
+            {t("Changed by you: {count} edits. The Buyer learns from these.", { count: editCount })}
           </p>
         ) : null}
         <section className="space-y-2">
-          <h4 className="label-caps">What to check</h4>
+          <h4 className="label-caps">{t("What to check")}</h4>
           <ul className="space-y-2">
             {request.reasons.map((r) => (
               <li key={r.rule} className="border-l-[3px] border-warning py-1 pl-3 text-sm">
@@ -224,7 +241,7 @@ export function ApprovalCard({
               aria-expanded={showOrder}
               onClick={() => setShowOrder((shown) => !shown)}
             >
-              {showOrder ? "Hide order lines" : "Show order lines"}
+              {showOrder ? t("Hide order lines") : t("Show order lines")}
             </Button>
             {showOrder ? (
               <div className="space-y-4">
@@ -239,23 +256,26 @@ export function ApprovalCard({
                           </div>
                         </div>
                         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                          <dt className="text-muted-foreground">Stock</dt>
-                          <dd>{formatOfferStock(line.offer)}</dd>
-                          <dt className="text-muted-foreground">Cut-off</dt>
+                          <dt className="text-muted-foreground">{t("Stock")}</dt>
+                          <dd>{t(formatOfferStock(line.offer))}</dd>
+                          <dt className="text-muted-foreground">{t("Cut-off")}</dt>
                           <dd>
-                            {formatDateTime(line.offer.closingTime)}
-                            {isPassed(line.offer.closingTime, now) ? " (passed)" : ""}
+                            {t(formatDateTime(line.offer.closingTime))}
+                            {isPassed(line.offer.closingTime, now) ? t(" (passed)") : ""}
                           </dd>
-                          <dt className="text-muted-foreground">Unit price</dt>
-                          <dd>{formatEur(line.offer.priceExVat)} ex VAT</dd>
+                          <dt className="text-muted-foreground">{t("Unit price")}</dt>
+                          <dd>{t("{amount} ex VAT", { amount: t(formatEur(line.offer.priceExVat)) })}</dd>
                         </dl>
-                        <p className="text-sm text-muted-foreground">Why: {line.why}</p>
+                        <p className="text-sm text-muted-foreground">{t("Why:")} {line.why}</p>
                         <div className="flex items-end gap-2">
                           <label
                             className="grid min-w-0 flex-1 gap-1 text-sm font-medium"
                             htmlFor={`qty-${request.id}-${line.product.id}`}
                           >
-                            Quantity for {line.product.names.en} ({line.product.salesUnit})
+                            {t("Quantity for {product} ({unit})", {
+                              product: line.product.names.en,
+                              unit: line.product.salesUnit,
+                            })}
                             <Input
                               id={`qty-${request.id}-${line.product.id}`}
                               type="number"
@@ -277,7 +297,7 @@ export function ApprovalCard({
                               Number(quantityValue(line)) < 1 ||
                               Number(quantityValue(line)) === line.quantity
                             }
-                            aria-label={`Update ${line.product.names.en}`}
+                            aria-label={t("Update {product}", { product: line.product.names.en })}
                             onClick={() =>
                               void changeProposal({
                                 type: "SET_QUANTITY",
@@ -286,16 +306,16 @@ export function ApprovalCard({
                               })
                             }
                           >
-                            Update
+                            {t("Update")}
                           </Button>
                           <Button
                             type="button"
                             variant="destructive"
                             disabled={busy}
-                            aria-label={`Remove ${line.product.names.en}`}
+                            aria-label={t("Remove {product}", { product: line.product.names.en })}
                             onClick={() => void changeProposal({ type: "REMOVE_LINE", productId: line.product.id })}
                           >
-                            Remove
+                            {t("Remove")}
                           </Button>
                         </div>
                       </li>
@@ -307,21 +327,21 @@ export function ApprovalCard({
                 {editing ? (
                   <section className="space-y-3 border-t pt-4" aria-labelledby={`add-products-${request.id}`}>
                     <h4 id={`add-products-${request.id}`} className="font-medium">
-                      Add products
+                      {t("Add products")}
                     </h4>
                     <label className="grid gap-1 text-sm font-medium" htmlFor={`product-search-${request.id}`}>
-                      Search products
+                      {t("Search products")}
                       <Input
                         id={`product-search-${request.id}`}
                         type="search"
                         value={search}
                         disabled={busy}
                         onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Search by name"
+                        placeholder={t("Search by name")}
                       />
                     </label>
                     {addables.status === "loading" ? (
-                      <p className="text-sm text-muted-foreground">Loading products…</p>
+                      <p className="text-sm text-muted-foreground">{t("Loading products…")}</p>
                     ) : null}
                     {addables.status === "error" ? (
                       <p role="alert" className="text-sm text-danger">
@@ -330,7 +350,7 @@ export function ApprovalCard({
                     ) : null}
                     {addables.status === "ready" ? (
                       addables.data.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No products found.</p>
+                        <p className="text-sm text-muted-foreground">{t("No products found.")}</p>
                       ) : (
                         <ul className="divide-y">
                           {addables.data.map((item) => (
@@ -359,7 +379,7 @@ export function ApprovalCard({
           <>
             {held ? (
               <p role="status" className="w-full text-sm text-muted-foreground sm:mr-auto">
-                Blocked by a recall. This proposal cannot be approved as it is.
+                {t("Blocked by a recall. This proposal cannot be approved as it is.")}
               </p>
             ) : null}
             {error && (
@@ -369,12 +389,12 @@ export function ApprovalCard({
             )}
             <Button variant="outline" className="w-full sm:w-auto" disabled={busy || !!approvalBlockedReason} onClick={() => setOpen("reject")}>
               <X aria-hidden />
-              Reject
+              {t("Reject")}
             </Button>
             {pending ? (
               <Button className="w-full sm:w-auto" disabled={busy || !!stockMessage || !!approvalBlockedReason} onClick={() => setOpen("approve")}>
                 <Check aria-hidden />
-                Approve {formatEur(request.totalInclVat)} incl VAT
+                {t("Approve {amount} incl VAT", { amount: formatEur(request.totalInclVat) })}
               </Button>
             ) : null}
           </>
@@ -388,16 +408,19 @@ export function ApprovalCard({
           >
             {status === "APPROVED" ? (
               <span className="stamp text-lg" aria-hidden>
-                Approved
+                {t("Approved")}
               </span>
             ) : null}
             {status === "APPROVED"
-              ? `Approved: ${formatEur(request.totalExVat)} ex VAT, ${formatEur(request.totalInclVat)} incl VAT. The order may now be sent.`
+              ? t("Approved: {exVat} ex VAT, {inclVat} incl VAT. The order may now be sent.", {
+                  exVat: formatEur(request.totalExVat),
+                  inclVat: formatEur(request.totalInclVat),
+                })
               : status === "IN_PROGRESS"
-                ? "In progress. This proposal cannot be approved yet."
+                ? t("In progress. This proposal cannot be approved yet.")
                 : status === "BLOCKED_BY_RECALL"
-                  ? "Blocked by a recall. This proposal cannot be approved as it is."
-                  : "Rejected. This order will not be sent."}
+                  ? t("Blocked by a recall. This proposal cannot be approved as it is.")
+                  : t("Rejected. This order will not be sent.")}
           </p>
         )}
         {canDecide && approvalBlockedReason ? (
@@ -408,10 +431,12 @@ export function ApprovalCard({
       <Dialog open={open === "approve"} onOpenChange={(o) => setOpen(o ? "approve" : null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Approve this order?</DialogTitle>
+            <DialogTitle>{t("Approve this order?")}</DialogTitle>
             <DialogDescription>
-              You approve exactly {formatEur(request.totalExVat)} ex VAT ({formatEur(request.totalInclVat)} incl VAT).
-              If the price or stock moves before it is placed, the gateway refuses it and asks again.
+              {t("You approve exactly {exVat} ex VAT ({inclVat} incl VAT). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
+                exVat: formatEur(request.totalExVat),
+                inclVat: formatEur(request.totalInclVat),
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -428,11 +453,11 @@ export function ApprovalCard({
                 )
               }
             >
-              Yes, approve {formatEur(request.totalInclVat)}
+              {t("Yes, approve {amount}", { amount: formatEur(request.totalInclVat) })}
             </Button>
             <DialogClose asChild>
               <Button variant="outline" disabled={busy}>
-                Cancel
+                {t("Cancel")}
               </Button>
             </DialogClose>
           </DialogFooter>
@@ -442,16 +467,16 @@ export function ApprovalCard({
       <Dialog open={open === "reject"} onOpenChange={(o) => setOpen(o ? "reject" : null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Reject this order?</DialogTitle>
-            <DialogDescription>This order will not be sent. Your reason goes in the audit log.</DialogDescription>
+            <DialogTitle>{t("Reject this order?")}</DialogTitle>
+            <DialogDescription>{t("This order will not be sent. Your reason goes in the audit log.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor={reasonId}>Reason (optional)</Label>
+            <Label htmlFor={reasonId}>{t("Reason (optional)")}</Label>
             <Textarea
               id={reasonId}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="For example: 3 % fat is not right for the dessert menu"
+              placeholder={t("For example: 3 % fat is not right for the dessert menu")}
             />
           </div>
           <DialogFooter>
@@ -460,11 +485,11 @@ export function ApprovalCard({
               disabled={busy || !!approvalBlockedReason}
               onClick={() => decide("REJECTED", () => onReject?.(request.id, reason.trim()))}
             >
-              Reject
+              {t("Reject")}
             </Button>
             <DialogClose asChild>
               <Button variant="outline" disabled={busy}>
-                Cancel
+                {t("Cancel")}
               </Button>
             </DialogClose>
           </DialogFooter>
@@ -483,6 +508,7 @@ function AddableRow({
   disabled: boolean;
   onAdd: (quantity: number) => void;
 }) {
+  const t = useT();
   const [quantity, setQuantity] = useState(String(item.suggestedQuantity));
   const id = useId();
   return (
@@ -492,17 +518,20 @@ function AddableRow({
         {item.product.id} · {item.product.salesUnit}
       </div>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-        <dt className="text-muted-foreground">Stock on hand</dt>
-        <dd>{item.onHand == null ? "not counted" : formatStock(item.onHand, item.product.salesUnit)}</dd>
-        <dt className="text-muted-foreground">On order</dt>
-        <dd>{item.onOrder == null ? "unknown" : `${formatNumber(item.onOrder)} ${item.product.salesUnit}`}</dd>
-        <dt className="text-muted-foreground">Price</dt>
-        <dd>{formatEur(item.offer.priceExVat)} ex VAT</dd>
+        <dt className="text-muted-foreground">{t("Stock on hand")}</dt>
+        <dd>{item.onHand == null ? t("not counted") : t(formatStock(item.onHand, item.product.salesUnit))}</dd>
+        <dt className="text-muted-foreground">{t("On order")}</dt>
+        <dd>{item.onOrder == null ? t("unknown") : `${formatNumber(item.onOrder)} ${item.product.salesUnit}`}</dd>
+        <dt className="text-muted-foreground">{t("Price")}</dt>
+        <dd>{t("{amount} ex VAT", { amount: t(formatEur(item.offer.priceExVat)) })}</dd>
       </dl>
       <p className="text-sm text-muted-foreground">{item.why}</p>
       <div className="flex items-end gap-2">
         <label className="grid min-w-0 flex-1 gap-1 text-sm font-medium" htmlFor={id}>
-          Quantity for {item.product.names.en} ({item.product.salesUnit})
+          {t("Quantity for {product} ({unit})", {
+            product: item.product.names.en,
+            unit: item.product.salesUnit,
+          })}
           <Input
             id={id}
             type="number"
@@ -515,11 +544,11 @@ function AddableRow({
         </label>
         <Button
           type="button"
-          aria-label={`Add ${item.product.names.en}`}
+          aria-label={t("Add {product}", { product: item.product.names.en })}
           disabled={disabled || !Number.isInteger(Number(quantity)) || Number(quantity) < 1}
           onClick={() => onAdd(Number(quantity))}
         >
-          Add
+          {t("Add")}
         </Button>
       </div>
     </li>
