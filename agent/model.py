@@ -2,6 +2,7 @@
 import asyncio
 import os
 import time
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -9,7 +10,9 @@ from agent.usage import Meter
 
 
 class ModelError(RuntimeError):
-    pass
+    def __init__(self, message, *, status_code=None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 # The Buyer tool loop's model settings (#706), measured on 2026-11-14: agent/README.md,
@@ -17,6 +20,38 @@ class ModelError(RuntimeError):
 # whole reply budget on reasoning and returned no tool call, so the run stopped.
 BUYER_THINKING = False
 BUYER_MAX_TOKENS = 2048
+
+PROVIDERS = {
+    'verda': ('https://containers.datacrunch.io/nemotron-3-5-super-vl-b300/v1/',
+              'nemotron-3.5-super-vl', 'VERDA_INFERENCE_KEY'),
+    'nvidia': ('https://integrate.api.nvidia.com/v1/',
+               'nvidia/nemotron-3.5-super-vl-120b-a12b', 'NVIDIA_API_KEY'),
+}
+
+
+def provider_settings(environ=None):
+    """Explicit provider selection; never an automatic switch or paid fallback."""
+    environ = os.environ if environ is None else environ
+    provider = (environ.get('NEMOTRON_PROVIDER') or 'verda').strip().lower()
+    if provider not in PROVIDERS:
+        raise ValueError('NEMOTRON_PROVIDER must be verda or nvidia')
+    base, model, key_name = PROVIDERS[provider]
+    key = environ.get(key_name, '')
+    if not key:
+        raise ValueError(key_name + ' is required')
+    base = (environ.get('NEMOTRON_BASE_URL') or base).strip().rstrip('/') + '/'
+    model = (environ.get('NEMOTRON_MODEL') or model).strip()
+    try:
+        url = urlsplit(base)
+        valid = (url.hostname and not url.username and not url.password and not url.query and not url.fragment
+                 and (url.scheme == 'https' or (url.scheme == 'http' and url.hostname in ('localhost', '127.0.0.1', '::1'))))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ValueError('NEMOTRON_BASE_URL must be an HTTPS base URL without credentials, query or fragment')
+    if not model or any(c.isspace() for c in model) or key in model:
+        raise ValueError('NEMOTRON_MODEL must be a model identifier')
+    return base, model, key
 
 
 def buyer_settings(environ=None) -> tuple[bool, int]:
@@ -35,17 +70,18 @@ def buyer_settings(environ=None) -> tuple[bool, int]:
 
 
 class Nemotron:
-    def __init__(self, *, transport=None, sleep=asyncio.sleep):
-        key = os.environ.get("VERDA_INFERENCE_KEY", "")
-        if not key:
-            raise ValueError("VERDA_INFERENCE_KEY is required")
+    def __init__(self, *, transport=None, sleep=asyncio.sleep, timeout=90, max_attempts=3):
+        base, self.model, key = provider_settings()
+        if max_attempts not in (1, 2, 3):
+            raise ValueError('max_attempts must be 1 to 3')
+        self.max_attempts = max_attempts
         # Read before the client opens, so a bad setting leaks nothing. Fail-fast on purpose:
         # a bad Buyer setting stops every reader (photo readers too) until it is fixed.
         self.thinking, self.max_tokens = buyer_settings()
         self.http = httpx.AsyncClient(
-            base_url="https://containers.datacrunch.io/nemotron-3-5-super-vl-b300/v1/",
+            base_url=base,
             headers={"Authorization": "Bearer " + key}, transport=transport,
-            timeout=90, follow_redirects=False, trust_env=False)
+            timeout=timeout, follow_redirects=False, trust_env=False)
         self.sleep = sleep
         self.meter = Meter()    # calls, tokens and seconds per role (agent/usage.py)
 
@@ -53,7 +89,7 @@ class Nemotron:
         await self.http.aclose()
 
     async def complete(self, messages, tools):
-        body = {"model": "nemotron-3.5-super-vl", "messages": messages,
+        body = {"model": self.model, "messages": messages,
                 "tools": tools, "tool_choice": "auto", "temperature": 0,
                 "max_tokens": self.max_tokens,
                 # Always sent: the endpoint's default is thinking on (seen 2026-11-14).
@@ -64,12 +100,21 @@ class Nemotron:
         """One structured reply: the server constrains the output to `schema` (strict).
         Thinking is off; the caller still validates the parsed object. Metered under `role`,
         by default `vl_<name>` (the vision readers)."""
-        body = {"model": "nemotron-3.5-super-vl", "messages": messages, "temperature": 0,
+        body = {"model": self.model, "messages": messages, "temperature": 0,
                 "max_tokens": max_tokens,
                 "response_format": {"type": "json_schema",
                                     "json_schema": {"name": name, "schema": schema, "strict": True}},
                 "chat_template_kwargs": {"enable_thinking": False}}
         return await self._post(body, role or "vl_" + name)
+
+    async def ping(self):
+        """A real minimal generation, not GET /models (absent on some containers)."""
+        message = await self._post({'model': self.model, 'messages': [{'role': 'user', 'content': 'Reply with OK.'}],
+                                    'temperature': 0, 'max_tokens': 16,
+                                    'chat_template_kwargs': {'enable_thinking': False}}, 'health')
+        if not isinstance(message.get('content'), str) or not message['content'].strip():
+            raise ModelError('Nemotron returned an empty health reply')
+        return message
 
     async def _post(self, body, role):
         """One model call for `role`, metered: a failed call counts too, with no tokens."""
@@ -82,20 +127,20 @@ class Nemotron:
             self.meter.record(role, usage, time.monotonic() - started, ok=ok)
 
     async def _send(self, body):
-        for attempt in range(3):
+        for attempt in range(self.max_attempts):
             try:
                 response = await self.http.post("chat/completions", json=body)
             except httpx.HTTPError:
-                if attempt == 2:
+                if attempt == self.max_attempts - 1:
                     raise ModelError("Nemotron network request failed") from None
                 await self.sleep(0.5 * 2**attempt)
                 continue
             if response.status_code == 429 or response.status_code >= 500:
-                if attempt < 2:
+                if attempt < self.max_attempts - 1:
                     await self.sleep(0.5 * 2**attempt)
                     continue
             if response.status_code != 200:
-                raise ModelError(f"Nemotron HTTP {response.status_code}")
+                raise ModelError(f"Nemotron HTTP {response.status_code}", status_code=response.status_code)
             try:
                 reply = response.json()
                 message = reply["choices"][0]["message"]

@@ -28,6 +28,13 @@ def test_past_forecasts_were_made_before_the_day(data):
     assert past and all(r["made_on"] <= r["date"] for r in past)
 
 
+def test_baseline_has_no_first_week_placeholders(data):
+    from demo.seed import START
+    from datetime import timedelta
+    assert data['baseline']
+    assert min(r['date'] for r in data['baseline']) == (START + timedelta(days=7)).isoformat()
+
+
 def test_same_seed_same_data(data):
     again = build(seed=1, today=TODAY, future_weeks=2, kitchens=10)
     assert again["forecasts"][:50] == data["forecasts"][:50]
