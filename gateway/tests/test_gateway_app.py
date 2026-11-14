@@ -181,6 +181,17 @@ def test_price_moved_is_total_mismatch_and_nothing_is_placed(env):
     assert ok.status_code == 200, ok.text
 
 
+def test_expired_proposal_is_requoted_and_unchanged_basket_can_be_approved(env):
+    client, _, db = env
+    p = milk(client)
+    db.offers.update_one({'_id': p['offer_id']}, {'$set': {'valid_until': '2000-01-01T00:00:00+00:00'}})
+    result = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                        json={'expected_total': p['expected_total'], 'idempotency_key': 'expired'})
+    assert result.status_code == 200, result.text
+    assert result.json()['expected_total'] == p['expected_total']
+    assert db.orders.count_documents({}) == 1
+
+
 def test_wrong_total_from_the_client_is_refused(env):
     client, _, db = env
     p = milk(client)

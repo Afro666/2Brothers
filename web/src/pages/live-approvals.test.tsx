@@ -40,13 +40,33 @@ it("loads real proposals and requires explicit confirmation before recording one
   expect(screen.queryByRole("button", { name: /Approve .*149/ })).toBeNull();
 });
 
-it("blocks unknown stock and expired offers", async () => {
+it("blocks unknown stock even on an expired offer", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [
-    { ...row, lines: [{ ...row.lines[0], unknown_stock: true }] },
-    { ...row, proposal_id: "expired", valid_until: "2000-01-01T00:00:00Z" },
+    { ...row, valid_until: "2000-01-01T00:00:00Z", lines: [{ ...row.lines[0], unknown_stock: true }] },
   ] })));
   renderApp("/approvals");
   for (const button of await screen.findAllByRole("button", { name: /Approve .*149/ })) expect(button).toBeDisabled();
+});
+
+it("recovers from an expired changed offer inside the inbox and confirms its new exact total", async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ proposals: [{ ...row, valid_until: "2000-01-01T00:00:00Z" }] }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "TOTAL_MISMATCH", message: "Price changed; review the new total" } }), { status: 409 }))
+    .mockResolvedValueOnce(json({ proposals: [{ ...row, offer_id: "fresh", expected_total: "159.02" }] }))
+    .mockResolvedValueOnce(json({ order_id: "order-fresh", expected_total: "159.02" }));
+  vi.stubGlobal("fetch", fetch);
+  const user = userEvent.setup();
+  renderApp("/approvals");
+  await user.click(await screen.findByRole("button", { name: /Approve .*149/ }));
+  expect(screen.getByText(/This offer has expired/)).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Confirm and record order" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Price changed");
+  expect(screen.queryByRole("status")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Reload proposals" }));
+  await user.click(await screen.findByRole("button", { name: /Approve .*159/ }));
+  expect(fetch).toHaveBeenCalledTimes(3);
+  await user.click(screen.getByRole("button", { name: "Confirm and record order" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("order-fresh");
+  expect(JSON.parse(fetch.mock.calls[3][1].body)).toEqual({ expected_total: "159.02", idempotency_key: "web-approve-p1-fresh" });
 });
 
 it("keeps the decision key after a lost response and never displays an unconfirmed success", async () => {
