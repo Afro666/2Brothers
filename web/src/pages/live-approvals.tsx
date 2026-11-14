@@ -1,5 +1,4 @@
 import { useId, useState } from "react";
-import { useApi } from "@/api";
 import { mapSuppliersToConfirm } from "@/api/gateway-map";
 import { gatewayRequest } from "@/api/http";
 import { mapMoney } from "@/api/map";
@@ -11,6 +10,7 @@ import { useT } from "@/lib/i18n";
 import { usePendingApprovals } from "@/lib/pending-approvals";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { useApproveUnconfirmedManual } from "@/lib/approve-unconfirmed-manual";
 import { LabelEvidence, type LabelCheck } from "@/components/purchasing/label-evidence";
 
 const path = "/v1/kitchens/demo-kitchen/proposals";
@@ -184,7 +184,6 @@ function ProposalCard({ row, reload, approvalBlockedReason, approveUnconfirmedMa
 
 export function LiveApprovalsPage() {
   const t = useT();
-  const api = useApi();
   const { session } = useSession();
   const approvalBlockedReason = session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined;
   const proposals = useAsync(async () => {
@@ -192,10 +191,7 @@ export function LiveApprovalsPage() {
     if (!Array.isArray(result?.proposals)) throw new Error(t("Invalid proposal list."));
     return result.proposals.map((item) => parse(item, t));
   }, []);
-  const approveUnconfirmedManual = useAsync(
-    () => api.getKitchenSettings().then((settings) => settings.approveUnconfirmedManual).catch(() => false),
-    [api],
-  );
+  const approveUnconfirmedManual = useApproveUnconfirmedManual();
   return <AppShell activeId="approvals"><main className="mx-auto max-w-5xl space-y-5">
     <OpenDemoNote />
     <h1 className="page-title">{t("To approve")}</h1>
@@ -204,6 +200,6 @@ export function LiveApprovalsPage() {
     {proposals.status === "loading" && <p>{t("Loading proposals…")}</p>}
     {proposals.status === "error" && <p role="alert">{proposals.error.message}</p>}
     {proposals.status === "ready" && (proposals.data.length ? proposals.data.map(row =>
-      <ProposalCard key={`${row.proposal_id}-${row.offer_id}-${row.status}`} row={row} reload={proposals.reload} approvalBlockedReason={approvalBlockedReason} approveUnconfirmedManual={approveUnconfirmedManual.status === "ready" && approveUnconfirmedManual.data} />) : <p>{t("No proposals yet. Ask the Buyer on Requests.")}</p>)}
+      <ProposalCard key={`${row.proposal_id}-${row.offer_id}-${row.status}`} row={row} reload={proposals.reload} approvalBlockedReason={approvalBlockedReason} approveUnconfirmedManual={approveUnconfirmedManual} />) : <p>{t("No proposals yet. Ask the Buyer on Requests.")}</p>)}
   </main></AppShell>;
 }

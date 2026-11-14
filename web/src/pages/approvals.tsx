@@ -14,6 +14,7 @@ import { auditActorForRole, useRole } from "@/lib/role";
 import { formatEur } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
+import { useApproveUnconfirmedManual } from "@/lib/approve-unconfirmed-manual";
 import { useSession } from "@/lib/session";
 import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
 import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
@@ -68,10 +69,7 @@ function ApiApprovalsPage() {
   const { session } = useSession();
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
-  const approveUnconfirmedManual = useAsync(
-    () => api.getKitchenSettings().then((settings) => settings.approveUnconfirmedManual).catch(() => false),
-    [api],
-  );
+  const approveUnconfirmedManual = useApproveUnconfirmedManual();
   const { refresh: refreshWaiting } = usePendingApprovals();
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
   const recalls = useAsync(() => loadRecalls(api), [api]);
@@ -227,9 +225,7 @@ function ApiApprovalsPage() {
                         canEdit ? (query) => api.listAddableProducts(approval.orderId, query) : undefined
                       }
                       editCount={editCounts[approval.orderId] ?? 0}
-                      approveUnconfirmedManual={
-                        approveUnconfirmedManual.status === "ready" && approveUnconfirmedManual.data
-                      }
+                      approveUnconfirmedManual={approveUnconfirmedManual}
                       approvalBlockedReason={
                         session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined
                       }
@@ -255,9 +251,7 @@ function ApiApprovalsPage() {
                       request={approval}
                       order={order ?? undefined}
                       onReject={reject}
-                      approveUnconfirmedManual={
-                        approveUnconfirmedManual.status === "ready" && approveUnconfirmedManual.data
-                      }
+                      approveUnconfirmedManual={approveUnconfirmedManual}
                       approvalBlockedReason={
                         session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined
                       }
@@ -278,9 +272,7 @@ function ApiApprovalsPage() {
                       key={approval.id}
                       request={approval}
                       order={order ?? undefined}
-                      approveUnconfirmedManual={
-                        approveUnconfirmedManual.status === "ready" && approveUnconfirmedManual.data
-                      }
+                      approveUnconfirmedManual={approveUnconfirmedManual}
                       recalls={recallsFor(approval.orderId)}
                     />
                   ))}
