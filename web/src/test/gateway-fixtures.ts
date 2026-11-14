@@ -53,7 +53,7 @@ export const proposal = {
 export const placedOrder = {
   order_id: "ord-1",
   outcome: "CONFIRMED" as string | null,
-  status: "SENT",
+  status: "RECORDED",
   expected_total: "91.20",
   lines: [{ ...line, why: undefined }],
   created_at: "2026-11-14T10:05:00+00:00",

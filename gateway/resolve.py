@@ -42,17 +42,16 @@ def _public(resolution: dict | None) -> dict | None:
 
 
 def lookup(gw: Gateway, kitchen_id: str, order_id: str, *, human: str | None) -> dict:
-    """What our own store knows about the order. Changes nothing but the audit log."""
+    """What our own store knows about the order. A read: it changes nothing, no audit line."""
     if not human:
         raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can look into an unknown send")
     order = _order(gw, kitchen_id, order_id)
-    gw._audit(kitchen_id, "order_lookup", human, order_id=order_id, outcome=order["outcome"])
     return {"order_id": order_id, "proposal_id": order.get("proposal_id"),
             "proposal_status": _proposal(gw, kitchen_id, order).get("status"),
             "idempotency_key": order["idempotency_key"], "payload_hash": order["payload_hash"],
             "offer_id": order["offer_id"], "supplier_id": order.get("supplier_id"),
             "approved_by": order.get("approved_by"),
-            "outcome": order["outcome"], "status": order["status"],
+            "outcome": order["outcome"], "status": orders.public_status(order["status"]),
             "expected_total": _money(Decimal(str(order["expected_total"]))),
             "lines": [_line_out(ln) for ln in order["lines"]],
             "created_at": _iso(order["created_at"]), "updated_at": _iso(order["updated_at"]),
@@ -101,7 +100,7 @@ def resolve(gw: Gateway, kitchen_id: str, order_id: str, body: dict, *, human: s
                       "from_outcome": order["outcome"], "idempotency_key": body["idempotency_key"].strip()}
         placed = kind == "placed"
         claimed = resolve_order(gw.db, kitchen_id, order_id, outcome="CONFIRMED" if placed else "NOT_SENT",
-                                status="SENT" if placed else None, resolution=resolution)
+                                status=orders.RECORDED if placed else None, resolution=resolution)
         order = claimed or _order(gw, kitchen_id, order_id)   # lost the race: read who won
     stored = order.get("resolution")
     if stored is None:   # the outcome changed under us, and not through a resolution
@@ -114,7 +113,8 @@ def resolve(gw: Gateway, kitchen_id: str, order_id: str, body: dict, *, human: s
     _finish(gw, kitchen_id, order)
     return {"order_id": order_id, "proposal_id": order.get("proposal_id"),
             "proposal_status": _proposal(gw, kitchen_id, order).get("status"),
-            "outcome": order["outcome"], "status": order["status"], "resolution": _public(stored)}
+            "outcome": order["outcome"], "status": orders.public_status(order["status"]),
+            "resolution": _public(stored)}
 
 
 def _finish(gw: Gateway, kitchen_id: str, order: dict) -> None:

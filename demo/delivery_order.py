@@ -67,7 +67,7 @@ def place(db) -> dict:
         blocks=[{**SUPPLIER, "product_ids": [ln["product_id"] for ln in rows]}], supplier_must_confirm=[])
     if not created:
         return order
-    order = orders.set_outcome(db, order["order_id"], outcome="CONFIRMED", status="SENT")
+    order = orders.set_outcome(db, order["order_id"], outcome="CONFIRMED", status=orders.RECORDED)
     audit.append_event(db, {"event_id": uuid4().hex, "kind": "demo_delivery_order_placed", "actor": SEED,
                             "order_id": order["order_id"], "reference": REFERENCE, "expected_total": f"{total:f}"},
                        {"kitchen_id": KITCHEN, "at": datetime.now(timezone.utc).isoformat()})

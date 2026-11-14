@@ -4,7 +4,7 @@ No HTTP here (gateway/app.py maps routes onto these methods). Every figure a hum
 comes from `simulate`, the engine's numbers on a stored offer snapshot. Approve re-reads
 live prices and stock first: if the total moved, it refuses with TOTAL_MISMATCH and
 nothing is placed. There is no upstream order endpoint at Valio, so a placed order is
-"placed in our gateway" (outcome CONFIRMED, status SENT) until a supplier confirms it.
+"recorded in our gateway" (outcome CONFIRMED, status RECORDED): nothing is sent to a supplier.
 """
 
 from __future__ import annotations
@@ -1443,8 +1443,8 @@ class Gateway:
         if created:
             if doc.get("approval_id"):
                 orders.decide_approval(self.db, doc["approval_id"], status="APPROVED", decided_by=human)
-            # No upstream order endpoint: the order is placed in our gateway, waiting for the supplier.
-            order = orders.set_outcome(self.db, order["order_id"], outcome="CONFIRMED", status="SENT",
+            # No upstream order endpoint: the order is recorded in our gateway, nothing is sent.
+            order = orders.set_outcome(self.db, order["order_id"], outcome="CONFIRMED", status=orders.RECORDED,
                                        **self._receipt(kitchen_id, order))
             self.db.proposals.update_one({"_id": proposal_id},
                                          {"$set": {"status": "APPROVED", "order_id": order["order_id"]}})
@@ -1533,7 +1533,8 @@ class Gateway:
         if rates is None:
             rates = self._catalog_rates([order])
         lines = [_order_line_vat(ln, rates) for ln in order["lines"]]
-        return {"order_id": order["order_id"], "outcome": order["outcome"], "status": order["status"],
+        return {"order_id": order["order_id"], "outcome": order["outcome"],
+                "status": orders.public_status(order["status"]),
                 "receipt": order.get("receipt"),     # signed order receipt (#290); null when not signed
                 # #1560: "demo-seed" when a seed placed it (no person approved it, so no receipt)
                 "placed_by": seeded.placed_by(order),

@@ -104,7 +104,7 @@ The milk flow, end to end:
 3. `POST .../approve` with the `expected_total` the person saw (human token + `X-User`
    only). The gateway re-reads live prices and stock: if anything moved, 409
    `TOTAL_MISMATCH` with the new total, and nothing is placed. Otherwise the attempt is
-   written first, then the order (outcome `CONFIRMED`, status `SENT`: placed in our
+   written first, then the order (outcome `CONFIRMED`, status `RECORDED`: placed in our
    gateway; Valio has no order endpoint). A replay returns the same order.
 4. `GET .../orders`, `GET .../audit`: the order and every step.
 

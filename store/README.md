@@ -57,7 +57,7 @@ get_products(db, ["469549", "own-1"], kitchen_id="k1")   # several, in the order
 order, created = orders.record_attempt(         # before any send; replays return the stored row
     db, kitchen_id="k1", idempotency_key="key-1", offer_id="offer-1",
     expected_total=Decimal("149.02"), lines=[], payload_hash="sha256...")
-orders.set_outcome(db, order["order_id"], outcome="CONFIRMED", status="SENT")
+orders.set_outcome(db, order["order_id"], outcome="CONFIRMED", status=orders.RECORDED)
 audit.append_event(db, {"event_id": "e1", "run_id": "r1", "type": "tool_call_started"},
                    server={"kitchen_id": "k1", "principal": "agent"})
 audit.verify_chain(db)                          # {"ok": True, "length": 1, "broken_at": None}
