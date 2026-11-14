@@ -194,7 +194,8 @@ def test_stock_count_once_stores_once_and_replays():
     first = stock_count_once(db, "K1", "k", lambda: calls.append(1) or 3)
     again = stock_count_once(db, "K1", "k", lambda: calls.append(1) or 3)
     assert first == ("K1:k", 3, False) and again == ("K1:k", 3, True) and len(calls) == 1
-    db.stock_count_keys.insert_one({"_id": "K1:busy", "stock_count_id": "K1:busy", "stored": None})
+    db.stock_count_keys.insert_one({"_id": "K1:busy", "stock_count_id": "K1:busy", "stored": None,
+                                    "claimed_at": datetime.now(timezone.utc)})
     try:
         stock_count_once(db, "K1", "busy", lambda: 1)
         assert False, "a key being stored must not store twice"
@@ -214,3 +215,26 @@ def test_a_failed_stock_count_releases_its_key():
     except ValueError:
         pass
     assert stock_count_once(db, "K1", "k", lambda: 2) == ("K1:k", 2, False)
+
+
+def test_a_stale_stock_count_claim_is_taken_over():
+    import mongomock
+    from datetime import timedelta
+    from store.history import StockCountBusy, stock_count_once
+    db = mongomock.MongoClient()["t"]
+    old = datetime.now(timezone.utc) - timedelta(minutes=5)
+    db.stock_count_keys.insert_one({"_id": "K1:k", "stock_count_id": "K1:k", "stored": None,
+                                    "claimed_at": old})
+    db.stock_count_keys.insert_one({"_id": "K1:none", "stock_count_id": "K1:none", "stored": None})
+    calls = []
+    assert stock_count_once(db, "K1", "k", lambda: calls.append(1) or 4) == ("K1:k", 4, False)
+    assert stock_count_once(db, "K1", "k", lambda: calls.append(1) or 4) == ("K1:k", 4, True)
+    assert stock_count_once(db, "K1", "none", lambda: calls.append(1) or 1) == ("K1:none", 1, False)
+    assert len(calls) == 2
+    db.stock_count_keys.insert_one({"_id": "K1:fresh", "stock_count_id": "K1:fresh", "stored": None,
+                                    "claimed_at": datetime.now(timezone.utc)})
+    try:
+        stock_count_once(db, "K1", "fresh", lambda: 1)
+        assert False, "a fresh claim must not be taken over"
+    except StockCountBusy:
+        pass
