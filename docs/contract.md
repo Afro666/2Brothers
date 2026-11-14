@@ -667,6 +667,7 @@ reference, the outcome before.
 | 422 | `INVALID_REQUEST` | A required field is missing, or `quantity` is 0 or less. |
 | 422 | `CANNOT_READ_REQUEST` | The parser cannot read the text without guessing: no quantity with a unit, no delivery day, a day in the past, no product named, more than 500 characters. The message says what is missing. |
 | 422 | `NO_PRODUCTS_FOUND` | The parser read the text, but no catalog product matches the product words. |
+| 409 | `KITCHEN_POLICY_INVALID` | The kitchen's `excluded_allergens` names an allergen nobody knows (a typo). Fails closed: no offer is made until a person fixes the setting. |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another request (for free text: another `text`). |
 
 The proposal's `request` object echoes what was quoted: `product_ids`, `quantity`,
@@ -1509,8 +1510,8 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | `STOCK_UNKNOWN` | reason | availability is a sentinel (999999 or 9999999999), missing or null. Also a 409 error on approve. |
 | `PARTIAL_STOCK` | reason | less is available than needed |
 | `SUBSTITUTE_NEEDS_OK` | reason | a substitute changes the product; a human agrees |
-| `SUBSTITUTE_FAT_LEVEL` | reason | the substitute has a different fat level |
-| `ALLERGEN_RULE` | reason | a kitchen allergen rule refuses a product. That product is left out (per product, not the whole mandate). The gateway's proposal path does not emit it yet. |
+| `SUBSTITUTE_FAT_LEVEL` | reason | two lines of one plan have known fat levels more than 0.5 g per 100 g apart (fat-free and 3 % milk, S01). From the supplier record's `FAT` nutrient; unknown fat is never compared. On the mandate. |
+| `ALLERGEN_RULE` | reason | a kitchen allergen rule refuses a product: its known allergens (CONTAINS, MAY_CONTAIN or UNDECLARED) include an excluded code. That product is left out, listed under `excluded` with reason `ALLERGEN_RULE: the kitchen excludes <codes>` (per product, not the whole mandate), on every path: `POST /proposals` and MCP `get_offer`. Unknown allergen data is not a hit: the line stays with `ALLERGEN_DATA_MISSING`. |
 | `ALLERGEN_DATA_MISSING` | reason | no allergen data; treated as unknown |
 | `OVER_BUDGET_WARNING` | warning | total is above the kitchen's budget warning. A warning only: a human approves every order anyway. Replaces `OVER_SPEND_LIMIT`. |
 | `LOT_SIZE_ROUNDED` | reason | quantity rounded up to `allowedLotSize` or pack |
