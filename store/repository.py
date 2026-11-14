@@ -25,8 +25,9 @@ import uuid
 from typing import Callable
 
 from bson.decimal128 import Decimal128
+from pymongo.errors import DuplicateKeyError
 
-from store.search import ALLERGENS
+from store.search import allergen_codes
 
 ADAPTERS = ("valio_api", "manual", "csv")
 WEEKDAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
@@ -39,8 +40,7 @@ DEMAND_CLASSES = ("A", "B", "C")
 COVER_CATEGORIES = ("fresh_dairy", "vegetables", "meat", "fish", "frozen", "dry", "other")
 BUDGET_WARNINGS = ("budget_warning_order_eur", "budget_warning_week_eur")
 SETTINGS = ("service_level", "max_cover_days", "stockout_cap", *BUDGET_WARNINGS,
-            "excluded_allergens")
-_GS1_CODE = re.compile(r"[A-Z][A-Z0-9]{1,2}")
+            "excluded_allergens", "standing_orders")
 _CLOCK = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 _WEEK = re.compile(r"\d{4}-W(0[1-9]|[1-4]\d|5[0-3])")
 
@@ -56,6 +56,15 @@ def _require(doc: dict, *fields: str) -> None:
     missing = [f for f in fields if doc.get(f) in (None, "")]
     if missing:
         raise ValueError(f"missing fields: {', '.join(missing)}")
+
+
+def _objects(value, field: str) -> list[dict]:
+    """A list of objects, or empty when missing; anything else is a clear ValueError."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise ValueError(f"{field} must be a list of objects")
+    return value
 
 
 def _decimal(value, field: str) -> Decimal | None:
@@ -101,7 +110,11 @@ def supplier_fields(data: dict) -> dict:
     _require(data, "name", "adapter")
     if data["adapter"] not in ADAPTERS:
         raise ValueError(f"adapter must be one of {ADAPTERS}")
-    terms = data.get("terms") or {}
+    terms = data.get("terms")
+    if terms is None:
+        terms = {}
+    if not isinstance(terms, dict):
+        raise ValueError("terms must be an object")
     unknown = set(terms) - set(SUPPLIER_TERMS)
     if unknown:
         raise ValueError(f"unknown terms: {sorted(unknown)}")
@@ -113,7 +126,7 @@ def supplier_fields(data: dict) -> dict:
         raise ValueError("cutoff_time must be HH:MM")
     lead = terms.get("lead_time_days")
     tiers = []
-    for tier in terms.get("discount_tiers") or []:
+    for tier in _objects(terms.get("discount_tiers"), "discount_tiers"):
         _require(tier, "min_qty", "unit", "unit_price_eur")
         tiers.append({"product_id": tier.get("product_id"),  # None: every product
                       "min_qty": _decimal(tier["min_qty"], "min_qty"), "unit": tier["unit"],
@@ -131,7 +144,7 @@ def recipe_fields(data: dict) -> dict:
     """Validate a recipe body: products x quantity per portion, with an optional yield."""
     _require(data, "name")
     ingredients = []
-    for item in data.get("ingredients") or []:
+    for item in _objects(data.get("ingredients"), "ingredients"):
         _require(item, "product_id", "qty_per_portion", "unit")
         quantity = _decimal(item["qty_per_portion"], "qty_per_portion")
         if quantity <= 0:
@@ -153,7 +166,7 @@ def menu_days(week: str, days: list) -> list[dict]:
     if not _WEEK.fullmatch(str(week)):
         raise ValueError("week must look like 2026-W47")
     checked = []
-    for day in days or []:
+    for day in _objects(days, "days"):
         _require(day, "date", "meal", "recipe_id")
         iso = date.fromisoformat(str(day["date"])).isocalendar()
         if f"{iso.year}-W{iso.week:02d}" != week:
@@ -264,12 +277,26 @@ def settings_fields(data: dict) -> dict:
             out[field] = _decimal(data[field], field)  # None: no warning
     if "excluded_allergens" in data:
         codes = data["excluded_allergens"]
-        if not isinstance(codes, list) or not all(
-                isinstance(code, str) and (code in ALLERGENS or _GS1_CODE.fullmatch(code))
-                for code in codes):
-            raise ValueError("excluded_allergens must be a list of GS1 codes or allergen names; "
-                             "[] means no exclusions")
+        message = ("excluded_allergens must be a list of GS1 codes or allergen names; "
+                   "[] means no exclusions")
+        if not isinstance(codes, list) or not all(isinstance(code, str) for code in codes):
+            raise ValueError(message)
+        try:  # read as the Buyer's AllergenPolicy reads them: AW is the gluten group
+            allergen_codes(["gluten" if code.upper() == "AW" else code for code in codes])
+        except ValueError:
+            raise ValueError(message) from None
         out["excluded_allergens"] = codes
+    if "standing_orders" in data:
+        # Per product: the standing order per delivery, in sales units (#380, S08). The
+        # whole map is replaced, never merged (contract #414): {} clears them all.
+        orders = data["standing_orders"]
+        message = "standing_orders must map product codes to positive decimal strings"
+        if not isinstance(orders, dict) or not all(isinstance(pid, str) and pid for pid in orders):
+            raise ValueError(message)
+        values = {pid: _decimal(qty, "standing_orders") for pid, qty in orders.items()}
+        if any(value is None or not value.is_finite() or value <= 0 for value in values.values()):
+            raise ValueError(message)
+        out["standing_orders"] = values
     return out
 
 
@@ -303,7 +330,10 @@ class _Collection:
         doc_id = str(data.get(self._id_key) or uuid.uuid4().hex[:12])
         doc = {"_id": f"{kitchen_id}:{doc_id}", "kitchen_id": kitchen_id, self._id_key: doc_id,
                **self._fields(data)}
-        self._coll.insert_one(_to_store(doc))
+        try:
+            self._coll.insert_one(_to_store(doc))
+        except DuplicateKeyError:
+            raise ValueError(f"{self._id_key} {doc_id} already exists") from None
         return self._out(doc)
 
     def get(self, kitchen_id: str, doc_id: str) -> dict | None:
@@ -370,6 +400,8 @@ class _Settings:
         fields = settings_fields(changes)
         before = self.get(kitchen_id)
         after = _merge(before, fields, ())
+        if "standing_orders" in fields:
+            after["standing_orders"] = fields["standing_orders"]   # replace, never merge (#414)
         changed = {field: {"from": before.get(field), "to": after[field]}
                    for field in fields if before.get(field) != after[field]}
         if changed:
@@ -391,7 +423,10 @@ class _OwnProducts:
     def create(self, kitchen_id: str, data: dict) -> dict:
         row = own_product_row({**data, "kitchen_id": kitchen_id},
                               data.get("product_id") or f"own-{uuid.uuid4().hex[:12]}")
-        self._coll.insert_one(row)
+        try:
+            self._coll.insert_one(row)
+        except DuplicateKeyError:
+            raise ValueError(f"product_id {row['_id']} already exists") from None
         return own_product_out(row)
 
     def get(self, kitchen_id: str, product_id: str) -> dict | None:

@@ -1,6 +1,6 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/api";
 import { createMockApi } from "@/api/mock";
@@ -32,5 +32,118 @@ describe("orders pages", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
     expect(screen.getByRole("heading", { level: 1, name: "Order ORD-missing" })).toBeInTheDocument();
+  });
+
+  it("shows what is known and resolves a placed order only with its supplier reference", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const resolve = vi.spyOn(api, "resolveOrder");
+    renderApp("/orders/ORD-1046", api);
+
+    expect(await screen.findByRole("heading", { name: "Check this order with the supplier" })).toBeVisible();
+    expect(screen.getByText("The app cannot ask the supplier whether this order arrived. Check by phone, e-mail or the supplier's portal, then record what happened. Neither choice resends the order.")).toBeVisible();
+    expect(await screen.findByText("approve-unknown-1046")).toBeVisible();
+    expect(screen.getByText("Supplier status").nextElementSibling).toHaveTextContent("unknown");
+    expect(screen.getByRole("button", { name: "It was placed" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "It was not sent" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "It was placed" }));
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it was placed" });
+    const reference = within(dialog).getByLabelText("Supplier order reference");
+    await user.type(reference, "   ");
+    await user.click(within(dialog).getByRole("button", { name: "Confirm placed" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("1 to 200 characters");
+    expect(resolve).not.toHaveBeenCalled();
+
+    await user.clear(reference);
+    await user.type(reference, "VAL-2026-00123");
+    await user.click(within(dialog).getByRole("button", { name: "Confirm placed" }));
+    expect(resolve).toHaveBeenCalledWith(
+      "ORD-1046",
+      { resolution: "placed", supplierOrderRef: "VAL-2026-00123" },
+      "aron",
+    );
+    expect(await screen.findByText("VAL-2026-00123")).toBeVisible();
+    expect(await screen.findByText("Placed", { selector: "[data-status='PLACED']" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "It was placed" })).not.toBeInTheDocument();
+  });
+
+  it("records not_sent with a note and returns the proposal to the approval inbox", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const resolve = vi.spyOn(api, "resolveOrder");
+    renderApp("/orders/ORD-1046", api);
+
+    await user.click(await screen.findByRole("button", { name: "It was not sent" }));
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it was not sent" });
+    await user.type(within(dialog).getByLabelText("Note (optional)"), "Valio sales desk: no such order");
+    await user.click(within(dialog).getByRole("button", { name: "Confirm not sent" }));
+
+    expect(resolve).toHaveBeenCalledWith(
+      "ORD-1046",
+      { resolution: "not_sent", note: "Valio sales desk: no such order" },
+      "aron",
+    );
+    expect(await screen.findByText("Not sent", { selector: "[data-status='NOT_SENT']" })).toBeVisible();
+    expect((await api.getApproval("APR-UNKNOWN-1046")).status).toBe("PENDING");
+    expect(screen.queryByRole("button", { name: "It was not sent" })).not.toBeInTheDocument();
+  });
+
+  it("hides both actions for a chef and when the gateway says the order is not resolvable", async () => {
+    const chef = createMockApi();
+    chef.getCurrentSession = async () => ({
+      kind: "human",
+      name: "chef",
+      role: "chef",
+      kitchenId: "demo-kitchen",
+      canApprove: false,
+      scopes: null,
+    });
+    const lookup = vi.spyOn(chef, "getOrderResolution");
+    renderApp("/orders/ORD-1046", chef);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your role cannot resolve orders");
+    expect(lookup).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "It was placed" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "It was not sent" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer resolution actions when resolvable is false", async () => {
+    const api = createMockApi();
+    api.getOrderResolution = async () => ({ ...(await createMockApi().getOrderResolution("ORD-1046")), resolvable: false });
+    renderApp("/orders/ORD-1046", api);
+    expect(await screen.findByText("approve-unknown-1046")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "It was placed" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "It was not sent" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["HUMAN_SESSION_REQUIRED", "Only a signed-in person can check or resolve this order. Nothing was sent."],
+    ["ROLE_REQUIRED", "Your role cannot resolve orders. Ask an approver to check with the supplier."],
+  ])("shows the plain permission message for %s", async (code, message) => {
+    const api = createMockApi();
+    api.getOrderResolution = async () => {
+      throw new ApiError(code, code);
+    };
+    renderApp("/orders/ORD-1046", api);
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.queryByRole("button", { name: "It was placed" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["ALREADY_RESOLVED", "Someone else already resolved this order another way. Reloading the latest details."],
+    ["ORDER_NOT_RESOLVABLE", "This order is no longer waiting for resolution. Reloading the latest details."],
+    ["INVALID_REQUEST", "Enter the supplier's order reference (1 to 200 characters). Nothing was recorded."],
+  ])("shows the plain resolution error for %s", async (code, message) => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    api.resolveOrder = async () => {
+      throw new ApiError(code, code);
+    };
+    renderApp("/orders/ORD-1046", api);
+    await user.click(await screen.findByRole("button", { name: "It was placed" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Supplier order reference"), "VAL-1");
+    await user.click(within(dialog).getByRole("button", { name: "Confirm placed" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
   });
 });

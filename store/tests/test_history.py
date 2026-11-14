@@ -171,9 +171,11 @@ class LiveHistoryTests(unittest.TestCase):
         self.assertNotIn("by_kitchen", history.kitchen_demand(self.db, "K01", "900001",
                                                               DAYS[0], DAYS[0])[0])
 
-        history.save_forecasts(self.db, [{"kitchen_id": k, "product_id": "900001",
-                                          "date": "2026-11-16", "need": "14.5", "unit": "L",
-                                          "why": "menu plan"} for k in KITCHENS])
+        forecasts = [{"kitchen_id": k, "product_id": "900001", "date": "2026-11-16",
+                      "need": "14.5", "unit": "L", "why": "menu plan"} for k in KITCHENS]
+        history.save_forecasts(self.db, forecasts)
+        history.save_forecasts(self.db, forecasts)  # a re-run must not double the demand
+        self.assertEqual(self.db.forecasts.count_documents({}), len(KITCHENS))
         forecast = history.supplier_demand(self.db, "valio_aimo", "900001", "2026-11-16",
                                            "2026-11-16", source="forecast")
         self.assertEqual([(row["demand"], row["kitchens"]) for row in forecast],

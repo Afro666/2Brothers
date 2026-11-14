@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -17,6 +17,17 @@ describe("ProductsPage", () => {
     expect(bun).toHaveTextContent("Allergen data missing: unknown");
   });
 
+  it("still shows own products and marks recipes unknown when the catalog lookup fails", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    api.getProducts = () => Promise.reject(new Error("NOT_SERVED"));
+    renderApp("/products", api);
+    expect(await screen.findByText("Rye bread loaf")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Recipes" }));
+    const pudding = (await screen.findByText("Rice pudding")).closest("[data-slot='card-content']");
+    expect(pudding).toHaveTextContent("Allergen data missing: unknown");
+  });
+
   it("saves a new product with unknown allergens as null", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
@@ -28,6 +39,24 @@ describe("ProductsPage", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save product" }));
     expect(await screen.findByText("Test item")).toBeInTheDocument();
     expect((await api.listOwnProducts()).find((product) => product.name === "Test item")?.allergens).toBeNull();
+  });
+
+  it("still opens and closes the product dialog when another dialog node is in the document", async () => {
+    const user = userEvent.setup();
+    const stray = document.createElement("div");
+    stray.setAttribute("role", "dialog");
+    document.body.appendChild(stray);
+    try {
+      renderApp("/products", createMockApi());
+      await user.click(await screen.findByRole("button", { name: "Add product" }));
+      const dialog = await screen.findByRole("dialog", { name: "Add product" });
+      await user.type(within(dialog).getByLabelText("Name"), "Stray item");
+      await user.type(within(dialog).getByLabelText("Unit"), "PCS");
+      await user.click(within(dialog).getByRole("button", { name: "Save product" }));
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add product" })).not.toBeInTheDocument());
+    } finally {
+      stray.remove();
+    }
   });
 
   it("preserves allergens the editor does not display when saving an edit", async () => {

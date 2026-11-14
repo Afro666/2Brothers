@@ -38,6 +38,15 @@ class Scripted:
         return deepcopy(next(self.steps))
 
 
+class PlacingGateway(MockGateway):
+    """Confirms any order, so a rejected placement can only come from the runner's guard."""
+    def __call__(self, request):
+        if request.url.path == "/tools/place_order":
+            self.requests.append(request)
+            return httpx.Response(200, json={"order_id": "order-1", "outcome": "CONFIRMED", "status": "PLACED"})
+        return super().__call__(request)
+
+
 class BuyerTests(unittest.IsolatedAsyncioTestCase):
     async def run_case(self, steps, mock=None, **kwargs):
         mock = mock or MockGateway()
@@ -146,10 +155,44 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         order = tool("place_order", offer_id="milk-offer-1", expected_total="149.02", idempotency_key="key")
         for record in records:
             with self.subTest(record=record):
-                result, buyer, mock = await self.run_case(milk_steps()[:3] + [order],
+                result, buyer, mock = await self.run_case(milk_steps()[:3] + [order], PlacingGateway(),
                     approval_lookup=lambda offer_id, record=record: record)
                 self.assertEqual(result["status"], "CANNOT_FULFIL")
                 self.assertNotIn("/tools/place_order", [r.url.path for r in mock.requests])
+
+    async def test_place_order_fails_closed_without_lookup_or_with_missing_fields(self):
+        approved = {"approval_id": "approval-1", "offer_id": "milk-offer-1", "status": "APPROVED",
+                    "decided_by": "chef-1", "decided_at": "2026-11-01T10:00:00Z"}
+        order = tool("place_order", offer_id="milk-offer-1", expected_total="149.02")
+        # Control: the complete record does place the order, so the rejections below come from the guard.
+        result, buyer, mock = await self.run_case(milk_steps()[:3] + [order], PlacingGateway(),
+                                                  approval_lookup=lambda o: approved)
+        self.assertEqual(result["status"], "ORDER_PLACED")
+        lookups = [None] + [lambda o, k=k: {f: v for f, v in approved.items() if f != k}
+                            for k in ("approval_id", "decided_by", "decided_at", "status", "offer_id")]
+        lookups += [lambda o: {**approved, "decided_by": "   "}]
+        for lookup in lookups:
+            with self.subTest(lookup=lookup):
+                result, buyer, mock = await self.run_case(milk_steps()[:3] + [order], PlacingGateway(),
+                                                          approval_lookup=lookup)
+                self.assertEqual(result["status"], "CANNOT_FULFIL")
+                self.assertNotIn("/tools/place_order", [r.url.path for r in mock.requests])
+                self.assertIn(PolicyReason.HUMAN_APPROVAL_REQUIRED.value, json.dumps(buyer.events))
+
+    async def test_auto_verdict_is_rejected_even_with_human_approval(self):
+        class AutoVerdict(PlacingGateway):
+            @staticmethod
+            def simulation():
+                result = MockGateway.simulation()
+                result["mandate"]["verdict"] = "AUTO"
+                return result
+        approved = {"approval_id": "approval-1", "offer_id": "milk-offer-1", "status": "APPROVED",
+                    "decided_by": "chef-1", "decided_at": "2026-11-01T10:00:00Z"}
+        order = tool("place_order", offer_id="milk-offer-1", expected_total="149.02")
+        result, buyer, mock = await self.run_case(milk_steps()[:3] + [order], AutoVerdict(),
+                                                  approval_lookup=lambda o: approved)
+        self.assertEqual(result["status"], "CANNOT_FULFIL")
+        self.assertFalse(any(r.url.path in ("/tools/place_order", "/tools/request_approval") for r in mock.requests))
 
     async def test_model_claimed_approval_cannot_authorize_placement(self):
         order = tool("place_order", offer_id="milk-offer-1", expected_total="149.02", idempotency_key="key")
@@ -230,7 +273,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(buyer.events[0]["tool"], "invalid")
 
     async def test_read_schema_rejection_is_audited_and_corrected_to_approval(self):
-        invalid = tool("search_products", query="private-rejected-query")  # missing filters
+        invalid = tool("search_products", query="private-rejected-query", unexpected=1)  # not in the schema
         result, buyer, mock = await self.run_case([invalid] + milk_steps())
         self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
         self.assertEqual(len(mock.events), 10)
@@ -349,7 +392,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
 
     async def test_rejected_read_in_a_batch_keeps_tool_results_paired(self):
-        invalid = tool("search_products", query="milk")
+        invalid = tool("search_products", query="milk", unexpected=1)
         valid = milk_steps()[0]
         batch = {"role": "assistant", "content": None, "tool_calls": [
             {**invalid["tool_calls"][0], "id": "bad-read"},
@@ -362,7 +405,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("products", json.loads(messages[-1]["content"]))
 
     async def test_read_policy_recovery_respects_step_and_call_limits(self):
-        invalid = tool("search_products", query="milk")
+        invalid = tool("search_products", query="milk", unexpected=1)
         result, buyer, mock = await self.run_case([invalid] * 3, max_steps=2)
         self.assertIn("Step limit", result["reason"])
         self.assertEqual(len(buyer.model.messages), 2)
@@ -393,7 +436,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
                 if request.url.path == "/audit/events" and self.events:
                     return httpx.Response(503, json={})
                 return super().__call__(request)
-        result, buyer, mock = await self.run_case([tool("search_products", query="milk")] + milk_steps(), FailSecondAudit())
+        result, buyer, mock = await self.run_case([tool("search_products", query="milk", unexpected=1)] + milk_steps(), FailSecondAudit())
         self.assertTrue(result["reconciliation_required"])
         self.assertEqual(len(buyer.model.messages), 1)
         self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))

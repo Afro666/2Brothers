@@ -67,7 +67,39 @@ Ports 22, 80 and 443 must be open.
   `docker compose --env-file <your .env> -f deploy/compose.yaml up --build` (it needs the values above).
 The internal Nemotron `buyer` worker (#279) uses the same application image with
 the `two-brothers-buyer-worker` entrypoint. Set `VERDA_INFERENCE_KEY` in the server
-`.env` before deploying this service. It receives the agent token and Mongo URI,
+`.env` for this service. The key is optional for compose: without it web and gateway
+still deploy, and the buyer returns 503 `BUYER_UNAVAILABLE` until the key is set. It receives the agent token and Mongo URI,
 not the human token or upstream Valio key. No worker port is published.
 `BUYER_WORKER_URL` on the gateway routes free-text proposal requests to it.
 
+## One deploy at a time, and pausing deploys
+
+- Deploys never overlap: the workflow queues runs (`concurrency: deploy`) and `deploy/update.sh`
+  takes a lock on the server, so a second deploy waits for the first.
+- A deploy always takes the newest commit on main and writes its sha to `/opt/2brothers.deployed`;
+  a run that finds that commit already deployed does nothing. Merges that land back to back
+  usually cause one restart instead of one each. The sha is written only after the gateway
+  answers `/health`. To redeploy the same commit (after editing `/opt/2brothers/.env`, or a
+  crashed container): "Run workflow" on the deploy action; a manual run always deploys.
+- Only what changed restarts: a web-only commit rebuilds the web image and leaves the gateway and
+  the buyer running. While the gateway restarts, Caddy holds a request for up to 15 seconds
+  instead of answering 502.
+- A deploy that changes the gateway restarts it, which cuts off requests in flight. To pause
+  deploys (recording the demo, a long job on the server): `touch /opt/2brothers.hold` on the
+  server. Merges still pass; their deploy run says "on hold" and changes nothing. `rm
+  /opt/2brothers.hold` to resume; the next merge, or "Run workflow" on the deploy action, deploys
+  the newest commit.
+
+## Recall check (Context.dev)
+
+- `CONTEXT_DEV_API_KEY` in the server `.env` is optional. With it, "Check recalls now"
+  (`POST /v1/kitchens/{k}/recalls/check`) scrapes the Ruokavirasto list live, one call per
+  check. Without it, or when Context.dev is slow or down, the check uses the recording in
+  the image and the screen says "recording". `RECALL_CHECK_TIMEOUT_S` (default 45, at most
+  120) bounds the call; a live list scrape took 30 seconds on 2026-11-14.
+- The demo needs an open proposal with the recalled coffee (461332) before the check. On
+  the server:
+  `docker compose --env-file /opt/2brothers/.env -f /opt/2brothers/deploy/compose.yaml exec gateway python -m demo.recall_demo`
+  It makes a READY proposal through the gateway and orders nothing. Run it before the first
+  check: after a check has recorded the recall, new quotes leave the coffee out and the
+  command says so.

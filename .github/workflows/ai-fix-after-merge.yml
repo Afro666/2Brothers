@@ -1,0 +1,41 @@
+name: ai-fix-after-merge
+
+# The review files ai-fix issues while the PR is still open, so the code they name is
+# not on main yet. This starts the fix agent for those issues once that PR merges.
+# An issue is linked by a line of its body: "From review of #<pr>", markdown allowed in front (#454).
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Merged PR number whose ai-fix issues should start now
+        required: true
+
+permissions:
+  actions: write
+  issues: read
+  pull-requests: read
+
+jobs:
+  start:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number || inputs.pr }}
+    steps:
+      - name: Start the fix agent for this PR's ai-fix issues
+        run: |
+          state=$(gh pr view "$PR" -R "$REPO" --json state --jq .state)
+          [ "$state" = "MERGED" ] || { echo "PR #$PR is $state, not merged. Nothing to start."; exit 0; }
+          gh issue list -R "$REPO" --label ai-fix --state open --limit 300 --json number,body \
+            --jq ".[] | select(.body | test(\"(^|\n)[#*> _]*From review of #${PR}([^0-9]|$)\")) | .number" |
+          while read -r n; do
+            open=$(gh pr list -R "$REPO" --head "ai-fix/$n" --state open --json number --jq 'length')
+            if [ "$open" != "0" ]; then echo "#$n already has an open fix PR"; continue; fi
+            gh workflow run ai-fix.yml -R "$REPO" -f issue="$n" && echo "fix agent started for #$n" || echo "could not start #$n"
+          done

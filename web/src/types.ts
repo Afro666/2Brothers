@@ -44,8 +44,8 @@ export interface Product {
   salesUnit: string;
   /** The unit prices compare in (L or KG). */
   baseUnit: string;
-  /** Base units in one sales unit (1 for a 1 L carton sold per piece). */
-  baseUnitsPerSalesUnit: number;
+  /** Base units in one sales unit (1 for a 1 L carton sold per piece); null when not known. */
+  baseUnitsPerSalesUnit: number | null;
   units: PackUnit[];
   /** Fat % from nutrition data; null when not given. */
   fatPercent: number | null;
@@ -66,12 +66,15 @@ export interface Offer {
   requestedDate: string;
   /** Catalog price per sales unit before tax; null when `error: true`. */
   priceExVat: number | null;
-  taxRatePercent: number;
+  /** null when the gateway sends only the order's VAT total. */
+  taxRatePercent: number | null;
   /** Price per comparison unit before tax, e.g. € per L. */
   comparisonPrice: number | null;
   comparisonUnit: "L" | "KG" | null;
-  /** In `salesUnit`. 999999 and 9999999999 are "unknown" sentinels. */
-  availableAmount: number;
+  /** In `salesUnit`. 999999, 9999999999 and null are "unknown". */
+  availableAmount: number | null;
+  /** The supplier confirmed stock for the ordered quantity, without saying how much there is. */
+  stockConfirmed?: boolean;
   salesUnit: string;
   /** Earliest date it can arrive; can be later than `requestedDate`. */
   availableDate: string | null;
@@ -82,6 +85,8 @@ export interface Offer {
 
 export type OrderStatus =
   | "NEEDS_APPROVAL"
+  | "IN_PROGRESS"
+  | "BLOCKED_BY_RECALL"
   | "REFUSED"
   | "PLACED"
   | "NOT_SENT"
@@ -117,11 +122,66 @@ export interface Order {
   id: string;
   status: OrderStatus;
   urgency: Urgency;
-  deliveryDate: string;
+  deliveryDate: string | null;
   lines: OrderLine[];
-  totalExVat: number;
+  totalExVat: number | null;
   totalInclVat: number;
-  mov: MovState;
+  /** null = the supplier's delivery terms are not known. */
+  mov: MovState | null;
+  /** The supplier's own reference after a person resolves an unknown send. */
+  supplierOrderRef?: string | null;
+}
+
+export type OrderSendOutcome = "CONFIRMED" | "NOT_SENT" | "UNCONFIRMED" | "SENT_READ_FAILED";
+
+export interface OrderResolutionRecord {
+  resolution: "placed" | "not_sent";
+  supplierOrderRef: string | null;
+  note: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  fromOutcome: OrderSendOutcome | null;
+}
+
+export interface OrderResolution {
+  orderId: string;
+  proposalId: string | null;
+  proposalStatus: string | null;
+  idempotencyKey: string | null;
+  payloadHash: string | null;
+  offerId: string | null;
+  supplierId: string | null;
+  approvedBy: string | null;
+  outcome: OrderSendOutcome | null;
+  status: string | null;
+  expectedTotal: number | null;
+  lines: OrderLine[];
+  createdAt: string | null;
+  updatedAt: string | null;
+  resolvable: boolean;
+  resolution: OrderResolutionRecord | null;
+}
+
+export interface OrderResolutionResult {
+  orderId: string;
+  proposalId: string | null;
+  proposalStatus: string | null;
+  outcome: OrderSendOutcome | null;
+  status: string | null;
+  resolution: OrderResolutionRecord | null;
+}
+
+export type OrderResolutionInput =
+  | { resolution: "placed"; supplierOrderRef: string }
+  | { resolution: "not_sent"; note?: string };
+
+export interface CurrentSession {
+  kind: "human" | "agent" | "token" | null;
+  name: string | null;
+  role: string | null;
+  kitchenId: string | null;
+  canApprove: boolean;
+  scopes: string[] | null;
 }
 
 /** One rule of the mandate that this order breaks or touches. */
@@ -135,7 +195,7 @@ export interface ApprovalRequest {
   id: string;
   orderId: string;
   requestedBy: string;
-  createdAt: string;
+  createdAt: string | null;
   /** One line: what the chef asked and what this order covers. */
   summary: string;
   lineCount: number;
@@ -143,7 +203,57 @@ export interface ApprovalRequest {
   totalExVat: number;
   totalInclVat: number;
   reasons: MandateReason[];
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  /** Only PENDING can be approved; IN_PROGRESS and BLOCKED_BY_RECALL wait, they are not decided. */
+  status: "PENDING" | "IN_PROGRESS" | "BLOCKED_BY_RECALL" | "APPROVED" | "REJECTED";
+  /** The baskets the engine offers for this request; absent or empty when it offers one. */
+  options?: ProposalOption[];
+}
+
+export interface ProposalOptionLine {
+  productId: ProductCode;
+  /** null when the API names only the product id. */
+  productName: string | null;
+  quantity: number;
+  unit: string;
+  /** Ex VAT, per `unit`. */
+  unitPrice: number | null;
+}
+
+/**
+ * One basket the engine offers for a request (contract `substitute_options`).
+ * null means unknown: never zero, never none, and never the best value.
+ */
+export interface ProposalOption {
+  /** The option's engine offer id. */
+  id: string;
+  /** Presentation order only; it does not say an option is better. */
+  tier: OfferTier;
+  /** Where this basket came from; null when the API does not say. */
+  source: "confirmed" | "original" | "supplier" | "catalog" | null;
+  /** PARTIAL covers part of the ask now and leaves the rest for later. */
+  kind: "FULL" | "PARTIAL";
+  lines: ProposalOptionLine[];
+  /** With fees and tax: the exact figure a person approves. */
+  totalInclVat: number;
+  /** False unless every line's stock is measured. */
+  stockConfirmed: boolean;
+  /** true = the order cut-off is missed; null = the API did not say. */
+  cutoffPassed: boolean | null;
+  cutoffAt: string | null;
+  /** Delivered vs ordered, 0..1, of the weakest line. */
+  deliveryReliability: number | null;
+  /** Product-group average (not this product's own figure): lowest and highest line. */
+  co2KgPerKg: { min: number; max: number } | null;
+  /** Labels every line carries. */
+  labels: ProductLabel[] | null;
+  /** The engine's sentence, shown verbatim. */
+  tradeOff: string;
+  /** Only what the API says: the UI never ranks options. */
+  recommended: boolean;
+  /** The part of the request still waiting for supplier stock confirmation. */
+  held: { quantity: number; unit: string } | null;
+  /** The basket the proposal holds now. */
+  chosen: boolean;
 }
 
 export interface SubstitutionRule {
@@ -176,11 +286,13 @@ export type AuditKind =
   | "order"
   | "stock"
   | "forecast_share"
-  | "settings";
+  | "settings"
+  | "other";
 
 export interface AuditEvent {
   id: string;
-  at: string;
+  /** null = the gateway did not record when. */
+  at: string | null;
   kind: AuditKind;
   actor: "chef" | "agent" | "gateway" | "human" | "valio" | "system";
   /** What happened, short. */
@@ -268,7 +380,8 @@ export interface StockItem {
   unit: string;
   /** null = not counted (unknown), never zero. */
   onHand: number | null;
-  onOrder: number;
+  /** null = the gateway cannot say what is on order yet (unknown), never zero. */
+  onOrder: number | null;
   countedAt: string | null;
   lastDelivery: string | null;
 }
@@ -281,6 +394,27 @@ export interface DemandLine {
   date: string;
   need: number;
   why: string;
+}
+
+/**
+ * One order proposal for everything a menu plan window needs, net of counted stock
+ * (`POST /proposals` with `from` and `to`). It is a proposal only: a person approves it.
+ */
+export interface PlanProposal {
+  id: string;
+  /** REJECTED: the gateway could not put one line in the basket. */
+  status: "READY" | "REJECTED";
+  /** The total a person approves (the gateway's `expected_total`). */
+  totalInclVat: number;
+  lineCount: number;
+  /** Products the plan needs something of. */
+  needCount: number;
+  /** Needed products whose stock was never counted: their full need is proposed. */
+  uncountedCount: number;
+  /** Needed products that cannot be fully covered. */
+  shortfallCount: number;
+  /** Why the proposal needs a person or was refused (the gateway's `mandate.reason_codes`). */
+  reasonCodes: string[];
 }
 
 export type ShortageRisk = "SHORT" | "AT_RISK" | "COVERED" | "UNKNOWN";
@@ -314,7 +448,11 @@ export interface CoverRule {
   maxDays: number;
 }
 
-/** How the engine sizes orders for this kitchen. Defaults come from the engine. */
+/**
+ * How the engine sizes orders for this kitchen. Defaults come from the engine. From the gateway,
+ * a service level or stock-out cap the kitchen never set is NaN (the form shows an empty field):
+ * the engine's default applies and the gateway does not send it.
+ */
 export interface KitchenSettings {
   /** Target service level per demand class, in percent (A = menu-critical). */
   serviceLevelPercent: Record<DemandClass, number>;
@@ -327,6 +465,38 @@ export interface KitchenSettings {
   budgetWarningPerWeekExVat: number | null;
   /** A product that contains or may contain one of these is refused. GS1 codes. */
   excludedAllergens: string[];
+}
+
+/** One thing the Buyer does, asks for or is refused, with the audit kind that shows it happening. */
+export interface PermissionRow {
+  action: string;
+  auditKind: AuditKind;
+  /** The gateway rule that enforces it, when the gateway sends one. */
+  rule?: string;
+}
+
+/** What the Buyer decides alone, what a person signs off, and what the Buyer can never do. */
+export interface BuyerPermissions {
+  alone: PermissionRow[];
+  person: PermissionRow[];
+  never: PermissionRow[];
+}
+
+/** How far this kitchen is into the learning period of the earned auto-approve. Read-only. */
+export interface AutoApproveLearning {
+  weeks: number;
+  weeksNeeded: number;
+  decisions: number;
+  decisionsNeeded: number;
+  /** Share of decisions a person edited, 0 to 1. null = not known yet, never shown as 0 %. */
+  editRate: number | null;
+  maxEditRate: number;
+  /** Whether an approver switched auto-approve on. Absent = not known (shown as off). */
+  enabled?: boolean;
+  /** The kitchen's limit in EUR, as the gateway sends it. Only with `enabled`. */
+  limitEur?: string | null;
+  /** Who switched it on. Only with `enabled`. */
+  setBy?: string | null;
 }
 
 /** A product the Buyer could add to this order, most useful first. */
@@ -359,4 +529,211 @@ export interface FeedbackRow {
   from: number | null;
   to: number | null;
   reason: string | null;
+}
+
+/** How one forecast method did against what the kitchen really needed. Every null is "unknown", never zero. */
+export interface ForecastScore {
+  /** Weekly error: sum of |predicted - actual| over sum of actual, as a fraction. */
+  wape: number | null;
+  /** (predicted - actual) / actual; above zero means the forecast was too high. */
+  bias: number | null;
+  /** Quantity needed above the forecast (the kitchen would have run short). */
+  short: number | null;
+  /** Quantity forecast above the need (it would have been waste). */
+  waste: number | null;
+  /** Days a product would have run out when ordering to this forecast. */
+  stockOutDays: number | null;
+}
+
+export interface ForecastWeek {
+  /** ISO `YYYY-Www`. */
+  week: string;
+  /** null in a week that is not over, or a past week with no stock count. */
+  actual: number | null;
+  /** true for a week that is not over yet: it carries a forecast only. */
+  ahead: boolean;
+  engine: number | null;
+  baseline: number | null;
+  engineWape: number | null;
+  baselineWape: number | null;
+}
+
+/** Predicted against actual per week, for the whole kitchen or one product. */
+export interface ForecastSeries {
+  /** null for the whole kitchen. */
+  productId: ProductCode | null;
+  name: string;
+  /** null when the series adds products counted in different units. */
+  unit: string | null;
+  /** Our engine: menu x covers x recipe. */
+  engine: ForecastScore;
+  /** The plain weekday average. */
+  baseline: ForecastScore;
+  /** Oldest first: past weeks, then future weeks. */
+  weeks: ForecastWeek[];
+}
+
+export interface ForecastAccuracy {
+  kitchen: ForecastSeries;
+  /** null when the gateway does not say per product (unknown, not "no products"). */
+  products: ForecastSeries[] | null;
+}
+
+/** Standing-order drift (docs/contract.md, "Standing-order drift"). */
+export type DriftKind = "portion_creep" | "cost_creep";
+
+export interface DriftWarning {
+  productId: ProductCode;
+  /** null when the gateway sends only the code. */
+  productName: string | null;
+  kind: DriftKind;
+  /** 0.4 = 40% above the baseline. */
+  change: number;
+  unit: string;
+  qtyPer100: number;
+  baselineQty: number;
+  spendPer100: number;
+  baselineSpend: number;
+  baselineWeeks: number;
+  why: string;
+  /** Set on the supplier side only: the consenting kitchen it belongs to. */
+  kitchenId?: string;
+  kitchenName?: string | null;
+}
+
+export interface DriftReport {
+  /** Monday of the last full week, `YYYY-MM-DD`. */
+  week: string;
+  warnings: DriftWarning[];
+}
+
+/** The kitchen-type guess onboarding offers. Anything else stays unknown. */
+export type KitchenType = "hotel" | "school" | "hospital" | "restaurant";
+
+/** Where a looked-up field came from: the provider and the endpoint the gateway called. */
+export interface FieldSource {
+  provider: "Context.dev";
+  /** e.g. `POST /v1/brand/retrieve`. */
+  endpoint: string;
+}
+
+/** One looked-up field. `value` null = unknown: the lookup did not find it, so nothing is guessed. */
+export interface LookedUpField<T> {
+  value: T | null;
+  /** null when `value` is null. */
+  source: FieldSource | null;
+}
+
+export interface KitchenAddress {
+  street: string | null;
+  postalCode: string | null;
+  city: string | null;
+  country: string | null;
+}
+
+/** What onboarding found for a kitchen's email or website. Nothing is saved until a person confirms. */
+export interface KitchenBrandLookup {
+  /** The domain the lookup used, e.g. `hotelkuusi.fi`. */
+  domain: string;
+  /** false when the provider knew nothing about the domain: every field is then unknown. */
+  found: boolean;
+  name: LookedUpField<string>;
+  /** An https URL or a `data:image/svg+xml` URI. */
+  logoUrl: LookedUpField<string>;
+  /** Brand colours as `#rrggbb`, the main one first. */
+  colors: LookedUpField<string[]>;
+  address: LookedUpField<KitchenAddress>;
+  kitchenType: LookedUpField<KitchenType>;
+  /** Free text as the website says it, e.g. "Mon-Fri 06:30-22:00". */
+  openingHours: LookedUpField<string>;
+}
+
+/** The profile a person confirmed on the onboarding page. */
+export interface KitchenBrandProfile {
+  domain: string;
+  name: string;
+  logoUrl: string | null;
+  colors: string[];
+  address: KitchenAddress;
+  kitchenType: KitchenType | null;
+  openingHours: string | null;
+}
+
+/**
+ * How sure the recall monitor is that a notice is about this product (monitor/README.md):
+ * `exact` the notice's EAN is the product's; `possible` same brand and a shared product
+ * word; `review` no brand and no EAN, a person checks.
+ */
+export type RecallMatch = "exact" | "possible" | "review";
+
+/** The Ruokavirasto notice as Context.dev scraped it. null means the notice does not say. */
+export interface RecallNotice {
+  url: string;
+  /** `YYYY-MM-DD`. */
+  date: string | null;
+  /** The notice title, in Finnish as published. */
+  title: string | null;
+  reason: string | null;
+  action: string | null;
+  recalledProduct: string | null;
+  brand: string | null;
+  gtin: string | null;
+  packageSize: string | null;
+  /** Recalled lots or best-before dates; null means the notice names none, so every pack is in doubt. */
+  lot: string | null;
+}
+
+/** The line the Buyer re-planned in place of the recalled one. The engine sized it. */
+export interface RecallReplacementLine {
+  productId: ProductCode;
+  productName: string | null;
+  quantity: number;
+  unit: string;
+}
+
+/** One `recall.alert` (docs/contract.md, Webhooks), as the screens read it. */
+export interface RecallAlert {
+  /** Stable per notice, kitchen and product: a repeat check is the same alert. */
+  eventId: string;
+  productId: ProductCode;
+  productName: string | null;
+  match: RecallMatch;
+  /** The monitor's reason for the match, shown verbatim. */
+  why: string;
+  /** Where the kitchen holds it: stock, recipes, the open proposal. */
+  where: string[];
+  recall: RecallNotice;
+  nextStep: string;
+  /** The open order it hits; null when it is not on an open order. */
+  orderId: string | null;
+  /**
+   * `BLOCKED_BY_RECALL` for an exact or possible match on an order line; `WARNING` for a
+   * review match, which never blocks on its own.
+   */
+  lineStatus: "BLOCKED_BY_RECALL" | "WARNING";
+  /** null while the Buyer has not re-planned the line: then the order cannot be approved. */
+  replacementLine: RecallReplacementLine | null;
+  /** Ideas for the chef from other brands; nothing is ordered from an alert. */
+  replacementIdeas: { productId: ProductCode; name: string | null; brand: string | null }[];
+  detectedAt: string;
+}
+
+/** One run of the recall monitor. */
+export interface RecallCheck {
+  checkedAt: string;
+  /** `live`: scraped now. `recording`: Context.dev was slow or the demo uses the saved scrape. */
+  source: "live" | "recording";
+  /** When the scraped pages were fetched; for `live` the same as `checkedAt`. */
+  fetchedAt: string;
+  /** The Context.dev endpoint, e.g. `/v1/web/scrape`. */
+  via: string;
+  /** null when the monitor does not say. */
+  noticesScanned: number | null;
+}
+
+/** What the inbox knows about recalls: the open alerts and the last check. */
+export interface RecallList {
+  /** null when no check has run: the screens then say "not checked yet", never "no recalls". */
+  lastCheck: RecallCheck | null;
+  alerts: RecallAlert[];
 }

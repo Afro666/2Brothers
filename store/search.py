@@ -105,6 +105,9 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
         raise ValueError("allergen_strictness must be 'declared' or 'strict'")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIMIT:
         raise ValueError(f"limit must be an integer from 1 to {MAX_LIMIT}")
+    for name in ("require_labels", "exclude_allergens"):
+        if filters.get(name) is not None and not isinstance(filters[name], (list, tuple)):
+            raise ValueError(f"{name} must be a list of strings")
 
     text, text_size = parse_query(query)
     compound: dict = {"filter": [], "mustNot": [], "should": []}

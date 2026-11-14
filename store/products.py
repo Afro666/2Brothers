@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from pymongo import UpdateOne
+from pymongo import ReplaceOne
 
 VALIO_SUPPLIER_ID = "valio_aimo"
 NO_DECLARABLE_ALLERGENS = "X99"  # GS1: "does not contain declaration obligatory allergens"
@@ -145,16 +145,22 @@ def flatten(raw: dict, reliability: float | None = None, carbon: float | None = 
 
 
 def upsert_products(db, docs: list[dict], batch_size: int = 500) -> int:
-    """Insert or update by `_id`, in batches. Running it again changes nothing.
+    """Insert or replace by `_id`, in batches. Running it again changes nothing.
 
-    Fields are set, not the row replaced, so a product keeps its `embedding`.
+    A reload gives the same row as a fresh load, so fields a product no longer has
+    are dropped. Only a stored `embedding` is carried over to the new row.
     """
     for start in range(0, len(docs), batch_size):
         batch = docs[start:start + batch_size]
-        db.products.bulk_write([
-            UpdateOne({"_id": doc["_id"]},
-                      {"$set": {key: value for key, value in doc.items() if key != "_id"}},
-                      upsert=True) for doc in batch], ordered=False)
+        vectors = {row["_id"]: row["embedding"] for row in db.products.find(
+            {"_id": {"$in": [doc["_id"] for doc in batch]}, "embedding": {"$exists": True}},
+            {"embedding": 1})}
+        db.products.bulk_write(
+            [ReplaceOne({"_id": doc["_id"]},
+                        {**doc, "embedding": vectors[doc["_id"]]} if doc["_id"] in vectors
+                        and "embedding" not in doc else doc,
+                        upsert=True)
+             for doc in batch], ordered=False)
     return len(docs)
 
 

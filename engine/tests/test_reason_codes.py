@@ -49,14 +49,33 @@ def test_standing_order_that_no_longer_matches_usage_drifts():
     assert "STANDING_ORDER_DRIFT" in line.reason_codes
     assert line.numbers["standing_order"] == D(200)
     assert "Standing order 200 ST no longer matches usage" in line.why
+    assert "propose_standing_order" in line.numbers and "a person changes it" in line.why
 
 
-def test_standing_order_close_to_the_need_is_fine():
-    assert "STANDING_ORDER_DRIFT" not in replenish(item(standing_order=D(42)), P).reason_codes
+def test_standing_order_close_to_usage_is_fine():
+    assert "STANDING_ORDER_DRIFT" not in replenish(item(standing_order=D(145)), P).reason_codes   # usage 140
     assert "STANDING_ORDER_DRIFT" not in replenish(item(), P).reason_codes
+
+
+def test_a_standing_order_equal_to_usage_never_suggests_itself():
+    """#803: standing 140, demand 20/day, review 7 days, lots of stock: no drift, no suggestion."""
+    for on_hand in (120, 500):
+        line = replenish(item(on_hand=on_hand, standing_order=D(140)), P)
+        assert "STANDING_ORDER_DRIFT" not in line.reason_codes
+        assert "propose_standing_order" not in line.numbers and "Suggested" not in line.why
 
 
 def test_standing_order_when_nothing_is_needed_also_drifts():
     line = replenish(item(on_hand=500, standing_order=D(200)), P)
     assert line.quantity == 0
     assert line.reason_codes == ("POSITION_OK", "STANDING_ORDER_DRIFT")
+
+
+def test_allergen_rule_hits_only_known_excluded_codes():
+    from engine import allergen_rule_hits
+    oatly = {"allergens": {"contains": ["AW", "GO"], "may_contain": [], "undeclared": []}}
+    trace = {"allergens": {"contains": [], "may_contain": ["AW"], "undeclared": []}}
+    assert allergen_rule_hits(oatly, ("AW",)) == ("AW",)
+    assert allergen_rule_hits(trace, ("AW",)) == ("AW",)            # may contain counts
+    assert allergen_rule_hits(oatly, ()) == ()                       # no rule, no hit
+    assert allergen_rule_hits({}, ("AW",)) == ()                     # unknown: ALLERGEN_DATA_MISSING instead

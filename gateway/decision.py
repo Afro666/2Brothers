@@ -7,6 +7,19 @@ disagree with the figures a person approves. No model writes it.
 
 from __future__ import annotations
 
+from gateway.suppliers import VALIO
+
+
+def _supplier_of(sim: dict) -> dict:
+    """product_id -> supplier name, from the proposal's supplier blocks (#73).
+    Valio keeps its short name; a line outside any block (stored before #73) is Valio's."""
+    out = {}
+    for b in sim.get("blocks") or []:
+        name = "Valio" if b.get("supplier_id") == VALIO else (b.get("name") or b.get("supplier_id"))
+        for ln in b.get("lines") or []:
+            out[ln["product_id"]] = name
+    return out
+
 
 def _name(pid: str, names: dict) -> str:
     name = names.get(pid)
@@ -21,8 +34,11 @@ def decision_summary(request: dict, sim: dict, names: dict | None = None) -> dic
     need = f"{request.get('quantity')} {request.get('unit')} for {request.get('requested_date')}"
     asked = f"Asked: \"{asked_text}\" ({need})." if asked_text else f"Asked: {need}."
 
+    supplier_of = _supplier_of(sim)
+    suppliers = list(dict.fromkeys(supplier_of.values())) or ["Valio"]
+    source = f"{suppliers[0]} prices and stock" if len(suppliers) == 1 else "supplier prices and stock"
     ids = list(request.get("product_ids") or [])
-    searched = (f"Checked {len(ids)} product(s) with Valio prices and stock for "
+    searched = (f"Checked {len(ids)} product(s) with {source} for "
                 f"{request.get('requested_date')}: {', '.join(ids)}.")
 
     chosen = [f"{ln['quantity']} {ln['unit']} of {_name(ln['product_id'], names)}, "
@@ -45,11 +61,14 @@ def decision_summary(request: dict, sim: dict, names: dict | None = None) -> dic
         decide.append(f"Nothing is ordered until a person approves the total of EUR {sim['expected_total']}.")
     elif verdict == "REFUSED":
         decide.append("Nothing can be ordered: no line passed the checks.")
-    unknown = [ln for ln in sim.get("lines") or [] if ln.get("unknown_stock")]
-    if unknown:
-        decide.append("Valio has not confirmed stock for " + ", ".join(
-            f"{_name(ln['product_id'], names)} ({ln['quantity']} {ln['unit']})" for ln in unknown)
-            + ": the order cannot be placed until Valio confirms that stock.")
+    unknown = [ln for ln in sim.get("lines") or [] if ln.get("unknown_stock") is not False]
+    by_supplier: dict[str, list] = {}
+    for ln in unknown:
+        by_supplier.setdefault(supplier_of.get(ln["product_id"], "Valio"), []).append(ln)
+    for supplier, lines in by_supplier.items():
+        decide.append(f"{supplier} has not confirmed stock for " + ", ".join(
+            f"{_name(ln['product_id'], names)} ({ln['quantity']} {ln['unit']})" for ln in lines)
+            + f": the order cannot be placed until {supplier} confirms that stock.")
 
     parts = [asked, searched]
     parts += ["Chosen: " + c for c in chosen] or ["Chosen: nothing."]

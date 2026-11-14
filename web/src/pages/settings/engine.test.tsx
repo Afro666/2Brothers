@@ -33,7 +33,7 @@ describe("Ordering engine settings", () => {
     await user.type(input, "98");
     await user.click(screen.getByRole("button", { name: "Save settings" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Settings saved");
+    expect(await screen.findByTestId("settings-saved-toast")).toHaveTextContent("Settings saved");
     await waitFor(async () => {
       expect((await api.getKitchenSettings()).serviceLevelPercent.A).toBe(98);
       expect((await api.listAudit()).at(-1)).toMatchObject({
@@ -42,7 +42,7 @@ describe("Ordering engine settings", () => {
       });
     });
     await router.navigate({ to: "/audit" });
-    expect(await screen.findByRole("heading", { level: 1, name: "Audit log" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Activity log" })).toBeInTheDocument();
     expect(await screen.findByText("Kitchen settings updated")).toBeInTheDocument();
     expect(screen.getByText("Service level A: 97.5 % to 98 %")).toBeInTheDocument();
   });
@@ -69,7 +69,7 @@ describe("Ordering engine settings", () => {
     await user.clear(input);
     await user.click(screen.getByRole("button", { name: "Save settings" }));
 
-    await screen.findByRole("status");
+    await screen.findByTestId("settings-saved-toast");
     expect((await api.getKitchenSettings()).budgetWarningPerOrderExVat).toBeNull();
   });
 
@@ -84,5 +84,19 @@ describe("Ordering engine settings", () => {
 
     expect(input).toHaveValue(97.5);
     expect(screen.getByRole("button", { name: "Save settings" })).toBeDisabled();
+  });
+
+  it("keeps focus while typing a new cover category", async () => {
+    const user = userEvent.setup();
+    renderApp("/settings/engine", createMockApi());
+
+    await user.click(await screen.findByRole("button", { name: "Add category" }));
+    const inputs = screen.getAllByLabelText("Category");
+    const input = inputs[inputs.length - 1];
+    await user.click(input);
+    await user.type(input, "Meat");
+
+    expect(input).toHaveValue("Meat");
+    expect(input).toHaveFocus();
   });
 });

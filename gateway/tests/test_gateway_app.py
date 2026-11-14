@@ -11,6 +11,7 @@ mongomock = pytest.importorskip("mongomock")
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
+from engine.offers import plan_request  # noqa: E402
 from gateway.app import create_app  # noqa: E402
 from gateway.service import Gateway, GatewayError  # noqa: E402
 from gateway.valio_client import ValioClient  # noqa: E402
@@ -113,6 +114,18 @@ def test_agent_cannot_approve(env):
     assert r.status_code == 403 and r.json()["error"]["code"] == "NEEDS_APPROVAL"
 
 
+def test_non_numeric_quantity_and_total_are_422(env):
+    client, _, _ = env
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "abc", "unit": "L",
+        "requested_date": "2026-11-16", "idempotency_key": "bad-q"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_REQUEST", r.text
+    p = milk(client)
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                    json={"expected_total": "abc", "idempotency_key": "bad-t"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_REQUEST", r.text
+
+
 def test_no_token_no_access(env):
     client, _, _ = env
     assert client.get(K + "/orders").status_code == 401
@@ -179,6 +192,17 @@ def test_price_moved_is_total_mismatch_and_nothing_is_placed(env):
     ok = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
                      json={"expected_total": fresh["expected_total"], "idempotency_key": "a2"})
     assert ok.status_code == 200, ok.text
+
+
+def test_expired_proposal_is_requoted_and_unchanged_basket_can_be_approved(env):
+    client, _, db = env
+    p = milk(client)
+    db.offers.update_one({'_id': p['offer_id']}, {'$set': {'valid_until': '2000-01-01T00:00:00+00:00'}})
+    result = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                        json={'expected_total': p['expected_total'], 'idempotency_key': 'expired'})
+    assert result.status_code == 200, result.text
+    assert result.json()['expected_total'] == p['expected_total']
+    assert db.orders.count_documents({}) == 1
 
 
 def test_wrong_total_from_the_client_is_refused(env):
@@ -308,3 +332,175 @@ def test_parser_is_not_used_after_an_ambiguous_buyer_failure(monkeypatch):
     assert r.status_code == 503 and db.proposals.count_documents({}) == 0
     r = TestClient(create_app(gw, buyer_worker=safe)).post(K + "/proposals", headers=AGENT, json=body)
     assert r.status_code == 200 and r.json()["request"]["made_by"] == "parser"
+
+
+def test_the_parser_prices_products_that_fit_the_asked_measure_not_the_top_text_hits(monkeypatch):
+    """Live case 2026-11-14: "lactose free milk" ranked chocolate (kg) above the milk (L),
+    the parser took the top 8, and the proposal came back REJECTED with no lines."""
+    seen = {}
+
+    def search(db, query, filters, limit, kitchen_id=None):
+        seen["limit"] = limit
+        return [{"product_id": "466215", "net_content": {"value": 0.15, "unit": "KG"}, "category": "52201"},
+                {"product_id": "462775", "net_content": {"value": 1.0, "unit": "L"}, "category": "10400"}]
+
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    db = mongomock.MongoClient(tz_aware=True)["test"]
+    for pid, raw in RAW.items():
+        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
+    fake = FakeValio()
+    gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: NOW), now=lambda: NOW,
+                 search=search)
+    r = TestClient(create_app(gw)).post(K + "/proposals", headers=AGENT,
+                                        json={"text": "60 l milk by Monday", "idempotency_key": "fit1"})
+    assert r.status_code == 200
+    assert r.json()["request"]["product_ids"] == ["462775"]      # the chocolate is not priced
+    assert seen["limit"] == 50                                     # a wider look than the top 8
+
+
+def test_a_structured_body_cannot_claim_the_parser_made_it(env):
+    """made_by and query are set by the gateway, never by the client."""
+    client, _, _ = env
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "51", "unit": "L", "requested_date": "2026-11-16",
+        "idempotency_key": "spoof", "made_by": "parser", "query": "milk"})
+    assert r.status_code == 200, r.text
+    assert r.json()["request"]["made_by"] == "structured"
+    assert "query" not in r.json()["request"]
+
+
+def test_failed_attempt_without_a_write_releases_commit_claim(env, monkeypatch):
+    from store import orders
+    client, _, db = env
+    p = milk(client)
+    real = orders.record_attempt
+    def fail(**kwargs):
+        raise RuntimeError('write failed')
+    monkeypatch.setattr(orders, 'record_attempt', lambda *a, **kw: fail(**kw))
+    body = {'expected_total': p['expected_total'], 'idempotency_key': 'recovery'}
+    with pytest.raises(RuntimeError):
+        client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
+    assert db.proposals.find_one({'_id': p['proposal_id']})['status'] == 'READY'
+    monkeypatch.setattr(orders, 'record_attempt', real)
+    assert client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body).status_code == 200
+    assert db.orders.count_documents({}) == 1
+
+
+def test_lost_attempt_response_retains_claim_for_reconciliation(env, monkeypatch):
+    from store import orders
+    client, _, db = env
+    p = milk(client)
+    real = orders.record_attempt
+    def write_then_fail(*args, **kwargs):
+        real(*args, **kwargs)
+        raise RuntimeError('response lost')
+    monkeypatch.setattr(orders, 'record_attempt', write_then_fail)
+    body = {'expected_total': p['expected_total'], 'idempotency_key': 'ambiguous'}
+    with pytest.raises(RuntimeError):
+        client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
+    assert db.proposals.find_one({'_id': p['proposal_id']})['status'] == 'COMMITTING'
+    body['idempotency_key'] = 'different-key'
+    assert client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body).status_code == 409
+    assert db.orders.count_documents({}) == 1
+
+
+def test_an_event_need_marks_every_offer_line_event_line(env):
+    """#530: the trusted need carries the event flag; offers quoted for it get EVENT_LINE."""
+    client, _, _ = env
+    need = client.post(K + "/needs", headers=AGENT, json={
+        "quantity": "60", "unit": "L", "requested_date": "2026-11-16", "event": True}).json()
+    offer = client.post("/tools/get_offer", headers=AGENT,
+                        json={"need_id": need["need_id"], "product_ids": ["462775"]}).json()
+    assert offer["lines"] and all("EVENT_LINE" in ln["reason_codes"] for ln in offer["lines"])
+    plain = client.post(K + "/needs", headers=AGENT, json={
+        "quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
+    offer = client.post("/tools/get_offer", headers=AGENT,
+                        json={"need_id": plain["need_id"], "product_ids": ["462775"]}).json()
+    assert not any("EVENT_LINE" in ln["reason_codes"] for ln in offer["lines"])
+
+
+def test_offer_lines_carry_delivery_date_and_cut_off(env):
+    """#531: each line says when it arrives and whether its order cut-off has passed (S01)."""
+    client, _, _ = env
+    line = milk(client, quantity="1000")["lines"][0]
+    assert line["product_id"] == "462775"
+    assert line["available_date"] == "2026-11-16"
+    assert line["cutoff_passed"] is False
+    assert line["closing_time"].startswith("2026-11-15T")
+
+
+def test_no_cut_off_from_valio_is_null_on_the_offer_line_never_false(env):
+    """#547: Valio gives no closingTime for a product: its delivery facts say null for both
+    closing_time and cutoff_passed, never a safe-looking False."""
+    from datetime import date
+    from decimal import Decimal
+
+    client, fake, db = env
+    for product in fake.avail_data["products"]:
+        if product["productId"] == "462775":
+            product.pop("closingTime")
+    gw = Gateway(db, ValioClient("test-not-a-real-key", transport=fake.transport, ttl=0, now=lambda: NOW),
+                 now=lambda: NOW)
+    offers, skipped, tax, supplier_of, when = gw._offers(
+        "demo-kitchen", ["462775", "463335"], "L", date(2026, 11, 16))
+    assert when["462775"]["cutoff_passed"] is None
+    assert when["462775"]["closing_time"] is None
+    assert when["463335"]["cutoff_passed"] is False          # the known one stays known
+    # A line with no delivery facts at all shows them as unknown too.
+    plan = plan_request(Decimal("10"), "L", offers, date(2026, 11, 16))
+    sim = gw._simulate("demo-kitchen", plan, tax, skipped, supplier_of, {})
+    assert sim["lines"]
+    for line in sim["lines"] + [ln for b in sim["blocks"] for ln in b["lines"]]:
+        assert line["cutoff_passed"] is None and line["closing_time"] is None
+    # End to end, the engine does not promise a delivery it cannot time: the product is left out.
+    p = milk(client, quantity="1000")
+    assert "462775" not in [ln["product_id"] for ln in p["lines"]]
+    assert any(x["product_id"] == "462775" and "cut-off" in x["reason"] for x in p["excluded"])
+
+
+def test_api_docs_load_the_spec_relative_to_their_own_path(env):
+    """#278: behind Caddy the docs live at /api/docs, so the spec URL must be relative."""
+    client, _, _ = env
+    page = client.get("/docs")
+    assert page.status_code == 200 and "url: 'openapi.json'" in page.text
+    spec = client.get("/openapi.json").json()
+    assert spec["servers"][0]["url"] == "/api" and "docs/choices.md" in spec["info"]["description"]
+
+
+def test_the_kitchen_allergen_rule_leaves_a_product_out_on_every_path(env):
+    """S03: a product listing an excluded allergen is never offered, with ALLERGEN_RULE.
+    Unknown allergen data is not a hit: it stays, flagged ALLERGEN_DATA_MISSING (S04)."""
+    client, _, db = env
+    db.kitchen_settings.insert_one({"_id": "demo-kitchen", "excluded_allergens": ["milk"]})
+    db.products.update_one({"_id": "463335"}, {"$set": {
+        "allergen_data_known": True, "allergens": {"contains": ["AM"], "may_contain": [], "undeclared": []}}})
+    p = milk(client, quantity="100")
+    assert [ln["product_id"] for ln in p["lines"]] == ["462775"]
+    assert any(e["product_id"] == "463335" and e["reason"].startswith("ALLERGEN_RULE")
+               for e in p["excluded"])
+    assert "ALLERGEN_RULE" in p["mandate"]["reason_codes"]
+    need = client.post(K + "/needs", headers=AGENT, json={
+        "quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
+    offer = client.post("/tools/get_offer", headers=AGENT,
+                        json={"need_id": need["need_id"], "product_ids": ["463335"]}).json()
+    assert offer["lines"] == [] and "ALLERGEN_RULE" in offer["mandate"]["reason_codes"]
+
+
+def test_a_misspelt_allergen_rule_fails_closed(env):
+    client, _, db = env
+    db.kitchen_settings.insert_one({"_id": "demo-kitchen", "excluded_allergens": ["mlik"]})
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "10", "unit": "L", "requested_date": "2026-11-16",
+        "idempotency_key": "typo"})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "KITCHEN_POLICY_INVALID"
+
+
+def test_agent_audit_events_carry_a_time(env):
+    client, _, db = env
+    r = client.post("/audit/events", headers=AGENT, json={"event_id": "e1", "run_id": "r1", "type": "tool_call_started"})
+    assert r.status_code == 200
+    db.audit_log.insert_one({"_id": 999, "seq": 999, "prev_hash": "x", "hash": "y", "stored_at": NOW,
+                             "event": {"event_id": "old", "type": "tool_call_started"},
+                             "server": {"kitchen_id": "demo-kitchen"}})     # an event stored before this fix
+    events = client.get(K + "/audit", headers=AGENT).json()["events"]
+    assert all(e["at"] for e in events) and len(events) == 2

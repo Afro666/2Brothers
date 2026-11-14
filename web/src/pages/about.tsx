@@ -122,7 +122,7 @@ export function AboutPage() {
               </CardContent>
             </Card>
           </div>
-          <p className="text-sm text-muted-foreground">Switch sides with “Viewing as” in the menu.</p>
+          <p className="text-sm text-muted-foreground">Switch sides with “Your role” in the menu.</p>
         </section>
 
         <section aria-labelledby="about-rules" className="space-y-3">
@@ -139,8 +139,20 @@ export function AboutPage() {
           </ul>
           <p className="text-sm">
             <Link to="/audit" className="font-medium text-primary underline underline-offset-4">
-              Open the audit log
+              Open the activity log
             </Link>
+          </p>
+          <p className="text-sm">
+            <a href="/api/docs" className="font-medium text-primary underline underline-offset-4">
+              API docs (OpenAPI)
+            </a>
+            {" · "}
+            <a
+              href="https://github.com/Afro666/2Brothers/blob/main/docs/choices.md"
+              className="font-medium text-primary underline underline-offset-4"
+            >
+              Why it is built this way
+            </a>
           </p>
         </section>
       </div>

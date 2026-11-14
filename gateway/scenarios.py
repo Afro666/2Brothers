@@ -30,6 +30,7 @@ from pathlib import Path
 import sys
 from typing import Callable
 
+from engine.gap import fill_gap
 from engine import (Item, KitchenParams, Offer, Wanted, allergen_codes, pack_info, pad_to_free_delivery,
                     plan_request, replenish, stockout_adjusted)
 from engine.quantity import cover_limit
@@ -75,6 +76,13 @@ def _row(pid, sales, base, units, lot=0.01):
             "units": [{"unitId": u, "sizeInBaseUnits": s} for u, s in units]}
 
 
+def _with_fat(row, grams):
+    """The fat level as docs/scenarios.md names it (fat free, 3 %), as a nutrient row."""
+    row["synkkaData"] = {"nutritionalContent": [
+        {"id": "FAT", "value": grams, "unit": "GRM", "basisQuantity": 100.0, "basisQuantityUnit": "GRM"}]}
+    return row
+
+
 def _offer(pid, name, product, price, cmp, cmp_unit, available, cutoff_passed, measure=None, allergen_data_known=True):
     pack = pack_info(product, price=D(price), comparison_price=D(cmp) if cmp else None,
                      comparison_unit=cmp_unit, measure=measure)
@@ -90,9 +98,9 @@ class _Gateway:
     """The real FastAPI app on a test database with the recorded Valio answers."""
 
     RAW = {
-        "462775": _row("462775", "ST", "ST", [("KI", 12.0), ("ST", 1.0)]),
+        "462775": _with_fat(_row("462775", "ST", "ST", [("KI", 12.0), ("ST", 1.0)]), 0.0),   # fat free
         "462921": _row("462921", "KI", "ST", [("KI", 5.0), ("ST", 1.0)]),
-        "463335": _row("463335", "ST", "ST", [("KI", 5.0), ("ST", 1.0)]),
+        "463335": _with_fat(_row("463335", "ST", "ST", [("KI", 5.0), ("ST", 1.0)]), 3.0),   # Eila 3 %
     }
 
     def __init__(self):
@@ -120,6 +128,23 @@ class _Gateway:
         data = deepcopy(self.price if path == "/api/price" else self.avail)
         data["products"] = [p for p in data["products"] if p["productId"] in payload["products"]]
         return data
+
+    def add_product(self, pid, name, price, available, contains):
+        """A product from docs/scenarios.md: price and stock as written there, cloned from a
+        recorded Valio answer, so no challenge data is copied. 9999999999 is Valio's
+        "unknown" sentinel."""
+        self.db.products.insert_one({"_id": pid, "names": {"en": name}, "allergen_data_known": True,
+                                     "allergens": {"contains": list(contains), "may_contain": [], "undeclared": []},
+                                     "raw": _row(pid, "ST", "ST", [("ST", 1.0)])})
+        base_price = deepcopy(next(p for p in self.price["products"] if p["productId"] == "463335"))
+        base_price.update(productId=pid)
+        base_price["catalogPrice"]["value"] = price
+        base_price["comparisonPrice"]["value"] = price
+        self.price["products"].append(base_price)
+        base_avail = deepcopy(next(p for p in self.avail["products"] if p["productId"] == "463335"))
+        base_avail.update(productId=pid)
+        base_avail["scheduleLines"][0]["availableAmount"] = available
+        self.avail["products"].append(base_avail)
 
     def reprice(self, pid, value):
         for p in self.price["products"]:
@@ -163,8 +188,16 @@ def s02() -> Result:
     r.expect("lines", _lines(plan), [("465138", "16")])
     r.expect("total", f"{plan.total:f}", "1028.32")
     r.expect("shortfall cases", f"{plan.shortfall.normalize():f}", "4")
-    r.codes(plan.reason_codes, ["PARTIAL_STOCK", "SUBSTITUTE_NEEDS_OK", "ALLERGEN_DATA_MISSING"])
-    r.checks.append("substitute 462300 x 84 by weight: not built (#281)")
+    # Valio's own substitute: Elovena rolls, 400 g bags. Fill the 4-case gap by weight.
+    by_kg = pack_info(_row("465138", "KI", "KI", [("KI", 1)]), price=D("64.27"), comparison_price=D("7.65"),
+                      comparison_unit="KG", measure="KG")
+    rolls = _offer("462300", "Elovena gluten free oat-carrot rolls 400 g", _row("462300", "BAG", "BAG", [("BAG", 1)]),
+                   "3.58", "8.95", "KG", None, False, measure="KG")
+    sub = fill_gap(plan, by_kg, [rolls], MON, P)
+    r.expect("substitute (by weight)", _lines(sub) if sub else None, [("462300", "84")])
+    r.expect("substitute total", f"{sub.total:f}" if sub else None, "300.72")
+    r.codes([*plan.reason_codes, *(sub.reason_codes if sub else ())],
+            ["PARTIAL_STOCK", "SUBSTITUTE_NEEDS_OK", "ALLERGEN_DATA_MISSING"])
     return r.finish()
 
 
@@ -174,17 +207,22 @@ def _row_allergens(pid, contains):
 
 
 def s03() -> Result:
-    from agent.substitutes import AllergenPolicy
-
-    r = Result("S03", "Allergen-safe substitute for a school", "agent (substitutes policy)")
-    school = AllergenPolicy(excluded=("AW",))                 # coeliac pupils: no gluten cereals
-    oddly = _row_allergens("468465", ["GO"])                  # oat drink, gluten free: oats only
-    oatly = _row_allergens("470863", ["AW", "GO"])            # Valio's own substitute, 1,414 in stock
-    r.expect("requested oat drink allowed", school.allowed(oddly), True)
-    r.expect("Oatly refused as substitute", school.allowed(oatly, substitute=True), False)
-    r.expect("same Oatly fine without the rule", AllergenPolicy().allowed(oatly, substitute=True), True)
-    r.codes([], ["ALLERGEN_RULE", "STOCK_UNKNOWN"])
-    r.checks.append("the refusal holds; no line carries ALLERGEN_RULE yet")
+    r = Result("S03", "Allergen-safe substitute for a school", "gateway HTTP")
+    g = _Gateway()
+    g.db.kitchen_settings.insert_one({"_id": "demo-kitchen", "excluded_allergens": ["AW"]})   # coeliac pupils
+    g.add_product("468465", "Oddlygood oat drink 1 l gluten free", 1.17, 9999999999.0, ["GO"])
+    g.add_product("470863", "Oatly Oat Drink Semi 1 L", 1.40, 1414.0, ["AW", "GO"])   # Valio's own substitute
+    resp = g.client.post(g.k + "/proposals", headers=g.agent, json={
+        "product_ids": ["468465", "470863"], "quantity": "60", "unit": "ST",
+        "requested_date": MON.isoformat(), "idempotency_key": "s03",
+        "text": "60 litres of the gluten-free oat drink for the coeliac pupils"})
+    resp.raise_for_status()
+    p = resp.json()
+    r.expect("lines", [(ln["product_id"], ln["quantity"]) for ln in p["lines"]], [("468465", "60")])
+    r.expect("total ex VAT", p["total_ex_vat"], "70.20")
+    r.expect("Oatly refused (contains AW)",
+             any(e["product_id"] == "470863" and e["reason"].startswith("ALLERGEN_RULE") for e in p["excluded"]), True)
+    r.codes(p["mandate"]["reason_codes"], ["ALLERGEN_RULE", "STOCK_UNKNOWN"])
     return r.finish()
 
 
@@ -259,8 +297,8 @@ def s08() -> Result:
     line = replenish(Item("469549", esl, daily_demand=20, lead_time_days=0, review_days=7, on_hand=120,
                           safety_stock=20, category="fresh_dairy", standing_order=D(200)), P)
     r.expect("this week qty", f"{line.quantity.normalize():f}", "40")
+    r.expect("proposed standing order", f"{line.numbers.get('propose_standing_order', 0):f}", "140")
     r.codes(line.reason_codes, ["STANDING_ORDER_DRIFT"])
-    r.checks.append("proposing the standing order 200 -> 140: not built")
     return r.finish()
 
 
@@ -365,13 +403,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--markdown", action="store_true")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--strict", action="store_true", help="exit 1 when any case is FAIL")
     args = parser.parse_args(argv)
     results = run()
     if args.json:
         print(json.dumps([asdict(r) for r in results], indent=2))
     else:
         print(table(results, markdown=args.markdown))
-    return 1 if any(r.status == "ERROR" for r in results) else 0
+    bad = {"ERROR", "FAIL"} if args.strict else {"ERROR"}
+    return 1 if any(r.status in bad for r in results) else 0
 
 
 if __name__ == "__main__":

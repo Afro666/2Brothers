@@ -71,12 +71,14 @@ def list_feedback(db, kitchen_id: str, proposal_id: str | None = None,
 def declined_products(db, kitchen_id: str, threshold: int = DECLINES_TO_STOP) -> list[str]:
     """Products this kitchen removed from proposals at least `threshold` times.
 
-    The engine should stop proposing them until a human adds one back.
+    The engine should stop proposing them until a human adds one back: a `line_added`
+    resets the count, so only removals after the latest add count.
     """
-    rows = db.feedback.aggregate([
-        {"$match": {"meta.kitchen_id": kitchen_id, "kind": "line_removed"}},
-        {"$group": {"_id": "$meta.product_id", "declines": {"$sum": 1}}},
-        {"$match": {"declines": {"$gte": threshold}}},
-        {"$sort": {"_id": 1}},
-    ])
-    return [row["_id"] for row in rows]
+    declines: dict[str, int] = {}
+    rows = db.feedback.find(
+        {"meta.kitchen_id": kitchen_id, "kind": {"$in": ["line_removed", "line_added"]}},
+        {"meta.product_id": 1, "kind": 1}).sort([("ts", 1), ("_id", 1)])
+    for row in rows:
+        product = row["meta"]["product_id"]
+        declines[product] = declines.get(product, 0) + 1 if row["kind"] == "line_removed" else 0
+    return sorted(product for product, count in declines.items() if count >= threshold)

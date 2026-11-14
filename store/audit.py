@@ -45,6 +45,20 @@ def entry_hash(entry: dict) -> str:
     return hashlib.sha256(canonical(body).encode()).hexdigest()
 
 
+def as_read(value):
+    """A value read back from Mongo, with naive datetimes marked UTC.
+
+    A db handle without `tz_aware=True` returns naive datetimes; Mongo stores UTC.
+    """
+    if isinstance(value, datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    if isinstance(value, dict):
+        return {key: as_read(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [as_read(item) for item in value]
+    return value
+
+
 def _out(doc: dict) -> dict:
     doc.pop("_id", None)
     return doc
@@ -106,7 +120,7 @@ def verify_entries(entries) -> dict:
     prev, expected, count = GENESIS, 1, 0
     for entry in entries:
         if (entry["seq"] != expected or entry["prev_hash"] != prev
-                or entry["hash"] != entry_hash(entry)):
+                or entry["hash"] != entry_hash(as_read(entry))):
             return {"ok": False, "length": count, "broken_at": entry["seq"]}
         prev, expected, count = entry["hash"], expected + 1, count + 1
     return {"ok": True, "length": count, "broken_at": None}

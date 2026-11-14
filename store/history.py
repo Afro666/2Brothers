@@ -146,6 +146,13 @@ def save_forecasts(db, rows: list[dict], collection: str = "forecasts") -> int:
              "need": Decimal(str(row["need"])), "unit": row["unit"], "why": row.get("why"),
              "method": row.get("method"), "made_on": row.get("made_on")}
             for row in rows]
+    # Time-series rows cannot be upserted: a re-run replaces the same kitchen/product/day.
+    keys = list({(d["meta"]["kitchen_id"], d["meta"]["product_id"], d["ts"]): None
+                 for d in docs})
+    for start in range(0, len(keys), 1000):
+        db[collection].delete_many({"$or": [
+            {"meta.kitchen_id": k, "meta.product_id": p, "ts": t}
+            for k, p, t in keys[start:start + 1000]]})
     for start in range(0, len(docs), 5000):
         db[collection].insert_many(docs[start:start + 5000], ordered=False)
     return len(docs)
@@ -229,6 +236,33 @@ def supplier_demand(db, supplier_id: str, product_id: str, start, end,
                               "kitchen_name": names.get(entry["kitchen_id"]),
                               "demand": entry["demand"]} for entry in row["by_kitchen"]]
     return rows
+
+
+def supplier_forecasts(db, supplier_id: str, start, end,
+                       product_id: str | None = None) -> tuple[dict[str, str | None], list[dict]]:
+    """The consenting kitchens (id -> name) and their forecast rows, `start` to `end` inclusive.
+
+    Rows: `kitchen_id`, `product_id`, `day` (ISO date), `need` (as stored), `unit`.
+    A kitchen without active consent for this supplier is in neither.
+    """
+    kitchens = consenting_kitchens(db, supplier_id)
+    if not kitchens:
+        return {}, []
+    names = {k: None for k in kitchens}
+    names.update({k["_id"]: k.get("name") for k in db.kitchens.find({"_id": {"$in": kitchens}}, {"name": 1})})
+    query = {"meta.kitchen_id": {"$in": kitchens}, "ts": {"$gte": _day(start), "$lte": _day(end, end=True)}}
+    if product_id:
+        query["meta.product_id"] = str(product_id)
+    rows = [{"kitchen_id": row["meta"]["kitchen_id"], "product_id": row["meta"]["product_id"],
+             "day": row["ts"].date().isoformat(), "need": row["need"], "unit": row["unit"]}
+            for row in db.forecasts.find(query)]
+    return names, rows
+
+
+def product_docs(db, product_ids) -> dict[str, dict]:
+    """Catalog docs by id with `names`, `units`, `sales_unit` and `net_content` only."""
+    return {d["_id"]: d for d in db.products.find(
+        {"_id": {"$in": list(product_ids)}}, {"names": 1, "units": 1, "sales_unit": 1, "net_content": 1})}
 
 
 # Stock counts from the kitchen (POST /stock-counts)

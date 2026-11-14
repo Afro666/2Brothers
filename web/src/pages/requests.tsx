@@ -47,7 +47,7 @@ function DemoRequestsPage() {
     <AppShell activeId="requests">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Requests</h1>
+          <h1 className="page-title">Request an order</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Say what the kitchen needs. The Buyer agent proposes an order, and a person approves it before it is sent.
           </p>
@@ -65,7 +65,12 @@ function DemoRequestsPage() {
           </EmptyState>
         ) : null}
 
-        {state.status === "loading" ? <LoadingState label="Preparing the proposal" /> : null}
+        {state.status === "loading" ? (
+          <div className="space-y-3">
+            <div className="print-bar" aria-hidden="true" />
+            <LoadingState label="Preparing the proposal" />
+          </div>
+        ) : null}
 
         {state.status === "ready" ? (
           <Proposal request={state.request} proposal={state.proposal} preferred={preferred} onChoose={setPreferred} />
@@ -97,8 +102,8 @@ function Proposal({
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
+      <Card className="docket gap-4 p-4 sm:p-5">
+        <CardHeader className="px-0">
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle>{order.id}</CardTitle>
             <StatusBadge status={order.status} />
@@ -109,7 +114,7 @@ function Proposal({
             {formatEur(order.totalInclVat)} incl VAT
           </p>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 px-0">
           <OrderLinesTable lines={order.lines} now={new Date()} />
           <MovProgress mov={order.mov} />
         </CardContent>
@@ -139,7 +144,7 @@ function Proposal({
             <p>
               This order is not placed yet: a human must approve it first.{" "}
               <Link to="/approvals" className="font-medium text-primary underline underline-offset-4">
-                Review it in Approvals
+                Review it under To approve
               </Link>
               .
             </p>

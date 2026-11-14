@@ -10,3 +10,4 @@ __pycache__/
 .DS_Store
 /vendor/valio/
 /.claude/worktrees/
+/demo/out/

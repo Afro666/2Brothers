@@ -4,19 +4,31 @@
 	order rate_limit before reverse_proxy
 }
 
+# While the gateway restarts after a deploy, a request waits for it instead of failing.
+# Caddy retries only when it could not connect, so nothing already sent is sent twice
+# (after a connection, it retries GET only: the default lb_retry_match).
+(wait_for_gateway) {
+	lb_try_duration 15s
+	lb_try_interval 500ms
+}
+
 {$SITE_ADDRESS} {
 	encode zstd gzip
 
 	# Health check for monitors: no password, and it says nothing but "ok".
 	handle /api/ping {
 		rewrite * /health
-		reverse_proxy gateway:8000
+		reverse_proxy gateway:8000 {
+			import wait_for_gateway
+		}
 	}
 
 	# The Buyer agent and other services call the gateway here with their own
 	# bearer token; the gateway checks it. No shared password on this path.
 	handle_path /gateway/* {
-		reverse_proxy gateway:8000
+		reverse_proxy gateway:8000 {
+			import wait_for_gateway
+		}
 	}
 
 	# No password on the screens (Tymon, 2026-11-14): anyone with the link can use
@@ -49,7 +61,21 @@
 			}
 		}
 		reverse_proxy gateway:8000 {
+			import wait_for_gateway
 			header_up Authorization "Bearer {$GATEWAY_HUMAN_TOKEN}"
+		}
+	}
+
+	# Agent discovery (#293): the gateway writes both files from its own routes.
+	# Public, read-only, no token; the same files are at /gateway/llms.txt.
+	handle /llms.txt {
+		reverse_proxy gateway:8000 {
+			import wait_for_gateway
+		}
+	}
+	handle /.well-known/agent-card.json {
+		reverse_proxy gateway:8000 {
+			import wait_for_gateway
 		}
 	}
 

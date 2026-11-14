@@ -61,7 +61,11 @@ def test_load_and_prove_the_forecast(data, monkeypatch):
     db = mongomock.MongoClient(tz_aware=True)["test"]
     counts = load(db, data)
     assert counts["forecasts"] == len(data["forecasts"]) and counts["sharing"] >= 1
+    assert counts["suppliers"] == 2 and counts["own_products"] == 2
     load(db, data)                                   # idempotent: run twice, same counts
+    assert db.suppliers.count_documents({"kitchen_id": DEMO_ID}) == 2
+    bun = db.products.find_one({"_id": "own-cinnamon-bun"})
+    assert bun["allergen_data_known"] is False        # unknown, never "free from"
     assert db.forecasts.count_documents({}) == len(data["forecasts"])
     gw = Gateway(db, valio=None, now=lambda: datetime(2026, 10, 12, tzinfo=timezone.utc))
     proof = gw.forecast_accuracy(DEMO_ID, "2026-08-31", "2026-10-11")
@@ -70,3 +74,11 @@ def test_load_and_prove_the_forecast(data, monkeypatch):
     assert len(proof["methods"]["engine"]["weeks"]) == 6
     ahead = gw.forecast(DEMO_ID, "2026-10-12", "2026-10-25")["lines"]
     assert ahead and all(line["made_on"] == "2026-10-12" for line in ahead)
+
+
+def test_the_demo_kitchen_gets_a_standing_order_that_drifts():
+    """S08 in the demo: about 60 % above what one delivery cycle uses."""
+    from demo.seed import demo_standing_orders
+    stock = [{"meta": {"kitchen_id": "demo-kitchen", "product_id": "463335"}, "used": 20.0}] * 28
+    assert demo_standing_orders({"stock": stock}) == {"463335": "96"}          # 20 x 3 x 1.6
+    assert demo_standing_orders({"stock": []}) == {}

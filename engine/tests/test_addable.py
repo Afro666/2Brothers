@@ -1,5 +1,6 @@
 """Addable products (#129): what the buyer can add to a proposal, most probable first."""
 
+from dataclasses import replace
 from decimal import Decimal as D
 
 from engine import Item, KitchenParams
@@ -94,3 +95,14 @@ def test_quantity_without_demand_still_has_a_timing_and_a_why():
     assert row.suggested_qty == D(8)
     assert row.timing is Timing.THIS_WEEK
     assert row.why == "The engine says order this week: 8 ST."
+
+
+def test_standing_order_drift_keeps_its_sentence_in_the_row_why():
+    """#380: the row writes its own why; the engine's drift sentence must stay in it."""
+    c = cand("m", on_hand=35, price="2.57")
+    c = Candidate(replace(c.item, standing_order=D(20)), name=c.name, unit_price=c.unit_price)
+    (row,) = rank_addable([c], P)
+    assert "STANDING_ORDER_DRIFT" in row.reason_codes
+    assert row.why == ("The engine says order this week: 5 ST. "
+                       "Standing order 20 ST no longer matches usage (30 per delivery); this delivery "
+                       "needs 5. Suggested standing order: 30 ST; a person changes it.")

@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -68,5 +68,18 @@ describe("audit page", () => {
     const summaries = within(timeline!).getAllByText(/same time/);
     expect(summaries[0]).toHaveTextContent("First at same time");
     expect(summaries[1]).toHaveTextContent("Second at same time");
+  });
+
+  it("follows later ?kind= changes without remounting and ignores unknown kinds", async () => {
+    const { router } = renderApp("/audit?kind=search");
+    const kind = await screen.findByRole("combobox", { name: "Kind" });
+    expect(kind).toHaveTextContent("Search");
+
+    await act(() => router.navigate({ to: "/audit", search: { kind: "offer" } as never }));
+    expect(screen.getByRole("combobox", { name: "Kind" })).toBe(kind);
+    await waitFor(() => expect(kind).toHaveTextContent("Offer"));
+
+    await act(() => router.navigate({ to: "/audit", search: { kind: "bogus" } as never }));
+    await waitFor(() => expect(kind).toHaveTextContent("All kinds"));
   });
 });

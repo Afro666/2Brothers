@@ -9,6 +9,10 @@ services:
       context: ../web
       args:
         VITE_LIVE_BUYER: "true"
+        # Proposals, approvals, orders and the audit log come from the gateway behind /api;
+        # the screens it does not serve yet stay on the mock, marked "Sample data".
+        VITE_GATEWAY_URL: /api
+        VITE_USE_MOCKS: "false"
     restart: unless-stopped
     depends_on:
       - gateway
@@ -35,6 +39,11 @@ services:
       GATEWAY_HUMAN_TOKEN: ${GATEWAY_HUMAN_TOKEN:?set GATEWAY_HUMAN_TOKEN in .env}
       GATEWAY_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}
       BUYER_WORKER_URL: http://buyer:8001
+      # Optional: the onboarding lookup (#375); without it that one route answers 502. Also the live
+      # scrape of "Check recalls now" (#358); without it the check uses the recording and says so.
+      CONTEXT_DEV_API_KEY: ${CONTEXT_DEV_API_KEY:-}
+      # Caddy strips this prefix (web/Caddyfile); the agent card and llms.txt print it in their URLs (#293).
+      GATEWAY_PUBLIC_PREFIX: /gateway
 
   # Internal worker: no human token, upstream Valio key or published port.
   buyer:
@@ -44,7 +53,8 @@ services:
     command: ["two-brothers-buyer-worker"]
     restart: unless-stopped
     environment:
-      VERDA_INFERENCE_KEY: ${VERDA_INFERENCE_KEY:?set VERDA_INFERENCE_KEY in .env}
+      # Optional: without it only this worker fails (503 BUYER_UNAVAILABLE), not the deploy.
+      VERDA_INFERENCE_KEY: ${VERDA_INFERENCE_KEY:-}
       MONGODB_URI: ${MONGODB_URI:?set MONGODB_URI in .env}
       GATEWAY_AGENT_TOKEN: ${GATEWAY_AGENT_TOKEN:?set GATEWAY_AGENT_TOKEN in .env}
       GATEWAY_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}

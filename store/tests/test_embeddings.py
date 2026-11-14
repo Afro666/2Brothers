@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
 from uuid import uuid4
@@ -15,6 +16,11 @@ from store.embeddings import (EMBED_DIMENSIONS, EmbeddingError, embed, embed_pro
                               product_text, stale)
 from store.products import upsert_products
 from store.search import build_hybrid_pipeline, search_products, vector_filter
+
+try:
+    import mongomock
+except ImportError:  # the `test` extra is not installed
+    mongomock = None
 
 
 def fake_embedder(texts, input_type):
@@ -206,3 +212,114 @@ class HybridQueryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProviderTests(unittest.TestCase):
+    """Two embedding services; the first whose key is set is used."""
+
+    def env(self, **values):
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("NVIDIA_API_KEY", "MONGODB_AI_API_KEY", "MONGODB_AI_ENDPOINT")}
+        return mock.patch.multiple(embeddings, load_dotenv=lambda: None), \
+            mock.patch.dict(os.environ, {**clean, **values}, clear=True)
+
+    def test_no_key_means_no_provider_and_a_clear_error(self):
+        a, b = self.env()
+        with a, b:
+            self.assertIsNone(embeddings.provider())
+            with self.assertRaisesRegex(EmbeddingError, "no embedding key"):
+                embed(["x"], "query")
+
+    def test_nvidia_is_used_first_when_both_keys_are_set(self):
+        a, b = self.env(NVIDIA_API_KEY="n", MONGODB_AI_API_KEY="m")
+        with a, b:
+            self.assertEqual(embeddings.provider(), "nvidia")
+            self.assertEqual(embeddings.current_model(), "nvidia/nemotron-3.5-embed-1b")
+
+    def test_mongodb_ai_request_uses_voyage_and_its_own_words(self):
+        seen = {}
+
+        def post(url, json, timeout, headers):
+            seen.update(url=url, body=json, auth=headers["Authorization"])
+            return Response(200, [[0.0] * EMBED_DIMENSIONS for _ in json["input"]])
+
+        a, b = self.env(MONGODB_AI_API_KEY="secret-key", MONGODB_AI_ENDPOINT="ai.mongodb.com")
+        with a, b:
+            vectors = embed(["milk", "oat drink"], "passage", post=post)
+        self.assertEqual(len(vectors), 2)
+        self.assertEqual(seen["url"], "https://ai.mongodb.com/v1/embeddings")
+        self.assertEqual(seen["body"], {"model": "voyage-4", "input": ["milk", "oat drink"],
+                                        "input_type": "document", "output_dimension": EMBED_DIMENSIONS})
+        self.assertEqual(seen["auth"], "Bearer secret-key")
+
+    def test_a_failure_never_carries_the_key(self):
+        a, b = self.env(MONGODB_AI_API_KEY="secret-key")
+        with a, b:
+            with self.assertRaises(EmbeddingError) as caught:
+                embed(["x"], "query", post=lambda *args, **kwargs: Response(401))
+        self.assertNotIn("secret-key", str(caught.exception))
+
+    def test_vectors_of_another_model_are_stale(self):
+        doc = {"_id": "1", "names": {"en": "Milk 1 l"},
+               "embedding": {"model": "nvidia/nemotron-3.5-embed-1b", "dimensions": EMBED_DIMENSIONS,
+                             "text_sha": embeddings.text_sha("Milk 1 l")}}
+        self.assertEqual(stale([doc], "nvidia/nemotron-3.5-embed-1b"), [])
+        self.assertEqual([row[0] for row in stale([doc], "voyage-4")], ["1"])
+
+
+@unittest.skipUnless(mongomock, "mongomock is not installed")
+class VectorFileTests(unittest.TestCase):
+    """The vectors can travel as a file: export needs the key, import needs the database."""
+
+    RAW = [{"id": "900001", "salesUnit": "ST", "baseUnit": "ST",
+            "synkkaData": {"names": [{"language": "en", "value": "Test oat drink 1 l"}], "brand": "Testi"}},
+           {"id": "900002", "salesUnit": "ST", "baseUnit": "ST",
+            "synkkaData": {"names": [{"language": "en", "value": "Test milk 1 l"}], "brand": "Testi"}}]
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.catalog = self.dir / "catalog.json"
+        self.catalog.write_text(json.dumps(self.RAW), encoding="utf-8")
+        self.out = self.dir / "vectors.jsonl.gz"
+        self.db = mongomock.MongoClient(tz_aware=True)[f"t{uuid4().hex[:8]}"]
+        from store.products import flatten
+        # insert_many, not upsert_products: mongomock has no bulk ReplaceOne for this pymongo.
+        self.db.products.insert_many([flatten(raw) for raw in self.RAW])
+        # mongomock cannot run a bulk UpdateOne of this pymongo either: apply them one by one.
+        self.db.products.bulk_write = lambda writes, ordered=False: [
+            self.db.products.update_one(write._filter, write._doc) for write in writes]
+        patch = mock.patch.object(embeddings, "current_model", lambda: "voyage-4")
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_export_then_import_writes_every_vector_with_its_model(self):
+        calls = []
+        count = embeddings.export_vectors(self.catalog, self.out, embedder=lambda texts, kind: (
+            calls.append(kind), fake_embedder(texts, kind))[1], log=lambda line: None)
+        self.assertEqual((count, calls), (2, ["passage"]))
+        self.assertEqual(embeddings.import_vectors(self.db, self.out),
+                         {"written": 2, "text_changed": 0, "missing": 0})
+        stored = self.db.products.find_one({"_id": "900001"})["embedding"]
+        self.assertEqual((stored["model"], stored["dimensions"]), ("voyage-4", EMBED_DIMENSIONS))
+        self.assertEqual(stored["vector"].as_vector().dtype, BinaryVectorDtype.FLOAT32)
+        self.assertEqual(stale(self.db.products.find({}), "voyage-4"), [])     # nothing left to embed
+
+    def test_a_second_export_run_embeds_nothing_again(self):
+        embeddings.export_vectors(self.catalog, self.out, embedder=fake_embedder, log=lambda line: None)
+        again = embeddings.export_vectors(self.catalog, self.out, embedder=lambda texts, kind: self.fail(
+            "the second run must not call the service"), log=lambda line: None)
+        self.assertEqual(again, 0)
+
+    def test_import_skips_a_changed_text_and_a_missing_product(self):
+        embeddings.export_vectors(self.catalog, self.out, embedder=fake_embedder, log=lambda line: None)
+        self.db.products.update_one({"_id": "900001"}, {"$set": {"names.en": "Renamed drink 1 l"}})
+        self.db.products.delete_one({"_id": "900002"})
+        self.assertEqual(embeddings.import_vectors(self.db, self.out),
+                         {"written": 0, "text_changed": 1, "missing": 1})
+        self.assertNotIn("embedding", self.db.products.find_one({"_id": "900001"}))
+
+    def test_a_file_of_another_model_is_not_appended_to(self):
+        embeddings.export_vectors(self.catalog, self.out, embedder=fake_embedder, log=lambda line: None)
+        with mock.patch.object(embeddings, "current_model", lambda: "nvidia/nemotron-3.5-embed-1b"):
+            with self.assertRaisesRegex(EmbeddingError, "another model"):
+                embeddings.export_vectors(self.catalog, self.out, embedder=fake_embedder, log=lambda line: None)

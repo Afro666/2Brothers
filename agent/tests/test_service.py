@@ -26,6 +26,12 @@ def test_explicit_need_parser_does_not_invent_quantities():
             parse_need({'text': text, 'requested_date': '2026-11-16'})
 
 
+def test_event_flag_goes_into_the_need():
+    need = parse_need({'text': '60 L milk', 'requested_date': '2026-11-16', 'event': True})
+    assert need['event'] is True
+    assert 'event' not in parse_need({'text': '60 L milk', 'requested_date': '2026-11-16'})
+
+
 class ScriptedBuyer:
     def __init__(self):
         self.calls = 0
@@ -85,6 +91,26 @@ def test_real_buyer_worker_creates_ready_proposal_and_durable_audit_once(monkeyp
     asyncio.run(run())
 
 
+def test_invalid_allergen_code_fails_closed_before_any_buyer_run(monkeypatch):
+    async def run():
+        db, gateway = environment(monkeypatch)
+        db.kitchen_settings.insert_one({'_id': 'demo-kitchen', 'excluded_allergens': ['not-an-allergen']})
+        factory = AsyncMock(side_effect=AssertionError('model must not start'))
+        worker = BuyerWorker(db, gateway, model_factory=factory, now=lambda: NOW)
+        body = {'text': '51 L milk', 'requested_date': '2026-11-16', 'idempotency_key': 'bad-policy'}
+        try:
+            with pytest.raises(WorkerError) as caught:
+                await worker.run('demo-kitchen', body)
+            assert (caught.value.status, caught.value.code) == (503, 'KITCHEN_POLICY_INVALID')
+            assert caught.value.fallback_safe
+            factory.assert_not_called()
+            assert db.agent_runs.count_documents({}) == 0
+            assert db.needs.count_documents({}) == 0
+        finally:
+            await gateway.close()
+    asyncio.run(run())
+
+
 def test_timeout_never_restarts_an_ambiguous_run(monkeypatch):
     class Slow(ScriptedBuyer):
         async def complete(self, *args):
@@ -119,8 +145,62 @@ def test_internal_worker_requires_agent_token_and_fixed_kitchen(monkeypatch):
 def test_public_free_text_route_hands_off_to_worker(monkeypatch):
     monkeypatch.setenv('GATEWAY_AGENT_TOKEN', 'internal-test-token')
     called = AsyncMock(return_value={'proposal_id': 'p', 'status': 'READY'})
-    client = TestClient(gateway_app(buyer_worker=called))
+    # Auth now consults the gateway's session repository before the injected
+    # worker. Keep this test independent of a developer's .env / live database.
+    gateway = Gateway(mongomock.MongoClient(tz_aware=True).test, None)
+    client = TestClient(gateway_app(gateway, buyer_worker=called))
     body = {'text': '51 L milk', 'requested_date': '2026-11-16', 'idempotency_key': 'k'}
     result = client.post('/v1/kitchens/demo-kitchen/proposals', headers={'Authorization': 'Bearer internal-test-token'}, json=body)
     assert result.status_code == 200 and result.json()['status'] == 'READY'
     called.assert_awaited_once_with('demo-kitchen', body)
+
+
+class GivesUpOnce(ScriptedBuyer):
+    """Stops with a plain answer on the first run (what the live model does about 1 time in 3)."""
+
+    def __init__(self):
+        super().__init__()
+        self.gave_up = False
+
+    async def complete(self, messages, definitions):
+        if not self.gave_up:
+            self.gave_up = True
+            return {'role': 'assistant', 'content': 'I could not find a suitable product.'}
+        return await super().complete(messages, definitions)
+
+
+def test_a_run_that_wrote_nothing_is_started_once_more(monkeypatch):
+    async def run():
+        db, gateway = environment(monkeypatch)
+        model = GivesUpOnce()
+        worker = BuyerWorker(db, gateway, model_factory=lambda: model, now=lambda: NOW)
+        try:
+            proposal = await worker.run('demo-kitchen', {'text': '51 L milk', 'requested_date': '2026-11-16',
+                                                         'idempotency_key': 'request-retry'})
+            assert proposal['status'] == 'READY' and proposal['approval_id']
+            assert db.proposals.count_documents({}) == 1 and db.needs.count_documents({}) == 1
+            assert db.audit_log.count_documents({'event.run_id': proposal['buyer_run_id'] + '-retry'}) == 8
+        finally:
+            await gateway.close()
+    asyncio.run(run())
+
+
+def test_two_failed_runs_are_still_a_safe_fallback(monkeypatch):
+    class NeverFinishes(ScriptedBuyer):
+        async def complete(self, messages, definitions):
+            self.calls += 1
+            return {'role': 'assistant', 'content': 'No.'}
+
+    async def run():
+        db, gateway = environment(monkeypatch)
+        model = NeverFinishes()
+        worker = BuyerWorker(db, gateway, model_factory=lambda: model, now=lambda: NOW)
+        try:
+            with pytest.raises(WorkerError) as caught:
+                await worker.run('demo-kitchen', {'text': '51 L milk', 'requested_date': '2026-11-16',
+                                                  'idempotency_key': 'request-never'})
+            assert caught.value.code == 'BUYER_INCOMPLETE' and caught.value.fallback_safe is True
+            assert db.proposals.count_documents({}) == 0
+        finally:
+            await gateway.close()
+    asyncio.run(run())

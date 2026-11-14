@@ -1,8 +1,10 @@
 import { Check, X } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { MovProgress } from "@/components/purchasing/mov-progress";
+import { OptionCompare } from "@/components/purchasing/option-compare";
 import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
+import { RecallLines, recallHold } from "@/components/purchasing/recall-lines";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -22,14 +24,15 @@ import {
   formatDateTime,
   formatEur,
   formatNumber,
+  formatOfferStock,
   formatStock,
   isPassed,
-  isUnknownStock,
+  isStockUnconfirmed,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
-import type { AddableProduct, ApprovalRequest, Order, OrderLine, ProposalChange } from "@/types";
+import type { AddableProduct, ApprovalRequest, Order, OrderLine, ProposalChange, RecallAlert } from "@/types";
 
 /** What the gateway gets on approve: the exact totals the human read. */
 export interface ApprovalDecision {
@@ -45,6 +48,9 @@ export interface ApprovalDecision {
  * order. The human's "yes" to that figure is the consent; the total alone
  * is not.
  */
+/** Wait this long after the last keystroke before searching addable products. */
+export const ADD_SEARCH_DEBOUNCE_MS = 250;
+
 export function ApprovalCard({
   request,
   order,
@@ -52,8 +58,11 @@ export function ApprovalCard({
   onApprove,
   onReject,
   onChangeProposal,
+  onChooseOption,
   listAddableProducts,
   editCount = 0,
+  approvalBlockedReason,
+  recalls = [],
 }: {
   request: ApprovalRequest;
   order?: Order;
@@ -61,8 +70,12 @@ export function ApprovalCard({
   onApprove?: (decision: ApprovalDecision) => void | Promise<void>;
   onReject?: (approvalId: string, reason: string) => void | Promise<void>;
   onChangeProposal?: (change: ProposalChange) => void | Promise<void>;
+  onChooseOption?: (optionId: string) => void | Promise<void>;
   listAddableProducts?: (query: string) => Promise<AddableProduct[]>;
   editCount?: number;
+  approvalBlockedReason?: string;
+  /** Recall alerts on this order; a blocked line still on it holds the approval. */
+  recalls?: RecallAlert[];
 }) {
   const [open, setOpen] = useState<"approve" | "reject" | null>(null);
   const [status, setStatus] = useState(request.status);
@@ -72,15 +85,24 @@ export function ApprovalCard({
   const [showOrder, setShowOrder] = useState(false);
   const [search, setSearch] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
-  const addables = useAsync(() => listAddableProducts?.(search) ?? Promise.resolve([]), [search]);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), ADD_SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  const addables = useAsync(
+    () => listAddableProducts?.(debouncedSearch) ?? Promise.resolve([]),
+    [debouncedSearch],
+  );
   const reasonId = useId();
   const pending = status === "PENDING";
   const stockMessage =
-    !order || order.lines.length === 0
+    recallHold(recalls, order) ??
+    (!order || order.lines.length === 0
       ? "Order details are unavailable. Reload them before approving."
-      : order.lines.some((line) => isUnknownStock(line.offer.availableAmount))
+      : order.lines.some((line) => isStockUnconfirmed(line.offer))
         ? "Waiting for supplier stock confirmation. You can review or reject this proposal; approval is available once stock is confirmed."
-        : null;
+        : null);
   const editing = pending && onChangeProposal != null && listAddableProducts != null;
 
   async function changeProposal(change: ProposalChange) {
@@ -89,6 +111,12 @@ export function ApprovalCard({
     setError(null);
     try {
       await onChangeProposal(change);
+      // Drop the typed number so the input shows the line's real quantity.
+      setQuantities((current) => {
+        const next = { ...current };
+        delete next[change.productId];
+        return next;
+      });
       addables.reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -105,7 +133,7 @@ export function ApprovalCard({
   // (price moved, expected_total mismatch, network), the card stays PENDING
   // and shows the error, so nobody believes an order went through.
   async function decide(next: "APPROVED" | "REJECTED", call: () => void | Promise<void>) {
-    if (next === "APPROVED" && stockMessage) return;
+    if (approvalBlockedReason || (next === "APPROVED" && stockMessage)) return;
     setBusy(true);
     setError(null);
     try {
@@ -121,23 +149,25 @@ export function ApprovalCard({
   }
 
   return (
-    <Card className="gap-4">
-      <CardHeader>
-        <CardTitle className="leading-snug">{request.summary}</CardTitle>
-        <CardDescription>
+    <Card className="docket gap-4 p-4 sm:p-5">
+      <CardHeader className="px-0">
+        <CardTitle className="text-[19px] leading-[25px] font-[650]">{request.summary}</CardTitle>
+        <CardDescription className="font-mono text-xs leading-4 font-[450]">
           {request.lineCount} {request.lineCount === 1 ? "line" : "lines"} · delivery {formatDate(request.deliveryDate)}{" "}
           · asked by {request.requestedBy}, {formatDateTime(request.createdAt)}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <dl className="grid grid-cols-2 gap-3">
-          <div>
-            <dt className="text-xs text-muted-foreground">Total ex VAT</dt>
-            <dd className="text-lg font-semibold tabular-nums">{formatEur(request.totalExVat)}</dd>
+      <CardContent className="space-y-4 px-0">
+        <dl className="space-y-3 border-t pt-3">
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="text-sm text-muted-foreground">Total ex VAT</dt>
+            <dd className="font-mono text-sm tabular-nums">{formatEur(request.totalExVat)}</dd>
           </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Total incl VAT</dt>
-            <dd className="text-lg font-semibold tabular-nums">{formatEur(request.totalInclVat)}</dd>
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="text-sm text-muted-foreground">Total incl VAT</dt>
+            <dd className="inline-block border-b-[3px] border-double border-foreground text-2xl leading-7 font-bold tabular-nums">
+              {formatEur(request.totalInclVat)}
+            </dd>
           </div>
         </dl>
         {editCount > 0 ? (
@@ -146,18 +176,27 @@ export function ApprovalCard({
           </p>
         ) : null}
         <section className="space-y-2">
-          <h4 className="text-sm font-medium">What to check</h4>
+          <h4 className="label-caps">What to check</h4>
           <ul className="space-y-2">
             {request.reasons.map((r) => (
-              <li key={r.rule} className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.warning)}>
-                <div className="font-medium">{r.rule}</div>
+              <li key={r.rule} className="border-l-[3px] border-warning py-1 pl-3 text-sm">
+                <div className="font-semibold">{r.rule}</div>
                 <div className="text-foreground">{r.detail}</div>
               </li>
             ))}
           </ul>
         </section>
+        <RecallLines alerts={recalls} />
         {pending && stockMessage ? (
-          <p className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.warning)}>{stockMessage}</p>
+          <p className="hatch text-sm text-warning">{stockMessage}</p>
+        ) : null}
+        {pending && request.options?.length ? (
+          <OptionCompare
+            options={request.options}
+            disabled={busy || !!approvalBlockedReason}
+            onChoose={onChooseOption}
+            onApprove={() => setOpen("approve")}
+          />
         ) : null}
         {order ? (
           <section className="space-y-3 border-t pt-4">
@@ -183,7 +222,7 @@ export function ApprovalCard({
                         </div>
                         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
                           <dt className="text-muted-foreground">Stock</dt>
-                          <dd>{formatStock(line.offer.availableAmount, line.offer.salesUnit)}</dd>
+                          <dd>{formatOfferStock(line.offer)}</dd>
                           <dt className="text-muted-foreground">Cut-off</dt>
                           <dd>
                             {formatDateTime(line.offer.closingTime)}
@@ -214,7 +253,12 @@ export function ApprovalCard({
                           <Button
                             type="button"
                             variant="outline"
-                            disabled={busy || Number(quantityValue(line)) === line.quantity}
+                            disabled={
+                              busy ||
+                              !Number.isInteger(Number(quantityValue(line))) ||
+                              Number(quantityValue(line)) < 1 ||
+                              Number(quantityValue(line)) === line.quantity
+                            }
                             aria-label={`Update ${line.product.names.en}`}
                             onClick={() =>
                               void changeProposal({
@@ -292,7 +336,7 @@ export function ApprovalCard({
           </section>
         ) : null}
       </CardContent>
-      <CardFooter className="flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
+      <CardFooter className="flex-col items-stretch gap-2 border-t border-dashed border-input px-0 pt-4 [.border-t]:pt-4 sm:flex-row sm:justify-end">
         {pending ? (
           <>
             {error && (
@@ -300,11 +344,11 @@ export function ApprovalCard({
                 {error}
               </p>
             )}
-            <Button variant="outline" disabled={busy} onClick={() => setOpen("reject")}>
+            <Button variant="outline" className="w-full sm:w-auto" disabled={busy || !!approvalBlockedReason} onClick={() => setOpen("reject")}>
               <X aria-hidden />
               Reject
             </Button>
-            <Button disabled={busy || !!stockMessage} onClick={() => setOpen("approve")}>
+            <Button className="w-full sm:w-auto" disabled={busy || !!stockMessage || !!approvalBlockedReason} onClick={() => setOpen("approve")}>
               <Check aria-hidden />
               Approve {formatEur(request.totalInclVat)} incl VAT
             </Button>
@@ -313,15 +357,27 @@ export function ApprovalCard({
           <p
             role="status"
             className={cn(
-              "rounded-md border px-3 py-2 text-sm font-medium",
-              status === "APPROVED" ? TONE_CLASSES.success : TONE_CLASSES.neutral,
+              "stamp-mark w-full text-sm font-medium sm:w-auto",
+              status === "APPROVED" ? "text-success" : "text-muted-foreground",
             )}
           >
+            {status === "APPROVED" ? (
+              <span className="stamp text-lg" aria-hidden>
+                Approved
+              </span>
+            ) : null}
             {status === "APPROVED"
               ? `Approved: ${formatEur(request.totalExVat)} ex VAT, ${formatEur(request.totalInclVat)} incl VAT. The order may now be sent.`
-              : "Rejected. This order will not be sent."}
+              : status === "IN_PROGRESS"
+                ? "In progress. This proposal cannot be approved yet."
+                : status === "BLOCKED_BY_RECALL"
+                  ? "Blocked by a recall. This proposal cannot be approved as it is."
+                  : "Rejected. This order will not be sent."}
           </p>
         )}
+        {pending && approvalBlockedReason ? (
+          <p className="w-full text-sm text-muted-foreground sm:mr-auto">{approvalBlockedReason}</p>
+        ) : null}
       </CardFooter>
 
       <Dialog open={open === "approve"} onOpenChange={(o) => setOpen(o ? "approve" : null)}>
@@ -335,7 +391,7 @@ export function ApprovalCard({
           </DialogHeader>
           <DialogFooter>
             <Button
-              disabled={busy || !!stockMessage}
+              disabled={busy || !!stockMessage || !!approvalBlockedReason}
               onClick={() =>
                 decide("APPROVED", () =>
                   onApprove?.({
@@ -375,7 +431,7 @@ export function ApprovalCard({
           <DialogFooter>
             <Button
               variant="destructive"
-              disabled={busy}
+              disabled={busy || !!approvalBlockedReason}
               onClick={() => decide("REJECTED", () => onReject?.(request.id, reason.trim()))}
             >
               Reject

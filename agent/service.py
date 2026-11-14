@@ -50,7 +50,10 @@ def parse_need(body, *, today=None):
         requested = date.fromisoformat(requested).isoformat()
     except (ValueError, TypeError):
         raise WorkerError(422, 'INVALID_DATE') from None
-    return {'quantity': quantity, 'unit': unit, 'requested_date': requested, 'text': text.strip()}
+    need = {'quantity': quantity, 'unit': unit, 'requested_date': requested, 'text': text.strip()}
+    if body.get('event') is True:
+        need['event'] = True    # one-off demand: the gateway marks every line EVENT_LINE (#530)
+    return need
 
 
 class BuyerWorker:
@@ -63,6 +66,12 @@ class BuyerWorker:
         key = body.get('idempotency_key')
         if not isinstance(key, str) or not 1 <= len(key.strip()) <= 200:
             raise WorkerError(422, 'MISSING_IDEMPOTENCY_KEY')
+        exclusions = buyer_context.excluded_allergens(self.db, kitchen_id)
+        try:
+            policy = AllergenPolicy(tuple(exclusions)) if exclusions is not None else None
+        except ValueError:
+            # A misspelt allergen code must never silently widen what is safe: fail closed.
+            raise WorkerError(503, 'KITCHEN_POLICY_INVALID', fallback_safe=True) from None
         try:
             row, created = agent_runs.claim(self.db, kitchen_id, key, need)
         except IdempotencyConflict:
@@ -76,15 +85,21 @@ class BuyerWorker:
             nonlocal model, buyer
             stored = await self.gateway.request('POST', f'/v1/kitchens/{kitchen_id}/needs', payload=need)
             model = self.model_factory()
-            exclusions = buyer_context.excluded_allergens(self.db, kitchen_id)
-            policy = AllergenPolicy(tuple(exclusions)) if exclusions is not None else None
             lookup = lambda pid: buyer_context.product(self.db, kitchen_id, pid)
-            async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
-                buyer = Buyer(model, session, self.gateway, need_id=stored['need_id'],
-                              requested_date=need['requested_date'], run_id=row['_id'], max_steps=12, now=self.now,
-                              catalog_lookup=lookup, allergen_policy=policy,
-                              substitute_planner=SubstitutePlanner(lookup, policy) if policy else None)
-                outcome = await buyer.run(need['text'])
+            # The model does not finish every run (seen live: about 1 in 3 stopped without asking
+            # for approval). A run that wrote nothing is safe to start once more, under its own
+            # run id so its audit steps stay separate. A run that wrote something is never repeated.
+            for attempt in (1, 2):
+                async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
+                    buyer = Buyer(model, session, self.gateway, need_id=stored['need_id'],
+                                  requested_date=need['requested_date'],
+                                  run_id=row['_id'] if attempt == 1 else f"{row['_id']}-retry",
+                                  max_steps=12, now=self.now,
+                                  catalog_lookup=lookup, allergen_policy=policy,
+                                  substitute_planner=SubstitutePlanner(lookup, policy) if policy else None)
+                    outcome = await buyer.run(need['text'])
+                if outcome['status'] == 'SENT_FOR_APPROVAL' or buyer.mutations:
+                    break
             if outcome['status'] != 'SENT_FOR_APPROVAL':
                 raise WorkerError(503, 'BUYER_INCOMPLETE', fallback_safe=not buyer.mutations)
             proposals = await self.gateway.request('GET', f'/v1/kitchens/{kitchen_id}/proposals')

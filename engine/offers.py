@@ -14,9 +14,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
+from typing import TYPE_CHECKING
 
 from engine.packs import PackInfo, to_sales_units
 from engine.params import KitchenParams
+
+if TYPE_CHECKING:
+    from engine.partial import PartialFill   # partial.py imports this module
 
 CENT = Decimal("0.01")
 
@@ -35,6 +39,7 @@ class Offer:
     carbon: float | None = None         # kg CO2e per kg, product-group average; None = unknown
     labels: tuple[str, ...] = ()
     allergen_data_known: bool | None = True   # False or None: ALLERGEN_DATA_MISSING (S02)
+    stock_source: str = "Valio"         # who would report the stock (a manual supplier: its name)
 
     @property
     def price_per_measure(self) -> Decimal:
@@ -67,6 +72,7 @@ class RequestPlan:
     reason_codes: tuple[str, ...]
     warnings: tuple[str, ...] = ()
     alternative: "RequestPlan | None" = field(default=None)
+    partial: "PartialFill | None" = field(default=None)   # engine/partial.py (#288)
 
 
 def _n(x: Decimal) -> str:
@@ -113,15 +119,17 @@ def rank(offers: list[Offer]) -> tuple[list[Offer], dict[str, str]]:
     cheapest = by_price[0].price_per_measure
     band = [o for o in by_price if o.price_per_measure <= cheapest * (1 + BAND)]
     rest = [o for o in by_price if o not in band]
+    def rel(o: Offer) -> float:
+        return o.reliability if o.reliability is not None else -1.0
     def better(o: Offer):
-        return (-(o.reliability if o.reliability is not None else -1.0),
+        return (-rel(o),
                 o.carbon if o.carbon is not None else float("inf"), o.price_per_measure, o.product_id)
     band.sort(key=better)
     notes: dict[str, str] = {}
     top, cheap = band[0], by_price[0]
     if top is not cheap:
         diff = (top.price_per_measure / cheap.price_per_measure - 1) * 100
-        if (top.reliability or -1) > (cheap.reliability if cheap.reliability is not None else -1):
+        if rel(top) > rel(cheap):
             notes[top.product_id] = (f"chosen over {cheap.name} ({diff:.1f}% cheaper): delivery reliability "
                                      f"{_pct(top.reliability)} vs {_pct(cheap.reliability)}")
         else:
@@ -172,7 +180,7 @@ def _fill(need: Decimal, measure: str, usable: list[Offer], *, confirmed_first: 
         why = (f"{_n(qty)} {o.pack.sales_unit} of {o.name} = {_n(qty * o.pack.size)} {measure}: "
                f"{'price' if o.product_id in notes else 'cheapest'} per {measure} "
                f"({_n(o.price_per_measure.quantize(CENT))} EUR), "
-               "but Valio does not report its stock, so it is not confirmed"
+               f"but {o.stock_source} does not report its stock, so it is not confirmed"
                + (f"; {notes[o.product_id]}" if o.product_id in notes else "") + ".")
         lines.append(_line(o, qty, line_codes, why))
         codes.update(line_codes)
@@ -198,8 +206,9 @@ def plan_request(need: Decimal, measure: str, offers: list[Offer], requested: da
         else:
             usable.append(o)
 
-    def build(confirmed_first: bool) -> RequestPlan:
-        lines, shortfall, codes = _fill(need, measure, usable, confirmed_first=confirmed_first)
+    def build(confirmed_first: bool, pool: list[Offer] | None = None) -> RequestPlan:
+        lines, shortfall, codes = _fill(need, measure, usable if pool is None else pool,
+                                        confirmed_first=confirmed_first)
         if event:
             lines = [replace(ln, reason_codes=(*ln.reason_codes, "EVENT_LINE")) for ln in lines]
         if any("cut-off has passed" in r for _, r in excluded):
@@ -217,7 +226,22 @@ def plan_request(need: Decimal, measure: str, offers: list[Offer], requested: da
                            tuple(c for c in order if c in codes), warnings)
 
     plan = build(confirmed_first=True)
+    # Confirmed stock at a price far above the cheapest is left out of the main plan
+    # (engine/premium.py), unless that would make the order short.
+    from engine.premium import DEFAULT_MAX, over_premium
+    dear = over_premium(usable, measure, params.certainty_premium_max if params else DEFAULT_MAX)
+    if dear:
+        lean = build(confirmed_first=True, pool=[o for o in usable if o.product_id not in dear])
+        if lean.shortfall <= plan.shortfall:
+            plan = replace(lean, excluded=(*lean.excluded, *dear.items()))
+            offers = [o for o in offers if o.product_id not in dear]   # the partial fill follows
+        else:
+            plan = replace(plan, warnings=(*plan.warnings, "CERTAINTY_PREMIUM_HIGH"))
     alt = build(confirmed_first=False)
     if alt.lines and alt.shortfall <= plan.shortfall and alt.total < plan.total and alt.lines != plan.lines:
         plan = RequestPlan(**{**plan.__dict__, "alternative": alt})
+    from engine.partial import partial_fill   # imported here: partial.py imports this module
+    part = partial_fill(need, measure, offers, requested, event=event)
+    if part is not None:
+        plan = replace(plan, partial=part)
     return plan

@@ -12,9 +12,18 @@ from uuid import NAMESPACE_URL, uuid5
 import httpx
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 Identifier = Annotated[str, Field(min_length=1, max_length=200)]
+
+
+class SearchFilters(BaseModel):
+    """Optional search filters; other contract filter keys pass through unchanged."""
+    model_config = ConfigDict(extra="allow")
+
+    exclude_allergens: list[Annotated[str, Field(min_length=1, max_length=50)]] = Field(
+        default_factory=list,
+        description='Allergen names or GS1 codes to exclude, e.g. "milk" or "AM".')
 
 
 class GatewayError(RuntimeError):
@@ -71,9 +80,14 @@ def build_server(gateway: GatewayClient) -> FastMCP:
     write = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False)
 
     @server.tool(annotations=read)
-    async def search_products(query: Annotated[str, Field(min_length=1, max_length=1000)], filters: dict) -> dict:
-        """Find catalog products. Missing allergen data is unknown, never safe. Do not invent quantities."""
-        return await gateway.request("POST", "/tools/search_products", payload={"query": query, "filters": filters})
+    async def search_products(query: Annotated[str, Field(min_length=1, max_length=1000)],
+                              filters: SearchFilters | None = None,
+                              need_id: Identifier | None = None) -> dict:
+        """Find catalog products. Pass the need_id: the result is then limited to products sold in the need's measure, and each product has can_arrive (true: it can still be delivered on the requested date; prefer those, and put several in one get_offer). Missing allergen data is unknown, never safe. Do not invent quantities."""
+        payload = {"query": query, "filters": (filters or SearchFilters()).model_dump()}
+        if need_id:
+            payload["need_id"] = need_id
+        return await gateway.request("POST", "/tools/search_products", payload=payload)
 
     @server.tool(annotations=read)
     async def get_offer(product_ids: Annotated[list[Identifier], Field(min_length=1, max_length=1000)],

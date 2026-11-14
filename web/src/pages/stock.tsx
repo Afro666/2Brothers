@@ -81,6 +81,21 @@ function OnHand({ item, className }: { item: StockItem; className?: string }) {
   );
 }
 
+function OnOrder({ item }: { item: StockItem }) {
+  if (item.onOrder == null) {
+    return (
+      <span className="font-medium text-warning" title="Open orders are not counted in kitchen units yet">
+        unknown
+      </span>
+    );
+  }
+  return (
+    <>
+      {formatNumber(item.onOrder)} {item.unit}
+    </>
+  );
+}
+
 export function StockPage() {
   const api = useApi();
   const { role } = useRole();
@@ -89,7 +104,6 @@ export function StockPage() {
   const [drafts, setDrafts] = useState<Drafts>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   const rows = stock.status === "ready" ? stock.data : [];
   const uncounted = rows.filter((row) => row.onHand == null).length;
@@ -97,23 +111,25 @@ export function StockPage() {
   const canSave = pending.length > 0 && invalidCount === 0 && !saving;
 
   function updateDraft(productId: string, change: Partial<RowDraft>) {
-    setDrafts((current) => ({
-      ...current,
-      [productId]: { ...draftFor(current, productId), ...change },
-    }));
-    setSaved(false);
+    setDrafts((current) => {
+      const next = { ...draftFor(current, productId), ...change };
+      if (next.value.trim() === "" && !next.notCounted) {
+        // An emptied row goes back to untouched, so it does not block Save for the others.
+        const { [productId]: _cleared, ...rest } = current;
+        return rest;
+      }
+      return { ...current, [productId]: next };
+    });
     setSaveError(null);
   }
 
   async function saveCounts() {
     if (pending.length === 0 || invalidCount > 0 || saving) return;
     setSaving(true);
-    setSaved(false);
     setSaveError(null);
     try {
       await api.submitStockCount(pending, actor);
       setDrafts({});
-      setSaved(true);
       stock.reload();
       toast.success("Count saved", { testId: "stock-count-saved-toast" });
     } catch (error) {
@@ -127,7 +143,7 @@ export function StockPage() {
     <AppShell activeId="stock">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Stock</h1>
+          <h1 className="text-2xl font-semibold">Stock count</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             What is on hand and on order. A product nobody counted is unknown, not zero.
           </p>
@@ -184,7 +200,7 @@ export function StockPage() {
                               <OnHand item={item} />
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatNumber(item.onOrder)} {item.unit}
+                              <OnOrder item={item} />
                             </TableCell>
                             <TableCell>{formatDate(item.lastDelivery)}</TableCell>
                             <TableCell>{formatDateTime(item.countedAt)}</TableCell>
@@ -258,7 +274,7 @@ export function StockPage() {
                           </dd>
                           <dt className="text-muted-foreground">On order</dt>
                           <dd className="text-right tabular-nums">
-                            {formatNumber(item.onOrder)} {item.unit}
+                            <OnOrder item={item} />
                           </dd>
                           <dt className="text-muted-foreground">Last delivery</dt>
                           <dd className="text-right">{formatDate(item.lastDelivery)}</dd>
@@ -313,11 +329,6 @@ export function StockPage() {
               <Button onClick={saveCounts} disabled={!canSave} aria-busy={saving || undefined}>
                 {saving ? "Saving count" : "Save count"}
               </Button>
-              {saved ? (
-                <p role="status" className="text-sm font-medium text-success">
-                  Count saved
-                </p>
-              ) : null}
               {pending.length === 0 && invalidCount === 0 ? (
                 <p className="text-sm text-muted-foreground">Enter a count or mark a product as not counted.</p>
               ) : null}

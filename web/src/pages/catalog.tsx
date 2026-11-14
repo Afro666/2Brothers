@@ -10,23 +10,16 @@ import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { ProductCard } from "@/components/purchasing/product-card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EU_ALLERGENS } from "@/lib/allergens";
 import type { ProductLabel } from "@/types";
 
-const ALLERGENS = [
-  { code: "AM", name: "Milk" },
-  { code: "AW", name: "Gluten cereals" },
-  { code: "AE", name: "Egg" },
-  { code: "AF", name: "Fish" },
-  { code: "AN", name: "Tree nuts" },
-  { code: "AP", name: "Peanuts" },
-  { code: "AS", name: "Sesame" },
-  { code: "AY", name: "Soy" },
-] as const;
+const ALLERGENS = [...EU_ALLERGENS, { code: "ML", name: "Lactose" }] as const;
 
 const LABEL_OPTIONS = Object.keys(LABEL_META) as ProductLabel[];
 const TEMPERATURES: ProductTemperature[] = ["ambient", "chilled", "frozen"];
@@ -78,8 +71,17 @@ function filtersOf(search: CatalogSearch): ProductSearchFilters {
   };
 }
 
+/** The /catalog URL params; every one is optional, so a plain `/catalog` link is valid. */
+export interface CatalogParams {
+  q?: string;
+  exclude?: string;
+  strict?: true;
+  labels?: string;
+  temp?: ProductTemperature;
+}
+
 /** Empty params stay out of the URL, so a plain `/catalog` is a clean link. */
-function toParams(search: CatalogSearch): Record<string, string | true | undefined> {
+function toParams(search: CatalogSearch): CatalogParams {
   return {
     q: search.q.trim() || undefined,
     exclude: search.exclude.length > 0 ? search.exclude.join(",") : undefined,
@@ -87,6 +89,11 @@ function toParams(search: CatalogSearch): Record<string, string | true | undefin
     labels: search.labels.length > 0 ? search.labels.join(",") : undefined,
     temp: search.temp,
   };
+}
+
+/** `validateSearch` for the /catalog route: drops unknown and malformed params. */
+export function validateCatalogSearch(search: Record<string, unknown>): CatalogParams {
+  return toParams(parseSearch(search));
 }
 
 function toggle<T>(values: T[], value: T): T[] {
@@ -97,8 +104,7 @@ type Update = (change: (current: CatalogSearch) => CatalogSearch) => void;
 
 export function CatalogPage() {
   const api = useApi();
-  // The catalog route has no typed search, so the params are read defensively.
-  const search = parseSearch(useSearch({ strict: false }));
+  const search = parseSearch(useSearch({ from: "/catalog" }));
   const navigate = useNavigate();
   const [query, setQuery] = useState(search.q);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -114,7 +120,7 @@ export function CatalogPage() {
   function update(change: (current: CatalogSearch) => CatalogSearch) {
     const next = change(latest.current);
     latest.current = next;
-    void navigate({ to: "/catalog", search: toParams(next) as never, replace: true });
+    void navigate({ to: "/catalog", search: toParams(next), replace: true });
   }
 
   function submit(event: FormEvent) {
@@ -128,7 +134,7 @@ export function CatalogPage() {
     const cleared = parseSearch({});
     setQuery("");
     latest.current = cleared;
-    void navigate({ to: "/catalog", search: {} as never, replace: true });
+    void navigate({ to: "/catalog", search: {}, replace: true });
   }
 
   const searchKey = JSON.stringify(search);
@@ -169,7 +175,7 @@ export function CatalogPage() {
     <AppShell activeId="catalog">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Catalog</h1>
+          <h1 className="text-2xl font-semibold">Products</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Search what suppliers sell. A product with no allergen data is unknown, not safe.
           </p>
@@ -192,6 +198,21 @@ export function CatalogPage() {
                 Search
               </Button>
             </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Only when the gateway answers the search: the mock is not Atlas. */}
+            {api.live?.has("searchProducts") ? <Badge variant="secondary">Atlas Search</Badge> : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setQuery("milk");
+                update((current) => ({ ...current, q: "milk", exclude: ["AM"] }));
+              }}
+            >
+              Example: milk without the milk allergen
+            </Button>
           </div>
 
           <div className="rounded-xl border bg-card px-4 py-3 shadow-sm md:px-6 md:py-6">

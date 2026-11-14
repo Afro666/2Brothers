@@ -90,7 +90,9 @@ class SearchQueryTests(unittest.TestCase):
                                       ("milk", None, 0), ("milk", None, 51), ("milk", None, True),
                                       ("milk", {"pack_size": {"value": 1, "unit": "oz"}}, 20),
                                       ("milk", {"pack_size": {"value": -1, "unit": "L"}}, 20),
-                                      ("milk", {"pack_size": "1 l"}, 20)):
+                                      ("milk", {"pack_size": "1 l"}, 20),
+                                      ("milk", {"require_labels": "EU_ORGANIC_FARMING"}, 20),
+                                      ("milk", {"exclude_allergens": "AM"}, 20)):
             with self.assertRaises(ValueError, msg=(query, filters, limit)):
                 build_pipeline(query, filters, limit)
 

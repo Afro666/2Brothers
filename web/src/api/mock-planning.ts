@@ -10,7 +10,7 @@ import {
   planningSupplierDemand,
   planningSuppliers,
 } from "@/mocks/planning";
-import type { AuditEvent, DemandLine, SharingConsent, SupplierDemandRow } from "@/types";
+import type { AuditEvent, DemandLine, PlanProposal, SharingConsent, SupplierDemandRow } from "@/types";
 
 type PlanningApi = Pick<
   Api,
@@ -28,6 +28,7 @@ type PlanningApi = Pick<
   | "getStock"
   | "submitStockCount"
   | "getDemand"
+  | "proposeOrderForPlan"
   | "getSharing"
   | "setSharing"
   | "getSupplierDemand"
@@ -44,6 +45,9 @@ function requiredName(name: string): void {
 function round3(value: number): number {
   return Math.round((value + Number.EPSILON) * 1000) / 1000;
 }
+
+/** Sample price of a catalog product per unit; the mock has no price list for them. */
+const SAMPLE_CATALOG_PRICE_EUR = 1.19;
 
 export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
   let suppliers = copy(planningSuppliers);
@@ -183,9 +187,16 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
     },
     async submitStockCount(counts: StockCount[], actor: AuditActor) {
       const countedAt = new Date().toISOString();
-      for (const count of counts) {
+      const items = counts.map((count) => {
         const item = stock.find((row) => row.productId === count.productId);
         if (!item) throw new ApiError("NOT_FOUND", `Stock product ${count.productId} was not found.`);
+        if (count.onHand !== null && (!Number.isFinite(count.onHand) || count.onHand < 0)) {
+          throw new ApiError("INVALID", "Stock on hand must be a number greater than or equal to zero, or unknown.");
+        }
+        return item;
+      });
+      for (const [index, count] of counts.entries()) {
+        const item = items[index];
         item.onHand = count.onHand;
         item.countedAt = countedAt;
       }
@@ -200,6 +211,45 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
     },
     async getDemand(from, to) {
       return getDemand(from, to);
+    },
+    async proposeOrderForPlan(from, to): Promise<PlanProposal> {
+      // Need per product over the window, net of counted stock; a product never counted keeps its full need.
+      const needs = new Map<string, number>();
+      for (const line of getDemand(from, to)) needs.set(line.productId, (needs.get(line.productId) ?? 0) + line.need);
+      let lineCount = 0;
+      let needCount = 0;
+      let uncountedCount = 0;
+      let shortfallCount = 0;
+      let total = 0;
+      for (const [productId, need] of needs) {
+        const onHand = stock.find((item) => item.productId === productId)?.onHand ?? null;
+        const net = onHand === null ? need : need - onHand;
+        if (net <= 0) continue;
+        needCount += 1;
+        if (onHand === null) uncountedCount += 1;
+        const own = ownProducts.find((product) => product.id === productId);
+        const price = own ? own.priceEur : SAMPLE_CATALOG_PRICE_EUR;
+        // Sample rule: a product with no known price has no offer, so its need cannot be covered.
+        if (price === null) {
+          shortfallCount += 1;
+          continue;
+        }
+        lineCount += 1;
+        total += Math.ceil(net) * price;
+      }
+      if (needCount === 0) {
+        throw new ApiError("NOTHING_NEEDED", "the plan needs nothing beyond the stock in this window");
+      }
+      return {
+        id: makeId("PLAN"),
+        status: lineCount > 0 ? "READY" : "REJECTED",
+        totalInclVat: Math.round(total * 100) / 100,
+        lineCount,
+        needCount,
+        uncountedCount,
+        shortfallCount,
+        reasonCodes: shortfallCount > 0 ? ["PARTIAL_STOCK"] : [],
+      };
     },
     async getSharing() {
       return sharingRows();

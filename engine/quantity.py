@@ -32,17 +32,30 @@ class Item:
     standing_order: Decimal | None = None   # in sales units per delivery (S08)
 
 
-DRIFT_TOLERANCE = Decimal("0.10")          # standing order more than 10% off the need: drift
+DRIFT_TOLERANCE = Decimal("0.10")          # standing order more than 10% off usage per delivery (demand x review days): drift
 
 
 def _drift(item: Item, qty: Decimal) -> str | None:
     """S08: a standing order that no longer matches usage. The engine only flags it;
     a person changes the standing order."""
     s = item.standing_order
-    if s is None or s <= 0 or abs(s - qty) <= s * DRIFT_TOLERANCE:
+    if s is None or s <= 0:
         return None
-    return (f" Standing order {_fmt(s)} {item.pack.sales_unit} no longer matches usage: "
-            f"this delivery needs {_fmt(qty)}.")
+    # Against usage per delivery, not this delivery's need: extra stock this week is not
+    # drift (#803), and a standing order equal to usage never "drifts" to itself.
+    usage = proposed_standing_order(item)
+    if abs(s - usage) <= s * DRIFT_TOLERANCE:
+        return None
+    return (f" Standing order {_fmt(s)} {item.pack.sales_unit} no longer matches usage "
+            f"({_fmt(usage)} per delivery); this delivery needs {_fmt(qty)}. Suggested standing "
+            f"order: {_fmt(usage)} {item.pack.sales_unit}; a person changes it.")
+
+
+def proposed_standing_order(item: Item) -> Decimal:
+    """S08: what one delivery cycle really uses (demand x review days), in sales units.
+    Only a suggestion: the engine never changes a standing order itself."""
+    qty, _ = to_sales_units(Decimal(str(item.daily_demand * item.review_days)), item.pack)
+    return qty
 
 
 @dataclass(frozen=True)
@@ -92,6 +105,7 @@ def replenish(item: Item, params: KitchenParams) -> LinePlan:
         drift = _drift(item, Decimal(0))
         if drift:
             codes.append("STANDING_ORDER_DRIFT")
+            numbers["propose_standing_order"] = proposed_standing_order(item)
             why += drift
         return LinePlan(item.product_id, Decimal(0), item.pack.sales_unit, tier, tuple(codes), why, numbers)
 
@@ -111,6 +125,7 @@ def replenish(item: Item, params: KitchenParams) -> LinePlan:
     drift = _drift(item, qty)
     if drift:
         codes.append("STANDING_ORDER_DRIFT")
+        numbers["propose_standing_order"] = proposed_standing_order(item)
         why += drift
     return LinePlan(item.product_id, qty, item.pack.sales_unit, tier, tuple(codes), why, numbers)
 
@@ -121,6 +136,8 @@ def cover_limit(item: Item, params: KitchenParams, extra: float) -> dict:
     The ceiling is lead time + the category's max days of cover + safety stock, but never
     less than what lasts to the next delivery. Returns the most that fits and the days of
     cover `extra` would give; above the ceiling the line carries COVER_CEILING.
+    `days_of_cover` is None when daily demand is 0 (cover is unbounded; None keeps the
+    result valid JSON, where float("inf") would not be).
     """
     d, lt = item.daily_demand, item.lead_time_days
     ss = item.safety_stock if item.safety_stock is not None else safety_stock(
@@ -129,7 +146,7 @@ def cover_limit(item: Item, params: KitchenParams, extra: float) -> dict:
     position = on_hand + item.on_order
     ceiling = d * (lt + max(item.review_days, params.cover_days(item.category))) + ss
     after = position + extra
-    days = after / d if d > 0 else float("inf")
+    days = after / d if d > 0 else None
     return {"max_extra": max(ceiling - position, 0.0), "ceiling": ceiling,
             "days_of_cover": days, "over_ceiling": after > ceiling,
             "reason_codes": ("COVER_CEILING",) if after > ceiling else ()}

@@ -3,13 +3,19 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { RecallPanel, type RecallStatus } from "@/components/purchasing/recall-panel";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { useApi } from "@/api";
-import type { Api } from "@/api/types";
+import { ApiError, type Api } from "@/api/types";
+import { usePendingApprovals } from "@/lib/pending-approvals";
 import { auditActorForRole, useRole } from "@/lib/role";
+import { formatEur } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
-import type { ApprovalRequest, Order, ProposalChange } from "@/types";
+import { useSession } from "@/lib/session";
+import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
+import { LiveApprovalsPage } from "@/pages/live-approvals";
 
 interface ApprovalWithOrder {
   approval: ApprovalRequest;
@@ -29,26 +35,65 @@ async function loadApprovals(api: Api): Promise<ApprovalWithOrder[]> {
   );
 }
 
+/** null when this gateway does not serve recalls yet (hidden, never shown as "no recalls"). */
+async function loadRecalls(api: Api): Promise<RecallList | null> {
+  // In gateway mode an unserved method answers from the mock: sample recalls must never
+  // stand in for the real orders' recalls.
+  if (!api.listRecalls || (api.live && !api.live.has("listRecalls"))) return null;
+  try {
+    return await api.listRecalls();
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "NOT_SERVED") return null;
+    throw error;
+  }
+}
+
 export function ApprovalsPage() {
   const api = useApi();
+  // In gateway mode the Api itself reads and decides the real proposals, so the inbox below is the live one.
+  // The standalone live page is for a build whose Api is still the mock.
+  return import.meta.env.VITE_LIVE_BUYER === "true" && !api.live?.has("listApprovals") ? (
+    <LiveApprovalsPage />
+  ) : (
+    <ApiApprovalsPage />
+  );
+}
+
+function ApiApprovalsPage() {
+  const api = useApi();
   const { role } = useRole();
+  const { session } = useSession();
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
+  const { refresh: refreshWaiting } = usePendingApprovals();
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
+  const recalls = useAsync(() => loadRecalls(api), [api]);
+
+  // The gateway has no route to change a proposal yet, so its proposals are read-only.
+  const canEdit = !api.live || api.live.has("changeProposal");
 
   async function approve(decision: ApprovalDecision): Promise<void> {
-    await api.approve(decision, actor);
-    approvals.reload();
+    try {
+      await api.approve(decision, actor);
+      toast.success(`Approved: ${formatEur(decision.expectedTotalInclVat)} incl VAT`, { testId: "approval-toast" });
+    } finally {
+      // Also after a refusal: when the total moved, the card must show the new one before asking again.
+      approvals.reload();
+      refreshWaiting();
+    }
   }
 
   async function reject(approvalId: string, reason: string): Promise<void> {
     await api.reject(approvalId, reason, actor);
+    toast.success("Rejected. The reason goes back to the Buyer.", { testId: "approval-toast" });
     approvals.reload();
+    refreshWaiting();
   }
 
   async function change(orderId: string, proposalChange: ProposalChange): Promise<void> {
     await api.changeProposal(orderId, proposalChange, actor);
     setEditCounts((counts) => ({ ...counts, [orderId]: (counts[orderId] ?? 0) + 1 }));
+    toast.success("Proposal updated. Check the new total before you approve.");
     approvals.reload();
   }
 
@@ -57,15 +102,44 @@ export function ApprovalsPage() {
   const decided =
     approvals.status === "ready" ? approvals.data.filter(({ approval }) => approval.status !== "PENDING") : [];
 
+  const pendingOrders = new Set(pending.map(({ approval }) => approval.orderId));
+  const recallsFor = (orderId: string) =>
+    recalls.status === "ready" ? (recalls.data?.alerts ?? []).filter((alert) => alert.orderId === orderId) : [];
+  // An order a recall hits comes first, so nobody scrolls past it.
+  const hit = (row: ApprovalWithOrder) => Number(recallsFor(row.approval.orderId).length > 0);
+  const recallFirst = [...pending].sort((a, b) => hit(b) - hit(a));
+  const recallStatus: RecallStatus =
+    recalls.status === "loading"
+      ? { kind: "loading" }
+      : recalls.status === "error"
+        ? { kind: "unknown", message: recalls.error.message }
+        : recalls.data === null
+          ? { kind: "unavailable" }
+          : {
+              kind: "ready",
+              lastCheck: recalls.data.lastCheck,
+              affecting: recalls.data.alerts.filter((alert) => alert.orderId != null && pendingOrders.has(alert.orderId))
+                .length,
+            };
+  const checkRecalls =
+    api.checkRecalls && recallStatus.kind !== "unavailable"
+      ? async () => {
+          await api.checkRecalls!(actor);
+          recalls.reload();
+          approvals.reload();
+        }
+      : undefined;
+
   return (
     <AppShell activeId="approvals">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Approvals</h1>
+          <h1 className="text-2xl font-semibold">To approve</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Every order the Buyer proposes waits here. Nothing is sent until a person approves it.
           </p>
         </header>
+        <RecallPanel status={recallStatus} onCheck={checkRecalls} />
         {approvals.status === "loading" ? <LoadingState label="Loading approvals" /> : null}
         {approvals.status === "error" ? (
           <ErrorState message={approvals.error.message} onRetry={approvals.reload} />
@@ -81,16 +155,36 @@ export function ApprovalsPage() {
               </h2>
               {pending.length > 0 ? (
                 <div className="space-y-4">
-                  {pending.map(({ approval, order }) => (
+                  {recallFirst.map(({ approval, order }) => (
                     <ApprovalCard
                       key={approval.id}
                       request={approval}
                       order={order ?? undefined}
                       onApprove={approve}
                       onReject={reject}
-                      onChangeProposal={(proposalChange) => change(approval.orderId, proposalChange)}
-                      listAddableProducts={(query) => api.listAddableProducts(approval.orderId, query)}
+                      onChangeProposal={
+                        canEdit ? (proposalChange) => change(approval.orderId, proposalChange) : undefined
+                      }
+                      onChooseOption={
+                        api.chooseOption &&
+                        (async (optionId) => {
+                          try {
+                            await api.chooseOption?.(approval.id, optionId, actor);
+                            toast.success("Option chosen. Check the new total before you approve.");
+                          } finally {
+                            // A refused choice keeps its basket; reload that same proposal after either answer.
+                            approvals.reload();
+                          }
+                        })
+                      }
+                      listAddableProducts={
+                        canEdit ? (query) => api.listAddableProducts(approval.orderId, query) : undefined
+                      }
                       editCount={editCounts[approval.orderId] ?? 0}
+                      approvalBlockedReason={
+                        session && !session.canApprove ? "Your account cannot approve or reject orders." : undefined
+                      }
+                      recalls={recallsFor(approval.orderId)}
                     />
                   ))}
                 </div>

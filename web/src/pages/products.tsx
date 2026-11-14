@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { useApi } from "@/api";
 import type { Draft } from "@/api/types";
@@ -29,6 +30,10 @@ import type {
 import { ProductPicker, type PickerProduct } from "@/pages/products/product-picker";
 import { recipeAllergens } from "@/pages/products/recipe-allergens";
 import { catalogProductIdsInRecipes } from "@/pages/products/recipe-products";
+
+/** How long whenSteady waits for a previous dialog to leave the DOM before it runs anyway. */
+const STEADY_LIMIT_MS = 400;
+const STEADY_RETRY_MS = 16;
 
 const ALLERGENS = [
   ["AM", "Milk"],
@@ -61,7 +66,10 @@ async function loadData(api: ReturnType<typeof useApi>) {
     api.listRecipes(),
   ]);
   // The catalog search returns only a page, so recipes load their products by id instead.
-  const catalog = await api.getProducts(catalogProductIdsInRecipes(recipes, ownProducts));
+  // A failing catalog lookup must not hide own products and suppliers: recipes then show unknown allergens.
+  const catalog = await api
+    .getProducts(catalogProductIdsInRecipes(recipes, ownProducts))
+    .catch((): Awaited<ReturnType<typeof api.getProducts>> => []);
   return { ownProducts, suppliers, recipes, catalog };
 }
 
@@ -166,13 +174,15 @@ function ProductsPageContent() {
   );
 
   /** Opens or closes a dialog once the browser has removed its previous one; a remount would drop a half-typed form. */
+  /** Gives up waiting after STEADY_LIMIT_MS and runs the callback anyway, so a stray dialog cannot block a click. */
   function whenSteady(callback: () => void) {
     const expected = dialog === null ? 0 : 1;
-    const attempts = (left: number) => {
-      if (document.querySelectorAll("[role='dialog']").length === expected) callback();
-      else if (left > 0) window.queueMicrotask(() => attempts(left - 1));
+    const deadline = Date.now() + STEADY_LIMIT_MS;
+    const attempt = () => {
+      if (document.querySelectorAll("[role='dialog']").length === expected || Date.now() >= deadline) callback();
+      else window.setTimeout(attempt, STEADY_RETRY_MS);
     };
-    window.queueMicrotask(() => attempts(100));
+    window.queueMicrotask(attempt);
   }
   function openProduct(product: OwnProduct | null = null) {
     setEditingProduct(product);
@@ -240,6 +250,7 @@ function ProductsPageContent() {
         allergens: unknown ? null : allergens,
       } as Draft<OwnProduct>);
       resetProductForm();
+      toast.success("Product saved");
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -292,6 +303,7 @@ function ProductsPageContent() {
         items: resolved,
       } as Draft<Recipe>);
       setItems([]);
+      toast.success("Recipe saved");
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -306,6 +318,7 @@ function ProductsPageContent() {
     setError("");
     try {
       await api.deleteOwnProduct(deletingProduct.id);
+      toast.success("Product deleted");
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -320,6 +333,7 @@ function ProductsPageContent() {
     setError("");
     try {
       await api.deleteRecipe(deletingRecipe.id);
+      toast.success("Recipe deleted");
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -339,9 +353,9 @@ function ProductsPageContent() {
     <AppShell activeId="products">
       <div className="mx-auto max-w-5xl space-y-6">
         <header>
-          <h1 className="text-2xl font-semibold">Products</h1>
+          <h1 className="text-2xl font-semibold">Recipes</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Review products available to this kitchen and their purchasing data.
+            Your recipes and the products you make in-house, with their purchasing data.
           </p>
         </header>
         {state.status === "loading" ? <LoadingState label="Loading products and recipes" /> : null}

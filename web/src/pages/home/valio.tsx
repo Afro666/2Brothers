@@ -1,12 +1,18 @@
 import { formatDate, formatNumber } from "@/lib/format";
 import { isoWeekOf, weekDates } from "@/lib/week";
-import { useAsync } from "@/lib/use-async";
+import { useAsync, type AsyncState } from "@/lib/use-async";
 import type { Api } from "@/api/types";
 import type { SupplierDemandRow } from "@/types";
 
+import { SampleData } from "@/components/purchasing/sample-data";
 import { Tile, TileState } from "@/pages/home/tile";
 
-type SupplierDemandResult = { rows: SupplierDemandRow[]; week: string; fallback: boolean };
+export type SupplierDemandResult = { rows: SupplierDemandRow[]; week: string; fallback: boolean };
+
+/** Loads supplier demand once for the Valio dashboard; both tiles share the result. */
+export function useSupplierDemand(api: Api, now: Date): AsyncState<SupplierDemandResult> {
+  return useAsync(() => loadSupplierDemand(api, now), [api, now.toISOString()]);
+}
 
 function loadSupplierDemand(api: Api, now: Date): Promise<SupplierDemandResult> {
   const today = now.toLocaleDateString("en-CA", { timeZone: "Europe/Helsinki" });
@@ -33,8 +39,7 @@ function addDays(date: string, days: number): string {
 
 const riskOrder: Record<SupplierDemandRow["risk"], number> = { SHORT: 0, AT_RISK: 1, UNKNOWN: 2, COVERED: 3 };
 
-export function ShortageTile({ api, now }: { api: Api; now: Date }) {
-  const state = useAsync(() => loadSupplierDemand(api, now), [api, now.toISOString()]);
+export function ShortageTile({ state, now }: { state: AsyncState<SupplierDemandResult>; now: Date }) {
   const currentWeek = isoWeekOf(now.toLocaleDateString("en-CA", { timeZone: "Europe/Helsinki" }));
   const shownWeek = state.status === "ready" ? state.data.week : currentWeek;
   const [weekMonday, , , , , , weekSunday] = weekDates(shownWeek);
@@ -44,6 +49,7 @@ export function ShortageTile({ api, now }: { api: Api; now: Date }) {
       href="/demand"
       linkLabel="Open demand view"
     >
+      <SampleData of="getSupplierDemand" />
       <TileState<SupplierDemandResult>
         status={state.status}
         error={state.error}
@@ -77,7 +83,7 @@ export function ShortageTile({ api, now }: { api: Api; now: Date }) {
                     </p>
                     <p className="tabular-nums text-muted-foreground">
                       Forecast {formatNumber(row.forecastDemand)} {row.unit}; available{" "}
-                      {row.available === null ? "unknown" : `${formatNumber(row.available)} ${row.unit}`}
+                      {row.available === null ? <span className="unknown-value">unknown</span> : `${formatNumber(row.available)} ${row.unit}`}
                     </p>
                   </li>
                 ))}
@@ -90,10 +96,10 @@ export function ShortageTile({ api, now }: { api: Api; now: Date }) {
   );
 }
 
-export function KitchensTile({ api, now }: { api: Api; now: Date }) {
-  const state = useAsync(() => loadSupplierDemand(api, now), [api, now.toISOString()]);
+export function KitchensTile({ state }: { state: AsyncState<SupplierDemandResult> }) {
   return (
     <Tile title="Kitchens sharing forecasts" href="/demand" linkLabel="Open demand view">
+      <SampleData of="getSupplierDemand" />
       <TileState<SupplierDemandRow[]>
         status={state.status}
         error={state.error}

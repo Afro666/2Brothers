@@ -87,8 +87,24 @@ class RepositoryTest(unittest.TestCase):
                     {"terms": {"discount_tiers": [{"min_qty": "100", "unit": "ST"}]}}):
             with self.assertRaises((ValueError, TypeError), msg=bad):
                 self.repo.suppliers.create("k1", {**good, **bad})
+        for bad in ({"terms": ["delivery_fee_eur"]}, {"terms": "free delivery"},
+                    {"terms": {"discount_tiers": "10%"}}, {"terms": {"discount_tiers": ["10%"]}},
+                    {"terms": {"discount_tiers": {"min_qty": "100"}}}):
+            with self.assertRaises(ValueError, msg=bad):  # a clear 400, not a crash
+                self.repo.suppliers.create("k1", {**good, **bad})
 
     # Kitchen isolation
+
+    def test_duplicate_id_in_one_kitchen_is_a_value_error(self):
+        self.repo.suppliers.create("k1", SUPPLIER)
+        with self.assertRaises(ValueError):
+            self.repo.suppliers.create("k1", SUPPLIER)
+        self.repo.recipes.create("k1", RECIPE)
+        with self.assertRaises(ValueError):
+            self.repo.recipes.create("k1", RECIPE)
+        self.repo.own_products.create("k1", {**OWN, "product_id": "own-rye"})
+        with self.assertRaises(ValueError):
+            self.repo.own_products.create("k1", {**OWN, "product_id": "own-rye"})
 
     def test_one_kitchen_never_sees_or_changes_another_kitchens_rows(self):
         self.repo.suppliers.create("k1", SUPPLIER)
@@ -219,10 +235,13 @@ class RepositoryTest(unittest.TestCase):
                     {"budget_warning_order_eur": "-1"}, {"budget_warning_week_eur": 6000.0},
                     {"excluded_allergens": None}, {"excluded_allergens": "AP"},
                     {"excluded_allergens": ["peanut butter"]}, {"excluded_allergens": [7]},
+                    {"excluded_allergens": ["ZZ"]}, {"excluded_allergens": ["AP", "ZZ"]},
                     {"auto_approve": True}):
             with self.assertRaises((ValueError, TypeError), msg=bad):
                 self.repo.settings.put("k1", bad)
         self.assertEqual(self.repo.settings.get("k1"), {"excluded_allergens": None})
+        self.repo.settings.put("k1", {"excluded_allergens": ["AW", "AM", "nuts"]})  # known ones save
+        self.assertEqual(self.repo.settings.get("k1")["excluded_allergens"], ["AW", "AM", "nuts"])
 
     # Recipes
 
@@ -249,6 +268,10 @@ class RepositoryTest(unittest.TestCase):
                     ingredient(yield_pct="120"), ingredient(product_id=""),
                     {"name": "X", "portions": 0}, {"name": ""}):
             with self.assertRaises((ValueError, TypeError), msg=bad):
+                self.repo.recipes.create("k1", bad)
+        for bad in ({"name": "X", "ingredients": "carrot"}, {"name": "X", "ingredients": ["carrot"]},
+                    {"name": "X", "ingredients": {"product_id": "900002"}}):
+            with self.assertRaises(ValueError, msg=bad):  # a clear 400, not a crash
                 self.repo.recipes.create("k1", bad)
 
     # Menu plans
@@ -277,6 +300,9 @@ class RepositoryTest(unittest.TestCase):
                           ("2026-W47", {**day, "date": "16.11.2026"})):
             with self.assertRaises(ValueError, msg=(week, bad)):
                 self.repo.menu_plans.put("k1", week, [bad])
+        for bad in ("2026-11-16", {"date": "2026-11-16"}, ["2026-11-16"], [7]):
+            with self.assertRaises(ValueError, msg=bad):  # a clear 400, not a crash
+                self.repo.menu_plans.put("k1", "2026-W47", bad)
 
 
 if __name__ == "__main__":

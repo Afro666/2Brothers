@@ -1,14 +1,24 @@
-import type { Api, AuditActor, ProductTemperature } from "@/api/types";
+import type { Api, AuditActor, AuditChainRow, ProductTemperature } from "@/api/types";
 import { ApiError } from "@/api/types";
+import { GENESIS, KITCHEN_ID, mapChainCheck, rowHash, verifyRows } from "@/api/audit-chain";
 import { nameProducts } from "@/api/map";
+import { permissionsMock } from "@/api/mock-permissions";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
+import { driftMock, supplierDriftMock } from "@/api/mock-drift";
+import { forecastAccuracyMock } from "@/api/mock-forecast";
+import { createRecallMock } from "@/api/mock-recalls";
+import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
+import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
+import { createMockAuth } from "@/api/mock-auth";
 import {
   approval as seedApproval,
   confirmedDemoApproval,
   confirmedDemoOrder,
   auditEvents,
   mandate,
+  milkOptionLines,
+  milkOptions,
   offers,
   orders as seedOrders,
   products,
@@ -23,6 +33,8 @@ import type {
   FeedbackRow,
   Order,
   OrderLine,
+  OrderResolution,
+  OrderResolutionResult,
   Product,
   ProposalChange,
 } from "@/types";
@@ -42,15 +54,87 @@ export interface MockApi extends Api {
   failNextApprove(code: string, message?: string): void;
 }
 
+export interface MockApiOptions {
+  signedOut?: boolean;
+}
+
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
-export function createMockApi(): MockApi {
-  const approvals = new Map([confirmedDemoApproval, seedApproval].map((row) => [row.id, structuredClone(row)]));
-  const demoOrders = new Map([...Object.values(seedOrders), confirmedDemoOrder].map((row) => [row.id, structuredClone(row)]));
+export function createMockApi(options: MockApiOptions = {}): MockApi {
+  const unknownOrder: Order = {
+    ...structuredClone(seedOrders.placed),
+    id: "ORD-1046",
+    status: "UNCONFIRMED",
+    urgency: "UNKNOWN",
+    supplierOrderRef: null,
+  };
+  const unknownApproval: ApprovalRequest = {
+    ...structuredClone(seedApproval),
+    id: "APR-UNKNOWN-1046",
+    orderId: unknownOrder.id,
+    status: "APPROVED",
+  };
+  const approvals = new Map(
+    [
+      { ...confirmedDemoApproval, options: milkOptions },
+      seedApproval,
+      coffeeApproval,
+      unknownApproval,
+    ].map((row) => [row.id, structuredClone(row)]),
+  );
+  const demoOrders = new Map(
+    [...Object.values(seedOrders), confirmedDemoOrder, coffeeOrder, unknownOrder].map((row) => [
+      row.id,
+      structuredClone(row),
+    ]),
+  );
+  const resolutions = new Map<string, OrderResolution>([
+    [
+      unknownOrder.id,
+      {
+        orderId: unknownOrder.id,
+        proposalId: unknownApproval.id,
+        proposalStatus: "COMMITTING",
+        idempotencyKey: "approve-unknown-1046",
+        payloadHash: "3a08f1a95f244b7f9d8f6f7e8e7e51e2",
+        offerId: "OFR-MILK-UNKNOWN",
+        supplierId: "sup-valio",
+        approvedBy: "aron",
+        outcome: "UNCONFIRMED",
+        status: null,
+        expectedTotal: unknownOrder.totalInclVat,
+        lines: structuredClone(unknownOrder.lines),
+        createdAt: "2026-11-14T02:10:00+00:00",
+        updatedAt: "2026-11-14T02:10:01+00:00",
+        resolvable: true,
+        resolution: null,
+      },
+    ],
+  ]);
   const audit: AuditEvent[] = [...auditEvents];
   const feedback: FeedbackRow[] = [];
   let nextFailure: ApiError | null = null;
 
-  const recordAudit = (event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason">) => {
+  // The stored hash of each audit line, in order. A line is hashed once, when the chain is
+  // first read after the line was written; changing the line later no longer matches it.
+  const hashes: Pick<AuditChainRow, "prevHash" | "hash">[] = [];
+  let tampered: { index: number; original: AuditEvent } | null = null;
+  function chainRows(): AuditChainRow[] {
+    for (let index = hashes.length; index < audit.length; index++) {
+      const prevHash = index === 0 ? GENESIS : hashes[index - 1].hash;
+      hashes.push({ prevHash, hash: rowHash(index + 1, prevHash, audit[index]) });
+    }
+    return hashes.map((stored, index) => ({ seq: index + 1, event: audit[index], ...stored }));
+  }
+  const productNames = new Map((Object.values(products) as Product[]).map((product) => [product.id, product.names.en]));
+  const named = (event: AuditEvent): AuditEvent => ({
+    ...event,
+    summary: nameProducts(event.summary, productNames),
+    reason: nameProducts(event.reason, productNames),
+  });
+
+  const recordAudit = (
+    event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason"> & Partial<Pick<AuditEvent, "orderId">>,
+  ) => {
     audit.push({
       ...event,
       id: `EV-${audit.length + 1}`,
@@ -122,11 +206,11 @@ export function createMockApi(): MockApi {
     });
   }
 
-  function resimulate(lines: OrderLine[], proposalOrder: Order): Order {
+  function resimulate(lines: OrderLine[], proposalOrder: Order): Order & { totalExVat: number } {
     let exVat = 0;
     let inclVat = 0;
     for (const line of lines) {
-      if (line.offer.priceExVat == null) {
+      if (line.offer.priceExVat == null || line.offer.taxRatePercent == null) {
         throw new ApiError("PRICE_UNKNOWN", `Price for ${line.product.id} is unknown.`);
       }
       const lineEx = line.offer.priceExVat * line.quantity;
@@ -140,13 +224,31 @@ export function createMockApi(): MockApi {
       lines,
       totalExVat,
       totalInclVat,
-      mov: { ...proposalOrder.mov, current: totalExVat },
+      mov: proposalOrder.mov && { ...proposalOrder.mov, current: totalExVat },
     };
   }
 
   return {
+    ...createMockAuth(options.signedOut),
     ...createPlanningMock(recordAudit),
     ...createSettingsMock(recordAudit),
+    getForecastAccuracy: async () => forecastAccuracyMock(),
+    getDrift: async () => driftMock(),
+    getSupplierDrift: async () => supplierDriftMock(),
+    ...permissionsMock,
+    ...createRecallMock({
+      getOrder: (id) => demoOrders.get(id),
+      isPending: (orderId) => [...approvals.values()].some((row) => row.orderId === orderId && row.status === "PENDING"),
+      replan(orderId, lines) {
+        const order = demoOrders.get(orderId)!;
+        const next = resimulate(lines, order);
+        Object.assign(order, next);
+        const approval = [...approvals.values()].find((row) => row.orderId === orderId)!;
+        approvals.set(approval.id, { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length });
+      },
+      recordAudit: (event) => audit.push({ ...event, id: `EV-${audit.length + 1}`, at: new Date().toISOString() }),
+    }),
+    lookupKitchenBrand: lookupKitchenBrandMock,
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
     },
@@ -175,6 +277,15 @@ export function createMockApi(): MockApi {
       const order = demoOrders.get(current.orderId)!;
       if (order.lines.some((line) => isUnknownStock(line.offer.availableAmount))) {
         throw new ApiError("STOCK_UNKNOWN", "Waiting for supplier stock confirmation.");
+      }
+      const short = order.lines.find(
+        (line) => line.offer.availableAmount != null && line.quantity > line.offer.availableAmount,
+      );
+      if (short) {
+        throw new ApiError(
+          "PARTIAL_STOCK",
+          `Only ${short.offer.availableAmount} of ${short.product.id} in supplier stock; ${short.quantity} requested.`,
+        );
       }
       demoOrders.set(order.id, { ...order, status: "PLACED" });
       const decided = decide(
@@ -224,7 +335,8 @@ export function createMockApi(): MockApi {
     async changeProposal(orderId, change: ProposalChange, actor) {
       const proposalOrder = demoOrders.get(orderId);
       if (!proposalOrder) throw new ApiError("NOT_FOUND", `Order ${orderId} was not found.`);
-      const approval = [...approvals.values()].find((row) => row.orderId === orderId)!;
+      const approval = [...approvals.values()].find((row) => row.orderId === orderId);
+      if (!approval) throw new ApiError("NOT_FOUND", `Order ${orderId} has no approval to change.`);
       pendingApproval(approval.id);
       if (change.type !== "REMOVE_LINE" && (!Number.isInteger(change.quantity) || change.quantity < 1)) {
         throw new ApiError("INVALID", "Quantity must be a whole number of at least 1.");
@@ -273,10 +385,41 @@ export function createMockApi(): MockApi {
       }
       const next = resimulate(lines, proposalOrder);
       Object.assign(proposalOrder, next);
-      const nextApproval = { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length };
+      // An edited basket is no longer one of the engine's options.
+      const options = approval.options?.map((option) => ({ ...option, chosen: false }));
+      const nextApproval = { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length, options };
       approvals.set(approval.id, nextApproval);
       appendChange(proposalOrder.id, kind, change.productId, from, to, actor, summary);
       return { order: proposalOrder, approval: nextApproval };
+    },
+    async chooseOption(approvalId, optionId, actor) {
+      const current = pendingApproval(approvalId);
+      const option = current.options?.find((row) => row.id === optionId);
+      if (!option) throw new ApiError("NOT_FOUND", `Option ${optionId} was not found.`);
+      if (option.cutoffPassed) throw new ApiError("CLOSING_PASSED", "The order cut-off for this option has passed.");
+      const lines = structuredClone(milkOptionLines[optionId]);
+      if (!lines) throw new ApiError("NOT_FOUND", `Option ${optionId} has no basket.`);
+      const order = demoOrders.get(current.orderId)!;
+      const next = resimulate(lines, order);
+      Object.assign(order, next);
+      const approval = {
+        ...current,
+        totalExVat: next.totalExVat,
+        totalInclVat: order.totalInclVat,
+        lineCount: lines.length,
+        options: current.options?.map((row) => ({ ...row, chosen: row.id === optionId })),
+      };
+      approvals.set(approval.id, approval);
+      audit.push({
+        id: `EV-${audit.length + 1}`,
+        at: new Date().toISOString(),
+        kind: "approval",
+        actor,
+        orderId: order.id,
+        summary: `Chose option ${optionId} for ${order.id}`,
+        reason: `Re-simulated: ${formatEur(order.totalInclVat)} incl VAT. Nothing is approved or sent yet.`,
+      });
+      return approval;
     },
     async listFeedback(filter) {
       return filter?.orderId ? feedback.filter((row) => row.orderId === filter.orderId) : [...feedback];
@@ -290,13 +433,101 @@ export function createMockApi(): MockApi {
       if (!found) throw new ApiError("NOT_FOUND", `Order ${id} was not found.`);
       return found;
     },
+    async getCurrentSession() {
+      return { kind: "human", name: "aron", role: "approver", kitchenId: KITCHEN_ID, canApprove: true, scopes: null };
+    },
+    async getOrderResolution(orderId) {
+      const found = resolutions.get(orderId);
+      if (!found) throw new ApiError("ORDER_NOT_FOUND", `Order ${orderId} was not found.`);
+      return structuredClone(found);
+    },
+    async resolveOrder(orderId, input, actor) {
+      const current = resolutions.get(orderId);
+      if (!current) throw new ApiError("ORDER_NOT_FOUND", `Order ${orderId} was not found.`);
+      const supplierOrderRef = input.resolution === "placed" ? input.supplierOrderRef.trim() : null;
+      const note = input.resolution === "not_sent" ? (input.note?.trim() ?? "") : "";
+      if (input.resolution === "placed" && (!supplierOrderRef || supplierOrderRef.length > 200)) {
+        throw new ApiError("INVALID_REQUEST", "The supplier order reference must be 1 to 200 characters.");
+      }
+      if (note.length > 500) throw new ApiError("INVALID_REQUEST", "The note must be at most 500 characters.");
+      if (current.resolution) {
+        if (
+          current.resolution.resolution !== input.resolution ||
+          current.resolution.supplierOrderRef !== supplierOrderRef
+        ) {
+          throw new ApiError("ALREADY_RESOLVED", "Someone else already resolved this order another way.");
+        }
+      } else if (!current.resolvable) {
+        throw new ApiError("ORDER_NOT_RESOLVABLE", "This order is no longer waiting for resolution.");
+      } else {
+        const resolvedAt = new Date().toISOString();
+        current.resolution = {
+          resolution: input.resolution,
+          supplierOrderRef,
+          note,
+          resolvedBy: actor,
+          resolvedAt,
+          fromOutcome: current.outcome,
+        };
+        current.resolvable = false;
+        current.updatedAt = resolvedAt;
+        recordAudit({
+          kind: "order",
+          actor: "human",
+          orderId,
+          summary: `${input.resolution === "placed" ? "Marked placed" : "Marked not sent"}: ${orderId}`,
+          reason: note || supplierOrderRef || `Checked with the supplier; recorded by ${actor}.`,
+        });
+      }
+      const placed = current.resolution.resolution === "placed";
+      current.outcome = placed ? "CONFIRMED" : "NOT_SENT";
+      current.status = placed ? "SENT" : null;
+      current.proposalStatus = placed ? "APPROVED" : "READY";
+      demoOrders.set(orderId, {
+        ...demoOrders.get(orderId)!,
+        status: placed ? "PLACED" : "NOT_SENT",
+        supplierOrderRef: current.resolution.supplierOrderRef,
+      });
+      approvals.set(unknownApproval.id, { ...approvals.get(unknownApproval.id)!, status: placed ? "APPROVED" : "PENDING" });
+      const result: OrderResolutionResult = {
+        orderId,
+        proposalId: current.proposalId,
+        proposalStatus: current.proposalStatus,
+        outcome: current.outcome,
+        status: current.status,
+        resolution: structuredClone(current.resolution),
+      };
+      return structuredClone(result);
+    },
     async listAudit(filter) {
-      const names = new Map((Object.values(products) as Product[]).map((product) => [product.id, product.names.en]));
-      return (filter?.orderId ? audit.filter((event) => event.orderId === filter.orderId) : audit).map((event) => ({
-        ...event,
-        summary: nameProducts(event.summary, names),
-        reason: nameProducts(event.reason, names),
-      }));
+      return (filter?.orderId ? audit.filter((event) => event.orderId === filter.orderId) : audit).map(named);
+    },
+    async listAuditChain(limit) {
+      return chainRows()
+        .slice(-limit)
+        .map((row) => ({ ...row, event: named(row.event) }));
+    },
+    async verifyAuditChain() {
+      const rows = chainRows();
+      const check = verifyRows(rows);
+      // Every sample line is this kitchen's own.
+      return mapChainCheck({ ...check, broken_kitchen_id: check.ok ? null : KITCHEN_ID, kitchen_entries: rows.length });
+    },
+    async tamperAuditRow() {
+      const rows = chainRows();
+      if (rows.length === 0) throw new ApiError("NOTHING_TO_TAMPER", "The audit log is empty.");
+      if (tampered) throw new ApiError("ALREADY_TAMPERED", "A line is already tampered.");
+      const index = rows.length - 1;
+      tampered = { index, original: audit[index] };
+      audit[index] = { ...audit[index], summary: `${audit[index].summary} (edited after the fact)` };
+      return { seq: index + 1 };
+    },
+    async restoreAuditRow() {
+      if (!tampered) return { seq: null, restored: false };
+      const { index, original } = tampered;
+      audit[index] = original;
+      tampered = null;
+      return { seq: index + 1, restored: true };
     },
     async submitChefRequest() {
       return { order: demoOrders.get(seedApproval.orderId)!, substitutes, approval: approvals.get(seedApproval.id)! };

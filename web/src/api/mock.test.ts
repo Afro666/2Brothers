@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createMockApi } from "@/api/mock";
-import { confirmedDemoApproval as approval, approval as unknownApproval } from "@/mocks/milk-case";
+import { confirmedDemoApproval as approval, approval as unknownApproval, milkOptions } from "@/mocks/milk-case";
 
 const DECISION = {
   approvalId: approval.id,
@@ -162,8 +162,27 @@ describe("mock API proposal changes", () => {
 
     expect(result.order.totalExVat).toBe(1845);
     expect(result.order.totalInclVat).toBe(2094.08);
-    expect(result.order.mov.current).toBe(1845);
+    expect(result.order.mov?.current).toBe(1845);
     expect(result.approval).toMatchObject({ totalExVat: 1845, totalInclVat: 2094.08, lineCount: 1 });
+  });
+
+  it("refuses to approve a line above measured supplier stock", async () => {
+    const api = createMockApi();
+    const [line] = (await api.getOrder(approval.orderId)).lines;
+    expect(line.offer.availableAmount).toBe(51);
+    const { approval: changed } = await api.changeProposal(
+      approval.orderId,
+      { type: "SET_QUANTITY", productId: line.product.id, quantity: 60 },
+      "human",
+    );
+    await expect(
+      api.approve(
+        { approvalId: approval.id, expectedTotalExVat: changed.totalExVat, expectedTotalInclVat: changed.totalInclVat },
+        "human",
+      ),
+    ).rejects.toMatchObject({ code: "PARTIAL_STOCK" });
+    expect((await api.getApproval(approval.id)).status).toBe("PENDING");
+    expect((await api.getOrder(approval.orderId)).status).toBe("NEEDS_APPROVAL");
   });
 
   it("only allows proposal changes while its approval is pending", async () => {
@@ -180,5 +199,51 @@ describe("mock API proposal changes", () => {
         "human",
       ),
     ).rejects.toMatchObject({ code: "ALREADY_DECIDED" });
+  });
+
+  it("refuses changes to an order that has no approval", async () => {
+    const api = createMockApi();
+    await expect(
+      api.changeProposal("ORD-1042", { type: "SET_QUANTITY", productId: "463335", quantity: 2 }, "human"),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+describe("mock API options", () => {
+  const [optionA, optionB, optionC] = milkOptions;
+
+  it("re-simulates the chosen option to its exact total and approves nothing", async () => {
+    const api = createMockApi();
+    const chosen = await api.chooseOption!(approval.id, optionC.id, "human");
+    expect(chosen).toMatchObject({ status: "PENDING", totalExVat: 2050, totalInclVat: optionC.totalInclVat });
+    expect(chosen.options?.filter((option) => option.chosen).map((option) => option.id)).toEqual([optionC.id]);
+    expect((await api.getOrder(approval.orderId)).status).toBe("NEEDS_APPROVAL");
+    // Option C's stock is not measured: the existing approval rule still refuses it.
+    await expect(
+      api.approve(
+        { approvalId: approval.id, expectedTotalExVat: 2050, expectedTotalInclVat: optionC.totalInclVat },
+        "human",
+      ),
+    ).rejects.toMatchObject({ code: "STOCK_UNKNOWN" });
+
+    const back = await api.chooseOption!(approval.id, optionA.id, "human");
+    expect(back).toMatchObject({ totalExVat: approval.totalExVat, totalInclVat: optionA.totalInclVat });
+  });
+
+  it("refuses an option whose cut-off has passed, and an option it does not know", async () => {
+    const api = createMockApi();
+    await expect(api.chooseOption!(approval.id, optionB.id, "human")).rejects.toMatchObject({ code: "CLOSING_PASSED" });
+    await expect(api.chooseOption!(approval.id, "nope", "human")).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect((await api.getApproval(approval.id)).totalInclVat).toBe(approval.totalInclVat);
+  });
+
+  it("marks no option as proposed once a person edits the basket", async () => {
+    const api = createMockApi();
+    const result = await api.changeProposal(
+      approval.orderId,
+      { type: "SET_QUANTITY", productId: "462775", quantity: 40 },
+      "human",
+    );
+    expect(result.approval.options?.some((option) => option.chosen)).toBe(false);
   });
 });

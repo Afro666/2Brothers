@@ -1,5 +1,6 @@
 """Golden scenarios from docs/scenarios.md. Offers are the live values of 2026-11-13 22:04."""
 
+import json
 from datetime import date
 from decimal import Decimal as D
 
@@ -149,6 +150,35 @@ def test_stockout_cap_is_user_set():
     assert weekly == pytest.approx(45)
 
 
+@pytest.mark.parametrize("level", [0, 1, 95, -0.5])
+def test_service_level_outside_open_unit_interval_is_rejected(level):
+    with pytest.raises(ValueError, match="class A"):
+        KitchenParams.from_dict({"service_level": {"A": level}})
+
+
+def test_service_level_inside_unit_interval_is_kept():
+    assert KitchenParams.from_dict({"service_level": {"B": 0.99}}).service_level["B"] == D("0.99")
+
+
+@pytest.mark.parametrize("cover", [{"Dairy": 4}, {"fresh_dairy": 0}, {"dry": -3}])
+def test_bad_max_cover_days_is_rejected(cover):
+    with pytest.raises(ValueError, match="max_cover_days"):
+        KitchenParams.from_dict({"max_cover_days": cover})
+
+
+@pytest.mark.parametrize("cap", [0.5, 3.5, 10])
+def test_stockout_cap_outside_one_to_three_is_rejected(cap):
+    with pytest.raises(ValueError, match="stockout_cap"):
+        KitchenParams.from_dict({"stockout_cap": cap})
+
+
+def test_valid_settings_still_load():
+    params = KitchenParams.from_dict({"service_level": {"A": "0.99"}, "stockout_cap": "3",
+                                      "max_cover_days": {"fish": 1, "other": 10}})
+    assert params.stockout_cap == 3 and params.max_cover_days["fish"] == 1
+    assert params.max_cover_days["other"] == 10 and params.service_level["A"] == D("0.99")
+
+
 def test_s11_inbound_is_not_an_emergency():
     parm = pack_info(row("469648", "ST", "ST", [("KI", 12), ("ST", 1)]), measure="ST")
     item = Item("469648", parm, daily_demand=4, lead_time_days=3, review_days=1, on_hand=10,
@@ -183,6 +213,15 @@ def test_s11_cover_ceiling_stops_cheap_hoarding():
     assert check["over_ceiling"] and check["reason_codes"] == ("COVER_CEILING",)
     assert check["days_of_cover"] == pytest.approx(47.5)
     assert not cover_limit(item, params, extra=30)["over_ceiling"]
+
+
+def test_cover_limit_zero_demand_gives_json_safe_none():
+    parm = pack_info(row("469648", "ST", "ST", [("ST", 1)]), measure="ST")
+    item = Item("469648", parm, daily_demand=0, lead_time_days=3, review_days=1, on_hand=10,
+                safety_stock=0, category="dry")
+    check = cover_limit(item, KitchenParams.from_dict({}), extra=5)
+    assert check["days_of_cover"] is None
+    json.dumps(check, allow_nan=False)
 
 
 def test_rounding_up_to_lot():
@@ -226,3 +265,11 @@ def test_unknown_reliability_is_never_best_then_carbon_decides():
     green = _milk("C", "1.02", reliability=0.90, carbon=1.1)
     plan = plan_request(D(50), "L", [known.__class__(**{**known.__dict__, "carbon": 1.6}), green], MON, P)
     assert plan.lines[0].product_id == "C" and "lower carbon" in plan.lines[0].why
+
+
+def test_zero_reliability_beats_unknown_and_note_says_reliability():
+    unknown = _milk("A", "1.00", reliability=None)
+    zero = _milk("B", "1.01", reliability=0.0)
+    plan = plan_request(D(50), "L", [unknown, zero], MON, P)
+    assert plan.lines[0].product_id == "B"
+    assert "delivery reliability 0% vs unknown" in plan.lines[0].why

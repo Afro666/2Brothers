@@ -28,6 +28,18 @@ export const STATUS_META: Record<OrderStatus, StatusMeta> = {
     icon: UserCheck,
     meaning: "Outside the mandate. A human must approve the exact total before it is placed.",
   },
+  IN_PROGRESS: {
+    label: "In progress",
+    tone: "neutral",
+    icon: CircleDashed,
+    meaning: "The Buyer is still building this proposal, or an approve is running. It cannot be approved yet.",
+  },
+  BLOCKED_BY_RECALL: {
+    label: "Blocked by recall",
+    tone: "danger",
+    icon: TriangleExclamationPoint,
+    meaning: "A line is recalled. The proposal waits for a replacement and cannot be approved as it is.",
+  },
   REFUSED: {
     label: "Refused",
     tone: "danger",

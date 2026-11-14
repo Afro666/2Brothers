@@ -40,3 +40,28 @@ chef; nothing is ordered from an alert). `--webhook URL` POSTs it with `X-Event-
 
 Context.dev notes: the REST API rejects the MCP-only `responseMode` field; a 429 is
 retried with `Retry-After` / backoff.
+# Core proposal enforcement (#358)
+
+Replacement enrichment (#368) records a second Context structured extraction
+from the pinned official Löfbergs Crescendo page. The committed recording has
+source URL, fetch time and Context request ID. It appears in the live inbox,
+with allergens explicitly unknown. Add `--live-enrichment` to the command below
+to refresh that page using credits. This is an additional product-page call
+to web/scrape, not a claim to have used a different REST endpoint or RASFF.
+It cannot override supplier pack sizing or the trusted catalog allergen policy.
+
+After recording notices, apply them to actual open proposals in one kitchen:
+
+```powershell
+python -m monitor.proposals --fixture monitor/fixtures/ruokavirasto.json --kitchen-id demo-kitchen
+```
+
+This writes holds and pending replacement proposals, never orders. It uses
+Mongo through `store/`, live Valio quotes through the gateway, and the kitchen's
+explicit allergen policy. Exact/possible matches block; review matches warn.
+The live approval inbox shows the notice, lot and replacement link. A failed
+quote or unknown policy leaves the original held. Repeated polls reuse the
+recorded alert and replacement. Holds are conservative and remain until a
+human reconciles the affected lot; there is no automatic expiry or release.
+An order past the atomic commit point is not cancelled by a later notice.
+

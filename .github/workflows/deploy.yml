@@ -36,10 +36,15 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          # "Run workflow" by hand redeploys even when main has not moved (after an .env fix).
+          DEPLOY_ARG: ${{ github.event_name == 'workflow_dispatch' && format('force {0}', github.sha) || github.sha }}
         run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "::notice::deploy secrets not set, skipping"; exit 0
+          fi
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            "root@$DEPLOY_HOST" "$GITHUB_SHA"
+            "root@$DEPLOY_HOST" "$DEPLOY_ARG"

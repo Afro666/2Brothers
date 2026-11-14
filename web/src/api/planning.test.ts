@@ -41,6 +41,34 @@ describe("mock API planning data", () => {
     });
   });
 
+  it("rejects a stock count with an unknown product and leaves stock unchanged", async () => {
+    const api = createMockApi();
+    const before = (await api.getStock()).find((item) => item.productId === "462775");
+    const auditBefore = (await api.listAudit()).length;
+
+    await expect(
+      api.submitStockCount(
+        [
+          { productId: "462775", onHand: 999 },
+          { productId: "NOPE", onHand: 1 },
+        ],
+        "chef",
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    expect((await api.getStock()).find((item) => item.productId === "462775")).toEqual(before);
+    expect(await api.listAudit()).toHaveLength(auditBefore);
+  });
+
+  it("rejects negative or non-finite stock counts", async () => {
+    const api = createMockApi();
+    for (const onHand of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(api.submitStockCount([{ productId: "462775", onHand }], "chef")).rejects.toMatchObject({
+        code: "INVALID",
+      });
+    }
+  });
+
   it("calculates daily product demand from menu covers", async () => {
     const api = createMockApi();
     const demand = await api.getDemand("2026-11-16", "2026-11-16");
@@ -124,6 +152,37 @@ describe("mock API planning data", () => {
     const milk = (await api.getSupplierDemand("2026-11-16", "2026-11-16")).find((row) => row.productId === "463335");
 
     expect(milk).toMatchObject({ available: null, risk: "UNKNOWN", suggestedBuy: null });
+  });
+
+  it("proposes one order from the week's demand, net of counted stock", async () => {
+    const api = createMockApi();
+    const approvals = await api.listApprovals();
+
+    expect(await api.proposeOrderForPlan("2026-11-16", "2026-11-22", "2026-11-16")).toMatchObject({
+      status: "READY",
+      totalInclVat: 719.6,
+      lineCount: 4,
+      needCount: 5,
+      // Eila milk and the cinnamon buns were never counted.
+      uncountedCount: 2,
+      // The salmon has no price in the sample data.
+      shortfallCount: 1,
+    });
+    // A proposal only: nothing is approved or placed by it.
+    expect(await api.listApprovals()).toEqual(approvals);
+  });
+
+  it("answers NOTHING_NEEDED for a week with no menu entries, or when stock covers the plan", async () => {
+    const api = createMockApi();
+    await expect(api.proposeOrderForPlan("2026-11-23", "2026-11-29", "2026-11-23")).rejects.toMatchObject({
+      code: "NOTHING_NEEDED",
+    });
+
+    await api.saveMenuPlan("2026-W48", [{ date: "2026-11-23", meal: "Lunch", recipeId: "REC-SALMON-SOUP", covers: 1 }]);
+    await api.submitStockCount([{ productId: "462775", onHand: 18 }], "chef");
+    await expect(api.proposeOrderForPlan("2026-11-23", "2026-11-29", "2026-11-23")).rejects.toMatchObject({
+      code: "NOTHING_NEEDED",
+    });
   });
 
   it("rejects blank names and invalid menu cover values", async () => {

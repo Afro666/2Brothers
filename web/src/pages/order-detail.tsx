@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
+import { OrderResolutionPanel } from "@/components/purchasing/order-resolution-panel";
 import { StatusBadge } from "@/components/purchasing/status-badge";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,7 +43,11 @@ export function OrderDetailPage() {
         {state.status === "loading" ? <LoadingState /> : null}
         {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
         {state.status === "ready" ? (
-          <Card>
+          <>
+            {state.data.status === "UNCONFIRMED" || state.data.status === "SENT_READ_FAILED" ? (
+              <OrderResolutionPanel order={state.data} onChanged={state.reload} />
+            ) : null}
+            <Card>
             <div className="space-y-4 px-6">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-semibold">{state.data.id}</h2>
@@ -62,6 +67,12 @@ export function OrderDetailPage() {
                   <dt className="text-muted-foreground">Total incl VAT</dt>
                   <dd>{formatEur(state.data.totalInclVat)}</dd>
                 </div>
+                {state.data.supplierOrderRef ? (
+                  <div className="sm:col-span-3">
+                    <dt className="text-muted-foreground">Supplier order reference</dt>
+                    <dd className="break-all">{state.data.supplierOrderRef}</dd>
+                  </div>
+                ) : null}
               </dl>
             </div>
             <CardContent>
@@ -79,7 +90,8 @@ export function OrderDetailPage() {
                 </TabsContent>
               </Tabs>
             </CardContent>
-          </Card>
+            </Card>
+          </>
         ) : null}
       </div>
     </AppShell>

@@ -12,10 +12,10 @@ import csv
 import json
 from pathlib import Path
 
+from pymongo.errors import OperationFailure
+
 from store.db import ensure_indexes, get_db
 from store.products import flatten, upsert_products
-import os
-
 from store.embeddings import embed_products
 from store.search import ensure_search_index, ensure_vector_index
 
@@ -55,12 +55,19 @@ def main() -> None:
     megabytes = (stats["dataSize"] + stats["indexSize"]) / 1e6
     print(f"upserted {count} products; products in {db.name}: {db.products.count_documents({})}")
     print(f"data + indexes: {megabytes:.0f} MB of the 512 MB free tier")
-    print(f"search index: {ensure_search_index(db)}")
-    if os.environ.get("NVIDIA_API_KEY"):
-        print(f"embedded {embed_products(db)} new or changed products")
-        print(f"vector index: {ensure_vector_index(db)}")
+    try:
+        print(f"search index: {ensure_search_index(db)}")
+    except OperationFailure as exc:  # not Atlas, or no search-index rights
+        print(f"search index: not created ({exc})")
+    from store import embeddings
+    if embeddings.provider() is None:
+        print("embeddings skipped: no embedding key is set (hybrid search needs them)")
     else:
-        print("embeddings skipped: NVIDIA_API_KEY is not set (hybrid search needs them)")
+        try:
+            print(f"embedded {embed_products(db)} new or changed products")
+            print(f"vector index: {ensure_vector_index(db)}")
+        except (embeddings.EmbeddingError, OperationFailure) as exc:
+            print(f"embeddings: not finished ({exc})")
 
 
 if __name__ == "__main__":
