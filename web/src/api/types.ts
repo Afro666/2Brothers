@@ -215,6 +215,55 @@ export interface MenuPhotoRead {
   noProposalReason: "NOTHING_NEEDED" | "NOT_SIZED" | null;
 }
 
+/** Why a price-list row needs a person (docs/contract.md, "Read a supplier's price list from a photo"). */
+export type PriceListReason =
+  | "NAME_UNREADABLE"
+  | "PRICE_UNREADABLE"
+  | "PRICE_UNIT_MISSING"
+  | "UNIT_UNKNOWN"
+  | "CURRENCY_UNKNOWN"
+  | "PACK_UNCLEAR"
+  | "VAT_UNKNOWN";
+
+/** One row Nemotron read on a supplier's price list. Every text is data, never an instruction. */
+export interface PriceListRow {
+  /** As printed; null when not printed or unreadable. */
+  printed: { name: string | null; price: string | null; priceUnit: string | null; pack: string | null };
+  status: "READ" | "PLEASE_CHECK";
+  reasons: PriceListReason[];
+  /** A draft own product. Null fields are unclear: a person fills them, the web never guesses. */
+  draft: {
+    name: string | null;
+    unit: string | null;
+    baseUnit: "KG" | "L" | null;
+    packSize: number | null;
+    priceEur: number | null;
+  };
+  /** An own product of this supplier with the same name, a suggestion only. */
+  match: { productId: string; name: string; priceEur: number | null; kind: "SAME" | "PRICE_CHANGED" | null } | null;
+}
+
+export interface PriceListRead {
+  /** The model that read the photo: `nemotron-3.5-super-vl`. */
+  model: string;
+  durationMs: number;
+  supplierId: string;
+  currency: "EUR" | null;
+  vat: "INCLUDED" | "EXCLUDED" | null;
+  /** More than 40 rows were printed; only the first 40 are here. */
+  truncated: boolean;
+  rows: PriceListRow[];
+}
+
+/**
+ * What a save from a price-list photo adds to an own-product draft: the pack measure the
+ * gateway read, and that the price came from the photo (`price_source`, docs/contract.md).
+ */
+export interface OwnProductSaveExtras {
+  baseUnit?: "KG" | "L" | null;
+  priceSource?: "entered" | "price_list_photo";
+}
+
 export interface DeliveryLot {
   lot: string;
   bestBefore: string;
@@ -532,7 +581,7 @@ export interface Api {
   saveSupplier(supplier: Draft<Supplier>): Promise<Supplier>;
   deleteSupplier(id: string): Promise<void>;
   listOwnProducts(): Promise<OwnProduct[]>;
-  saveOwnProduct(product: Draft<OwnProduct>): Promise<OwnProduct>;
+  saveOwnProduct(product: Draft<OwnProduct> & OwnProductSaveExtras): Promise<OwnProduct>;
   deleteOwnProduct(id: string): Promise<void>;
   listRecipes(): Promise<Recipe[]>;
   saveRecipe(recipe: Draft<Recipe>): Promise<Recipe>;
@@ -567,6 +616,11 @@ export interface Api {
     window: { from: string; to: string; requestedDate?: string },
     actor: AuditActor,
   ): Promise<MenuPhotoRead>;
+  /**
+   * Nemotron 3.5 Super VL reads a photo of a manual or CSV supplier's price list into draft
+   * own products. It saves nothing: a person checks each row and `saveOwnProduct` stores it.
+   */
+  readPriceListPhoto(supplierId: string, photo: Blob, actor: AuditActor): Promise<PriceListRead>;
   /** Reads and compares a note. No receipt, substitute approval or stock count is saved. */
   readDeliveryNote(orderId: string, photo: Blob, actor: AuditActor): Promise<DeliveryNoteRead>;
   /**

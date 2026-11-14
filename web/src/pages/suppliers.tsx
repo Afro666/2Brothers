@@ -7,6 +7,7 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { PriceListPhoto } from "@/components/purchasing/price-list-photo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -434,7 +435,9 @@ function SupplierCard({
           ) : null}
         </div>
       </CardContent>
-      <CardFooter className="gap-2 border-t">
+      <CardFooter className="flex-wrap gap-2 border-t">
+        {/* Manual and CSV suppliers only; a supplier with an API sends its own prices (#1174). */}
+        <PriceListPhoto supplier={supplier} />
         <Button variant="outline" size="sm" onClick={onEdit}>
           {t("Edit")}
         </Button>
