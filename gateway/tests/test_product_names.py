@@ -140,3 +140,15 @@ def test_order_lines_carry_names_computed_at_read_time(env, monkeypatch):  # noq
     listed = client.get(f"{K}/orders", headers=AGENT).json()["orders"]
     assert listed[0]["lines"] == order["lines"]
     assert len(calls) == 1                         # one query for the whole list
+
+
+def test_the_audit_summary_never_names_another_kitchens_own_product(env):  # noqa: F811
+    _, _, db = env
+    from gateway.service import Gateway
+    db.products.insert_one({"_id": "own-9", "kitchen_id": "k99", "names": {"en": "not ours"}})
+    sim = {"lines": [{"product_id": "own-9", "quantity": "1", "unit": "ST", "total": "1.00", "why": "x"}],
+           "excluded": [], "expected_total": "1.24", "total_ex_vat": "1.00", "vat": "0.24"}
+    request = {"product_ids": ["own-9"], "quantity": "1", "unit": "ST", "requested_date": "2026-11-16"}
+    gw = Gateway(db, None)
+    assert "not ours" not in gw._summary(request, sim, "demo-kitchen")["text"]
+    assert "not ours" in gw._summary(request, sim, "k99")["text"]       # its own kitchen sees it

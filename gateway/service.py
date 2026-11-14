@@ -1023,7 +1023,7 @@ class Gateway:
             self._audit(kitchen_id, "learned_fact_applied", actor, proposal_id=doc["_id"],
                         offer_id=offer["offer_id"], applied=applied)
         self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
-                    offer_id=offer["offer_id"], summary=self._summary(request, sim)["text"])
+                    offer_id=offer["offer_id"], summary=self._summary(request, sim, kitchen_id)["text"])
         if auto_approve:
             self._maybe_auto_approve(kitchen_id, doc, sim, request)
         return self._proposal_out(self.db.proposals.find_one({"_id": doc["_id"]}) or doc)
@@ -1082,7 +1082,7 @@ class Gateway:
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
                 **offer["simulation"],
-                "decision_summary": self._summary(doc["request"], offer["simulation"], found),
+                "decision_summary": self._summary(doc["request"], offer["simulation"], doc["kitchen_id"], found),
                 "signature": offer.get("signature"), "offer_hash": offer.get("offer_hash")}
         result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
         result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []))
@@ -1101,11 +1101,12 @@ class Gateway:
         # #1130: names on every line kind, read in one query for the whole proposal.
         return product_names.name_proposal(result, found)
 
-    def _summary(self, request: dict, sim: dict, found: dict | None = None) -> dict:
-        """`found`: product_names.labels already read for this proposal (no second query)."""
+    def _summary(self, request: dict, sim: dict, kitchen_id: str, found: dict | None = None) -> dict:
+        """`found`: product_names.labels already read for this proposal (no second query).
+        Names are scoped to `kitchen_id`: never another kitchen's own product (#1450)."""
         if found is None:
             ids = {ln["product_id"] for ln in sim.get("lines") or []} | {e["product_id"] for e in sim.get("excluded") or []}
-            found = product_names.labels(self.db, ids)
+            found = product_names.labels(self.db, ids, kitchen_id)
         return decision_summary(request, sim, {pid: f["product_name"] for pid, f in found.items()})
 
     def get_proposal(self, kitchen_id: str, proposal_id: str) -> dict:
@@ -1634,7 +1635,7 @@ class Gateway:
         self._audit(kitchen_id, "approval_requested", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], expected_total=sim["expected_total"])
         self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
-                    offer_id=offer["offer_id"], summary=self._summary(offer["request"], sim)["text"])
+                    offer_id=offer["offer_id"], summary=self._summary(offer["request"], sim, kitchen_id)["text"])
         return {"approval_id": approval["approval_id"], "proposal_id": doc["_id"], "status": "PENDING"}
 
     def tool_place_order(self, kitchen_id: str, body: dict) -> dict:
