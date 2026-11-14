@@ -80,7 +80,9 @@ def test_a_person_gets_the_checked_lines_and_the_observation_is_saved(monkeypatc
     assert data["lines"][0]["missing"] == "15" and data["not_ordered"][0]["needs_approval"] is True
     assert worker.calls == [("demo-kitchen", ORDER)]
     written = {n for n in db.list_collection_names() if db[n].count_documents({})}
-    assert written == {"orders", "offers", "delivery_results", "delivery_result_current", "audit_log"}
+    # audit_head: every audit append also moves the chain head (#1879)
+    assert written == {"orders", "offers", "delivery_results", "delivery_result_current", "audit_log",
+                       "audit_head"}
     assert db.delivery_results.count_documents({}) == 1 and db.audit_log.count_documents({}) == 2
     [event] = events(db, "delivery_note_read")
     assert (event["actor"], event["order_id"], event["statuses"]) == ("aron", ORDER, {"SHORT": 1, "SUBSTITUTE": 1})

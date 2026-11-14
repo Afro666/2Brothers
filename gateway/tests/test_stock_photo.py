@@ -82,7 +82,8 @@ def test_a_person_gets_the_rows_and_nothing_is_stored_but_one_audit_entry(monkey
     assert worker.calls == [("demo-kitchen", BODY["image_base64"])]             # one call, never retried
     assert db.kitchen_stock.count_documents({}) == 0 and db.stock_count_keys.count_documents({}) == 0
     written = {name: db[name].count_documents({}) for name in db.list_collection_names()}
-    assert {name for name, n in written.items() if n} == {"audit_log"} and written["audit_log"] == 1
+    # audit_head: the one audit append also moves the chain head (#1879)
+    assert {name for name, n in written.items() if n} == {"audit_log", "audit_head"} and written["audit_log"] == 1
     [event] = events(db, "stock_photo_read")
     assert (event["actor"], event["rows"], event["counted"], event["model"]) == ("aron", 3, 1, "nemotron-3.5-super-vl")
     stored = json.dumps(list(db.audit_log.find({}, {"_id": 0})), default=str)

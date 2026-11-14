@@ -137,6 +137,21 @@ class LiveTrustTests(unittest.TestCase):
         trust.restore(self.db, "demo-kitchen")
         self.assertTrue(trust.verify(self.db, "demo-kitchen")["ok"])
 
+    def test_a_cut_end_fails_the_verify_on_real_mongo(self):
+        # #1879, on its own throwaway database: the head moves forward only, and a log
+        # that lost its last row no longer verifies.
+        from store.db import get_db
+        db = get_db(f"two_brothers_test_{uuid4().hex[:8]}")
+        self.addCleanup(db.client.drop_database, db.name)
+        entries = [audit.append_event(db, {"event_id": f"e{n}", "kind": "x"}, {"kitchen_id": "k"})
+                   for n in range(3)]
+        self.assertEqual(audit.chain_head(db)["seq"], 3)
+        audit._advance_head(db, entries[0])          # a slow writer arrives late
+        self.assertEqual((audit.chain_head(db)["seq"], audit.chain_head(db)["hash"]), (3, entries[2]["hash"]))
+        self.assertEqual(audit.verify_chain(db), {"ok": True, "length": 3, "broken_at": None})
+        db.audit_log.delete_one({"_id": 3})
+        self.assertEqual(audit.verify_chain(db), {"ok": False, "length": 2, "broken_at": 3})
+
     def test_the_stream_carries_this_kitchens_changes_only(self):
         events = trust.watch_kitchen(self.db, "demo-kitchen", max_await_ms=500)
         try:
