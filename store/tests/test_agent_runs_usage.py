@@ -82,3 +82,23 @@ def test_it_reads_what_the_worker_stores(db):
     totals = agent_runs.usage_totals(db, "K01")
     assert (totals["runs"], totals["finished_runs"], totals["calls"]) == (1, 1, 7)
     assert totals["since"] is not None and totals["last_run_at"] >= totals["since"]
+
+
+def test_a_run_that_ended_without_a_proposal_keeps_its_usage(db):
+    """#1801: the model used tokens in a run that failed too; the sums must not lose them."""
+    row, _ = agent_runs.claim(db, "K01", "key-failed", {"text": "milk"})
+    agent_runs.finish(db, row["_id"], state="RECONCILE", result=None, usage=USAGE)
+    stored = db.agent_runs.find_one({"_id": row["_id"]})
+    assert stored["result"] is None and stored["usage"] == USAGE
+    totals = agent_runs.usage_totals(db, "K01")
+    assert (totals["runs"], totals["finished_runs"], totals["runs_without_usage"]) == (1, 0, 0)
+    assert (totals["calls"], totals["prompt_tokens"]) == (7, 41250)
+    assert totals["seconds"] == pytest.approx(38.412)
+
+
+def test_a_failed_run_without_usage_is_still_counted_apart(db):
+    row, _ = agent_runs.claim(db, "K01", "key-early", {"text": "milk"})
+    agent_runs.finish(db, row["_id"], state="RECONCILE", result=None)      # failed before any model call
+    stored = db.agent_runs.find_one({"_id": row["_id"]})
+    assert "usage" not in stored
+    assert agent_runs.usage_totals(db, "K01")["runs_without_usage"] == 1

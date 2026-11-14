@@ -435,6 +435,8 @@ export interface ModelUsage {
   model: string;
   /** Every Buyer run of the kitchen. */
   runs: number;
+  /** Runs that ended with a proposal. The other runs failed, timed out or still run. */
+  finishedRuns: number;
   /** Runs that carry no count (from before the meter, or without a proposal). The sums leave them out. */
   runsWithoutUsage: number;
   modelCalls: number;

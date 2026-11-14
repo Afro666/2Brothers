@@ -38,6 +38,7 @@ describe("model usage on the real gateway", () => {
     await expect(api.getModelUsage()).resolves.toEqual({
       model: "nemotron-3.5-super-vl",
       runs: 14,
+      finishedRuns: 11,
       runsWithoutUsage: 5,
       modelCalls: 63,
       promptTokens: 371250,
