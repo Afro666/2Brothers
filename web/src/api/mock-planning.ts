@@ -32,6 +32,7 @@ type PlanningApi = Pick<
   | "getSharing"
   | "setSharing"
   | "getSupplierDemand"
+  | "getBuyingNote"
 >;
 
 type AuditRecorder = (event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason">) => void;
@@ -308,6 +309,9 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
             };
           }),
       );
+    },
+    async getBuyingNote() {
+      return null;
     },
   };
 }

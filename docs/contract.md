@@ -452,6 +452,24 @@ and quantities are decimal strings on the wire.
   `kitchen_id`, `principal`, its own timestamp). `hash` covers the whole entry and
   the previous entry's hash, so a changed or removed entry is detectable.
 
+### Gateway health
+
+Served (#1188, `gateway/app.py`). `GET /health` is public (no token) and never calls
+Valio: monitors call it often. Answer:
+
+```json
+{"status": "ok", "valio_api": "live", "valio_reachable": true,
+ "valio_checked_at": "2026-11-14T13:40:02+00:00"}
+```
+
+- `valio_api`: `live` when the gateway talks to Valio's challenge API, `mock` when it runs
+  on a stand-in (tests, the web's mock gateway).
+- `valio_reachable`: from the last call to Valio that the gateway made anyway: `true`
+  when it answered, `false` when it failed (an HTTP error, a timeout, a 429), `null` when
+  no call was made since the gateway started. `valio_checked_at` is the time of that call,
+  or null.
+- Nothing else: no host name, key, status code or upstream error text.
+
 ### Agent audit ingestion
 
 POST `/audit/events` accepts `event_id`, `run_id`, `type`, `tool`, `arguments`,
@@ -2471,9 +2489,24 @@ webhooks per kitchen. Create and delete are audit entries (`webhook_created`,
 (the events one can subscribe to). These routes take no `idempotency_key`.
 
 Events: `proposal.ready`, `proposal.approved`, `proposal.rejected`, `order.placed`,
-`total_mismatch`, `recall.alert`. They come from the audit trail, so a webhook says what
-the audit log says. `ping` is sent only by `POST .../webhooks/{id}/test`; it is not a
-subscription.
+`total_mismatch`, `recall.alert`, and (planned, #1188) `supplier.offer`, `agent.refused`,
+`delivery.checked`. They come from the audit trail, so a webhook says what the audit log
+says. `ping` is sent only by `POST .../webhooks/{id}/test`; it is not a subscription. A
+webhook gets only the events it names; the web form ticks `proposal.ready` and
+`recall.alert` for a new webhook and offers the others unticked.
+
+Bodies (`data`) of the planned events and of the second `recall.alert` case. Each holds
+only fields of its audit entry:
+
+| Event | From the audit kind | `data` | Sent |
+|---|---|---|---|
+| `supplier.offer` | `supplier_offer_received`, `supplier_offer_accepted`, `supplier_offer_declined` (#374) | `step` (`RECEIVED`, `ACCEPTED`, `DECLINED`), `offer_id`, `supplier_id`, `product_id`, `replaces_product_id`, `requested_date`, `quantity`, `unit`; `proposal_id` when accepted. Never the supplier's reason text. | Once per offer and step, also when the offer is written by the selling agent's one-off command (`python -m agent.seller --apply`): that command waits for its deliveries before it exits. |
+| `agent.refused` | `refused` (#548) | `actor`, `code` (for example `HUMAN_SESSION_REQUIRED`), `method`, `route`: the route **pattern**, such as `/v1/kitchens/{kitchen_id}/approvals/{approval_id}/approve`, never the path with ids. | At most one delivery per webhook, actor and code a minute; more refusals in that minute stay in the audit log only. |
+| `delivery.checked` | `delivery_note_read` (#362) | `order_id`, `statuses` (count per line status), `complete`, `needs_approval` (substitute lines waiting for a person), `duration_ms`. Never the photo or the note's text. | Once per read. |
+| `recall.alert`, case `FOUND` (#1187) | the recall alert of a check (`POST /recalls/check`) | `case: "FOUND"`, `recall_event_id`, `product_id`, `product_name`, `match` (`exact`, `possible`, `review`), `found`: `{stock: true/false, recipes: <count>, open_proposal: true/false}`, `notice_url`, `next_step`. | When a check finds a recalled product in this kitchen's stock or recipes, also when no open proposal holds it. **Once per webhook and recall alert**: an alert stored before the webhook existed is sent at the next check; every later check sends nothing for it. A check inside the 60 s cooldown sends nothing. |
+
+The existing `recall.alert` for a blocked proposal (`recall_proposal_blocked`) keeps its
+body and gains `case: "PROPOSAL_BLOCKED"`.
 
 A delivery is one JSON POST:
 
@@ -2567,7 +2600,8 @@ strings in the stated unit.
 
 - `price_source` is `entered` (typed in by a person, the default) or `price_list_photo`
   (read from a photo of the supplier's price list and checked by a person, #1174). It
-  says where `unit_price_eur` came from; it never changes how the price is used.
+  says where `unit_price_eur` came from; it never changes how the price is used. A
+  change of `unit_price_eur` without `price_source` sets it back to `entered`.
 - `allergen_data` is `ENTERED` or `UNKNOWN`. An empty `allergens` list with `UNKNOWN`
   means unknown, never "free from".
 - Codes are the GS1 allergen codes the Valio catalog uses; `level` is `CONTAINS` or

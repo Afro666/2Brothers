@@ -139,6 +139,11 @@ class ValioClient:
         self._transport, self._sleep = transport, sleep
         self._clock, self._now = monotonic, now
         self._cache: dict[tuple, tuple[float, dict]] = {}
+        # For GET /health (#1188): live or a stand-in, and how the last real call went.
+        # Set from calls the gateway makes anyway; /health never calls Valio itself.
+        self.live = transport is _transport
+        self.last_reachable: bool | None = None
+        self.last_checked_at: datetime | None = None
         # Real Valio: the process-wide gate. A fake transport (tests, scenarios) reaches no
         # Valio, so it gets its own gate: the rest after a 429, no limiter.
         if gate is None:
@@ -160,6 +165,7 @@ class ValioClient:
             self._gate.acquire()      # ValioBusy during a rest: nothing is sent
             try:
                 result = self._transport(path, payload, headers)
+                self._seen(True)
                 if not isinstance(result, dict):
                     raise ValioError("Valio returned an invalid JSON object")
                 if self.ttl:
@@ -171,19 +177,25 @@ class ValioClient:
             except HTTPError as exc:
                 retry_after = str(exc.headers.get("Retry-After", "") if exc.headers else "").strip()
                 if exc.code == 429:   # never retried: a retry would fall inside Valio's block
+                    self._seen(False)
                     raise ValioBusy(self._gate.rest(retry_after)) from None
                 if not 500 <= exc.code < 600 or attempt == self.retries:
+                    self._seen(False)
                     raise ValioError(f"Valio HTTP {exc.code}") from None
                 delay = _seconds(retry_after)
                 delay = 0.5 * 2**attempt if delay is None else delay
                 self._sleep(min(delay, 30))
             except (URLError, TimeoutError, OSError):
                 if attempt == self.retries:
+                    self._seen(False)
                     raise ValioError("Valio network request failed") from None
                 self._sleep(0.5 * 2**attempt)
             except (ValueError, TypeError):
                 raise ValioError("Valio returned invalid data") from None
         raise AssertionError("unreachable")
+
+    def _seen(self, ok: bool) -> None:
+        self.last_reachable, self.last_checked_at = ok, self._now()
 
     def ping(self) -> dict:
         return self._read("/api/ping")
