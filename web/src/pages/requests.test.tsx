@@ -19,6 +19,26 @@ async function ask(api = createMockApi()) {
 describe("RequestsPage", () => {
   beforeEach(() => localStorage.clear());
 
+  it("fills the box from an example chip and never sends it (#1142)", async () => {
+    const api = createMockApi();
+    let asked = 0;
+    const original = api.submitChefRequest.bind(api);
+    api.submitChefRequest = async (request) => {
+      asked += 1;
+      return original(request);
+    };
+    const user = userEvent.setup();
+    renderApp("/requests", api);
+    await screen.findByRole("heading", { level: 1, name: "Request an order" });
+    const examples = screen.getByRole("group", { name: "Examples" });
+    await user.click(within(examples).getByRole("button", { name: "15 kg peanut butter" }));
+    expect(screen.getByLabelText("What do you need?")).toHaveValue("15 kg peanut butter");
+    await user.click(within(examples).getByRole("button", { name: "50 kg cheese by Monday" }));
+    expect(screen.getByLabelText("What do you need?")).toHaveValue("50 kg cheese by Monday");
+    expect(screen.queryByRole("region", { name: "Proposal" })).not.toBeInTheDocument();
+    expect(asked).toBe(0);
+  });
+
   it("shows the proposal with the line's why and the approvals link", async () => {
     const user = await ask();
 

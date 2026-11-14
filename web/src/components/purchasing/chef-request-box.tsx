@@ -8,6 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/lib/i18n";
 import type { ChefRequest } from "@/types";
 
+/** Examples a person can tap to fill the box (#1142). A tap only fills the text; it never sends. */
+export const REQUEST_EXAMPLES = [
+  "1,000 L lactose-free milk by Monday",
+  "50 kg cheese by Monday",
+  "15 kg peanut butter",
+] as const;
+
 /**
  * The chef says what they need in their own words. Covers and date are
  * separate fields so the engine reads numbers, not the model's guess.
@@ -79,6 +86,19 @@ export function ChefRequestBox({
           placeholder={t("1,000 L lactose-free milk by Monday")}
           rows={3}
         />
+        <div role="group" aria-label={t("Examples")} className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">{t("Try:")}</span>
+          {REQUEST_EXAMPLES.map((example) => (
+            <button
+              key={example}
+              type="button"
+              className="min-h-9 rounded-full border border-input bg-card px-3 py-1 text-sm hover:bg-muted"
+              onClick={() => setText(t(example))}
+            >
+              {t(example)}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
