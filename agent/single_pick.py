@@ -43,7 +43,10 @@ SYSTEM = ('Pick up to three products that best match the kitchen request from th
           'product is eligible. Never use those fields to overturn the ranking or its index tie-break. '
           'Use the fewest products needed: return only the best product when it can cover the need. '
           'When confirmed stock covers only part, include that product and the useful engine-selected '
-          'complement. engine_selected does not override the ranked rules for otherwise equal options. '
+          'complement. Never discard useful confirmed partial stock just because an unknown-stock '
+          'product might cover the remainder or is cheaper: return BOTH the partial-stock product '
+          'and its suitable complement. This also applies to a declined partial-stock product. '
+          'engine_selected does not override the ranked rules for otherwise equal options. '
           'Return picks in preference order. '
           'selection contains code-computed quote evidence, with prices ex VAT before basket discounts. '
           'Missing selection fields are unknown, not zero. '
@@ -104,6 +107,13 @@ def feedback_rows(rows, entries):
     declined = {f['product_id'] for f in entries
                 if f.get('kind') == 'DECLINED_PRODUCT' and f.get('product_id')}
     return [{**row, 'kitchen_declined': row['product_id'] in declined} for row in rows]
+
+
+def choice_memory(entries, rows):
+    """An explicit alias request overrides remembered removal preferences for this pick."""
+    if any(row.get('alias') is True for row in rows):
+        return [f for f in entries if f.get('kind') != 'DECLINED_PRODUCT']
+    return entries
 
 
 def checked_reason(reason, row, need=None):
@@ -172,8 +182,9 @@ class SinglePickModel:
             def read():
                 facts = self.memory_cache.get(self.kitchen, self.today, lambda: compute_facts(
                     _FactsGateway(self.db, datetime.now(timezone.utc)), self.kitchen, self.today))
-                return kitchen_memory(facts, [str(row['product_id']) for row in rows],
-                                      _suppliers(self.products, quote))
+                entries = kitchen_memory(facts, [str(row['product_id']) for row in rows],
+                                         _suppliers(self.products, quote))
+                return choice_memory(entries, rows)
             return await asyncio.to_thread(read)
         except Exception as exc:
             log.warning('kitchen memory unavailable for the pick: %s', type(exc).__name__)

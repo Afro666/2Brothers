@@ -169,3 +169,20 @@ def test_prompt_revision_invalidates_a_previously_cached_choice(monkeypatch):
         finally:
             await gateway.close()
     asyncio.run(run())
+
+
+def test_explicit_alias_ignores_removal_preference_but_keeps_other_memory(monkeypatch):
+    ratio = {**FACT, 'id': 'ratio', 'kind': 'CORRECTION_RATIO', 'value': 0.5}
+    monkeypatch.setattr(single_pick, 'compute_facts', lambda *args: [FACT, ratio])
+
+    async def run():
+        model = single_pick.SinglePickModel(None, None, 'demo-kitchen',
+            {'text': NEED['text']}, 'need', [], today=NOW.date())
+        rows = [{'product_id': FACT['product_id'], 'alias': True}]
+        entries = await model.memory_entries(rows, {})
+        assert [e['kind'] for e in entries] == ['CORRECTION_RATIO']
+        assert single_pick.feedback_rows(rows, entries)[0]['kitchen_declined'] is False
+        # A generic request still sees the active removal preference.
+        entries = await model.memory_entries([{**rows[0], 'alias': False}], {})
+        assert {e['kind'] for e in entries} == {'CORRECTION_RATIO', 'DECLINED_PRODUCT'}
+    asyncio.run(run())

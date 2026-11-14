@@ -259,7 +259,9 @@ changes context freshness, not Nemotron's weights or the engine's authority over
 quantities. It does not establish a latency guarantee during provider congestion.
 
 Repeated removals also produce a `kitchen_declined` flag beside each shortlist row,
-derived from the same active, relevant, bounded memory. The prompt applies that soft
+derived from the same active, relevant, bounded memory. An explicit alias request
+omits removal preferences from its pick memory, retaining other kinds of learned facts.
+The prompt applies that soft
 preference after product/explicit-alias fit, diet, delivery and confirmed coverage,
 and before price, prior orders and the index tie-break. It never removes a candidate
 in code: a declined product can still be needed for coverage or be the only suitable
@@ -281,8 +283,12 @@ only-option safeguards passed. The reported original case returns to its pre-fee
 choice after undo. Six reversed-shortlist no-feedback/undo checks still fail the
 frozen lower-index expectation, as at baseline: the model prefers the original
 engine-selected product; this existing tie-break limitation is not hidden or fixed.
-Overall: 23/36 to 30/36, with mean prompt tokens 809 to 1,057. All attempted iterations,
-including two failed drafts, are in `agent/benchmarks/feedback-choice-v1-report.json`.
+Overall: 23/36 to 30/36, with mean prompt tokens 809 to 1,088. All attempted iterations,
+including unsuccessful drafts and their stock/alias misses, are in
+`agent/benchmarks/feedback-choice-v1-report.json`. The final stock/diet/unit-price
+smoke check passed 15/15 (five repeats per case). A separate real-model check of
+recorded synthetic removals through the memory module selected A before feedback,
+B after feedback, and A after undo in all three repeats at each stage.
 This is synthetic development evidence, not a guarantee on unseen requests, and no
 live kitchen history or orders are created by this check.
 

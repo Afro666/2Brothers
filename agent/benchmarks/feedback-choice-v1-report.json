@@ -816,7 +816,518 @@
         "ebef22c5e6cb5e5fd551939266cb63f25b9587480a0441cd7aa585fb1f11a123",
         "fd48168075979da2fa09d9194dad336e0a0550decf2fa897d51a08dabaa3a2de"
       ]
+    },
+    "partial_stock_priority": {
+      "raw_sha256": "a6ab525eea53e1bc0afc3b41915e052471a655bf22bbb2f9022a28f0d02f1fdc",
+      "passed": 29,
+      "total": 36,
+      "by_case_stage": {
+        "equal-a/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "equal-a/without_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-a/after_undo": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/without_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_undo": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "declined-cheaper/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "diet-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "delivery-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "partial-keeps-complement/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ]
+          ]
+        },
+        "explicit-intent-wins/after_feedback": {
+          "passed": 2,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "only-option/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        }
+      },
+      "mean_prompt_tokens": 1102,
+      "median_model_seconds": 0.4845,
+      "prompt_sha256": [
+        "18af279e8fbba55d4f2000b0f4559bb886930d751f4f3c850c378ffef5ebf509",
+        "4d2f9a672119221d23c3d45494f2b156929b50150d77c1e843a3b350357a7076",
+        "4ee1d6a0f29539094d4751c2ecec1b75ade76ccd3caa44db2ca989a9584fff70",
+        "6427a2709c3efa5d6671020fda14152c5481b18c2a2e15e87d278724b0861443",
+        "851230922642afb7e7678484d82a70fcc0fbc6c591a718ca4899b83e88ebc525",
+        "8c05665ee28bb150c303c7ff501165b3ddf5ffbde725df39bbddc1b3e8eaec63",
+        "b039e7edffa523fb7a34b71448343d0e282622db803e68d81bf3a454d6a11621",
+        "bb4801a242452a52c295b47565a0bfb6baad49344a8ef067444a49b0702ee0a5",
+        "de7ac102b1f105c132979d6896c8d8acd9e855f33ebcaf1199259c1691d34e51",
+        "f57be8032b4c0833b67214b66582f24a854e5809b22541ee58ac277dc8506c3c"
+      ]
+    },
+    "alias_scoped_memory_final": {
+      "raw_sha256": "61d334d4fe6795fe978109c544575cce4ec2457881c6864824f6fc773ec34b11",
+      "passed": 30,
+      "total": 36,
+      "by_case_stage": {
+        "equal-a/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "equal-a/without_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-a/after_undo": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/without_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_undo": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "declined-cheaper/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "diet-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "delivery-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "partial-keeps-complement/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ]
+          ]
+        },
+        "explicit-intent-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "only-option/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        }
+      },
+      "mean_prompt_tokens": 1088,
+      "median_model_seconds": 0.898,
+      "prompt_sha256": [
+        "18af279e8fbba55d4f2000b0f4559bb886930d751f4f3c850c378ffef5ebf509",
+        "4d2f9a672119221d23c3d45494f2b156929b50150d77c1e843a3b350357a7076",
+        "4ee1d6a0f29539094d4751c2ecec1b75ade76ccd3caa44db2ca989a9584fff70",
+        "6427a2709c3efa5d6671020fda14152c5481b18c2a2e15e87d278724b0861443",
+        "851230922642afb7e7678484d82a70fcc0fbc6c591a718ca4899b83e88ebc525",
+        "8c05665ee28bb150c303c7ff501165b3ddf5ffbde725df39bbddc1b3e8eaec63",
+        "b039e7edffa523fb7a34b71448343d0e282622db803e68d81bf3a454d6a11621",
+        "bb4801a242452a52c295b47565a0bfb6baad49344a8ef067444a49b0702ee0a5",
+        "f57be8032b4c0833b67214b66582f24a854e5809b22541ee58ac277dc8506c3c",
+        "f8e88f8bb89c1932922446d8ef72d78951da0b90a468f1a0bf60ff40edcb8276"
+      ]
     }
   },
-  "conclusion": "Final: all 24 after-feedback cases passed, including 9 avoidance cases and 15 safeguards. Six equal-a no-feedback/undo checks pass. Six equal-b no-feedback/undo checks still fail the frozen lower-index expectation, as at baseline: engine-selected p0 remains preferred despite reversed shortlist. Undo still restores the same pre-feedback output. This existing tie-break limitation is not fixed or hidden."
+  "conclusion": "Final: all 24 after-feedback cases passed, including 9 avoidance cases and 15 safeguards. Six equal-a no-feedback/undo checks pass. Six equal-b no-feedback/undo checks still fail the frozen lower-index expectation, as at baseline: engine-selected p0 remains preferred despite reversed shortlist. Undo still restores the same pre-feedback output. This existing tie-break limitation is not fixed or hidden.",
+  "numeric_smoke": {
+    "strict_priority_before_partial_fix": {
+      "passed": 8,
+      "total": 9,
+      "by_case": {
+        "stock-01": {
+          "passed": 2,
+          "total": 3
+        },
+        "diet-01": {
+          "passed": 3,
+          "total": 3
+        },
+        "price-01": {
+          "passed": 3,
+          "total": 3
+        }
+      }
+    },
+    "after_partial_fix": {
+      "passed": 15,
+      "total": 15,
+      "by_case": {
+        "stock-01": {
+          "passed": 5,
+          "total": 5
+        },
+        "diet-01": {
+          "passed": 5,
+          "total": 5
+        },
+        "price-01": {
+          "passed": 5,
+          "total": 5
+        }
+      }
+    }
+  },
+  "iteration_notes": {
+    "prompt_only": "Did not correct original A failure.",
+    "row_flag_weak_priority": "Corrected avoidance but weakened delivery and explicit alias controls.",
+    "row_flag_strict_priority": "24/24 feedback checks; separate numeric smoke omitted useful partial stock once in three calls.",
+    "partial_stock_priority": "Numeric smoke 15/15; one explicit-alias choice failed.",
+    "alias_scoped_memory_final": "Explicit alias requests omit removal preferences from applicable memory (other facts retained). 24/24 feedback/safeguard cases; original undo passes. No further prompt change after numeric 15/15; alias memory filtering does not affect those non-alias inputs."
+  },
+  "integrated_final": {
+    "design": "9 live Nemotron calls; synthetic shortlist and in-memory feedback store; no live kitchen mutation or supplier/order calls",
+    "raw_feedback_rows": 9,
+    "raw_feedback_not_sent": true,
+    "unrelated_product_excluded": true,
+    "other_kitchen_excluded": true,
+    "refresh_after_60_seconds": true,
+    "undo_clears_memory": true,
+    "pick_key_changes_with_memory": true,
+    "orders": 0,
+    "stages": [
+      {
+        "stage": "before_feedback",
+        "memory_characters": 0,
+        "picks": [
+          [
+            "p0"
+          ],
+          [
+            "p0"
+          ],
+          [
+            "p0"
+          ]
+        ]
+      },
+      {
+        "stage": "after_three_removals",
+        "memory_characters": 417,
+        "picks": [
+          [
+            "p1"
+          ],
+          [
+            "p1"
+          ],
+          [
+            "p1"
+          ]
+        ]
+      },
+      {
+        "stage": "after_human_undo",
+        "memory_characters": 0,
+        "picks": [
+          [
+            "p0"
+          ],
+          [
+            "p0"
+          ],
+          [
+            "p0"
+          ]
+        ]
+      }
+    ]
+  }
 }

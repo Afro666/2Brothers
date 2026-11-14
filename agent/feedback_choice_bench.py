@@ -17,6 +17,8 @@ def messages(case, *, baseline=False, stage='after_feedback', fixture=None):
     fixture = fixture or json.loads(FIXTURE.read_text(encoding='utf-8'))
     facts = case['facts'] if stage == 'after_feedback' else []
     entries = kitchen_memory(facts, [r['product_id'] for r in case['rows']], [])
+    if not baseline:
+        entries = single_pick.choice_memory(entries, case['rows'])
     memory = prompt_block(entries)
     rows = case['rows'] if baseline else single_pick.feedback_rows(case['rows'], entries)
     system = fixture['baseline_system'] if baseline else single_pick.SYSTEM
