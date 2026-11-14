@@ -335,6 +335,17 @@ function mapAuditEvent(event: Json): AuditEvent {
     offer_id: _offer,
     ...rest
   } = event;
+  if (kind === "refused") {
+    // #548: the gateway refused a token or the Buyer. Show what was refused and the code, not the raw kind.
+    const action = [rest.method, rest.path].filter((part) => typeof part === "string" && part).join(" ");
+    return {
+      ...base,
+      kind: "refused",
+      actor: actor === "buyer-agent" ? "agent" : "system",
+      summary: action ? `Refused: ${action}` : "Refused",
+      reason: typeof rest.code === "string" && rest.code ? `Code: ${rest.code}` : describe(rest),
+    };
+  }
   const known = typeof kind === "string" ? EVENT_KINDS[kind] : undefined;
   return {
     ...base,
@@ -374,6 +385,7 @@ const AUDIT_KINDS = new Set<string>([
   "stock",
   "forecast_share",
   "settings",
+  "refused",
   "other",
 ] satisfies AuditKind[]);
 

@@ -12,6 +12,7 @@ export const KIND_META: Record<AuditKind, { label: string }> = {
   stock: { label: "Stock" },
   forecast_share: { label: "Forecast shared" },
   settings: { label: "Settings" },
+  refused: { label: "Refused by the gateway" },
   other: { label: "Other" },
 };
 
