@@ -8,7 +8,7 @@ import { LiveEventsProvider, useLiveEvents } from "@/lib/live-events";
 
 afterEach(() => vi.useRealTimers());
 
-it("debounces changes and reloads again only after a reconnect", async () => {
+it("debounces changes and reloads again after every connect", async () => {
   vi.useFakeTimers();
   let publish: ((event: LiveEvent) => void) | undefined;
   let status: ((connected: boolean) => void) | undefined;
@@ -33,6 +33,9 @@ it("debounces changes and reloads again only after a reconnect", async () => {
   });
   expect(changes).not.toHaveBeenCalled();
   await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(changes).toHaveBeenCalledTimes(1);
+  await act(async () => { status?.(false); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
   expect(changes).toHaveBeenCalledTimes(1);
   await act(async () => { status?.(true); });
   await act(async () => { await vi.advanceTimersByTimeAsync(300); });

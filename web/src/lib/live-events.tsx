@@ -24,7 +24,6 @@ export function LiveEventsProvider({ children }: { children: ReactNode }) {
   const api = useApi();
   const [connected, setConnected] = useState(false);
   const listeners = useRef(new Set<Listener>());
-  const hasConnected = useRef(false);
 
   useEffect(() => {
     setConnected(false);
@@ -33,10 +32,9 @@ export function LiveEventsProvider({ children }: { children: ReactNode }) {
       (event) => listeners.current.forEach((listener) => listener({ event })),
       (isConnected) => {
         setConnected(isConnected);
-        if (isConnected) {
-          if (hasConnected.current) listeners.current.forEach((listener) => listener({ reconnected: true }));
-          hasConnected.current = true;
-        }
+        // Nothing is replayed, so every connect (also the first: a change can land between a
+        // page's first load and the stream opening) tells the lists to load again.
+        if (isConnected) listeners.current.forEach((listener) => listener({ reconnected: true }));
       },
     );
   }, [api]);
