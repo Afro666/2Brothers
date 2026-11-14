@@ -251,8 +251,32 @@ The CLI tool agent still uses that audited loop. The legacy worker-mode tests se
 `strategy="loop"` explicitly; `test_single_pick.py` covers the new default, cache
 scope/expiry, live-price changes, concurrent selection and invalid model output.
 
-Live before/after latency and token measurements are recorded below once deployed;
-an uncongested benchmark is not proof of performance during provider queueing.
+### Live measurements, 14 November 2026
+
+Matched 200 L requests used `L`, `litres`, and `liters`, for 2026-11-16. All made
+waiting proposals; no order was approved. Small samples on the live demo, spanning
+concurrent changes on main (including model-trace reads), are not a controlled
+provider-queue benchmark.
+
+| Version/cohort | n | End-to-end times (s) | Median (s) | Model calls/request |
+|---|---:|---|---:|---:|
+| Before: tool loop | 3 | 6.359, 4.594, 4.203 | 4.594 | 4 |
+| First single-pick deployment: cold | 3 | 11.813, 17.000, 4.187 | 11.813 | 1 |
+| First single-pick deployment: cached | 2 | 7.078, 5.141 | 6.110 | 0 |
+
+The loop used roughly 43,500 prompt tokens per request. Single-pick cold calls used
+741-742 prompt and 79-131 completion tokens (0.293-0.538 model seconds); cache hits
+used zero model tokens. The cold median above does **not** meet the under-10-second
+goal. Provider time alone does not explain the end-to-end delay.
+
+Stored run/audit times for those three cold requests show 3.537/4.584/3.048 worker
+seconds, with about 1.2 seconds in each spent after the approval mutation on fetching
+the full proposal list. The worker now carries the proposal ID from the mutation
+receipt and fetches only that proposal, checking both identities. A bounded list
+read remains only for older receipts lacking the ID. This avoids enriching up to
+100 unrelated proposals and their model traces; it does not explain all ingress
+overhead. Post-fix measurements follow after deployment. No broad congestion or
+latency guarantee is claimed from these samples.
 
 ## Legacy Buyer loop settings (#706, #882)
 
