@@ -174,6 +174,16 @@ describe("AuditTimeline", () => {
     expect(document.querySelector("section > header time")).toHaveAttribute("datetime", group.at);
   });
 
+  it("keeps the order of requests by their newest step, whatever time the heading shows", () => {
+    const events = mapAudit([
+      ...sample,
+      { event_id: "lookup", kind: "order_lookup", proposal_id: proposalId, order_id: "order-1", at: "2026-11-14T21:29:00+00:00" },
+      { event_id: "other", kind: "recall_check", proposal_id: "other-proposal", at: "2026-11-14T18:00:00+00:00" },
+    ]);
+    const groups = groupSteps(events);
+    expect(groups.map((group) => group.at)).toEqual(["2026-11-14T13:32:03+00:00", "2026-11-14T18:00:00+00:00"]);
+  });
+
   it("gives common steps a kind and omits the Other chip", () => {
     const events = mapAudit([
       { event_id: "brief", kind: "kitchen_brief_read" },

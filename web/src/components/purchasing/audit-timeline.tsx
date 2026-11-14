@@ -178,12 +178,14 @@ export function shortTitle(summary: string): string {
   return first.length <= 120 ? first : `${first.slice(0, 117)}...`;
 }
 
-function makeGroup(events: AuditEvent[], index: number): AuditStepGroup & { index: number } {
+/** `at` is the time of the step the outcome chip names; `latest` (the newest step) only orders the groups. */
+function makeGroup(events: AuditEvent[], index: number): AuditStepGroup & { index: number; latest: string | null } {
   const titleEvent = events.find((event) => event.summary === "Decision summary") ?? null;
   const rows = oldestFirst(collapseToolCalls(events).filter((event) => event.id !== titleEvent?.id));
   const { outcome, event: outcomeEvent } = outcomeOf(events);
-  let at = outcomeEvent && timestamp(outcomeEvent) != null ? outcomeEvent.at : null;
-  if (!outcomeEvent) for (const event of events) if (timestamp(event) != null) at = event.at;
+  let latest: string | null = null;
+  for (const event of events) if (timestamp(event) != null) latest = event.at;
+  const at = outcomeEvent && timestamp(outcomeEvent) != null ? outcomeEvent.at : latest;
   const decider = [...events].reverse().find(
     (event) =>
       (event.actor === "chef" || event.actor === "human") &&
@@ -201,6 +203,7 @@ function makeGroup(events: AuditEvent[], index: number): AuditStepGroup & { inde
     rows,
     events,
     index,
+    latest,
   };
 }
 
@@ -264,10 +267,12 @@ export function groupSteps(events: AuditEvent[]): AuditStepGroup[] {
   });
   const groups = [...connected.values()].map((events, index) => makeGroup(events, index));
   const known = groups
-    .filter((group) => timestamp(group) != null)
-    .sort((a, b) => (timestamp(b) ?? 0) - (timestamp(a) ?? 0) || a.index - b.index);
+    .filter((group) => timestamp({ at: group.latest }) != null)
+    .sort((a, b) => (timestamp({ at: b.latest }) ?? 0) - (timestamp({ at: a.latest }) ?? 0) || a.index - b.index);
   let nextKnown = 0;
-  return groups.map((group) => (timestamp(group) == null ? group : known[nextKnown++])).map(({ index: _index, ...group }) => group);
+  return groups
+    .map((group) => (timestamp({ at: group.latest }) == null ? group : known[nextKnown++]))
+    .map(({ index: _index, latest: _latest, ...group }) => group);
 }
 
 function AuditStepRow({
