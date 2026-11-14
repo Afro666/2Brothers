@@ -1,5 +1,5 @@
 import { useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useApi } from "@/api";
 import { ACTOR_LABEL, AuditTimeline, KIND_META } from "@/components/purchasing/audit-timeline";
@@ -17,12 +17,12 @@ export function AuditPage() {
   const api = useApi();
   const state = useAsync(() => api.listAudit());
   const [order, setOrder] = useState("all");
-  // `/audit?kind=search` opens with that kind chosen (the Permissions page links here). Read once:
-  // the route has no typed search, and the filters below are local state.
+  // `/audit?kind=search` chooses that kind (the Permissions page links here). Follows later
+  // `?kind=` changes too (another link, back/forward) without remounting; unknown kinds mean "all".
   const linkedKind = (useSearch({ strict: false }) as { kind?: unknown }).kind;
-  const [kind, setKind] = useState(
-    typeof linkedKind === "string" && Object.hasOwn(KIND_META, linkedKind) ? linkedKind : "all",
-  );
+  const validKind = typeof linkedKind === "string" && Object.hasOwn(KIND_META, linkedKind) ? linkedKind : "all";
+  const [kind, setKind] = useState(validKind);
+  useEffect(() => setKind(validKind), [validKind]);
   const [actor, setActor] = useState("all");
 
   const events = state.status === "ready" ? state.data : [];
