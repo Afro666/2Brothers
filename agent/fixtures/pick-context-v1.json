@@ -1,0 +1,2784 @@
+{
+  "version": 1,
+  "description": "New synthetic shortlist benchmark; not the original #1025 live 30-request set. Frozen before model calls.",
+  "cases": [
+    {
+      "id": "stock-01",
+      "family": "stock",
+      "request": "1000 L milk by Monday",
+      "need": {
+        "quantity": "1000",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.4",
+          "stock": "698",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.1",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.0",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p0",
+      "expected_includes": [
+        "p0",
+        "p1"
+      ]
+    },
+    {
+      "id": "stock-02",
+      "family": "stock",
+      "request": "1100 L milk by Monday",
+      "need": {
+        "quantity": "1100",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.4",
+          "stock": "699",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.1",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.0",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p0",
+      "expected_includes": [
+        "p0",
+        "p1"
+      ]
+    },
+    {
+      "id": "stock-03",
+      "family": "stock",
+      "request": "1200 L milk by Monday",
+      "need": {
+        "quantity": "1200",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.4",
+          "stock": "700",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.1",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.0",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p0",
+      "expected_includes": [
+        "p0",
+        "p1"
+      ]
+    },
+    {
+      "id": "stock-04",
+      "family": "stock",
+      "request": "1300 L milk by Monday",
+      "need": {
+        "quantity": "1300",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.4",
+          "stock": "701",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.1",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.0",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p0",
+      "expected_includes": [
+        "p0",
+        "p1"
+      ]
+    },
+    {
+      "id": "stock-05",
+      "family": "stock",
+      "request": "1400 L milk by Monday",
+      "need": {
+        "quantity": "1400",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.4",
+          "stock": "702",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.1",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.0",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p0",
+      "expected_includes": [
+        "p0",
+        "p1"
+      ]
+    },
+    {
+      "id": "stock-06",
+      "family": "stock",
+      "request": "1500 L milk by Monday",
+      "need": {
+        "quantity": "1500",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.4",
+          "stock": "703",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.1",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.0",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p0",
+      "expected_includes": [
+        "p0",
+        "p1"
+      ]
+    },
+    {
+      "id": "diet-01",
+      "family": "diet",
+      "request": "51 L lactose-free milk by Monday",
+      "need": {
+        "quantity": "51",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.0",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.4",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": false,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "diet-02",
+      "family": "diet",
+      "request": "58 L lactose-free milk by Monday",
+      "need": {
+        "quantity": "58",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.0",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.4",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": false,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "diet-03",
+      "family": "diet",
+      "request": "65 L lactose-free milk by Monday",
+      "need": {
+        "quantity": "65",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.0",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.4",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": false,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "diet-04",
+      "family": "diet",
+      "request": "72 L lactose-free milk by Monday",
+      "need": {
+        "quantity": "72",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.0",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.4",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": false,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "diet-05",
+      "family": "diet",
+      "request": "79 L lactose-free milk by Monday",
+      "need": {
+        "quantity": "79",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.0",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.4",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": false,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "diet-06",
+      "family": "diet",
+      "request": "86 L lactose-free milk by Monday",
+      "need": {
+        "quantity": "86",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.0",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.4",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": false,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "history-01",
+      "family": "history",
+      "request": "51 L milk by Monday",
+      "need": {
+        "quantity": "51",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 8,
+        "p2": 2
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "history-02",
+      "family": "history",
+      "request": "58 L milk by Monday",
+      "need": {
+        "quantity": "58",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 9,
+        "p2": 2
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "history-03",
+      "family": "history",
+      "request": "65 L milk by Monday",
+      "need": {
+        "quantity": "65",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 10,
+        "p2": 2
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "history-04",
+      "family": "history",
+      "request": "72 L milk by Monday",
+      "need": {
+        "quantity": "72",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 11,
+        "p2": 2
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "history-05",
+      "family": "history",
+      "request": "79 L milk by Monday",
+      "need": {
+        "quantity": "79",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 12,
+        "p2": 2
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "history-06",
+      "family": "history",
+      "request": "86 L milk by Monday",
+      "need": {
+        "quantity": "86",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Milk B",
+          "names": {
+            "en": "Milk B"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk A",
+          "names": {
+            "en": "Milk A"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk C",
+          "names": {
+            "en": "Milk C"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 13,
+        "p2": 2
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "price-01",
+      "family": "price",
+      "request": "51 L milk by Monday",
+      "need": {
+        "quantity": "51",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk p0 1 L pack",
+          "names": {
+            "en": "Milk p0 1 L pack"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk p1 10 L pack",
+          "names": {
+            "en": "Milk p1 10 L pack"
+          },
+          "net_content": {
+            "value": 10,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk p2 5 L pack",
+          "names": {
+            "en": "Milk p2 5 L pack"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "10",
+          "price": "15",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "5",
+          "price": "8",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "price-02",
+      "family": "price",
+      "request": "58 L milk by Monday",
+      "need": {
+        "quantity": "58",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Milk p1 10 L pack",
+          "names": {
+            "en": "Milk p1 10 L pack"
+          },
+          "net_content": {
+            "value": 10,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk p2 5 L pack",
+          "names": {
+            "en": "Milk p2 5 L pack"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk p0 1 L pack",
+          "names": {
+            "en": "Milk p0 1 L pack"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "10",
+          "price": "15",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "5",
+          "price": "8",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "price-03",
+      "family": "price",
+      "request": "65 L milk by Monday",
+      "need": {
+        "quantity": "65",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk p0 1 L pack",
+          "names": {
+            "en": "Milk p0 1 L pack"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk p2 5 L pack",
+          "names": {
+            "en": "Milk p2 5 L pack"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk p1 10 L pack",
+          "names": {
+            "en": "Milk p1 10 L pack"
+          },
+          "net_content": {
+            "value": 10,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "10",
+          "price": "15",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "5",
+          "price": "8",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "price-04",
+      "family": "price",
+      "request": "72 L milk by Monday",
+      "need": {
+        "quantity": "72",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Milk p1 10 L pack",
+          "names": {
+            "en": "Milk p1 10 L pack"
+          },
+          "net_content": {
+            "value": 10,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk p2 5 L pack",
+          "names": {
+            "en": "Milk p2 5 L pack"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Milk p0 1 L pack",
+          "names": {
+            "en": "Milk p0 1 L pack"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "10",
+          "price": "15",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "5",
+          "price": "8",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "price-05",
+      "family": "price",
+      "request": "79 L milk by Monday",
+      "need": {
+        "quantity": "79",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk p0 1 L pack",
+          "names": {
+            "en": "Milk p0 1 L pack"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk p2 5 L pack",
+          "names": {
+            "en": "Milk p2 5 L pack"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk p1 10 L pack",
+          "names": {
+            "en": "Milk p1 10 L pack"
+          },
+          "net_content": {
+            "value": 10,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "10",
+          "price": "15",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "5",
+          "price": "8",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "price-06",
+      "family": "price",
+      "request": "86 L milk by Monday",
+      "need": {
+        "quantity": "86",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Milk p0 1 L pack",
+          "names": {
+            "en": "Milk p0 1 L pack"
+          },
+          "net_content": {
+            "value": 1,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Milk p1 10 L pack",
+          "names": {
+            "en": "Milk p1 10 L pack"
+          },
+          "net_content": {
+            "value": 10,
+            "unit": "L"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Milk p2 5 L pack",
+          "names": {
+            "en": "Milk p2 5 L pack"
+          },
+          "net_content": {
+            "value": 5,
+            "unit": "L"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "1",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "10",
+          "price": "15",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "5",
+          "price": "8",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p1",
+      "expected_includes": []
+    },
+    {
+      "id": "kind-01",
+      "family": "kind",
+      "request": "51 kg unsalted butter by Monday",
+      "need": {
+        "quantity": "51",
+        "unit": "KG",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p2",
+          "name": "Unsalted butter",
+          "names": {
+            "en": "Unsalted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Salted butter",
+          "names": {
+            "en": "Salted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Clarified butter ghee",
+          "names": {
+            "en": "Clarified butter ghee"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "0.5",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p2",
+      "expected_includes": []
+    },
+    {
+      "id": "kind-02",
+      "family": "kind",
+      "request": "58 kg unsalted butter by Monday",
+      "need": {
+        "quantity": "58",
+        "unit": "KG",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Clarified butter ghee",
+          "names": {
+            "en": "Clarified butter ghee"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Unsalted butter",
+          "names": {
+            "en": "Unsalted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Salted butter",
+          "names": {
+            "en": "Salted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "0.5",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p2",
+      "expected_includes": []
+    },
+    {
+      "id": "kind-03",
+      "family": "kind",
+      "request": "65 kg unsalted butter by Monday",
+      "need": {
+        "quantity": "65",
+        "unit": "KG",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p2",
+          "name": "Unsalted butter",
+          "names": {
+            "en": "Unsalted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Salted butter",
+          "names": {
+            "en": "Salted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Clarified butter ghee",
+          "names": {
+            "en": "Clarified butter ghee"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "0.5",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p2",
+      "expected_includes": []
+    },
+    {
+      "id": "kind-04",
+      "family": "kind",
+      "request": "72 kg unsalted butter by Monday",
+      "need": {
+        "quantity": "72",
+        "unit": "KG",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p1",
+          "name": "Salted butter",
+          "names": {
+            "en": "Salted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Unsalted butter",
+          "names": {
+            "en": "Unsalted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Clarified butter ghee",
+          "names": {
+            "en": "Clarified butter ghee"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "0.5",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p2",
+      "expected_includes": []
+    },
+    {
+      "id": "kind-05",
+      "family": "kind",
+      "request": "79 kg unsalted butter by Monday",
+      "need": {
+        "quantity": "79",
+        "unit": "KG",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p0",
+          "name": "Clarified butter ghee",
+          "names": {
+            "en": "Clarified butter ghee"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p2",
+          "name": "Unsalted butter",
+          "names": {
+            "en": "Unsalted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Salted butter",
+          "names": {
+            "en": "Salted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "0.5",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p2",
+      "expected_includes": []
+    },
+    {
+      "id": "kind-06",
+      "family": "kind",
+      "request": "86 kg unsalted butter by Monday",
+      "need": {
+        "quantity": "86",
+        "unit": "KG",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "p2",
+          "name": "Unsalted butter",
+          "names": {
+            "en": "Unsalted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p0",
+          "name": "Clarified butter ghee",
+          "names": {
+            "en": "Clarified butter ghee"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        },
+        {
+          "product_id": "p1",
+          "name": "Salted butter",
+          "names": {
+            "en": "Salted butter"
+          },
+          "net_content": {
+            "value": 0.5,
+            "unit": "KG"
+          },
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "p0",
+          "size": "0.5",
+          "price": "2",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p1",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "p2",
+          "size": "0.5",
+          "price": "3",
+          "stock": "2000",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "p0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p1": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "p2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "p0": 0,
+        "p1": 0,
+        "p2": 0
+      },
+      "expected_first": "p2",
+      "expected_includes": []
+    }
+  ]
+}
