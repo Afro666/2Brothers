@@ -19,7 +19,7 @@ export function OrdersPage() {
     <AppShell activeId="orders">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Orders</h1>
+          <h1 className="text-2xl font-semibold">Order history</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Orders a person approved, and where each one stands.
           </p>

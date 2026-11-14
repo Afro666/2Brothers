@@ -229,7 +229,7 @@ export function PlannerPage() {
     <AppShell activeId="planner">
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Planner</h1>
+          <h1 className="text-2xl font-semibold">Menu plan</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Plan the week's menus and covers. The needs below come from this plan.
           </p>

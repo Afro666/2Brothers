@@ -86,7 +86,7 @@ export function TrustPage() {
     <AppShell activeId="trust">
       <div className="mx-auto max-w-3xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Trust</h1>
+          <h1 className="text-2xl font-semibold">Tamper check</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Every audit line carries the hash of the line before it. Changing any line breaks every hash after it.
           </p>

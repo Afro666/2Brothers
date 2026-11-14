@@ -209,7 +209,7 @@ describe("the app on the gateway", () => {
 
   it("does not mark anything on the mock", async () => {
     renderApp("/stock");
-    expect(await screen.findByRole("heading", { name: "Stock" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Stock count" })).toBeVisible();
     expect(screen.queryByText("Sample data")).not.toBeInTheDocument();
   });
 });

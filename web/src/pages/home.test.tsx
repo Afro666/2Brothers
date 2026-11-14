@@ -30,7 +30,7 @@ describe("HomePage", () => {
     expect(await screen.findByText("Waiting for your approval")).toBeInTheDocument();
     expect(screen.getByText("2", { selector: ".text-3xl" })).toBeInTheDocument();
     expect(screen.getByText("€2,210.41 incl VAT")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Review approvals" })).toHaveAttribute("href", "/approvals");
+    expect(screen.getByRole("link", { name: "Review orders to approve" })).toHaveAttribute("href", "/approvals");
     expect(screen.getByText("Hakaniemi Fish").parentElement).toHaveTextContent("terms not set");
     expect(screen.getAllByText("not counted").length).toBeGreaterThan(0);
     expect(screen.getByText("Latest steps")).toBeInTheDocument();

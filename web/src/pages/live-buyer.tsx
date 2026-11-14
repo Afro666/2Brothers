@@ -205,7 +205,7 @@ export function LiveBuyerRequests() {
     <AppShell activeId="requests">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Requests</h1>
+          <h1 className="text-2xl font-semibold">Request an order</h1>
           <p className="text-muted-foreground">
             Ask the Buyer for a proposal using live supplier prices and availability. A person approves before anything
             is placed.

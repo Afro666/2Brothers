@@ -344,9 +344,9 @@ function ProductsPageContent() {
     <AppShell activeId="products">
       <div className="mx-auto max-w-5xl space-y-6">
         <header>
-          <h1 className="text-2xl font-semibold">Products</h1>
+          <h1 className="text-2xl font-semibold">Recipes</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Review products available to this kitchen and their purchasing data.
+            Your recipes and the products you make in-house, with their purchasing data.
           </p>
         </header>
         {state.status === "loading" ? <LoadingState label="Loading products and recipes" /> : null}

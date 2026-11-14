@@ -18,7 +18,7 @@ function loadKitchenStock(api: Api, now: Date): Promise<{ stock: StockItem[]; de
 export function ApprovalTile({ api }: { api: Api }) {
   const state = useAsync(() => api.listApprovals(), [api]);
   return (
-    <Tile title="Waiting for your approval" href="/approvals" linkLabel="Review approvals">
+    <Tile title="Waiting for your approval" href="/approvals" linkLabel="Review orders to approve">
       <TileState
         status={state.status}
         error={state.error}
@@ -148,7 +148,7 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
 export function AuditTile({ api }: { api: Api }) {
   const state = useAsync(() => api.listAudit(), [api]);
   return (
-    <Tile title="Latest steps" href="/audit" linkLabel="Open audit log">
+    <Tile title="Latest steps" href="/audit" linkLabel="Open activity log">
       <TileState
         status={state.status}
         error={state.error}

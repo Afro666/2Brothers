@@ -42,7 +42,7 @@ describe("Ordering engine settings", () => {
       });
     });
     await router.navigate({ to: "/audit" });
-    expect(await screen.findByRole("heading", { level: 1, name: "Audit log" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Activity log" })).toBeInTheDocument();
     expect(await screen.findByText("Kitchen settings updated")).toBeInTheDocument();
     expect(screen.getByText("Service level A: 97.5 % to 98 %")).toBeInTheDocument();
   });

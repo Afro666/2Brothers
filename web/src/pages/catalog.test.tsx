@@ -29,7 +29,7 @@ describe("catalog page", () => {
   it("lists the milk products for a query", async () => {
     renderApp("/catalog?q=milk");
 
-    expect(await screen.findByRole("heading", { level: 1, name: "Catalog" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Products" })).toBeInTheDocument();
     expect(await screen.findByText("5 products")).toBeInTheDocument();
     for (const name of MILK_PRODUCTS) {
       expect(await screen.findByText(name)).toBeInTheDocument();

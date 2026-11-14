@@ -139,7 +139,7 @@ export function AboutPage() {
           </ul>
           <p className="text-sm">
             <Link to="/audit" className="font-medium text-primary underline underline-offset-4">
-              Open the audit log
+              Open the activity log
             </Link>
           </p>
         </section>

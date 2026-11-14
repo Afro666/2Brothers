@@ -74,7 +74,7 @@ export function PermissionsSection() {
                       >
                         <span className="font-medium group-hover:underline">{row.action}</span>
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                          Audit log: {KIND_META[row.auditKind].label}
+                          Activity log: {KIND_META[row.auditKind].label}
                           <ArrowRight className="size-3" aria-hidden />
                         </span>
                       </Link>
