@@ -73,10 +73,25 @@ LOGGERS = ("uvicorn", "uvicorn.access", "uvicorn.error", "gateway", "httpx")
 
 
 def install_log_mask() -> None:
+    """A logger's filters skip records that propagate up from its children (gateway.app,
+    httpx._client), so the mask also wraps the log record factory: every record on every
+    logger is masked when it is created (#1710)."""
     for name in LOGGERS:
         log = logging.getLogger(name)
         if not any(isinstance(f, MaskPathToken) for f in log.filters):
             log.addFilter(MaskPathToken())
+    factory = logging.getLogRecordFactory()
+    if getattr(factory, "_masks_path_token", False):
+        return
+    mask = MaskPathToken()
+
+    def masked(*args, **kwargs):
+        record = factory(*args, **kwargs)
+        mask.filter(record)
+        return record
+
+    masked._masks_path_token = True
+    logging.setLogRecordFactory(masked)
 # The caller's own token for this request: a kitchen API token keeps its kitchen and scopes
 # all the way through the /tools routes (#271). Empty = the server agent token.
 _CALLER: ContextVar[str] = ContextVar("mcp_caller_token", default="")
