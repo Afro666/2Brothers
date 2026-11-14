@@ -50,7 +50,7 @@ class LiveTests(unittest.TestCase):
         self.assertEqual(orders.get_offer(self.db, offer["offer_id"])["lines"][0]["unit_price"],
                          Decimal("2.57"))
         args = dict(kitchen_id="k1", idempotency_key=uuid4().hex, offer_id=offer["offer_id"],
-                    expected_total=Decimal("149.02"), lines=[], payload_hash="h1")
+                    expected_total=Decimal("149.02"), lines=[])
         order, created = orders.record_attempt(self.db, **args)
         replay, created_again = orders.record_attempt(self.db, **args)
         self.assertTrue(created)
@@ -61,7 +61,7 @@ class LiveTests(unittest.TestCase):
         other, other_created = orders.record_attempt(self.db, **{**args, "kitchen_id": "k2"})
         self.assertTrue(other_created)  # the same key in another kitchen is another order
         with self.assertRaises(orders.IdempotencyConflict):
-            orders.record_attempt(self.db, **{**args, "payload_hash": "h2"})
+            orders.record_attempt(self.db, **{**args, "expected_total": Decimal("150.00")})
         done = orders.set_outcome(self.db, order["order_id"], outcome="CONFIRMED", status="SENT")
         self.assertEqual(orders.get_order(self.db, order["order_id"])["outcome"], "CONFIRMED")
         self.assertEqual(done["status"], "SENT")

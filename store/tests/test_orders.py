@@ -1,6 +1,8 @@
 from decimal import Decimal
 import unittest
 
+from bson.decimal128 import Decimal128
+
 from store import orders
 from store.db import ensure_indexes
 
@@ -18,7 +20,7 @@ class GuardTests(unittest.TestCase):
             orders.save_offer(None, {"lines": [{"unit_price": 2.57}]})
         with self.assertRaises(TypeError):
             orders.record_attempt(None, kitchen_id="k1", idempotency_key="k", offer_id="o",
-                                  expected_total=149.02, lines=[], payload_hash="h")
+                                  expected_total=149.02, lines=[])
 
     def test_stock_sentinels_are_never_stored(self):
         for sentinel in (999999, 9999999999, Decimal("999999")):
@@ -44,7 +46,7 @@ class IdempotencyTests(unittest.TestCase):
 
     def attempt(self, **over):
         args = dict(kitchen_id="k1", idempotency_key="key-1", offer_id="o1",
-                    expected_total="149.02", lines=[], payload_hash="h1")
+                    expected_total="149.02", lines=[])
         return orders.record_attempt(self.db, **{**args, **over})
 
     def approval(self, **over):
@@ -60,8 +62,18 @@ class IdempotencyTests(unittest.TestCase):
         self.assertEqual(replay["order_id"], order["order_id"])
         self.assertNotEqual(other["order_id"], order["order_id"])
         self.assertIsNone(order["status"])
-        with self.assertRaises(orders.IdempotencyConflict):
-            self.attempt(payload_hash="h2")
+
+    def test_order_hash_is_computed_from_the_order_fields(self):
+        line = {"sku": "milk", "quantity": Decimal128("12")}
+        order, created = self.attempt(lines=[line])
+        replay, created_again = self.attempt(lines=[dict(line)])
+        self.assertEqual((created, created_again), (True, False))
+        self.assertEqual(replay["order_id"], order["order_id"])
+        self.assertEqual(len(order["payload_hash"]), 64)
+        for changed in ({"expected_total": "150.00"}, {"lines": [{**line, "quantity": Decimal128("13")}]},
+                        {"lines": []}, {"offer_id": "o2"}, {"proposal_id": "p2"}):
+            with self.assertRaises(orders.IdempotencyConflict):
+                self.attempt(**changed)
 
     def test_approval_replay_must_carry_the_same_payload(self):
         approval, created = self.approval()

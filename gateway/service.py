@@ -397,12 +397,11 @@ class Gateway:
             'status': 'APPROVING', 'approving_key': key}, {'$set': {'status': 'COMMITTING'}})
         if not committed.modified_count:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
-        payload = {"offer_id": stored["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}
         order, created = orders.record_attempt(
             self.db, kitchen_id=kitchen_id, idempotency_key=key, offer_id=stored["offer_id"],
             expected_total=Decimal128(sim["expected_total"]),   # exact decimal in any Mongo
             lines=[{k: v for k, v in ln.items() if k != "why"} for ln in sim["lines"]],
-            payload_hash=_hash(payload), proposal_id=proposal_id, supplier_id=VALIO, approved_by=human)
+            proposal_id=proposal_id, supplier_id=VALIO, approved_by=human)
         if created:
             if doc.get("approval_id"):
                 orders.decide_approval(self.db, doc["approval_id"], status="APPROVED", decided_by=human)
