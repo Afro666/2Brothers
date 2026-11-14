@@ -258,6 +258,12 @@ The first offer now has three products every time (before: 1 to 5), and repeated
 one request give the same products much more often. So thinking is on where the model
 decides numbers (the benchmark) and off where the engine does (the product).
 
+**Not built:** fine-tuning. The gate decided no-go: no GPU budget and no validated
+recipe, so we claim no adapter gain (`docs/fine-tuning-gate.md`). Nemotron embeddings:
+Verda serves no embedding model (#1199). A test of the photo readers on real phone photos:
+the shelf, menu and delivery-note photos are prepared test photos (`docs/demo.md` "NVIDIA
+demo"). The benchmark has 3 seeds per kitchen type, so read the "all" rows only.
+
 **Buyer read context (#1605, 14 Nov).** A new synthetic shortlist benchmark has 30
 distinct requests in five families (stock, diet, price, prior orders and product fit),
 three repeats per condition, interleaved on the same Nemotron endpoint. It is not the
@@ -282,12 +288,6 @@ its claim validator omitted trusted pack/need numbers; the report retains that f
 On a separate live-quote milk snapshot, both prompts retained the confirmed-stock
 product in all three repeats; that snapshot had 51 L confirmed, not the older 698 L.
 The frozen stock cases also cover the saved 698 L scenario. No order was placed.
-
-**Not built:** fine-tuning. The gate decided no-go: no GPU budget and no validated
-recipe, so we claim no adapter gain (`docs/fine-tuning-gate.md`). Nemotron embeddings:
-Verda serves no embedding model (#1199). A test of the photo readers on real phone photos:
-the shelf, menu and delivery-note photos are prepared test photos (`docs/demo.md` "NVIDIA
-demo"). The benchmark has 3 seeds per kitchen type, so read the "all" rows only.
 
 ## MongoDB Atlas
 
