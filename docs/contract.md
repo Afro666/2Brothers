@@ -3606,7 +3606,9 @@ delivery results and the one-tap `/received` (#1304), and `GET`/`PUT /learned` w
 correction ratios applied to plan proposals (#1305 phase 2a). In this stage a
 `DECLINED_PRODUCT` fact and a late supplier (`SUPPLIER_LATE` with `on_time_rate` under
 0.7) only add a warning to the plan's `problems`: a declined recipe ingredient is never
-left out silently, and learned lead times do not change safety stock yet.
+left out silently.
+A late supplier's learned lead-time spread also adds safety stock to its plan lines
+(#1306, "Learned safety stock" below); it never moves a date.
 Learning adds no model-controlled write endpoint and never changes a typed request quantity.
 
 ### Changes and human feedback
@@ -3855,6 +3857,52 @@ alone, with Finnish number formatting normalized. An invalid sentence is omitted
 leaving the plain learned evidence. A not-applicable model suggestion is only text
 for human review; it does not skip an engine adjustment or persist a switch. Prompt memory is
 capped at 12 entries and approximately 600 tokens.
+
+#### Learned safety stock (#1306)
+
+A plan proposal has no safety stock of its own: it orders the window's net need. Only
+when the supplier of a line has an active `SUPPLIER_LATE` fact with `on_time_rate` under
+0.7 and a known `sigma_lead_time` above 0 does the gateway add the engine's safety
+stock (`engine.demand.safety_stock`) to that line's need:
+
+`safety_stock = z x daily_demand x sigma_lead_time`
+
+- `daily_demand` is the line's gross need in the window divided by the window's days;
+  `z` is the kitchen's service level for the product's class (`engine/params.py`).
+- The statistics are this product's own deliveries from the supplier when at least
+  five of them are in the last eight weeks (`evidence.scope: "product"`), else all of
+  the supplier's deliveries (`"supplier"`). The lead time passed to the engine is the
+  learned `mean_lead_time` when it differs from the supplier's term by one day or
+  more, else the term.
+- Caps: `sigma_lead_time` counts for at most 2 days, and the safety stock is at most
+  25 % of the line's need (`capped: true` when a cap applied). Fewer than five
+  deliveries: no fact, no safety stock.
+- A line that a `CORRECTION_RATIO` already adjusted gets no safety stock on top: the
+  person's own correction is the last word, and a line names one fact.
+- Typed requests, lists, supplier offers and the Buyer's proposals never get it. For
+  Valio it only adds quantity: `availableDate` and `closingTime` stay Valio's.
+
+The line and its stored need then carry `learned` in this form (no `ratio`; a
+`learned` object without `kind` is a `CORRECTION_RATIO` adjustment):
+
+```json
+"learned": {"fact_id": "lf_01JYK8M4N3M4K7W8N0E4Q2F6C5", "kind": "SUPPLIER_LATE",
+            "name": "Corner Bakery", "from_qty": "70", "to_qty": "79.6", "unit": "KG",
+            "safety_stock": "9.6", "sigma_lead_time": 0.49, "capped": false,
+            "evidence": {"rows": 5, "late": 3, "scope": "supplier",
+                         "from": "2026-11-02", "to": "2026-11-10", "last": "2026-11-10"}}
+```
+
+`safety_stock`, `from_qty` and `to_qty` are decimal strings in `unit`, before pack
+rounding; `sigma_lead_time` is a JSON number in days, as used after the cap;
+`evidence.rows` is the number of deliveries with a known lateness and `evidence.late`
+how many of them were late. The line's `why` starts with the same facts in a sentence:
+"Includes 9.6 KG learned safety stock on top of 70 KG: Corner Bakery was late in 3 of
+its last 5 deliveries (lead time varies by 0.49 days). Switch this learned fact off to
+order 70 KG." Switching the fact off (`PUT /learned/{id}`) makes the next plan proposal
+use the plain need again. Each adjusted line is in the `learned_fact_applied` audit
+entry, in the same shape as a correction ratio. Any learning error leaves the plan
+without the adjustment.
 
 ### Disable, privacy and audit
 
