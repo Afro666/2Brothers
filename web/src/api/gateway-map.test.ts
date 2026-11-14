@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions } from "@/api/gateway-map";
+import { mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, mapRecalls } from "@/api/gateway-map";
 import { addable, auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
 
 describe("mapPermissions", () => {
@@ -99,6 +99,144 @@ describe("mapApproval", () => {
       expect(() => mapApproval({ ...proposal, ...broken })).toThrow(
         expect.objectContaining({ code: "INVALID_RESPONSE" }),
       );
+    },
+  );
+});
+
+describe("mapRecalls", () => {
+  const body = {
+    last_check: {
+      checked_at: "2026-11-14T04:30:00+00:00",
+      checked_by: "chef@example.test",
+      source: "recording",
+      live_error: "NO_KEY",
+      fetched_at: "2026-11-13T22:17:51+00:00",
+      details_fetched_at: "2026-11-13T22:18:51+00:00",
+      via: "Context.dev /v1/web/scrape (json)",
+      notices_scanned: 38,
+      scanned_since: "2026-03-02",
+      notices_listed: null,
+      notices_unread: null,
+    },
+    alerts: [
+      {
+        event_id: "recall-example",
+        product_id: "100001",
+        product_name: "Example ingredient",
+        match: "possible",
+        why: "Example match reason",
+        where: ["on the open purchase proposal"],
+        recall: {
+          url: "https://www.ruokavirasto.fi/example-notice",
+          date: "2026-03-06",
+          title: "Example notice",
+          reason: "Example hazard",
+          action: "Example action",
+          recalled_product: "Example recalled product",
+          brand: "Example brand",
+          gtin: null,
+          package_size: "500 g",
+          lot: "Example lot",
+        },
+        next_step: "Check the example packs.",
+        replacement_proposal: [{ product_id: "100002", name: "Example alternative", brand: "Other brand" }],
+        detected_at: "2026-11-14T04:30:00+00:00",
+        status: "dismissed",
+        dismissed_by: "chef@example.test",
+        dismissed_at: "2026-11-14T05:00:00+00:00",
+        dismiss_reason: "The example lot is not held here.",
+        proposals: [
+          {
+            proposal_id: "held-example",
+            status: "BLOCKED_BY_RECALL",
+            recall_replan_error: null,
+            replacement: {
+              proposal_id: "replacement-example",
+              status: "READY",
+              expected_total: "56.75",
+              currency: "EUR",
+              lines: [{ product_id: "100002", product_name: "Example alternative", quantity: "1.5", unit: "KG" }],
+            },
+          },
+          {
+            proposal_id: "second-held-example",
+            status: "BLOCKED_BY_RECALL",
+            recall_replan_error: "NO_SAFE_REPLACEMENT",
+            replacement: null,
+          },
+        ],
+      },
+    ],
+  };
+
+  it("maps the check and one camel-case alert per held proposal with decimal strings as numbers", () => {
+    const result = mapRecalls(body);
+    expect(result.lastCheck).toEqual({
+      checkedAt: "2026-11-14T04:30:00+00:00",
+      checkedBy: "chef@example.test",
+      source: "recording",
+      liveError: "NO_KEY",
+      fetchedAt: "2026-11-13T22:17:51+00:00",
+      detailsFetchedAt: "2026-11-13T22:18:51+00:00",
+      via: "Context.dev /v1/web/scrape (json)",
+      noticesScanned: 38,
+      scannedSince: "2026-03-02",
+      noticesListed: null,
+      noticesUnread: null,
+    });
+    expect(result.alerts).toHaveLength(2);
+    expect(result.alerts[0]).toMatchObject({
+      eventId: "recall-example",
+      productId: "100001",
+      orderId: "held-example",
+      proposalStatus: "BLOCKED_BY_RECALL",
+      lineStatus: "BLOCKED_BY_RECALL",
+      status: "dismissed",
+      dismissedBy: "chef@example.test",
+      dismissedAt: "2026-11-14T05:00:00+00:00",
+      dismissReason: "The example lot is not held here.",
+      replacement: {
+        orderId: "replacement-example",
+        status: "READY",
+        expectedTotal: 56.75,
+        lines: [{ productId: "100002", productName: "Example alternative", quantity: 1.5, unit: "KG" }],
+      },
+      replacementIdeas: [{ productId: "100002", name: "Example alternative", brand: "Other brand" }],
+    });
+    expect(result.alerts[0].recall).toMatchObject({
+      recalledProduct: "Example recalled product",
+      packageSize: "500 g",
+      title: "Example notice",
+      lot: "Example lot",
+    });
+    expect(result.alerts[1]).toMatchObject({
+      eventId: "recall-example",
+      orderId: "second-held-example",
+      replacement: null,
+      replanError: "NO_SAFE_REPLACEMENT",
+    });
+  });
+
+  it("keeps an alert without a proposal, derives review warnings, and distinguishes an empty first state", () => {
+    const alert = { ...body.alerts[0], match: "review", status: "active", proposals: [] };
+    const result = mapRecalls({ last_check: null, alerts: [alert] });
+    expect(result.lastCheck).toBeNull();
+    expect(result.alerts).toHaveLength(1);
+    expect(result.alerts[0]).toMatchObject({
+      orderId: null,
+      proposalStatus: "UNKNOWN",
+      lineStatus: "WARNING",
+      replacement: null,
+      status: "active",
+    });
+  });
+
+  it.each(["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "/recalls/example-notice"])(
+    "maps an unsafe or relative source URL %s to null",
+    (url) => {
+      const alert = { ...body.alerts[0], recall: { ...body.alerts[0].recall, url } };
+      const result = mapRecalls({ ...body, alerts: [alert] });
+      expect(result.alerts[0].recall.url).toBeNull();
     },
   );
 });

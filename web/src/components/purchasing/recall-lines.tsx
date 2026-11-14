@@ -1,6 +1,6 @@
 import { ArrowDown, ExternalLink, ShieldAlert } from "lucide-react";
 
-import { formatDate, formatNumber } from "@/lib/format";
+import { formatDate, formatEur, formatNumber } from "@/lib/format";
 import { TONE_CLASSES } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import type { Order, RecallAlert, RecallMatch } from "@/types";
@@ -23,17 +23,21 @@ export function recallHold(alerts: RecallAlert[] | undefined, order: Order | und
       alert.lineStatus === "BLOCKED_BY_RECALL" && order?.lines.some((line) => line.product.id === alert.productId),
   );
   return held
-    ? `${held.productName ?? held.productId} is blocked by a recall. Approval is available once the Buyer replaces or removes the line.`
+    ? `${held.productName ?? held.productId} is blocked by a recall. This order cannot be approved. ${
+        held.replacement
+          ? "Reject it and approve the replacement order instead."
+          : "No replacement is proposed yet. You can reject this order."
+      }`
     : null;
 }
 
-/** The recalled lines of one order, each with its Ruokavirasto notice and the line that replaced it. */
+/** The recalled lines of one order, each with its notice and separate replacement proposal. */
 export function RecallLines({ alerts }: { alerts: RecallAlert[] }) {
   if (alerts.length === 0) return null;
   return (
     <section className="space-y-3" aria-label="Recalls on this order">
       {alerts.map((alert) => (
-        <RecallLine key={alert.eventId} alert={alert} />
+        <RecallLine key={`${alert.eventId}-${alert.orderId ?? "no-order"}`} alert={alert} />
       ))}
     </section>
   );
@@ -76,16 +80,25 @@ function RecallLine({ alert }: { alert: RecallAlert }) {
         </dl>
         <p className="text-foreground">{MATCH_TEXT[alert.match]}</p>
         <p className="text-foreground">{alert.nextStep}</p>
-        <a
-          href={recall.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 font-medium underline underline-offset-2"
-        >
-          Open the notice on ruokavirasto.fi
-          <ExternalLink aria-hidden className="size-3.5" />
-          <span className="sr-only">(opens in a new tab)</span>
-        </a>
+        {alert.status === "dismissed" ? (
+          <p className="text-foreground">
+            Dismissed by {alert.dismissedBy ?? "unknown"}: {alert.dismissReason ?? "no reason recorded"}
+          </p>
+        ) : null}
+        {recall.url ? (
+          <a
+            href={recall.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 font-medium underline underline-offset-2"
+          >
+            Open the notice ({new URL(recall.url).hostname})
+            <ExternalLink aria-hidden className="size-3.5" />
+            <span className="sr-only">(opens in a new tab)</span>
+          </a>
+        ) : (
+          <span>source unknown</span>
+        )}
       </div>
       {blocked ? <Replacement alert={alert} /> : null}
     </article>
@@ -93,12 +106,25 @@ function RecallLine({ alert }: { alert: RecallAlert }) {
 }
 
 function Replacement({ alert }: { alert: RecallAlert }) {
-  const line = alert.replacementLine;
-  if (!line) {
+  const replacement = alert.replacement;
+  if (!replacement) {
+    const errors: Record<string, string> = {
+      KITCHEN_POLICY_UNKNOWN: "The kitchen's allergen policy is unknown, so a safe replacement could not be planned.",
+      NO_SAFE_REPLACEMENT: "No safe replacement was found.",
+      REPLACEMENT_SHORTFALL: "A replacement could not cover the full quantity.",
+      REPLACEMENT_UNAVAILABLE: "The replacement is unavailable.",
+    };
+    const reason = alert.replanError
+      ? (errors[alert.replanError] ?? "The replacement order could not be prepared.")
+      : null;
     return (
-      <div className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.warning)}>
-        <p className="font-medium">No replacement yet</p>
-        <p className="text-foreground">The Buyer has not re-planned this line. Approval stays locked.</p>
+      <div
+        className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES[alert.replanError ? "warning" : "neutral"])}
+      >
+        <p className="font-medium">
+          {alert.replanError ? "The replacement order could not be made." : "No replacement order has been proposed."}
+        </p>
+        <p className="text-foreground">{reason ? `${reason} ` : ""}Approval of the held order stays locked.</p>
         {alert.replacementIdeas.length > 0 ? (
           <p className="text-foreground">
             Ideas from other brands: {alert.replacementIdeas.map((idea) => idea.name ?? idea.productId).join("; ")}
@@ -111,15 +137,27 @@ function Replacement({ alert }: { alert: RecallAlert }) {
     <div className={cn("ml-3 space-y-1 rounded-md border px-3 py-2 text-sm", TONE_CLASSES.success)}>
       <div className="flex items-center gap-2 font-semibold">
         <ArrowDown aria-hidden className="size-4 shrink-0" />
-        Replacement line
+        Replacement order
       </div>
-      <div className="font-medium break-words text-foreground">
-        {line.productName ?? "Product name unknown"} <span className="text-muted-foreground">({line.productId})</span>
-      </div>
+      <ul className="space-y-1 text-foreground">
+        {replacement.lines.map((line) => (
+          <li key={line.productId} className="break-words">
+            {formatNumber(line.quantity)} {line.unit} · {line.productName ?? "Product name unknown"}{" "}
+            <span className="text-muted-foreground">({line.productId})</span>
+          </li>
+        ))}
+      </ul>
       <p className="text-foreground">
-        {formatNumber(line.quantity)} {line.unit}, sized by the engine. It is in the total above; nothing is sent until you
-        approve.
+        Separate order total: <strong>{formatEur(replacement.expectedTotal)} incl VAT</strong>. Nothing is sent until a
+        person approves that order.
       </p>
+      <a
+        className="inline-flex font-medium break-all underline underline-offset-2"
+        href={`#proposal-${replacement.orderId}`}
+        onClick={() => document.getElementById(`proposal-${replacement.orderId}`)?.focus()}
+      >
+        Review replacement order {replacement.orderId}
+      </a>
     </div>
   );
 }

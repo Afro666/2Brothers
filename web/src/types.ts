@@ -668,7 +668,7 @@ export type RecallMatch = "exact" | "possible" | "review";
 
 /** The Ruokavirasto notice as Context.dev scraped it. null means the notice does not say. */
 export interface RecallNotice {
-  url: string;
+  url: string | null;
   /** `YYYY-MM-DD`. */
   date: string | null;
   /** The notice title, in Finnish as published. */
@@ -683,12 +683,19 @@ export interface RecallNotice {
   lot: string | null;
 }
 
-/** The line the Buyer re-planned in place of the recalled one. The engine sized it. */
+/** One line on the separate replacement proposal. The engine sized it. */
 export interface RecallReplacementLine {
   productId: ProductCode;
   productName: string | null;
   quantity: number;
   unit: string;
+}
+
+export interface RecallReplacement {
+  orderId: string;
+  status: string;
+  expectedTotal: number;
+  lines: RecallReplacementLine[];
 }
 
 /** One `recall.alert` (docs/contract.md, Webhooks), as the screens read it. */
@@ -711,11 +718,19 @@ export interface RecallAlert {
    * review match, which never blocks on its own.
    */
   lineStatus: "BLOCKED_BY_RECALL" | "WARNING";
-  /** null while the Buyer has not re-planned the line: then the order cannot be approved. */
-  replacementLine: RecallReplacementLine | null;
+  /** A separate pending proposal. The recalled proposal remains held and cannot be approved. */
+  replacement: RecallReplacement | null;
+  /** Why no safe replacement proposal was made; unknown codes get a generic message. */
+  replanError: string | null;
+  /** The gateway proposal state, including BLOCKED_BY_RECALL; UNKNOWN when there is no proposal. */
+  proposalStatus: string;
   /** Ideas for the chef from other brands; nothing is ordered from an alert. */
   replacementIdeas: { productId: ProductCode; name: string | null; brand: string | null }[];
   detectedAt: string;
+  status: "active" | "dismissed";
+  dismissedBy: string | null;
+  dismissedAt: string | null;
+  dismissReason: string | null;
 }
 
 /** One run of the recall monitor. */
@@ -729,6 +744,12 @@ export interface RecallCheck {
   via: string;
   /** null when the monitor does not say. */
   noticesScanned: number | null;
+  liveError: "NO_KEY" | "TIMEOUT" | "UPSTREAM_ERROR" | "BAD_ANSWER" | null;
+  noticesListed: number | null;
+  noticesUnread: number | null;
+  scannedSince: string | null;
+  detailsFetchedAt: string | null;
+  checkedBy: string | null;
 }
 
 /** What the inbox knows about recalls: the open alerts and the last check. */

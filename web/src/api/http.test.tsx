@@ -80,6 +80,8 @@ describe("createHttpApi", () => {
         "listApprovals",
         "listAudit",
         "listOrders",
+        "listRecalls",
+        "checkRecalls",
         "reject",
         "resolveOrder",
         "signIn",
@@ -288,6 +290,39 @@ describe("createHttpApi", () => {
     expect((await createHttpApi("/api").reject("prop-1", "Too much", "human")).status).toBe("REJECTED");
     expect(calls[0].body).toEqual({ reason: "Too much", idempotency_key: "web-reject:prop-1" });
     expect(calls[0].headers).toMatchObject({ "X-User": "human" });
+  });
+
+  it("lists and checks recalls through the gateway with a fresh key and actor on every check", async () => {
+    const answer = { last_check: null, alerts: [] };
+    const calls = gateway({
+      [`GET ${K}/recalls`]: () => answer,
+      [`POST ${K}/recalls/check`]: () => answer,
+    });
+    const api = createHttpApi("/api");
+    expect(await api.listRecalls!()).toEqual({ lastCheck: null, alerts: [] });
+    expect(await api.checkRecalls!("chef")).toEqual({ lastCheck: null, alerts: [] });
+    await api.checkRecalls!("human");
+    expect(calls.map((call) => call.route)).toEqual([
+      `GET ${K}/recalls`,
+      `POST ${K}/recalls/check`,
+      `POST ${K}/recalls/check`,
+    ]);
+    const checks = calls.filter((call) => call.route.startsWith("POST"));
+    expect(checks[0].headers).toMatchObject({ "X-User": "chef" });
+    expect(checks[1].headers).toMatchObject({ "X-User": "human" });
+    expect(checks[0].body.idempotency_key).toMatch(/^recall-check-[0-9a-f]{32}$/);
+    expect(checks[1].body.idempotency_key).toMatch(/^recall-check-[0-9a-f]{32}$/);
+    expect(checks[1].body.idempotency_key).not.toBe(checks[0].body.idempotency_key);
+  });
+
+  it("explains an attempted approval of a held proposal as blocked by a recall", async () => {
+    gateway({ [`POST ${K}/proposals/prop-1/approve`]: () => error(409, "BLOCKED_BY_RECALL") });
+    await expect(
+      createHttpApi("/api").approve(
+        { approvalId: "prop-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 },
+        "human",
+      ),
+    ).rejects.toMatchObject({ code: "BLOCKED_BY_RECALL", message: expect.stringContaining("blocked by a recall") });
   });
 
   it("omits X-User on decisions after signing in with an email", async () => {

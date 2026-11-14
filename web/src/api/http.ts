@@ -12,6 +12,7 @@ import {
   mapOrderResolution,
   mapOrderResolutionResult,
   mapPermissions,
+  mapRecalls,
   rows,
 } from "@/api/gateway-map";
 import { mapMoney } from "@/api/map";
@@ -221,6 +222,13 @@ export function createHttpApi(baseUrl: string): Api {
             `The total is now ${now}. Nothing was sent. Check the new total and approve again`,
           );
         }
+        if (error instanceof ApiError && error.code === "BLOCKED_BY_RECALL") {
+          throw new ApiError(
+            error.code,
+            "This order is blocked by a recall and cannot be approved. Reject it and approve the replacement order instead.",
+            error.details,
+          );
+        }
         throw error;
       }
       return approval(decision.approvalId);
@@ -304,6 +312,15 @@ export function createHttpApi(baseUrl: string): Api {
     },
     async getPermissions() {
       return mapPermissions(await get(`${kitchen}/permissions`));
+    },
+    async listRecalls() {
+      return mapRecalls(await get(`${kitchen}/recalls`));
+    },
+    async checkRecalls(actor) {
+      const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) =>
+        value.toString(16).padStart(2, "0"),
+      ).join("");
+      return mapRecalls(await post(`${kitchen}/recalls/check`, { idempotency_key: `recall-check-${key}` }, actor));
     },
     async getDrift() {
       return mapDrift(await get(`${kitchen}/drift`));

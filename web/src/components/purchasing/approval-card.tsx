@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
+import { ApiError } from "@/api/types";
 import type { AddableProduct, ApprovalRequest, Order, OrderLine, ProposalChange, RecallAlert } from "@/types";
 
 /** What the gateway gets on approve: the exact totals the human read. */
@@ -141,7 +142,16 @@ export function ApprovalCard({
       setStatus(next);
     } catch (e) {
       const what = next === "APPROVED" ? "Approval" : "Rejection";
-      setError(`${what} failed: ${e instanceof Error ? e.message : String(e)}. The order is still pending.`);
+      const recallBlocked = next === "APPROVED" && e instanceof ApiError && e.code === "BLOCKED_BY_RECALL";
+      const message =
+        recallBlocked
+          ? "This order is blocked by a recall. Reject it and approve the replacement order instead"
+          : e instanceof Error
+            ? e.message
+            : String(e);
+      setError(
+        `${what} failed: ${message}. ${recallBlocked ? "The order stays held by the recall." : "The order is still pending."}`,
+      );
     } finally {
       setBusy(false);
       setOpen(null);
@@ -149,7 +159,11 @@ export function ApprovalCard({
   }
 
   return (
-    <Card className="docket gap-4 p-4 sm:p-5">
+    <Card
+      id={`proposal-${request.orderId}`}
+      tabIndex={-1}
+      className="docket scroll-mt-6 gap-4 p-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/70 sm:p-5"
+    >
       <CardHeader className="px-0">
         <CardTitle className="text-[19px] leading-[25px] font-[650]">{request.summary}</CardTitle>
         <CardDescription className="font-mono text-xs leading-4 font-[450]">
