@@ -551,11 +551,13 @@ export function ApprovalCard({
             <dd className="font-mono text-xs text-muted-foreground tabular-nums">
               {t("{amount} ex VAT", { amount: formatEur(request.totalExVat) })}
             </dd>
-            {order?.deliveryFee != null ? (
+            {/* A zero fee needs no line. The limit is known only while it is not reached: the gateway
+                sends the gap, so at a gap of 0 "threshold" is just this order's own total. */}
+            {order?.deliveryFee != null && order.deliveryFee > 0 ? (
               <>
                 <dt className="sr-only">{t("Delivery fee")}</dt>
                 <dd className="w-full font-mono text-xs text-muted-foreground tabular-nums">
-                  {order.mov
+                  {order.mov && order.mov.threshold > order.mov.current
                     ? t("Delivery fee {amount} (free from {threshold} ex VAT)", {
                         amount: formatEur(order.deliveryFee),
                         threshold: formatEur(order.mov.threshold),
