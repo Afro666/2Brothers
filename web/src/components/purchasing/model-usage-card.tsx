@@ -29,9 +29,7 @@ function figures(usage: ModelUsage): [string, string][] {
 export function ModelUsageCard() {
   const api = useApi();
   const usage = useAsync(() => api.getModelUsage());
-  const empty =
-    usage.status === "error" ||
-    (usage.status === "ready" && nothingCounted(usage.data));
+  const empty = usage.status === "ready" && nothingCounted(usage.data);
   return (
     <Card>
       <CardHeader>
@@ -45,6 +43,11 @@ export function ModelUsageCard() {
         {usage.status === "loading" && (
           <p role="status" className="text-muted-foreground">
             Loading the counts…
+          </p>
+        )}
+        {usage.status === "error" && (
+          <p className="text-muted-foreground">
+            The counts are not available right now
           </p>
         )}
         {empty && <p>No runs counted yet</p>}
