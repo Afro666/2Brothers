@@ -255,3 +255,22 @@ a line:
 - Approve is still one human yes and one order; the order stores `blocks`. A line with
   unknown stock still returns 409 `STOCK_UNKNOWN`, so a block of a manual supplier cannot
   be placed until a supplier confirmation exists.
+
+## Kitchen planning routes (#74)
+
+`gateway/kitchen_routes.py`, all under `/v1/kitchens/{k}`:
+
+| Route | Who | What |
+|---|---|---|
+| `GET/POST /suppliers`, `GET/PUT/DELETE /suppliers/{id}` | read / write | Suppliers and their user-set terms (null = unknown) |
+| `GET/POST /recipes`, `GET/PUT/DELETE /recipes/{id}` | read / write | Ingredients with `qty_per_portion`, `unit`, `yield_pct` |
+| `GET/POST /products`, `GET/PUT/DELETE /products/{id}` | read / write | The kitchen's own products |
+| `GET/PUT /menu-plans/{YYYY-Www}` | read / write | `days: [{date, meal, recipe_id, covers}]`; an empty week returns `days: []` |
+| `POST /stock-counts`, `GET /stock` | write / read | A null count is "not counted", never zero; replay by `idempotency_key` |
+| `GET /demand?from=&to=` | read | Per product and day: `gross_need` (covers x recipe / yield), `net_need` (null when stock is unknown), `why`, `source` (`menu_plan`, else the stored forecast: `history`), plus `problems` |
+| `GET/PUT /settings` | read / approver | Engine settings; decimals as strings |
+| `GET/PUT /sharing` | read / approver | `{supplier_id, share_forecast}`; each change is an audit entry |
+
+"write" = a signed-in person who is not a viewer, or an API token with the new scope
+`kitchen:write` (a POS or stock system). The Buyer agent token cannot write. `on_order` is
+0 with `on_order_known: false` until open orders are converted to kitchen units.

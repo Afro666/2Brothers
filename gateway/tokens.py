@@ -13,7 +13,7 @@ import hashlib
 import secrets
 from uuid import uuid4
 
-SCOPES = ("kitchen:read", "kitchen:propose")
+SCOPES = ("kitchen:read", "kitchen:propose", "kitchen:write")   # write: stock, menus, products (a POS feed)
 PREFIX = "tkb_"
 TOUCH_EVERY = timedelta(minutes=1)   # last_used_at is written at most once a minute
 

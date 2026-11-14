@@ -39,8 +39,8 @@ class Principal:
         """403 unless this caller holds `scope` for `kitchen_id`."""
         if self.kind != "human" and scope not in self.scopes:
             raise GatewayError(403, "SCOPE_REQUIRED", f"this token lacks {scope}")
-        if self.kind == "human" and scope == "kitchen:propose" and self.role == "viewer":
-            raise GatewayError(403, "ROLE_REQUIRED", "a viewer can read, not ask for orders")
+        if self.kind == "human" and scope in ("kitchen:propose", "kitchen:write") and self.role == "viewer":
+            raise GatewayError(403, "ROLE_REQUIRED", "a viewer can read, not change or ask")
         if kitchen_id is not None and self.kitchen_id is not None and kitchen_id != self.kitchen_id:
             raise GatewayError(403, "KITCHEN_SCOPE", "this token belongs to another kitchen")
 
@@ -477,6 +477,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     # Onboarding lookup (#375): Context.dev brand lookup for the sign-up form.
     from gateway.onboarding import mount_onboarding
     mount_onboarding(app, principal, body)
+
+    # Kitchen planning routes (#74): stock, products, recipes, menu plans, suppliers, demand.
+    from gateway.kitchen_routes import register as register_kitchen_routes
+    register_kitchen_routes(app, gw, principal, body)
 
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp
