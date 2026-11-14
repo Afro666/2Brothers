@@ -96,6 +96,30 @@ describe("HTTP event stream", () => {
     expect(fetch).toHaveBeenCalledTimes(calls);
   });
 
+  it("a sign-in while connected aborts the old request and opens a new one", async () => {
+    vi.useFakeTimers();
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      signals.push(init.signal as AbortSignal);
+      return new Response(stream());
+    }));
+    const stop = subscribe();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event("kitchen-buyer:signed-in"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(signals[0].aborted).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(signals[1].aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    stop();
+    expect(signals[1].aborted).toBe(true);
+    window.dispatchEvent(new Event("kitchen-buyer:signed-in"));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("stop aborts the request and prevents reconnects", async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;
