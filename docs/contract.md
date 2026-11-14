@@ -495,7 +495,7 @@ Product row (the catalog row from the shared repository, without the raw record)
 | `substitutions` | string[] | Product codes Valio suggests. A kitchen's allergen rule still wins. |
 | `vat_code` | string or null | `STANDARD`, `MEDIUM`, `LOW` or `NOT_APPLICABLE`. See "VAT per product". Null: unknown. |
 | `vat_rate` | decimal string or null | VAT in percent for that code (`"13.5"`). Null: unknown, never 0. |
-| `vat_source` | string or null | `"Valio product data, vatCode"`, `"entered"` (an own product) or null. |
+| `vat_source` | string or null | `catalog` (the catalog `vatCode`), `entered` (an own product's entered rate) or null (unknown: `vat_rate` is null). The same values as a line's `vat_source` (#1609). |
 
 The contract is snake_case. The web client maps these rows to its own camelCase
 types in `web/src/api/`.
@@ -1143,7 +1143,7 @@ a name, the kind picture and the brand logo ("Product pictures" below) instead o
 ### VAT per product (#1603)
 
 Every product row has `vat_code`, `vat_rate` and `vat_source`. For a Valio product they come
-from the catalog field `synkkaData.vatCode` (`vat_source: "Valio product data, vatCode"`):
+from the catalog field `synkkaData.vatCode` (`vat_source: "catalog"`):
 
 | `vatCode` in the catalog | `vat_code` | `vat_rate` | Products (of 17,546) |
 |---|---|---|---|
@@ -1159,8 +1159,11 @@ from the catalog field `synkkaData.vatCode` (`vat_source: "Valio product data, v
 - Unknown is null, never a guess and never 0: most fresh vegetables have no `vatCode` in the
   catalog, so their VAT is unknown until the live price says it.
 - An own product has the `vat_rate` the kitchen entered (`vat_source: "entered"`), else null.
+- `vat_source` is null whenever `vat_rate` is null, on a row as on a line: one enum for both
+  (#1609). It is a code, not a label: a screen shows its own words for it.
 - The rows of a catalog loaded before #1603 get the fields from their stored record with
-  `python -m store.vat --apply` (idempotent; without `--apply` it only counts).
+  `python -m store.vat --apply` (idempotent; without `--apply` it only counts). It also rewrites
+  the old free-text `vat_source` (`"Valio product data, vatCode"`) to the enum (#1609).
 
 **Lines.** Every proposal line (`lines`, `blocks[].lines`, options, `partial_fill` lines) and
 every order line has `vat_rate` (decimal string or null) and `vat_source`:
@@ -1253,6 +1256,9 @@ the Buyer). A Valio error never fails the page: `live.error` says it.
   means unknown: empty lists then never mean free from.
 - `nutrition` is per 100 g or 100 ml from the label (`engine/nutrition.py`); null when the label
   has no usable table. A nutrient the label leaves out is absent, not 0.
+- `vat.source` is a label like the other sections' `source`, not the row's `vat_source` code:
+  `"Valio product data, vatCode"` for `catalog`, `"entered by the kitchen"` for `entered`, null
+  when `vat_rate` is unknown (#1609).
 - `live` is null for an own product (a price list has no live price). `stock.available` is null
   and `stock.unknown` true when Valio reports 999999 or more ("unknown", docs/decisions.md);
   no schedule line is `available: "0"`, not available. `error` is `SUPPLIER_BUSY` or
