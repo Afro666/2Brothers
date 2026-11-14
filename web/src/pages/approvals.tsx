@@ -137,6 +137,13 @@ function ApiApprovalsPage() {
           : {
               kind: "ready",
               lastCheck: recalls.data.lastCheck,
+              // No proposal carries it (`proposals: []`): the product is in stock or in a recipe.
+              unheld: recalls.data.alerts.filter(
+                (alert, index, all) =>
+                  alert.status === "active" &&
+                  alert.orderId == null &&
+                  all.findIndex((other) => other.eventId === alert.eventId) === index,
+              ),
               affecting: recalls.data.alerts.filter(
                 (alert) =>
                   alert.proposalStatus === "BLOCKED_BY_RECALL" &&
