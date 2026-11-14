@@ -125,7 +125,7 @@ class ValioClient:
                 except (ValueError, TypeError):
                     available = None
                 amount = line.get("availableAmount")
-                unknown = amount is None or amount in (999999, 9999999999)
+                unknown = amount is None or amount >= 999999  # 999999, 666666666, 1999999999, ... are filler for "plenty"
                 line["unknown_stock"] = unknown
                 if unknown:
                     line["availableAmount"] = None
