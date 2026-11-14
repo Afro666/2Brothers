@@ -475,3 +475,76 @@ export interface ForecastAccuracy {
   /** null when the gateway does not say per product (unknown, not "no products"). */
   products: ForecastSeries[] | null;
 }
+
+/**
+ * How sure the recall monitor is that a notice is about this product (monitor/README.md):
+ * `exact` the notice's EAN is the product's; `possible` same brand and a shared product
+ * word; `review` no brand and no EAN, a person checks.
+ */
+export type RecallMatch = "exact" | "possible" | "review";
+
+/** The Ruokavirasto notice as Context.dev scraped it. null means the notice does not say. */
+export interface RecallNotice {
+  url: string;
+  /** `YYYY-MM-DD`. */
+  date: string | null;
+  /** The notice title, in Finnish as published. */
+  title: string | null;
+  reason: string | null;
+  action: string | null;
+  recalledProduct: string | null;
+  brand: string | null;
+  gtin: string | null;
+  packageSize: string | null;
+  /** Recalled lots or best-before dates; null means the notice names none, so every pack is in doubt. */
+  lot: string | null;
+}
+
+/** The line the Buyer re-planned in place of the recalled one. The engine sized it. */
+export interface RecallReplacementLine {
+  productId: ProductCode;
+  productName: string | null;
+  quantity: number;
+  unit: string;
+}
+
+/** One `recall.alert` (docs/contract.md, Webhooks), as the screens read it. */
+export interface RecallAlert {
+  /** Stable per notice, kitchen and product: a repeat check is the same alert. */
+  eventId: string;
+  productId: ProductCode;
+  productName: string | null;
+  match: RecallMatch;
+  /** The monitor's reason for the match, shown verbatim. */
+  why: string;
+  /** Where the kitchen holds it: stock, recipes, the open proposal. */
+  where: string[];
+  recall: RecallNotice;
+  nextStep: string;
+  /** The open order it hits; null when it is not on an open order. */
+  orderId: string | null;
+  /**
+   * `BLOCKED_BY_RECALL` for an exact or possible match on an order line; `WARNING` for a
+   * review match, which never blocks on its own.
+   */
+  lineStatus: "BLOCKED_BY_RECALL" | "WARNING";
+  /** null while the Buyer has not re-planned the line: then the order cannot be approved. */
+  replacementLine: RecallReplacementLine | null;
+  /** Ideas for the chef from other brands; nothing is ordered from an alert. */
+  replacementIdeas: { productId: ProductCode; name: string | null; brand: string | null }[];
+  detectedAt: string;
+}
+
+/** One run of the recall monitor. */
+export interface RecallCheck {
+  checkedAt: string;
+  /** `live`: scraped now. `recording`: Context.dev was slow or the demo uses the saved scrape. */
+  source: "live" | "recording";
+  /** When the scraped pages were fetched; for `live` the same as `checkedAt`. */
+  fetchedAt: string;
+  /** The Context.dev endpoint, e.g. `/v1/web/scrape`. */
+  via: string;
+  /** null when the monitor does not say. */
+  noticesScanned: number | null;
+  alerts: RecallAlert[];
+}

@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OptionCompare } from "@/components/purchasing/option-compare";
 import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
+import { RecallLines, recallHold } from "@/components/purchasing/recall-lines";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -30,7 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
-import type { AddableProduct, ApprovalRequest, Order, OrderLine, ProposalChange } from "@/types";
+import type { AddableProduct, ApprovalRequest, Order, OrderLine, ProposalChange, RecallAlert } from "@/types";
 
 /** What the gateway gets on approve: the exact totals the human read. */
 export interface ApprovalDecision {
@@ -56,6 +57,7 @@ export function ApprovalCard({
   onChooseOption,
   listAddableProducts,
   editCount = 0,
+  recalls = [],
 }: {
   request: ApprovalRequest;
   order?: Order;
@@ -66,6 +68,8 @@ export function ApprovalCard({
   onChooseOption?: (optionId: string) => void | Promise<void>;
   listAddableProducts?: (query: string) => Promise<AddableProduct[]>;
   editCount?: number;
+  /** Recall alerts on this order; a blocked line still on it holds the approval. */
+  recalls?: RecallAlert[];
 }) {
   const [open, setOpen] = useState<"approve" | "reject" | null>(null);
   const [status, setStatus] = useState(request.status);
@@ -79,11 +83,12 @@ export function ApprovalCard({
   const reasonId = useId();
   const pending = status === "PENDING";
   const stockMessage =
-    !order || order.lines.length === 0
+    recallHold(recalls, order) ??
+    (!order || order.lines.length === 0
       ? "Order details are unavailable. Reload them before approving."
       : order.lines.some((line) => isUnknownStock(line.offer.availableAmount))
         ? "Waiting for supplier stock confirmation. You can review or reject this proposal; approval is available once stock is confirmed."
-        : null;
+        : null);
   const editing = pending && onChangeProposal != null && listAddableProducts != null;
 
   async function changeProposal(change: ProposalChange) {
@@ -159,6 +164,7 @@ export function ApprovalCard({
             ))}
           </ul>
         </section>
+        <RecallLines alerts={recalls} />
         {pending && stockMessage ? (
           <p className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.warning)}>{stockMessage}</p>
         ) : null}

@@ -3,13 +3,14 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { RecallPanel, type RecallStatus } from "@/components/purchasing/recall-panel";
 import { useState } from "react";
 
 import { useApi } from "@/api";
-import type { Api } from "@/api/types";
+import { ApiError, type Api } from "@/api/types";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { useAsync } from "@/lib/use-async";
-import type { ApprovalRequest, Order, ProposalChange } from "@/types";
+import type { ApprovalRequest, Order, ProposalChange, RecallAlert } from "@/types";
 
 interface ApprovalWithOrder {
   approval: ApprovalRequest;
@@ -29,12 +30,24 @@ async function loadApprovals(api: Api): Promise<ApprovalWithOrder[]> {
   );
 }
 
+/** null when this gateway does not serve recalls yet (hidden, never shown as "no recalls"). */
+async function loadRecalls(api: Api): Promise<RecallAlert[] | null> {
+  if (!api.listRecalls) return null;
+  try {
+    return await api.listRecalls();
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "NOT_SERVED") return null;
+    throw error;
+  }
+}
+
 export function ApprovalsPage() {
   const api = useApi();
   const { role } = useRole();
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
+  const recalls = useAsync(() => loadRecalls(api), [api]);
 
   async function approve(decision: ApprovalDecision): Promise<void> {
     await api.approve(decision, actor);
@@ -57,6 +70,33 @@ export function ApprovalsPage() {
   const decided =
     approvals.status === "ready" ? approvals.data.filter(({ approval }) => approval.status !== "PENDING") : [];
 
+  const pendingOrders = new Set(pending.map(({ approval }) => approval.orderId));
+  const recallsFor = (orderId: string) =>
+    recalls.status === "ready" ? (recalls.data ?? []).filter((alert) => alert.orderId === orderId) : [];
+  // An order a recall hits comes first, so nobody scrolls past it.
+  const hit = (row: ApprovalWithOrder) => Number(recallsFor(row.approval.orderId).length > 0);
+  const recallFirst = [...pending].sort((a, b) => hit(b) - hit(a));
+  const recallStatus: RecallStatus =
+    recalls.status === "loading"
+      ? { kind: "loading" }
+      : recalls.status === "error"
+        ? { kind: "unknown", message: recalls.error.message }
+        : recalls.data === null
+          ? { kind: "unavailable" }
+          : {
+              kind: "ready",
+              affecting: recalls.data.filter((alert) => alert.orderId != null && pendingOrders.has(alert.orderId)).length,
+            };
+  const checkRecalls =
+    api.checkRecalls && recallStatus.kind !== "unavailable"
+      ? async () => {
+          const result = await api.checkRecalls!(actor);
+          recalls.reload();
+          approvals.reload();
+          return result;
+        }
+      : undefined;
+
   return (
     <AppShell activeId="approvals">
       <div className="mx-auto max-w-5xl space-y-6">
@@ -66,6 +106,7 @@ export function ApprovalsPage() {
             Every order the Buyer proposes waits here. Nothing is sent until a person approves it.
           </p>
         </header>
+        <RecallPanel status={recallStatus} onCheck={checkRecalls} />
         {approvals.status === "loading" ? <LoadingState label="Loading approvals" /> : null}
         {approvals.status === "error" ? (
           <ErrorState message={approvals.error.message} onRetry={approvals.reload} />
@@ -81,7 +122,7 @@ export function ApprovalsPage() {
               </h2>
               {pending.length > 0 ? (
                 <div className="space-y-4">
-                  {pending.map(({ approval, order }) => (
+                  {recallFirst.map(({ approval, order }) => (
                     <ApprovalCard
                       key={approval.id}
                       request={approval}
@@ -98,6 +139,7 @@ export function ApprovalsPage() {
                       }
                       listAddableProducts={(query) => api.listAddableProducts(approval.orderId, query)}
                       editCount={editCounts[approval.orderId] ?? 0}
+                      recalls={recallsFor(approval.orderId)}
                     />
                   ))}
                 </div>

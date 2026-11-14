@@ -6,6 +6,8 @@ import { permissionsMock } from "@/api/mock-permissions";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
+import { createRecallMock } from "@/api/mock-recalls";
+import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
 import {
   approval as seedApproval,
   confirmedDemoApproval,
@@ -50,9 +52,9 @@ export interface MockApi extends Api {
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
 export function createMockApi(): MockApi {
   const approvals = new Map(
-    [{ ...confirmedDemoApproval, options: milkOptions }, seedApproval].map((row) => [row.id, structuredClone(row)]),
+    [{ ...confirmedDemoApproval, options: milkOptions }, seedApproval, coffeeApproval].map((row) => [row.id, structuredClone(row)]),
   );
-  const demoOrders = new Map([...Object.values(seedOrders), confirmedDemoOrder].map((row) => [row.id, structuredClone(row)]));
+  const demoOrders = new Map([...Object.values(seedOrders), confirmedDemoOrder, coffeeOrder].map((row) => [row.id, structuredClone(row)]));
   const audit: AuditEvent[] = [...auditEvents];
   const feedback: FeedbackRow[] = [];
   let nextFailure: ApiError | null = null;
@@ -174,6 +176,17 @@ export function createMockApi(): MockApi {
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),
     ...permissionsMock,
+    ...createRecallMock({
+      getOrder: (id) => demoOrders.get(id),
+      isPending: (orderId) => [...approvals.values()].some((row) => row.orderId === orderId && row.status === "PENDING"),
+      replan(orderId, lines) {
+        const order = demoOrders.get(orderId)!;
+        Object.assign(order, resimulate(lines, order));
+        const approval = [...approvals.values()].find((row) => row.orderId === orderId)!;
+        approvals.set(approval.id, { ...approval, totalExVat: order.totalExVat, totalInclVat: order.totalInclVat, lineCount: lines.length });
+      },
+      recordAudit: (event) => audit.push({ ...event, id: `EV-${audit.length + 1}`, at: new Date().toISOString() }),
+    }),
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
     },
