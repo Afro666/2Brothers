@@ -31,6 +31,8 @@ export default {
   "In Claude Desktop, open Settings, then Developer, then Edit Config. Add this server:":
     "Avaa Claude Desktopissa Settings, sitten Developer ja sitten Edit Config. Lisää tämä palvelin:",
   "Copy config": "Kopioi asetukset",
+  "Put your approval token in place of <token>. mcp-remote sends AUTH_HEADER as the Authorization header.":
+    "Kirjoita hyväksyntätunnuksesi kohdan <token> tilalle. mcp-remote lähettää AUTH_HEADERin Authorization-otsakkeena.",
   "The MCP address is the MCP entry in the agent card:": "MCP-osoite on agenttikortin MCP-kohdassa:",
   "Restart Claude Desktop. Ask it: which orders wait for my approval?":
     "Käynnistä Claude Desktop uudelleen. Kysy siltä: mitkä tilaukset odottavat hyväksyntääni?",

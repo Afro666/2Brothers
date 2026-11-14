@@ -90,7 +90,8 @@ export function ApproveChatSection() {
   const origin = window.location.origin;
   const mcpUrl = `${origin}/gateway/mcp`;
   const cardUrl = `${origin}/.well-known/agent-card.json`;
-  const config = desktopConfig(mcpUrl, created?.token ?? "<token>");
+  // Never the real token: a config on screen gets screenshotted and shared; the token is shown once, above.
+  const config = desktopConfig(mcpUrl, "<token>");
   const now = Date.now();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -252,10 +253,13 @@ export function ApproveChatSection() {
                 aria-labelledby="desktop-config-label"
                 className="max-w-full overflow-x-auto rounded-md bg-muted p-3 text-xs"
               >
-                <code ref={configRef} tabIndex={0} className="font-mono whitespace-pre">
+                <code ref={configRef} tabIndex={0} className="font-mono whitespace-pre-wrap break-all">
                   {config}
                 </code>
               </pre>
+              <p className="text-xs text-muted-foreground">
+                {t("Put your approval token in place of <token>. mcp-remote sends AUTH_HEADER as the Authorization header.")}
+              </p>
               <p className="text-xs text-muted-foreground">
                 {t("The MCP address is the MCP entry in the agent card:")}{" "}
                 <a className="break-all underline underline-offset-4" href={cardUrl}>

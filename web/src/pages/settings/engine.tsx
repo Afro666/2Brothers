@@ -77,7 +77,13 @@ export function EngineSection() {
     setSaveError(null);
   }
 
-  const allergenCodes = draft ? [...new Set([...Object.keys(ALLERGENS), ...draft.excludedAllergens])].sort() : [];
+  /** Beside a field that still shows the engine's default (the gateway's `defaults`), not a value the kitchen set. */
+  const engineDefault = (field: string, same: boolean) =>
+    same && original?.engineDefaults?.includes(field) ? (
+      <span className="text-xs text-muted-foreground">{t("Engine default")}</span>
+    ) : null;
+
+  const allergenCodes = draft ?[...new Set([...Object.keys(ALLERGENS), ...draft.excludedAllergens])].sort() : [];
 
   return (
     <SettingsSection
@@ -107,9 +113,15 @@ export function EngineSection() {
             <CardContent className="space-y-4">
               {DEMAND_CLASSES.map(({ key, description }) => (
                 <div key={key} className="grid gap-2 sm:grid-cols-[1fr_12rem] sm:items-center">
-                  <Label htmlFor={`service-${key}`}>
-                    {key} — {t(description)}
-                  </Label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Label htmlFor={`service-${key}`}>
+                      {key} — {t(description)}
+                    </Label>
+                    {engineDefault(
+                      `serviceLevelPercent.${key}`,
+                      Object.is(draft.serviceLevelPercent[key], original?.serviceLevelPercent[key]),
+                    )}
+                  </div>
                   <div className="relative">
                     <Input
                       id={`service-${key}`}
@@ -169,7 +181,14 @@ export function EngineSection() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor={`cover-days-${index}`}>{t("Days")}</Label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Label htmlFor={`cover-days-${index}`}>{t("Days")}</Label>
+                      {engineDefault(
+                        `maxDaysOfCover.${rule.category}`,
+                        original?.maxDaysOfCover[index]?.category === rule.category &&
+                          Object.is(original.maxDaysOfCover[index].maxDays, rule.maxDays),
+                      )}
+                    </div>
                     <Input
                       id={`cover-days-${index}`}
                       type="number"
@@ -223,7 +242,10 @@ export function EngineSection() {
               <CardDescription>{t("Maximum factor used to scale demand observed during a stock-out.")}</CardDescription>
             </CardHeader>
             <CardContent className="max-w-xs">
-              <Label htmlFor="stock-out-cap">{t("Maximum scaling factor")}</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Label htmlFor="stock-out-cap">{t("Maximum scaling factor")}</Label>
+                {engineDefault("stockOutDemandCap", Object.is(draft.stockOutDemandCap, original?.stockOutDemandCap))}
+              </div>
               <Input
                 id="stock-out-cap"
                 className="mt-1.5"
@@ -247,7 +269,13 @@ export function EngineSection() {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="budget-order">{t("Per order (ex VAT, €)")}</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Label htmlFor="budget-order">{t("Per order (ex VAT, €)")}</Label>
+                  {engineDefault(
+                    "budgetWarningPerOrderExVat",
+                    draft.budgetWarningPerOrderExVat === original?.budgetWarningPerOrderExVat,
+                  )}
+                </div>
                 <Input
                   id="budget-order"
                   type="number"
@@ -262,7 +290,13 @@ export function EngineSection() {
                 <p className="text-xs text-muted-foreground">{t("Leave empty for no warning.")}</p>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="budget-week">{t("Per week (ex VAT, €)")}</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Label htmlFor="budget-week">{t("Per week (ex VAT, €)")}</Label>
+                  {engineDefault(
+                    "budgetWarningPerWeekExVat",
+                    draft.budgetWarningPerWeekExVat === original?.budgetWarningPerWeekExVat,
+                  )}
+                </div>
                 <Input
                   id="budget-week"
                   type="number"

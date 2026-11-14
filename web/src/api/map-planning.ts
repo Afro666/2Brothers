@@ -420,31 +420,50 @@ function setting(value: unknown, label: string): number {
 }
 
 /**
- * `GET/PUT /settings`. The gateway sends only what the kitchen has set; for the rest the
- * engine's own default applies, and the gateway does not say what that is. So a service level
- * or a stock-out cap that is not set is NaN: the settings form shows an empty field, not a
- * number nobody chose. `excluded_allergens: null` (unknown) reads as an empty list here; see
- * `settingsBody` for why a save does not turn that into "no exclusions".
+ * `GET/PUT /settings`. gateway/kitchen_routes.py `get_settings` says: "`defaults` is what the
+ * engine uses for every field the kitchen has not set." Saved values win, including a null
+ * budget (no warning). Without defaults, unset numeric fields stay NaN, never invented values.
+ * `excluded_allergens: null` (unknown) reads as an empty list here; see `settingsBody` for why
+ * a save does not turn that into "no exclusions".
  */
 export function mapKitchenSettings(body: unknown): KitchenSettings {
   const row = object(body, "the kitchen settings");
-  const levels = row.service_level == null ? {} : object(row.service_level, "service_level");
-  const cover = row.max_cover_days == null ? {} : object(row.max_cover_days, "max_cover_days");
+  const defaults = row.defaults == null ? {} : object(row.defaults, "settings defaults");
+  const savedLevels = row.service_level == null ? {} : object(row.service_level, "service_level");
+  const defaultLevels = defaults.service_level == null ? {} : object(defaults.service_level, "default service_level");
+  const levels = { ...defaultLevels, ...savedLevels };
+  const savedCover = row.max_cover_days == null ? {} : object(row.max_cover_days, "max_cover_days");
+  const defaultCover = defaults.max_cover_days == null ? {} : object(defaults.max_cover_days, "default max_cover_days");
+  const cover = { ...defaultCover, ...savedCover };
+  const effective = { ...defaults, ...row };
   const level = (demandClass: DemandClass) => {
     const fraction = setting(levels[demandClass], "service_level");
     // 0.975 * 100 is not exactly 97.5 in binary; four decimals of a percent are enough.
     return Number.isNaN(fraction) ? fraction : Math.round(fraction * 1e6) / 1e4;
   };
+  // What the form shows from `defaults`, so it can say "Engine default" and not pass it off as the kitchen's.
+  const engineDefaults = [
+    ...DEMAND_CLASSES.filter((c) => savedLevels[c] == null && defaultLevels[c] != null).map((c) => `serviceLevelPercent.${c}`),
+    ...Object.keys(defaultCover).filter((category) => !(category in savedCover)).map((category) => `maxDaysOfCover.${category}`),
+    ...(
+      [
+        ["stockOutDemandCap", "stockout_cap"],
+        ["budgetWarningPerOrderExVat", "budget_warning_order_eur"],
+        ["budgetWarningPerWeekExVat", "budget_warning_week_eur"],
+      ] as const
+    ).flatMap(([field, key]) => (key in defaults && !(key in row) ? [field] : [])),
+  ];
   return {
-    approveUnconfirmedManual: row.approve_unconfirmed_manual === true,
+    ...(engineDefaults.length > 0 ? { engineDefaults } : {}),
+    approveUnconfirmedManual: effective.approve_unconfirmed_manual === true,
     serviceLevelPercent: { A: level("A"), B: level("B"), C: level("C") },
     maxDaysOfCover: Object.entries(cover).map(([category, days]) => ({
       category,
       maxDays: number(days, "max_cover_days"),
     })),
-    stockOutDemandCap: setting(row.stockout_cap, "stockout_cap"),
-    budgetWarningPerOrderExVat: decimal(row.budget_warning_order_eur, "budget_warning_order_eur"),
-    budgetWarningPerWeekExVat: decimal(row.budget_warning_week_eur, "budget_warning_week_eur"),
+    stockOutDemandCap: setting(effective.stockout_cap, "stockout_cap"),
+    budgetWarningPerOrderExVat: decimal(effective.budget_warning_order_eur, "budget_warning_order_eur"),
+    budgetWarningPerWeekExVat: decimal(effective.budget_warning_week_eur, "budget_warning_week_eur"),
     excludedAllergens:
       row.excluded_allergens == null
         ? []
