@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { LabelChip } from "@/components/purchasing/chips";
@@ -55,8 +55,8 @@ function Fact({
 /**
  * The engine's options for one request, one row each, in the API's order (A, B, C).
  * The UI never ranks them: "recommended" is shown only when the API says so, and never
- * on an option whose stock is unknown. The row's button chooses the option and opens the
- * existing approval; it approves nothing by itself.
+ * on an option whose stock is unknown. Each row toggles its details. The choose button in
+ * an open option opens the existing approval; it approves nothing by itself.
  */
 export function OptionCompare({
   options,
@@ -76,6 +76,32 @@ export function OptionCompare({
   const [awaiting, setAwaiting] = useState<{ from: ProposalOption[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sorted = [...options].sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
+  const optionIds = sorted.map((option) => option.id);
+  const optionIdsKey = JSON.stringify(optionIds);
+  const defaultOpenId = (
+    sorted.find((option) => option.chosen) ?? sorted.find((option) => option.recommended) ?? sorted[0]
+  )?.id;
+  const [openOptions, setOpenOptions] = useState<Set<string>>(
+    () => new Set(defaultOpenId ? [defaultOpenId] : []),
+  );
+
+  useEffect(() => {
+    const currentOptionIds = new Set(optionIds);
+    setOpenOptions((current) => {
+      const next = new Set([...current].filter((optionId) => currentOptionIds.has(optionId)));
+      if (defaultOpenId) next.add(defaultOpenId);
+      return next;
+    });
+  }, [defaultOpenId, optionIdsKey]);
+
+  function toggle(optionId: string) {
+    setOpenOptions((current) => {
+      const next = new Set(current);
+      if (next.has(optionId)) next.delete(optionId);
+      else next.add(optionId);
+      return next;
+    });
+  }
 
   // The approval names the proposal's exact total, so it opens only once the
   // re-simulated proposal is on screen, and not at all if that basket is blocked
@@ -138,33 +164,63 @@ export function OptionCompare({
               ),
             ),
           ];
+          const priceLabel = prices.length === 1 ? prices[0] : prices.join(", ");
           const co2 = option.co2KgPerKg;
+          const open = openOptions.has(option.id);
+          const contentId = `${headingId}-option-${index}`;
           return (
             <li
               key={option.id}
               className={cn(
-                "grid gap-x-5 gap-y-2 rounded-sm border p-3 text-sm sm:grid-cols-[9.5rem_minmax(0,1fr)]",
+                "rounded-sm border text-sm",
+                !open && "border-input/60 bg-muted/20",
                 recommended && "border-l-[3px] border-l-primary",
               )}
             >
-              <div className="flex min-w-0 flex-wrap items-center gap-2 sm:col-span-2">
-                <h5 className="font-medium">
-                  Option {letter}:{" "}
-                  {option.lines
-                    .map((line) => `${formatNumber(line.quantity)} ${line.unit} ${line.productName ?? line.productId}`)
-                    .join(" + ")}
-                </h5>
-                {recommended ? (
-                  <span className="stamp rounded-sm bg-primary px-2 py-0.5 text-xs whitespace-nowrap text-primary-foreground">
-                    Recommended by the Buyer
+              <div className={cn(open && "grid gap-x-5 gap-y-2 p-3 sm:grid-cols-[9.5rem_minmax(0,1fr)]")}>
+              <h5 className={cn("min-w-0 font-medium", open && "sm:col-span-2")}>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  aria-controls={contentId}
+                  onClick={() => toggle(option.id)}
+                  className={cn(
+                    "flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/70",
+                    open ? "p-0" : "px-3 py-2 font-normal hover:bg-muted/60",
+                  )}
+                >
+                  <span className="min-w-0 flex-[1_1_16rem] break-words font-medium">
+                    Option {letter}:{" "}
+                    {option.lines
+                      .map((line) => `${formatNumber(line.quantity)} ${line.unit} ${line.productName ?? line.productId}`)
+                      .join(" + ")}
                   </span>
-                ) : null}
-                {option.kind === "PARTIAL" ? <span className={BADGE}>Part now, the rest later</span> : null}
-                {option.chosen ? <span className={BADGE}>Proposed now</span> : null}
-              </div>
+                  {recommended ? (
+                    <span className="stamp rounded-sm bg-primary px-2 py-0.5 text-xs whitespace-nowrap text-primary-foreground">
+                      Recommended by the Buyer
+                    </span>
+                  ) : null}
+                  {option.kind === "PARTIAL" ? <span className={BADGE}>Part now, the rest later</span> : null}
+                  {option.chosen ? <span className={BADGE}>Proposed now</span> : null}
+                  <span className="price-tag min-w-0 break-words text-xs font-normal">
+                    {priceLabel === "unknown" ? <span className="unknown-value">unknown</span> : priceLabel}
+                  </span>
+                  <ChevronDown
+                    aria-hidden
+                    className={cn(
+                      "size-4 shrink-0 text-muted-foreground motion-safe:transition-transform motion-safe:duration-150",
+                      open && "rotate-180",
+                    )}
+                  />
+                  {blocked && !open ? (
+                    <span className="min-w-0 basis-full break-words text-xs font-normal text-warning">{blocked}</span>
+                  ) : null}
+                </button>
+              </h5>
+              <div id={contentId} hidden={!open} className={open ? "contents" : undefined}>
               <dl className="grid grid-cols-2 items-start gap-x-4 gap-y-2 sm:grid-cols-1">
                 <Fact label="Price ex VAT" className="price-tag">
-                  {prices.length === 1 ? prices[0] : prices.join(", ")}
+                  {priceLabel}
                 </Fact>
                 <Fact label="Total" className="font-semibold">
                   {formatEur(option.totalInclVat)} incl VAT
@@ -223,6 +279,8 @@ export function OptionCompare({
                   Choose option {letter}: approve {formatEur(option.totalInclVat)} incl VAT
                 </Button>
               ) : null}
+              </div>
+              </div>
             </li>
           );
         })}
