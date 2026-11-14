@@ -440,7 +440,7 @@ export default {
   "{product} is blocked by a recall. This order cannot be approved. Reject it and approve the replacement order instead.": "Takaisinveto estää tuotteen {product}. Tätä tilausta ei voi hyväksyä. Hylkää se ja hyväksy sen sijaan korvaava tilaus.",
   "{quantity} {unit} of {product}": "{quantity} {unit} tuotetta {product}",
   "{quantity} {unit} waits for stock confirmation": "{quantity} {unit} odottaa varastovahvistusta",
-  "{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.": "Toimittajan {supplier} on vahvistettava varasto. Jos hyväksyt tilauksen, se lähetetään ja odottaa toimittajan vahvistusta: soita tai lähetä sähköpostia.",
+  "{supplier} must confirm stock. If you approve, the order is recorded; nothing is sent to {supplier}. Call or e-mail them to confirm stock.": "Toimittajan {supplier} on vahvistettava varasto. Jos hyväksyt, tilaus kirjataan; toimittajalle {supplier} ei lähetetä mitään. Vahvista varasto soittamalla tai sähköpostilla.",
   "{unit} (pack size unknown)": "{unit} (pakkauskoko tuntematon)",
   "{restaurant} · signed by {signedBy} · valid until {date} · {id}": "{restaurant} · allekirjoittanut {signedBy} · voimassa {date} asti · {id}",
   "{what} failed: {message}. {outcome}": "{what} epäonnistui: {message}. {outcome}",

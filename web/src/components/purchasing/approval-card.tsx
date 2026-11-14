@@ -255,7 +255,7 @@ export function ApprovalCard({
   const stockMessage =
     recallMessage ??
     (!order || order.lines.length === 0 ? t("Order details are unavailable. Reload them before approving.") : null);
-  // Unconfirmed supplier stock does not hold it (Aron, 2026-11-14): the order is sent and waits.
+  // Unconfirmed supplier stock does not hold it (Aron, 2026-11-14): the order is recorded; nothing is sent (#1872).
   const waitingNotice =
     order?.lines.some((line) => isStockUnconfirmed(line.offer))
       ? t("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")
@@ -732,7 +732,7 @@ export function ApprovalCard({
                       key={supplier.supplierId}
                       className="rounded-r-md border-l-[3px] border-warning bg-warning-surface px-3 py-2 text-sm text-warning"
                     >
-                      {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", {
+                      {t("{supplier} must confirm stock. If you approve, the order is recorded; nothing is sent to {supplier}. Call or e-mail them to confirm stock.", {
                         supplier: supplier.name,
                       })}
                     </li>

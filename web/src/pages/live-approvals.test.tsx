@@ -44,7 +44,7 @@ it("reloads proposals after an event without remounting an unchanged card", asyn
 });
 
 it.each(["on", "off", "absent", "failed"] as const)(
-  "says the order is sent and waits for the supplier whatever the kitchen setting (%s)",
+  "says the order is recorded and nothing is sent to the supplier whatever the kitchen setting (%s)",
   async (setting) => {
     vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [{
       ...row,
@@ -59,7 +59,7 @@ it.each(["on", "off", "absent", "failed"] as const)(
     });
     renderApp("/approvals", api);
 
-    expect(await screen.findByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
+    expect(await screen.findByText("Leipomo Demo must confirm stock. If you approve, the order is recorded; nothing is sent to Leipomo Demo. Call or e-mail them to confirm stock.")).toBeVisible();
     expect(screen.queryByText(/before this order can be approved/)).toBeNull();
   },
 );

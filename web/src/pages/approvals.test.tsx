@@ -28,7 +28,7 @@ function withConfirmedStock() {
 
 describe("ApprovalsPage", () => {
   it.each(["on", "off", "absent", "failed"] as const)(
-    "says the order is sent and waits for the supplier whatever the kitchen setting (%s)",
+    "says the order is recorded and nothing is sent to the supplier whatever the kitchen setting (%s)",
     async (setting) => {
       const api = createMockApi();
       const listApprovals = api.listApprovals;
@@ -46,7 +46,7 @@ describe("ApprovalsPage", () => {
 
       expect((await screen.findAllByText("Leipomo Demo must confirm")).length).toBeGreaterThan(0);
       for (const inspect of await screen.findAllByRole("button", { name: /^Inspect/ })) await userEvent.click(inspect);
-      expect((await screen.findAllByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).length).toBeGreaterThan(0);
+      expect((await screen.findAllByText("Leipomo Demo must confirm stock. If you approve, the order is recorded; nothing is sent to Leipomo Demo. Call or e-mail them to confirm stock.")).length).toBeGreaterThan(0);
       expect(screen.queryByText(/before this order can be approved/)).toBeNull();
     },
   );

@@ -160,7 +160,7 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
       <h3 className="label-caps">{t("What to check")}</h3>
       <div className="space-y-2 rounded-md border border-warning/40 bg-warning-surface p-3 text-warning">
         {suppliersToConfirm.map(supplier => <p key={supplier.supplierId} className="text-sm">
-          {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", { supplier: supplier.name })}
+          {t("{supplier} must confirm stock. If you approve, the order is recorded; nothing is sent to {supplier}. Call or e-mail them to confirm stock.", { supplier: supplier.name })}
         </p>)}
       </div>
     </section>}

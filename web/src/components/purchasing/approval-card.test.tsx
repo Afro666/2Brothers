@@ -258,7 +258,7 @@ describe("ApprovalCard", () => {
     expect(screen.getByText("Leipomo Demo must confirm")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     const checks = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
-    expect(within(checks).getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
+    expect(within(checks).getByText("Leipomo Demo must confirm stock. If you approve, the order is recorded; nothing is sent to Leipomo Demo. Call or e-mail them to confirm stock.")).toBeVisible();
     expect((screen.getByRole("button", { name: /^Approve/ }) as HTMLButtonElement).disabled).toBe(disabledWithoutNotice);
   });
 
@@ -286,14 +286,14 @@ describe("ApprovalCard", () => {
     expect(screen.getByText("Valio must confirm")).toBeVisible();
   });
 
-  it("says the order is sent and waits for the supplier, with no kitchen setting (Aron, 2026-11-14)", async () => {
+  it("says the order is recorded and nothing is sent to the supplier, with no kitchen setting (Aron, 2026-11-14)", async () => {
     const request = {
       ...approval,
       suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
     };
     render(<ApprovalCard request={request} order={confirmedOrder} />);
     await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
-    expect(screen.getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
+    expect(screen.getByText("Leipomo Demo must confirm stock. If you approve, the order is recorded; nothing is sent to Leipomo Demo. Call or e-mail them to confirm stock.")).toBeVisible();
     expect(screen.queryByText(/before this order can be approved/)).toBeNull();
   });
 
