@@ -202,6 +202,31 @@ export function KitchenWords() {
                         </Button>
                       </div>
                     </div>
+                    {item.suggestions && item.suggestions.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-2" aria-label={t("Nearest products for “{phrase}”", { phrase: item.phrase })}>
+                        <span className="text-sm text-muted-foreground">
+                          {item.suggestedBy === "meaning" ? t("Closest in meaning:") : t("Closest in words:")}
+                        </span>
+                        {item.suggestions.map((s) => (
+                          <Button
+                            key={s.productId}
+                            variant="secondary"
+                            size="sm"
+                            className="h-auto max-w-full whitespace-normal break-words text-left"
+                            aria-label={t("Link “{phrase}” to {product}", { phrase: item.phrase, product: s.productName })}
+                            disabled={busy}
+                            onClick={() =>
+                              void change(
+                                () => api.linkWord(item.phrase, s.productId),
+                                t("“{phrase}” now goes to {product}", { phrase: item.phrase, product: s.productName }),
+                              )
+                            }
+                          >
+                            {s.productName}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : null}
                     {linking === item.phrase ? (
                       <LinkSearch
                         phrase={item.phrase}

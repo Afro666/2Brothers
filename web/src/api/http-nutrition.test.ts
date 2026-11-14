@@ -95,7 +95,7 @@ describe("nutrition and words on the real gateway", () => {
     });
     const api = createHttpApi("/api");
     expect((await api.getKitchenWords()).unknownItems).toEqual([
-      { phrase: "house milk", times: 2, firstAsked: null, lastAsked: null },
+      { phrase: "house milk", times: 2, firstAsked: null, lastAsked: null, suggestions: null, suggestedBy: null },
     ]);
     await api.linkWord("house milk", "463335");
     await api.forgetWord("oat & barista");

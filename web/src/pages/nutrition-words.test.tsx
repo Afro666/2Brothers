@@ -185,6 +185,28 @@ describe("the kitchen's words on the products tab", () => {
     expect(screen.queryByRole("searchbox", { name: /Find a product for/ })).not.toBeInTheDocument();
   });
 
+  it("links a word with one tap on a suggested nearest product", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const words = await api.getKitchenWords();
+    api.getKitchenWords = async () => ({
+      ...words,
+      unknownItems: words.unknownItems.map((item) =>
+        item.phrase === "house milk"
+          ? { ...item, suggestedBy: "meaning" as const,
+              suggestions: [{ productId: "463335", productName: "Valio Eila 3 % lactose free milk drink 1 L" }] }
+          : item,
+      ),
+    });
+    const link = vi.spyOn(api, "linkWord");
+    renderApp("/products", api);
+
+    const nearest = await screen.findByLabelText("Nearest products for “house milk”");
+    expect(nearest).toHaveTextContent("Closest in meaning:");
+    await user.click(within(nearest).getByRole("button", { name: "Link “house milk” to Valio Eila 3 % lactose free milk drink 1 L" }));
+    expect(link).toHaveBeenCalledWith("house milk", "463335");
+  });
+
   it("forgets a word and removes an own name, down to the empty states", async () => {
     const user = userEvent.setup();
     renderApp("/products", createMockApi());

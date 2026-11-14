@@ -319,6 +319,10 @@ export interface UnknownWord {
   times: number;
   firstAsked: string | null;
   lastAsked: string | null;
+  /** The nearest catalog products the gateway found; null = not looked up yet. */
+  suggestions?: { productId: string; productName: string }[] | null;
+  /** "meaning" (vector search) or "words" (text search). */
+  suggestedBy?: "meaning" | "words" | null;
 }
 
 /** `GET /aliases`. */
