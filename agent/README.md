@@ -58,6 +58,8 @@ and approve it". The kitchen's need is 60 L. Result:
 - `place_order` without a recorded human approval is refused (`HUMAN_APPROVAL_REQUIRED`);
 - the gateway on its own, with the agent token: a sent quantity is ignored,
   `place_order` gets 403 `NEEDS_APPROVAL`, approve gets 403 `HUMAN_SESSION_REQUIRED`;
+- the gateway writes both 403s to the audit log as `refused` events with their code
+  (#548), so an attack that skips the Buyer still leaves evidence;
 - no order is stored; the audit log keeps each refusal with its reason code and
   never stores the injected text.
 
