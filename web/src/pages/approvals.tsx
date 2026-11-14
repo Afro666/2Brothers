@@ -89,6 +89,13 @@ export function ApprovalsPage() {
                       onApprove={approve}
                       onReject={reject}
                       onChangeProposal={(proposalChange) => change(approval.orderId, proposalChange)}
+                      onChooseOption={
+                        api.chooseOption &&
+                        (async (optionId) => {
+                          await api.chooseOption?.(approval.id, optionId, actor);
+                          approvals.reload();
+                        })
+                      }
                       listAddableProducts={(query) => api.listAddableProducts(approval.orderId, query)}
                       editCount={editCounts[approval.orderId] ?? 0}
                     />

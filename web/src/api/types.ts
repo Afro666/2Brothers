@@ -68,6 +68,12 @@ export interface Api {
     change: ProposalChange,
     actor: AuditActor,
   ): Promise<{ order: Order; approval: ApprovalRequest }>;
+  /**
+   * Re-simulates the proposal with one of its options and returns the approval with the new
+   * totals. It approves nothing: a person still approves the exact new total. Optional because
+   * the contract has no route for it yet; without it the screens cannot switch baskets.
+   */
+  chooseOption?(approvalId: string, optionId: string, actor: AuditActor): Promise<ApprovalRequest>;
   listFeedback(filter?: { orderId?: string }): Promise<FeedbackRow[]>;
   listOrders(): Promise<Order[]>;
   getOrder(id: string): Promise<Order>;

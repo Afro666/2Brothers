@@ -2,6 +2,7 @@ import { Check, X } from "lucide-react";
 import { useId, useState } from "react";
 
 import { MovProgress } from "@/components/purchasing/mov-progress";
+import { OptionCompare } from "@/components/purchasing/option-compare";
 import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +53,7 @@ export function ApprovalCard({
   onApprove,
   onReject,
   onChangeProposal,
+  onChooseOption,
   listAddableProducts,
   editCount = 0,
 }: {
@@ -61,6 +63,7 @@ export function ApprovalCard({
   onApprove?: (decision: ApprovalDecision) => void | Promise<void>;
   onReject?: (approvalId: string, reason: string) => void | Promise<void>;
   onChangeProposal?: (change: ProposalChange) => void | Promise<void>;
+  onChooseOption?: (optionId: string) => void | Promise<void>;
   listAddableProducts?: (query: string) => Promise<AddableProduct[]>;
   editCount?: number;
 }) {
@@ -158,6 +161,14 @@ export function ApprovalCard({
         </section>
         {pending && stockMessage ? (
           <p className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.warning)}>{stockMessage}</p>
+        ) : null}
+        {pending && request.options?.length ? (
+          <OptionCompare
+            options={request.options}
+            disabled={busy}
+            onChoose={onChooseOption}
+            onApprove={() => setOpen("approve")}
+          />
         ) : null}
         {order ? (
           <section className="space-y-3 border-t pt-4">

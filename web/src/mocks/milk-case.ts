@@ -20,6 +20,7 @@ import type {
   Order,
   OrderLine,
   Product,
+  ProposalOption,
   SubstituteOption,
 } from "@/types";
 
@@ -423,3 +424,81 @@ export const auditEvents: AuditEvent[] = [
     reason: "Waiting for a human yes to the exact total: €2,210.41 incl VAT.",
   },
 ];
+
+function optionLine(line: OrderLine, quantity: number) {
+  return {
+    productId: line.product.id,
+    productName: line.product.names.en,
+    quantity,
+    unit: line.offer.comparisonUnit ?? line.product.salesUnit,
+    unitPrice: line.offer.comparisonPrice,
+  };
+}
+
+/**
+ * The engine's three answers to "1,000 L lactose-free milk by Monday", shown on the
+ * measured-stock approval (its basket is option C). PLACEHOLDERS: option B's confirmed
+ * stock, the totals of A and B, and the three sentences; replace with the gateway's
+ * `substitute_options` once the HTTP adapter maps them.
+ */
+export const milkOptions: ProposalOption[] = [
+  {
+    id: "OFR-MILK-A",
+    tier: "good",
+    kind: "FULL",
+    lines: [optionLine(lineEila3, 1000)],
+    totalInclVat: 2326.75,
+    stockConfirmed: false,
+    cutoffPassed: false,
+    cutoffAt: offers.eila3pct1l.closingTime,
+    deliveryReliability: products.eila3pct1l.deliveryReliability,
+    co2KgPerKg: { min: 1.3, max: 1.3 },
+    labels: products.eila3pct1l.labels,
+    tradeOff:
+      "Lowest price per litre and still makes Monday, but Valio has not measured the stock: the delivery may arrive short.",
+    recommended: false,
+    chosen: false,
+  },
+  {
+    id: "OFR-MILK-B",
+    tier: "better",
+    kind: "FULL",
+    lines: [optionLine(lineEilaOrganic, 1000)],
+    totalInclVat: 2485.65,
+    stockConfirmed: true,
+    cutoffPassed: true,
+    cutoffAt: offers.eilaOrganic1l.closingTime,
+    deliveryReliability: products.eilaOrganic1l.deliveryReliability,
+    co2KgPerKg: { min: 1.3, max: 1.3 },
+    labels: products.eilaOrganic1l.labels,
+    tradeOff:
+      "Organic and Finnish with confirmed stock, but €0.14 more per litre, and the order cut-off for Monday has passed: it would arrive after Monday.",
+    recommended: false,
+    chosen: false,
+  },
+  {
+    id: "OFR-MILK-C",
+    tier: "best",
+    kind: "PARTIAL",
+    lines: [optionLine(lineArla, 51)],
+    totalInclVat: confirmedDemoOrder.totalInclVat,
+    stockConfirmed: true,
+    cutoffPassed: false,
+    cutoffAt: offers.arlaUht1l.closingTime,
+    deliveryReliability: products.arlaUht1l.deliveryReliability,
+    co2KgPerKg: { min: 1.3, max: 1.3 },
+    labels: products.arlaUht1l.labels,
+    tradeOff:
+      "51 L is all the stock Valio has confirmed for Monday. Order it now; the other 949 L waits until Valio confirms stock.",
+    recommended: true,
+    chosen: true,
+  },
+];
+
+/** The order lines behind each option a person may choose; B is refused (cut-off passed). */
+export const milkOptionLines: Record<string, OrderLine[]> = {
+  "OFR-MILK-A": [
+    { ...lineEila3, quantity: 1000, why: "1,000 ST: the whole request in one product, the lowest price per litre." },
+  ],
+  "OFR-MILK-C": [lineArla],
+};

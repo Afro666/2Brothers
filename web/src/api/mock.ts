@@ -10,6 +10,8 @@ import {
   confirmedDemoOrder,
   auditEvents,
   mandate,
+  milkOptionLines,
+  milkOptions,
   offers,
   orders as seedOrders,
   products,
@@ -45,7 +47,9 @@ export interface MockApi extends Api {
 
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
 export function createMockApi(): MockApi {
-  const approvals = new Map([confirmedDemoApproval, seedApproval].map((row) => [row.id, structuredClone(row)]));
+  const approvals = new Map(
+    [{ ...confirmedDemoApproval, options: milkOptions }, seedApproval].map((row) => [row.id, structuredClone(row)]),
+  );
   const demoOrders = new Map([...Object.values(seedOrders), confirmedDemoOrder].map((row) => [row.id, structuredClone(row)]));
   const audit: AuditEvent[] = [...auditEvents];
   const feedback: FeedbackRow[] = [];
@@ -275,10 +279,40 @@ export function createMockApi(): MockApi {
       }
       const next = resimulate(lines, proposalOrder);
       Object.assign(proposalOrder, next);
-      const nextApproval = { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length };
+      // An edited basket is no longer one of the engine's options.
+      const options = approval.options?.map((option) => ({ ...option, chosen: false }));
+      const nextApproval = { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length, options };
       approvals.set(approval.id, nextApproval);
       appendChange(proposalOrder.id, kind, change.productId, from, to, actor, summary);
       return { order: proposalOrder, approval: nextApproval };
+    },
+    async chooseOption(approvalId, optionId, actor) {
+      const current = pendingApproval(approvalId);
+      const option = current.options?.find((row) => row.id === optionId);
+      if (!option) throw new ApiError("NOT_FOUND", `Option ${optionId} was not found.`);
+      if (option.cutoffPassed) throw new ApiError("CLOSING_PASSED", "The order cut-off for this option has passed.");
+      const lines = structuredClone(milkOptionLines[optionId]);
+      if (!lines) throw new ApiError("NOT_FOUND", `Option ${optionId} has no basket.`);
+      const order = demoOrders.get(current.orderId)!;
+      Object.assign(order, resimulate(lines, order));
+      const approval = {
+        ...current,
+        totalExVat: order.totalExVat,
+        totalInclVat: order.totalInclVat,
+        lineCount: lines.length,
+        options: current.options?.map((row) => ({ ...row, chosen: row.id === optionId })),
+      };
+      approvals.set(approval.id, approval);
+      audit.push({
+        id: `EV-${audit.length + 1}`,
+        at: new Date().toISOString(),
+        kind: "approval",
+        actor,
+        orderId: order.id,
+        summary: `Chose option ${optionId} for ${order.id}`,
+        reason: `Re-simulated: ${formatEur(order.totalInclVat)} incl VAT. Nothing is approved or sent yet.`,
+      });
+      return approval;
     },
     async listFeedback(filter) {
       return filter?.orderId ? feedback.filter((row) => row.orderId === filter.orderId) : [...feedback];
