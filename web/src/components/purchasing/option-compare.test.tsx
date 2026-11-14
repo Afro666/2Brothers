@@ -6,7 +6,7 @@ import { createMockApi } from "@/api/mock";
 import { ApiError } from "@/api/types";
 import { ApprovalCard } from "@/components/purchasing/approval-card";
 import { CHOOSE_TIMEOUT_MS, OptionCompare } from "@/components/purchasing/option-compare";
-import { formatEur } from "@/lib/format";
+import { formatEur, formatNumber } from "@/lib/format";
 import { confirmedDemoApproval, confirmedDemoOrder, milkOptions } from "@/mocks/milk-case";
 import { renderApp } from "@/test/render";
 import type { ProposalOption } from "@/types";
@@ -111,6 +111,16 @@ describe("OptionCompare", () => {
     ).toBeVisible();
     expect(within(row("B")).getByText("The order cut-off has passed.")).toBeVisible();
     expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
+  });
+
+  it("names the option heading and toggle by the title only, with price and blocked reason as description", () => {
+    render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
+    const line = optionB.lines[0];
+    const title = `Option B: ${formatNumber(line.quantity)} ${line.unit} ${line.productName ?? line.productId}`;
+    const price = line.unitPrice == null ? "unknown" : `${formatEur(line.unitPrice)} per ${line.unit}`;
+    expect(screen.getByRole("heading", { name: title })).toBeVisible();
+    expect(optionToggle("B")).toHaveAccessibleName(title);
+    expect(optionToggle("B")).toHaveAccessibleDescription(new RegExp(`${price}.*The order cut-off has passed\\.`));
   });
 
   it("opens and collapses an option independently by clicking its row", async () => {
