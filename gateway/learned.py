@@ -83,8 +83,37 @@ def compute_facts(gw, kitchen_id: str, today) -> list[dict]:
     return unique
 
 
+def leave_out_declined(facts: list[dict], needs: list[dict],
+                       recipe_products: set[str]) -> tuple[list[dict], list[dict]]:
+    """Split a plan's needs into (kept, left out) by the active DECLINED_PRODUCT facts (#1307).
+
+    A product a recipe of the window needs is kept: nothing else covers a recipe
+    ingredient, so `plan_problems` warns instead. A left-out entry is what the proposal
+    shows in `excluded`: the reason, the fact id for the undo, the evidence and the need.
+    """
+    declined = {str(fact["product_id"]): fact for fact in facts
+                if fact.get("kind") == "DECLINED_PRODUCT" and fact.get("active") is True}
+    kept, left_out = [], []
+    for need in needs:
+        product_id = str(need["product_id"])
+        fact = declined.get(product_id)
+        evidence = (fact or {}).get("evidence") or {}
+        if fact is None or product_id in recipe_products or not evidence.get("rows"):
+            kept.append(need)
+            continue
+        left_out.append({
+            "product_id": product_id,
+            "reason": (f"LEARNED_DECLINED: not proposed: you removed it {evidence['rows']} times "
+                       f"(last on {evidence.get('last')}). Switch this learned fact off to get it back."),
+            "fact_id": fact["id"], "evidence": dict(evidence),
+            "quantity": need.get("unlearned_quantity", need["quantity"]), "unit": need["unit"],
+            "name": fact.get("name") or product_id})
+    return kept, left_out
+
+
 def plan_problems(gw, kitchen_id: str, facts: list[dict], product_ids: list[str]) -> list[str]:
-    """Warning-only sentences for declined products and late suppliers of this plan."""
+    """Warning sentences for the declined products that stay (a recipe needs them) and
+    the late suppliers of this plan."""
     product_ids = {str(pid) for pid in product_ids}
     problems = []
     declined = {fact["product_id"]: fact for fact in facts

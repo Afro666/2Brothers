@@ -495,6 +495,13 @@ class Gateway:
                 ratio = ratios.get(line["product_id"])
                 if ratio is not None and ratio > 0:
                     line["unlearned_quantity"] = f"{(Decimal(str(line['quantity'])) / ratio).normalize():f}"
+            # Shown, not hidden (#1307): a product a learned fact left out, with the fact id
+            # for the undo. A person who added it back by hand has it as a need again.
+            asked = {need["product_id"] for need in needs}
+            for entry in request.get("learned_excluded") or []:
+                if entry["product_id"] not in asked:
+                    sim["excluded"].append(dict(entry))
+                    sim["mandate"]["reasons"].append(f"{entry['product_id']}: {entry['reason']}")
         sim["shortfalls"] = [{"product_id": p, "shortfall": f"{q.normalize():f}", "unit": u} for p, q, u in short]
         for p, q, u in short:
             sim["mandate"]["reasons"].append(f"{p}: {q.normalize():f} {u} of the plan's need cannot be covered for this date.")
@@ -890,6 +897,8 @@ class Gateway:
                                      entries_override=entries)
         total: dict[tuple[str, str], Decimal] = {}
         uncounted: set[str] = set()
+        # A recipe of a planned day needs these: learning never leaves one out (#1307).
+        recipe_products = {row["product_id"] for row in rows if row.get("source") == "menu_plan"}
         for row in rows:
             need = row["net_need"]
             if need is None:
@@ -908,6 +917,7 @@ class Gateway:
         from engine.learning import apply_ratio
         from gateway import learned as learned_facts
         # Learning is an extra: any error in it leaves the plan unlearned (#1522).
+        left_out: list[dict] = []
         try:
             learned_needs = [dict(need) for need in needs]
             facts = learned_facts.compute_facts(self, kitchen_id, self.now().date())
@@ -927,13 +937,22 @@ class Gateway:
                 need["learned"] = {**info, "ratio": f"{Decimal(str(info['ratio'])).normalize():f}",
                                    "unit": need["unit"]}
                 need["unlearned_quantity"] = original
+            # A product the kitchen keeps removing gets no line, and the proposal says so (#1307).
+            learned_needs, learned_left_out = learned_facts.leave_out_declined(
+                facts, learned_needs, recipe_products)
             learned_problems = [*problems, *learned_facts.plan_problems(
                 self, kitchen_id, facts, [need["product_id"] for need in learned_needs])]
         except Exception:
             log.warning("learned facts failed for kitchen %s; plan proposed unlearned", kitchen_id, exc_info=True)
         else:
-            needs, problems = learned_needs, learned_problems
-        return {"product_ids": [n["product_id"] for n in needs], "quantity": str(len(needs)), "unit": "products",
+            needs, problems, left_out = learned_needs, learned_problems, learned_left_out
+        names = {entry["product_id"]: entry.pop("name") for entry in left_out}
+        if not needs:
+            raise GatewayError(422, "NOTHING_NEEDED", "every product this plan needs is one you keep removing",
+                               problems=[*problems, *(f"{names[entry['product_id']]}: {entry['reason']}"
+                                                      for entry in left_out)])
+        return {**({"learned_excluded": left_out} if left_out else {}),
+                "product_ids": [n["product_id"] for n in needs], "quantity": str(len(needs)), "unit": "products",
                 "requested_date": str(body.get("requested_date") or body["from"]), "needs": needs,
                 "text": body.get("text") or f"Order for the menu plan {start.isoformat()} to {end.isoformat()}",
                 "window": {"from": start.isoformat(), "to": end.isoformat()}, "problems": problems,
@@ -988,6 +1007,8 @@ class Gateway:
         request["made_by"] = "menu_plan" if planned else ("parser" if parsed else "structured")
         if planned:
             request.update({key: body[key] for key in ("needs", "window", "problems")})
+            if body.get("learned_excluded"):
+                request["learned_excluded"] = body["learned_excluded"]
         elif needs:
             request["needs"] = needs
         if parsed and body.get("query"):
@@ -1040,6 +1061,10 @@ class Gateway:
                     "from_qty": need["learned"].get("from_qty"), "to_qty": need["learned"].get("to_qty"),
                     "unit": need["learned"].get("unit")}
                    for need in request.get("needs") or [] if need.get("learned")]
+        # A product left out by a learned fact: the need went to zero (#1307).
+        applied += [{"product_id": entry["product_id"], "fact_id": entry["fact_id"],
+                     "from_qty": entry["quantity"], "to_qty": "0", "unit": entry["unit"]}
+                    for entry in request.get("learned_excluded") or []]
         if applied:
             self._audit(kitchen_id, "learned_fact_applied", actor, proposal_id=doc["_id"],
                         offer_id=offer["offer_id"], applied=applied)
