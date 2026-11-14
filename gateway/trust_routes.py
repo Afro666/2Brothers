@@ -58,10 +58,9 @@ def chain_rows(gw, kitchen_id: str, limit: str | None) -> dict:
         count = 0
     if not 1 <= count <= CHAIN_MAX:
         raise GatewayError(422, "INVALID_REQUEST", f"limit: a whole number from 1 to {CHAIN_MAX}")
-    newest = gw.db.audit_log.find({"server.kitchen_id": kitchen_id}).sort("_id", -1).limit(count)
     return {"entries": [{"seq": entry["seq"], "prev_hash": entry["prev_hash"], "hash": entry["hash"],
                          "event": _document(gw, "audit_log", entry)}
-                        for entry in reversed(list(newest))]}
+                        for entry in trust.chain_entries(gw.db, kitchen_id, count)]}
 
 
 def _key(body: dict) -> str:
