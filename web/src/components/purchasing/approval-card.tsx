@@ -33,6 +33,7 @@ import {
   peopleUnit,
 } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { inclVatOf, inclVatText } from "@/lib/vat";
 import { splitChecks, statusChips } from "@/lib/proposal-checks";
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
@@ -195,6 +196,8 @@ export function ApprovalCard({
   recalls?: RecallAlert[];
 }) {
   const t = useT();
+  // #1630: `totalInclVat` is the approve figure; incl VAT is `inclVat`, or unknown when a rate is.
+  const inclVat = inclVatOf(request);
   const [open, setOpen] = useState<"approve" | "reject" | null>(null);
   const [status, setStatus] = useState(request.status);
   const [reason, setReason] = useState("");
@@ -499,7 +502,7 @@ export function ApprovalCard({
         <dl className="flex items-baseline gap-3 sm:block sm:text-right">
           <dt className="sr-only">{t("Total incl VAT")}</dt>
           <dd className="inline-block border-b-[3px] border-double border-foreground text-xl leading-7 font-bold tabular-nums">
-            {formatEur(request.totalInclVat)}
+            {inclVat !== null ? formatEur(inclVat) : inclVatText(request, t, formatEur)}
           </dd>
           <dt className="sr-only">{t("Total ex VAT")}</dt>
           <dd className="font-mono text-xs text-muted-foreground tabular-nums">
@@ -725,7 +728,9 @@ export function ApprovalCard({
                 <Check aria-hidden />
                 {stockMessage || approvalBlockedReason
                   ? t("Approve")
-                  : t("Approve {amount} incl VAT", { amount: formatEur(request.totalInclVat) })}
+                  : inclVat === null
+                    ? t("Approve {amount}", { amount: formatEur(request.totalInclVat) })
+                    : t("Approve {amount} incl VAT", { amount: formatEur(request.totalInclVat) })}
               </Button>
             ) : null}
           </>
@@ -743,9 +748,9 @@ export function ApprovalCard({
               </span>
             ) : null}
             {status === "APPROVED"
-              ? t("Approved: {exVat} ex VAT, {inclVat} incl VAT. The order may now be sent.", {
+              ? t("Approved: {exVat} ex VAT, {total}. The order may now be sent.", {
                   exVat: formatEur(request.totalExVat),
-                  inclVat: formatEur(request.totalInclVat),
+                  total: inclVatText(request, t, formatEur),
                 })
               : status === "IN_PROGRESS"
                 ? t("In progress. This proposal cannot be approved yet.")
@@ -764,10 +769,16 @@ export function ApprovalCard({
           <DialogHeader>
             <DialogTitle>{t("Approve this order?")}</DialogTitle>
             <DialogDescription>
-              {t("You approve exactly {exVat} ex VAT ({inclVat} incl VAT). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
-                exVat: formatEur(request.totalExVat),
-                inclVat: formatEur(request.totalInclVat),
-              })}
+              {inclVat === null
+                ? t("You approve exactly {exVat} ex VAT, {amount} in all ({total}). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
+                    exVat: formatEur(request.totalExVat),
+                    amount: formatEur(request.totalInclVat),
+                    total: inclVatText(request, t, formatEur),
+                  })
+                : t("You approve exactly {exVat} ex VAT ({inclVat} incl VAT). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
+                    exVat: formatEur(request.totalExVat),
+                    inclVat: formatEur(request.totalInclVat),
+                  })}
             </DialogDescription>
           </DialogHeader>
           {waitingNotice ? <p className="hatch text-sm text-warning">{waitingNotice}</p> : null}

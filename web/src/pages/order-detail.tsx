@@ -19,6 +19,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, formatDateTime, formatEur, shortOrderId } from "@/lib/format";
 import { getLanguage, translate, useT } from "@/lib/i18n";
+import { inclVatOf, inclVatText } from "@/lib/vat";
 import { placedStatuses } from "@/lib/order-status";
 import { orderTitle } from "@/lib/order-title";
 import { useAsync } from "@/lib/use-async";
@@ -181,7 +182,11 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
                 <dt>{t("Total incl VAT")}</dt>
                 <dd className="text-right font-mono text-lg tabular-nums">
                   {/* docs/contract.md: with a VAT unknown, `expected_total` is not a total incl VAT. */}
-                  {order.withoutProposal && order.vat === null ? t("unknown") : t(formatEur(order.totalInclVat))}
+                  {order.withoutProposal && order.vat === null && order.inclVat === undefined
+                    ? t("unknown")
+                    : inclVatOf(order) !== null
+                      ? t(formatEur(inclVatOf(order)))
+                      : inclVatText(order, t, formatEur)}
                 </dd>
               </div>
             </dl>
