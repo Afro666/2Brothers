@@ -326,5 +326,6 @@ def demand_rows(db, kitchen_id: str, start: date, end: date,
             rows.append({"product_id": f["meta"]["product_id"], "date": day, "unit": f["unit"],
                          "covers": None, "gross_need": Decimal(str(f["need"])),
                          "why": f.get("why") or "forecast from history", "source": "history"})
-    stock = {item["product_id"]: item["position"] for item in _stock_items(db, kitchen_id, today)}
-    return net_needs(rows, stock), problems
+    stock = {item["product_id"]: (item["unit"], item["position"])
+             for item in _stock_items(db, kitchen_id, today)}
+    return net_needs(rows, stock, problems), problems

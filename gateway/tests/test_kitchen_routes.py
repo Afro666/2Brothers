@@ -61,6 +61,24 @@ def test_recipes_menu_plan_stock_and_demand_end_to_end(env):
     assert "menu_plan_changed" in kinds and "stock_counted" in kinds
 
 
+def test_stock_in_kg_and_recipe_in_g_gives_unknown_net_need(env):
+    client, _, db = env
+    salad = {"recipe_id": "salad", "name": "Carrot salad", "ingredients": [
+        {"product_id": "460708", "qty_per_portion": "80", "unit": "KG"}]}
+    assert client.post(K + "/recipes", headers=HUMAN, json=salad).status_code == 200
+    # The API takes L, KG or PCS only; a G recipe (older data, a direct write) must still not
+    # be netted against a KG count.
+    assert db.recipes.update_one({"recipe_id": "salad"}, {"$set": {"ingredients.0.unit": "G"}}).modified_count == 1
+    plan = {"days": [{"date": "2026-11-16", "meal": "lunch", "recipe_id": "salad", "covers": 10}]}
+    assert client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan).status_code == 200
+    count = {**COUNT, "idempotency_key": "kg", "counts": [{"product_id": "460708", "on_hand": "5", "unit": "KG"}]}
+    assert client.post(K + "/stock-counts", headers=HUMAN, json=count).status_code == 200
+    demand = client.get(K + "/demand?from=2026-11-16&to=2026-11-16", headers=AGENT).json()
+    row = next(r for r in demand["rows"] if r["product_id"] == "460708")
+    assert row["gross_need"] == "800" and row["net_need"] is None           # 800 G less 5 KG: not 795
+    assert any("stock counted in KG" in p and "G" in p for p in demand["problems"])
+
+
 def test_suppliers_crud_and_validation(env):
     client, _, _ = env
     body = {"supplier_id": "sup-bakery", "name": "Bakery", "adapter": "manual",
