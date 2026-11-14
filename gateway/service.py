@@ -1477,7 +1477,7 @@ class Gateway:
         if need is None:
             hybrid = {"hybrid": True, "text": False}.get(mode)
             rows, kind = catalog_search.search(self.db, query, filters, limit, injected=self._search,
-                                               hybrid=hybrid)
+                                               hybrid=hybrid, caller="catalog")   # rests apart (#1452)
             out = {"products": _matched_by(rows), "search": kind}
             if hybrid and kind == "text" and (query or "").strip():
                 out["meaning_unavailable"] = True     # no query vector: the words answered

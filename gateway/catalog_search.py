@@ -9,6 +9,11 @@ because of it. The answer says which one ran.
 The embedding service on a free tier allows 3 requests a minute, so a query's vector is
 kept in memory for the life of the process, and after a failure hybrid is not tried
 again for a while.
+
+Each caller rests on its own (#1452): a 429 from the Catalog page's "Search by meaning"
+("catalog") or from an unknown-item suggestion ("suggest") never sends the Buyer's search
+("buyer") to words. The other callers also leave the last new embedding call of each
+minute to the Buyer, so trying the switch cannot use up the Buyer's budget.
 """
 
 from __future__ import annotations
@@ -19,9 +24,18 @@ import time
 QUERY_TIMEOUT_S = 2.0      # cap on the query embedding call
 COOLDOWN_S = 60.0          # after a failed hybrid search, use text only for this long
 CACHE_SIZE = 256
+BUYER = "buyer"            # the order path; "catalog" (the Catalog page) and "suggest" are the others
+KEY_PER_MINUTE = 3         # the embedding key's free tier
+BUYER_KEEPS = 1            # new embedding calls a minute the other callers leave to the Buyer
 
 _vectors: dict[str, list[float]] = {}
-_state = {"skip_until": 0.0}
+_skip_until: dict[str, float] = {}      # caller -> end of its rest after a failure
+_calls: list[float] = []                # when each new embedding call of the last minute went out
+
+
+class SlotKept(RuntimeError):
+    """No new embedding call for this caller now: the minute's last one is the Buyer's.
+    Nothing failed, so the caller falls back to words without a rest."""
 
 
 def enabled() -> bool:
@@ -31,11 +45,31 @@ def enabled() -> bool:
 def reset() -> None:
     """Forget cached query vectors and the cooldown (tests, and after a config change)."""
     _vectors.clear()
-    _state["skip_until"] = 0.0
+    _skip_until.clear()
+    _calls.clear()
 
 
-def _query_embedder(now=time.monotonic):
-    """An embedder for one query: cached, at most `QUERY_TIMEOUT_S`, never retried."""
+def resting(caller: str, text: str, now=time.monotonic) -> bool:
+    """True while `caller` rests after a failure and `text` has no vector kept in memory."""
+    return now() < _skip_until.get(caller, 0.0) and (text or "").strip().lower() not in _vectors
+
+
+def rest(caller: str, now=time.monotonic) -> None:
+    """After a failed embedding call: `caller` uses words only for `COOLDOWN_S`."""
+    _skip_until[caller] = now() + COOLDOWN_S
+
+
+def _take_slot(caller: str, now) -> None:
+    t = now()
+    _calls[:] = [c for c in _calls if t - c < 60.0]
+    if caller != BUYER and len(_calls) >= KEY_PER_MINUTE - BUYER_KEEPS:
+        raise SlotKept("the last embedding call of this minute is kept for the Buyer")
+    _calls.append(t)
+
+
+def _query_embedder(caller: str = BUYER, now=time.monotonic):
+    """An embedder for one query: cached, at most `QUERY_TIMEOUT_S`, never retried. A
+    caller other than the Buyer gets `SlotKept` instead of the minute's last new call."""
     import httpx
 
     from store import embeddings
@@ -51,9 +85,11 @@ def _query_embedder(now=time.monotonic):
         for text in texts:
             key = text.strip().lower()
             if key not in _vectors:
+                _take_slot(caller, now)
+                vector = embeddings.embed([text], input_type, post=post, sleep=no_retry)[0]
                 if len(_vectors) >= CACHE_SIZE:
                     _vectors.pop(next(iter(_vectors)))
-                _vectors[key] = embeddings.embed([text], input_type, post=post, sleep=no_retry)[0]
+                _vectors[key] = vector
             out.append(_vectors[key])
         return out
 
@@ -62,7 +98,7 @@ def _query_embedder(now=time.monotonic):
 
 def search(db, query: str, filters: dict | None, limit: int, kitchen_id: str | None = None,
            *, injected=None, now=time.monotonic, hybrid_ok: bool = True,
-           hybrid: bool | None = None) -> tuple[list[dict], str]:
+           hybrid: bool | None = None, caller: str = BUYER) -> tuple[list[dict], str]:
     """`(rows, kind)`: the best matches and which search gave them, "text" or "hybrid".
 
     `injected` is the gateway's own search function (tests and offline runs): it is used
@@ -70,6 +106,7 @@ def search(db, query: str, filters: dict | None, limit: int, kitchen_id: str | N
     search inside one category needs no meaning search and must not spend an embedding call.
     `hybrid` (True or False) decides for this one call whatever `SEARCH_HYBRID` says (the
     Catalog page's "Search by meaning" switch, #1382); None leaves it to `SEARCH_HYBRID`.
+    `caller` ("buyer", "catalog") picks whose rest applies (#1452).
 
     While hybrid rests after a failure, a query whose vector is kept in memory still runs
     hybrid: it needs no new call to the embedding service.
@@ -79,17 +116,18 @@ def search(db, query: str, filters: dict | None, limit: int, kitchen_id: str | N
     from store.search import search_products
 
     text = (query or "").strip()
-    resting = now() < _state["skip_until"] and text.lower() not in _vectors
     wanted = enabled() if hybrid is None else hybrid
-    if hybrid_ok and wanted and text and not resting:
+    if hybrid_ok and wanted and text and not resting(caller, text, now):
         try:
             rows = search_products(db, query, filters or {}, limit, kitchen_id=kitchen_id,
-                                   hybrid=True, embedder=_query_embedder())
+                                   hybrid=True, embedder=_query_embedder(caller, now))
             return rows, "hybrid"
         except ValueError:
             raise              # a bad filter or limit is the caller's error in either search
+        except SlotKept:
+            pass               # nothing failed: words this time, no rest
         except Exception:      # no key, 429, timeout, no vector index: never fail the search
-            _state["skip_until"] = now() + COOLDOWN_S
+            rest(caller, now)
     return search_products(db, query, filters or {}, limit, kitchen_id=kitchen_id), "text"
 
 
@@ -118,14 +156,14 @@ def meaning(db, query: str, filters: dict | None, limit: int, kitchen_id: str | 
             raise
         except Exception:
             raise MeaningUnavailable("the meaning search failed") from None
-    if now() < _state["skip_until"] and text.lower() not in _vectors:
+    if resting(BUYER, text, now):
         raise MeaningUnavailable("the embedding service rests after a failure")
     from store.search import search_products
     try:
         return search_products(db, query, filters or {}, limit, kitchen_id=kitchen_id,
-                               hybrid=True, embedder=_query_embedder())
+                               hybrid=True, embedder=_query_embedder(BUYER, now))
     except ValueError:
         raise
     except Exception:          # no key, 429, timeout, no vector index
-        _state["skip_until"] = now() + COOLDOWN_S
+        rest(BUYER, now)
         raise MeaningUnavailable("the query vector could not be made") from None
