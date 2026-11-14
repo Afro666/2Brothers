@@ -153,7 +153,7 @@ def register(app, gw, principal, body) -> None:
     @app.get(k + "/stock")
     def stock(kitchen_id: str, who=Depends(principal)):
         reader(who, kitchen_id)
-        return {"as_of": gw().now().isoformat(), "items": _json(stock_items(kitchen_id))}
+        return {"as_of": gw().now().isoformat(), "items": _json(_named(gw().db, stock_items(kitchen_id)))}
 
     # ---- future demand ------------------------------------------------------------------
     @app.get(k + "/demand")
@@ -168,13 +168,20 @@ def register(app, gw, principal, body) -> None:
             return start, end
         start, end = guarded(window)
         rows, problems = demand_rows(gw().db, kitchen_id, start, end)
-        return {"from": start.isoformat(), "to": end.isoformat(), "rows": _json(rows), "problems": problems}
+        return {"from": start.isoformat(), "to": end.isoformat(), "rows": _json(_named(gw().db, rows)),
+                "problems": problems}
 
     # ---- settings and sharing: an approver only -----------------------------------------
     @app.get(k + "/settings")
     def get_settings(kitchen_id: str, who=Depends(principal)):
         reader(who, kitchen_id)
-        return _json(repo().settings.get(kitchen_id))
+        from engine.params import KitchenParams
+        base = KitchenParams()
+        # `defaults` is what the engine uses for every field the kitchen has not set.
+        defaults = {"service_level": base.service_level, "max_cover_days": base.max_cover_days,
+                    "stockout_cap": base.stockout_cap, "budget_warning_order_eur": base.budget_warning_order_eur,
+                    "budget_warning_week_eur": base.budget_warning_week_eur}
+        return {**_json(repo().settings.get(kitchen_id)), "defaults": _json(defaults)}
 
     @app.put(k + "/settings")
     async def put_settings(kitchen_id: str, request: Request, who=Depends(principal)):
@@ -201,6 +208,15 @@ def register(app, gw, principal, body) -> None:
             raise GatewayError(422, "INVALID_REQUEST", "supplier_id and share_forecast (true or false) are required")
         guarded(lambda: set_sharing(gw().db, kitchen_id, str(data["supplier_id"]), data["share_forecast"], person))
         return {"sharing": _json(list_sharing(gw().db, kitchen_id))}
+
+
+def _named(db, rows: list[dict]) -> list[dict]:
+    """Add `product_name` where the catalog or the kitchen's own products know it; a product
+    without a name keeps only its id (never an invented name)."""
+    ids = sorted({row["product_id"] for row in rows})
+    names = {d["_id"]: (d.get("names") or {}).get("en")
+             for d in db.products.find({"_id": {"$in": ids}}, {"names": 1})} if ids else {}
+    return [{**row, "product_name": names.get(row["product_id"])} for row in rows]
 
 
 def _stock_items(db, kitchen_id: str) -> list[dict]:
