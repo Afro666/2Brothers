@@ -29,7 +29,7 @@ export function HomePage() {
     <AppShell activeId="home">
       <div className="mx-auto max-w-6xl space-y-6">
         <header>
-          <h1 className="text-[28px] leading-8 font-bold tracking-[-0.015em]">Kitchen Buyer</h1>
+          <h1 className="page-title">Kitchen Buyer</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {side === "kitchen" ? "What needs you today." : "Where demand may outrun supply."}
           </p>

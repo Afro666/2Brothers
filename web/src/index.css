@@ -139,6 +139,13 @@
 }
 
 @layer components {
+  .page-title {
+    font-size: 28px;
+    line-height: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+
   .label-caps {
     font-family: var(--font-mono);
     font-size: 0.6875rem;

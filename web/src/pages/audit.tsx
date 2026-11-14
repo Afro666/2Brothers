@@ -42,7 +42,7 @@ export function AuditPage() {
     <AppShell activeId="audit">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-[28px] leading-8 font-bold tracking-[-0.015em]">Activity log</h1>
+          <h1 className="page-title">Activity log</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Every step the Buyer, the gateway and people took, with who did it and why.
           </p>
