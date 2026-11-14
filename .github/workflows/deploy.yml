@@ -17,6 +17,7 @@ on:
       - "env/**"
       - "demo/**"
       - "pyproject.toml"
+      - "VERSION"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 

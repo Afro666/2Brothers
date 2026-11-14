@@ -10,6 +10,11 @@ ARG VITE_GATEWAY_URL=
 ENV VITE_GATEWAY_URL=$VITE_GATEWAY_URL
 ARG VITE_USE_MOCKS=true
 ENV VITE_USE_MOCKS=$VITE_USE_MOCKS
+# Shown on Settings > Developer. Set by deploy/update.sh; "unknown" in a local build.
+ARG VITE_APP_VERSION=
+ENV VITE_APP_VERSION=$VITE_APP_VERSION
+ARG VITE_GIT_SHA=
+ENV VITE_GIT_SHA=$VITE_GIT_SHA
 RUN npm run build
 
 # Caddy serves the built files. Its config is in the image, so a config change
