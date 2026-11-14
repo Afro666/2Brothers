@@ -165,3 +165,36 @@ def test_on_order_is_unknown_when_net_content_unit_differs_from_the_kitchen_unit
     db.products.update_one({"_id": "462775"}, {"$unset": {"net_content": ""}})
     item = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}["462775"]
     assert item["on_order"] is None and item["on_order_known"] is False
+
+
+PLANNING = [("/suppliers", "supplier_id", {"name": "Bakery", "adapter": "manual"}),
+            ("/recipes", "recipe_id", {"name": "Carrot soup", "ingredients": SOUP["ingredients"]}),
+            ("/products", "product_id", {"name": "Rye bread", "supplier_id": "sup-bakery", "unit": "PCS"})]
+
+
+def test_a_repeated_idempotency_key_replays_planning_writes(env):
+    """#745: web and POS clients retry; a repeat with the same key is the same row."""
+    client, _, _ = env
+    for path, id_key, data in PLANNING:
+        name = path.strip("/")
+        first = client.post(K + path, headers=HUMAN, json={**data, "idempotency_key": "k1"})
+        assert first.status_code == 200, first.text
+        again = client.post(K + path, headers=HUMAN, json={**data, "idempotency_key": "k1"})
+        assert again.json() == first.json()
+        assert len(client.get(K + path, headers=AGENT).json()[name]) == 1, path
+        assert client.post(K + path, headers=HUMAN, json=data).status_code == 200     # no key: a new row
+        assert len(client.get(K + path, headers=AGENT).json()[name]) == 2, path
+        item = f"{K}{path}/{first.json()[id_key]}"
+        put = client.put(item, headers=HUMAN, json={"name": "Renamed", "idempotency_key": "u1"})
+        assert put.status_code == 200, put.text
+        assert client.put(item, headers=HUMAN, json={"name": "Other", "idempotency_key": "u1"}).json() == put.json()
+        assert client.get(item, headers=AGENT).json()["name"] == "Renamed"
+    plan = {"days": [{"date": "2026-11-16", "meal": "lunch", "recipe_id": "soup", "covers": 10}],
+            "idempotency_key": "m1"}
+    first = client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan)
+    assert first.status_code == 200, first.text
+    assert client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan).json() == first.json()
+    kinds = [e["kind"] for e in client.get(K + "/audit", headers=AGENT).json()["events"]]
+    assert kinds.count("menu_plan_changed") == 1 and kinds.count("suppliers_created") == 2
+    blank = client.post(K + "/suppliers", headers=HUMAN, json={"name": "x", "adapter": "manual", "idempotency_key": ""})
+    assert blank.status_code == 422
