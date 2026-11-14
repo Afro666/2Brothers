@@ -12,6 +12,7 @@ import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import { readShelfPhotoMock } from "@/api/mock-shelf";
 import { createMockAuth } from "@/api/mock-auth";
+import { createTokensMock } from "@/api/mock-tokens";
 import {
   approval as seedApproval,
   confirmedDemoApproval,
@@ -250,6 +251,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       recordAudit: (event) => audit.push({ ...event, id: `EV-${audit.length + 1}`, at: new Date().toISOString() }),
     }),
     lookupKitchenBrand: lookupKitchenBrandMock,
+    ...createTokensMock(),
     readShelfPhoto: readShelfPhotoMock,
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);

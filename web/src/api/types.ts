@@ -46,6 +46,26 @@ export interface Session {
 
 export type Draft<T extends { id: string }> = Omit<T, "id"> & { id?: string };
 
+export type ApiTokenScope = "kitchen:read" | "kitchen:propose" | "kitchen:write";
+
+/** The secret-free token row returned by every token route. */
+export interface ApiToken {
+  id: string;
+  name: string;
+  scopes: ApiTokenScope[];
+  prefix: string;
+  createdAt: string;
+  createdBy: string;
+  /** Undefined means this gateway did not send the field; null means never used. */
+  lastUsedAt?: string | null;
+  revokedAt: string | null;
+}
+
+/** Only token creation returns the secret; the list and revoke routes return ApiToken. */
+export interface CreatedApiToken extends ApiToken {
+  token: string;
+}
+
 export interface StockCount {
   productId: string;
   onHand: number | null;
@@ -125,6 +145,9 @@ export interface Api {
    * returns sample data from the mock. Absent on the mock itself.
    */
   readonly live?: ReadonlySet<keyof Api>;
+  listApiTokens(): Promise<ApiToken[]>;
+  createApiToken(input: { name: string; scopes: ApiTokenScope[] }): Promise<CreatedApiToken>;
+  revokeApiToken(id: string): Promise<ApiToken>;
   getSession(): Promise<Session | null>;
   signIn(email: string, password: string): Promise<Session>;
   signOut(): Promise<void>;
