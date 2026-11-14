@@ -266,6 +266,8 @@ describe("mapCatalogProduct", () => {
     expect(formatPack(noValue.salesUnit, noValue.baseUnitsPerSalesUnit, noValue.baseUnit)).toBe("case (pack size unknown)");
     const noUnit = mapCatalogProduct({ ...MILK, sales_unit: "KI", units: [{ unit: "ST", size_in_base_units: 1 }] });
     expect(noUnit.baseUnitsPerSalesUnit).toBeNull();
+    const noNetUnit = mapCatalogProduct({ ...MILK, sales_unit: "KI", units: [{ unit: "KI", size_in_base_units: 6 }], net_content: { value: 0.5, unit: null } });
+    expect(noNetUnit.baseUnitsPerSalesUnit).toBeNull();
   });
 
   it("maps a full row to the web Product", () => {

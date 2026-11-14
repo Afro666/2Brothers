@@ -64,4 +64,11 @@ describe("ProductCard catalog facts", () => {
     expect(screen.getByText("Jäähdytetty, +2–+6 °C")).toBeInTheDocument();
     expect(screen.queryByText(/Chilled/)).not.toBeInTheDocument();
   });
+
+  it("falls back to the English name for an empty Finnish name, and translates an unknown temperature", () => {
+    updateLanguage("fi", false);
+    render(<ProductCard product={{ ...products.arlaUht1l, names: { ...products.arlaUht1l.names, fi: "" }, temperature: null }} />);
+    expect(screen.getByRole("link", { name: products.arlaUht1l.names.en })).toBeInTheDocument();
+    expect(screen.queryByText("unknown")).not.toBeInTheDocument();
+  });
 });

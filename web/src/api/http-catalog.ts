@@ -133,7 +133,7 @@ export function mapCatalogProduct(value: unknown): Product {
   // `size_in_base_units` counts base units (pieces), `net_content` is what one base unit holds:
   // 6 pieces of 0.5 L are 3 L. Content unknown stays unknown; no content at all is a count of pieces.
   const baseUnitsPerSalesUnit =
-    packSize === null || (netUnit !== null && netValue === null)
+    packSize === null || (net !== null && (netUnit === null || netValue === null))
       ? null
       : netUnit !== null && netValue !== null
         ? Math.round(packSize * netValue * 1e6) / 1e6

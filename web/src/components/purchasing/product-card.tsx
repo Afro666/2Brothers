@@ -30,7 +30,7 @@ function Fact({ icon: Icon, label, value, hint }: { icon: typeof Truck; label: s
 export function ProductCard({ product, className }: { product: Product; className?: string }) {
   const t = useT();
   const { language } = useLanguage();
-  const title = (language === "fi" ? product.names.fi : undefined) ?? product.names.en;
+  const title = (language === "fi" ? product.names.fi : undefined) || product.names.en;
   const altNames = [language === "fi" ? product.names.en : product.names.fi, product.names.sv]
     .filter((name) => name && name !== title)
     .join(" · ");
@@ -40,7 +40,7 @@ export function ProductCard({ product, className }: { product: Product; classNam
   })) ?? null;
   const temperature = product.temperature?.label.match(/^(Ambient|Chilled|Frozen)(?:, (.+) to (.+) °C)?$/);
   const temperatureLabel = !product.temperature
-    ? "unknown"
+    ? t("unknown")
     : temperature?.[2] != null
       ? t("{temperature}, {minimum} to {maximum} °C", {
           temperature: t(temperature[1]),
