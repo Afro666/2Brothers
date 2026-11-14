@@ -246,7 +246,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createApprovalTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen, mock.getProducts),
+    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     // A live event or a new connection means the lists may have changed since a request began.
     subscribeEvents: (onEvent, onStatus) =>
       events.subscribeEvents!(
