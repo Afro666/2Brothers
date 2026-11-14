@@ -22,6 +22,7 @@ import type {
   SubstituteOption,
   KitchenSettings,
   ForecastAccuracy,
+  KitchenBrandLookup,
 } from "@/types";
 
 /** Who a decision is recorded as in the audit log. */
@@ -108,6 +109,11 @@ export interface Api {
   saveKitchenSettings(settings: KitchenSettings, actor: AuditActor): Promise<KitchenSettings>;
   /** Predicted against actual for the last 12 full weeks, and the forecast for this week and the 3 after. */
   getForecastAccuracy(): Promise<ForecastAccuracy>;
+  /**
+   * Onboarding: the gateway looks the kitchen up with Context.dev (`POST /v1/brand/retrieve`)
+   * from a work email or a website. It saves nothing; a person confirms the fields first.
+   */
+  lookupKitchenBrand(query: { email: string } | { website: string }): Promise<KitchenBrandLookup>;
 }
 
 /** A gateway error: `code` is the contract's error code, e.g. `TOTAL_MISMATCH`. */

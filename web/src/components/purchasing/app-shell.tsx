@@ -13,6 +13,7 @@ import {
   ScrollText,
   Settings,
   ShoppingBasket,
+  Sparkles,
   TrendingUp,
   Truck,
   UserCheck,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 
+import { KitchenLogo } from "@/components/purchasing/kitchen-logo";
 import { ThemePicker } from "@/components/purchasing/theme-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -54,6 +56,7 @@ export const KITCHEN_NAV: NavItem[] = [
   { id: "products", label: "Products", href: "/products", icon: ShoppingBasket },
   { id: "catalog", label: "Catalog", href: "/catalog", icon: BookOpen },
   { id: "settings", label: "Settings", href: "/settings", icon: Settings },
+  { id: "onboarding", label: "Set up from website", href: "/onboarding", icon: Sparkles },
   AUDIT,
   ABOUT,
 ];
@@ -161,6 +164,7 @@ function Brand() {
         <ChefHat className="size-5" aria-hidden />
       </span>
       Kitchen Buyer
+      <KitchenLogo />
     </span>
   );
 }

@@ -17,6 +17,7 @@ import { DemandPage } from "@/pages/demand";
 import { ForecastPage } from "@/pages/forecast";
 import { OrderDetailPage } from "@/pages/order-detail";
 import { OrdersPage } from "@/pages/orders";
+import { OnboardingPage } from "@/pages/onboarding";
 import { PlannerPage } from "@/pages/planner";
 import { ProductsPage } from "@/pages/products";
 import { RequestsPage } from "@/pages/requests";
@@ -71,6 +72,7 @@ const settingsSectionRoute = createRoute({
   component: SettingsPage,
 });
 const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: "/about", component: AboutPage });
+const onboardingRoute = createRoute({ getParentRoute: () => rootRoute, path: "/onboarding", component: OnboardingPage });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -90,6 +92,7 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
   settingsSectionRoute,
   aboutRoute,
+  onboardingRoute,
 ]);
 
 export function createAppRouter(history?: RouterHistory) {

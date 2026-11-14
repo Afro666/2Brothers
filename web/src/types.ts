@@ -451,3 +451,55 @@ export interface ForecastAccuracy {
   /** null when the gateway does not say per product (unknown, not "no products"). */
   products: ForecastSeries[] | null;
 }
+
+/** The kitchen-type guess onboarding offers. Anything else stays unknown. */
+export type KitchenType = "hotel" | "school" | "hospital" | "restaurant";
+
+/** Where a looked-up field came from: the provider and the endpoint the gateway called. */
+export interface FieldSource {
+  provider: "Context.dev";
+  /** e.g. `POST /v1/brand/retrieve`. */
+  endpoint: string;
+}
+
+/** One looked-up field. `value` null = unknown: the lookup did not find it, so nothing is guessed. */
+export interface LookedUpField<T> {
+  value: T | null;
+  /** null when `value` is null. */
+  source: FieldSource | null;
+}
+
+export interface KitchenAddress {
+  street: string | null;
+  postalCode: string | null;
+  city: string | null;
+  country: string | null;
+}
+
+/** What onboarding found for a kitchen's email or website. Nothing is saved until a person confirms. */
+export interface KitchenBrandLookup {
+  /** The domain the lookup used, e.g. `hotelkuusi.fi`. */
+  domain: string;
+  /** false when the provider knew nothing about the domain: every field is then unknown. */
+  found: boolean;
+  name: LookedUpField<string>;
+  /** An https URL or a `data:image/svg+xml` URI. */
+  logoUrl: LookedUpField<string>;
+  /** Brand colours as `#rrggbb`, the main one first. */
+  colors: LookedUpField<string[]>;
+  address: LookedUpField<KitchenAddress>;
+  kitchenType: LookedUpField<KitchenType>;
+  /** Free text as the website says it, e.g. "Mon-Fri 06:30-22:00". */
+  openingHours: LookedUpField<string>;
+}
+
+/** The profile a person confirmed on the onboarding page. */
+export interface KitchenBrandProfile {
+  domain: string;
+  name: string;
+  logoUrl: string | null;
+  colors: string[];
+  address: KitchenAddress;
+  kitchenType: KitchenType | null;
+  openingHours: string | null;
+}
