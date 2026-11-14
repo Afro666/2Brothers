@@ -406,7 +406,26 @@ const TOOL_KINDS: Record<string, AuditKind> = {
   get_order_status: "order",
 };
 
+/** #899: what the Buyer did with each tool, in plain words. An unknown tool keeps its raw name. */
+const TOOL_VERBS: Record<string, { started: string; done: string }> = {
+  search_products: { started: "Buyer is searching the catalog", done: "Buyer searched the catalog" },
+  get_offer: { started: "Buyer is asking for an offer", done: "Buyer got the offer" },
+  simulate_order: { started: "Buyer is simulating the order", done: "Buyer simulated the order" },
+  request_approval: { started: "Buyer is asking for approval", done: "Buyer asked for approval" },
+  place_order: { started: "Buyer is placing the order", done: "Buyer placed the order" },
+  get_order_status: { started: "Buyer is checking the order status", done: "Buyer checked the order status" },
+};
+
 const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
+  // #899: kinds added on 14 Nov, with a plain-English label each.
+  stock_photo_read: { kind: "stock", summary: "Shelf photo read by Nemotron VL" },
+  audit_demo_tamper: { kind: "other", summary: "Tamper demo: a line was changed" },
+  audit_demo_restore: { kind: "other", summary: "Tamper demo: the line was restored" },
+  option_chosen: { kind: "approval", summary: "A person chose an option" },
+  order_lookup: { kind: "order", summary: "A person looked up an order with an unknown send result" },
+  order_resolved: { kind: "order", summary: "A person resolved an unknown send" },
+  recall_check: { kind: "other", summary: "Recall check" },
+  demo_inbox_cleared: { kind: "other", summary: "Test proposals cleared before a demo" },
   proposal_created: { kind: "request", summary: "Proposal created" },
   approval_requested: { kind: "approval", summary: "Approval requested" },
   decision_summary: { kind: "mandate_check", summary: "Decision summary" },
@@ -439,15 +458,18 @@ function mapAuditEvent(event: Json): AuditEvent {
   if (typeof event.tool === "string") {
     const finished = event.type === "tool_call_finished";
     const error = object(event.result ?? {}, "an audit result").error;
+    const verb = Object.hasOwn(TOOL_VERBS, event.tool) ? TOOL_VERBS[event.tool] : undefined;
     return {
       ...base,
       kind: TOOL_KINDS[event.tool] ?? "other",
       actor: "agent",
       summary: !finished
-        ? `Buyer called ${event.tool}`
+        ? (verb?.started ?? `Buyer called ${event.tool}`)
         : error == null
-          ? `${event.tool} finished`
-          : `${event.tool} failed`,
+          ? (verb?.done ?? `${event.tool} finished`)
+          : verb
+            ? `${verb.done}: it failed`
+            : `${event.tool} failed`,
       reason: describe(finished ? event.result : event.arguments),
     };
   }

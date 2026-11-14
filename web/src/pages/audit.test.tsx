@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { mapAudit } from "@/api/gateway-map";
 import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
 
@@ -68,6 +69,44 @@ describe("audit page", () => {
     const summaries = within(timeline!).getAllByText(/same time/);
     expect(summaries[0]).toHaveTextContent("First at same time");
     expect(summaries[1]).toHaveTextContent("Second at same time");
+  });
+
+  it("shows a plain-English label for the kinds and tools added on 14 Nov; unknown ones keep their name (#899)", async () => {
+    const labels: Record<string, string> = {
+      stock_photo_read: "Shelf photo read by Nemotron VL",
+      audit_demo_tamper: "Tamper demo: a line was changed",
+      audit_demo_restore: "Tamper demo: the line was restored",
+      option_chosen: "A person chose an option",
+      order_lookup: "A person looked up an order with an unknown send result",
+      order_resolved: "A person resolved an unknown send",
+      recall_check: "Recall check",
+      demo_inbox_cleared: "Test proposals cleared before a demo",
+      some_future_kind: "some_future_kind",
+    };
+    const raw = [
+      ...Object.keys(labels).map((kind, i) => ({
+        event_id: `k-${i}`,
+        kind,
+        actor: "system",
+        at: `2026-11-14T10:0${i}:00+00:00`,
+      })),
+      { event_id: "t-1", type: "tool_call_finished", tool: "request_approval", arguments: {}, result: {} },
+      { event_id: "t-2", type: "tool_call_finished", tool: "simulate_order", arguments: {}, result: {} },
+      { event_id: "t-3", type: "tool_call_started", tool: "request_approval", arguments: {} },
+      { event_id: "t-4", type: "tool_call_finished", tool: "new_tool", arguments: {}, result: {} },
+    ];
+    const api = createMockApi();
+    api.listAudit = async () => mapAudit(raw);
+    renderApp("/audit", api);
+
+    for (const label of Object.values(labels)) expect(await screen.findByText(label)).toBeInTheDocument();
+    expect(screen.getByText("Buyer asked for approval")).toBeInTheDocument();
+    expect(screen.getByText("Buyer simulated the order")).toBeInTheDocument();
+    expect(screen.getByText("Buyer is asking for approval")).toBeInTheDocument();
+    expect(screen.getByText("new_tool finished")).toBeInTheDocument();
+    for (const name of ["stock_photo_read", "request_approval finished", "Buyer called request_approval"]) {
+      expect(screen.queryByText(name)).not.toBeInTheDocument();
+    }
   });
 
   it("follows later ?kind= changes without remounting and ignores unknown kinds", async () => {
