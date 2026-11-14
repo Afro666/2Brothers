@@ -10,6 +10,7 @@ import type {
   AuditEvent,
   AuditKind,
   BuyerPermissions,
+  MandateReason,
   MovState,
   Offer,
   Order,
@@ -456,9 +457,14 @@ export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalR
   });
 }
 
-/** #1227: a bare known code as a sentence; a known product's name in place of its code. */
-function approvalReason(rule: string, productNames: ReadonlyMap<string, string>): string {
-  if (Object.hasOwn(CODE_LABELS, rule)) return `${CODE_LABELS[rule].title}. ${CODE_LABELS[rule].detail}`;
+/** #1227: a known product's name in place of its code, and any code after it in words. */
+function approvalReason(rule: string, productNames: ReadonlyMap<string, string>): MandateReason {
+  // A bare known code gets its title and detail, as CHECK_CODES does, so both go through t().
+  if (Object.hasOwn(CODE_LABELS, rule)) return { rule: CODE_LABELS[rule].title, detail: CODE_LABELS[rule].detail };
+  return { rule: productReason(rule, productNames), detail: "" };
+}
+
+function productReason(rule: string, productNames: ReadonlyMap<string, string>): string {
   const plain = plainReason(rule, productNames);
   if (plain !== rule) return plain;
   const [, productId, rest] = /^([^:]+): (.*)$/s.exec(rule) ?? [];
@@ -514,7 +520,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
   }
   // #1142: no raw code reaches the screen, in a gateway reason or as an unknown warning.
   const reasons = [
-    ...strings(mandate.reasons).map((rule) => ({ rule: approvalReason(rule, productNames), detail: "" })),
+    ...strings(mandate.reasons).map((rule) => approvalReason(rule, productNames)),
     ...Object.entries(CHECK_CODES)
       .filter(([code]) => codes.has(code))
       .map(([, reason]) => reason),

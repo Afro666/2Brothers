@@ -230,7 +230,9 @@ export function ApprovalCard({
           hours: Math.floor(cutoff.minutesLeft / 60),
           minutes: cutoff.minutesLeft % 60,
         })
-      : t("{minutes} min left", { minutes: cutoff.minutesLeft })
+      : cutoff.minutesLeft > 0
+        ? t("{minutes} min left", { minutes: cutoff.minutesLeft })
+        : t("Less than 1 min left")
     : null;
   const approveBlockDescription = [stockMessage ? stockBlockId : null, approvalBlockedReason ? accountBlockId : null]
     .filter(Boolean).join(" ") || undefined;

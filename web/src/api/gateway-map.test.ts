@@ -111,16 +111,17 @@ describe("mapApproval", () => {
         ],
       },
     });
-    expect(result.reasons.map((reason) => reason.rule)).toEqual([
-      "Coffee 500 g: Blocked by a recall. A product on this order matches a food recall. It cannot be approved.",
-      "Oat drink 1 L: order cut-off has passed for this delivery",
-      "Oat drink 1 L: pack size unknown; check the pack",
-      "Order cut-off passed. The supplier's cut-off for this delivery date has passed.",
-      "Stock not confirmed. The supplier does not report stock for some lines. They confirm it later.",
-      "PACK_SIZE_UNKNOWN",
-      "NEW_GATEWAY_REASON",
+    expect(result.reasons.map(({ rule, detail }) => ({ rule, detail }))).toEqual([
+      { rule: "Coffee 500 g: Blocked by a recall. A product on this order matches a food recall. It cannot be approved.", detail: "" },
+      { rule: "Oat drink 1 L: order cut-off has passed for this delivery", detail: "" },
+      { rule: "Oat drink 1 L: pack size unknown; check the pack", detail: "" },
+      // A bare known code is a title and a detail, as CHECK_CODES are, so both have Finnish.
+      { rule: "Order cut-off passed", detail: "The supplier's cut-off for this delivery date has passed." },
+      { rule: "Stock not confirmed", detail: "The supplier does not report stock for some lines. They confirm it later." },
+      { rule: "PACK_SIZE_UNKNOWN", detail: "" },
+      { rule: "NEW_GATEWAY_REASON", detail: "" },
       // #1142: a code after a product id is still put in words, even an unknown one.
-      "777777: New line code. The gateway flagged this. Check the order before you approve.",
+      { rule: "777777: New line code. The gateway flagged this. Check the order before you approve.", detail: "" },
     ]);
   });
 

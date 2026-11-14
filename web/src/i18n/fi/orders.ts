@@ -464,4 +464,10 @@ export default {
   " (earliest of {count})": " (aikaisin {count} rivistä)",
   "{hours} h {minutes} min left": "{hours} h {minutes} min jäljellä",
   "{minutes} min left": "{minutes} min jäljellä",
+  "Less than 1 min left": "Alle 1 min jäljellä",
+  "Blocked by a recall": "Takaisinveto estää",
+  "A product on this order matches a food recall. It cannot be approved.": "Tilauksen tuote vastaa elintarvikkeen takaisinvetoa. Tilausta ei voi hyväksyä.",
+  "Order cut-off passed": "Tilausaikaraja on umpeutunut",
+  "The supplier's cut-off for this delivery date has passed.": "Toimittajan tilausaikaraja tälle toimituspäivälle on umpeutunut.",
+  "The supplier does not report stock for some lines. They confirm it later.": "Toimittaja ei ilmoita kaikkien rivien varastoa. Se vahvistaa sen myöhemmin.",
 } satisfies Record<string, string>;

@@ -88,6 +88,15 @@ describe("ApprovalCard", () => {
     expect(screen.getByText("Approve before Sun 15 Nov 16:00 · Töölö Bakery's cut-off (earliest of 2) · 1 h 20 min left")).toBeVisible();
   });
 
+  it("says less than a minute, not 0 min, in the last minute before the cut-off", () => {
+    render(<ApprovalCard
+      request={{ ...approval, cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: "Valio" }] }}
+      order={confirmedOrder}
+      now={new Date("2026-11-15T16:59:30+02:00")}
+    />);
+    expect(screen.getByText("Approve before Sun 15 Nov 17:00 · Valio's cut-off · Less than 1 min left")).toBeVisible();
+  });
+
   it("names no supplier when no supplier block names the line", () => {
     render(<ApprovalCard
       request={{ ...approval, cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: null }] }}

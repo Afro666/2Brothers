@@ -68,7 +68,8 @@ describe("authentication", () => {
     const { router } = renderApp("/sign-in", createMockApi({ signedOut: true }));
     await user.click(await screen.findByRole("button", { name: "Sign in as Valio planner" }));
     await router.navigate({ to: "/approvals" });
-    const approveButtons = await screen.findAllByRole("button", { name: /^Approve / });
+    // A disabled Approve names no total (#1227); the totals block still does.
+    const approveButtons = await screen.findAllByRole("button", { name: "Approve" });
     expect(approveButtons.length).toBeGreaterThan(0);
     expect(approveButtons.every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
     const rejectButtons = screen.getAllByRole("button", { name: "Reject" });
