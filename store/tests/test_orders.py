@@ -21,7 +21,7 @@ class GuardTests(unittest.TestCase):
                                   expected_total=149.02, lines=[])
 
     def test_stock_sentinels_are_never_stored(self):
-        for sentinel in (999999, 9999999999, Decimal("999999")):
+        for sentinel in (999999, 9999999999, 666666666, 1999999999, Decimal("999999")):
             with self.assertRaises(ValueError):
                 orders.save_offer(None, {"lines": [{"available_amount": sentinel}]})
 
