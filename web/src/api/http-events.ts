@@ -1,5 +1,7 @@
 import type { Api, LiveEvent, Session } from "@/api/types";
 
+/** Same name as `SIGNED_IN_EVENT` in http.ts (not imported: http.ts imports this file). */
+const SIGNED_IN_EVENT = "kitchen-buyer:signed-in";
 const RETRY_MS = 2_000;
 
 function publish(raw: string, onEvent: (event: LiveEvent) => void) {
@@ -31,6 +33,7 @@ export function createEventsHttp(
     subscribeEvents(onEvent, onStatus) {
       let stopped = false;
       let unavailable = false;
+      let refused = false;
       let controller: AbortController | null = null;
       let retry: ReturnType<typeof setTimeout> | undefined;
 
@@ -61,6 +64,8 @@ export function createEventsHttp(
             if (stopped || controller !== connection) return;
             if (response.status === 503 || response.status === 401 || response.status === 403) {
               unavailable = true;
+              // 503 is for good; a refused session ends when someone signs in.
+              refused = response.status !== 503;
               controller = null;
               onStatus?.(false);
               return;
@@ -112,13 +117,21 @@ export function createEventsHttp(
           open();
         }
       };
+      const signedIn = () => {
+        if (!refused) return;
+        refused = false;
+        unavailable = false;
+        open();
+      };
       document.addEventListener("visibilitychange", visibility);
+      window.addEventListener(SIGNED_IN_EVENT, signedIn);
       open();
 
       return () => {
         if (stopped) return;
         stopped = true;
         document.removeEventListener("visibilitychange", visibility);
+        window.removeEventListener(SIGNED_IN_EVENT, signedIn);
         if (retry !== undefined) clearTimeout(retry);
         controller?.abort();
         controller = null;
