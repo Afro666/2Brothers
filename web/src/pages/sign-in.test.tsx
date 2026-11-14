@@ -16,8 +16,19 @@ describe("authentication", () => {
   it("shows only sign-in to a signed-out visitor", async () => {
     renderApp("/approvals", createMockApi({ signedOut: true }));
     expect(await screen.findByRole("heading", { name: "Sign in to Kitchen Buyer" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Back to the demo" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open menu" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Approvals" })).not.toBeInTheDocument();
+  });
+
+  it("links back to Home from the open demo", async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp("/sign-in", createMockApi());
+    const back = await screen.findByRole("link", { name: "Back to the demo" });
+    expect(back).toHaveAttribute("href", "/");
+    await user.click(back);
+    expect(await screen.findByText("Waiting for your approval")).toBeVisible();
+    expect(router.state.location.pathname).toBe("/");
   });
 
   it("signs in from a demo account button and lands on Home", async () => {

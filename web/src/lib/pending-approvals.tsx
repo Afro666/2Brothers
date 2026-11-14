@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { useApi } from "@/api";
-import { useLiveEvents } from "@/lib/live-events";
+import { useLiveConnected, useLiveEvents } from "@/lib/live-events";
 
 interface PendingApprovals {
   /** How many approvals wait for a person. null = not known (loading or the gateway failed): show no badge. */
@@ -50,10 +50,21 @@ export function PendingApprovalsProvider({
   }, [api, version]);
   const refresh = useCallback(() => setVersion((value) => value + 1), []);
   useLiveEvents(["proposal", "approval"], refresh);
+  const liveConnected = useLiveConnected();
+  // The connected event stream already refreshes the count; without it, ask every 30 s while the
+  // tab is seen, and at once when it is seen again.
   useEffect(() => {
-    const timer = setInterval(refresh, intervalMs);
-    return () => clearInterval(timer);
-  }, [refresh, intervalMs]);
+    if (liveConnected) return;
+    const whenSeen = () => {
+      if (!document.hidden) refresh();
+    };
+    const timer = setInterval(whenSeen, intervalMs);
+    document.addEventListener("visibilitychange", whenSeen);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", whenSeen);
+    };
+  }, [refresh, intervalMs, liveConnected]);
   const value = useMemo(() => ({ count, refresh }), [count, refresh]);
   return <PendingApprovalsContext.Provider value={value}>{children}</PendingApprovalsContext.Provider>;
 }

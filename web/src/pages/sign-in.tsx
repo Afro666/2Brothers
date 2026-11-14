@@ -1,4 +1,4 @@
-import { Navigate } from "@tanstack/react-router";
+import { Link, Navigate } from "@tanstack/react-router";
 import { type FormEvent, useMemo, useState } from "react";
 
 import { useApi } from "@/api";
@@ -132,6 +132,14 @@ export function SignInPage() {
               {busy ? t("Signing in…") : t("Sign in")}
             </Button>
           </form>
+          {/* Only the open demo (a person without an email) has a demo to go back to. */}
+          {session?.kind === "human" && !session.email ? (
+            <div className="text-center text-sm">
+              <Link to="/" className="text-muted-foreground underline-offset-4 hover:underline">
+                {t("Back to the demo")}
+              </Link>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </main>
