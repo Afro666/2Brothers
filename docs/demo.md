@@ -49,7 +49,7 @@ therefore shows options, and the first one is the part that Valio's stock confir
 nothing is ordered for it." The button "Choose option A: approve EUR 2,099.41 incl VAT"
 takes that option and opens the approval dialog with the exact total (#775, #844, #843).
 
-Checked on the live site on 14 Nov at 04:10 UTC, on a 390 px wide screen: request, card in
+Checked on the live site on 14 Nov at 03:50 UTC, on a 390 px wide screen: request, card in
 14 s from the Buyer (Nemotron 3.5 Super VL), Choose, "Yes, approve EUR 2,099.41", status
 APPROVED with one line of 698 ST of 463380 and an order id.
 
@@ -159,7 +159,7 @@ are planned, and none of them scores in three minutes.
 ## Open items for this script
 
 - [x] Fallback video: `python -m demo.record_demo --approve` records it with the approval
-      (run 14 Nov 04:20 UTC, all nine steps ok). Record the final one after the last change.
+      (run 14 Nov 03:50 UTC, all nine steps ok). Record the final one after the last change.
 - [ ] Measure the manual webshop time (#295).
 - [ ] Buyer path through the web still fell back to the parser at 02:22 UTC on 14 Nov;
       confirm it says the Buyer model before rehearsal.
