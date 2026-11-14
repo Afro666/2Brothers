@@ -12,7 +12,14 @@ case "$sha" in
 	sha=${sha#force }
 	;;
 esac
-if ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+# The whole value, not one line of it: only hex digits, exactly 40 of them.
+case "$sha" in
+"" | *[!0-9a-f]*)
+	echo "expected a 40-character commit sha" >&2
+	exit 2
+	;;
+esac
+if [ "${#sha}" -ne 40 ]; then
 	echo "expected a 40-character commit sha" >&2
 	exit 2
 fi
