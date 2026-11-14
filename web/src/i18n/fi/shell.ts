@@ -1,5 +1,9 @@
 export default {
   "Home": "Etusivu",
+  "This page does not exist": "Tätä sivua ei ole",
+  "The address may be mistyped, or what it pointed to is gone.": "Osoitteessa voi olla kirjoitusvirhe, tai sen kohde on poistunut.",
+  "Go to Home": "Siirry etusivulle",
+  "See the orders to approve": "Katso hyväksyttävät tilaukset",
   "Orders": "Tilaukset",
   "Request an order": "Pyydä tilausta",
   "To approve": "Hyväksyttävät",
