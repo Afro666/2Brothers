@@ -255,6 +255,31 @@ A simulated offer line also carries three optional fields from the Valio dataset
 | `carbon_kg_co2e_per_kg` | number or null | kg CO2-eq per kg, the average of the product group, not this product's own figure. Null means unknown. |
 | `labels` | string[] | Product labels, for example `EU_ORGANIC_FARMING`. May be empty. |
 
+**Cut-off, lead time and delivery reliability to show (#1453).** A simulated offer line
+(also in `blocks[].lines` and on order lines) carries six more fields, for display only.
+They never change a quantity, a line, `cutoff_passed`, `closing_time` or `reliability`
+(those keep their meaning above), so the engine and every basket are the same. Each
+value says where it came from; real data always wins:
+
+1. `valio`: Valio's own answer (`closingTime` from availability, the delivery
+   reliability CSV).
+2. `supplier_terms`: the supplier's user-set terms (`order_days`, `cutoff_time`,
+   `lead_time_days`, see "Suppliers").
+3. `demo`: demo values for a synthetic demo kitchen only (`python -m demo.delivery_terms`).
+   They are invented for the demo, never Valio's or a supplier's numbers; the screen
+   marks them "(demo)". A real kitchen has no demo values.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `cutoff_at` | timestamp with offset, or null | Order by this moment for the line's delivery. Valio's `closingTime` when Valio gives one. Otherwise the last order day at the cut-off time (kitchen time, Europe/Helsinki) that still delivers, with the lead time, by the delivery date: the later of `available_date` and the requested date. Null when no source knows it. |
+| `cutoff_source` | `"valio"`, `"supplier_terms"`, `"demo"` or null | Where `cutoff_at` came from. `demo` when any part of it (order days, cut-off time or lead time) is a demo value. |
+| `lead_time_days` | integer or null | Days from order to delivery: a per-product demo value, else the supplier's terms, else the supplier's demo value. |
+| `lead_time_source` | `"supplier_terms"`, `"demo"` or null | Where `lead_time_days` came from. |
+| `delivery_reliability` | number or null | Delivered versus ordered, 0 to 1: Valio's `reliability` when known, else the product's demo value, else the supplier's demo value. |
+| `reliability_source` | `"valio"`, `"demo"` or null | Where `delivery_reliability` came from. |
+
+A proposal stored before #1453 has none of these fields: read a missing field as null.
+
 `expected_total` includes fees and tax. Simulation also includes `mov_gap` and
 `delivery_fee` as decimal strings. Expired offers must be refreshed and simulated.
 
@@ -792,7 +817,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
 | POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver` (create: signed-in session only) | Personal approval tokens. Shape under "Personal approval tokens". |
 | GET | `/model-usage` | `kitchen:read` | How much the Buyer agent used its model for this kitchen: runs, model calls, tokens, seconds. Shape under "Model usage". |
-| GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". Proposed (#1393); the store function exists, the route is not built. |
+| GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". |
 | GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
 | POST, GET | `/webhooks` | human, role `approver` | Register a webhook (body `url`, `events`) or list them. Shape under "Webhooks". |
 | DELETE | `/webhooks/{id}` | human, role `approver` | Remove the webhook and its delivery log. |
@@ -1020,6 +1045,30 @@ model or gateway retry and no automatic provider fallback. Usage is metered as
 `proposal_explanation_failed` contain the proposal/source, language, model,
 latency, sentence count or safe error code. No explanation text, prompt or secret
 is written to audit. The signed offer and receipt remain authoritative.
+
+### Product names on proposal and order lines (#1130)
+
+Every line a person reads carries three fields next to `product_id`, so a screen shows
+a name, the kind picture and the brand logo ("Product pictures" below) instead of a code:
+
+| Field | Type | Rule |
+|---|---|---|
+| `product_name` | string or null | The English name of the product row (`names.en`). |
+| `product_name_fi` | string or null | The Finnish name (`names.fi`). |
+| `brand` | string or null | The brand of the product row. |
+
+- Where: `lines`, `blocks[].lines`, `substitute_options[].lines`, `alternative.lines`,
+  `partial_fill.now.lines`, `partial_fill.rest[].lines` and each `excluded` entry, on
+  `GET /proposals`, `GET /proposals/{id}`, the `POST /proposals` answer and the change
+  answer; and `lines` on `GET /orders`, `GET /orders/{id}` and the approve answer.
+- Read at read time from the catalog and this kitchen's own products (never another
+  kitchen's): an order stored before #1130 has them too. Never stored on a line.
+- Unknown is null, never an invented name. One query per proposal (one per order
+  list), never one per line.
+- A mandate reason that starts with a bare product code (`"463203: confirmed in stock,
+  but ..."`) starts with the name when it is known, the code after it in brackets:
+  `"Arla milk 1 L (463203): confirmed in stock, but ..."`. `excluded[].reason` itself is
+  unchanged. Names and reasons are not part of `offer_hash`.
 
 ### Creating a proposal
 
@@ -2673,11 +2722,11 @@ reached the Buyer worker):
 - Counts only: no request text, no reply text, no key.
 - Where it shows: the About page.
 
-### Atlas facts (proposed, #1393)
+### Atlas facts (#1393, #1383)
 
 `GET /v1/kitchens/{kitchen_id}/atlas` (`kitchen:read`) answers what MongoDB Atlas holds
-and runs for the product, read live. Proposed: the store function exists
-(`store.atlas.atlas_facts`); the gateway route is not built yet (#1383).
+and runs for the product, read live: `store.atlas.atlas_facts` behind
+`gateway/atlas_routes.py`.
 
 ```json
 {"mongodb_version": "8.0.37", "data_mb": 215, "products": 17548,

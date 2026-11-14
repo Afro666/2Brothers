@@ -291,6 +291,8 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
                  for side in (doc.pop("fusion", None) or {}).get("details", [])}
         if ranks.get("vector") and not ranks.get("text"):
             doc["match_reasons"].append("similar meaning, no word match")
+        # How the row was found (#1382): a text search finds by words only.
+        doc["matched_by"] = ("both" if ranks.get("text") else "meaning") if ranks.get("vector") else "words"
         rows.append(doc)
     return rows
 

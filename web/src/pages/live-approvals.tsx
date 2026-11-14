@@ -12,6 +12,7 @@ import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { LiveConnectionLabel, useLiveEvents } from "@/lib/live-events";
 import { LabelEvidence, type LabelCheck } from "@/components/purchasing/label-evidence";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 
 const path = "/v1/kitchens/demo-kitchen/proposals";
 interface RecallAlert {
@@ -78,8 +79,13 @@ interface Proposal {
   decision_summary?: { text?: string };
   mandate?: { reasons?: unknown };
   blocks?: unknown;
-  lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
+  /** `product_name`, `product_name_fi`, `brand`: string or null (#1130); older answers lack them. */
+  lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean;
+    product_name?: string | null; product_name_fi?: string | null; brand?: string | null }[];
 }
+
+/** A line's name field, or null: never invented (#1130). */
+const lineText = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
 function parse(value: unknown, t: (text: string) => string): Proposal {
   const row = value as Proposal;
   if (!row || typeof row.proposal_id !== "string" || typeof row.offer_id !== "string" ||
@@ -160,7 +166,13 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
         {showDetails ? t("Hide details") : t("Show details")}
       </Button>
       <div id={detailsId} className="space-y-4" hidden={!showDetails}>{showDetails && <>
-        <ul className="divide-y">{row.lines.map(l => <li key={l.product_id} className="py-2 font-mono text-[13px]">{l.quantity} {l.unit} · {l.product_id} · {l.why}</li>)}</ul>
+        <ul className="divide-y">{row.lines.map(l => {
+          const name = lineText(l.product_name);
+          return <li key={l.product_id} data-testid="proposal-line" className="flex items-start gap-2 py-2 text-[13px]">
+            <ProductThumb en={name} fi={lineText(l.product_name_fi)} brand={lineText(l.brand)} size="sm" />
+            <span className="min-w-0 break-words font-mono">{l.quantity} {l.unit} · {name ? `${name} (${l.product_id})` : l.product_id} · {l.why}</span>
+          </li>;
+        })}</ul>
         {row.label_checks?.map(c => <LabelEvidence key={`${c.product_id}-${c.label}`} check={c} />)}
         {row.product_evidence?.map(e => <div key={e.product_id} className="rounded border p-3 text-sm">
           <p>{t("Manufacturer evidence for {id} · checked {date} · {via}", { id: e.product_id, date: e.checked_at, via: e.via })}</p>

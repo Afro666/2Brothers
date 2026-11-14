@@ -115,6 +115,27 @@ describe("mapApproval", () => {
     expect(approval.reasons).toEqual([expect.objectContaining({ rule: "A person approves every order" })]);
   });
 
+  it("maps the gateway's line names, Finnish names and brands onto the option lines (#1130)", () => {
+    const named = { product_id: "462775", quantity: "51", unit: "ST", why: "x", unknown_stock: false,
+      product_name: "Valio Eila milk 1 L", product_name_fi: "Valio Eila maito 1 l", brand: "Valio" };
+    const approval = mapApproval({
+      ...proposal,
+      lines: [named],
+      mandate: { verdict: "NEEDS_APPROVAL", reasons: ["Valio Eila milk 1 L (462775): ALLERGEN_RULE: the kitchen excludes AN"] },
+      substitute_options: [{
+        tier: "good", source: "confirmed", offer_id: "offer-2", expected_total: "10.00", currency: "EUR",
+        lines: [named, { ...named, product_id: "463335", product_name: null, product_name_fi: null, brand: null }],
+        why: "Confirmed stock only.", requires_chef_approval: true, stock_confirmed: true,
+      }],
+    });
+    expect(approval.options?.[0]?.lines.map((line) => [line.productName, line.productNameFi, line.brand])).toEqual([
+      ["Valio Eila milk 1 L", "Valio Eila maito 1 l", "Valio"],
+      [null, null, null],
+    ]);
+    expect(approval.reasons[0].rule.startsWith("Valio Eila milk 1 L (462775): ")).toBe(true);
+    expect(approval.reasons[0].rule).not.toContain("ALLERGEN_RULE");
+  });
+
   it("explains why confirmed stock has a high certainty premium", () => {
     const withWarning = {
       ...proposal,

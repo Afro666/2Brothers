@@ -144,7 +144,9 @@ def test_manual_cutoff_passed_excludes_the_product(env):
     bakery(db, {**BAKERY_DAYS, "order_days": ["MON", "TUE", "WED", "THU", "FRI"]})
     p = propose(client)
     assert [b["supplier_id"] for b in p["blocks"]] == ["sup-valio"]
-    assert {"product_id": OAT, "reason": "order cut-off has passed for this delivery"} in p["excluded"]
+    # #1130: an excluded entry carries the product's names too (the own product has its name in both).
+    assert {"product_id": OAT, "reason": "order cut-off has passed for this delivery", "product_name": "Oat drink 1 L",
+            "product_name_fi": "Oat drink 1 L", "brand": None} in p["excluded"]
     assert "CLOSING_PASSED" in p["mandate"]["reason_codes"]
 
 
@@ -153,7 +155,8 @@ def test_manual_unknown_cutoff_terms_exclude_the_product(env, missing):
     client, _, db = env
     bakery(db, {k: v for k, v in BAKERY_DAYS.items() if k != missing})
     p = propose(client)
-    assert {"product_id": OAT, "reason": "no cut-off time known: cannot promise this delivery"} in p["excluded"]
+    assert {"product_id": OAT, "reason": "no cut-off time known: cannot promise this delivery",
+            "product_name": "Oat drink 1 L", "product_name_fi": "Oat drink 1 L", "brand": None} in p["excluded"]
 
 
 def test_own_product_without_price_or_supplier_is_left_out(env):

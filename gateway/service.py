@@ -24,7 +24,7 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
                     pad_to_free_delivery, plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
-from gateway import options
+from gateway import options, product_names
 from gateway.decision import decision_summary
 from gateway.partial_fill import partial_out
 from gateway.suppliers import (UNKNOWN_FACTS, VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers,
@@ -72,6 +72,13 @@ def _line_out(line: dict) -> dict:
     """A stored offer or order line as the API answers it: the two dataset values are numbers
     (docs/contract.md), kept as text in Mongo because the store refuses a binary float (#570)."""
     return {**line, **{key: float(line[key]) for key in _LINE_NUMBERS if line.get(key) is not None}}
+
+
+def _matched_by(rows: list[dict]) -> list[dict]:
+    """Every search row says how it was found (#1382); a text search finds by words."""
+    for row in rows:
+        row.setdefault("matched_by", "words")
+    return rows
 
 
 def _hash(payload: dict) -> str:
@@ -748,12 +755,15 @@ class Gateway:
 
     def _proposal_out(self, doc: dict, traces: dict | None = None) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
+        substitutes = options.merged(doc)
+        found = product_names.labels(self.db, product_names.proposal_ids(
+            {**offer["simulation"], "substitute_options": substitutes}), doc["kitchen_id"])
         result = {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
-                "substitute_options": options.merged(doc),
+                "substitute_options": substitutes,
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
                 **offer["simulation"],
-                "decision_summary": self._summary(doc["request"], offer["simulation"]),
+                "decision_summary": self._summary(doc["request"], offer["simulation"], found),
                 "signature": offer.get("signature"), "offer_hash": offer.get("offer_hash")}
         result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
         result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []))
@@ -766,13 +776,15 @@ class Gateway:
         result['label_checks'] = checks(get_products(self.db,
             [line['product_id'] for line in result['lines']], doc['kitchen_id']), now=self.now())
         result['model_trace'] = self._trace(doc, traces)
-        return result
+        # #1130: names on every line kind, read in one query for the whole proposal.
+        return product_names.name_proposal(result, found)
 
-    def _summary(self, request: dict, sim: dict) -> dict:
-        ids = {ln["product_id"] for ln in sim.get("lines") or []} | {e["product_id"] for e in sim.get("excluded") or []}
-        names = {d["_id"]: (d.get("names") or {}).get("en")
-                 for d in self.db.products.find({"_id": {"$in": sorted(ids)}}, {"names": 1})}
-        return decision_summary(request, sim, names)
+    def _summary(self, request: dict, sim: dict, found: dict | None = None) -> dict:
+        """`found`: product_names.labels already read for this proposal (no second query)."""
+        if found is None:
+            ids = {ln["product_id"] for ln in sim.get("lines") or []} | {e["product_id"] for e in sim.get("excluded") or []}
+            found = product_names.labels(self.db, ids)
+        return decision_summary(request, sim, {pid: f["product_name"] for pid, f in found.items()})
 
     def get_proposal(self, kitchen_id: str, proposal_id: str) -> dict:
         doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id})
@@ -1001,18 +1013,24 @@ class Gateway:
             log.warning("receipt signing failed: %s", type(exc).__name__)
             return {}
 
-    @staticmethod
-    def _order_out(order: dict) -> dict:
+    def _order_out(self, order: dict, found: dict | None = None) -> dict:
+        """`found`: product_names.labels for these lines; read here when not given (#1130:
+        names are computed at read time, so an order stored before them has them too)."""
+        if found is None:
+            found = product_names.labels(self.db, [ln.get("product_id") for ln in order["lines"]],
+                                         order.get("kitchen_id"))
         return {"order_id": order["order_id"], "outcome": order["outcome"], "status": order["status"],
                 "receipt": order.get("receipt"),     # signed order receipt (#290); null when not signed
                 # #631: suppliers whose stock nobody confirmed yet; a person calls them
                 "supplier_must_confirm": list(order.get("supplier_must_confirm") or []),
                 "expected_total": _money(Decimal(str(order["expected_total"]))),
-                "lines": [_line_out(ln) for ln in order["lines"]], "created_at": order["created_at"].isoformat()
+                "lines": [product_names.named(_line_out(ln), found) for ln in order["lines"]], "created_at": order["created_at"].isoformat()
                 if hasattr(order["created_at"], "isoformat") else order["created_at"]}
 
     def list_orders(self, kitchen_id: str) -> list[dict]:
-        return [self._order_out(o) for o in orders.list_orders(self.db, kitchen_id)]
+        rows = list(orders.list_orders(self.db, kitchen_id))
+        found = product_names.labels(self.db, [ln.get("product_id") for o in rows for ln in o["lines"]], kitchen_id)
+        return [self._order_out(o, found) for o in rows]
 
     def get_order(self, kitchen_id: str, order_id: str) -> dict:
         order = orders.get_order(self.db, order_id)
@@ -1045,18 +1063,27 @@ class Gateway:
         return {"need_id": need["_id"], **{k: need[k] for k in ("quantity", "unit", "requested_date", "text")}}
 
     def tool_search(self, kitchen_id: str, query: str, filters: dict, limit: int,
-                    need_id: str | None = None) -> dict:
+                    need_id: str | None = None, mode: str | None = None) -> dict:
         """Catalog search for the Buyer. With the stored need it becomes a shortlist the
         Buyer can order from: only products sold in the need's measure (a request in litres
         never gets chocolate), and products that can still arrive on the requested date
-        first. One availability call for the shortlist only, never for the whole catalog."""
+        first. One availability call for the shortlist only, never for the whole catalog.
+
+        `mode` ("text" or "hybrid") is the Catalog page's "Search by meaning" switch (#1382):
+        it decides for this one request without a need. With a need (the Buyer) it is
+        ignored, so the Buyer's basket never changes with it."""
         from gateway import catalog_search
         need = self.db.needs.find_one({"_id": need_id, "kitchen_id": kitchen_id}) if need_id else None
         if need_id and need is None:
             raise GatewayError(422, "INVALID_NEED", "unknown need_id")
         if need is None:
-            rows, kind = catalog_search.search(self.db, query, filters, limit, injected=self._search)
-            return {"products": rows, "search": kind}
+            hybrid = {"hybrid": True, "text": False}.get(mode)
+            rows, kind = catalog_search.search(self.db, query, filters, limit, injected=self._search,
+                                               hybrid=hybrid)
+            out = {"products": _matched_by(rows), "search": kind}
+            if hybrid and kind == "text" and (query or "").strip():
+                out["meaning_unavailable"] = True     # no query vector: the words answered
+            return out
         if need.get("refusal"):
             # Nothing to pick from, whatever the query: "butter" must not answer "peanut butter".
             return {"products": [], "requested_date": need["requested_date"], "measure": None,
@@ -1094,7 +1121,7 @@ class Gateway:
         for r in rows:
             r["can_arrive"] = arrival.get(r["product_id"])
         rows.sort(key=lambda r: 0 if r["can_arrive"] else (1 if r["can_arrive"] is None else 2))
-        return {"products": rows[:limit], "requested_date": need["requested_date"],
+        return {"products": _matched_by(rows[:limit]), "requested_date": need["requested_date"],
                 "measure": measure if filtered else None, "search": kind,
                 "note": "can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
                         "prefer products with can_arrive true"}

@@ -204,7 +204,7 @@ export function OptionCompare({
                 >
                   <span className="flex shrink-0 -space-x-2" data-testid="option-thumbs">
                     {option.lines.map((line, n) => (
-                      <ProductThumb key={`${line.productId}-${n}`} en={line.productName} size="sm" className="ring-2 ring-background" />
+                      <ProductThumb key={`${line.productId}-${n}`} en={line.productName} fi={line.productNameFi} brand={line.brand} size="sm" className="ring-2 ring-background" />
                     ))}
                   </span>
                   <span id={titleId} className="min-w-0 flex-[1_1_16rem] break-words font-medium">

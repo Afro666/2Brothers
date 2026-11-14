@@ -16,6 +16,7 @@ import { listBrandLogosMock } from "@/api/mock-brand-logos";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import { readShelfPhotoMock } from "@/api/mock-shelf";
 import { readMenuPhotoMock } from "@/api/mock-menu-photo";
+import { readPriceListPhotoMock } from "@/api/mock-price-list";
 import { readLabelPhotoMock } from "@/api/mock-label-photo";
 import { createMockAuth } from "@/api/mock-auth";
 import { createKitchenMock } from "@/api/mock-kitchen";
@@ -25,6 +26,7 @@ import { createPrivacyMock } from "@/api/mock-privacy";
 import { createTokensMock } from "@/api/mock-tokens";
 import { createApprovalTokensMock } from "@/api/mock-approval-tokens";
 import { modelUsageMock } from "@/api/mock-usage";
+import { atlasFactsMock } from "@/api/mock-atlas";
 import { createWordsMock } from "@/api/mock-words";
 import {
   approval as seedApproval,
@@ -316,8 +318,10 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     // Like the gateway: only a signed-in account (it has an email) gets a personal approval token.
     ...createApprovalTokensMock(async () => (await auth.getSession())?.email ?? null),
     getModelUsage: async () => modelUsageMock(),
+    getAtlasFacts: async () => atlasFactsMock(),
     readShelfPhoto: readShelfPhotoMock,
     readMenuPhoto: readMenuPhotoMock,
+    readPriceListPhoto: readPriceListPhotoMock,
     readLabelPhoto: readLabelPhotoMock,
     async readDeliveryNote() {
       throw new ApiError("VISION_NOT_CONFIGURED", "Delivery note reading needs the live gateway. Check the delivery by hand.");

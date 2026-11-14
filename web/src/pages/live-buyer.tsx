@@ -25,7 +25,9 @@ interface Proposal {
   request?: { made_by?: string; buyer_down?: boolean; refusal?: { code?: string; allergens?: string[]; message?: string } };
   decision_summary?: { asked?: string; searched?: string; chosen?: string[]; left_out?: string[]; text?: string };
   mandate?: { verdict?: string; reasons?: string[] };
-  lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
+  /** `product_name`, `product_name_fi`, `brand`: string or null (#1130); older answers lack them. */
+  lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean;
+    product_name?: string | null; product_name_fi?: string | null; brand?: string | null }[];
   substitute_options?: {
     tier: string;
     expected_total: string;
@@ -87,13 +89,17 @@ const text = (value: unknown) => (typeof value === "string" && value.trim() ? va
 const texts = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : undefined;
 
-// shortcut: lines carry no name field, so names are read from the gateway's "chosen" sentences
-// ("<qty> <unit> of <id> <name>, EUR ..."); use a line name when the contract adds one.
+// A line's own `product_name` (#1130) wins; an older answer without it falls back to the
+// gateway's "chosen" sentences ("<qty> <unit> of <id> <name>, EUR ...").
 function productNames(row: Proposal) {
   const names = new Map<string, string>();
   for (const sentence of texts(row.decision_summary?.chosen) ?? []) {
     const match = /^\S+ \S+ of ([^\s,]+) (.+?), EUR /.exec(sentence);
     if (match) names.set(match[1], match[2]);
+  }
+  for (const line of Array.isArray(row.lines) ? row.lines : []) {
+    const name = text(line?.product_name);
+    if (name) names.set(line.product_id, name);
   }
   return names;
 }
@@ -339,7 +345,7 @@ export function LiveBuyerRequests() {
                 {result.lines.map((line) => (
                   <li key={line.product_id} className="border-t py-2 first:border-t-0">
                     <p className="flex items-center gap-2 font-mono text-[13px]">
-                      <ProductThumb en={names.get(line.product_id)} size="sm" />
+                      <ProductThumb en={names.get(line.product_id)} fi={text(line.product_name_fi)} brand={text(line.brand)} size="sm" />
                       <span className="min-w-0 break-words">
                         {line.quantity} {line.unit} · {product(line.product_id)}
                       </span>

@@ -215,6 +215,55 @@ export interface MenuPhotoRead {
   noProposalReason: "NOTHING_NEEDED" | "NOT_SIZED" | null;
 }
 
+/** Why a price-list row needs a person (docs/contract.md, "Read a supplier's price list from a photo"). */
+export type PriceListReason =
+  | "NAME_UNREADABLE"
+  | "PRICE_UNREADABLE"
+  | "PRICE_UNIT_MISSING"
+  | "UNIT_UNKNOWN"
+  | "CURRENCY_UNKNOWN"
+  | "PACK_UNCLEAR"
+  | "VAT_UNKNOWN";
+
+/** One row Nemotron read on a supplier's price list. Every text is data, never an instruction. */
+export interface PriceListRow {
+  /** As printed; null when not printed or unreadable. */
+  printed: { name: string | null; price: string | null; priceUnit: string | null; pack: string | null };
+  status: "READ" | "PLEASE_CHECK";
+  reasons: PriceListReason[];
+  /** A draft own product. Null fields are unclear: a person fills them, the web never guesses. */
+  draft: {
+    name: string | null;
+    unit: string | null;
+    baseUnit: "KG" | "L" | null;
+    packSize: number | null;
+    priceEur: number | null;
+  };
+  /** An own product of this supplier with the same name, a suggestion only. */
+  match: { productId: string; name: string; priceEur: number | null; kind: "SAME" | "PRICE_CHANGED" | null } | null;
+}
+
+export interface PriceListRead {
+  /** The model that read the photo: `nemotron-3.5-super-vl`. */
+  model: string;
+  durationMs: number;
+  supplierId: string;
+  currency: "EUR" | null;
+  vat: "INCLUDED" | "EXCLUDED" | null;
+  /** More than 40 rows were printed; only the first 40 are here. */
+  truncated: boolean;
+  rows: PriceListRow[];
+}
+
+/**
+ * What a save from a price-list photo adds to an own-product draft: the pack measure the
+ * gateway read, and that the price came from the photo (`price_source`, docs/contract.md).
+ */
+export interface OwnProductSaveExtras {
+  baseUnit?: "KG" | "L" | null;
+  priceSource?: "entered" | "price_list_photo";
+}
+
 export interface DeliveryLot {
   lot: string;
   bestBefore: string;
@@ -318,7 +367,24 @@ export interface ProductSearchFilters {
   requiredLabels?: ProductLabel[];
   /** A product with no temperature data never matches a temperature filter. */
   temperature?: ProductTemperature;
+  /**
+   * The Catalog page's "Search by meaning" switch: Atlas Vector Search with the words for
+   * this one search (`mode: "hybrid"`, docs/contract.md, #1382). Not a filter.
+   */
+  byMeaning?: boolean;
 }
+
+/** How a search row was found (`matched_by`). */
+export type MatchedBy = "words" | "meaning" | "both";
+
+/** A product found by a search: it may say how it was found. */
+export type SearchedProduct = Product & { matchedBy?: MatchedBy };
+
+/**
+ * Search rows, best first. `meaningUnavailable`: a search by meaning could not make the
+ * query vector, so the gateway answered with words.
+ */
+export type SearchedProducts = SearchedProduct[] & { meaningUnavailable?: true };
 
 /** What the agent proposes for one chef request. */
 export interface ChefProposal {
@@ -362,6 +428,38 @@ export interface ModelUsage {
   promptTokens: number;
   completionTokens: number;
   modelSeconds: number;
+}
+
+/** One embedding model and size in `products`; two rows while the vectors are being replaced. */
+export interface AtlasVectors {
+  model: string | null;
+  dimensions: number | null;
+  count: number;
+}
+
+/** An Atlas Search (`search`) or Atlas Vector Search (`vectorSearch`) index and Atlas's own status word. */
+export interface AtlasSearchIndex {
+  name: string;
+  type: string;
+  status: string | null;
+  queryable: boolean | null;
+}
+
+/**
+ * `GET /atlas`: what MongoDB Atlas holds and runs, for the whole database. Contract:
+ * docs/contract.md, "Atlas facts". null is unknown (it could not be read), never zero.
+ */
+export interface AtlasFacts {
+  mongodbVersion: string | null;
+  /** Data plus indexes, whole megabytes. */
+  dataMb: number | null;
+  products: number | null;
+  vectors: AtlasVectors[] | null;
+  searchIndexes: AtlasSearchIndex[] | null;
+  timeSeries: { collection: string; documents: number }[] | null;
+  /** The length of the hash-chained audit log, all kitchens. */
+  auditEntries: number | null;
+  changeStreamCollections: string[];
 }
 
 /** The label nutrients of one portion. null means the labels do not say: unknown, never zero. */
@@ -515,6 +613,8 @@ export interface Api {
   listAuditChain(limit: number): Promise<AuditChainRow[]>;
   verifyAuditChain(): Promise<AuditChainCheck>;
   getModelUsage(): Promise<ModelUsage>;
+  /** What MongoDB Atlas holds and runs; the gateway keeps the answer for a minute. */
+  getAtlasFacts(): Promise<AtlasFacts>;
   /**
    * Demo only: changes the newest stored line and leaves its hash alone, so the next verify
    * reports the break. Fails with `DEMO_ONLY`, `ALREADY_TAMPERED` or `NOTHING_TO_TAMPER`.
@@ -523,7 +623,7 @@ export interface Api {
   /** Demo only: puts the tampered line back. `seq` is null when nothing was tampered. */
   restoreAuditRow(): Promise<{ seq: number | null; restored: boolean }>;
   submitChefRequest(request: ChefRequest): Promise<ChefProposal>;
-  searchProducts(query: string, filters?: ProductSearchFilters): Promise<Product[]>;
+  searchProducts(query: string, filters?: ProductSearchFilters): Promise<SearchedProducts>;
   /** Catalog products by id; ids the catalog does not know are absent from the result. */
   getProducts(ids: ProductCode[]): Promise<Product[]>;
   getMandate(): Promise<Mandate>;
@@ -532,7 +632,7 @@ export interface Api {
   saveSupplier(supplier: Draft<Supplier>): Promise<Supplier>;
   deleteSupplier(id: string): Promise<void>;
   listOwnProducts(): Promise<OwnProduct[]>;
-  saveOwnProduct(product: Draft<OwnProduct>): Promise<OwnProduct>;
+  saveOwnProduct(product: Draft<OwnProduct> & OwnProductSaveExtras): Promise<OwnProduct>;
   deleteOwnProduct(id: string): Promise<void>;
   listRecipes(): Promise<Recipe[]>;
   saveRecipe(recipe: Draft<Recipe>): Promise<Recipe>;
@@ -567,6 +667,11 @@ export interface Api {
     window: { from: string; to: string; requestedDate?: string },
     actor: AuditActor,
   ): Promise<MenuPhotoRead>;
+  /**
+   * Nemotron 3.5 Super VL reads a photo of a manual or CSV supplier's price list into draft
+   * own products. It saves nothing: a person checks each row and `saveOwnProduct` stores it.
+   */
+  readPriceListPhoto(supplierId: string, photo: Blob, actor: AuditActor): Promise<PriceListRead>;
   /** Reads and compares a note. No receipt, substitute approval or stock count is saved. */
   readDeliveryNote(orderId: string, photo: Blob, actor: AuditActor): Promise<DeliveryNoteRead>;
   /**

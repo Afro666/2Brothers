@@ -252,6 +252,9 @@ export interface ProposalOptionLine {
   productId: ProductCode;
   /** null when the API names only the product id. */
   productName: string | null;
+  /** The Finnish name and the brand (#1130), for the kind picture and the brand logo; null when unknown. */
+  productNameFi: string | null;
+  brand: string | null;
   quantity: number;
   unit: string;
   /** Ex VAT, per `unit`. */

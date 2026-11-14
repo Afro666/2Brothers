@@ -61,12 +61,15 @@ def _query_embedder(now=time.monotonic):
 
 
 def search(db, query: str, filters: dict | None, limit: int, kitchen_id: str | None = None,
-           *, injected=None, now=time.monotonic, hybrid_ok: bool = True) -> tuple[list[dict], str]:
+           *, injected=None, now=time.monotonic, hybrid_ok: bool = True,
+           hybrid: bool | None = None) -> tuple[list[dict], str]:
     """`(rows, kind)`: the best matches and which search gave them, "text" or "hybrid".
 
     `injected` is the gateway's own search function (tests and offline runs): it is used
     as it is and counts as "text". `hybrid_ok=False` asks for the text search only: a
     search inside one category needs no meaning search and must not spend an embedding call.
+    `hybrid` (True or False) decides for this one call whatever `SEARCH_HYBRID` says (the
+    Catalog page's "Search by meaning" switch, #1382); None leaves it to `SEARCH_HYBRID`.
 
     While hybrid rests after a failure, a query whose vector is kept in memory still runs
     hybrid: it needs no new call to the embedding service.
@@ -77,7 +80,8 @@ def search(db, query: str, filters: dict | None, limit: int, kitchen_id: str | N
 
     text = (query or "").strip()
     resting = now() < _state["skip_until"] and text.lower() not in _vectors
-    if hybrid_ok and enabled() and text and not resting:
+    wanted = enabled() if hybrid is None else hybrid
+    if hybrid_ok and wanted and text and not resting:
         try:
             rows = search_products(db, query, filters or {}, limit, kitchen_id=kitchen_id,
                                    hybrid=True, embedder=_query_embedder())
