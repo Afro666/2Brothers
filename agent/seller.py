@@ -195,9 +195,9 @@ async def run(gw, *, today: date, apply: bool, limit: int = 3, kitchen: str | No
             choice = entries[picked[0]]
             entry.update(offered_product_id=choice["product_id"], offered_product=choice["name"],
                          reason=picked[1], made_by="rule" if model is None else MODEL_NAME)
-            offers += 1
-            done.add((kitchen_id, row["product_id"]))
             if not apply:
+                offers += 1
+                done.add((kitchen_id, row["product_id"]))
                 entry["result"] = "DRY_RUN"
                 continue
             try:
@@ -207,7 +207,10 @@ async def run(gw, *, today: date, apply: bool, limit: int = 3, kitchen: str | No
                     "reason": picked[1], "made_by": entry["made_by"], "idempotency_key": key}, "seller-agent")
                 entry.update(result=offer["status"], offer_id=offer["offer_id"], quantity=offer["quantity"])
             except GatewayError as exc:
-                entry["result"] = exc.code
+                entry["result"] = exc.code        # refused: not counted, a later date may still be tried
+                continue
+            offers += 1
+            done.add((kitchen_id, row["product_id"]))
     return report
 
 
