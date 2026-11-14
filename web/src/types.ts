@@ -145,6 +145,8 @@ export interface OrderReceipt {
   /** ISO time from the `iat` claim. */
   signedAt: string | null;
   total: number | null;
+  /** `supplier_outcome` claim: `NOT_SENT` today; null when the claim is absent. */
+  supplierOutcome: string | null;
 }
 
 export type OrderSendOutcome = "CONFIRMED" | "NOT_SENT" | "UNCONFIRMED" | "SENT_READ_FAILED";

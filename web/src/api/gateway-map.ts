@@ -253,6 +253,8 @@ export function mapReceipt(value: unknown): OrderReceipt | null {
     approvedBy: typeof claims.approved_by === "string" && claims.approved_by ? claims.approved_by : null,
     signedAt: typeof iat === "number" && Number.isFinite(iat) ? new Date(iat * 1000).toISOString() : null,
     total,
+    supplierOutcome:
+      typeof claims.supplier_outcome === "string" && claims.supplier_outcome ? claims.supplier_outcome : null,
   };
 }
 

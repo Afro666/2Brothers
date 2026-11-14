@@ -424,6 +424,8 @@ export default {
   "Signed receipt": "Allekirjoitettu kuitti",
   "Signed by the gateway. Anyone can check it with the public key.": "Yhdyskäytävän allekirjoittama. Kuka tahansa voi tarkistaa sen julkisella avaimella.",
   "Signed at": "Allekirjoitettu",
+  "Supplier": "Toimittaja",
+  "Nothing sent to the supplier yet": "Toimittajalle ei ole vielä lähetetty mitään",
   "Signed total": "Allekirjoitettu summa",
   "Copy receipt": "Kopioi kuitti",
   "No signed receipt (this order is from before receipts, or signing was not possible)": "Ei allekirjoitettua kuittia (tilaus on ajalta ennen kuitteja, tai allekirjoitus ei onnistunut)",
