@@ -95,3 +95,22 @@ def test_a_signing_failure_is_logged_and_the_quote_still_works(env, monkeypatch,
     assert p.get("signature") is None
     assert "offer signing failed: ValueError" in caplog.text
     assert "secret-seed" not in caplog.text
+
+
+def test_a_signing_failure_still_sets_offer_hash_and_keeps_approval_mismatch(env, monkeypatch):
+    """#753: no signature must not mean no APPROVAL_MISMATCH check."""
+    client, _, db = env
+
+    def broken(*a, **k):
+        raise ValueError("no key")
+    monkeypatch.setattr(signing, "sign_offer", broken)
+    p = proposal(client)
+    assert p.get("signature") is None and p["offer_hash"]
+    done = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                       json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
+    assert done.status_code == 200, done.text
+    assert db.orders.find_one({})["offer_hash"] == p["offer_hash"]
+    db.offers.update_one({"_id": p["offer_id"]}, {"$set": {"offer_hash": "0" * 64}})
+    bad = client.post("/tools/place_order", headers=AGENT, json={
+        "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"})
+    assert bad.status_code == 409 and bad.json()["error"]["code"] == "APPROVAL_MISMATCH"
