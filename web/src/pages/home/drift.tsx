@@ -12,14 +12,22 @@ const KIND_LABEL: Record<DriftWarning["kind"], string> = {
   cost_creep: "Price creeping",
 };
 
-/** Until the gateway serves the drift route, the tile is not shown at all. */
+/**
+ * Until the gateway serves the drift route, or while drift is unavailable
+ * (503 DRIFT_UNAVAILABLE), the tile is not shown at all.
+ */
 async function loadDrift(
   load: () => Promise<DriftReport>,
 ): Promise<DriftReport | null> {
   try {
     return await load();
   } catch (error) {
-    if (error instanceof ApiError && error.code === "NOT_SERVED") return null;
+    if (
+      error instanceof ApiError &&
+      (error.code === "NOT_SERVED" || error.code === "DRIFT_UNAVAILABLE")
+    ) {
+      return null;
+    }
     throw error;
   }
 }

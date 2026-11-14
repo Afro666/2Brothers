@@ -54,6 +54,25 @@ describe("Standing-order drift tiles", () => {
     expect(screen.queryByText(/Standing-order drift/)).not.toBeInTheDocument();
   });
 
+  it("hides the tile when drift is unavailable", async () => {
+    const api = {
+      ...createMockApi(),
+      getDrift: async () => {
+        throw new ApiError(
+          "DRIFT_UNAVAILABLE",
+          "Drift cannot be computed right now.",
+        );
+      },
+    };
+    renderApp(`/?now=${DEMO_NOW}`, api);
+
+    expect(
+      await screen.findByText("Waiting for your approval"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Standing-order drift/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Orders per guest are steady/)).not.toBeInTheDocument();
+  });
+
   it("says so when nothing drifts", async () => {
     const api = {
       ...createMockApi(),
