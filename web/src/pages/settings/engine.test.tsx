@@ -143,4 +143,20 @@ describe("Ordering engine settings", () => {
     expect(input).toHaveValue("Meat");
     expect(input).toHaveFocus();
   });
+
+  it("offers Remove only on cover rows added in this edit", async () => {
+    const user = userEvent.setup();
+    renderApp("/settings/engine", createMockApi());
+
+    // Loaded rows: the gateway merges cover rules, so they cannot be removed.
+    expect(await screen.findAllByLabelText("Category")).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /^Remove/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add category" }));
+    expect(screen.getAllByLabelText("Category")).toHaveLength(4);
+    await user.click(screen.getByRole("button", { name: "Remove category" }));
+
+    expect(screen.getAllByLabelText("Category")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Save settings" })).toBeDisabled();
+  });
 });
