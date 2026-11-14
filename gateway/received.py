@@ -11,6 +11,7 @@ from datetime import date
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, Request
+from starlette.concurrency import run_in_threadpool
 
 from gateway.delivery_note import delivery_context, manual_lines
 from gateway.service import GatewayError
@@ -77,8 +78,10 @@ def mount_received(app, gw, principal, body) -> None:
             raise _error(409, "NOT_PENDING", "this order was not placed successfully")
         context = delivery_context(gw().db, order)
         try:
-            result, created = delivery_results.save_received(
-                gw().db, kitchen_id=kitchen_id, order_id=order_id, idempotency_key=key,
+            # save_received may wait for a pending same-key save (time.sleep): keep it off
+            # the event loop so other requests do not stall.
+            result, created = await run_in_threadpool(
+                delivery_results.save_received, gw().db, kitchen_id=kitchen_id, order_id=order_id, idempotency_key=key,
                 delivery_date=day, supplier_id=context["supplier_id"],
                 requested_date=context["requested_date"], ordered_at=context["ordered_at"],
                 checked_by=person, checked_at=gw().now(),
