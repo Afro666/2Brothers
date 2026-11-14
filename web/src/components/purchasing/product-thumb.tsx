@@ -70,7 +70,9 @@ export function ProductThumb({
         className,
       )}
     >
-      <Icon className={ICON_SIZES[size]} strokeWidth={1.75} aria-hidden />
+      {/* text-current keeps the tint's colour inside a Select or a Button, whose own rules
+          recolour any svg without a text- class. */}
+      <Icon className={cn(ICON_SIZES[size], "text-current")} strokeWidth={1.75} aria-hidden />
     </span>
   );
 }
