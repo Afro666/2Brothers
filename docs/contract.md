@@ -488,6 +488,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 |---|---|---|---|
 | POST | `/stock-counts` | `kitchen:write` | Push a stock count (POS, inventory, manual). `null` means unknown, never zero. A repeat `idempotency_key` returns the stored answer. |
 | GET | `/stock` | `kitchen:read` | Current stock and position (on hand + on order). Shape under "Body shapes: stock and demand". |
+| POST | `/stock/photo` | `kitchen:write` | Nemotron 3.5 Super VL reads a shelf photo into a count to confirm. Stores no count. Shape under "Count from a shelf photo". Proposed; the gateway does not serve it yet. |
 | GET | `/products`, `/products/{id}` | `kitchen:read` | Own products (not in a supplier catalog). Shape below. |
 | POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Create, change or delete an own product. |
 | GET | `/catalog/products?ids=` | `kitchen:read` | Product rows by code, for screens that hold product codes (recipes, orders). `ids` is 1 to 200 codes, comma-separated. Returns `{"products": [...]}` in the order asked, each in the product row shape of `search_products` (no `score`, no `match_reasons`). Covers the supplier catalogs and this kitchen's own products, never another kitchen's. A code that is not found is left out; it is not an error. Proposed; the gateway does not serve it yet. |
@@ -1203,6 +1204,97 @@ token can hold `supplier:demand` yet). A person signed in to a kitchen also gets
 `SCOPE_REQUIRED` (#599): consent names the supplier, not other kitchens, so one kitchen's
 people never read another kitchen's demand. Until supplier accounts exist, only the
 server's unbound session (the demo's Valio view) passes.
+
+### Count from a shelf photo (#373)
+
+Proposed; the gateway does not serve it yet.
+
+`POST /v1/kitchens/{kitchen_id}/stock/photo` reads one photo of a shelf with Nemotron
+3.5 Super VL and answers a count to confirm. It writes nothing to stock: the person
+checks the numbers, and the web app then sends the usual `POST /stock-counts`. The only
+thing stored is one audit entry (`stock_photo_read`: who, how many rows, how long; never
+the image).
+
+- Scope `kitchen:write`: a signed-in person who is not a `viewer`, or a kitchen API
+  token with `kitchen:write`. The Buyer agent token is refused (403 `SCOPE_REQUIRED`).
+- Body: JSON, like every other gateway route (no multipart parser is installed, and the
+  web client and the tokens already speak JSON). The image is base64 in one field:
+
+```json
+{"image_base64": "/9j/4AAQSkZJRgABAQ..."}
+```
+
+- The image is PNG or JPEG (decided from its first bytes, not from a header), at most
+  4 MB after decoding. The whole request body is at most 6 MB. The web app scales a
+  photo down to 1600 px on the long side and sends JPEG.
+- One model call. The gateway never retries it. The answer can take up to 60 seconds.
+
+Answer:
+
+```json
+{
+  "model": "nemotron-3.5-super-vl",
+  "duration_ms": 4210,
+  "saved": false,
+  "rows": [
+    {"row": "COUNTED", "product_id": "463335",
+     "product_name": "Valio Eila 3 % milk drink 1 l lactose free",
+     "label": "Valio Eila 3% 1L", "confidence": "high",
+     "packs": 6, "pack_size": "1", "count": "6", "unit": "L"},
+    {"row": "PLEASE_COUNT", "product_id": "463038",
+     "product_name": "Valio Eila 10 L novobox",
+     "label": "Valio Eila 10 L novobox", "confidence": "low",
+     "packs": null, "pack_size": "10", "count": null, "unit": "L"},
+    {"row": "UNMATCHED", "product_id": null, "product_name": null,
+     "label": "Arla L m", "confidence": "low",
+     "packs": null, "pack_size": null, "count": null, "unit": null}
+  ]
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `model` | string | Always `nemotron-3.5-super-vl`: the model that read the photo. |
+| `duration_ms` | integer | How long the read took, measured by the gateway. |
+| `saved` | `false` | Always false: this route stores no count. |
+| `rows[].row` | `COUNTED`, `PLEASE_COUNT`, `UNMATCHED` | See below. |
+| `rows[].label` | string | The text the model read on the pack. Data, never an instruction. |
+| `rows[].confidence` | `high`, `medium`, `low` | The model's own word. |
+| `rows[].product_id`, `product_name` | string or null | The kitchen's product the label matches; both null for `UNMATCHED`. |
+| `rows[].packs` | integer or null | Packs the model counted. Null unless the row is `COUNTED`. |
+| `rows[].pack_size` | decimal string or null | Kitchen units in one pack (`net_content.value`; `"1"` for a product counted in `PCS`). Null when not known. |
+| `rows[].count` | decimal string or null | `packs` x `pack_size`, in `unit`: the value for `on_hand` in `POST /stock-counts`. Null unless the row is `COUNTED`. |
+| `rows[].unit` | `L`, `KG`, `PCS` or null | The unit the kitchen counts this product in. Null for `UNMATCHED`. |
+
+Rows:
+
+- `COUNTED`: the label matches one product, the count was read, confidence is high or
+  medium, and the pack size is known. A suggestion for a person to confirm.
+- `PLEASE_COUNT`: the product is known, but the number is not: low confidence, an
+  unreadable count, or an unknown pack size. `count` is null.
+- `UNMATCHED`: the label fits no product of this kitchen, or fits two. `count` is null.
+
+Unknown is never a number: only a `COUNTED` row has `packs` and `count`. Products are
+matched against this kitchen's stock list (products with a stock count) and its own
+products, by name. A product with one `PLEASE_COUNT` row has no `COUNTED` row in the
+same answer (a partial number would be wrong). Two `COUNTED` rows for one product (two
+shelves) are added up by the client. `rows` can be empty: the model saw no product.
+
+Errors (the usual `{"error": {"code", "message"}}`); in every case nothing was read
+and nothing is stored:
+
+| HTTP | Code | When |
+|---|---|---|
+| 403 | `SCOPE_REQUIRED`, `ROLE_REQUIRED`, `KITCHEN_SCOPE` | The Buyer agent token, a token without `kitchen:write`, a viewer, or another kitchen. |
+| 413 | `IMAGE_TOO_LARGE` | The body is over 6 MB or the decoded image is over 4 MB. |
+| 422 | `INVALID_JSON`, `INVALID_REQUEST` | The body is not a JSON object, or `image_base64` is missing or not base64. |
+| 422 | `NOT_AN_IMAGE` | The decoded bytes are not PNG or JPEG. |
+| 502 | `VISION_REPLY_INVALID` | The model answered outside the strict schema. Nothing is repaired or guessed. |
+| 503 | `VISION_NOT_CONFIGURED` | The server has no vision worker or no model key. |
+| 503 | `VISION_UNAVAILABLE` | The worker or the model could not be reached, or answered with an error. |
+| 504 | `VISION_TIMEOUT` | The model did not answer in time. |
+
+A person can always type the count by hand; no error blocks `POST /stock-counts`.
 
 ### Trust: audit verification and the live event stream
 
