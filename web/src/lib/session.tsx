@@ -15,7 +15,8 @@ interface SessionContextValue {
   signInRevision: number;
   signIn(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
-  reload(): Promise<Session | null>;
+  /** The session, null when signed out, undefined when `/v1/me` failed (the error screen shows). */
+  reload(): Promise<Session | null | undefined>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -41,10 +42,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (cause instanceof ApiError && (cause.code === "UNAUTHENTICATED" || cause.status === 401)) {
         setSession(null);
         setStatus("signed-out");
-      } else {
-        setFailure(cause instanceof Error ? cause : new Error(String(cause)));
+        return null;
       }
-      return null;
+      setFailure(cause instanceof Error ? cause : new Error(String(cause)));
+      return undefined;
     }
   }, [api]);
 
@@ -86,7 +87,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     setFailure(null);
     const next = await reload();
-    await navigate({ to: next ? "/" : "/sign-in" });
+    // Only a gateway that says "signed out" sends a person to sign-in; a failed read keeps "/" behind the retry.
+    await navigate({ to: next === null ? "/sign-in" : "/" });
   }
 
   let content = children;

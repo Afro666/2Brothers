@@ -50,6 +50,25 @@ describe("authentication", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 
+  it("after sign-out a failed session read shows the error, not the sign-in page", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    await api.signIn("buyer@demo.kitchen", "demo-kitchen-2026");
+    const getSession = vi.spyOn(api, "getSession");
+    const { router } = renderApp("/", api);
+    const signOut = (await screen.findAllByRole("button", { name: "Sign out" }))[0];
+    getSession.mockRejectedValueOnce(new ApiError("GATEWAY_ERROR", "The gateway answered 503.", {}, 503));
+
+    await user.click(signOut);
+
+    expect(await screen.findByText("The gateway answered 503.")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Sign in to Kitchen Buyer" })).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByTestId("open-demo-note")).toBeVisible();
+    expect(router.state.location.pathname).toBe("/");
+  });
+
   it("shows the gateway error for a wrong password", async () => {
     const user = userEvent.setup();
     renderApp("/", createMockApi({ signedOut: true }));
