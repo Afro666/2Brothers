@@ -1,12 +1,13 @@
 """Record the demo as a silent video with captions: the fallback for the stage (#295).
 
     python -m demo.record_demo                      # records, approves nothing
-    python -m demo.record_demo --approve            # also approves the small order
+    python -m demo.record_demo --approve            # also takes the confirmed option and approves it
     python -m demo.record_demo --base-url https://31-22-104-201.sslip.io --out demo/out
 
-It drives a real browser through the live site, the way docs/demo.md says: a small request
-the Buyer can fill from confirmed stock, the proposal with its reasons, the approval inbox,
-the activity log, the tamper check and the two discovery files. Each step shows a caption,
+It drives a real browser through the live site, the way docs/demo.md says: the challenge's
+request (1,000 L of lactose-free milk), the proposal with its reasons, the approval inbox,
+the option that confirmed stock covers, the activity log, the tamper check and the two
+discovery files. Each step shows a caption,
 so the video explains itself without sound. A step that fails is reported and skipped; the
 recording goes on.
 
@@ -77,10 +78,14 @@ def steps(base: str, text: str, needed_by: str, approve: bool) -> list[tuple[str
         """Approve only the proposal for `text`, never another one in the inbox.
 
         Matching rule: an inbox card's title is the request text (trimmed by the gateway),
-        so only an Approve button inside a card whose title is exactly `text.strip()` counts.
+        so only a button inside a card whose title is exactly `text.strip()` counts.
+        A proposal with unconfirmed stock has no Approve button a person can press: its
+        "Choose option" button takes the option that confirmed stock covers and opens the
+        same dialog. That button comes first; a plain Approve is the other case.
         """
         cards = page.locator('[data-slot="card"]').filter(has=page.get_by_text(text.strip(), exact=True))
-        buttons = [b for b in cards.get_by_role("button", name="Approve", exact=False).all() if b.is_enabled()]
+        buttons = [b for name in ("Choose option", "Approve")
+                   for b in cards.get_by_role("button", name=name, exact=False).all() if b.is_enabled()]
         if not buttons:
             raise RuntimeError(f'no proposal for "{text.strip()}" in the inbox can be approved')
         buttons[0].scroll_into_view_if_needed()
@@ -114,7 +119,8 @@ def steps(base: str, text: str, needed_by: str, approve: bool) -> list[tuple[str
         ("inbox", "Nothing is ordered yet. Every proposal waits for a person.", inbox),
     ]
     if approve:
-        plan.append(("approve", "A person approves the exact total. The agent has no approve tool.", decide))
+        plan.append(("approve", "A person takes the option Valio's stock confirms and approves its exact total. "
+                                "The agent has no approve tool.", decide))
     plan += [
         ("log", "Every step is written to a hash-chained activity log.", log),
         ("tamper", "Tamper check: change one line of the log and the chain breaks.", tamper),
@@ -153,7 +159,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base-url", default="https://31-22-104-201.sslip.io")
     parser.add_argument("--out", default="demo/out", help="folder for the .webm file (git-ignored)")
-    parser.add_argument("--text", default="200 L lactose-free milk by Monday")
+    parser.add_argument("--text", default="1,000 L lactose-free milk by Monday")
     parser.add_argument("--date", default=next_monday(date.today()).isoformat(),
                         help="needed-by date; pick one whose order cut-offs are still open")
     parser.add_argument("--approve", action="store_true", help="also approve the proposal (records one order)")

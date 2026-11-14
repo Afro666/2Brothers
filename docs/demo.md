@@ -30,7 +30,8 @@ shaky ones.
    `agent/fixtures/shelf/demo-shelf.png` on the device that shows it.
 5. **Recall beat only:** it is one-shot per recorded notice and needs data (see beat 4).
 6. **Have the fallback video open** in a player, paused at 0:00. Record it with
-   `python -m demo.record_demo --approve` (about one minute, captions, no sound; the file
+   `python -m demo.record_demo --approve` (about 75 seconds, captions, no sound; it sends the
+   1,000 L request, takes option A and approves it; the file
    lands in `demo/out/`). Record again after any change to the demo path.
 7. **Clear the inbox.** Test requests pile up: on 14 Nov the menu badge showed 24 waiting
    proposals. On the server, through the gateway container:
@@ -39,20 +40,21 @@ shaky ones.
 8. **Warm up.** Send one request before the live one. The Buyer model does not finish about
    one run in three; the gateway then retries once (#735), and after that the parser answers.
 
-## Two requests, not one
+## One request, and a person can approve it
 
-A proposal with a line whose stock Valio does not report cannot be placed: a person's yes is
-not stock confirmation. On 14 Nov every 1,000 L milk proposal had such a line, so its
-Approve button was disabled. Until the option card has a Choose button (#403), show the
-approval on a request that confirmed stock covers:
+A proposal with a line whose stock Valio does not report cannot be placed as it is: a
+person's yes is not stock confirmation. The 1,000 L milk proposal has such a line. Its card
+therefore shows options, and the first one is the part that Valio's stock confirms:
+"Order the confirmed 698 L now. The other 302 L is held until the supplier confirms stock;
+nothing is ordered for it." The button "Choose option A: approve EUR 2,099.41 incl VAT"
+takes that option and opens the approval dialog with the exact total (#775, #844, #843).
 
-- **Small request, for the one-tap approval:** `200 L lactose-free milk by Monday`. Measured
-  live: the Buyer (Nemotron 3.5 Super VL) answered in 8.5 s with 200 ST of 463380, stock
-  confirmed, EUR 601.55. It can be approved.
-- **Big request, for the honest answer:** `1,000 L lactose-free milk by Monday`. It shows
-  the split, the cut-offs and the first option: "Order the confirmed 698 L now. The other
-  302 L is held until the supplier confirms stock" (EUR 2,099.41, served by the gateway
-  since #775). With the Choose button a person takes that option and approves it.
+Checked on the live site on 14 Nov at 04:10 UTC, on a 390 px wide screen: request, card in
+14 s from the Buyer (Nemotron 3.5 Super VL), Choose, "Yes, approve EUR 2,099.41", status
+APPROVED with one line of 698 ST of 463380 and an order id.
+
+- **Backup request:** `200 L lactose-free milk by Monday`. Confirmed stock covers all of it
+  (200 ST of 463380, EUR 601.55, 8.5 s), so its card has a plain Approve button.
 
 ## The script
 
@@ -60,8 +62,8 @@ approval on a request that confirmed stock covers:
 |---|---|---|---|---|
 | 0:00 | 1. The request | On `/requests` type: `1,000 L lactose-free milk by Monday`. Press "Ask the agent". | "This is the sentence from your challenge. No product codes." | A, B |
 | 0:15 | 2. The honest answer | The card appears (about 12 s). Read the "Why this basket" list. | "It checked 20 products with live Valio prices and stock. 12 cannot make Monday: their cut-off passed. Valio confirms stock for 698 litres only. The rest is on the cheapest milk, and the card says its stock is not confirmed. A chatbot would have promised 1,000 litres." | B, D |
-| 0:50 | 3. The human decides | Open `/approvals` on the phone. Show the total and the options. Approve or reject with one tap. Open `/audit`. | "The agent can propose. It has no approve tool. A person approves the exact total; if the price moves, the old yes is refused. Every step is in a hash-chained log." | C |
-| 1:30 | 4. An exception | Show one: the recall hold (*not live in the web yet*, #655), or the tamper check on `/trust` (*mock data in gateway mode until the trust routes merge*). Until then: run `python -m gateway.scenarios` in the terminal. | "13 golden cases with the correct decision. All 13 pass. They include a moved price, an allergen with missing data, and a duplicate send." | D |
+| 0:50 | 3. The human decides | Open `/approvals` on the phone. Show the total and the options. Press "Choose option A", then "Yes, approve". Open `/audit`. | "The agent can propose. It has no approve tool. I take the part Valio confirms: 698 litres now, 302 held, nothing ordered for it. I approve the exact total; if the price moves, the old yes is refused. Every step is in a hash-chained log." | C |
+| 1:30 | 4. An exception | The tamper check on `/trust`: "Verify audit chain" says Chain OK; "Run the tamper test" changes one line and the page says "Chain broken at line N"; restore, and it is OK again (live, checked 14 Nov). Or run `python -m gateway.scenarios` in the terminal. The recall hold is *not live yet* (#655 and the Context.dev key on the server). | "Nobody can edit the log quietly, not even us. And 13 golden cases with the correct decision all pass: a moved price, an allergen with missing data, a duplicate send." | D |
 | 2:10 | 5. Any agent | In the terminal: `curl -s https://31-22-104-201.sslip.io/llms.txt \| head -20`, then the search call from `docs/byoa.md`. | "This is not our agent's private door. Any agent with a URL and a token can read the catalog, get an offer, simulate and propose. The agent card, the OpenAPI file and the MCP endpoint are public. Our conformance kit runs 12 trust checks against any gateway." | E |
 | 2:40 | 6. Close | Show the Valio side: role "Valio planner", Home. | "The kitchen shares its forecast if it agrees. Valio sees demand before the orders arrive: 16 kitchens share, and 8 lines are short for Monday and Tuesday." (Numbers from 14 Nov; read them from the screen.) | bonus |
 
@@ -156,15 +158,14 @@ are planned, and none of them scores in three minutes.
 
 ## Open items for this script
 
-- [x] Fallback video: `python -m demo.record_demo` records it (first run 14 Nov, 57 s). Record the
-      final one with `--approve` after the last change.
+- [x] Fallback video: `python -m demo.record_demo --approve` records it with the approval
+      (run 14 Nov 04:20 UTC, all nine steps ok). Record the final one after the last change.
 - [ ] Measure the manual webshop time (#295).
 - [ ] Buyer path through the web still fell back to the parser at 02:22 UTC on 14 Nov;
       confirm it says the Buyer model before rehearsal.
 - [ ] Recall beat: web wiring #655; `CONTEXT_DEV_API_KEY` on the server; seed with
       `python -m demo.recall_demo` (see `deploy/README.md`). One-shot: do not press
       "Check recalls now" in rehearsal on the live kitchen.
-- [ ] Tamper check beat: the gateway routes are live (#747, `/audit/verify` answers the real
-      chain); the web Trust page still shows sample data until #789.
-- [ ] Choose button on the option card (#403), so the big request can be approved in the demo.
+- [x] Tamper check beat: live on `/trust` (#747, #818).
+- [x] Choose button on the option card (#403, #843): the big request can be approved.
 - [ ] Claude Desktop as the second agent (`docs/byoa.md`): run it once before the demo.
