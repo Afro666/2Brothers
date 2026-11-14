@@ -96,11 +96,10 @@ def _made_by(gw, doc: dict, request: dict) -> str | None:
     return "request" if request.get("made_by") else None
 
 
-def _engine_quantity(gw, doc: dict, product_id: str) -> str | None:
+def _engine_quantity(offer: dict | None, product_id: str) -> str | None:
     """The engine's own quantity for this product in the proposal's ORIGINAL offer, in the
     line's sales unit (the basis of from_qty/to_qty). A line that learning already adjusted
     carries `unlearned_quantity` (#1305), which wins, so a correction never compounds."""
-    offer = orders.get_offer(gw.db, doc.get("original_offer_id") or doc["offer_id"])
     total, found = Decimal(0), False
     for line in ((offer or {}).get("simulation") or {}).get("lines") or []:
         if str(line.get("product_id")) != product_id:
@@ -113,23 +112,30 @@ def _engine_quantity(gw, doc: dict, product_id: str) -> str | None:
     return _n(total) if found else None
 
 
-def _context(gw, doc: dict, product_id: str) -> dict:
-    """The server-read basis of one line, before this change re-quotes the offer.
+def _contexts(gw, doc: dict, product_ids: list[str]) -> dict[str, dict]:
+    """The server-read basis of each line, before this change re-quotes the offer. The
+    original offer and the origin are read once per change, not once per line (#1496).
 
     `forecast_need` is the unlearned engine quantity, and only for a plan proposal: a typed
     request's quantity is the person's own number, not a forecast, so it stays null and can
     never train a correction (contract, "Changes and human feedback")."""
     basis = doc.get("original_request") or doc["request"]
-    need = next((n for n in basis.get("needs") or []
-                 if str(n.get("product_id")) == product_id), None) or {}
     requested_date = basis.get("requested_date")
     if hasattr(requested_date, "isoformat"):
         requested_date = requested_date.isoformat()
     made_by = _made_by(gw, doc, basis)
-    return {"forecast_need": _engine_quantity(gw, doc, product_id) if made_by == "menu_plan" else None,
+    offer = (orders.get_offer(gw.db, doc.get("original_offer_id") or doc["offer_id"])
+             if made_by == "menu_plan" else None)
+    out = {}
+    for product_id in product_ids:
+        need = next((n for n in basis.get("needs") or []
+                     if str(n.get("product_id")) == product_id), None) or {}
+        out[product_id] = {
+            "forecast_need": _engine_quantity(offer, product_id) if made_by == "menu_plan" else None,
             "stock_position": _number(need.get("stock_position")), "covers": need.get("covers"),
             "requested_date": requested_date, "made_by": made_by,
             "offer_id": doc["offer_id"]}
+    return out
 
 
 def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, person: str | None) -> dict:
@@ -162,7 +168,7 @@ def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, per
         raise GatewayError(409, "NOT_PENDING", f"proposal is {doc['status']}{held}")
     if any(a.get("match") in ("exact", "possible") for a in doc.get("recall_alerts") or []):
         raise GatewayError(409, "NOT_PENDING", "a recall holds this basket; review its replacement proposal")
-    contexts = {entry["product_id"]: _context(gw, doc, entry["product_id"]) for entry in entries}
+    contexts = _contexts(gw, doc, ids)
 
     stored = orders.get_offer(gw.db, doc["offer_id"])
     before_total = stored["simulation"]["expected_total"]
