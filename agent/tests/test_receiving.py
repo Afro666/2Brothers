@@ -69,6 +69,14 @@ def test_unreadable_code_makes_an_absent_line_unknown_not_missing():
     assert match_delivery(ORDER, reply)["lines"][0]["status"] == "MISSING"
 
 
+def test_unreadable_replaces_needs_a_persons_ok():
+    reply = deepcopy(note("short"))
+    sub = next(ln for ln in reply["lines"] if ln["replaces"] != "none")
+    sub["replaces"] = "unknown"
+    [row] = match_delivery(ORDER, reply)["not_ordered"]
+    assert (row["status"], row["replaces"], row["needs_approval"]) == ("SUBSTITUTE", "unknown", True)
+
+
 @pytest.mark.parametrize("content", [
     "not json",
     json.dumps({"order_ref": "x", "delivery_date": "2026-11-16"}),
