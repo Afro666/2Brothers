@@ -39,7 +39,7 @@ describe("ApprovalsPage recalls", () => {
     expect(within(card).getByText("Replacement order")).toBeInTheDocument();
     expect(within(card).getByText("Blocked by a recall. This proposal cannot be approved as it is.")).toBeInTheDocument();
     expect(within(card).queryByRole("button", { name: /^Approve/ })).not.toBeInTheDocument();
-    expect(within(card).queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Reject" })).toBeEnabled();
     expect(within(card).getByRole("link", { name: /Review replacement order/ })).toHaveAttribute(
       "href",
       "#proposal-ORD-1045-R",
@@ -135,6 +135,42 @@ describe("ApprovalsPage recalls", () => {
     ).rejects.toMatchObject({ code: "BLOCKED_BY_RECALL", message: expect.stringContaining("blocked by a recall") });
     expect((await api.reject("APR-313", "Recalled line; replacement proposed", "human")).status).toBe("REJECTED");
     expect((await api.getApproval("APR-313-R")).status).toBe("PENDING");
+  });
+
+  it("rejects a held card from the inbox and moves it to Decided", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    await api.checkRecalls!("human");
+    const reject = vi.spyOn(api, "reject");
+    renderApp("/approvals", api);
+
+    const held = (await screen.findByRole("heading", { name: "Held by a recall (1)" })).closest("section") as HTMLElement;
+    const card = within(held).getByText("Breakfast buffet coffee for next week").closest('[data-slot="card"]') as HTMLElement;
+    expect(within(card).queryByRole("button", { name: /^Approve/ })).not.toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Reject" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Reject this order?" });
+    await user.type(within(dialog).getByLabelText("Reason (optional)"), "Recalled line; replacement proposed");
+    await user.click(within(dialog).getByRole("button", { name: "Reject" }));
+
+    await waitFor(() => expect(reject).toHaveBeenCalledWith("APR-313", "Recalled line; replacement proposed", "human"));
+    expect((await api.getApproval("APR-313")).status).toBe("REJECTED");
+    await waitFor(() => expect(screen.queryByRole("heading", { name: /Held by a recall/ })).not.toBeInTheDocument());
+    const decided = screen.getByRole("heading", { name: "Decided" }).closest("section") as HTMLElement;
+    expect(within(decided).getByText("Breakfast buffet coffee for next week")).toBeInTheDocument();
+    expect(within(decided).getByText("Rejected. This order will not be sent.")).toBeInTheDocument();
+  });
+
+  it("rejects a held proposal through the gateway's reject route", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ status: "rejected" }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetch);
+    const api = createHttpApi("http://gateway.test");
+    // Only the first call matters here: the reject POST. The re-read after it is answered with a stub.
+    await api.reject("APR-313", "Recalled line", "human").catch(() => undefined);
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(String(url)).toMatch(/\/proposals\/.+\/reject$/);
+    expect(init.method).toBe("POST");
+    vi.unstubAllGlobals();
   });
 
   it("says recalls are unknown when loading them fails", async () => {

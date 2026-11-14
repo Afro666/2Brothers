@@ -97,6 +97,9 @@ export function ApprovalCard({
   );
   const reasonId = useId();
   const pending = status === "PENDING";
+  // A proposal held by a recall cannot be approved, but it can be rejected to close it.
+  const held = status === "BLOCKED_BY_RECALL";
+  const canDecide = pending || (held && onReject != null);
   const stockMessage =
     recallHold(recalls, order) ??
     (!order || order.lines.length === 0
@@ -134,7 +137,7 @@ export function ApprovalCard({
   // (price moved, expected_total mismatch, network), the card stays PENDING
   // and shows the error, so nobody believes an order went through.
   async function decide(next: "APPROVED" | "REJECTED", call: () => void | Promise<void>) {
-    if (approvalBlockedReason || (next === "APPROVED" && stockMessage)) return;
+    if (approvalBlockedReason || (next === "APPROVED" && (stockMessage || !pending))) return;
     setBusy(true);
     setError(null);
     try {
@@ -150,7 +153,7 @@ export function ApprovalCard({
             ? e.message
             : String(e);
       setError(
-        `${what} failed: ${message}. ${recallBlocked ? "The order stays held by the recall." : "The order is still pending."}`,
+        `${what} failed: ${message}. ${recallBlocked || held ? "The order stays held by the recall." : "The order is still pending."}`,
       );
     } finally {
       setBusy(false);
@@ -351,8 +354,13 @@ export function ApprovalCard({
         ) : null}
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-2 border-t border-dashed border-input px-0 pt-4 [.border-t]:pt-4 sm:flex-row sm:justify-end">
-        {pending ? (
+        {canDecide ? (
           <>
+            {held ? (
+              <p role="status" className="w-full text-sm text-muted-foreground sm:mr-auto">
+                Blocked by a recall. This proposal cannot be approved as it is.
+              </p>
+            ) : null}
             {error && (
               <p role="alert" className={cn("rounded-md border px-3 py-2 text-sm sm:mr-auto", TONE_CLASSES.danger)}>
                 {error}
@@ -362,10 +370,12 @@ export function ApprovalCard({
               <X aria-hidden />
               Reject
             </Button>
-            <Button className="w-full sm:w-auto" disabled={busy || !!stockMessage || !!approvalBlockedReason} onClick={() => setOpen("approve")}>
-              <Check aria-hidden />
-              Approve {formatEur(request.totalInclVat)} incl VAT
-            </Button>
+            {pending ? (
+              <Button className="w-full sm:w-auto" disabled={busy || !!stockMessage || !!approvalBlockedReason} onClick={() => setOpen("approve")}>
+                <Check aria-hidden />
+                Approve {formatEur(request.totalInclVat)} incl VAT
+              </Button>
+            ) : null}
           </>
         ) : (
           <p
@@ -389,7 +399,7 @@ export function ApprovalCard({
                   : "Rejected. This order will not be sent."}
           </p>
         )}
-        {pending && approvalBlockedReason ? (
+        {canDecide && approvalBlockedReason ? (
           <p className="w-full text-sm text-muted-foreground sm:mr-auto">{approvalBlockedReason}</p>
         ) : null}
       </CardFooter>

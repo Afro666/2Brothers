@@ -221,6 +221,10 @@ function ApiApprovalsPage() {
                       key={approval.id}
                       request={approval}
                       order={order ?? undefined}
+                      onReject={reject}
+                      approvalBlockedReason={
+                        session && !session.canApprove ? "Your account cannot approve or reject orders." : undefined
+                      }
                       recalls={recallsFor(approval.orderId)}
                     />
                   ))}
