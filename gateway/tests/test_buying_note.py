@@ -107,9 +107,19 @@ def test_note_rounding_preserves_unknowns_kitchen_count_and_original_priority():
     larger = {**short, "product_id": "z", "shortage": "10.04"}
     rows = pick([unknown, short, larger])
     assert [r["product_id"] for r in rows] == ["z", "a", unknown["product_id"]]
-    assert rows[0]["shortage"] == rows[1]["shortage"] == "10"
+    assert rows[0]["shortage"] == rows[1]["shortage"] == "10.1"
     assert rows[2]["demand"] == "381" and rows[2]["kitchens"] == 3
     assert all(rows[2][k] is None for k in ("available", "shortage", "suggested_buy"))
+
+
+@pytest.mark.parametrize("unit, gap, expected", [("PCS", "0.3", "1"), ("ST", "0.3", "1"),
+                                                ("KG", "0.04", "0.1"), ("L", "0.04", "0.1")])
+def test_a_small_shortage_rounds_up_and_never_shows_as_zero(unit, gap, expected):
+    source = {**ROWS[0], "unit": unit, "demand": "5.04", "available": "5", "shortage": gap,
+              "suggested_buy": gap}
+    row = pick([source])[0]
+    assert row["shortage"] == row["suggested_buy"] == expected
+    assert row["available"] == "5"
 
 
 def test_a_correct_number_moved_to_another_product_drops_the_note():

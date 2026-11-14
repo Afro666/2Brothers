@@ -7,7 +7,7 @@ note is shown. One failed line drops the whole note, and the page shows the tabl
 """
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 import hashlib
 import json
 import os
@@ -40,7 +40,10 @@ def presentation_row(row: dict) -> dict:
     if quantum is not None:
         for key in ("demand", "available", "shortage", "suggested_buy"):
             if out[key] is not None:
-                rounded = Decimal(out[key]).quantize(Decimal(quantum), rounding=ROUND_HALF_UP)
+                amount = Decimal(out[key])
+                # A real gap is never shown as 0: shortage and buy round up to the unit quantum.
+                up = key in ("shortage", "suggested_buy") and amount > 0
+                rounded = amount.quantize(Decimal(quantum), rounding=ROUND_CEILING if up else ROUND_HALF_UP)
                 text = format(rounded, "f") if rounded else "0"
                 out[key] = text.rstrip("0").rstrip(".") if "." in text else text
     return out
