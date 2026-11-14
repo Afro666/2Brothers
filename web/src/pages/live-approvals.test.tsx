@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createMockApi } from "@/api/mock";
@@ -136,4 +136,23 @@ it("keeps the decision key after a lost response and never displays an unconfirm
   await user.click(screen.getByRole("button", { name: "Confirm and record order" }));
   expect(await screen.findByRole("status")).toHaveTextContent("order1");
   expect(fetch.mock.calls[1][1].body).toBe(fetch.mock.calls[2][1].body);
+});
+
+it("drops the waiting-approvals badge right after a live rejection, without navigation", async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ proposals: [row] }))
+    .mockResolvedValueOnce(json({ status: "REJECTED", proposal_id: "p1" }));
+  vi.stubGlobal("fetch", fetch);
+  const api = createMockApi();
+  const pending = (await api.listApprovals()).filter(a => a.status === "PENDING");
+  expect(pending.length).toBeGreaterThan(0);
+  let decided = false;
+  api.listApprovals = async () => (decided ? pending.slice(1) : pending);
+  const user = userEvent.setup();
+  renderApp("/approvals", api);
+  const orders = () => within(screen.getAllByRole("navigation", { name: "Main" })[0]).getByRole("link", { name: "Orders" });
+  await waitFor(() => expect(orders()).toHaveAttribute("aria-description", `${pending.length} waiting`));
+  await user.click(await screen.findByRole("button", { name: "Reject proposal" }));
+  decided = true;
+  await user.click(screen.getByRole("button", { name: "Confirm rejection" }));
+  await waitFor(() => expect(orders()).toHaveAttribute("aria-description", `${pending.length - 1} waiting`));
 });
