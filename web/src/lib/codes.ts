@@ -138,3 +138,26 @@ export function plainReason(reason: string, names?: ReadonlyMap<string, string>)
   const name = names?.get(product) ?? product;
   return rest === undefined ? `${name}: ${label.title}. ${label.detail}` : `${name}: ${label.title}: ${rest}`;
 }
+
+/**
+ * #1169: a reason with t(), where the code title plainReason put in it ("Peanut butter:
+ * Excluded allergen: ...") is translated on its own when the whole sentence is not in the
+ * dictionary. The product name and the gateway's own words after the title stay as they are.
+ */
+export function translateReason(text: string, t: (text: string) => string): string {
+  const whole = t(text);
+  if (whole !== text) return whole;
+  // The title starts the text or follows a ": ".
+  const starts = [0];
+  for (let i = text.indexOf(": "); i >= 0; i = text.indexOf(": ", i + 2)) starts.push(i + 2);
+  for (const start of starts) {
+    for (const { title, detail } of Object.values(CODE_LABELS)) {
+      if (!text.startsWith(title, start)) continue;
+      const head = text.slice(0, start);
+      const after = text.slice(start + title.length);
+      if (after === `. ${detail}`) return `${head}${t(title)}. ${t(detail)}`;
+      if (after === "" || after.startsWith(": ")) return `${head}${t(title)}${after}`;
+    }
+  }
+  return text;
+}
