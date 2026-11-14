@@ -201,6 +201,20 @@ class HybridQueryTests(unittest.TestCase):
                             embedder=lambda texts, kind: calls.append(texts))
         self.assertEqual(calls, [])
 
+    @unittest.skipIf(mongomock is None, "mongomock is not installed")
+    def test_a_query_model_other_than_the_stored_vectors_is_refused(self):
+        db = mongomock.MongoClient().db
+        db.products.insert_one({"_id": "900001", "names": {"fi": "Testi maito"},
+                                "embedding": {"model": "voyage-4", "dimensions": EMBED_DIMENSIONS}})
+        calls = []
+        env = {"NVIDIA_API_KEY": "test-not-a-real-key", "MONGODB_AI_API_KEY": ""}
+        with mock.patch.dict("os.environ", env), mock.patch.object(embeddings, "load_dotenv"):
+            with self.assertRaises(EmbeddingError) as caught:
+                search_products(db, "milk", hybrid=True,
+                                embedder=lambda texts, kind: calls.append(texts))
+        self.assertEqual(calls, [])
+        self.assertIn("voyage-4", str(caught.exception))
+
     def test_index_definition_matches_the_model(self):
         fields = json.loads(Path(__file__).parents[1].joinpath("vector_index.json").read_text())["fields"]
         self.assertEqual(fields[0]["numDimensions"], EMBED_DIMENSIONS)

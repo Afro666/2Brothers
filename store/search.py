@@ -236,6 +236,20 @@ def _reasons(doc: dict, text: str, size: dict | None, codes: list[str]) -> list[
     return reasons
 
 
+_STORED_MODEL: dict = {}  # per process: (client id, database name) -> model of the vectors
+
+
+def _stored_model(db) -> str | None:
+    """The model the product vectors were made with, or None when there are none yet."""
+    key = (id(db.client), db.name)
+    if key not in _STORED_MODEL:
+        row = db.products.find_one({"embedding.model": {"$exists": True}}, {"embedding.model": 1})
+        if row is None:
+            return None  # not cached: vectors may be written later in this process
+        _STORED_MODEL[key] = row["embedding"]["model"]
+    return _STORED_MODEL[key]
+
+
 def search_products(db, query: str = "", filters: dict | None = None, limit: int = 20,
                     kitchen_id: str | None = None, hybrid: bool = False,
                     embedder=None) -> list[dict]:
@@ -248,8 +262,12 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
     """
     text, text_size = parse_query(query)
     if hybrid and text:
-        from store.embeddings import embed, to_binary
+        from store.embeddings import EmbeddingError, current_model, embed, to_binary
         build_pipeline(query, filters, limit, kitchen_id)  # refuse bad input before paying
+        query_model, stored = current_model(), _stored_model(db)
+        if query_model and stored and query_model != stored:
+            # Same size, other model: Atlas would accept the vector and rank by noise.
+            raise EmbeddingError(f"query model {query_model} does not match stored vectors {stored}")
         vector = to_binary((embedder or embed)([query], "query")[0])
         pipeline = build_hybrid_pipeline(query, vector, filters, limit, kitchen_id)
     else:
