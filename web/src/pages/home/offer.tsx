@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 
 import type { Api } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import { useT } from "@/lib/i18n";
@@ -84,7 +85,10 @@ export function SupplierOfferTile({ api }: { api: Api }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1">
-          <p className="break-words text-base font-semibold">{product}</p>
+          <div className="flex items-center gap-3">
+            <ProductThumb en={offer.productName} />
+            <p className="min-w-0 break-words text-base font-semibold">{product}</p>
+          </div>
           <p className="break-words text-sm">
             {t("in place of {product}, which is predicted short on", { product: replaced })}{" "}
             <time dateTime={offer.requestedDate}>{formatDate(offer.requestedDate)}</time>
