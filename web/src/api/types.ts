@@ -161,6 +161,43 @@ export interface ShelfPhotoRead {
   rows: ShelfPhotoRow[];
 }
 
+export interface DeliveryLot {
+  lot: string;
+  bestBefore: string;
+  quantity: number | null;
+  unit: string;
+}
+
+export interface DeliveryNoteLine {
+  productId: string;
+  status: "RECEIVED" | "SHORT" | "MISSING" | "UNKNOWN";
+  ordered: number | null;
+  received: number | null;
+  missing: number | null;
+  baseUnit: string;
+  lots: DeliveryLot[];
+}
+
+export interface DeliveryNoteOther extends DeliveryLot {
+  productId: string;
+  status: "SUBSTITUTE" | "EXTRA" | "UNREADABLE";
+  replaces: string;
+  received: number | null;
+  baseUnit: string;
+  needsApproval: boolean;
+}
+
+export interface DeliveryNoteRead {
+  orderId: string;
+  model: string;
+  durationMs: number;
+  orderRef: string;
+  deliveryDate: string;
+  complete: boolean;
+  lines: DeliveryNoteLine[];
+  notOrdered: DeliveryNoteOther[];
+}
+
 export type ProductTemperature = "ambient" | "chilled" | "frozen";
 
 export interface ProductSearchFilters {
@@ -388,6 +425,8 @@ export interface Api {
    * nothing: the person checks the numbers and `submitStockCount` stores them.
    */
   readShelfPhoto(photo: Blob, actor: AuditActor): Promise<ShelfPhotoRead>;
+  /** Reads and compares a note. No receipt, substitute approval or stock count is saved. */
+  readDeliveryNote(orderId: string, photo: Blob, actor: AuditActor): Promise<DeliveryNoteRead>;
   /** The kitchen's need per product and day, `from` and `to` inclusive (`YYYY-MM-DD`). */
   getDemand(from: string, to: string): Promise<DemandLine[]>;
   /**

@@ -303,6 +303,9 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     ...createTokensMock(),
     getModelUsage: async () => modelUsageMock(),
     readShelfPhoto: readShelfPhotoMock,
+    async readDeliveryNote() {
+      throw new ApiError("VISION_NOT_CONFIGURED", "Delivery note reading needs the live gateway. Check the delivery by hand.");
+    },
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
     },
