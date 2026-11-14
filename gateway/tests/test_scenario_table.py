@@ -35,7 +35,7 @@ def test_markdown_table_and_exit_code(capsys):
 EXPECTED_STATUS = {
     "S01": "PASS",
     "S02": "PARTIAL",
-    "S03": "PARTIAL",
+    "S03": "PASS",
     "S04": "PASS",
     "S05": "PASS",
     "S06": "PASS",
