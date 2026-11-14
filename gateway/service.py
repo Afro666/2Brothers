@@ -729,7 +729,17 @@ class Gateway:
         except Exception:
             pass
 
-    def _proposal_out(self, doc: dict) -> dict:
+    def _trace(self, doc: dict, traces: dict | None = None) -> dict | None:
+        """What the model did (#1197): the Buyer run's trace, the parser's rule trace, or None."""
+        from gateway import model_trace
+        from store import agent_runs
+        if (doc.get("request") or {}).get("made_by") == "parser":
+            return model_trace.parser_trace()
+        if traces is None:
+            traces = agent_runs.traces(self.db, doc["kitchen_id"], [doc["_id"]])
+        return model_trace.stored(traces.get(doc["_id"]))
+
+    def _proposal_out(self, doc: dict, traces: dict | None = None) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
         result = {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
                 "substitute_options": options.merged(doc),
@@ -748,6 +758,7 @@ class Gateway:
         from store.products import get_products
         result['label_checks'] = checks(get_products(self.db,
             [line['product_id'] for line in result['lines']], doc['kitchen_id']), now=self.now())
+        result['model_trace'] = self._trace(doc, traces)
         return result
 
     def _summary(self, request: dict, sim: dict) -> dict:
@@ -763,8 +774,10 @@ class Gateway:
         return self._proposal_out(doc)
 
     def list_proposals(self, kitchen_id: str) -> list[dict]:
-        return [self._proposal_out(d) for d in
-                self.db.proposals.find({"kitchen_id": kitchen_id}).sort("created_at", -1).limit(100)]
+        from store import agent_runs
+        docs = list(self.db.proposals.find({"kitchen_id": kitchen_id}).sort("created_at", -1).limit(100))
+        traces = agent_runs.traces(self.db, kitchen_id, [d["_id"] for d in docs])     # one read for all
+        return [self._proposal_out(d, traces) for d in docs]
 
     def approve(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None) -> dict:
         """A human says yes to the figure they saw. Re-check live; place only if unchanged."""
