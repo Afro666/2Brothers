@@ -9,6 +9,7 @@ import type {
   MenuPlanEntry,
   Order,
   OwnProduct,
+  PlanProposal,
   Product,
   ProductCode,
   ProposalChange,
@@ -145,6 +146,12 @@ export interface Api {
   submitStockCount(counts: StockCount[], actor: AuditActor): Promise<StockItem[]>;
   /** The kitchen's need per product and day, `from` and `to` inclusive (`YYYY-MM-DD`). */
   getDemand(from: string, to: string): Promise<DemandLine[]>;
+  /**
+   * Asks for one order proposal for what the menu plan needs from `from` to `to` (inclusive,
+   * `YYYY-MM-DD`), delivered on `requestedDate`. It approves nothing. Fails with
+   * `NOTHING_NEEDED` when the stock covers the plan.
+   */
+  proposeOrderForPlan(from: string, to: string, requestedDate: string): Promise<PlanProposal>;
   getSharing(): Promise<SharingConsent[]>;
   setSharing(supplierId: string, shared: boolean, actor: AuditActor): Promise<SharingConsent[]>;
   getSupplierDemand(from: string, to: string): Promise<SupplierDemandRow[]>;

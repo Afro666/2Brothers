@@ -154,6 +154,37 @@ describe("mock API planning data", () => {
     expect(milk).toMatchObject({ available: null, risk: "UNKNOWN", suggestedBuy: null });
   });
 
+  it("proposes one order from the week's demand, net of counted stock", async () => {
+    const api = createMockApi();
+    const approvals = await api.listApprovals();
+
+    expect(await api.proposeOrderForPlan("2026-11-16", "2026-11-22", "2026-11-16")).toMatchObject({
+      status: "READY",
+      totalInclVat: 719.6,
+      lineCount: 4,
+      needCount: 5,
+      // Eila milk and the cinnamon buns were never counted.
+      uncountedCount: 2,
+      // The salmon has no price in the sample data.
+      shortfallCount: 1,
+    });
+    // A proposal only: nothing is approved or placed by it.
+    expect(await api.listApprovals()).toEqual(approvals);
+  });
+
+  it("answers NOTHING_NEEDED for a week with no menu entries, or when stock covers the plan", async () => {
+    const api = createMockApi();
+    await expect(api.proposeOrderForPlan("2026-11-23", "2026-11-29", "2026-11-23")).rejects.toMatchObject({
+      code: "NOTHING_NEEDED",
+    });
+
+    await api.saveMenuPlan("2026-W48", [{ date: "2026-11-23", meal: "Lunch", recipeId: "REC-SALMON-SOUP", covers: 1 }]);
+    await api.submitStockCount([{ productId: "462775", onHand: 18 }], "chef");
+    await expect(api.proposeOrderForPlan("2026-11-23", "2026-11-29", "2026-11-23")).rejects.toMatchObject({
+      code: "NOTHING_NEEDED",
+    });
+  });
+
   it("rejects blank names and invalid menu cover values", async () => {
     const api = createMockApi();
     await expect(

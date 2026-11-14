@@ -8,6 +8,7 @@ import {
   mapList,
   mapMenuPlan,
   mapOwnProduct,
+  mapPlanProposal,
   mapRecipe,
   mapSharing,
   mapStock,
@@ -15,6 +16,7 @@ import {
   mapSupplierDemand,
   menuPlanBody,
   ownProductBody,
+  planProposalBody,
   recipeBody,
   settingsBody,
   stockCountBody,
@@ -397,6 +399,65 @@ describe("demand", () => {
         why: "160 x 0.1 L (Salmon soup)",
       },
     ]);
+  });
+});
+
+describe("the order for the menu plan", () => {
+  const body = {
+    proposal_id: "prop-plan-1",
+    status: "READY",
+    expected_total: "212.40",
+    lines: [{ product_id: "462775" }, { product_id: "own-1" }],
+    request: {
+      requested_date: "2026-11-16",
+      needs: [
+        { product_id: "462775", quantity: "30", unit: "L", stock_counted: true },
+        { product_id: "own-1", quantity: "48", unit: "PCS", stock_counted: false },
+        { product_id: "own-2", quantity: "51.6", unit: "KG", stock_counted: false },
+      ],
+    },
+    shortfalls: [{ product_id: "own-2", shortfall: "51.6", unit: "KG" }],
+    mandate: { reason_codes: ["PARTIAL_STOCK", "OVER_LIMIT"] },
+    excluded: [],
+  };
+
+  it("writes the window, the delivery date and the key, and no product or text", () => {
+    expect(planProposalBody("2026-11-16", "2026-11-22", "2026-11-18", "key-1")).toEqual({
+      from: "2026-11-16",
+      to: "2026-11-22",
+      requested_date: "2026-11-18",
+      idempotency_key: "key-1",
+    });
+  });
+
+  it("counts the lines, the needs, the uncounted products and the shortfalls", () => {
+    expect(mapPlanProposal(body)).toEqual({
+      id: "prop-plan-1",
+      status: "READY",
+      totalInclVat: 212.4,
+      lineCount: 2,
+      needCount: 3,
+      uncountedCount: 2,
+      shortfallCount: 1,
+      reasonCodes: ["PARTIAL_STOCK", "OVER_LIMIT"],
+    });
+  });
+
+  it("maps a refused proposal with no lines, no shortfall list and no reason codes", () => {
+    const refused = { ...body, status: "REJECTED", expected_total: "0.00", lines: [], shortfalls: undefined, mandate: {} };
+    expect(mapPlanProposal(refused)).toMatchObject({
+      status: "REJECTED",
+      totalInclVat: 0,
+      lineCount: 0,
+      shortfallCount: 0,
+      reasonCodes: [],
+    });
+  });
+
+  it("refuses a proposal without needs, with a total that is not a decimal string, or with an unknown status", () => {
+    expect(() => mapPlanProposal({ ...body, request: {} })).toThrow(/unexpected shape/);
+    expect(() => mapPlanProposal({ ...body, expected_total: 212.4 })).toThrow(/decimal string/);
+    expect(() => mapPlanProposal({ ...body, status: "APPROVED" })).toThrow(/unexpected shape/);
   });
 });
 

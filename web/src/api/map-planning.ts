@@ -9,6 +9,7 @@ import type {
   KitchenSettings,
   MenuPlanEntry,
   OwnProduct,
+  PlanProposal,
   Recipe,
   SharingConsent,
   ShortageRisk,
@@ -327,6 +328,36 @@ export function mapDemand(body: unknown): DemandLine[] {
       why: typeof row.why === "string" ? row.why : "",
     };
   });
+}
+
+// ---- the order for the menu plan ------------------------------------------------------
+
+/** The body of `POST /proposals` for a menu plan window: no products and no text. */
+export function planProposalBody(from: string, to: string, requestedDate: string, idempotencyKey: string): Json {
+  return { from, to, requested_date: requestedDate, idempotency_key: idempotencyKey };
+}
+
+/**
+ * The proposal the gateway made for a menu plan window, as the counts the planner shows.
+ * `stock_counted: false` on a need means the full need was proposed, not a guess.
+ */
+export function mapPlanProposal(body: unknown): PlanProposal {
+  const proposal = object(body, "a proposal");
+  const request = object(proposal.request, "a proposal's request");
+  const needs = list(request.needs, "a proposal's needs").map((need) => object(need, "a need"));
+  const mandate = proposal.mandate == null ? {} : object(proposal.mandate, "a proposal's mandate");
+  const codes = mandate.reason_codes == null ? [] : list(mandate.reason_codes, "reason_codes");
+  if (proposal.status !== "READY" && proposal.status !== "REJECTED") invalid("a proposal status");
+  return {
+    id: text(proposal.proposal_id, "proposal_id"),
+    status: proposal.status,
+    totalInclVat: mapMoney(proposal.expected_total, "expected_total"),
+    lineCount: list(proposal.lines, "proposal lines").length,
+    needCount: needs.length,
+    uncountedCount: needs.filter((need) => need.stock_counted === false).length,
+    shortfallCount: proposal.shortfalls == null ? 0 : list(proposal.shortfalls, "shortfalls").length,
+    reasonCodes: codes.filter((code): code is string => typeof code === "string" && code !== ""),
+  };
 }
 
 // ---- sharing --------------------------------------------------------------------------

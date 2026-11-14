@@ -6,6 +6,7 @@ import {
   mapList,
   mapMenuPlan,
   mapOwnProduct,
+  mapPlanProposal,
   mapRecipe,
   mapSharing,
   mapStock,
@@ -13,6 +14,7 @@ import {
   mapSupplierDemand,
   menuPlanBody,
   ownProductBody,
+  planProposalBody,
   recipeBody,
   settingsBody,
   stockCountBody,
@@ -36,6 +38,7 @@ type PlanningApi = Pick<
   | "getStock"
   | "submitStockCount"
   | "getDemand"
+  | "proposeOrderForPlan"
   | "getSharing"
   | "setSharing"
   | "getSupplierDemand"
@@ -72,6 +75,11 @@ export function createPlanningHttp(call: GatewayCall, kitchen: string): Planning
   const settings = async () => mapKitchenSettings(await call(`${kitchen}/settings`));
   // One key per count, kept after a failure: a retry must not store the count twice.
   const countKeys = new Map<string, string>();
+  // One key per plan window, kept after a failure: a new key could create a second proposal.
+  const planKeys = new Map<string, string>();
+  // getRandomValues, not randomUUID: it also works on a plain-HTTP address.
+  const newKey = () =>
+    Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) => value.toString(16).padStart(2, "0")).join("");
 
   return {
     async listSuppliers() {
@@ -113,10 +121,7 @@ export function createPlanningHttp(call: GatewayCall, kitchen: string): Planning
     async submitStockCount(counts, actor) {
       const units = new Map((await stock()).map((item) => [item.productId, item.unit]));
       const identity = JSON.stringify(counts);
-      // getRandomValues, not randomUUID: it also works on a plain-HTTP address.
-      const key =
-        countKeys.get(identity) ??
-        Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) => value.toString(16).padStart(2, "0")).join("");
+      const key = countKeys.get(identity) ?? newKey();
       countKeys.set(identity, key);
       await send(
         "POST",
@@ -131,6 +136,18 @@ export function createPlanningHttp(call: GatewayCall, kitchen: string): Planning
 
     async getDemand(from, to) {
       return mapDemand(await call(`${kitchen}/demand?${window(from, to)}`));
+    },
+
+    async proposeOrderForPlan(from, to, requestedDate) {
+      const identity = JSON.stringify([from, to, requestedDate]);
+      const key = planKeys.get(identity) ?? newKey();
+      planKeys.set(identity, key);
+      const proposal = mapPlanProposal(
+        await send("POST", `${kitchen}/proposals`, planProposalBody(from, to, requestedDate, key)),
+      );
+      // Created: asking again later (after a new count or a changed plan) is a new proposal.
+      planKeys.delete(identity);
+      return proposal;
     },
 
     async getSharing() {
