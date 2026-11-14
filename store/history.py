@@ -146,6 +146,13 @@ def save_forecasts(db, rows: list[dict], collection: str = "forecasts") -> int:
              "need": Decimal(str(row["need"])), "unit": row["unit"], "why": row.get("why"),
              "method": row.get("method"), "made_on": row.get("made_on")}
             for row in rows]
+    # Time-series rows cannot be upserted: a re-run replaces the same kitchen/product/day.
+    keys = list({(d["meta"]["kitchen_id"], d["meta"]["product_id"], d["ts"]): None
+                 for d in docs})
+    for start in range(0, len(keys), 1000):
+        db[collection].delete_many({"$or": [
+            {"meta.kitchen_id": k, "meta.product_id": p, "ts": t}
+            for k, p, t in keys[start:start + 1000]]})
     for start in range(0, len(docs), 5000):
         db[collection].insert_many(docs[start:start + 5000], ordered=False)
     return len(docs)
