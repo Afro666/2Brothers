@@ -18,6 +18,11 @@ const MAX_THUMBS = 3;
 export const CHOOSE_TIMEOUT_MS = 5000;
 
 const TIER_ORDER: OfferTier[] = ["good", "better", "best"];
+
+/** The options in the order the card letters them: A, B, C. */
+export function inLetterOrder(options: readonly ProposalOption[]): ProposalOption[] {
+  return [...options].sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
+}
 const BADGE = "label-caps rounded-sm border border-input px-2 py-0.5 whitespace-nowrap";
 export const CHOOSE_ERRORS: Record<string, string> = {
   STOCK_UNKNOWN: "Stock is not confirmed for this option. The current basket is unchanged; wait for the supplier or choose another option. Nothing was approved.",
@@ -87,7 +92,7 @@ export function OptionCompare({
   const [busy, setBusy] = useState(false);
   const [awaiting, setAwaiting] = useState<{ from: ProposalOption[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const sorted = [...options].sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
+  const sorted = inLetterOrder(options);
   const optionIds = sorted.map((option) => option.id);
   const optionIdsKey = JSON.stringify(optionIds);
   const defaultOpenId = (

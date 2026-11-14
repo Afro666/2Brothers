@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { ModelTraceLine, ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { MovProgress } from "@/components/purchasing/mov-progress";
-import { OptionCompare } from "@/components/purchasing/option-compare";
+import { CHOOSE_ERRORS, CHOOSE_TIMEOUT_MS, OptionCompare, inLetterOrder } from "@/components/purchasing/option-compare";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { ProposalExplanationBlock, useCardExplanation } from "@/components/purchasing/proposal-explanation";
 import { ProposalLines } from "@/components/purchasing/proposal-lines";
@@ -223,6 +223,10 @@ export function ApprovalCard({
   const changing = useRef(false);
   // Every card starts compact (#1142, Aron 2026-11-14): the details open on Inspect.
   const [inspecting, setInspecting] = useState(false);
+  // #1866: true once the person picked an option on this card; the card then follows the proposal's basket.
+  const [followBasket, setFollowBasket] = useState(false);
+  // #1866: the recommended option was chosen from the main button; the approval opens when its basket is on screen.
+  const [awaitingLead, setAwaitingLead] = useState(false);
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
   // The checked Nemotron explanation (#1173): asked after the card is drawn, never awaited.
@@ -311,6 +315,38 @@ export function ApprovalCard({
   // engine's own reason for a one-line order.
   const why = !explanation?.text && lines.length === 1 ? lines[0].why : null;
   const optionCount = pending ? (request.options?.length ?? 0) : 0;
+  // #1866: the gateway marks the confirmed-stock option `recommended`, but the proposal's own basket
+  // stays the Buyer's (an option never selects itself, docs/contract.md "Chef substitute choices").
+  // Until the person picks an option here, the card's total and its Approve button are for the
+  // recommended option: Approve chooses it (the gateway re-simulates), then asks for the yes to the new total.
+  const letterOrder = pending ? inLetterOrder(request.options ?? []) : [];
+  const letterOf = (option: (typeof letterOrder)[number]) => String.fromCharCode(65 + letterOrder.indexOf(option));
+  const basketOption = letterOrder.find((option) => option.chosen);
+  // Only while the basket is still the Buyer's own, untouched one (`source: "original"`): a basket a
+  // person chose or edited is theirs, and the card shows it.
+  const lead =
+    !followBasket && onChooseOption && basketOption?.source === "original"
+      ? letterOrder.find(
+          (option) => option.recommended && option.stockConfirmed && !option.chosen && option.cutoffPassed !== true,
+        )
+      : undefined;
+  const recommendedIsBasket = letterOrder.some((option) => option.chosen && option.recommended);
+  useEffect(() => {
+    if (!awaitingLead) return;
+    if (recommendedIsBasket) {
+      setAwaitingLead(false);
+      setOpen("approve");
+      return;
+    }
+    // The reload failed or brought the old basket back: free the button and say so.
+    const timer = window.setTimeout(() => {
+      setAwaitingLead(false);
+      setError(t("Could not load the updated options. Nothing was approved. Please try again."));
+    }, CHOOSE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [awaitingLead, recommendedIsBasket, t]);
+  // "Must confirm" is about the proposal's own basket; the recommended option has confirmed stock only.
+  const shownChips = lead ? chips.filter((chip) => !chip.key.startsWith("confirm")) : chips;
   // #1865: the lines inside the total whose stock nobody confirmed. The gateway gives no
   // confirmed / waiting split of the total, so each line shows its own quantity and line total.
   const waitingLines = pending ? lines.filter((line) => !line.offer.salesBlock && isStockUnconfirmed(line.offer)) : [];
@@ -323,7 +359,7 @@ export function ApprovalCard({
     .join(", ");
   const waitingMore = waitingLines.length > WAITING_SHOWN ? ` +${waitingLines.length - WAITING_SHOWN}` : "";
   // #1865: "Over budget" says against which budget and by how much, when the kitchen's limit is known.
-  const overBudget = chips.some((chip) => chip.key === "budget");
+  const overBudget = shownChips.some((chip) => chip.key === "budget");
   const budgetLine = !overBudget
     ? null
     : budgetWarningExVat != null && request.totalExVat > budgetWarningExVat
@@ -338,6 +374,8 @@ export function ApprovalCard({
     // The ref closes the gap before `busy` disables the buttons: two fast presses are one change.
     if (!onChangeProposal || changing.current) return;
     changing.current = true;
+    // The person edits the basket: the card's total and button are that basket's from now on.
+    setFollowBasket(true);
     setBusy(true);
     setChangeError(null);
     try {
@@ -370,9 +408,32 @@ export function ApprovalCard({
   }
 
   async function chooseOption(optionId: string) {
+    // The person picked an option themselves: from now on the card shows the proposal's basket.
+    setFollowBasket(true);
     setBusy(true);
     try {
       await onChooseOption?.(optionId);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** The main button while the recommended option leads: choose it, then the effect opens the approval. */
+  async function approveLead(optionId: string) {
+    if (changing.current) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onChooseOption?.(optionId);
+      setAwaitingLead(true);
+    } catch (e) {
+      setError(
+        e instanceof ApiError && CHOOSE_ERRORS[e.code]
+          ? t("Could not choose this option. {reason}", { reason: t(CHOOSE_ERRORS[e.code]) })
+          : t("Could not choose this option: {message}. Nothing was changed or approved.", {
+              message: e instanceof Error ? e.message : String(e),
+            }),
+      );
     } finally {
       setBusy(false);
     }
@@ -566,8 +627,34 @@ export function ApprovalCard({
               ? t("Nothing could be ordered. Left out: {count}", { count: checks.leftOut.length })
               : t("Nothing could be ordered")}
           </p>
+        ) : lead ? (
+          <dl data-testid="card-totals" className="flex flex-wrap items-baseline gap-x-3 sm:block sm:text-right">
+            <dt className="sr-only">{t("Total of the recommended option")}</dt>
+            <dd className="inline-block border-b-[3px] border-double border-foreground text-xl leading-7 font-bold tabular-nums">
+              {formatEur(lead.totalInclVat)}
+            </dd>
+            <dd className="w-full text-xs font-semibold">
+              {t("Option {letter}, recommended by the Buyer", { letter: letterOf(lead) })}
+            </dd>
+            {lead.held ? (
+              <dd className="w-full text-xs font-medium text-warning">
+                {t("{quantity} {unit} waits for stock confirmation", {
+                  quantity: formatNumber(lead.held.quantity),
+                  unit: peopleUnit(lead.held.unit, lead.held.quantity),
+                })}
+              </dd>
+            ) : null}
+            {basketOption ? (
+              <dd className="w-full font-mono text-xs text-muted-foreground tabular-nums">
+                {t("Option {letter}, the basket proposed now: {amount}", {
+                  letter: letterOf(basketOption),
+                  amount: formatEur(request.totalInclVat),
+                })}
+              </dd>
+            ) : null}
+          </dl>
         ) : (
-          <dl className="flex flex-wrap items-baseline gap-x-3 sm:block sm:text-right">
+          <dl data-testid="card-totals" className="flex flex-wrap items-baseline gap-x-3 sm:block sm:text-right">
             <dt className={named && inclVat !== null ? "label-caps w-full" : "sr-only"}>
               {named && inclVat !== null ? t("Lines incl VAT") : t("Total incl VAT")}
             </dt>
@@ -636,9 +723,9 @@ export function ApprovalCard({
         )}
       </CardHeader>
       <CardContent className="space-y-3 px-0">
-        {chips.length > 0 ? (
+        {shownChips.length > 0 ? (
           <ul className="flex flex-wrap gap-1.5" aria-label={t("Status")}>
-            {chips.slice(0, CHIPS_SHOWN).map((chip) => (
+            {shownChips.slice(0, CHIPS_SHOWN).map((chip) => (
               <li
                 key={chip.key}
                 className={cn(
@@ -651,7 +738,13 @@ export function ApprovalCard({
             ))}
           </ul>
         ) : null}
-        {budgetLine ? <p className="text-sm text-muted-foreground">{budgetLine}</p> : null}
+        {budgetLine ? (
+          <p className="text-sm text-muted-foreground">
+            {/* Beside the recommended option's total, the budget figures say whose they are. */}
+            {lead && basketOption ? `${t("Option {letter}:", { letter: letterOf(basketOption) })} ` : null}
+            {budgetLine}
+          </p>
+        ) : null}
         {pending && cutoff ? (
           <p className={cn("break-words text-sm", cutoff.warning ? "hatch text-warning" : "text-muted-foreground")}>
             {cutoff.passed
@@ -681,6 +774,14 @@ export function ApprovalCard({
                   {changeError ? (
                     <p role="alert" className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.danger)}>
                       {changeError}
+                    </p>
+                  ) : null}
+                  {lead && basketOption ? (
+                    <p className="text-sm text-muted-foreground">
+                      {t("These lines are option {letter}, the basket proposed now. Option {lead} orders only its own lines.", {
+                        letter: letterOf(basketOption),
+                        lead: letterOf(lead),
+                      })}
                     </p>
                   ) : null}
                   <ProposalLines
@@ -784,7 +885,11 @@ export function ApprovalCard({
                   options={request.options}
                   disabled={busy || !!approvalBlockedReason}
                   onChoose={onChooseOption ? chooseOption : undefined}
-                  onApprove={() => setOpen("approve")}
+                  onApprove={() => {
+                    // The person asked for the proposal's own basket: the total and the button follow it.
+                    setFollowBasket(true);
+                    setOpen("approve");
+                  }}
                 />
               ) : null}
               <section className="space-y-2">
@@ -813,7 +918,7 @@ export function ApprovalCard({
           ) : null}
         </div>
       </CardContent>
-      <CardFooter className="flex-col items-stretch gap-2 border-t border-dashed border-input px-0 pt-3 [.border-t]:pt-3 sm:flex-row sm:items-center">
+      <CardFooter data-testid="card-actions" className="flex-col items-stretch gap-2 border-t border-dashed border-input px-0 pt-3 [.border-t]:pt-3 sm:flex-row sm:items-center">
         <Button
           type="button"
           variant="ghost"
@@ -844,7 +949,19 @@ export function ApprovalCard({
               <X aria-hidden />
               {t("Reject")}
             </Button>
-            {pending ? (
+            {pending && lead ? (
+              <Button
+                className="h-auto min-h-9 w-full whitespace-normal sm:w-auto"
+                disabled={busy || awaitingLead || !!stockMessage || !!approvalBlockedReason}
+                aria-describedby={approveBlockDescription}
+                onClick={() => void approveLead(lead.id)}
+              >
+                <Check aria-hidden />
+                {stockMessage || approvalBlockedReason
+                  ? t("Approve")
+                  : t("Approve option {letter}: {amount}", { letter: letterOf(lead), amount: formatEur(lead.totalInclVat) })}
+              </Button>
+            ) : pending ? (
               <Button
                 className="w-full sm:w-auto"
                 disabled={busy || !!stockMessage || !!approvalBlockedReason}
