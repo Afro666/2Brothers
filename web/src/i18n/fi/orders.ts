@@ -119,6 +119,7 @@ export default {
   "Enter the supplier's order reference (1 to 200 characters). Nothing was recorded.": "Anna toimittajan tilausviite (1–200 merkkiä). Mitään ei tallennettu.",
   "Every order the Buyer proposes waits here. Nothing is sent until a person approves it.": "Jokainen Ostajan ehdottama tilaus odottaa täällä. Mitään ei lähetetä ennen ihmisen hyväksyntää.",
   "Every line would be removed: reject the proposal instead.": "Jokainen rivi poistettaisiin: hylkää sen sijaan ehdotus.",
+  "This proposal could not be found in this kitchen.": "Tätä ehdotusta ei löytynyt tästä keittiöstä.",
   "That product cannot be added to this proposal. Choose a product from the addable list.": "Tätä tuotetta ei voi lisätä ehdotukseen. Valitse tuote lisättävien tuotteiden luettelosta.",
   "That product is not on this proposal. Add it as a new product instead.": "Tätä tuotetta ei ole ehdotuksessa. Lisää se sen sijaan uutena tuotteena.",
   "Excluded allergens (refused, even as may contain)": "Suljetut allergeenit (hylätään myös saattaa sisältää -tapauksissa)",

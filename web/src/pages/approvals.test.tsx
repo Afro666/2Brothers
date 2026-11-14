@@ -260,7 +260,7 @@ describe("ApprovalsPage", () => {
     await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Could not change this proposal: An order needs at least one line; reject it instead. The proposal is unchanged.",
+      "Could not change this proposal. Every line would be removed: reject the proposal instead. The proposal is unchanged.",
     );
   });
 

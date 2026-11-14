@@ -97,6 +97,7 @@ const CHANGE_ERRORS: Record<string, string> = {
   LINE_UNAVAILABLE:
     "This product cannot be ordered now. It may be recalled, blocked by an allergen rule, or have no stock date.",
   EMPTY_PROPOSAL: "Every line would be removed: reject the proposal instead.",
+  PROPOSAL_NOT_FOUND: "This proposal could not be found in this kitchen.",
   ROLE_REQUIRED: "Your role cannot change proposals. Ask a chef or approver to make this change.",
 };
 
