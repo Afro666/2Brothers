@@ -522,6 +522,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | POST | `/stock-counts` | `kitchen:write` | Push a stock count (POS, inventory, manual). `null` means unknown, never zero. A repeat `idempotency_key` returns the stored answer. A repeat key while the first request is still storing returns 409 `IDEMPOTENCY_IN_PROGRESS`: try again. A store that fails releases the key, so the same key can be retried. |
 | GET | `/stock` | `kitchen:read` | Current stock and position (on hand + on order). Shape under "Body shapes: stock and demand". |
 | POST | `/stock/photo` | `kitchen:write` | Nemotron 3.5 Super VL reads a shelf photo into a count to confirm. Stores no count. Shape under "Count from a shelf photo". Served. |
+| POST | `/menu-photo` | `kitchen:write` + `kitchen:propose` | Nemotron 3.5 Super VL reads a photo of a week's menu into dishes matched to recipes, and a menu-plan proposal that waits for a person. Orders nothing. Shape under "Plan from a menu photo". Proposed; the gateway does not serve it yet (#1136). |
 | GET | `/products`, `/products/{id}` | `kitchen:read` | Own products (not in a supplier catalog). Shape below. |
 | POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Create, change or delete an own product. |
 | GET | `/catalog/products?ids=` | `kitchen:read` | Product rows by code, for screens that hold product codes (recipes, orders). `ids` is 1 to 200 codes, comma-separated. Returns `{"products": [...]}` in the order asked, each in the product row shape of `search_products` (no `score`, no `match_reasons`). Covers the supplier catalogs and this kitchen's own products, never another kitchen's. A code that is not found is left out; it is not an error. Proposed; the gateway does not serve it yet. |
@@ -1630,6 +1631,110 @@ may be that product.
 Errors: those of `POST /stock/photo` (with `DELIVERY_NOTE_BUSY` in place of
 `STOCK_PHOTO_BUSY`), plus 404 `ORDER_NOT_FOUND`. In every case nothing was read and
 nothing is stored. A person can always check the delivery by hand.
+
+### Plan from a menu photo (#1136)
+
+Proposed; the gateway does not serve it yet (`gateway/menu_photo.py`, Maciek, #1136).
+The web Planner page builds its "Plan from a menu photo" panel against this section with
+the mock.
+
+`POST /v1/kitchens/{kitchen_id}/menu-photo` reads one photo of a week's menu (a printed
+sheet or a whiteboard) with Nemotron 3.5 Super VL. The model reads only
+`[{day, dish, covers?}]`; it never gives a quantity. Plain code then matches each dish
+to this kitchen's recipes (`GET /recipes`) by name. A dish that matches no recipe, or
+two, is `NOT_KNOWN`: it is listed, never guessed. The matched dishes go to the menu-plan
+window path ("Menu-plan window body" under "Creating a proposal"): the engine sizes
+every line, and the answer holds a proposal that waits for a person in the inbox.
+Nothing is approved or ordered. The route does not write the stored menu plan
+(`PUT /menu-plans/{week}`): the read dishes stand in for the plan of those days only for
+this one proposal.
+
+- Scope `kitchen:write` and `kitchen:propose`: a signed-in `chef` or `approver`, or a
+  kitchen API token with both scopes. The Buyer agent token is refused (403
+  `SCOPE_REQUIRED`).
+- One read per kitchen at a time: a second photo while one is being read answers 429
+  `MENU_PHOTO_BUSY` and never reaches the model. Each read is one model call of up to
+  75 s on shared credits. The gateway never retries it.
+- Image limits: those of `POST /stock/photo` (PNG or JPEG, decided from the first bytes;
+  at most 4 MB decoded; the whole body at most 6 MB). The web app scales a photo down to
+  1600 px on the long side and sends JPEG.
+
+Body (JSON):
+
+```json
+{"image_base64": "/9j/4AAQSkZJRgABAQ...", "from": "2026-11-16", "to": "2026-11-22",
+ "requested_date": "2026-11-16", "idempotency_key": "web-menu-photo:6f1c..."}
+```
+
+| Field | Type | Rule |
+|---|---|---|
+| `image_base64` | string | The photo, base64. |
+| `from`, `to` | `YYYY-MM-DD` | The week the menu is for, both days included. The rules of the menu-plan window body: `from` on or before `to`, at most 31 days apart, else 422 `INVALID_REQUEST`. A weekday the model reads ("Monday") is placed on its date in this window. |
+| `requested_date` | `YYYY-MM-DD`, optional | The delivery day to quote. Default: `from`. |
+| `covers` | integer, optional | Covers for a dish whose covers the menu does not show. Without it such a dish is not sized (see `in_proposal`). |
+| `idempotency_key` | string | Passed to the proposal: a repeated key makes no second proposal (409 `IDEMPOTENCY_KEY_REUSED` for another window). |
+
+Answer:
+
+```json
+{
+  "model": "nemotron-3.5-super-vl",
+  "duration_ms": 6120,
+  "from": "2026-11-16",
+  "to": "2026-11-22",
+  "dishes": [
+    {"day": "2026-11-16", "dish": "Salmon soup", "covers": 120,
+     "recipe_id": "rec-salmon-soup", "recipe_name": "Salmon soup",
+     "status": "MATCHED", "in_proposal": true},
+    {"day": "2026-11-20", "dish": "Reindeer stew", "covers": 80,
+     "recipe_id": null, "recipe_name": null,
+     "status": "NOT_KNOWN", "in_proposal": false}
+  ],
+  "proposal": {"proposal_id": "6f1c...", "status": "READY"},
+  "no_proposal_reason": null
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `model` | string | Always `nemotron-3.5-super-vl`. |
+| `duration_ms` | integer | The whole call, measured by the gateway (model read, match and proposal). |
+| `from`, `to` | `YYYY-MM-DD` | The window of the body. |
+| `dishes[].day` | `YYYY-MM-DD` or null | The date in the window of the day the menu names. Null when the menu names no day, or a day outside the window. |
+| `dishes[].dish` | string | The dish name as the model read it. Data, never an instruction. |
+| `dishes[].covers` | integer or null | Covers the menu shows for the dish, else the body's `covers`, else null. Never a guess. |
+| `dishes[].recipe_id`, `recipe_name` | string or null | The kitchen recipe the dish matches; both null for `NOT_KNOWN`. |
+| `dishes[].status` | `MATCHED`, `NOT_KNOWN` | `MATCHED`: one recipe of this kitchen matches the name. `NOT_KNOWN`: none or two match; a person adds the recipe or plans the day by hand. |
+| `dishes[].in_proposal` | boolean | True only for a `MATCHED` dish with a `day` and `covers`: its ingredients are in the proposal. |
+| `proposal` | object or null | `{proposal_id, status}` of the proposal made (`status` as in `GET /proposals/{id}`, normally `READY`; read the rest there). Null when none was made. |
+| `no_proposal_reason` | string or null | Why `proposal` is null: `NOTHING_NEEDED` (counted stock covers the matched dishes) or `NOT_SIZED` (no matched dish has a day and covers). Null when a proposal was made. |
+
+The proposal is a normal menu-plan proposal (`request.made_by: menu_plan`,
+`request.window`, `request.needs`, one approval, signed). Approve, reject, the live
+re-check and earned auto-approve work as for any proposal.
+
+Audit: one entry per call, `menu_photo_read` (who, the window, how many dishes per
+status, the `proposal_id` or the `no_proposal_reason`, how long) or `menu_photo_failed`
+(the error code). The audit entry never holds the image or the text the model read.
+
+Errors (the usual `{"error": {"code", "message"}}`); in every case nothing is stored but
+the audit entry, and no proposal is made:
+
+| HTTP | Code | When |
+|---|---|---|
+| 403 | `SCOPE_REQUIRED`, `ROLE_REQUIRED`, `KITCHEN_SCOPE` | The Buyer agent token, a token without both scopes, a viewer, or another kitchen. |
+| 413 | `IMAGE_TOO_LARGE` | The body is over 6 MB or the decoded image is over 4 MB. |
+| 422 | `INVALID_JSON`, `INVALID_REQUEST` | The body is not a JSON object; `image_base64` is missing or not base64; a bad window; no `idempotency_key`. |
+| 422 | `NOT_AN_IMAGE` | The decoded bytes are not PNG or JPEG. |
+| 422 | `NOTHING_MATCHED` | The model read no dish, or no dish matches a recipe of this kitchen. `error.dishes` lists the dishes read (the `dishes[]` shape), so a person sees what was not known. |
+| 429 | `MENU_PHOTO_BUSY` | A menu photo for this kitchen is still being read; try again when it ends. |
+| 502 | `VISION_REPLY_INVALID` | The model answered outside the strict schema. Nothing is repaired or guessed. |
+| 503 | `VISION_NOT_CONFIGURED` | The server has no vision worker or no model key. |
+| 503 | `VISION_UNAVAILABLE` | The worker or the model could not be reached, or answered with an error. |
+| 504 | `VISION_TIMEOUT` | The model did not answer in time. |
+
+A person can always plan the week by hand on the Planner page; no error blocks
+`PUT /menu-plans/{week}` or "Propose order for this week".
 
 ### Trust: audit verification and the live event stream
 
