@@ -92,7 +92,6 @@ export function TrustPage() {
           </p>
           <Badge variant="outline">{live ? "Audit log stored in MongoDB Atlas" : "Sample data"}</Badge>
         </header>
-        {import.meta.env.VITE_LIVE_BUYER === "true" && <LabelVerificationDemo />}
 
         <Card>
           <CardContent className="space-y-4">
@@ -189,6 +188,8 @@ export function TrustPage() {
             </Button>
           </div>
         </section>
+
+        {import.meta.env.VITE_LIVE_BUYER === "true" && <LabelVerificationDemo />}
       </div>
     </AppShell>
   );

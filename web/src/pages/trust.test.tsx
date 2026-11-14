@@ -1,6 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/api";
 import { createMockApi } from "@/api/mock";
@@ -8,6 +8,19 @@ import { renderApp } from "@/test/render";
 
 describe("trust page", () => {
   beforeEach(() => localStorage.clear());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("puts the verify button before the label checks", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    vi.stubGlobal("fetch", () => new Promise(() => {}));
+    renderApp("/trust");
+    const button = await screen.findByRole("button", { name: "Verify audit chain" });
+    const heading = screen.getByRole("heading", { name: "Source-backed label checks" });
+    expect(button.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 
   it("verifies, shows the break on the tampered line, and is OK again after restore", async () => {
     const user = userEvent.setup();
