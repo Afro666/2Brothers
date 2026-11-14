@@ -44,41 +44,37 @@ def test_seed_after_a_check_says_the_coffee_is_left_out(monkeypatch):
     assert out["excluded"] == [{"product_id": COFFEE, "reason": "BLOCKED_BY_RECALL"}]
 
 
-class Valio:
-    """Monday's cut-off has passed; Tuesday is open."""
-    def availability(self, products, day):
-        passed = day == "2026-11-16"
-        return {"products": [{"productId": COFFEE, "cutoff_passed": passed,
-                              "scheduleLines": [{"availableDate": day, "availableAmount": 50}]}]}
-
-
 class Gw:
-    valio = Valio()
+    """Monday's quote leaves the coffee out (cut-off passed); Tuesday's holds it."""
+    def __init__(self):
+        self.asked = []
+
+    def _quote(self, kitchen_id, request):
+        self.asked.append(request["requested_date"])
+        lines = [] if request["requested_date"] == "2026-11-16" else [{"product_id": COFFEE}]
+        return {"simulation": {"lines": lines}}
 
 
-def test_open_day_skips_a_day_whose_cut_off_has_passed():
+def test_open_day_is_the_first_day_whose_quote_holds_the_coffee():
     from demo.recall_demo import open_day
-    assert open_day(Gw(), TODAY) == date(2026, 11, 17)
+    gw = Gw()
+    assert open_day(gw, TODAY) == date(2026, 11, 17)
+    assert gw.asked == ["2026-11-16", "2026-11-17"]
 
 
 class Down:
-    """Valio is down: every availability call raises."""
-    class valio:
-        @staticmethod
-        def availability(products, day):
-            raise ConnectionError("valio down")
+    """No live quote: every quote raises."""
+    def _quote(self, kitchen_id, request):
+        raise ConnectionError("valio down")
 
 
 class AllPassed:
-    """Every day's cut-off has passed."""
-    class valio:
-        @staticmethod
-        def availability(products, day):
-            return {"products": [{"productId": COFFEE, "cutoff_passed": True,
-                                  "scheduleLines": [{"availableDate": day, "availableAmount": 50}]}]}
+    """No day's quote holds the coffee."""
+    def _quote(self, kitchen_id, request):
+        return {"simulation": {"lines": []}}
 
 
-def test_open_day_falls_back_to_next_monday_when_availability_raises():
+def test_open_day_falls_back_to_next_monday_when_the_quote_raises():
     from demo.recall_demo import open_day
     assert open_day(Down(), TODAY) == next_monday(TODAY)
 
