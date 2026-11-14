@@ -335,6 +335,27 @@ export interface DemandLine {
   why: string;
 }
 
+/**
+ * One order proposal for everything a menu plan window needs, net of counted stock
+ * (`POST /proposals` with `from` and `to`). It is a proposal only: a person approves it.
+ */
+export interface PlanProposal {
+  id: string;
+  /** REJECTED: the gateway could not put one line in the basket. */
+  status: "READY" | "REJECTED";
+  /** The total a person approves (the gateway's `expected_total`). */
+  totalInclVat: number;
+  lineCount: number;
+  /** Products the plan needs something of. */
+  needCount: number;
+  /** Needed products whose stock was never counted: their full need is proposed. */
+  uncountedCount: number;
+  /** Needed products that cannot be fully covered. */
+  shortfallCount: number;
+  /** Why the proposal needs a person or was refused (the gateway's `mandate.reason_codes`). */
+  reasonCodes: string[];
+}
+
 export type ShortageRisk = "SHORT" | "AT_RISK" | "COVERED" | "UNKNOWN";
 
 /** Supplier view: forecast demand across consenting kitchens against availability. */

@@ -79,6 +79,7 @@ describe("createHttpApi", () => {
         "getStock",
         "submitStockCount",
         "getDemand",
+        "proposeOrderForPlan",
         "getSharing",
         "setSharing",
         "getSupplierDemand",

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { useApi } from "@/api";
-import type { Draft } from "@/api/types";
+import { ApiError, type Draft } from "@/api/types";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
@@ -14,9 +14,9 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAsync } from "@/lib/use-async";
-import { formatDate, formatNumber } from "@/lib/format";
+import { formatDate, formatEur, formatNumber } from "@/lib/format";
 import { isoWeekOf, weekDates } from "@/lib/week";
-import type { DemandLine, MenuPlanEntry, Recipe } from "@/types";
+import type { DemandLine, MenuPlanEntry, PlanProposal, Recipe } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
 
 function todayIso(): string {
@@ -119,6 +119,49 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
   );
 }
 
+const products = (count: number) => `${formatNumber(count)} ${count === 1 ? "product" : "products"}`;
+
+/** What the proposal call answered, for the week it was asked for. */
+type ProposeOutcome =
+  | { week: string; kind: "proposal"; proposal: PlanProposal }
+  | { week: string; kind: "nothing" }
+  | { week: string; kind: "error"; message: string };
+
+function ProposeMessage({ outcome }: { outcome: ProposeOutcome }) {
+  if (outcome.kind === "nothing") return <p>Stock covers this week's plan. Nothing to order.</p>;
+  if (outcome.kind === "error") return <p className="text-destructive">{outcome.message}</p>;
+  const { proposal } = outcome;
+  const approvals = (
+    <Link to="/approvals" className="font-medium text-primary underline underline-offset-4">
+      Orders &gt; To approve
+    </Link>
+  );
+  return (
+    <div className="space-y-1">
+      {proposal.status === "READY" ? (
+        <p>
+          Proposal ready: {formatNumber(proposal.lineCount)} {proposal.lineCount === 1 ? "line" : "lines"},{" "}
+          {formatEur(proposal.totalInclVat)}. A person approves it in {approvals}.
+        </p>
+      ) : (
+        <p>
+          The gateway could not build an order for this week
+          {proposal.reasonCodes.length ? ` (${proposal.reasonCodes.join(", ")})` : ""}. Nothing can be approved. See it
+          in {approvals}.
+        </p>
+      )}
+      {proposal.uncountedCount > 0 ? (
+        <p>
+          {products(proposal.uncountedCount)}{" "}
+          {proposal.uncountedCount === 1 ? "was never counted, so its" : "were never counted, so their"} full need is
+          proposed.
+        </p>
+      ) : null}
+      {proposal.shortfallCount > 0 ? <p>{products(proposal.shortfallCount)} cannot be fully covered.</p> : null}
+    </div>
+  );
+}
+
 export function PlannerPage() {
   const api = useApi();
   const navigate = useNavigate();
@@ -135,6 +178,8 @@ export function PlannerPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [draftWeek, setDraftWeek] = useState(week);
+  const [proposing, setProposing] = useState(false);
+  const [outcome, setOutcome] = useState<ProposeOutcome | null>(null);
 
   useEffect(() => {
     if (menu.status === "ready") {
@@ -209,6 +254,8 @@ export function PlannerPage() {
       );
       await api.saveMenuPlan(week, menuDrafts);
       setDraft(null);
+      // A proposal made from the plan before this save no longer describes the plan.
+      setOutcome(null);
       menu.reload();
       demand.reload();
       toast.success("Week saved");
@@ -216,6 +263,31 @@ export function PlannerPage() {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Delivery on the first day of the shown week that is today or later; none when the week has passed.
+  const today = todayIso();
+  const requestedDate = dates.find((date) => date >= today);
+  const proposeBlocked = !requestedDate
+    ? "This week is in the past, so there is nothing to order for it."
+    : dirty
+      ? "Save the week first: the proposal uses the saved plan."
+      : "";
+
+  /** Asks for a proposal only. Approving it is a person's step on the approvals page. */
+  async function proposeOrder() {
+    if (!requestedDate || proposing) return;
+    setProposing(true);
+    setOutcome(null);
+    try {
+      const proposal = await api.proposeOrderForPlan(dates[0], dates[6], requestedDate);
+      setOutcome({ week, kind: "proposal", proposal });
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === "NOTHING_NEEDED") setOutcome({ week, kind: "nothing" });
+      else setOutcome({ week, kind: "error", message: cause instanceof Error ? cause.message : String(cause) });
+    } finally {
+      setProposing(false);
     }
   }
 
@@ -334,6 +406,24 @@ export function PlannerPage() {
               {demand.status === "loading" ? <LoadingState label="Loading weekly demand" /> : null}
               {demand.status === "error" ? <ErrorState message={demand.error.message} onRetry={demand.reload} /> : null}
               {demand.status === "ready" ? <DemandList lines={demand.data} dates={dates} /> : null}
+              <div className="space-y-2">
+                <Button
+                  className="w-full sm:w-auto"
+                  onClick={() => void proposeOrder()}
+                  disabled={proposing || proposeBlocked !== ""}
+                  aria-describedby={proposeBlocked ? "propose-blocked" : undefined}
+                >
+                  {proposing ? "Proposing…" : "Propose order for this week"}
+                </Button>
+                {proposeBlocked ? (
+                  <p id="propose-blocked" className="text-sm text-muted-foreground">
+                    {proposeBlocked}
+                  </p>
+                ) : null}
+                <div role="status" aria-live="polite" className="text-sm break-words">
+                  {outcome && outcome.week === week ? <ProposeMessage outcome={outcome} /> : null}
+                </div>
+              </div>
               <div className="flex flex-wrap gap-4 text-sm">
                 <Link to="/stock" className="font-medium text-primary underline underline-offset-4">
                   Check stock

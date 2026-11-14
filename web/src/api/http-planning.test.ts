@@ -71,6 +71,24 @@ const stockBody = {
   as_of: "2026-11-14T10:00:00+02:00",
   items: [{ product_id: "own-1", unit: "PCS", on_hand: "3", counted_at: null, on_order: "0", on_order_known: false }],
 };
+const planProposal = {
+  proposal_id: "prop-plan-1",
+  status: "READY",
+  expected_total: "212.40",
+  lines: [{ product_id: "own-1" }, { product_id: "462775" }],
+  request: {
+    requested_date: "2026-11-18",
+    made_by: "menu_plan",
+    needs: [
+      { product_id: "462775", quantity: "30", unit: "L", stock_counted: true },
+      { product_id: "own-1", quantity: "48", unit: "PCS", stock_counted: false },
+      { product_id: "own-2", quantity: "51.6", unit: "KG", stock_counted: true },
+    ],
+  },
+  shortfalls: [{ product_id: "own-2", shortfall: "51.6", unit: "KG" }],
+  mandate: { reason_codes: ["PARTIAL_STOCK"] },
+  excluded: [],
+};
 const settingsRow = {
   service_level: { A: "0.975" },
   stockout_cap: 1.8,
@@ -101,6 +119,7 @@ describe("planning methods of createHttpApi", () => {
       "getStock",
       "submitStockCount",
       "getDemand",
+      "proposeOrderForPlan",
       "getSharing",
       "setSharing",
       "getSupplierDemand",
@@ -304,6 +323,66 @@ describe("planning methods of createHttpApi", () => {
     const keys = calls.filter((call) => call.route.startsWith("POST")).map((call) => call.body.idempotency_key);
     expect(keys[1]).toBe(keys[0]);
     expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it("asks for one proposal for a menu plan window and maps what came back", async () => {
+    const calls = gateway({ [`POST ${K}/proposals`]: () => planProposal });
+    const proposal = await createHttpApi("/api").proposeOrderForPlan("2026-11-16", "2026-11-22", "2026-11-18");
+    expect(proposal).toEqual({
+      id: "prop-plan-1",
+      status: "READY",
+      totalInclVat: 212.4,
+      lineCount: 2,
+      needCount: 3,
+      uncountedCount: 1,
+      shortfallCount: 1,
+      reasonCodes: ["PARTIAL_STOCK"],
+    });
+    // One call: nothing is approved, and no product or text is sent.
+    expect(routesOf(calls)).toEqual([`POST ${K}/proposals`]);
+    expect(calls[0].body).toEqual({
+      from: "2026-11-16",
+      to: "2026-11-22",
+      requested_date: "2026-11-18",
+      idempotency_key: expect.stringMatching(/^[0-9a-f]{32}$/),
+    });
+  });
+
+  it("retries a failed plan proposal with the same key, and a later one with a new key", async () => {
+    let fail = true;
+    const calls = gateway({
+      [`POST ${K}/proposals`]: () => {
+        if (!fail) return planProposal;
+        fail = false;
+        return new Response(JSON.stringify({ error: { code: "UNAVAILABLE", message: "try again" } }), { status: 503 });
+      },
+    });
+    const api = createHttpApi("/api");
+    const ask = () => api.proposeOrderForPlan("2026-11-16", "2026-11-22", "2026-11-16");
+    await expect(ask()).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    await ask();
+    await ask();
+    const keys = calls.map((call) => call.body.idempotency_key);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it("passes on NOTHING_NEEDED with the gateway's message", async () => {
+    gateway({
+      [`POST ${K}/proposals`]: () =>
+        new Response(
+          JSON.stringify({
+            error: { code: "NOTHING_NEEDED", message: "the plan needs nothing beyond the stock in this window" },
+          }),
+          { status: 422 },
+        ),
+    });
+    await expect(
+      createHttpApi("/api").proposeOrderForPlan("2026-11-16", "2026-11-22", "2026-11-16"),
+    ).rejects.toMatchObject({
+      code: "NOTHING_NEEDED",
+      message: "the plan needs nothing beyond the stock in this window",
+    });
   });
 
   it("reads the demand of a date window", async () => {
