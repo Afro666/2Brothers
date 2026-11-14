@@ -89,6 +89,11 @@ describe("createHttpApi", () => {
         // Standing-order drift (store/drift.py behind the gateway).
         "getDrift",
         "getSupplierDrift",
+        // The Trust page (api/http-trust.ts).
+        "listAuditChain",
+        "verifyAuditChain",
+        "tamperAuditRow",
+        "restoreAuditRow",
       ].sort(),
     );
     expect((await api.getMandate()).restaurant).toBeTruthy();
