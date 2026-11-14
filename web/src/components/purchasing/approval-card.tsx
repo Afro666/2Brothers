@@ -111,6 +111,12 @@ export function ApprovalCard({
     setError(null);
     try {
       await onChangeProposal(change);
+      // Drop the typed number so the input shows the line's real quantity.
+      setQuantities((current) => {
+        const next = { ...current };
+        delete next[change.productId];
+        return next;
+      });
       addables.reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -247,7 +253,12 @@ export function ApprovalCard({
                           <Button
                             type="button"
                             variant="outline"
-                            disabled={busy || Number(quantityValue(line)) === line.quantity}
+                            disabled={
+                              busy ||
+                              !Number.isInteger(Number(quantityValue(line))) ||
+                              Number(quantityValue(line)) < 1 ||
+                              Number(quantityValue(line)) === line.quantity
+                            }
                             aria-label={`Update ${line.product.names.en}`}
                             onClick={() =>
                               void changeProposal({
