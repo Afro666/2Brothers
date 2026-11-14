@@ -43,7 +43,9 @@ person opens it in Telegram and presses Start. Only linked chats get an answer.
 
 ## What a person can do
 
-- Type or say a request: "20 L oat drink for Monday". One product per message until #1375.
+- Type or say a request: "20 L oat drink for Monday". One request may name several products:
+  the gateway makes one proposal from it (#1375), and the bot shows it as a summary and one
+  message per supplier with that supplier's lines.
 - `/week`: the order for the menu plan of the next 7 days, all suppliers.
 - `/brief` (or `/brief morning`, `/brief evening`): what waits and what is urgent, now. The first
   message has the products needed, the suppliers and the cost of all waiting orders (bold), the
@@ -69,4 +71,5 @@ person opens it in Telegram and presses Start. Only linked chats get an answer.
 - `Change` on a supplier's message, then a line, then `−`, `+` or `Remove`. One step is the
   product's lot size. The gateway rounds, checks stock and gives the new total.
 - `Open to approve` on the summary: our approval card. Approve and reject happen there,
-  because both need a person (`kitchen:approve`).
+  because both need a person. No approve scope exists for a token (`gateway/tokens.py`): the
+  bot's token never approves.

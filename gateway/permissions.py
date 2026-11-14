@@ -36,7 +36,10 @@ PERSON = [
     {"action": "API tokens and webhooks", "audit_kind": "token_created",
      "rule": "Only an approver creates or revokes them; a token can read or propose, never approve."},
     {"action": "Approve from your own chat", "audit_kind": "approval_token_created",
-     "rule": "A signed-in approver (never the open demo) creates a personal approval token: it stands for "
+     # The open demo's shared approver may create one too (gateway/app.py approval_token_owner,
+     # decision 2026-11-14 18:08 UTC, #1446): the old text said "never the open demo" (#1874).
+     "rule": "A signed-in approver creates a personal approval token (in the open demo: any visitor, as the "
+             "shared person open-demo, for the open demo's kitchen only): it stands for "
              "that person only, approves and rejects only, never proposes, ends after 8 hours (at most 24), "
              "can be revoked, and every use is audited with via: personal_token."},
 ]
