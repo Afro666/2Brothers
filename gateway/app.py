@@ -13,6 +13,7 @@ from __future__ import annotations
 import hmac
 import os
 import time
+from datetime import datetime
 from decimal import InvalidOperation
 from typing import Any, Literal
 
@@ -255,7 +256,17 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
 
     @app.get("/health")
     def health() -> dict:
-        return {"status": "ok"}
+        """Public and cheap (#1188): never calls Valio, never opens the database. Mode and a
+        yes/no from the last call the gateway made; no host, key or upstream text."""
+        built = gateway if gateway is not None else state.get("gw")
+        valio = getattr(built, "valio", None)
+        if valio is None:       # no request served yet: the server builds a real client on the first one
+            return {"status": "ok", "valio_api": "live", "valio_reachable": None, "valio_checked_at": None}
+        at = getattr(valio, "last_checked_at", None)
+        reachable = getattr(valio, "last_reachable", None)
+        return {"status": "ok", "valio_api": "live" if getattr(valio, "live", False) is True else "mock",
+                "valio_reachable": reachable if isinstance(reachable, bool) else None,
+                "valio_checked_at": at.isoformat() if isinstance(at, datetime) else None}
 
     # ---- kitchen side -------------------------------------------------------------
     k = "/v1/kitchens/{kitchen_id}"

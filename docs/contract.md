@@ -424,8 +424,8 @@ and quantities are decimal strings on the wire.
 
 ### Gateway health
 
-Planned (#1188). `GET /health` is public (no token) and never calls Valio: monitors call
-it often. Answer:
+Served (#1188, `gateway/app.py`). `GET /health` is public (no token) and never calls
+Valio: monitors call it often. Answer:
 
 ```json
 {"status": "ok", "valio_api": "live", "valio_reachable": true,
