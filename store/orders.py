@@ -91,21 +91,24 @@ def attempt_for_key(db, kitchen_id: str, idempotency_key: str) -> dict | None:
 
 
 def record_attempt(db, *, kitchen_id: str, idempotency_key: str, offer_id: str,
-                   expected_total, lines: list, payload_hash: str,
-                   **extra) -> tuple[dict, bool]:
+                   expected_total, lines: list, **extra) -> tuple[dict, bool]:
     """Write the attempt row. Call this before any send. Returns `(order, created)`.
 
-    A replay with the same `payload_hash` returns the stored order and False; the
-    same key with another payload raises `IdempotencyConflict`. Keys are scoped to
-    the kitchen. `status` and `outcome` stay None until `set_outcome`.
+    The `payload_hash` is computed here, from `offer_id`, `expected_total`, `lines`
+    and the extra fields, so every caller hashes the same way. A replay of the same
+    payload returns the stored order and False; the same key with another payload
+    raises `IdempotencyConflict`. Keys are scoped to the kitchen. `status` and
+    `outcome` stay None until `set_outcome`.
     """
+    extra.pop("payload_hash", None)   # a caller's own hash is ignored
+    payload = {**extra, "offer_id": offer_id, "expected_total": expected_total,
+               "lines": lines}
+    _check(payload)
     now = _now()
-    doc = {**extra, "_id": uuid4().hex, "kitchen_id": kitchen_id,
-           "idempotency_key": idempotency_key, "offer_id": offer_id,
-           "expected_total": expected_total, "lines": lines,
-           "payload_hash": payload_hash, "status": None, "outcome": None,
-           "created_at": now, "updated_at": now}
-    _check(doc)
+    doc = {**payload, "_id": uuid4().hex, "kitchen_id": kitchen_id,
+           "idempotency_key": idempotency_key,
+           "payload_hash": hashlib.sha256(canonical(payload).encode()).hexdigest(),
+           "status": None, "outcome": None, "created_at": now, "updated_at": now}
     return _insert_once(db.orders, doc, "order_id")
 
 

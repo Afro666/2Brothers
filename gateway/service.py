@@ -647,13 +647,12 @@ class Gateway:
             {'$set': {'status': 'COMMITTING', 'offer_id': stored['offer_id']}})
         if not committed.modified_count:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
-        payload = {"offer_id": stored["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}
         blocks = sim.get("blocks") or [{"supplier_id": VALIO}]   # an offer stored before #73
         order, created = orders.record_attempt(
             self.db, kitchen_id=kitchen_id, idempotency_key=key, offer_id=stored["offer_id"],
             expected_total=Decimal128(sim["expected_total"]),   # exact decimal in any Mongo
             lines=[{k: v for k, v in ln.items() if k != "why"} for ln in sim["lines"]],
-            payload_hash=_hash(payload), proposal_id=proposal_id, approved_by=human,
+            proposal_id=proposal_id, approved_by=human,
             offer_hash=stored.get("offer_hash"),     # the exact offer this yes covers (#290)
             # One order for the proposal (#73); the supplier split is stored on it.
             supplier_id=blocks[0]["supplier_id"] if len(blocks) == 1 else None,
