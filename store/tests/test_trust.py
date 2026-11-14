@@ -134,5 +134,43 @@ class LiveTrustTests(unittest.TestCase):
             events.close()
 
 
+class FakeStream:
+    def __init__(self, changes=()):
+        self.changes, self.alive, self.closed = list(changes), True, False
+
+    def try_next(self):
+        return self.changes.pop(0) if self.changes else None
+
+    def close(self):
+        self.closed, self.alive = True, False
+
+
+class FakeDb:
+    def __init__(self, stream):
+        self.stream = stream
+
+    def watch(self, pipeline, **kwargs):
+        return self.stream
+
+
+class WatchKitchenCloseTests(unittest.TestCase):
+    def test_close_before_first_next_closes_the_stream(self):
+        stream = FakeStream()
+        trust.watch_kitchen(FakeDb(stream), "demo-kitchen").close()
+        self.assertTrue(stream.closed)
+
+    def test_items_heartbeat_and_end_when_the_stream_dies(self):
+        stream = FakeStream([{"ns": {"coll": "proposals"}, "operationType": "insert",
+                              "fullDocument": {"_id": "p1"}}])
+        with trust.watch_kitchen(FakeDb(stream), "demo-kitchen") as events:
+            self.assertEqual(next(events), {"collection": "proposals", "operation": "insert",
+                                            "document": {"_id": "p1"}})
+            self.assertIsNone(next(events))
+            stream.alive = False
+            with self.assertRaises(StopIteration):
+                next(events)
+        self.assertTrue(stream.closed)
+
+
 if __name__ == "__main__":
     unittest.main()
