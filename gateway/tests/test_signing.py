@@ -82,3 +82,16 @@ def test_an_approval_for_one_offer_cannot_place_another(env):
     bad = client.post("/tools/place_order", headers=AGENT, json={
         "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"})
     assert bad.status_code == 409 and bad.json()["error"]["code"] == "APPROVAL_MISMATCH"
+
+
+def test_a_signing_failure_is_logged_and_the_quote_still_works(env, monkeypatch, caplog):
+    client, _, _ = env
+
+    def broken(*a, **k):
+        raise ValueError("secret-seed-must-not-appear")
+    monkeypatch.setattr(signing, "sign_offer", broken)
+    with caplog.at_level("WARNING", logger="gateway.service"):
+        p = proposal(client)    # still 200
+    assert p.get("signature") is None
+    assert "offer signing failed: ValueError" in caplog.text
+    assert "secret-seed" not in caplog.text

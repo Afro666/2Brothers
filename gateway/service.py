@@ -13,6 +13,7 @@ from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 import hashlib
+import logging
 from typing import Callable
 from uuid import uuid4
 
@@ -34,6 +35,7 @@ DEMAND_DAYS = 28                    # usage history behind the daily demand of a
 REVIEW_DAYS = 3.0                   # days to the delivery after next, until order days are wired
 CENT = Decimal("0.01")
 TOLERANCE = Decimal("0.005")
+log = logging.getLogger(__name__)
 OFFER_TTL = timedelta(minutes=15)   # Aron, 2026-11-14 (#19 answer F)
 
 
@@ -285,7 +287,8 @@ class Gateway:
                 self.db, offer_id=offer_id, kitchen_id=kitchen_id, simulation=sim,
                 requested_date=request["requested_date"], as_of=now, valid_until=now + OFFER_TTL)
             signed = {"signature": token, "offer_hash": digest}
-        except Exception:
+        except Exception as exc:  # log the type only: never the key or the seed
+            log.warning("offer signing failed: %s", type(exc).__name__)
             signed = {}
         offer = orders.save_offer(self.db, {
             "offer_id": offer_id, "kitchen_id": kitchen_id, "supplier_id": VALIO,
