@@ -1422,6 +1422,14 @@ One offer per supplier, kitchen, offered product and date: a later one (another 
 answers the stored offer, whatever its status, and stores nothing. A "no thanks" is final:
 the supplier cannot ask again for the same product and day.
 
+Rounds (demo reset): the rule above holds within one round of a kitchen. A kitchen starts in
+round 0. `python -m demo.reset_offers --apply` (a server command, no route) starts the next
+round: from then on the same supplier, product and day may be offered again, as a new offer
+with a new `offer_id`; its accept makes a new proposal. Offers of earlier rounds, their
+proposals and audit lines stay as they were. Each offer carries `round` (an integer) in the
+stored row; ids of round 0 are the ids made before rounds existed. The reset writes one
+audit entry, `demo_offers_reset`.
+
 **`GET /v1/kitchens/{kitchen_id}/supplier-offers`** answers `{"offers": [...]}` in the shape
 above: open offers first, then the newest, at most 50.
 
