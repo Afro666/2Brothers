@@ -12,6 +12,8 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal, ROUND_CEILING
 
+from engine.packs import PIECES
+
 
 def gross_needs(menu_days: list[dict], recipes: dict[str, dict]) -> tuple[list[dict], list[str]]:
     """`menu_days`: {date, recipe_id, covers}; `recipes`: recipe_id -> {name, ingredients}.
@@ -45,7 +47,7 @@ def gross_needs(menu_days: list[dict], recipes: dict[str, dict]) -> tuple[list[d
             parts[key].append(note)
     rows = [{"product_id": pid, "date": day, "unit": unit, "covers": covers[(pid, day, unit)],
              "gross_need": (total.to_integral_value(rounding=ROUND_CEILING)
-                            if unit.upper() in ("PCS", "ST") else total.quantize(Decimal("0.001"))),
+                            if unit.upper() in PIECES else total.quantize(Decimal("0.001"))),
              "why": " + ".join(parts[(pid, day, unit)])}
             for (pid, day, unit), total in sorted(need.items(), key=lambda kv: (kv[0][1], kv[0][0]))]
     return rows, problems
@@ -81,7 +83,7 @@ def net_needs(rows: list[dict], stock: dict[str, Decimal | None | tuple[str, Dec
         used = min(have, row["gross_need"])
         left[pid] = have - used
         net = row["gross_need"] - used
-        if str(need_unit).upper() in ("PCS", "ST"):
+        if str(need_unit).upper() in PIECES:
             net = net.to_integral_value(rounding=ROUND_CEILING)
         out.append({**row, "net_need": net})
     return out
