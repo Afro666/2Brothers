@@ -47,6 +47,7 @@ def env(monkeypatch):
         return upstream["answer"]
 
     monkeypatch.setattr(onboarding, "_post", fake_post)
+    onboarding.reset_cost_guard()
     return TestClient(create_app(Gateway(db, None))), upstream, db
 
 
@@ -284,3 +285,22 @@ def test_post_sends_the_key_only_in_the_header(monkeypatch):
     monkeypatch.setattr(onboarding.urllib.request, "urlopen",
                         lambda request, timeout: Answer(b"<html>gateway timeout</html>"))
     assert onboarding._post({}, KEY) == (200, {})      # not JSON: no brand, so the route says 502
+
+
+def test_same_business_twice_is_one_paid_call(env):
+    client, upstream, _ = env
+    first = client.post(URL, headers=HUMAN, json={"website": "ravintola.example"})
+    again = client.post(URL, headers=HUMAN, json={"website": "ravintola.example"})
+    assert first.status_code == again.status_code == 200 and first.json() == again.json()
+    assert len(upstream["calls"]) == 1
+
+
+def test_past_the_site_limit_is_429_without_a_call(env, monkeypatch):
+    client, upstream, _ = env
+    monkeypatch.setattr(onboarding, "MAX_CALLS", 3)
+    for i in range(3):
+        assert client.post(URL, headers=HUMAN, json={"website": f"kitchen{i}.example"}).status_code == 200
+    r = client.post(URL, headers=HUMAN, json={"website": "kitchen9.example"})
+    assert r.status_code == 429 and r.json()["error"]["code"] == "RATE_LIMITED"
+    assert len(upstream["calls"]) == 3
+    assert client.post(URL, headers=HUMAN, json={"website": "kitchen1.example"}).status_code == 200   # from memory

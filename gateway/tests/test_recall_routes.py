@@ -46,6 +46,7 @@ def env(monkeypatch):
     monkeypatch.setenv("GATEWAY_HUMAN_TOKEN", "human-test-token")
     monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
     monkeypatch.delenv("GATEWAY_REQUIRE_LOGIN", raising=False)
+    monkeypatch.setenv("RECALL_CHECK_COOLDOWN_S", "0")     # these tests check every call
     monkeypatch.delenv("RECALL_CHECK_TIMEOUT_S", raising=False)
     monkeypatch.setattr(recalls_view, "ContextDev", NoKey)
     db, gw, proposal = setup()
@@ -280,3 +281,18 @@ def test_context_dev_client_makes_one_bounded_call_when_asked(monkeypatch):
     with pytest.raises(RuntimeError, match="HTTP 429"):
         monitor.ContextDev(key="test-key").scrape_json(LIST_URL, LIST_SCHEMA, attempts=1, timeout=3)
     assert seen == [3]
+
+
+def test_two_checks_within_the_cooldown_make_one_context_dev_call(env, monkeypatch):
+    client, db, *_ = env
+    monkeypatch.setenv("RECALL_CHECK_COOLDOWN_S", "60")
+    calls = []
+    listing = {"recalls": [{"url": n["url"], "title": n["title"], "date": n["date"]} for n in NOTICES]}
+    monkeypatch.setattr(recalls_view, "ContextDev", client_class(listing, calls))
+    first = check(client, "click-1")
+    events = len(list_events(db, kitchen_id="hotel"))
+    second = check(client, "click-2")                     # another click, another tab: a new key
+    assert first.status_code == second.status_code == 200
+    assert len(calls) == 1                                # one paid scrape
+    assert len(list_events(db, kitchen_id="hotel")) == events   # nothing applied twice
+    assert second.json()["checked_at"] == first.json()["checked_at"] if "checked_at" in first.json() else True

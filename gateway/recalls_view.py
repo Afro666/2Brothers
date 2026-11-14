@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
@@ -159,6 +160,14 @@ def recall_view(gw: Gateway, kitchen_id: str, entry: dict | None = None) -> dict
                        for alert in recalls.alerts(gw.db, kitchen_id)]}
 
 
+def _cooldown_seconds() -> float:
+    """RECALL_CHECK_COOLDOWN_S, default 60, bounded to 0..3600; 0 switches the cooldown off."""
+    try:
+        return min(max(float(os.environ.get("RECALL_CHECK_COOLDOWN_S", "60")), 0.0), 3600.0)
+    except ValueError:
+        return 60.0
+
+
 def run_check(gw: Gateway, kitchen_id: str, body: dict, actor: str) -> dict:
     key = body.get("idempotency_key")
     if not isinstance(key, str) or not 1 <= len(key.strip()) <= 200:
@@ -167,6 +176,17 @@ def run_check(gw: Gateway, kitchen_id: str, body: dict, actor: str) -> dict:
     stored = recalls.check_entry(gw.db, kitchen_id, event_id)
     if stored is not None:      # a replay: no scrape, nothing applied
         return recall_view(gw, kitchen_id, stored)
+    # Cooldown (#652): the site is open and every check is a paid scrape of up to 45 s. A new
+    # check within the cooldown is answered with the last check's result: no scrape, nothing applied.
+    cooldown = _cooldown_seconds()
+    latest = recalls.check_entry(gw.db, kitchen_id) if cooldown else None
+    if latest is not None:
+        try:
+            age = (gw.now() - datetime.fromisoformat(str(latest["server"].get("at")))).total_seconds()
+        except (TypeError, ValueError):
+            age = None
+        if age is not None and 0 <= age < cooldown:
+            return recall_view(gw, kitchen_id, latest)
     now_iso = gw.now().isoformat()
     notices, facts = fetch_notices(now_iso)
     from monitor.proposals import apply_notices     # imports the agent package: only when used

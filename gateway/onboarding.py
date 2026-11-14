@@ -202,6 +202,42 @@ def lookup(data: dict) -> dict:
     raise _unavailable()      # 401, 402 (credits), 408, 429, 5xx, or an answer without a brand
 
 
+# ---- cost guard (#604): the demo site is open, and every lookup is a paid Context.dev call --
+# Nothing is saved (the contract's promise): the cache and the counter live in this process only.
+CACHE_TTL_S = 600          # the same business within 10 minutes is answered from memory
+MAX_CALLS = 20             # paid calls per window, for the whole site
+WINDOW_S = 600
+_cache: dict[str, tuple[float, dict]] = {}
+_calls: list[float] = []
+
+
+def reset_cost_guard() -> None:
+    _cache.clear()
+    _calls.clear()
+
+
+def guarded_lookup(data: dict, now=None) -> dict:
+    """`lookup`, but a repeated query is answered from memory and the site makes at most
+    MAX_CALLS paid calls per WINDOW_S; past that it answers 429, without calling Context.dev."""
+    import json
+    import time
+    now = time.monotonic() if now is None else now
+    domain, payload = parse_query(data)          # validates first: a bad query never costs
+    key = json.dumps([domain, payload], sort_keys=True, default=str)
+    hit = _cache.get(key)
+    if hit and hit[0] > now:
+        return hit[1]
+    _calls[:] = [t for t in _calls if t > now - WINDOW_S]
+    if len(_calls) >= MAX_CALLS:
+        raise GatewayError(429, "RATE_LIMITED", "Too many lookups right now. Try again in a few minutes.")
+    _calls.append(now)
+    result = lookup(data)
+    if len(_cache) > 200:
+        _cache.clear()
+    _cache[key] = (now + CACHE_TTL_S, result)
+    return result
+
+
 def mount_onboarding(app: FastAPI, principal, body) -> None:
     @app.post("/v1/onboarding/lookup")
     async def onboarding_lookup(request: Request, who=Depends(principal)):
@@ -209,4 +245,4 @@ def mount_onboarding(app: FastAPI, principal, body) -> None:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can look a business up")
         data = await body(request)
         from starlette.concurrency import run_in_threadpool
-        return await run_in_threadpool(lookup, data)
+        return await run_in_threadpool(guarded_lookup, data)
