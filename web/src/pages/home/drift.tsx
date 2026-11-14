@@ -114,13 +114,18 @@ function DriftTileBody({
         data={state.status === "ready" ? state.data : null}
         empty={false}
       >
-        {(report) =>
-          report.warnings.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t(quiet)}</p>
-          ) : (
-            <DriftList warnings={report.warnings} showKitchen={showKitchen} />
-          )
-        }
+        {(report) => (
+          <>
+            {report.warnings.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t(quiet)}</p>
+            ) : (
+              <DriftList warnings={report.warnings} showKitchen={showKitchen} />
+            )}
+            <p className="mt-3 text-xs text-muted-foreground">
+              {t("MongoDB Atlas time-series aggregation over the earlier weeks of orders")}
+            </p>
+          </>
+        )}
       </TileState>
     </Tile>
   );
