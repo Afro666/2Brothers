@@ -387,3 +387,12 @@ def test_offer_lines_carry_delivery_date_and_cut_off(env):
     assert line["available_date"] == "2026-11-16"
     assert line["cutoff_passed"] is False
     assert line["closing_time"].startswith("2026-11-15T")
+
+
+def test_api_docs_load_the_spec_relative_to_their_own_path(env):
+    """#278: behind Caddy the docs live at /api/docs, so the spec URL must be relative."""
+    client, _, _ = env
+    page = client.get("/docs")
+    assert page.status_code == 200 and "url: 'openapi.json'" in page.text
+    spec = client.get("/openapi.json").json()
+    assert spec["servers"][0]["url"] == "/api" and "docs/choices.md" in spec["info"]["description"]

@@ -142,6 +142,18 @@ export function AboutPage() {
               Open the activity log
             </Link>
           </p>
+          <p className="text-sm">
+            <a href="/api/docs" className="font-medium text-primary underline underline-offset-4">
+              API docs (OpenAPI)
+            </a>
+            {" · "}
+            <a
+              href="https://github.com/Afro666/2Brothers/blob/main/docs/choices.md"
+              className="font-medium text-primary underline underline-offset-4"
+            >
+              Why it is built this way
+            </a>
+          </p>
         </section>
       </div>
     </AppShell>
