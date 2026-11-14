@@ -193,6 +193,24 @@ describe("catalog page", () => {
     expect(router.state.location.href).toBe("/catalog?q=butter");
   });
 
+  it("sends an example search in the language shown", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const calls: string[] = [];
+    api.searchProducts = (query) => {
+      calls.push(query);
+      return Promise.resolve([]);
+    };
+    renderApp("/catalog", api);
+
+    await user.click(await screen.findByRole("button", { name: "voi" }));
+
+    expect(calls).toContain("voi");
+    expect(calls).not.toContain("butter");
+    expect(screen.getByRole("searchbox")).toHaveValue("voi");
+  });
+
   it("still says no products match for a query that finds nothing", async () => {
     const api = createMockApi();
     const actual = api.searchProducts;
