@@ -19,3 +19,11 @@ A partial page, missing producer, unsupported scheme, stale result or failed
 fetch is `unknown`. A missing check also means unknown. Neither is verified.
 UI source links use HTTPS. Evidence is recorded, dated and replayable; live
 Context.dev calls require an explicit operator flag and consume credits.
+
+`GET /v1/kitchens/{kitchen_id}/label-checks` uses the usual kitchen authorization.
+Its `checks` list demonstrates the recorded producer checks for catalog products
+462535, 462576 and 462775, resolved through the trusted catalog. Missing products
+are omitted. `negative_control` is an explicitly synthetic unregistered producer
+check, never a real product or an accusation about a supplier. Both use the dated
+recording; the route does not consume Context credits. `synthetic` is true only
+on that negative control. Proposal `label_checks` concern only its actual lines.
