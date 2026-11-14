@@ -200,6 +200,8 @@ describe("nextCutoff", () => {
     expect(screen.getByRole("link", { name: "+2 more" })).toHaveAttribute("href", "/stock");
     // A thumb hits it on a phone: the link is at least 44 px high.
     expect(screen.getByRole("link", { name: "+2 more" })).toHaveClass("min-h-11");
+    // The tile links on the same page too.
+    expect(screen.getByRole("link", { name: "Count stock" })).toHaveClass("min-h-11");
     expect(screen.getByText(/A purchasing agent for professional kitchens/)).toBeInTheDocument();
   });
 });
