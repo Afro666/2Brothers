@@ -14,7 +14,7 @@ const SEARCH_LIMIT = 50;
 const IDS_PER_CALL = 200;
 
 /** The gateway sends GS1 codes only; names from docs/contract.md "search_products". */
-const ALLERGEN_NAMES: Record<string, string> = {
+export const ALLERGEN_NAMES: Record<string, string> = {
   AW: "Gluten",
   AC: "Crustaceans",
   AE: "Eggs",

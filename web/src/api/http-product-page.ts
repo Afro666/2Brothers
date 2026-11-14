@@ -79,6 +79,8 @@ export interface ProductPage {
   nutrition: { basis: string; values: Partial<Record<NutrientKey, number>>; source: string | null } | null;
   storage: { temperature: string | null; minC: number | null; maxC: number | null; source: string | null };
   origin: { country: string | null; source: string | null };
+  /** The catalog's id for the producer ("10400"); null when it sends none. */
+  supplierId: string | null;
   vat: { code: string | null; rate: number | null; source: string | null };
   /** Valio's live price and stock for `date`; null for an own product. */
   live: {
@@ -236,6 +238,7 @@ export function mapProductPage(value: unknown): ProductPage {
       source: str(storage.source),
     },
     origin: { country: str(origin.country), source: str(origin.source) },
+    supplierId: str(about?.supplier_id),
     vat: { code: str(vat.code), rate: num(vat.rate), source: str(vat.source) },
     live: live && {
       date: str(live.date),

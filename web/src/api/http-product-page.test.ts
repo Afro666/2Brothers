@@ -34,6 +34,7 @@ const SALMON = {
     preparation_instructions: null,
     usage_instructions: null,
     producer: "Kalavapriikki Oy",
+    supplier_id: "10400",
     source: "Valio product data",
   },
   allergens: {
@@ -105,6 +106,8 @@ describe("getProductPage on the gateway", () => {
     expect(page.product.names.en).toBe("Salmon fillet A, ASC");
     expect(page.vat).toEqual({ code: "MEDIUM", rate: 13.5, source: "Valio product data, vatCode" });
     expect(page.allergens.contains).toEqual([{ code: "AF", name: "fish" }]);
+    // The producer id the page labels, so it is never a bare number.
+    expect(page.supplierId).toBe("10400");
     // A free-from code without a name keeps its code.
     expect(page.allergens.freeFrom).toEqual([{ code: "AW", name: "AW" }]);
     expect(page.live?.stock?.available).toBe(120);
