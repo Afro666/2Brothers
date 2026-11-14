@@ -1,6 +1,7 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { createContext, type ReactNode, useContext, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 
+import { useSession } from "@/lib/session";
 import type { AuditEvent } from "@/types";
 
 export type Role = "chef" | "buyer" | "valio_planner";
@@ -52,6 +53,27 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const [role, setCurrent] = useState<Role>(storedRole);
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const { session } = useSession();
+  // Only a real account (it has an email) decides the view; with the shared demo token the picker's choice stays.
+  const accountIdentity = session?.role && session.email ? session.email : null;
+
+  useEffect(() => {
+    if (!session?.role || accountIdentity === null) return;
+    const next =
+      session.role === "approver"
+        ? "buyer"
+        : session.role === "chef"
+          ? "chef"
+          : session.email?.endsWith("@demo.valio") || session.name.toLowerCase().includes("valio")
+            ? "valio_planner"
+            : "chef";
+    setCurrent(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      // The account role still applies for this visit.
+    }
+  }, [accountIdentity, session?.role]);
 
   function setRole(next: Role) {
     setCurrent(next);

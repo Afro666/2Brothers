@@ -72,6 +72,7 @@ describe("ApprovalsPage recalls", () => {
 
   it("says the check is not available on a gateway that does not serve it", async () => {
     const api = createHttpApi("http://gateway.test");
+    api.getSession = createMockApi().getSession;
     renderApp("/approvals", api);
     expect(await screen.findByText(/Recall check is not available on this server yet/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Check recalls now" })).not.toBeInTheDocument();

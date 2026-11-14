@@ -2,7 +2,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createHttpApi } from "@/api/http";
+import { createHttpApi, SIGNED_OUT_EVENT } from "@/api/http";
 import { auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
 import { renderApp } from "@/test/render";
 
@@ -20,7 +20,12 @@ function gateway(routes: Record<string, Handler>) {
     const route = `${init.method ?? "GET"} ${url}`;
     const body = init.body ? JSON.parse(init.body as string) : {};
     calls.push({ route, headers: init.headers as Record<string, string>, body });
-    const answer = routes[route] ? routes[route](body) : error(404, "NO_ROUTE");
+    // A signed-in approver unless the test says otherwise: every screen asks who is signed in first.
+    const fallback =
+      route === "GET /api/v1/me"
+        ? { kind: "human", name: "Demo approver", role: "approver", can_approve: true }
+        : null;
+    const answer = routes[route] ? routes[route](body) : (fallback ?? error(404, "NO_ROUTE"));
     return answer instanceof Response ? answer : new Response(JSON.stringify(answer));
   });
   return calls;
@@ -45,15 +50,19 @@ describe("createHttpApi", () => {
     expect([...api.live!].sort()).toEqual(
       [
         "approve",
+        "changePassword",
         "getApproval",
         "getForecastAccuracy",
         "getOrder",
         "getPermissions",
+        "getSession",
         "listAddableProducts",
         "listApprovals",
         "listAudit",
         "listOrders",
         "reject",
+        "signIn",
+        "signOut",
         "submitChefRequest",
         // The planning screens (api/http-planning.ts).
         "listSuppliers",
@@ -171,6 +180,102 @@ describe("createHttpApi", () => {
     expect(calls[0].headers).toMatchObject({ "X-User": "human" });
   });
 
+  it("omits X-User on decisions after signing in with an email", async () => {
+    const calls = gateway({
+      ...inbox({ ...proposal, status: "APPROVED", order_id: "ord-1" }),
+      "POST /api/v1/auth/login": () => ({
+        email: "buyer@example.com",
+        name: "Buyer",
+        role: "approver",
+        kitchen_id: "demo-kitchen",
+      }),
+      [`POST ${K}/proposals/prop-1/approve`]: () => ({ proposal_id: "prop-1", ...placedOrder }),
+    });
+    const api = createHttpApi("/api");
+    expect(await api.signIn("buyer@example.com", "demo-kitchen-2026")).toMatchObject({
+      email: "buyer@example.com",
+      canApprove: false,
+    });
+    await api.approve({ approvalId: "prop-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 }, "human");
+    const approvalCall = calls.find((call) => call.route.includes("/approve"));
+    expect(approvalCall?.headers).not.toHaveProperty("X-User");
+    expect(calls[0].body).toEqual({ email: "buyer@example.com", password: "demo-kitchen-2026" });
+  });
+
+  it("does not allow an agent session to approve even when the approval flag is true", async () => {
+    gateway({
+      "POST /api/v1/auth/login": () => ({
+        email: "agent@example.com",
+        name: "Buyer agent",
+        role: "approver",
+        kind: "agent",
+        can_approve: true,
+      }),
+    });
+    expect(await createHttpApi("/api").signIn("agent@example.com", "demo-kitchen-2026")).toMatchObject({
+      role: "approver",
+      canApprove: false,
+    });
+  });
+
+  it("maps login errors and treats an unauthenticated session as signed out", async () => {
+    gateway({
+      "POST /api/v1/auth/login": () => error(401, "INVALID_LOGIN", { message: "wrong email or password" }),
+      "GET /api/v1/me": () => error(401, "SESSION_EXPIRED"),
+    });
+    const api = createHttpApi("/api");
+    await expect(api.signIn("nobody@example.com", "not-the-password")).rejects.toMatchObject({
+      code: "INVALID_LOGIN",
+      message: "wrong email or password",
+      status: 401,
+    });
+    expect(await api.getSession()).toBeNull();
+  });
+
+  it("clears the local account when logout fails", async () => {
+    const approved = { ...proposal, status: "APPROVED", order_id: "ord-1" };
+    const calls = gateway({
+      ...inbox(approved),
+      "POST /api/v1/auth/login": () => ({
+        email: "buyer@example.com",
+        name: "Buyer",
+        role: "approver",
+        kind: "human",
+        can_approve: true,
+      }),
+      "POST /api/v1/auth/logout": () => error(401, "UNAUTHENTICATED"),
+      [`POST ${K}/proposals/prop-1/approve`]: () => ({ proposal_id: "prop-1", ...placedOrder }),
+    });
+    const api = createHttpApi("/api");
+    await api.signIn("buyer@example.com", "demo-kitchen-2026");
+
+    await expect(api.signOut()).resolves.toBeUndefined();
+    await api.approve({ approvalId: "prop-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 }, "chef");
+
+    expect(calls.find((call) => call.route.includes("/approve"))?.headers).toMatchObject({ "X-User": "chef" });
+  });
+
+  it("announces an expired session for other requests and still throws the gateway error", async () => {
+    gateway({ [`GET ${K}/audit`]: () => error(401, "SESSION_EXPIRED") });
+    const signedOut = vi.fn();
+    window.addEventListener(SIGNED_OUT_EVENT, signedOut);
+    try {
+      await expect(createHttpApi("/api").listAudit()).rejects.toMatchObject({
+        code: "SESSION_EXPIRED",
+        status: 401,
+      });
+      expect(signedOut).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener(SIGNED_OUT_EVENT, signedOut);
+    }
+  });
+
+  it("changes the password through the gateway", async () => {
+    const calls = gateway({ "POST /api/v1/auth/change-password": () => ({ changed: true }) });
+    await createHttpApi("/api").changePassword("demo-kitchen-2026", "a-new-demo-password");
+    expect(calls[0].body).toEqual({ current_password: "demo-kitchen-2026", new_password: "a-new-demo-password" });
+  });
+
   it("lists placed orders with the basket of the proposal that placed them", async () => {
     gateway({
       [`GET ${K}/orders`]: () => ({ orders: [placedOrder, { ...placedOrder, order_id: "ord-old" }] }),
@@ -258,12 +363,25 @@ describe("createHttpApi", () => {
 });
 
 describe("the app on the gateway", () => {
+  it("shows sign-in when a request after the session check answers 401", async () => {
+    gateway({
+      "GET /api/v1/me": () => ({ kind: "human", name: "Demo approver", role: "approver", can_approve: true }),
+      [`GET ${K}/proposals`]: () => error(401, "SESSION_EXPIRED"),
+      [`GET ${K}/audit`]: () => ({ events: auditEvents }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    expect(await screen.findByRole("heading", { name: "Sign in to Kitchen Buyer" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Open menu" })).not.toBeInTheDocument();
+  });
+
   it("shows the real proposal read-only and, when the total moved, the new total before asking again", async () => {
     // As deployed: with the gateway Api, the Api-backed inbox is the live one.
     vi.stubEnv("VITE_LIVE_BUYER", "true");
     const user = userEvent.setup();
     let current = proposal;
     gateway({
+      "GET /api/v1/me": () => ({ kind: "human", name: "Demo approver", role: "approver", can_approve: true }),
       [`GET ${K}/proposals`]: () => ({ proposals: [current] }),
       [`GET ${K}/proposals/prop-1`]: () => current,
       [`GET ${K}/audit`]: () => ({ events: auditEvents }),
@@ -291,7 +409,9 @@ describe("the app on the gateway", () => {
   });
 
   it("marks a screen that still runs on the mock, and only on the gateway", async () => {
-    gateway({});
+    gateway({
+      "GET /api/v1/me": () => ({ kind: "human", name: "Demo approver", role: "approver", can_approve: true }),
+    });
     renderApp("/catalog", createHttpApi("/api"));
     expect(await screen.findByText("Sample data")).toBeVisible();
   });

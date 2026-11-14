@@ -10,6 +10,7 @@ import {
 import { AboutPage } from "@/pages/about";
 import { KitPage } from "@/pages/kit";
 import { RoleProvider } from "@/lib/role";
+import { SessionProvider } from "@/lib/session";
 import { ApprovalsPage } from "@/pages/approvals";
 import { AuditPage } from "@/pages/audit";
 import { CatalogPage, validateCatalogSearch } from "@/pages/catalog";
@@ -27,17 +28,21 @@ import { HomePage } from "@/pages/home";
 import { DEFAULT_SETTINGS_SECTION } from "@/pages/settings/sections";
 import { SettingsPage } from "@/pages/settings/settings-page";
 import { TrustPage } from "@/pages/trust";
+import { SignInPage } from "@/pages/sign-in";
 
 function RootLayout() {
   return (
-    <RoleProvider>
-      <Outlet />
-    </RoleProvider>
+    <SessionProvider>
+      <RoleProvider>
+        <Outlet />
+      </RoleProvider>
+    </SessionProvider>
   );
 }
 const rootRoute = createRootRoute({ component: RootLayout });
 
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: HomePage });
+const signInRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sign-in", component: SignInPage });
 const kitRoute = createRoute({ getParentRoute: () => rootRoute, path: "/kit", component: KitPage });
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/requests", component: RequestsPage });
 const approvalsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/approvals", component: ApprovalsPage });
@@ -91,6 +96,7 @@ const onboardingRoute = createRoute({ getParentRoute: () => rootRoute, path: "/o
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  signInRoute,
   kitRoute,
   requestsRoute,
   approvalsRoute,

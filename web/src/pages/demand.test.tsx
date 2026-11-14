@@ -1,4 +1,4 @@
-import { cleanup, screen, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +22,10 @@ function kitchensFor(productId: string): number {
   const firstDay = productSection(productId)[1];
   const text = within(firstDay).getAllByRole("cell")[2].textContent ?? "";
   return Number(text.match(/^\d+/)?.[0]);
+}
+
+async function demandTableReady() {
+  await waitFor(() => expect(productSections().length).toBeGreaterThan(0));
 }
 
 describe("DemandPage", () => {
@@ -53,6 +57,7 @@ describe("DemandPage", () => {
     renderApp("/demand?week=2026-W47", createMockApi());
 
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await demandTableReady();
     const [, ...days] = productSection("462921");
     expect(days).toHaveLength(3);
     for (const day of days) {
@@ -65,6 +70,7 @@ describe("DemandPage", () => {
   it("counts the kitchen's own forecast when it shares with Valio", async () => {
     renderApp("/demand?week=2026-W47", createMockApi());
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await demandTableReady();
     expect(kitchensFor("462775")).toBe(4);
   });
 
@@ -72,6 +78,7 @@ describe("DemandPage", () => {
     const user = userEvent.setup();
     renderApp("/demand?week=2026-W47", createMockApi());
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await demandTableReady();
 
     const firstDay = productSection("463335")[1];
     const button = within(firstDay).getByRole("button", { name: /^5 kitchens for Valio Eila 3 % milk, / });
@@ -92,6 +99,7 @@ describe("DemandPage", () => {
   it("gives the table and the phone list their own kitchen list ids", async () => {
     renderApp("/demand?week=2026-W47", createMockApi());
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await waitFor(() => expect(document.querySelectorAll("button[aria-controls]")).toHaveLength(30));
 
     const ids = [...document.querySelectorAll("button[aria-controls]")].map((button) =>
       button.getAttribute("aria-controls"),
@@ -104,6 +112,7 @@ describe("DemandPage", () => {
     const user = userEvent.setup();
     renderApp("/demand?week=2026-W47", createMockApi());
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await demandTableReady();
 
     const firstDay = productSection("462775")[1];
     await user.click(within(firstDay).getByRole("button", { name: /^4 kitchens/ }));
@@ -140,6 +149,7 @@ describe("DemandPage", () => {
     cleanup();
     renderApp("/demand?week=2026-W47", closed);
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await demandTableReady();
 
     expect(kitchensFor("462775")).toBe(3);
     const firstDay = productSection("463335")[1];
@@ -164,6 +174,7 @@ describe("DemandPage", () => {
   it("shows each product name as the row header of its days", async () => {
     renderApp("/demand?week=2026-W47", createMockApi());
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await screen.findByRole("rowheader", { name: /Arla lactose-free milk/ });
 
     const table = within(document.querySelector("table")!);
     const headers = table.getAllByRole("rowheader");

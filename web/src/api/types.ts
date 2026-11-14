@@ -32,6 +32,13 @@ import type {
 /** Who a decision is recorded as in the audit log. */
 export type AuditActor = AuditEvent["actor"];
 
+export interface Session {
+  name: string;
+  email: string | null;
+  role: "approver" | "chef" | "viewer" | null;
+  canApprove: boolean;
+}
+
 export type Draft<T extends { id: string }> = Omit<T, "id"> & { id?: string };
 
 export interface StockCount {
@@ -90,6 +97,10 @@ export interface Api {
    * returns sample data from the mock. Absent on the mock itself.
    */
   readonly live?: ReadonlySet<keyof Api>;
+  getSession(): Promise<Session | null>;
+  signIn(email: string, password: string): Promise<Session>;
+  signOut(): Promise<void>;
+  changePassword(current: string, next: string): Promise<void>;
   listApprovals(): Promise<ApprovalRequest[]>;
   getApproval(id: string): Promise<ApprovalRequest>;
   approve(decision: ApprovalDecision, actor: AuditActor): Promise<ApprovalRequest>;
@@ -179,11 +190,13 @@ export class ApiError extends Error {
   readonly code: string;
   /** The other fields of the gateway's error object, e.g. `expected_total` on `TOTAL_MISMATCH`. */
   readonly details: Record<string, unknown>;
+  readonly status?: number;
 
-  constructor(code: string, message: string, details: Record<string, unknown> = {}) {
+  constructor(code: string, message: string, details: Record<string, unknown> = {}, status?: number) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.details = details;
+    this.status = status;
   }
 }

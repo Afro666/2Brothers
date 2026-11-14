@@ -12,7 +12,7 @@ describe("PlannerPage", () => {
     renderApp("/planner?week=2026-W47", createMockApi());
 
     expect(await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" })).toBeInTheDocument();
-    const monday = screen.getByRole("heading", { name: /Monday/ }).closest("[data-slot='card']");
+    const monday = (await screen.findByRole("heading", { name: /Monday/ })).closest("[data-slot='card']");
     expect(monday).not.toBeNull();
     expect(within(monday as HTMLElement).getByText(/Rice pudding/)).toBeInTheDocument();
     expect(within(monday as HTMLElement).getByText(/180 covers/)).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe("PlannerPage", () => {
     renderApp("/planner?week=2026-W47", api);
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
 
-    const monday = screen.getByRole("heading", { name: /Monday/ }).closest("[data-slot='card']") as HTMLElement;
+    const monday = (await screen.findByRole("heading", { name: /Monday/ })).closest("[data-slot='card']") as HTMLElement;
     await user.click(within(monday).getAllByRole("button", { name: "Remove" })[0]);
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Discard" }));

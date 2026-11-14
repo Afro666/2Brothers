@@ -61,6 +61,7 @@ export function ApprovalCard({
   onChooseOption,
   listAddableProducts,
   editCount = 0,
+  approvalBlockedReason,
   recalls = [],
 }: {
   request: ApprovalRequest;
@@ -72,6 +73,7 @@ export function ApprovalCard({
   onChooseOption?: (optionId: string) => void | Promise<void>;
   listAddableProducts?: (query: string) => Promise<AddableProduct[]>;
   editCount?: number;
+  approvalBlockedReason?: string;
   /** Recall alerts on this order; a blocked line still on it holds the approval. */
   recalls?: RecallAlert[];
 }) {
@@ -125,7 +127,7 @@ export function ApprovalCard({
   // (price moved, expected_total mismatch, network), the card stays PENDING
   // and shows the error, so nobody believes an order went through.
   async function decide(next: "APPROVED" | "REJECTED", call: () => void | Promise<void>) {
-    if (next === "APPROVED" && stockMessage) return;
+    if (approvalBlockedReason || (next === "APPROVED" && stockMessage)) return;
     setBusy(true);
     setError(null);
     try {
@@ -185,7 +187,7 @@ export function ApprovalCard({
         {pending && request.options?.length ? (
           <OptionCompare
             options={request.options}
-            disabled={busy}
+            disabled={busy || !!approvalBlockedReason}
             onChoose={onChooseOption}
             onApprove={() => setOpen("approve")}
           />
@@ -331,11 +333,11 @@ export function ApprovalCard({
                 {error}
               </p>
             )}
-            <Button variant="outline" className="w-full sm:w-auto" disabled={busy} onClick={() => setOpen("reject")}>
+            <Button variant="outline" className="w-full sm:w-auto" disabled={busy || !!approvalBlockedReason} onClick={() => setOpen("reject")}>
               <X aria-hidden />
               Reject
             </Button>
-            <Button className="w-full sm:w-auto" disabled={busy || !!stockMessage} onClick={() => setOpen("approve")}>
+            <Button className="w-full sm:w-auto" disabled={busy || !!stockMessage || !!approvalBlockedReason} onClick={() => setOpen("approve")}>
               <Check aria-hidden />
               Approve {formatEur(request.totalInclVat)} incl VAT
             </Button>
@@ -358,6 +360,9 @@ export function ApprovalCard({
               : "Rejected. This order will not be sent."}
           </p>
         )}
+        {pending && approvalBlockedReason ? (
+          <p className="w-full text-sm text-muted-foreground sm:mr-auto">{approvalBlockedReason}</p>
+        ) : null}
       </CardFooter>
 
       <Dialog open={open === "approve"} onOpenChange={(o) => setOpen(o ? "approve" : null)}>
@@ -371,7 +376,7 @@ export function ApprovalCard({
           </DialogHeader>
           <DialogFooter>
             <Button
-              disabled={busy || !!stockMessage}
+              disabled={busy || !!stockMessage || !!approvalBlockedReason}
               onClick={() =>
                 decide("APPROVED", () =>
                   onApprove?.({
@@ -411,7 +416,7 @@ export function ApprovalCard({
           <DialogFooter>
             <Button
               variant="destructive"
-              disabled={busy}
+              disabled={busy || !!approvalBlockedReason}
               onClick={() => decide("REJECTED", () => onReject?.(request.id, reason.trim()))}
             >
               Reject

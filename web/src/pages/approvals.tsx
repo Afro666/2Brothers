@@ -13,6 +13,7 @@ import { usePendingApprovals } from "@/lib/pending-approvals";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { formatEur } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
+import { useSession } from "@/lib/session";
 import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
 import { LiveApprovalsPage } from "@/pages/live-approvals";
 
@@ -61,6 +62,7 @@ export function ApprovalsPage() {
 function ApiApprovalsPage() {
   const api = useApi();
   const { role } = useRole();
+  const { session } = useSession();
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
   const { refresh: refreshWaiting } = usePendingApprovals();
@@ -175,6 +177,9 @@ function ApiApprovalsPage() {
                         canEdit ? (query) => api.listAddableProducts(approval.orderId, query) : undefined
                       }
                       editCount={editCounts[approval.orderId] ?? 0}
+                      approvalBlockedReason={
+                        session && !session.canApprove ? "Your account cannot approve or reject orders." : undefined
+                      }
                       recalls={recallsFor(approval.orderId)}
                     />
                   ))}
