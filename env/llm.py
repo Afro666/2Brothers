@@ -12,7 +12,6 @@ only; keys come from the environment or the repo's .env and are never logged.
 import json
 import math
 import os
-import re
 import subprocess
 import time
 import urllib.error
@@ -93,13 +92,24 @@ def _units(value):
 
 def parse_action(text: str, products) -> tuple:
     """Model text -> (action, problem or None). Never trusts the model's types."""
-    match = re.search(r"\{.*\}", text or "", re.S)
-    if not match:
+    text = text or ""
+    if "{" not in text:
         return {}, "no JSON object"
-    try:
-        raw = json.loads(match.group(0))
-    except json.JSONDecodeError:
+    # Decode every top-level JSON object (prose and fences may hold braces too);
+    # the last one with an "order" key is the answer, else the last object.
+    decoder, found, pos = json.JSONDecoder(), [], text.find("{")
+    while pos != -1:
+        try:
+            obj, end = decoder.raw_decode(text, pos)
+        except json.JSONDecodeError:
+            pos = text.find("{", pos + 1)
+            continue
+        if isinstance(obj, dict):
+            found.append(obj)
+        pos = text.find("{", end)
+    if not found:
         return {}, "invalid JSON"
+    raw = next((o for o in reversed(found) if "order" in o), found[-1])
     if not isinstance(raw, dict):
         return {}, "not an object"
     raw_order = raw.get("order")

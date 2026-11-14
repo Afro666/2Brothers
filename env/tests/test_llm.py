@@ -23,6 +23,19 @@ class ParseActionTest(unittest.TestCase):
         self.assertEqual(action["order"], {"463132": 2})
         self.assertFalse(action["request_approval"])
 
+    def test_two_objects_takes_the_final_action(self):
+        text = 'I considered {"order": {"461903": 9}} but then {"order": {"463132": 1}}'
+        action, problem = parse_action(text, PRODUCTS)
+        self.assertEqual(action["order"], {"463132": 1})
+        self.assertIsNone(problem)
+
+    def test_prose_braces_and_fenced_block(self):
+        text = ('Plan: {stock low} and {"note": 1}.\n```json\n'
+                '{"order": {"461903": 4}, "request_approval": true}\n```\nDone {x}.')
+        action, problem = parse_action(text, PRODUCTS)
+        self.assertEqual(action, {"order": {"461903": 4}, "request_approval": True})
+        self.assertIsNone(problem)
+
     def test_bad_quantities_are_dropped_not_crashing(self):
         action, problem = parse_action('{"order": {"461903": "lots", "463132": 2.7, "x": -1}}', PRODUCTS)
         self.assertEqual(action["order"], {"463132": 2})
