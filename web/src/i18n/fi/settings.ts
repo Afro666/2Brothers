@@ -320,6 +320,7 @@ export default {
   "Learned facts": "Opitut faktat",
   "Quantity correction: {ratio} × the forecast": "Määrän korjaus: {ratio} × ennuste",
   "Kept out of proposals after repeated removals": "Jätetään pois ehdotuksista toistuvien poistojen perusteella",
+  "Supplier delivery timing: {days} day late on average": "Toimittajan toimitusaika: keskimäärin {days} päivä myöhässä",
   "Supplier delivery timing: {days} days late on average": "Toimittajan toimitusaika: keskimäärin {days} päivää myöhässä",
   "Supplier fill rate: {rate}": "Toimittajan toimituskattavuus: {rate}",
   "Evidence": "Näyttö",

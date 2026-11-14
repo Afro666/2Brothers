@@ -20,7 +20,9 @@ function factText(fact: LearnedFact, t: (key: string, values?: Record<string, st
     case "DECLINED_PRODUCT":
       return t("Kept out of proposals after repeated removals");
     case "SUPPLIER_LATE":
-      return t("Supplier delivery timing: {days} days late on average", { days: formatNumber(fact.value) });
+      return fact.value === 1
+        ? t("Supplier delivery timing: {days} day late on average", { days: formatNumber(fact.value) })
+        : t("Supplier delivery timing: {days} days late on average", { days: formatNumber(fact.value) });
     case "SUPPLIER_SHORT":
       return t("Supplier fill rate: {rate}", { rate: formatPercent(fact.value) });
   }

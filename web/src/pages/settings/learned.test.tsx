@@ -19,6 +19,18 @@ describe("What the tool learned settings", () => {
     expect(screen.getAllByText(/4 recorded events from/)).toHaveLength(1);
     expect(screen.getByRole("switch", { name: "Use learned fact for Washed potato 10 kg" })).toBeChecked();
     expect(screen.getByRole("switch", { name: "Use learned fact for Leipomo Demo" })).not.toBeChecked();
+    expect(screen.getByText("Supplier delivery timing: 1 day late on average")).toBeVisible();
+  });
+
+  it("uses the plural for a supplier that is late by more than a day", async () => {
+    const api = createMockApi();
+    const facts = await api.listLearnedFacts();
+    vi.spyOn(api, "listLearnedFacts").mockResolvedValue(
+      facts.map((fact) => (fact.kind === "SUPPLIER_LATE" ? { ...fact, value: 2.5, meanDaysLate: 2.5 } : fact)),
+    );
+    renderApp("/settings/learned", api);
+
+    expect(await screen.findByText("Supplier delivery timing: 2.5 days late on average")).toBeVisible();
   });
 
   it("lets an approver switch off a fact", async () => {
