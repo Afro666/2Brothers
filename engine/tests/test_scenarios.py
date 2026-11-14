@@ -236,3 +236,11 @@ def test_unknown_reliability_is_never_best_then_carbon_decides():
     green = _milk("C", "1.02", reliability=0.90, carbon=1.1)
     plan = plan_request(D(50), "L", [known.__class__(**{**known.__dict__, "carbon": 1.6}), green], MON, P)
     assert plan.lines[0].product_id == "C" and "lower carbon" in plan.lines[0].why
+
+
+def test_zero_reliability_beats_unknown_and_note_says_reliability():
+    unknown = _milk("A", "1.00", reliability=None)
+    zero = _milk("B", "1.01", reliability=0.0)
+    plan = plan_request(D(50), "L", [unknown, zero], MON, P)
+    assert plan.lines[0].product_id == "B"
+    assert "delivery reliability 0% vs unknown" in plan.lines[0].why
