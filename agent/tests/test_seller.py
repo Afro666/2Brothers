@@ -100,6 +100,18 @@ def test_shortlist_keeps_only_what_this_kitchen_may_get_and_what_can_arrive(w):
     assert other[0]["shortlist"] == [f"{SUBS[0]} oat drink {SUBS[0]}"]
 
 
+def test_shortlist_also_looks_at_the_rest_of_the_category(w):
+    """A substitute that shares no word with the short product (zucchini for cucumber)."""
+    asked = []
+
+    def search(db, query, filters, limit, kitchen_id=None):
+        asked.append((query, filters))
+        return [] if query else [{"product_id": pid} for pid in SUBS[:2]]
+    w.gw._search = search
+    assert len(go(w)[0]["shortlist"]) == 2
+    assert asked == [("milk 462775", {"category": "milk"}), ("", {"category": "milk"})]
+
+
 def test_a_misspelt_allergen_rule_means_no_offer(w):
     w.db.kitchen_settings.insert_one({"_id": "K1", "excluded_allergens": ["not-an-allergen"]})
     assert go(w, apply=True)[0]["result"] == "NO_SUBSTITUTE"

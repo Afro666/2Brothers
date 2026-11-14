@@ -73,8 +73,12 @@ def shortlist(gw, row: dict, kitchen_id: str, demand: Decimal, not_ok: set) -> l
     except ValueError:
         return []
     query = (short.get("names") or {}).get("en") or (short.get("names") or {}).get("fi") or ""
-    hits, _ = catalog_search.search(gw.db, query[:200], {"category": short["category"]}, 50,
-                                    injected=gw._search)
+    # Products named like the short one first (another cucumber), then the rest of its category.
+    hits = []
+    for text in ([query[:200]] if query else []) + [""]:
+        found, _ = catalog_search.search(gw.db, text, {"category": short["category"]}, 50,
+                                         injected=gw._search)
+        hits += found
     blocked = recalls.blocked_ids(gw.db, kitchen_id)
     rows = {r["product_id"]: r for r in get_products(gw.db, [h["product_id"] for h in hits])}
     usable = [r for r in rows.values()
