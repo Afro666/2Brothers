@@ -60,15 +60,16 @@ class Nemotron:
                 "chat_template_kwargs": {"enable_thinking": self.thinking}}
         return await self._post(body, "buyer")
 
-    async def complete_json(self, messages, schema, name, *, max_tokens=2048):
+    async def complete_json(self, messages, schema, name, *, max_tokens=2048, role=None):
         """One structured reply: the server constrains the output to `schema` (strict).
-        Thinking is off; the caller still validates the parsed object."""
+        Thinking is off; the caller still validates the parsed object. Metered under `role`,
+        by default `vl_<name>` (the vision readers)."""
         body = {"model": "nemotron-3.5-super-vl", "messages": messages, "temperature": 0,
                 "max_tokens": max_tokens,
                 "response_format": {"type": "json_schema",
                                     "json_schema": {"name": name, "schema": schema, "strict": True}},
                 "chat_template_kwargs": {"enable_thinking": False}}
-        return await self._post(body, "vl_" + name)
+        return await self._post(body, role or "vl_" + name)
 
     async def _post(self, body, role):
         """One model call for `role`, metered: a failed call counts too, with no tokens."""

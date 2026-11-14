@@ -22,7 +22,7 @@ class FakeModel:
     def __init__(self, answer):
         self.answer, self.calls = answer, []
 
-    async def complete_json(self, messages, schema, name, *, max_tokens=2048):
+    async def complete_json(self, messages, schema, name, *, max_tokens=2048, role=None):
         self.calls.append(messages)
         if isinstance(self.answer, Exception):
             raise self.answer
@@ -270,3 +270,41 @@ def test_cli_stops_before_any_work_when_the_model_key_is_missing(monkeypatch):
     assert "VERDA_INFERENCE_KEY" in str(stop.value)
     with pytest.raises(SystemExit):
         seller.main([])                       # --dry-run or --apply is required
+
+
+def test_the_cli_meters_the_pick_as_seller_pick_and_writes_one_usage_line(monkeypatch, tmp_path, capsys):
+    from decimal import Decimal
+    import httpx
+    from agent import model as model_module
+    from agent.usage import MARK, collect
+    from gateway import service, valio_client
+    from store import db
+    answer = {"index": 0, "reason": "The same kind of drink."}
+    usage = {"prompt_tokens": 100, "completion_tokens": 20}
+
+    def handler(request):
+        return httpx.Response(200, json={"usage": usage, "choices": [
+            {"message": {"role": "assistant", "content": json.dumps(answer)}}]})
+    real = model_module.Nemotron
+    monkeypatch.setattr(model_module, "Nemotron", lambda: real(transport=httpx.MockTransport(handler)))
+    monkeypatch.setenv("VERDA_INFERENCE_KEY", "not-a-real-secret")
+    monkeypatch.setenv("NEMOTRON_USAGE_LOG", str(tmp_path / "usage.jsonl"))
+    monkeypatch.setattr(db, "get_db", lambda: None)
+    monkeypatch.setattr(valio_client, "ValioClient", lambda: None)
+    monkeypatch.setattr(service, "Gateway", lambda database, valio: None)
+    row = {"product_name": "Milk", "date": "2026-11-16", "unit": "L", "demand": "10",
+           "available": "2", "shortage": "8"}
+    entries = [{"name": "Oat drink", "brand": None, "sold_as": "unknown", "lactose_free": True,
+                "available": "50"}]
+
+    async def run(gw, *, model, **_):
+        assert await seller.model_pick(model, row, Decimal("4"), entries) == (0, answer["reason"])
+        return []
+    monkeypatch.setattr(seller, "run", run)
+    seller.main(["--dry-run", "--today", "2026-11-15"])
+    lines = [line for line in capsys.readouterr().err.splitlines() if line.startswith(MARK)]
+    assert len(lines) == 1
+    assert json.loads(lines[0][len(MARK):])["run"] == "seller"
+    roles, runs = collect((tmp_path / "usage.jsonl").read_text().splitlines())
+    assert runs == 1 and set(roles) == {"seller_pick"}
+    assert (roles["seller_pick"]["calls"], roles["seller_pick"]["prompt_tokens"]) == (1, 100)
