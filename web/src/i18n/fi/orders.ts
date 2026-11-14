@@ -457,4 +457,11 @@ export default {
   "Short explanation": "Lyhyt selitys",
   "Written by {model} from the checked decision record": "Kirjoittanut {model} tarkistetun päätöstietueen pohjalta",
   "Open the full decision record": "Avaa koko päätöstietue",
+  "Approve": "Hyväksy",
+  "Approve before {time}": "Hyväksy ennen {time}",
+  "The cut-off has passed": "Tilausaikaraja on umpeutunut",
+  "{supplier}'s cut-off": "Toimittajan {supplier} tilausaikaraja",
+  " (earliest of {count})": " (aikaisin {count} rivistä)",
+  "{hours} h {minutes} min left": "{hours} h {minutes} min jäljellä",
+  "{minutes} min left": "{minutes} min jäljellä",
 } satisfies Record<string, string>;

@@ -3,7 +3,7 @@ import { mapProposalOptions } from "@/api/map-options";
 import { mapModelTrace } from "@/api/model-trace";
 import { SUPPLIER_ID } from "@/api/supplier-id";
 import { ApiError } from "@/api/types";
-import { codeLabel, plainReason } from "@/lib/codes";
+import { CODE_LABELS, codeLabel, plainReason } from "@/lib/codes";
 import type {
   AddableProduct,
   ApprovalRequest,
@@ -456,6 +456,16 @@ export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalR
   });
 }
 
+/** #1227: a bare known code as a sentence; a known product's name in place of its code. */
+function approvalReason(rule: string, productNames: ReadonlyMap<string, string>): string {
+  if (Object.hasOwn(CODE_LABELS, rule)) return `${CODE_LABELS[rule].title}. ${CODE_LABELS[rule].detail}`;
+  const plain = plainReason(rule, productNames);
+  if (plain !== rule) return plain;
+  const [, productId, rest] = /^([^:]+): (.*)$/s.exec(rule) ?? [];
+  const name = productId == null ? undefined : productNames.get(productId);
+  return name ? `${name}: ${rest}` : rule;
+}
+
 /**
  * The approval card for one proposal. `events` is the kitchen's audit log: the proposal
  * itself does not say who asked or when, the event that created it does.
@@ -474,14 +484,37 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
   const productNames = new Map<string, string>();
   if (Array.isArray(proposal.lines)) {
     for (const line of proposal.lines) {
-      if (typeof line?.product_id === "string" && typeof line.product_name === "string") {
+      if (typeof line?.product_id === "string" && typeof line.product_name === "string" && line.product_name) {
         productNames.set(line.product_id, line.product_name);
+      }
+    }
+  }
+  if (Array.isArray(proposal.excluded)) {
+    for (const line of proposal.excluded) {
+      if (typeof line?.product_id !== "string" || productNames.has(line.product_id)) continue;
+      const name = typeof line.product_name === "string" && line.product_name ? line.product_name : line.name;
+      if (typeof name === "string" && name) productNames.set(line.product_id, name);
+    }
+  }
+  const supplierNames = new Map<string, string>();
+  if (Array.isArray(proposal.blocks)) {
+    for (const block of proposal.blocks) {
+      if (!block || typeof block.supplier_id !== "string" || !Array.isArray(block.lines)) continue;
+      const name =
+        block.supplier_id === SUPPLIER_ID
+          ? "Valio"
+          : typeof block.name === "string" && block.name
+            ? block.name
+            : block.supplier_id || null;
+      if (name == null) continue;
+      for (const line of block.lines) {
+        if (typeof line?.product_id === "string") supplierNames.set(line.product_id, name);
       }
     }
   }
   // #1142: no raw code reaches the screen, in a gateway reason or as an unknown warning.
   const reasons = [
-    ...strings(mandate.reasons).map((rule) => ({ rule: plainReason(rule, productNames), detail: "" })),
+    ...strings(mandate.reasons).map((rule) => ({ rule: approvalReason(rule, productNames), detail: "" })),
     ...Object.entries(CHECK_CODES)
       .filter(([code]) => codes.has(code))
       .map(([, reason]) => reason),
@@ -509,6 +542,12 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
       ? reasons
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],
     suppliersToConfirm: mapSuppliersToConfirm(proposal),
+    cutoffs: Array.isArray(proposal.lines)
+      ? proposal.lines.map((line) => ({
+          closingTime: nullableText(line?.closing_time, "closing_time"),
+          supplierName: typeof line?.product_id === "string" ? supplierNames.get(line.product_id) ?? null : null,
+        }))
+      : undefined,
     status: approvalStatus(proposal.status),
     options: mapProposalOptions(
       proposal.substitute_options,

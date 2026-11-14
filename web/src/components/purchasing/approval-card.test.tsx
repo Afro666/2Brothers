@@ -1,11 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { ADD_SEARCH_DEBOUNCE_MS, ApprovalCard } from "@/components/purchasing/approval-card";
+import { ADD_SEARCH_DEBOUNCE_MS, ApprovalCard, earliestCutoff } from "@/components/purchasing/approval-card";
 import { mapApproval } from "@/api/gateway-map";
 import { ApiError } from "@/api/types";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, formatTime } from "@/lib/format";
 import { proposal } from "@/test/gateway-fixtures";
 import { approval, orders } from "@/mocks/milk-case";
 
@@ -16,7 +16,136 @@ const confirmedOrder = {
   })),
 };
 
+describe("earliestCutoff", () => {
+  const at = (closingTime: string | null, supplierName = "Valio") => ({ closingTime, supplierName });
+
+  it("does not warn when more than two hours remain", () => {
+    expect(earliestCutoff([at("2026-11-15T17:00:00+02:00")], new Date("2026-11-15T14:00:00+02:00"))).toMatchObject({
+      warning: false,
+      passed: false,
+      minutesLeft: 180,
+    });
+  });
+
+  it("warns with whole hours and minutes left when less than two hours remain", () => {
+    expect(earliestCutoff([at("2026-11-15T17:00:00+02:00")], new Date("2026-11-15T15:40:00+02:00"))).toMatchObject({
+      warning: true,
+      minutesLeft: 80,
+    });
+  });
+
+  it("reports a cut-off at or before now as passed", () => {
+    expect(earliestCutoff([at("2026-11-15T17:00:00+02:00")], new Date("2026-11-15T17:00:00+02:00"))).toMatchObject({
+      warning: true,
+      passed: true,
+      minutesLeft: 0,
+    });
+  });
+
+  it("shows no cut-off when every value is null", () => {
+    expect(earliestCutoff([at(null), at(null)], new Date("2026-11-15T17:00:00+02:00"))).toBeNull();
+  });
+
+  it("does not warn at exactly two hours left", () => {
+    expect(earliestCutoff([at("2026-11-15T17:00:00+02:00")], new Date("2026-11-15T15:00:00+02:00"))).toMatchObject({
+      warning: false,
+      minutesLeft: 120,
+    });
+  });
+
+  it("chooses the earliest supplier cut-off and counts the known lines", () => {
+    expect(earliestCutoff([
+      at("2026-11-15T17:00:00+02:00"),
+      at("2026-11-15T15:00:00+02:00", "Töölö Bakery"),
+      at(null),
+    ], new Date("2026-11-15T12:00:00+02:00"))).toMatchObject({
+      closingTime: "2026-11-15T15:00:00+02:00",
+      supplierName: "Töölö Bakery",
+      earliestOf: 2,
+    });
+  });
+
+  it("uses absolute timestamps and Helsinki formatting across the change to winter time", () => {
+    const cutoff = earliestCutoff([at("2026-10-25T05:00:00+02:00")], new Date("2026-10-25T03:30:00+02:00"))!;
+    expect(cutoff.minutesLeft).toBe(90);
+    expect(`${formatDate(cutoff.closingTime)} ${formatTime(cutoff.closingTime)}`).toBe("Sun 25 Oct 05:00");
+  });
+});
+
 describe("ApprovalCard", () => {
+  it("shows the earliest supplier cut-off next to the totals while waiting", () => {
+    render(<ApprovalCard
+      request={{
+        ...approval,
+        cutoffs: [
+          { closingTime: "2026-11-15T17:00:00+02:00", supplierName: "Valio" },
+          { closingTime: "2026-11-15T16:00:00+02:00", supplierName: "Töölö Bakery" },
+        ],
+      }}
+      order={confirmedOrder}
+      now={new Date("2026-11-15T14:40:00+02:00")}
+    />);
+    expect(screen.getByText("Approve before Sun 15 Nov 16:00 · Töölö Bakery's cut-off (earliest of 2) · 1 h 20 min left")).toBeVisible();
+  });
+
+  it("names no supplier when no supplier block names the line", () => {
+    render(<ApprovalCard
+      request={{ ...approval, cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: null }] }}
+      order={confirmedOrder}
+      now={new Date("2026-11-15T12:00:00+02:00")}
+    />);
+    expect(screen.getByText("Approve before Sun 15 Nov 17:00")).toBeVisible();
+  });
+
+  it("warns when the cut-off has passed and shows nothing when all cut-offs are null", () => {
+    const passed = render(<ApprovalCard
+      request={{ ...approval, cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: "Valio" }] }}
+      order={confirmedOrder}
+      now={new Date("2026-11-15T17:00:00+02:00")}
+    />);
+    expect(screen.getByText("The cut-off has passed · Valio's cut-off")).toHaveClass("hatch", "text-warning");
+    expect(screen.getByRole("button", { name: "Approve €2,210.41 incl VAT" })).toBeEnabled();
+    passed.unmount();
+
+    render(<ApprovalCard
+      request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: "Valio" }] }}
+      order={confirmedOrder}
+    />);
+    expect(screen.queryByText(/Approve before|cut-off has passed/)).not.toBeInTheDocument();
+  });
+
+  it("hides the cut-off on a decided card", () => {
+    render(<ApprovalCard
+      request={{
+        ...approval,
+        status: "APPROVED",
+        cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: "Valio" }],
+      }}
+      order={confirmedOrder}
+    />);
+    expect(screen.queryByText(/Approve before|cut-off has passed/)).not.toBeInTheDocument();
+  });
+
+  it("refreshes the countdown once a minute and clears its timer", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-15T15:40:00+02:00"));
+    const clearInterval = vi.spyOn(window, "clearInterval");
+    try {
+      const card = render(<ApprovalCard
+        request={{ ...approval, cutoffs: [{ closingTime: "2026-11-15T17:00:00+02:00", supplierName: "Valio" }] }}
+        order={confirmedOrder}
+      />);
+      expect(screen.getByText(/1 h 20 min left/)).toBeVisible();
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(screen.getByText(/1 h 19 min left/)).toBeVisible();
+      card.unmount();
+      expect(clearInterval).toHaveBeenCalled();
+    } finally {
+      clearInterval.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("starts folded when asked: title and total show, the details open on a tap (#1142)", async () => {
     render(<ApprovalCard request={{ ...approval, status: "REJECTED" }} order={confirmedOrder} folded />);
     expect(screen.getByText(approval.summary)).toBeInTheDocument();
@@ -142,8 +271,11 @@ describe("ApprovalCard", () => {
 
   it("still holds approval when the order lines are unavailable", () => {
     render(<ApprovalCard request={approval} order={{ ...confirmedOrder, lines: [] }} />);
-    expect(screen.getByText("Order details are unavailable. Reload them before approving.")).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
+    const reason = "Order details are unavailable. Reload them before approving.";
+    expect(screen.getByText(reason)).toBeVisible();
+    const button = screen.getByRole("button", { name: "Approve" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription(reason);
   });
 
   it("lists what to check and never says an order can go without approval", () => {
@@ -169,7 +301,18 @@ describe("ApprovalCard", () => {
   it("blocks missing order details", () => {
     render(<ApprovalCard request={approval} />);
     expect(screen.getByText(/Order details are unavailable/)).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+  });
+
+  it("keeps an enabled total but omits it from a button disabled for a stated reason", () => {
+    const reason = "Your account cannot approve or reject orders.";
+    const { rerender } = render(<ApprovalCard request={approval} order={confirmedOrder} />);
+    expect(screen.getByRole("button", { name: "Approve €2,210.41 incl VAT" })).toBeEnabled();
+    rerender(<ApprovalCard request={approval} order={confirmedOrder} approvalBlockedReason={reason} />);
+    const approve = screen.getByRole("button", { name: "Approve" });
+    expect(approve).toBeDisabled();
+    expect(approve).toHaveAccessibleDescription(reason);
+    expect(screen.getByText("€2,210.41", { selector: "dd" })).toBeVisible();
   });
 
   it("rechecks the order while the confirmation dialog is open", async () => {
