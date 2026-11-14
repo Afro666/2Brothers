@@ -30,11 +30,18 @@ export function LabelEvidence({ check, productName }: { check: LabelCheck; produ
     ? t("checked {time}", { time: formatDateTime(check.checked_at) })
     : t("not checked");
   return <div className="space-y-1 rounded border p-3 text-sm">
-    <p>{product} · {check.producer ?? t("Legal producer unknown")}</p>
-    <p className={verified ? "font-semibold text-green-700 dark:text-green-400" : "font-semibold"}>
-      {verified ? t("Producer registration verified") : check.label_verified === "not_found" ? t("Producer not found") : t("Verification unknown")}
+    <p>
+      {product} · {check.producer ?? t("Legal producer unknown")}
+      {check.synthetic ? ` · ${t("Control: a made-up producer the register must not find")}` : ""}
     </p>
-    <p>{t(LABEL_NAMES[check.label] ?? check.label)} · {t("producer scope · individual product certification unverified")}</p>
+    <p className={verified ? "font-semibold text-green-700 dark:text-green-400" : "font-semibold"}>
+      {verified
+        ? t("Producer is in the register; this product's label was not checked")
+        : check.label_verified === "not_found"
+          ? t("Producer not found")
+          : t("Verification unknown")}
+    </p>
+    <p>{t(LABEL_NAMES[check.label] ?? check.label)}</p>
     {/* The gateway's reason is an English sentence: the known ones have a Finnish entry. */}
     <p>{t(check.reason)} · {checkedAt}</p>
     {check.source_url && /^https:\/\//.test(check.source_url) && <a className="underline" href={check.source_url} target="_blank" rel="noreferrer">{t("Official producer register")}</a>}
@@ -65,14 +72,17 @@ export function LabelVerificationDemo() {
     : new Map();
   return <section className="space-y-3" aria-label={t("Label verification")}>
     <h2 className="text-xl font-semibold">{t("Source-backed label checks")}</h2>
-    <p>{t("Context.dev extracted the official producer register. These dated checks verify producer registration; they do not certify an individual SKU.")}</p>
+    <p>{t("Context.dev extracted the official producer register. These dated checks verify producer registration; they do not certify an individual product.")}</p>
     {state.status === "loading" && <p>{t("Loading verification evidence…")}</p>}
     {state.status === "error" && <p role="alert">{t("Verification unknown: {message}", { message: state.error.message })}</p>}
     {state.status === "ready" && <>
       {checked.map(c => <LabelEvidence key={`${c.product_id}-${c.label}`} check={c} productName={productNames.get(c.product_id)} />)}
       {unsupported.length > 0 && <details className="rounded border p-3 text-sm">
         <summary className="cursor-pointer font-medium">
-          {t("Not checked: {count} labels with no public register", { count: unsupported.length })}
+          {t("Not checked: {count} labels with no public register: {labels}", {
+            count: unsupported.length,
+            labels: [...new Set(unsupported.map(check => t(LABEL_NAMES[check.label] ?? check.label)))].join(", "),
+          })}
         </summary>
         <div className="mt-3 space-y-3">
           {unsupported.map(c => <LabelEvidence key={`${c.product_id}-${c.label}`} check={c} productName={productNames.get(c.product_id)} />)}
