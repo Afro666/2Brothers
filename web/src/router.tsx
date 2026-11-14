@@ -1,5 +1,6 @@
 import { type RouterHistory, Outlet, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 
+import { AboutPage } from "@/pages/about";
 import { KitPage } from "@/pages/kit";
 import { RoleProvider } from "@/lib/role";
 import { ApprovalsPage } from "@/pages/approvals";
@@ -43,6 +44,7 @@ const productsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/pro
 const plannerRoute = createRoute({ getParentRoute: () => rootRoute, path: "/planner", component: PlannerPage });
 const demandRoute = createRoute({ getParentRoute: () => rootRoute, path: "/demand", component: DemandPage });
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsPage });
+const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: "/about", component: AboutPage });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -59,6 +61,7 @@ const routeTree = rootRoute.addChildren([
   plannerRoute,
   demandRoute,
   settingsRoute,
+  aboutRoute,
 ]);
 
 export function createAppRouter(history?: RouterHistory) {
