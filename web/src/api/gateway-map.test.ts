@@ -71,9 +71,32 @@ describe("mapApproval", () => {
       ],
     });
     expect(result.suppliersToConfirm).toEqual([
-      { supplierId: "sup-bakery", name: "Leipomo Demo" },
-      { supplierId: "sup-nameless", name: "sup-nameless" },
+      { supplierId: "sup-bakery", name: "Leipomo Demo", count: 1 },
+      { supplierId: "sup-nameless", name: "sup-nameless", count: 1 },
     ]);
+  });
+
+  it("counts each other supplier's unconfirmed lines (#1865)", () => {
+    const unknown = { ...proposal.lines[0], unknown_stock: true };
+    const confirmed = { ...proposal.lines[0], unknown_stock: false };
+    const result = mapApproval({
+      ...proposal,
+      blocks: [{ supplier_id: "sup-fish", name: "Baltic Catch", lines: [unknown, confirmed, unknown] }],
+    });
+    expect(result.suppliersToConfirm).toEqual([{ supplierId: "sup-fish", name: "Baltic Catch", count: 2 }]);
+  });
+
+  it("carries each supplier block's own delivery fee, and none for a free or unknown one (#1865)", () => {
+    const result = mapApproval({
+      ...proposal,
+      blocks: [
+        { supplier_id: "sup-fish", name: "Baltic Catch", lines: proposal.lines, delivery_fee: "0.00" },
+        { supplier_id: "sup-valio", name: "Valio Aimo", lines: proposal.lines, delivery_fee: "25.00" },
+        { supplier_id: "sup-bakery", name: "Leipomo Demo", lines: proposal.lines, delivery_fee: null },
+      ],
+    });
+    expect(result.deliveryFees).toEqual([{ supplier: "Valio Aimo", amount: 25 }]);
+    expect("deliveryFees" in mapApproval(proposal)).toBe(false);
   });
 
   it("shows the gateway's must-confirm sentence as it is (Valio, 14 Nov)", () => {

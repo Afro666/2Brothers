@@ -291,7 +291,10 @@ export interface ApprovalRequest {
   /** Names of the lines whose VAT rate is unknown (`vat_unknown`). */
   vatUnknown?: string[];
   reasons: MandateReason[];
-  suppliersToConfirm: { supplierId: string; name: string }[];
+  /** Suppliers other than Valio with unconfirmed stock; `count` is how many of the proposal's lines (the gateway's `blocks`). */
+  suppliersToConfirm: { supplierId: string; name: string; count?: number }[];
+  /** Each supplier block's own delivery fee above zero (`blocks[].delivery_fee`); absent when no block has one. */
+  deliveryFees?: { supplier: string; amount: number }[];
   /** Proposal-line cut-offs and the supplier block each line belongs to. */
   cutoffs?: { closingTime: OrderLine["offer"]["closingTime"]; supplierName: string | null }[];
   /** Only PENDING can be approved; IN_PROGRESS and BLOCKED_BY_RECALL wait, they are not decided. */

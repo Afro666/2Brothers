@@ -500,8 +500,26 @@ export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalR
     return [{
       supplierId: block.supplier_id,
       name: typeof block.name === "string" && block.name ? block.name : block.supplier_id,
+      count: block.lines.filter((line: Json | null) => line?.unknown_stock === true).length,
     }];
   });
+}
+
+/**
+ * Each supplier block's own delivery fee above zero (#1865). A proposal of two suppliers has no
+ * `delivery_fee` of its own, so the fee inside `expected_total` is named only here.
+ */
+function mapBlockFees(proposal: { blocks?: unknown }): { deliveryFees?: NonNullable<ApprovalRequest["deliveryFees"]> } {
+  if (!Array.isArray(proposal.blocks)) return {};
+  const deliveryFees = proposal.blocks.flatMap((block) => {
+    if (!block || typeof block !== "object") return [];
+    const amount = decimal((block as Json).delivery_fee, "delivery_fee");
+    const name = (block as Json).name;
+    const id = (block as Json).supplier_id;
+    const supplier = typeof name === "string" && name ? name : typeof id === "string" ? id : "";
+    return amount != null && amount > 0 && supplier ? [{ supplier, amount }] : [];
+  });
+  return deliveryFees.length ? { deliveryFees } : {};
 }
 
 /** #1227: a known product's name in place of its code, and any code after it in words. */
@@ -597,6 +615,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
       ? reasons
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],
     suppliersToConfirm: mapSuppliersToConfirm(proposal),
+    ...mapBlockFees(proposal),
     cutoffs: Array.isArray(proposal.lines)
       ? proposal.lines.map((line) => ({
           closingTime: nullableText(line?.closing_time, "closing_time"),
