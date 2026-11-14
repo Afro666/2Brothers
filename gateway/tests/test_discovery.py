@@ -134,6 +134,17 @@ def test_llms_txt_names_the_flow_the_rules_and_real_urls(client):
     assert "tkb_" in text and not re.search(r"tkb_[A-Za-z0-9_\-]{8,}", text)     # the prefix, never a token
 
 
+def test_every_scope_has_a_description(client):
+    """#1769: `kitchen:write` was printed as "`kitchen:write`: ." with no text."""
+    assert set(discovery.SCOPE_TEXT) == set(tokens.SCOPES)
+    in_card = card(client).json()["securitySchemes"]["bearer"]["scopes"]
+    line = next(ln for ln in client.get("/llms.txt", headers=PUBLIC).text.splitlines() if ln.startswith("- Scopes: "))
+    for scope in tokens.SCOPES:
+        assert len(in_card[scope].split()) >= 4, scope
+        assert f"`{scope}`: {in_card[scope]}" in line, scope
+    assert "`: ." not in line and "`: ;" not in line
+
+
 def test_urls_follow_the_request_and_the_prefix(client, monkeypatch):
     monkeypatch.delenv("GATEWAY_PUBLIC_PREFIX")
     c = client.get(CARD).json()
