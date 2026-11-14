@@ -9,6 +9,7 @@ import { collectFinnishDictionaries } from "@/lib/i18n";
 import { ALLERGENS as CATALOG_ALLERGENS, TEMPERATURE_LABELS } from "@/pages/catalog";
 import { KITCHEN_TYPES } from "@/pages/onboarding";
 import { ALLERGENS as PRODUCT_ALLERGENS } from "@/pages/products";
+import { MACROS } from "@/pages/products/recipe-nutrition";
 import { ADAPTER_LABEL, DAY_LABEL } from "@/pages/suppliers";
 
 const TRANSLATED_FILES = [
@@ -16,6 +17,8 @@ const TRANSLATED_FILES = [
   "pages/stock.tsx",
   "pages/products.tsx",
   "pages/products/product-picker.tsx",
+  "pages/products/kitchen-words.tsx",
+  "pages/products/recipe-nutrition.tsx",
   "pages/catalog.tsx",
   "pages/suppliers.tsx",
   "pages/onboarding.tsx",
@@ -70,6 +73,7 @@ describe("part 3 Finnish coverage", () => {
       ...PRODUCT_ALLERGENS.map(([, name]) => name),
       ...SUPPLIER_VALIDATION_MESSAGES,
       ...PRODUCT_FACT_TEXT,
+      ...MACROS.map(([, label]) => label),
     ];
     for (const text of dynamicTexts) {
       if (!Object.prototype.hasOwnProperty.call(dictionary, text)) missing.push(`dynamic: ${text}`);

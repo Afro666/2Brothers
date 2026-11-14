@@ -3,6 +3,7 @@ import { ApiError } from "@/api/types";
 import { GENESIS, KITCHEN_ID, mapChainCheck, rowHash, verifyRows } from "@/api/audit-chain";
 import { nameProducts } from "@/api/map";
 import { permissionsMock } from "@/api/mock-permissions";
+import { createNutritionMock } from "@/api/mock-nutrition";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
 import { driftMock, supplierDriftMock } from "@/api/mock-drift";
@@ -20,6 +21,7 @@ import { createDeveloperMock } from "@/api/mock-developer";
 import { createPrivacyMock } from "@/api/mock-privacy";
 import { createTokensMock } from "@/api/mock-tokens";
 import { modelUsageMock } from "@/api/mock-usage";
+import { createWordsMock } from "@/api/mock-words";
 import {
   approval as seedApproval,
   confirmedDemoApproval,
@@ -261,13 +263,21 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     };
   }
 
+  const planning = createPlanningMock(recordAudit);
+  const getProducts: Api["getProducts"] = async (ids) => {
+    const wanted = new Set(ids);
+    return (Object.values(products) as Product[]).filter((product) => wanted.has(product.id));
+  };
+
   return {
     ...createMockAuth(options.signedOut),
     ...createKitchenMock(recordAudit),
     ...createNotificationsMock(recordAudit),
     ...createDeveloperMock(recordAudit),
     ...createPrivacyMock(recordAudit),
-    ...createPlanningMock(recordAudit),
+    ...planning,
+    ...createNutritionMock(planning),
+    ...createWordsMock(getProducts),
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),
     getDrift: async () => driftMock(),
@@ -594,10 +604,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
         return !product.allergens.some((allergen) => excluded.includes(allergen.code));
       });
     },
-    async getProducts(ids) {
-      const wanted = new Set(ids);
-      return (Object.values(products) as Product[]).filter((product) => wanted.has(product.id));
-    },
+    getProducts,
     async getMandate() {
       return mandate;
     },

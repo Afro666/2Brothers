@@ -130,6 +130,12 @@ describe("createHttpApi", () => {
         "listSupplierOffers",
         "acceptSupplierOffer",
         "declineSupplierOffer",
+        // Nutrition from the label data and the kitchen's own words (api/http-nutrition.ts).
+        "getRecipeNutrition",
+        "getNutrition",
+        "getKitchenWords",
+        "linkWord",
+        "forgetWord",
       ].sort(),
     );
     expect((await api.getMandate()).restaurant).toBeTruthy();

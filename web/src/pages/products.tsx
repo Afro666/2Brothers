@@ -27,8 +27,10 @@ import type {
   RecipeItem,
   Supplier,
 } from "@/types";
+import { KitchenWords } from "@/pages/products/kitchen-words";
 import { ProductPicker, type PickerProduct } from "@/pages/products/product-picker";
 import { recipeAllergens } from "@/pages/products/recipe-allergens";
+import { RecipeNutritionLine } from "@/pages/products/recipe-nutrition";
 import { catalogProductIdsInRecipes } from "@/pages/products/recipe-products";
 import { useT } from "@/lib/i18n";
 
@@ -387,6 +389,7 @@ function ProductsPageContent() {
               ) : (
                 <EmptyState title={t("No own products yet")}>{t("Add products the kitchen buys outside the catalog.")}</EmptyState>
               )}
+              <KitchenWords />
             </TabsContent>
             <TabsContent value="recipes" className="space-y-4">
               <div className="flex justify-end">
@@ -399,11 +402,12 @@ function ProductsPageContent() {
                     return (
                       <Card key={recipe.id}>
                         <CardContent className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
-                          <div>
+                          <div className="space-y-1">
                             <p className="font-medium">{recipe.name}</p>
                             <p className="text-sm text-muted-foreground">
                               {recipe.items.length === 1 ? t("{count} item", { count: recipe.items.length }) : t("{count} items", { count: recipe.items.length })}
                             </p>
+                            <RecipeNutritionLine recipe={recipe} />
                           </div>
                           <div className="flex flex-wrap gap-1">
                             <AllergenList allergens={summary.allergens} />

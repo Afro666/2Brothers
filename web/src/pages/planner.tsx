@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { useApi } from "@/api";
-import { ApiError, type Draft } from "@/api/types";
+import { ApiError, type Draft, type KitchenNutrition } from "@/api/types";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
@@ -120,6 +120,43 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
   );
 }
 
+/**
+ * The shown week's planned energy against what the approved orders for the week contain.
+ * A number the gateway could not count is named as not known, never shown as 0.
+ */
+function EnergySummary({ nutrition }: { nutrition: KitchenNutrition }) {
+  const t = useT();
+  const { planned, ordered, orderedVsPlanned } = nutrition;
+  const parts: string[] = [];
+  if (nutrition.days.length === 0) parts.push(t("No energy planned for this week yet."));
+  else if (planned.kcal == null) parts.push(t("Planned: energy not known."));
+  else {
+    parts.push(t("Planned: {kcal} kcal.", { kcal: formatNumber(planned.kcal) }));
+    if (!planned.complete) parts.push(t("Partly counted: some ingredients have no nutrition table."));
+  }
+  if (ordered.lines === 0) parts.push(t("Nothing ordered for this week yet."));
+  else if (ordered.kcal == null) parts.push(t("Ordered for this week so far: energy not known."));
+  else {
+    parts.push(
+      orderedVsPlanned == null
+        ? t("Ordered for this week so far: {kcal} kcal.", { kcal: formatNumber(ordered.kcal) })
+        : t("Ordered for this week so far: {kcal} kcal ({percent}% of the plan).", {
+            kcal: formatNumber(ordered.kcal),
+            percent: formatNumber(Math.round(orderedVsPlanned * 100)),
+          }),
+    );
+    if (ordered.knownLines < ordered.lines) {
+      parts.push(
+        t("Counted from {known} of {total} order lines.", {
+          known: formatNumber(ordered.knownLines),
+          total: formatNumber(ordered.lines),
+        }),
+      );
+    }
+  }
+  return <p className="text-sm tabular-nums text-muted-foreground">{parts.join(" ")}</p>;
+}
+
 const products = (count: number, t: ReturnType<typeof useT>) =>
   count === 1 ? t("{count} product", { count: formatNumber(count) }) : t("{count} products", { count: formatNumber(count) });
 
@@ -186,6 +223,8 @@ export function PlannerPage() {
   const dates = useMemo(() => weekDates(week), [week]);
   const menu = useAsync(async () => Promise.all([api.getMenuPlan(week), api.listRecipes()]), [api, week]);
   const demand = useAsync(() => api.getDemand(dates[0], dates[6]), [api, week]);
+  // Energy is extra: while it loads or when it fails, the plan shows without it.
+  const nutrition = useAsync(() => api.getNutrition(dates[0], dates[6]), [api, week]);
   const [draft, setDraft] = useState<MenuPlanEntry[] | null>(null);
   const [dialog, setDialog] = useState<{ date: string; entry?: MenuPlanEntry } | null>(null);
   const [meal, setMeal] = useState("Lunch");
@@ -274,6 +313,7 @@ export function PlannerPage() {
       setOutcome(null);
       menu.reload();
       demand.reload();
+      nutrition.reload();
       toast.success(t("Week saved"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -357,6 +397,11 @@ export function PlannerPage() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {dates.map((date) => {
                 const dayEntries = entries.filter((entry) => entry.date === date);
+                // The energy is of the saved plan: a day with unsaved changes shows none.
+                const energy =
+                  nutrition.status === "ready" && sameEntries(dayEntries, saved.filter((entry) => entry.date === date))
+                    ? nutrition.data.days.find((day) => day.date === date)
+                    : undefined;
                 return (
                   <Card key={date}>
                     <CardHeader>
@@ -401,6 +446,14 @@ export function PlannerPage() {
                           </div>
                         );
                       })}
+                      {dayEntries.length > 0 && energy ? (
+                        <p className="text-sm tabular-nums text-muted-foreground">
+                          {energy.kcalPerCover == null
+                            ? t("Energy per cover not known")
+                            : t("about {kcal} kcal per cover", { kcal: formatNumber(energy.kcalPerCover) })}
+                          {energy.kcalPerCover != null && !energy.complete ? ` · ${t("partly counted")}` : ""}
+                        </p>
+                      ) : null}
                       <Button className="w-full" variant="outline" onClick={() => openAdd(date)}>
                         {t("Add to {weekday}", { weekday: weekday(date) })}
                       </Button>
@@ -419,6 +472,10 @@ export function PlannerPage() {
                 </h2>
                 {dirty ? <p className="mt-1 text-sm text-muted-foreground">{t("This table shows the saved plan.")}</p> : null}
               </div>
+              {nutrition.status === "ready" ? <EnergySummary nutrition={nutrition.data} /> : null}
+              {nutrition.status === "error" ? (
+                <p className="text-sm text-muted-foreground">{t("Energy numbers are not available right now.")}</p>
+              ) : null}
               {demand.status === "loading" ? <LoadingState label={t("Loading weekly demand")} /> : null}
               {demand.status === "error" ? <ErrorState message={demand.error.message} onRetry={demand.reload} /> : null}
               {demand.status === "ready" ? <DemandList lines={demand.data} dates={dates} /> : null}
