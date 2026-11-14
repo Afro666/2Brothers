@@ -67,6 +67,7 @@ def _day(row: dict) -> date:
 def build(seed: int, today: date, future_weeks: int, kitchens: int = 20,
           signal_rows=()) -> dict:
     """Everything in memory. Pure apart from reading env/; deterministic for a seed."""
+    signal_rows = list(signal_rows)                     # read once per kitchen below
     end = today + timedelta(days=7 * future_weeks + (6 - today.weekday()))
     days = (end - START).days + 1
     all_k = make_kitchens(kitchens, seed)

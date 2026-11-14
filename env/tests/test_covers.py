@@ -117,6 +117,23 @@ class CoversTest(unittest.TestCase):
                 kitchen_id=DEMO_ID, date=today.isoformat(), as_of=today.isoformat(), reservations=123)])
         self.assertEqual(seen, [123, 123])
 
+    def test_demo_signal_rows_may_be_a_one_shot_iterator(self):
+        from demo.seed import build, DEMO_ID
+        today = date(2026, 9, 7)
+        rows = [dict(kitchen_id=DEMO_ID, date=today.isoformat(), as_of=today.isoformat(), reservations=123)]
+        seen = []
+        class Inspect(Current):
+            name = "inspect"
+            def __init__(self, kitchen, signals=None):
+                super().__init__(kitchen)
+                seen.append(signals.snapshot(today, today).get("reservations"))
+        outs = []
+        with patch.dict(MODELS, inspect=Inspect), patch.dict(SELECTED, hotel="inspect"):
+            for given in (rows, iter(rows)):
+                outs.append(build(seed=1, today=today, future_weeks=0, kitchens=10, signal_rows=given))
+        self.assertEqual(seen, [123, 123, 123, 123])
+        self.assertEqual(outs[0], outs[1])
+
     def test_demo_explodes_selected_covers_into_recipe_quantities(self):
         from demo.seed import build, DEMO_ID
 
