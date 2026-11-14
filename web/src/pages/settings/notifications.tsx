@@ -12,9 +12,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { useT } from "@/lib/i18n";
 import { SettingsSection } from "@/pages/settings/section";
 
-const EVENTS: { key: keyof NotificationPreferences; title: string; description: string }[] = [
+export const EVENTS: { key: keyof NotificationPreferences; title: string; description: string }[] = [
   { key: "approvalWaiting", title: "Approval waiting", description: "A proposal needs a person to approve or reject it." },
   { key: "cutoffTwoHours", title: "Cut-off in 2 hours", description: "An order cut-off is approaching for a needed delivery." },
   { key: "recallAlert", title: "Recall alert", description: "A recall may affect a product used by this kitchen." },
@@ -22,6 +23,7 @@ const EVENTS: { key: keyof NotificationPreferences; title: string; description: 
 ];
 
 export function NotificationsSection() {
+  const t = useT();
   const api = useApi();
   const { session } = useSession();
   const state = useAsync(() => api.getNotificationPreferences(), [api]);
@@ -44,7 +46,7 @@ export function NotificationsSection() {
     try {
       const saved = await api.saveNotificationPreferences(draft, "human");
       setDraft({ ...saved });
-      toast.success("Notification preferences saved");
+      toast.success(t("Notification preferences saved"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -55,18 +57,18 @@ export function NotificationsSection() {
   return (
     <SettingsSection title="Notifications" description="Choose which events appear in the app. E-mail delivery will be added later.">
       <SampleData of="getNotificationPreferences" />
-      {state.status === "loading" ? <LoadingState label="Loading notification preferences" /> : null}
+      {state.status === "loading" ? <LoadingState label={t("Loading notification preferences")} /> : null}
       {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
       {state.status === "ready" && draft ? (
         <Card className="max-w-2xl">
           <CardHeader>
-            <CardTitle>In-app alerts</CardTitle>
-            <CardDescription>Recall alerts are strongly recommended for every kitchen.</CardDescription>
+            <CardTitle>{t("In-app alerts")}</CardTitle>
+            <CardDescription>{t("Recall alerts are strongly recommended for every kitchen.")}</CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-5" onSubmit={(event) => void save(event)}>
               {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-              {!canEdit ? <p className="text-sm text-muted-foreground">{canApprove ? "Saving notification preferences is not available on this server yet; the choices below are sample data." : "Only an approver can change notification preferences."}</p> : null}
+              {!canEdit ? <p className="text-sm text-muted-foreground">{canApprove ? t("Saving notification preferences is not available on this server yet; the choices below are sample data.") : t("Only an approver can change notification preferences.")}</p> : null}
               {EVENTS.map(({ key, title, description }) => (
                 <div key={key} className="flex items-start gap-3">
                   <Checkbox
@@ -80,12 +82,12 @@ export function NotificationsSection() {
                     }}
                   />
                   <div className="space-y-1">
-                    <Label htmlFor={`notification-${key}`}>{title}</Label>
-                    <p className="text-sm text-muted-foreground">{description}</p>
+                    <Label htmlFor={`notification-${key}`}>{t(title)}</Label>
+                    <p className="text-sm text-muted-foreground">{t(description)}</p>
                   </div>
                 </div>
               ))}
-              {canEdit ? <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save notifications"}</Button> : null}
+              {canEdit ? <Button type="submit" disabled={saving}>{saving ? t("Saving…") : t("Save notifications")}</Button> : null}
             </form>
           </CardContent>
         </Card>

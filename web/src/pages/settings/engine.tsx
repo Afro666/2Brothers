@@ -14,12 +14,13 @@ import { EU_ALLERGENS } from "@/lib/allergens";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { useAsync } from "@/lib/use-async";
+import { useT } from "@/lib/i18n";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { SettingsSection } from "@/pages/settings/section";
 import type { DemandClass, KitchenSettings } from "@/types";
 
 const ALLERGENS: Record<string, string> = Object.fromEntries(EU_ALLERGENS.map(({ code, name }) => [code, name]));
-const DEMAND_CLASSES: { key: DemandClass; name: string; description: string }[] = [
+export const DEMAND_CLASSES: { key: DemandClass; name: string; description: string }[] = [
   { key: "A", name: "A", description: "Menu-critical" },
   { key: "B", name: "B", description: "Regular" },
   { key: "C", name: "C", description: "Nice to have" },
@@ -31,6 +32,7 @@ function parseNumber(value: string): number {
 }
 
 export function EngineSection() {
+  const t = useT();
   const api = useApi();
   const { role } = useRole();
   const actor = auditActorForRole(role);
@@ -62,7 +64,7 @@ export function EngineSection() {
       const settings = await api.saveKitchenSettings(clone(draft), actor);
       setDraft(clone(settings));
       setOriginal(clone(settings));
-      toast.success("Settings saved", { testId: "settings-saved-toast" });
+      toast.success(t("Settings saved"), { testId: "settings-saved-toast" });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -83,10 +85,10 @@ export function EngineSection() {
       description="How the Buyer sizes orders for this kitchen. A person still approves every order."
     >
       <SampleData of="getKitchenSettings" />
-      {state.status === "loading" ? <LoadingState label="Loading settings" /> : null}
+      {state.status === "loading" ? <LoadingState label={t("Loading settings")} /> : null}
       {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
       {state.status === "ready" && draft === null ? (
-        <EmptyState title="Settings are unavailable">The settings service returned no kitchen settings.</EmptyState>
+        <EmptyState title={t("Settings are unavailable")}>{t("The settings service returned no kitchen settings.")}</EmptyState>
       ) : null}
       {state.status === "ready" && draft ? (
         <form
@@ -99,14 +101,14 @@ export function EngineSection() {
         >
           <Card>
             <CardHeader>
-              <CardTitle>Service level</CardTitle>
-              <CardDescription>Target service level by demand class.</CardDescription>
+              <CardTitle>{t("Service level")}</CardTitle>
+              <CardDescription>{t("Target service level by demand class.")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {DEMAND_CLASSES.map(({ key, description }) => (
                 <div key={key} className="grid gap-2 sm:grid-cols-[1fr_12rem] sm:items-center">
                   <Label htmlFor={`service-${key}`}>
-                    {key} — {description}
+                    {key} — {t(description)}
                   </Label>
                   <div className="relative">
                     <Input
@@ -140,8 +142,8 @@ export function EngineSection() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Days of cover</CardTitle>
-              <CardDescription>Maximum days of stock to order for each category.</CardDescription>
+              <CardTitle>{t("Days of cover")}</CardTitle>
+              <CardDescription>{t("Maximum days of stock to order for each category.")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {draft.maxDaysOfCover.map((rule, index) => (
@@ -151,7 +153,7 @@ export function EngineSection() {
                   className="grid gap-2 sm:grid-cols-[1fr_10rem_auto] sm:items-end"
                 >
                   <div className="space-y-1.5">
-                    <Label htmlFor={`cover-category-${index}`}>Category</Label>
+                    <Label htmlFor={`cover-category-${index}`}>{t("Category")}</Label>
                     <Input
                       id={`cover-category-${index}`}
                       value={rule.category}
@@ -167,7 +169,7 @@ export function EngineSection() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor={`cover-days-${index}`}>Days</Label>
+                    <Label htmlFor={`cover-days-${index}`}>{t("Days")}</Label>
                     <Input
                       id={`cover-days-${index}`}
                       type="number"
@@ -188,7 +190,7 @@ export function EngineSection() {
                   <Button
                     type="button"
                     variant="outline"
-                    aria-label={`Remove ${rule.category || "category"}`}
+                    aria-label={t("Remove {category}", { category: rule.category || t("category") })}
                     onClick={() =>
                       update((current) => ({
                         ...current,
@@ -196,7 +198,7 @@ export function EngineSection() {
                       }))
                     }
                   >
-                    Remove
+                    {t("Remove")}
                   </Button>
                 </div>
               ))}
@@ -210,18 +212,18 @@ export function EngineSection() {
                   }))
                 }
               >
-                Add category
+                {t("Add category")}
               </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Stock-out demand cap</CardTitle>
-              <CardDescription>Maximum factor used to scale demand observed during a stock-out.</CardDescription>
+              <CardTitle>{t("Stock-out demand cap")}</CardTitle>
+              <CardDescription>{t("Maximum factor used to scale demand observed during a stock-out.")}</CardDescription>
             </CardHeader>
             <CardContent className="max-w-xs">
-              <Label htmlFor="stock-out-cap">Maximum scaling factor</Label>
+              <Label htmlFor="stock-out-cap">{t("Maximum scaling factor")}</Label>
               <Input
                 id="stock-out-cap"
                 className="mt-1.5"
@@ -240,12 +242,12 @@ export function EngineSection() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Budget warnings</CardTitle>
-              <CardDescription>Leave a value empty to turn that warning off.</CardDescription>
+              <CardTitle>{t("Budget warnings")}</CardTitle>
+              <CardDescription>{t("Leave a value empty to turn that warning off.")}</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="budget-order">Per order (ex VAT, €)</Label>
+                <Label htmlFor="budget-order">{t("Per order (ex VAT, €)")}</Label>
                 <Input
                   id="budget-order"
                   type="number"
@@ -257,10 +259,10 @@ export function EngineSection() {
                     update((current) => ({ ...current, budgetWarningPerOrderExVat: value }));
                   }}
                 />
-                <p className="text-xs text-muted-foreground">Leave empty for no warning.</p>
+                <p className="text-xs text-muted-foreground">{t("Leave empty for no warning.")}</p>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="budget-week">Per week (ex VAT, €)</Label>
+                <Label htmlFor="budget-week">{t("Per week (ex VAT, €)")}</Label>
                 <Input
                   id="budget-week"
                   type="number"
@@ -272,16 +274,16 @@ export function EngineSection() {
                     update((current) => ({ ...current, budgetWarningPerWeekExVat: value }));
                   }}
                 />
-                <p className="text-xs text-muted-foreground">Leave empty for no warning.</p>
+                <p className="text-xs text-muted-foreground">{t("Leave empty for no warning.")}</p>
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Allergen rules</CardTitle>
+              <CardTitle>{t("Allergen rules")}</CardTitle>
               <CardDescription>
-                Products containing or possibly containing a selected allergen are refused.
+                {t("Products containing or possibly containing a selected allergen are refused.")}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -302,7 +304,7 @@ export function EngineSection() {
                       }}
                     />
                     <Label htmlFor={id}>
-                      {code} {ALLERGENS[code] ?? `(GS1 code ${code})`}
+                      {code} {ALLERGENS[code] ? t(ALLERGENS[code]) : t("(GS1 code {code})", { code })}
                     </Label>
                   </div>
                 );
@@ -317,10 +319,10 @@ export function EngineSection() {
           ) : null}
           <div className="flex flex-wrap gap-3">
             <Button type="submit" disabled={!changed || saving}>
-              {saving ? "Saving…" : "Save settings"}
+              {saving ? t("Saving…") : t("Save settings")}
             </Button>
             <Button type="button" variant="outline" disabled={!changed || saving} onClick={resetChanges}>
-              Reset changes
+              {t("Reset changes")}
             </Button>
           </div>
         </form>

@@ -23,10 +23,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDateTime } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
+import { useT } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { SettingsSection } from "@/pages/settings/section";
 
-const SCOPES: { value: ApiTokenScope; title: string; description: string }[] = [
+export const SCOPES: { value: ApiTokenScope; title: string; description: string }[] = [
   { value: "kitchen:read", title: "Read kitchen", description: "Read stock, menus and orders." },
   { value: "kitchen:propose", title: "Propose orders", description: "Use the Buyer agent and MCP tools to propose." },
   { value: "kitchen:write", title: "Update kitchen data", description: "Update stock, menus, recipes and suppliers." },
@@ -49,28 +50,30 @@ function selectText(element: HTMLElement | null) {
   element.focus();
 }
 
-async function copyText(text: string, element: HTMLElement | null) {
+async function copyText(text: string, element: HTMLElement | null, t: ReturnType<typeof useT>) {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
-      toast.success("Copied to clipboard");
+      toast.success(t("Copied to clipboard"));
       return;
     }
   } catch {}
   selectText(element);
-  toast.success("Text selected. Use your device's copy command.");
+  toast.success(t("Text selected. Use your device's copy command."));
 }
 
 // The ref, not its value: the element exists only after the first render.
 function CopyButton({ text, label, target }: { text: string; label: string; target: RefObject<HTMLElement | null> }) {
+  const t = useT();
   return (
-    <Button type="button" variant="outline" size="sm" onClick={() => void copyText(text, target.current)}>
+    <Button type="button" variant="outline" size="sm" onClick={() => void copyText(text, target.current, t)}>
       {label}
     </Button>
   );
 }
 
 export function TokensSection() {
+  const t = useT();
   const api = useApi();
   const { session } = useSession();
   // Unknown is not permission: only an account the gateway says may approve manages tokens.
@@ -98,11 +101,11 @@ export function TokensSection() {
     setActionError(null);
     const trimmed = name.trim();
     if (!trimmed || trimmed.length > 80) {
-      setActionError("Enter a token name between 1 and 80 characters.");
+      setActionError(t("Enter a token name between 1 and 80 characters."));
       return;
     }
     if (!scopes.length) {
-      setActionError("Select at least one token scope.");
+      setActionError(t("Select at least one token scope."));
       return;
     }
     setCreated(null);
@@ -112,11 +115,11 @@ export function TokensSection() {
       setCreated(next);
       setName("");
       tokens.reload();
-      toast.success("Token created");
+      toast.success(t("Token created"));
     } catch (cause) {
       setActionError(
         cause instanceof ApiError && permissionDenied(cause)
-          ? "Only a signed-in approver can manage API tokens."
+          ? t("Only a signed-in approver can manage API tokens.")
           : cause instanceof Error
             ? cause.message
             : String(cause),
@@ -134,7 +137,7 @@ export function TokensSection() {
       await api.revokeApiToken(pendingRevoke.id);
       setPendingRevoke(null);
       tokens.reload();
-      toast.success("Token revoked");
+      toast.success(t("Token revoked"));
     } catch (cause) {
       setPendingRevoke(null);
       setActionError(cause instanceof Error ? cause.message : String(cause));
@@ -150,7 +153,7 @@ export function TokensSection() {
     >
       <div className="min-w-0 space-y-5">
         <p className="max-w-prose text-sm text-muted-foreground">
-          Tokens cannot have <code className="font-mono">kitchen:approve</code>: only a signed-in person approves.
+          {t("Tokens cannot have")} <code className="font-mono">kitchen:approve</code>: {t("only a signed-in person approves.")}
         </p>
 
         {actionError ? (
@@ -167,33 +170,33 @@ export function TokensSection() {
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 space-y-2">
                 <h3 id="new-token-heading" className="font-semibold">
-                  Your new API token
+                  {t("Your new API token")}
                 </h3>
                 <code
                   ref={secretRef}
                   tabIndex={0}
-                  aria-label="New API token"
+                  aria-label={t("New API token")}
                   className="block max-w-full rounded-md bg-background px-3 py-2 font-mono text-sm break-all"
                 >
                   {created.token}
                 </code>
               </div>
-              <CopyButton text={created.token} label="Copy token" target={secretRef} />
+              <CopyButton text={created.token} label={t("Copy token")} target={secretRef} />
             </div>
-            <p className="mt-3 text-sm font-medium">This is the only time the token is shown.</p>
+            <p className="mt-3 text-sm font-medium">{t("This is the only time the token is shown.")}</p>
           </section>
         ) : null}
 
         {canManage ? (
           <Card>
             <CardHeader>
-              <CardTitle>Create a token</CardTitle>
-              <CardDescription>Give every agent or integration its own revocable token.</CardDescription>
+              <CardTitle>{t("Create a token")}</CardTitle>
+              <CardDescription>{t("Give every agent or integration its own revocable token.")}</CardDescription>
             </CardHeader>
             <CardContent>
               <form noValidate className="space-y-5" onSubmit={(event) => void submit(event)}>
                 <div className="space-y-2">
-                  <Label htmlFor="token-name">Token name</Label>
+                  <Label htmlFor="token-name">{t("Token name")}</Label>
                   <Input
                     id="token-name"
                     value={name}
@@ -204,11 +207,11 @@ export function TokensSection() {
                     autoComplete="off"
                   />
                   <p id="token-name-hint" className="text-xs text-muted-foreground">
-                    1 to 80 characters.
+                    {t("1 to 80 characters.")}
                   </p>
                 </div>
                 <fieldset className="space-y-3">
-                  <legend className="label-caps mb-2">Scopes</legend>
+                  <legend className="label-caps mb-2">{t("Scopes")}</legend>
                   {SCOPES.map((scope) => (
                     <div key={scope.value} className="flex items-start gap-3">
                       <Checkbox
@@ -229,49 +232,49 @@ export function TokensSection() {
                           htmlFor={`token-scope-${scope.value.split(":")[1]}`}
                           className="inline-flex flex-wrap items-center gap-2"
                         >
-                          {scope.title}
+                          {t(scope.title)}
                           <code className="font-mono text-xs text-muted-foreground">{scope.value}</code>
                         </Label>
                         <p
                           id={`token-scope-${scope.value.split(":")[1]}-description`}
                           className="text-xs text-muted-foreground"
                         >
-                          {scope.description}
+                          {t(scope.description)}
                         </p>
                       </div>
                     </div>
                   ))}
                 </fieldset>
                 <Button type="submit" disabled={creating}>
-                  {creating ? "Creating token…" : "Create token"}
+                  {creating ? t("Creating token…") : t("Create token")}
                 </Button>
               </form>
             </CardContent>
           </Card>
         ) : (
-          <p className="text-sm text-muted-foreground">Only an approver can create or revoke API tokens.</p>
+          <p className="text-sm text-muted-foreground">{t("Only an approver can create or revoke API tokens.")}</p>
         )}
 
         <section aria-labelledby="token-list-heading" className="min-w-0 space-y-3">
           <div>
             <h3 id="token-list-heading" className="font-semibold">
-              Your tokens
+              {t("Your tokens")}
             </h3>
-            <p className="text-sm text-muted-foreground">Secrets are never shown again after creation.</p>
+            <p className="text-sm text-muted-foreground">{t("Secrets are never shown again after creation.")}</p>
           </div>
-          {tokens.status === "loading" ? <LoadingState label="Loading API tokens" /> : null}
+          {tokens.status === "loading" ? <LoadingState label={t("Loading API tokens")} /> : null}
           {tokens.status === "error" ? (
             permissionDenied(tokens.error) ? (
-              <p className="text-sm text-muted-foreground">Your account does not have permission to view API tokens.</p>
+              <p className="text-sm text-muted-foreground">{t("Your account does not have permission to view API tokens.")}</p>
             ) : (
               <ErrorState message={tokens.error.message} onRetry={tokens.reload} />
             )
           ) : null}
           {tokens.status === "ready" && !tokens.data.length ? (
-            <EmptyState title="No tokens yet">Create a token to connect your own agent.</EmptyState>
+            <EmptyState title={t("No tokens yet")}>{t("Create a token to connect your own agent.")}</EmptyState>
           ) : null}
           {tokens.status === "ready" && tokens.data.length ? (
-            <ul aria-label="API tokens" className="min-w-0 space-y-3">
+            <ul aria-label={t("API tokens")} className="min-w-0 space-y-3">
               {tokens.data.map((row) => (
                 <li key={row.id} className="min-w-0 rounded-lg border p-4">
                   <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -279,22 +282,22 @@ export function TokensSection() {
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <h4 className="font-medium break-words">{row.name}</h4>
                         {row.revokedAt ? (
-                          <Badge variant="secondary">Revoked</Badge>
+                          <Badge variant="secondary">{t("Revoked")}</Badge>
                         ) : (
-                          <Badge variant="outline">Active</Badge>
+                          <Badge variant="outline">{t("Active")}</Badge>
                         )}
                       </div>
                       <code className="block font-mono text-xs break-all text-muted-foreground">{row.prefix}…</code>
                     </div>
                     {canManage && !row.revokedAt ? (
                       <Button type="button" variant="outline" size="sm" onClick={() => setPendingRevoke(row)}>
-                        Revoke {row.name}
+                        {t("Revoke {name}", { name: row.name })}
                       </Button>
                     ) : null}
                   </div>
                   <dl className="mt-4 grid min-w-0 gap-3 text-sm sm:grid-cols-3">
                     <div className="min-w-0">
-                      <dt className="label-caps">Scopes</dt>
+                      <dt className="label-caps">{t("Scopes")}</dt>
                       <dd className="mt-1 flex flex-wrap gap-1">
                         {row.scopes.map((scope) => (
                           <code key={scope} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs break-all">
@@ -304,16 +307,16 @@ export function TokensSection() {
                       </dd>
                     </div>
                     <div className="min-w-0">
-                      <dt className="label-caps">Created</dt>
+                      <dt className="label-caps">{t("Created")}</dt>
                       <dd className="mt-1">{formatDateTime(row.createdAt)}</dd>
                     </div>
                     <div className="min-w-0">
-                      <dt className="label-caps">Last used</dt>
+                      <dt className="label-caps">{t("Last used")}</dt>
                       <dd className="mt-1">
                         {row.lastUsedAt === undefined
-                          ? "unknown"
+                          ? t("unknown")
                           : row.lastUsedAt === null
-                            ? "never"
+                            ? t("never")
                             : formatDateTime(row.lastUsedAt)}
                       </dd>
                     </div>
@@ -326,9 +329,9 @@ export function TokensSection() {
 
         <Card className="min-w-0 overflow-hidden">
           <CardHeader>
-            <CardTitle>Connect your own agent</CardTitle>
+            <CardTitle>{t("Connect your own agent")}</CardTitle>
             <CardDescription>
-              Use <code className="font-mono">kitchen:propose</code> for MCP tools and proposals.
+              {t("Use")} <code className="font-mono">kitchen:propose</code> {t("for MCP tools and proposals.")}
             </CardDescription>
           </CardHeader>
           <CardContent className="min-w-0 space-y-5">
@@ -337,7 +340,7 @@ export function TokensSection() {
                 <Label id="mcp-command-label" className="label-caps">
                   MCP: Claude Code
                 </Label>
-                <CopyButton text={mcpCommand} label="Copy MCP command" target={mcpRef} />
+                <CopyButton text={mcpCommand} label={t("Copy MCP command")} target={mcpRef} />
               </div>
               <pre
                 aria-labelledby="mcp-command-label"
@@ -351,9 +354,9 @@ export function TokensSection() {
             <div className="min-w-0 space-y-2">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <Label id="curl-command-label" className="label-caps">
-                  HTTP: list proposals (needs kitchen:read)
+                  {t("HTTP: list proposals (needs kitchen:read)")}
                 </Label>
-                <CopyButton text={curlCommand} label="Copy curl command" target={curlRef} />
+                <CopyButton text={curlCommand} label={t("Copy curl command")} target={curlRef} />
               </div>
               <pre
                 aria-labelledby="curl-command-label"
@@ -366,10 +369,10 @@ export function TokensSection() {
             </div>
             <div className="flex min-w-0 flex-col gap-2 text-sm">
               <a className="break-all underline underline-offset-4" href={`${origin}/llms.txt`}>
-                Agent instructions: {origin}/llms.txt
+                {t("Agent instructions: {url}", { url: `${origin}/llms.txt` })}
               </a>
               <a className="break-all underline underline-offset-4" href={`${origin}/.well-known/agent-card.json`}>
-                Agent card: {origin}/.well-known/agent-card.json
+                {t("Agent card: {url}", { url: `${origin}/.well-known/agent-card.json` })}
               </a>
             </div>
           </CardContent>
@@ -379,17 +382,17 @@ export function TokensSection() {
       <Dialog open={pendingRevoke !== null} onOpenChange={(open) => !open && setPendingRevoke(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Revoke {pendingRevoke?.name || "API token"}?</DialogTitle>
+            <DialogTitle>{t("Revoke {name}?", { name: pendingRevoke?.name || t("API token") })}</DialogTitle>
             <DialogDescription>
-              Agents using this token will immediately lose access. This cannot be undone.
+              {t("Agents using this token will immediately lose access. This cannot be undone.")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="destructive" disabled={revoking} onClick={() => void revoke()}>
-              {revoking ? "Revoking…" : "Revoke token"}
+              {revoking ? t("Revoking…") : t("Revoke token")}
             </Button>
             <Button type="button" variant="outline" disabled={revoking} onClick={() => setPendingRevoke(null)}>
-              Cancel
+              {t("Cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
