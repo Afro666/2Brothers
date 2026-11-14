@@ -444,7 +444,10 @@ class Gateway:
         allergen rule removes ends here, as a REJECTED proposal that names the allergen. The
         Buyer would only see what is left (plain butter for "peanut butter") and propose it.
         None: the request goes on to the Buyer as before. The delivery day may come from
-        the body (`requested_date`), as it does for the Buyer."""
+        the body (`requested_date`), as it does for the Buyer.
+
+        A text that asks for two products ("100 L cream and 50 kg cheese") also ends here,
+        with 422 `CANNOT_READ_REQUEST`: one request names one product."""
         text, key = body.get("text"), body.get("idempotency_key")
         if not isinstance(text, str) or not isinstance(key, str) or not key.strip():
             return None
@@ -455,6 +458,10 @@ class Gateway:
             if stored["request"].get("text") != text:
                 raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
             return self._proposal_out(stored)
+        from gateway.parse import ONE_PRODUCT, asks_for_two
+        if asks_for_two(text):
+            # Before any model call: the Buyer would take one of the two, or neither.
+            raise GatewayError(422, "CANNOT_READ_REQUEST", ONE_PRODUCT)
         if not self._allergen_rule(kitchen_id):
             return None
         try:

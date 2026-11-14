@@ -239,3 +239,19 @@ def test_a_need_for_plain_butter_is_searched_as_before(kitchen):
         "query": "butter", "filters": {}, "need_id": need["need_id"]}).json()
     assert [p["product_id"] for p in found["products"]][:2] == ["472127", "476740"]
     assert found["note"].startswith("can_arrive false")
+
+
+@pytest.mark.parametrize("rule", [["AP", "AN", "AS"], []])
+def test_two_products_in_one_text_are_refused_before_the_buyer_runs(kitchen, rule):
+    """Live on 2026-11-14: "100 L cream and 50 kg cheese" ended as a cleaning product.
+    One request names one product, with or without an allergen rule on the kitchen."""
+    with_buyer, without_buyer, db, calls = kitchen
+    db.kitchen_settings.update_one({"_id": "demo-kitchen"}, {"$set": {"excluded_allergens": rule}})
+    body = {"text": "100 L cream and 50 kg cheese by Monday", "requested_date": "2026-11-17",
+            "idempotency_key": "two1"}
+    for client in (with_buyer, without_buyer):
+        r = client.post(K + "/proposals", headers=AGENT, json=body)
+        assert r.status_code == 422, r.text
+        assert r.json()["error"]["code"] == "CANNOT_READ_REQUEST"
+        assert r.json()["error"]["message"].startswith("one product per request")
+    assert calls == [] and db.proposals.count_documents({}) == 0
