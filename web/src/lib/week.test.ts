@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isValidWeek, isoWeekOf, weekDates, weekLabel, weekRangeLabel } from "@/lib/week";
+import { isValidWeek, isoWeekOf, shiftWeek, weekDates, weekLabel, weekRangeLabel } from "@/lib/week";
 
 describe("ISO week helpers", () => {
   it("finds the ISO week for a date", () => {
@@ -18,6 +18,12 @@ describe("ISO week helpers", () => {
       "2026-01-03",
       "2026-01-04",
     ]);
+  });
+
+  it("shifts by whole weeks across a year boundary", () => {
+    expect(shiftWeek("2026-W53", 1)).toBe("2027-W01");
+    expect(shiftWeek("2027-W01", -1)).toBe("2026-W53");
+    expect(shiftWeek("2026-W47", 0)).toBe("2026-W47");
   });
 
   it("names the day range of a normal week", () => {

@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAsync } from "@/lib/use-async";
 import { formatDate, formatNumber } from "@/lib/format";
-import { isoWeekOf, weekDates } from "@/lib/week";
+import { isoWeekOf, shiftWeek, weekDates } from "@/lib/week";
 import type { DemandLine, MenuPlanEntry, Recipe } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
 
@@ -30,12 +30,6 @@ function todayIso(): string {
 function displayedWeek(search: string): string {
   const value = new URLSearchParams(search).get("week");
   return value && /^\d{4}-W\d{2}$/.test(value) ? value : isoWeekOf(todayIso());
-}
-
-function shiftWeek(week: string, amount: number): string {
-  const monday = new Date(`${weekDates(week)[0]}T12:00:00Z`);
-  monday.setUTCDate(monday.getUTCDate() + amount * 7);
-  return isoWeekOf(monday.toISOString().slice(0, 10));
 }
 
 function weekTitle(week: string): string {
