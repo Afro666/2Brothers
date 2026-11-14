@@ -43,7 +43,7 @@ class Chef:
     def __init__(self, habits: Habits, seed: int, noise: float = 0.1):
         self.habits = habits
         self.noise = noise
-        self.rng = random.Random(f"chef-edit-{seed}")
+        self.seed = seed
 
     def edit(self, env, proposal: dict, baseline: dict | None = None) -> tuple:
         """Apply habits first, then stock cuts and unlearnable ordering noise.
@@ -67,9 +67,14 @@ class Chef:
             three_day_use = sum(env._expected_use(pid, delivery + timedelta(days=i)) for i in range(3))
             if three_day_use > 0 and env.state.on_hand(pid) >= three_day_use:
                 wanted, reason = 0, "IN_STOCK"
-            elif wanted == units and self.rng.random() < self.noise:
-                wanted = round_to_pack(pid, units * PRODUCTS[pid].pack * self.rng.choice((0.8, 1.2)))
-                reason = None
+            else:
+                # One generator per line: the same (seed, delivery day, product) gets the same
+                # noise in every arm, whatever the earlier lines or the proposal were.
+                rng = random.Random(f"chef-edit-{self.seed}-{delivery.isoformat()}-{pid}")
+                flip, scale = rng.random(), rng.choice((0.8, 1.2))
+                if wanted == units and flip < self.noise:
+                    wanted = round_to_pack(pid, units * PRODUCTS[pid].pack * scale)
+                    reason = None
 
             final[pid] = wanted
             if wanted != units:
