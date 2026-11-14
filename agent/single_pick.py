@@ -109,8 +109,9 @@ def checked_reason(reason, row, need=None):
         except InvalidOperation:
             pass
     clean = re.sub(re.escape(row['name']), '', reason, flags=re.IGNORECASE)
-    if check_sentence(reason, numbers_in(clean, 'en'), allowed, 'en', strip=[row['name']]):
-        raise ValueError('Product-choice reason has an unsupported number')
+    rule = check_sentence(reason, numbers_in(clean, 'en'), allowed, 'en', strip=[row['name']])
+    if rule:
+        raise ValueError(f'Product-choice reason has an unsupported number ({rule})')
 
 
 def minimal_indices(indices, rows, need):
@@ -219,7 +220,12 @@ class SinglePickModel:
                     if len(set(indices)) != len(indices) or any(i >= len(rows) for i in indices):
                         raise ValueError('Pick is outside the trusted shortlist')
                     for pick in reply['picks']:
-                        checked_reason(pick['reason'], rows[pick['index']], self.need)
+                        # The reason is never stored or shown: a bad one is logged (rule only) and dropped.
+                        try:
+                            checked_reason(pick['reason'], rows[pick['index']], self.need)
+                        except ValueError as err:
+                            rule = str(err).rsplit('(', 1)[-1].rstrip(')')
+                            log.warning('Dropped an unsupported pick reason: %s', rule)
                     self.raw_pick_count = len(indices)
                     indices = minimal_indices(indices, rows, {
                         'unit': self.need['unit'], 'needed_by': self.need['requested_date']})
