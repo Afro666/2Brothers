@@ -64,7 +64,8 @@ class BuyerWorker:
         if self.strategy not in ('single_pick', 'loop'):
             raise ValueError('invalid Buyer strategy')
         self.db, self.gateway = db, gateway
-        self.model_factory = model_factory or (lambda: Nemotron(max_attempts=1))
+        self.model_factory = model_factory or ((lambda: Nemotron(max_attempts=1))
+                                               if self.strategy == 'single_pick' else Nemotron)
         self.timeout = timeout if timeout is not None else (35 if self.strategy == 'single_pick' else 150)
         self.now = now
 

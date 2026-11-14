@@ -13,6 +13,15 @@ from store import buyer_picks
 NEED = {'text': '51 L milk', 'requested_date': '2026-11-16', 'idempotency_key': 'first'}
 
 
+def test_legacy_mode_retains_model_retry_defaults(monkeypatch):
+    import agent.service as service
+    calls = []
+    monkeypatch.setattr(service, 'Nemotron', lambda **kw: calls.append(kw))
+    BuyerWorker(None, None, strategy='loop').model_factory()
+    BuyerWorker(None, None, strategy='single_pick').model_factory()
+    assert calls == [{}, {'max_attempts': 1}]
+
+
 class Pick:
     def __init__(self, reply=None):
         self.calls, self.prompts, self.closed = 0, [], False
