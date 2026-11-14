@@ -55,10 +55,31 @@ describe("createHttpApi", () => {
         "listOrders",
         "reject",
         "submitChefRequest",
+        // The planning screens (api/http-planning.ts).
+        "listSuppliers",
+        "saveSupplier",
+        "deleteSupplier",
+        "listOwnProducts",
+        "saveOwnProduct",
+        "deleteOwnProduct",
+        "listRecipes",
+        "saveRecipe",
+        "deleteRecipe",
+        "getMenuPlan",
+        "saveMenuPlan",
+        "getStock",
+        "submitStockCount",
+        "getDemand",
+        "getSharing",
+        "setSharing",
+        "getSupplierDemand",
+        "getKitchenSettings",
+        "saveKitchenSettings",
+        "getAutoApproveLearning",
       ].sort(),
     );
-    expect((await api.getStock()).length).toBeGreaterThan(0);
-    expect((await api.listSuppliers()).length).toBeGreaterThan(0);
+    expect((await api.getMandate()).restaurant).toBeTruthy();
+    expect((await api.searchProducts("milk")).length).toBeGreaterThan(0);
     expect(calls).toEqual([]);
     await expect(
       api.changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
@@ -229,8 +250,24 @@ describe("the app on the gateway", () => {
 
   it("marks a screen that still runs on the mock, and only on the gateway", async () => {
     gateway({});
-    renderApp("/stock", createHttpApi("/api"));
+    renderApp("/catalog", createHttpApi("/api"));
     expect(await screen.findByText("Sample data")).toBeVisible();
+  });
+
+  it("shows the gateway's own stock without the mark, with on order unknown and not zero", async () => {
+    gateway({
+      [`GET ${K}/stock`]: () => ({
+        as_of: "2026-11-14T10:00:00+02:00",
+        items: [
+          { product_id: "900001", unit: "L", on_hand: "12", counted_at: null, on_order: "0", on_order_known: false },
+        ],
+      }),
+    });
+    renderApp("/stock", createHttpApi("/api"));
+    expect((await screen.findAllByText("12 L")).length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle("Open orders are not counted in kitchen units yet").length).toBeGreaterThan(0);
+    expect(screen.queryByText("0 L")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sample data")).not.toBeInTheDocument();
   });
 
   it("does not mark anything on the mock", async () => {

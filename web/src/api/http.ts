@@ -1,3 +1,4 @@
+import { createPlanningHttp } from "@/api/http-planning";
 import { type Json, mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, rows } from "@/api/gateway-map";
 import { mapMoney } from "@/api/map";
 import { forecastWindow, mapForecastAccuracy } from "@/api/map-forecast";
@@ -50,8 +51,9 @@ function mapEach<T>(list: Json[], what: string, idKey: string, map: (row: Json) 
 }
 
 /**
- * Hybrid: the order flow (proposals, approve and reject, orders, audit) talks to the real
- * gateway; every other method still answers from the mock, and `live` says which is which.
+ * Hybrid: the order flow (proposals, approve and reject, orders, audit) and the planning
+ * screens (api/http-planning.ts) talk to the real gateway; every other method still answers
+ * from the mock, and `live` says which is which.
  *
  * No Authorization header is sent: in production the web server adds the gateway's human
  * token (web/Caddyfile). A decision names the person's role in `X-User`.
@@ -77,6 +79,7 @@ export function createHttpApi(baseUrl: string): Api {
   const requestKeys = new Map<string, string>();
 
   const real = {
+    ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));

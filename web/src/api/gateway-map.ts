@@ -28,12 +28,12 @@ function invalid(what: string): never {
   throw new ApiError("INVALID_RESPONSE", `The gateway sent ${what} in an unexpected shape.`);
 }
 
-function object(value: unknown, what: string): Json {
+export function object(value: unknown, what: string): Json {
   if (!value || typeof value !== "object" || Array.isArray(value)) invalid(what);
   return value as Json;
 }
 
-function text(value: unknown, what: string): string {
+export function text(value: unknown, what: string): string {
   if (typeof value !== "string" || !value) invalid(what);
   return value;
 }
@@ -46,7 +46,7 @@ export function rows(body: unknown, key: string): Json[] {
 }
 
 /** A decimal string, or null when the gateway says unknown. */
-function decimal(value: unknown, label: string): number | null {
+export function decimal(value: unknown, label: string): number | null {
   return value == null ? null : mapMoney(value, label);
 }
 

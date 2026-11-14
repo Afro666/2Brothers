@@ -319,7 +319,8 @@ export interface StockItem {
   unit: string;
   /** null = not counted (unknown), never zero. */
   onHand: number | null;
-  onOrder: number;
+  /** null = the gateway cannot say what is on order yet (unknown), never zero. */
+  onOrder: number | null;
   countedAt: string | null;
   lastDelivery: string | null;
 }
@@ -365,7 +366,11 @@ export interface CoverRule {
   maxDays: number;
 }
 
-/** How the engine sizes orders for this kitchen. Defaults come from the engine. */
+/**
+ * How the engine sizes orders for this kitchen. Defaults come from the engine. From the gateway,
+ * a service level or stock-out cap the kitchen never set is NaN (the form shows an empty field):
+ * the engine's default applies and the gateway does not send it.
+ */
 export interface KitchenSettings {
   /** Target service level per demand class, in percent (A = menu-critical). */
   serviceLevelPercent: Record<DemandClass, number>;
