@@ -106,3 +106,26 @@ def test_malformed_standing_order_is_skipped_not_a_500(env):  # noqa: F811
     assert r.status_code == 200
     organic = next(row for row in r.json()["rows"] if row["product_id"] == "462921")
     assert "STANDING_ORDER_DRIFT" not in organic["reason_codes"]
+
+
+def test_a_person_sets_standing_orders_in_settings_and_drift_shows(env):  # noqa: F811
+    """#380 live: PUT /settings stores the map (replaced, never merged) and the addable rows read it."""
+    from gateway.tests.test_gateway_app import HUMAN
+    client, _, _ = env
+    p = milk(client)
+    stock_rows = client.put(f"{K}/settings", headers=HUMAN, json={"standing_orders": {"462921": "12", "777": "1"}})
+    assert stock_rows.status_code == 200, stock_rows.text
+    r = client.put(f"{K}/settings", headers=HUMAN, json={"standing_orders": {"462921": "12"}})
+    assert r.json()["standing_orders"] == {"462921": "12"}                    # replaced, not merged
+    assert client.put(f"{K}/settings", headers=HUMAN, json={"standing_orders": {"462921": "-1"}}).status_code == 422
+    assert client.put(f"{K}/settings", headers=AGENT, json={"standing_orders": {}}).status_code == 403
+
+
+def test_standing_orders_from_settings_reach_the_addable_rows(env):  # noqa: F811
+    from gateway.tests.test_gateway_app import HUMAN
+    client, _, db = env
+    p = milk(client)
+    client.put(f"{K}/settings", headers=HUMAN, json={"standing_orders": {"462921": "12"}})
+    stock(db, "462921", "L", Decimal(0), 10)
+    row = client.get(f"{K}/proposals/{p['proposal_id']}/addable", headers=AGENT).json()["rows"][0]
+    assert "STANDING_ORDER_DRIFT" in row["reason_codes"]

@@ -97,9 +97,12 @@ class Gateway:
 
     def _standing_orders(self, kitchen_id: str) -> dict[str, Decimal]:
         """Per product: the standing order per delivery, in sales units (#380, S08)."""
-        doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}, {"standing_orders": 1}) or {}
+        doc = self.db.kitchen_settings.find_one(
+            {"_id": kitchen_id}, {"standing_orders": 1, "engine.standing_orders": 1}) or {}
+        # PUT /settings stores it under `engine` (store/repository.py); older rows at the top.
+        stored = (doc.get("engine") or {}).get("standing_orders") or doc.get("standing_orders") or {}
         out = {}
-        for pid, qty in (doc.get("standing_orders") or {}).items():
+        for pid, qty in stored.items():
             try:
                 value = _dec(qty)
             except (InvalidOperation, ValueError, TypeError):

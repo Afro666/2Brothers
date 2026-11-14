@@ -39,7 +39,7 @@ DEMAND_CLASSES = ("A", "B", "C")
 COVER_CATEGORIES = ("fresh_dairy", "vegetables", "meat", "fish", "frozen", "dry", "other")
 BUDGET_WARNINGS = ("budget_warning_order_eur", "budget_warning_week_eur")
 SETTINGS = ("service_level", "max_cover_days", "stockout_cap", *BUDGET_WARNINGS,
-            "excluded_allergens")
+            "excluded_allergens", "standing_orders")
 _CLOCK = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 _WEEK = re.compile(r"\d{4}-W(0[1-9]|[1-4]\d|5[0-3])")
 
@@ -285,6 +285,17 @@ def settings_fields(data: dict) -> dict:
         except ValueError:
             raise ValueError(message) from None
         out["excluded_allergens"] = codes
+    if "standing_orders" in data:
+        # Per product: the standing order per delivery, in sales units (#380, S08). The
+        # whole map is replaced, never merged (contract #414): {} clears them all.
+        orders = data["standing_orders"]
+        message = "standing_orders must map product codes to positive decimal strings"
+        if not isinstance(orders, dict) or not all(isinstance(pid, str) and pid for pid in orders):
+            raise ValueError(message)
+        values = {pid: _decimal(qty, "standing_orders") for pid, qty in orders.items()}
+        if any(value is None or not value.is_finite() or value <= 0 for value in values.values()):
+            raise ValueError(message)
+        out["standing_orders"] = values
     return out
 
 
@@ -385,6 +396,8 @@ class _Settings:
         fields = settings_fields(changes)
         before = self.get(kitchen_id)
         after = _merge(before, fields, ())
+        if "standing_orders" in fields:
+            after["standing_orders"] = fields["standing_orders"]   # replace, never merge (#414)
         changed = {field: {"from": before.get(field), "to": after[field]}
                    for field in fields if before.get(field) != after[field]}
         if changed:
