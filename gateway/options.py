@@ -1,8 +1,8 @@
 """Options on a proposal: the "confirmed stock only" option, and choosing an option.
 
 Why. Live on 2026-11-14 every milk proposal in the demo inbox had a line whose stock Valio
-does not report. Such a line cannot be placed (a person's yes is not stock confirmation),
-so no Approve button worked. The engine already knew the part Valio confirms
+does not report. Such a line could not be placed then (a person's yes is not stock confirmation),
+so no Approve button worked; since 2026-11-14 a person may approve it and the order waits. The engine already knew the part Valio confirms
 (`partial_fill.now`, #288), but only as text. Here it becomes an option with its own
 stored, signed quote that a person can choose and then approve.
 

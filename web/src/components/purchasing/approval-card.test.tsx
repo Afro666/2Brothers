@@ -60,7 +60,6 @@ describe("ApprovalCard", () => {
           suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
         }}
         order={order}
-        approveUnconfirmedManual
       />,
     );
     const checks = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
@@ -68,18 +67,14 @@ describe("ApprovalCard", () => {
     expect((screen.getByRole("button", { name: /^Approve/ }) as HTMLButtonElement).disabled).toBe(disabledWithoutNotice);
   });
 
-  it("does not promise to send unconfirmed stock when manual approval is off or unknown", () => {
+  it("says the order is sent and waits for the supplier, with no kitchen setting (Aron, 2026-11-14)", () => {
     const request = {
       ...approval,
       suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
     };
-    const first = render(<ApprovalCard request={request} order={confirmedOrder} approveUnconfirmedManual={false} />);
-    expect(screen.getByText("Leipomo Demo must confirm stock before this order can be approved.")).toBeVisible();
-    expect(screen.queryByText(/If you approve, the order is sent/)).toBeNull();
-    first.unmount();
-
     render(<ApprovalCard request={request} order={confirmedOrder} />);
-    expect(screen.getByText("Leipomo Demo must confirm stock before this order can be approved.")).toBeVisible();
+    expect(screen.getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
+    expect(screen.queryByText(/before this order can be approved/)).toBeNull();
   });
 
   it("shows the gateway's manual-supplier confirmation reason as sent under What to check", () => {
@@ -117,19 +112,27 @@ describe("ApprovalCard", () => {
     expect(listAddableProducts).toHaveBeenCalledWith("Arla 1 L");
   });
 
-  it.each([999999, 9999999999, undefined, null])("blocks unknown stock %s with a visible reason", async (amount) => {
+  it.each([999999, 9999999999, undefined, null])("lets a person approve unknown stock %s and says the order waits", async (amount) => {
     const user = userEvent.setup();
     const onApprove = vi.fn();
     const order = structuredClone(confirmedOrder);
     Object.assign(order.lines[0].offer, { availableAmount: amount });
     render(<ApprovalCard request={approval} order={order} onApprove={onApprove} />);
-    expect(screen.getByText(/Waiting for supplier stock confirmation/)).toBeVisible();
+    expect(screen.getByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
+    expect(screen.queryByText(/approval is available once stock is confirmed/)).toBeNull();
     const approve = screen.getByRole("button", { name: /^Approve/ });
-    expect(approve).toBeDisabled();
+    expect(approve).toBeEnabled();
     expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
     await user.click(approve);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(onApprove).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    await user.click(within(dialog).getByRole("button", { name: /^Yes, approve/ }));
+    expect(onApprove).toHaveBeenCalledTimes(1);
+  });
+
+  it("still holds approval when the order lines are unavailable", () => {
+    render(<ApprovalCard request={approval} order={{ ...confirmedOrder, lines: [] }} />);
+    expect(screen.getByText("Order details are unavailable. Reload them before approving.")).toBeVisible();
+    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
   });
 
   it("lists what to check and never says an order can go without approval", () => {
@@ -158,14 +161,19 @@ describe("ApprovalCard", () => {
     expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
   });
 
-  it("rechecks stock while the confirmation dialog is open", async () => {
+  it("rechecks the order while the confirmation dialog is open", async () => {
     const user = userEvent.setup();
     const onApprove = vi.fn();
     const { rerender } = render(<ApprovalCard request={approval} order={confirmedOrder} onApprove={onApprove} />);
     await user.click(screen.getByRole("button", { name: /^Approve/ }));
-    const order = structuredClone(confirmedOrder);
-    order.lines[0].offer.availableAmount = 999999;
-    rerender(<ApprovalCard request={approval} order={order} onApprove={onApprove} />);
+    // Stock that turns unconfirmed does not hold the yes (Aron, 2026-11-14): it only says so.
+    const unknown = structuredClone(confirmedOrder);
+    unknown.lines[0].offer.availableAmount = 999999;
+    rerender(<ApprovalCard request={approval} order={unknown} onApprove={onApprove} />);
+    expect(screen.getByRole("button", { name: /^Yes, approve/ })).toBeEnabled();
+    expect(screen.getByText(/wait for the supplier's stock confirmation/)).toBeInTheDocument();
+    // Lines that can no longer be shown do hold it.
+    rerender(<ApprovalCard request={approval} order={{ ...confirmedOrder, lines: [] }} onApprove={onApprove} />);
     const yes = screen.getByRole("button", { name: /^Yes, approve/ });
     expect(yes).toBeDisabled();
     await user.click(yes);

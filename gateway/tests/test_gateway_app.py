@@ -219,16 +219,40 @@ def test_wrong_total_from_the_client_is_refused(env):
     assert db.orders.count_documents({}) == 0
 
 
-def test_human_approval_does_not_confirm_unknown_stock(env):
+def test_human_approval_places_unknown_stock_and_the_order_waits_for_the_supplier(env):
+    """Aron, 2026-11-14: a person's yes sends the order even when Valio has not confirmed
+    stock. A yes is still not stock confirmation: the lines keep unknown_stock and the
+    order names the supplier that must confirm."""
     client, _, db = env
     p = milk(client, quantity="1000")
     assert any(line['unknown_stock'] for line in p['lines'])
     response = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
                            json={'expected_total': p['expected_total'], 'idempotency_key': 'a1'})
-    assert response.status_code == 409
-    assert response.json()['error']['code'] == 'STOCK_UNKNOWN'
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body['status'] == 'SENT' and body['supplier_must_confirm'] == ['sup-valio']
+    assert [ln['unknown_stock'] for ln in body['lines']] == [ln['unknown_stock'] for ln in p['lines']]
+    order = db.orders.find_one({})
+    assert order['supplier_must_confirm'] == ['sup-valio']
+    assert any(ln['unknown_stock'] for ln in order['lines'])
+    assert 'STOCK_UNKNOWN' in p['mandate']['reason_codes']      # still shown as a warning
+    assert db.approvals.find_one({})['status'] == 'APPROVED'
+    placed = [e for e in client.get(K + "/audit", headers=HUMAN).json()["events"] if e["kind"] == "order_placed"]
+    assert [e["supplier_must_confirm"] for e in placed] == [["sup-valio"]]
+
+
+def test_auto_approve_never_places_unknown_stock(env):
+    """Defence in depth: even if the auto-approve rules let one through, the placement
+    itself refuses an unknown-stock line for an auto-approve actor."""
+    client, fake, db = env
+    p = milk(client, quantity="1000")
+    valio = ValioClient("test-not-a-real-key", transport=fake.transport, ttl=0, now=lambda: NOW)
+    gw = Gateway(db, valio, now=lambda: NOW)            # the same database the app writes
+    with pytest.raises(GatewayError) as err:
+        gw.approve("demo-kitchen", p['proposal_id'], {'expected_total': p['expected_total'],
+                   'idempotency_key': 'auto:x'}, human="auto-approve (rule set by aron)")
+    assert err.value.code == 'STOCK_UNKNOWN'
     assert db.orders.count_documents({}) == 0
-    assert db.approvals.find_one({})['status'] == 'PENDING'
     assert client.get(f"{K}/proposals/{p['proposal_id']}", headers=HUMAN).json()['status'] == 'READY'
 
 

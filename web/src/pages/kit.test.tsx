@@ -74,11 +74,11 @@ describe("/kit", () => {
     expect(within(catalog).getAllByText("Contains").length).toBeGreaterThan(0);
   });
 
-  it("keeps the unknown-stock example waiting for supplier confirmation", async () => {
+  it("shows the unknown-stock example as waiting for supplier confirmation, still approvable", async () => {
     await renderKit();
     const approvals = screen.getByRole("region", { name: "ApprovalCard" });
-    expect(within(approvals).getByText(/Waiting for supplier stock confirmation/)).toBeVisible();
-    expect(within(approvals).getByRole("button", { name: /^Approve/ })).toBeDisabled();
+    expect(within(approvals).getByText(/wait for the supplier's stock confirmation/)).toBeVisible();
+    expect(within(approvals).getByRole("button", { name: /^Approve/ })).toBeEnabled();
     expect(within(approvals).getByRole("button", { name: "Reject" })).toBeEnabled();
   });
 

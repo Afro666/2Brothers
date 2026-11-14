@@ -11,7 +11,6 @@ import { usePendingApprovals } from "@/lib/pending-approvals";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { LiveConnectionLabel, useLiveEvents } from "@/lib/live-events";
-import { useApproveUnconfirmedManual } from "@/lib/approve-unconfirmed-manual";
 import { LabelEvidence, type LabelCheck } from "@/components/purchasing/label-evidence";
 
 const path = "/v1/kitchens/demo-kitchen/proposals";
@@ -93,7 +92,7 @@ function parse(value: unknown, t: (text: string) => string): Proposal {
   return row;
 }
 
-function ProposalCard({ row, reload, approvalBlockedReason, approveUnconfirmedManual }: { row: Proposal; reload: () => void; approvalBlockedReason?: string; approveUnconfirmedManual: boolean }) {
+function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; reload: () => void; approvalBlockedReason?: string }) {
   const t = useT();
   const [confirm, setConfirm] = useState<"approve" | "reject" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -146,9 +145,7 @@ function ProposalCard({ row, reload, approvalBlockedReason, approveUnconfirmedMa
       <h3 className="label-caps">{t("What to check")}</h3>
       <div className="space-y-2 rounded-md border border-warning/40 bg-warning-surface p-3 text-warning">
         {suppliersToConfirm.map(supplier => <p key={supplier.supplierId} className="text-sm">
-          {approveUnconfirmedManual
-            ? t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", { supplier: supplier.name })
-            : t("{supplier} must confirm stock before this order can be approved.", { supplier: supplier.name })}
+          {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", { supplier: supplier.name })}
         </p>)}
       </div>
     </section>}
@@ -159,7 +156,7 @@ function ProposalCard({ row, reload, approvalBlockedReason, approveUnconfirmedMa
       {/^https:\/\//.test(e.source_url) && <a className="underline" href={e.source_url} target="_blank" rel="noreferrer">{t("Manufacturer source")}</a>}
     </div>)}
     <p className="text-xl font-bold">{t("{exVat} ex VAT · {total} including VAT and delivery", { exVat: formatEur(mapMoney(row.total_ex_vat)), total: formatEur(mapMoney(row.expected_total)) })}</p>
-    {unknown && <p><span className="unknown-value">{t("Waiting for supplier stock confirmation. Approval is unavailable.")}</span></p>}
+    {unknown && <p><span className="unknown-value">{t("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")}</span></p>}
     {expired && pending && <p>{t("This offer has expired. You can review it here: the gateway rechecks price and stock before recording an order. Any change requires a fresh confirmation.")}</p>}
     {placed ? <p role="status" className="stamp-mark border-success text-sm font-medium text-success">{t("Order recorded: {id} · {total}. Recorded in our gateway; not submitted to Valio.", { id: placed.id, total: formatEur(mapMoney(placed.total)) })}</p> :
       row.status === "APPROVED" ? <p className="stamp-mark border-success text-sm font-medium text-success">{t("Order recorded: {id}. Recorded in our gateway; not submitted to Valio.", { id: row.order_id ?? t("reload to reconcile") })}</p> :
@@ -167,12 +164,12 @@ function ProposalCard({ row, reload, approvalBlockedReason, approveUnconfirmedMa
     {error && <div role="alert">{error} {t("Check the current proposal before repeating a decision.")} <Button onClick={reload}>{t("Reload proposals")}</Button></div>}
     {approvalBlockedReason && <p className="text-sm text-muted-foreground">{approvalBlockedReason}</p>}
     {rejectable && <div className="flex flex-wrap gap-3">
-      {pending && <Button className="w-full sm:w-auto" disabled={busy || unknown || !row.lines.length || !!approvalBlockedReason} onClick={() => setConfirm("approve")}>{t("Approve {amount}", { amount: formatEur(mapMoney(row.expected_total)) })}</Button>}
+      {pending && <Button className="w-full sm:w-auto" disabled={busy || !row.lines.length || !!approvalBlockedReason} onClick={() => setConfirm("approve")}>{t("Approve {amount}", { amount: formatEur(mapMoney(row.expected_total)) })}</Button>}
       <Button className="w-full sm:w-auto" variant="outline" disabled={busy || !!approvalBlockedReason} onClick={() => setConfirm("reject")}>{t("Reject proposal")}</Button>
     </div>}
     {confirm === "approve" && pending && <div role="dialog" aria-label={t("Confirm approval")} className="space-y-3 rounded border p-4">
       <p>{t("Confirm this exact basket for {amount}? The gateway checks price and stock again.", { amount: formatEur(mapMoney(row.expected_total)) })}</p>
-      <Button disabled={busy || unknown || !!approvalBlockedReason} onClick={() => void decide(true)}>{t("Confirm and record order")}</Button>
+      <Button disabled={busy || !!approvalBlockedReason} onClick={() => void decide(true)}>{t("Confirm and record order")}</Button>
       <Button variant="outline" disabled={busy} onClick={() => setConfirm(null)}>{t("Cancel")}</Button>
     </div>}
     {confirm === "reject" && rejectable && <div role="dialog" aria-label={t("Confirm rejection")} className="space-y-3 rounded border p-4">
@@ -193,7 +190,6 @@ export function LiveApprovalsPage() {
     return result.proposals.map((item) => parse(item, t));
   }, []);
   useLiveEvents(["proposal", "approval"], proposals.reload);
-  const approveUnconfirmedManual = useApproveUnconfirmedManual();
   return <AppShell activeId="approvals"><main className="mx-auto max-w-5xl space-y-5">
     <OpenDemoNote />
     <div className="flex items-center gap-3"><h1 className="page-title">{t("To approve")}</h1><LiveConnectionLabel /></div>
@@ -202,6 +198,6 @@ export function LiveApprovalsPage() {
     {proposals.status === "loading" && <p>{t("Loading proposals…")}</p>}
     {proposals.status === "error" && <p role="alert">{proposals.error.message}</p>}
     {proposals.status === "ready" && (proposals.data.length ? proposals.data.map(row =>
-      <ProposalCard key={`${row.proposal_id}-${row.offer_id}-${row.status}`} row={row} reload={proposals.reload} approvalBlockedReason={approvalBlockedReason} approveUnconfirmedManual={approveUnconfirmedManual} />) : <p>{t("No proposals yet. Ask the Buyer on Requests.")}</p>)}
+      <ProposalCard key={`${row.proposal_id}-${row.offer_id}-${row.status}`} row={row} reload={proposals.reload} approvalBlockedReason={approvalBlockedReason} />) : <p>{t("No proposals yet. Ask the Buyer on Requests.")}</p>)}
   </main></AppShell>;
 }
