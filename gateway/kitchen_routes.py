@@ -333,7 +333,7 @@ def _stock_items(db, kitchen_id: str, today: date | None = None) -> list[dict]:
 
 
 def demand_rows(db, kitchen_id: str, start: date, end: date,
-                today: date | None = None, tz=None) -> tuple[list[dict], list[str]]:
+                today: date | None = None, tz=None, *, entries_override=None) -> tuple[list[dict], list[str]]:
     """Per product and day: gross and net need from the menu plan; days without a plan use
     the stored forecast. Shared by GET /demand and the "propose an order for this plan" path.
     `tz` sets the forecast window's day bounds; callers pass the gateway clock's tzinfo."""
@@ -343,9 +343,10 @@ def demand_rows(db, kitchen_id: str, start: date, end: date,
     from store.repository import Repository
     r = Repository(db)
     recipes = {x["recipe_id"]: x for x in r.recipes.list(kitchen_id)}
-    entries = [day for week in weeks_between(start, end)
-               for day in (r.menu_plans.get(kitchen_id, week) or {}).get("days", [])
-               if start.isoformat() <= day["date"] <= end.isoformat()]
+    entries = (entries_override if entries_override is not None else
+               [day for week in weeks_between(start, end)
+                for day in (r.menu_plans.get(kitchen_id, week) or {}).get("days", [])
+                if start.isoformat() <= day["date"] <= end.isoformat()])
     rows, problems = gross_needs(entries, recipes)
     for row in rows:
         row["source"] = "menu_plan"
@@ -353,7 +354,9 @@ def demand_rows(db, kitchen_id: str, start: date, end: date,
     tz = tz or timezone.utc
     lo = datetime.combine(start, datetime.min.time(), tzinfo=tz)
     hi = datetime.combine(end, datetime.max.time(), tzinfo=tz)
-    for f in forecasts_between(db, kitchen_id, lo, hi):
+    # A photo is a transient, explicit plan: unknown/unread days do not silently
+    # pull ingredients from the saved plan or history forecast.
+    for f in ([] if entries_override is not None else forecasts_between(db, kitchen_id, lo, hi)):
         day = f["ts"].date().isoformat()
         if day not in planned_days:
             rows.append({"product_id": f["meta"]["product_id"], "date": day, "unit": f["unit"],
