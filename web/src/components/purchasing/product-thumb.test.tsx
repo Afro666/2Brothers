@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiProvider } from "@/api";
 import { createMockApi } from "@/api/mock";
 import type { Api, BrandLogo } from "@/api/types";
+import { Beet, Butter, Cucumber, Mushroom, Onion, Pepper, Potato, Tomato } from "@/lib/product-icons";
 
 import { ProductThumb } from "./product-thumb";
 
@@ -35,6 +36,34 @@ describe("ProductThumb kind tile", () => {
     const tile = container.querySelector("[data-kind]");
     expect(tile).toHaveAttribute("data-kind", "product");
     expect(tile?.querySelector("svg")).not.toBeNull();
+  });
+
+  it("keeps a new pictogram decorative at every tile size", () => {
+    const sizes = [["sm", "size-8", "size-4"], ["md", "size-11", "size-6"], ["lg", "size-14", "size-7"]] as const;
+    for (const [size, tileSize, iconSize] of sizes) {
+      const { container, unmount } = render(<ProductThumb en="Butter" size={size} />);
+      const tile = container.querySelector("[data-kind]");
+      const icon = tile?.querySelector(":scope > svg");
+      expect(tile).toHaveAttribute("data-kind", "butter");
+      expect(tile).toHaveAttribute("aria-hidden");
+      expect(tile).toHaveClass(tileSize, "bg-amber-100", "dark:bg-amber-950");
+      expect(icon).toHaveAttribute("aria-hidden", "true");
+      expect(icon).toHaveClass(iconSize);
+      unmount();
+    }
+  });
+});
+
+describe("custom product icons", () => {
+  it("renders every custom icon with the Lucide outline attributes", () => {
+    for (const Icon of [Beet, Butter, Cucumber, Mushroom, Onion, Pepper, Potato, Tomato]) {
+      const { container, unmount } = render(<Icon />);
+      const icon = container.querySelector("svg");
+      expect(icon).toHaveAttribute("viewBox", "0 0 24 24");
+      expect(icon).toHaveAttribute("stroke", "currentColor");
+      expect(icon).toHaveAttribute("fill", "none");
+      unmount();
+    }
   });
 });
 
