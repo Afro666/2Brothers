@@ -86,7 +86,9 @@ class SinglePickModel:
                     if len(set(indices)) != len(indices) or any(i >= len(rows) for i in indices):
                         raise ValueError('Pick is outside the trusted shortlist')
                     ids = [rows[i]['product_id'] for i in indices]
-                    await asyncio.to_thread(buyer_picks.finish, self.db, key, token, ids)
+                    owned = await asyncio.to_thread(buyer_picks.finish, self.db, key, token, ids)
+                    if not owned:
+                        raise RuntimeError('Product-selection claim was lost; stop before requesting approval')
                 except BaseException:
                     await asyncio.to_thread(buyer_picks.finish, self.db, key, token, None)
                     raise

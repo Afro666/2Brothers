@@ -25,7 +25,8 @@ def claim(db, key, now=None):
     token = uuid4().hex
     try:
         result = db.buyer_pick_cache.update_one({'_id': key, 'expires_at': {'$lte': now}}, {'$set': {
-            'state': 'RUNNING', 'token': token, 'expires_at': now + timedelta(seconds=30)}}, upsert=True)
+            # Outlive the entire 35-second worker, including cancellation and store I/O.
+            'state': 'RUNNING', 'token': token, 'expires_at': now + timedelta(seconds=60)}}, upsert=True)
     except DuplicateKeyError:
         return None
     return token if result.modified_count or result.upserted_id else None
@@ -33,6 +34,7 @@ def claim(db, key, now=None):
 
 def finish(db, key, token, product_ids, now=None):
     now = now or datetime.now(timezone.utc)
-    db.buyer_pick_cache.update_one({'_id': key, 'token': token, 'state': 'RUNNING'}, {'$set': {
+    result = db.buyer_pick_cache.update_one({'_id': key, 'token': token, 'state': 'RUNNING'}, {'$set': {
         'state': 'READY' if product_ids else 'FAILED', 'product_ids': product_ids,
         'expires_at': now + timedelta(seconds=600 if product_ids else 5)}})
+    return result.matched_count == 1

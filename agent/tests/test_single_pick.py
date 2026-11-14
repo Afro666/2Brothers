@@ -162,10 +162,29 @@ def test_pick_cache_expiry_policy_scope_and_interrupted_claims(monkeypatch):
     now = datetime.now(timezone.utc)
     token = buyer_picks.claim(db, key, now)
     assert token and buyer_picks.claim(db, key, now) is None
-    replacement = buyer_picks.claim(db, key, now + timedelta(seconds=31))
+    assert buyer_picks.claim(db, key, now + timedelta(seconds=59)) is None
+    replacement = buyer_picks.claim(db, key, now + timedelta(seconds=61))
     assert replacement and replacement != token
-    buyer_picks.finish(db, key, token, ['stale'], now + timedelta(seconds=32))
-    assert buyer_picks.get(db, key, now + timedelta(seconds=32)) is None
-    buyer_picks.finish(db, key, replacement, ['p'], now + timedelta(seconds=32))
-    assert buyer_picks.get(db, key, now + timedelta(seconds=33)) == ['p']
-    assert buyer_picks.get(db, key, now + timedelta(seconds=633)) is None
+    assert not buyer_picks.finish(db, key, token, ['stale'], now + timedelta(seconds=62))
+    assert buyer_picks.get(db, key, now + timedelta(seconds=62)) is None
+    assert buyer_picks.finish(db, key, replacement, ['p'], now + timedelta(seconds=62))
+    assert buyer_picks.get(db, key, now + timedelta(seconds=63)) == ['p']
+    assert buyer_picks.get(db, key, now + timedelta(seconds=663)) is None
+
+
+def test_lost_cache_claim_never_requests_approval(monkeypatch):
+    original = buyer_picks.finish
+    def lost(db, key, token, ids, *a, **kw):
+        if ids:
+            return False
+        return original(db, key, token, ids, *a, **kw)
+    monkeypatch.setattr(buyer_picks, 'finish', lost)
+    async def run():
+        db, gateway = environment(monkeypatch)
+        try:
+            with pytest.raises(WorkerError) as err:
+                await BuyerWorker(db, gateway, model_factory=Pick, now=lambda: NOW).run('demo-kitchen', NEED)
+            assert err.value.fallback_safe and db.proposals.count_documents({}) == 0
+        finally:
+            await gateway.close()
+    asyncio.run(run())

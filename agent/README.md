@@ -240,7 +240,8 @@ quantity/unit, allergen policy and the eligible catalog shortlist. Prices, stock
 offers and approval are never reused by this cache: every new request re-quotes and
 simulates live. The same idempotency key replays its original result as before.
 An identical choice already in flight does not start another model call; its
-30-second lease expires after interruption. Cache failures cool down for five
+60-second lease outlives the bounded worker and expires after interruption. Lost
+claim ownership stops the run before approval is requested. Cache failures cool down for five
 seconds. Pick calls are metered under `buyer_pick`; a cache hit uses zero calls.
 
 Set `NEMOTRON_BUYER_STRATEGY=loop` to retain the previous multi-turn implementation.
