@@ -219,6 +219,14 @@ def test_a_refused_request_is_one_sentence_in_the_status_message(bot):
     assert bot.tg.edits[0]["text"].startswith("I could not read that as an order.")
 
 
+def test_an_unexpected_failure_turns_the_status_message_into_a_short_failure(bot):
+    bot.gw.error = KeyError("blocks")
+    say(bot, "20 l oat drink")
+    assert len(bot.tg.sent) == 1
+    assert bot.tg.edits == [{"chat": 7, "id": bot.tg.sent[0]["id"], "text": "Something went wrong. Ask again.",
+                             "markup": None}]
+
+
 def test_a_rejected_proposal_shows_the_reason_and_no_supplier_message(bot):
     bot.gw.current = proposal(blocks=[], status="REJECTED",
                               mandate={"reasons": ["This kitchen excludes peanuts, so \"peanut butter\" cannot be ordered."]})

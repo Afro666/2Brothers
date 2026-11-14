@@ -154,11 +154,15 @@ class Bot:
         """Show that work started, then turn that same message into the summary."""
         status = self.tg.send(chat, wait_text, silent=True)
         self.tg.typing(chat)
+        prefix = f"Heard: \"{render.escape(heard)}\"\n" if heard else ""
         try:
             proposal = make()
         except GatewayError as exc:
-            prefix = f"Heard: \"{render.escape(heard)}\"\n" if heard else ""
             self.tg.edit(chat, status, prefix + render.refusal(exc.code, exc.message))
+            return
+        except Exception as exc:
+            print(f"bot: proposal failed: {type(exc).__name__}", file=sys.stderr, flush=True)
+            self.tg.edit(chat, status, prefix + "Something went wrong. Ask again.")
             return
         pid = proposal.get("proposal_id")
         if pid:
