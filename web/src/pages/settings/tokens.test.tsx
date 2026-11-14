@@ -26,7 +26,7 @@ describe("API & MCP token settings", () => {
     expect(screen.getByLabelText("MCP: Claude Code")).toHaveTextContent(
       `claude mcp add --transport http kitchen-buyer ${window.location.origin}/gateway/mcp --header "Authorization: Bearer tkb_demo_0001"`,
     );
-    expect(screen.getByLabelText("HTTP: request a proposal")).toHaveTextContent(
+    expect(screen.getByLabelText("HTTP: list proposals (needs kitchen:read)")).toHaveTextContent(
       `curl -H "Authorization: Bearer tkb_demo_0001" ${window.location.origin}/gateway/v1/kitchens/demo-kitchen/proposals`,
     );
     expect(
@@ -40,7 +40,7 @@ describe("API & MCP token settings", () => {
     expect(await screen.findByText("tkb_demo_0002", { selector: "code" })).toBeVisible();
     expect(screen.queryByText("tkb_demo_0001", { selector: "code" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("MCP: Claude Code")).toHaveTextContent("tkb_demo_0002");
-    expect(screen.getByLabelText("HTTP: request a proposal")).toHaveTextContent("tkb_demo_0002");
+    expect(screen.getByLabelText("HTTP: list proposals (needs kitchen:read)")).toHaveTextContent("tkb_demo_0002");
     expect((await api.listApiTokens()).every((token) => !("token" in token))).toBe(true);
   });
 
