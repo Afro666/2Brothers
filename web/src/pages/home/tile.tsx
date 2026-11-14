@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
+import { useT } from "@/lib/i18n";
 
 export function Tile({
   title,
@@ -59,9 +60,10 @@ export function TileState<T>({
   empty: boolean;
   children: (value: T) => ReactNode;
 }) {
-  if (status === "loading") return <LoadingState label="Loading dashboard tile" />;
+  const t = useT();
+  if (status === "loading") return <LoadingState label={t("Loading dashboard tile")} />;
   if (status === "error")
-    return <ErrorState message={error?.message ?? "Could not load this tile."} onRetry={reload} />;
-  if (empty || data === null) return <EmptyState title="No data yet" />;
+    return <ErrorState message={error?.message ?? t("Could not load this tile.")} onRetry={reload} />;
+  if (empty || data === null) return <EmptyState title={t("No data yet")} />;
   return children(data);
 }

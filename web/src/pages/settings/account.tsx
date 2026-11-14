@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/lib/i18n";
 import { SettingsSection } from "@/pages/settings/section";
 
 export function AccountSection() {
+  const t = useT();
   const api = useApi();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -21,11 +23,11 @@ export function AccountSection() {
     event.preventDefault();
     setError(null);
     if (next !== repeat) {
-      setError("Passwords do not match.");
+      setError(t("Passwords do not match."));
       return;
     }
     if (next.length < 10) {
-      setError("New password must be at least 10 characters.");
+      setError(t("New password must be at least 10 characters."));
       return;
     }
     setBusy(true);
@@ -34,7 +36,7 @@ export function AccountSection() {
       setCurrent("");
       setNext("");
       setRepeat("");
-      toast.success("Password changed");
+      toast.success(t("Password changed"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -43,10 +45,10 @@ export function AccountSection() {
   }
 
   return (
-    <SettingsSection title="Account" description="Manage the password for your kitchen account.">
+    <SettingsSection title={t("Account")} description={t("Manage the password for your kitchen account.")}>
       <Card className="max-w-lg">
         <CardHeader>
-          <CardTitle>Change password</CardTitle>
+          <CardTitle>{t("Change password")}</CardTitle>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={(event) => void submit(event)}>
@@ -56,7 +58,7 @@ export function AccountSection() {
               </Alert>
             ) : null}
             <div className="space-y-2">
-              <Label htmlFor="current-password">Current password</Label>
+              <Label htmlFor="current-password">{t("Current password")}</Label>
               <Input
                 id="current-password"
                 type="password"
@@ -68,7 +70,7 @@ export function AccountSection() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-password">New password</Label>
+              <Label htmlFor="new-password">{t("New password")}</Label>
               <Input
                 id="new-password"
                 type="password"
@@ -80,11 +82,11 @@ export function AccountSection() {
                 disabled={busy}
               />
               <p id="new-password-hint" className="text-xs text-muted-foreground">
-                Use at least 10 characters.
+                {t("Use at least 10 characters.")}
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="repeat-password">Repeat new password</Label>
+              <Label htmlFor="repeat-password">{t("Repeat new password")}</Label>
               <Input
                 id="repeat-password"
                 type="password"
@@ -96,7 +98,7 @@ export function AccountSection() {
               />
             </div>
             <Button type="submit" disabled={busy}>
-              {busy ? "Changing password…" : "Change password"}
+              {busy ? t("Changing password…") : t("Change password")}
             </Button>
           </form>
         </CardContent>

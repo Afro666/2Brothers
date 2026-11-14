@@ -5,6 +5,7 @@ import type { Api } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
@@ -28,6 +29,7 @@ function supplierName(offer: SupplierOffer): string {
  * ordered here. The tile is an extra: when the list cannot be read, Home stays as it is.
  */
 export function SupplierOfferTile({ api }: { api: Api }) {
+  const t = useT();
   const state = useAsync(() => api.listSupplierOffers(), [api]);
   const { role } = useRole();
   const { session } = useSession();
@@ -40,10 +42,10 @@ export function SupplierOfferTile({ api }: { api: Api }) {
     state.status === "ready" ? state.data.find((row) => row.status === "OPEN" && !hidden.includes(row.id)) : undefined;
   if (!offer) return null;
 
-  const blocked = session && !session.canApprove ? "Your account cannot accept or decline offers." : null;
+  const blocked = session && !session.canApprove ? t("Your account cannot accept or decline offers.") : null;
   const actor = auditActorForRole(role);
-  const product = offer.productName ?? `product ${offer.productId}`;
-  const replaced = offer.replacesProductName ?? `product ${offer.replacesProductId}`;
+  const product = offer.productName ?? t("product {id}", { id: offer.productId });
+  const replaced = offer.replacesProductName ?? t("product {id}", { id: offer.replacesProductId });
 
   const act = async (kind: "accept" | "decline") => {
     setPending(kind);
@@ -57,13 +59,17 @@ export function SupplierOfferTile({ api }: { api: Api }) {
       const accepted = await api.acceptSupplierOffer(offer.id, actor);
       if (accepted.proposalStatus === "REJECTED") {
         setMessage(
-          `${supplierName(offer)} cannot deliver ${product} for ${formatDate(offer.requestedDate)} after all. No proposal was made.`,
+          t("{supplier} cannot deliver {product} for {date} after all. No proposal was made.", {
+            supplier: supplierName(offer),
+            product,
+            date: formatDate(offer.requestedDate),
+          }),
         );
         return;
       }
       await navigate({ to: "/approvals" });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "That did not work. Try again.");
+      setMessage(error instanceof Error ? error.message : t("That did not work. Try again."));
     } finally {
       setPending(null);
     }
@@ -73,34 +79,38 @@ export function SupplierOfferTile({ api }: { api: Api }) {
     <Card className="md:col-span-2" aria-labelledby="supplier-offer-title">
       <CardHeader>
         <CardTitle id="supplier-offer-title" className="label-caps leading-4">
-          Offer from {supplierName(offer)}
+          {t("Offer from {supplier}", { supplier: t(supplierName(offer)) })}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1">
           <p className="break-words text-base font-semibold">{product}</p>
           <p className="break-words text-sm">
-            in place of {replaced}, which is predicted short on{" "}
+            {t("in place of {product}, which is predicted short on", { product: replaced })}{" "}
             <time dateTime={offer.requestedDate}>{formatDate(offer.requestedDate)}</time>
           </p>
           <p className="font-mono text-[13px] tabular-nums text-muted-foreground">
-            {offer.quantity} {offer.unit}, from your own forecast
+            {t("{quantity} {unit}, from your own forecast", { quantity: offer.quantity, unit: offer.unit })}
           </p>
         </div>
         <figure className="space-y-1 border-l-2 border-border pl-3">
-          <blockquote className="whitespace-pre-line break-words text-sm">{offer.reason || "No reason given."}</blockquote>
+          <blockquote className="whitespace-pre-line break-words text-sm">
+            {offer.reason || t("No reason given.")}
+          </blockquote>
           <figcaption className="text-xs text-muted-foreground">
-            written by {supplierName(offer) === "Valio Aimo" ? "Valio's" : "the supplier's"} selling agent (
-            {madeByLabel(offer.madeBy)})
+            {t("written by {possessive} selling agent ({madeBy})", {
+              possessive: t(supplierName(offer) === "Valio Aimo" ? "Valio's" : "the supplier's"),
+              madeBy: t(madeByLabel(offer.madeBy)),
+            })}
           </figcaption>
         </figure>
         {!offer.allergenDataKnown && (
           <p className="break-words text-sm font-medium">
-            The catalog has no allergen data for this product. Check the label before you approve.
+            {t("The catalog has no allergen data for this product. Check the label before you approve.")}
           </p>
         )}
         <p className="text-sm text-muted-foreground">
-          This is a suggestion, not an order. A proposal still waits for your approval, with the live price.
+          {t("This is a suggestion, not an order. A proposal still waits for your approval, with the live price.")}
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -108,7 +118,7 @@ export function SupplierOfferTile({ api }: { api: Api }) {
             disabled={pending !== null || blocked !== null}
             onClick={() => void act("accept")}
           >
-            {pending === "accept" ? "Making the proposal…" : "Make a proposal"}
+            {pending === "accept" ? t("Making the proposal…") : t("Make a proposal")}
           </Button>
           <Button
             variant="outline"
@@ -116,7 +126,7 @@ export function SupplierOfferTile({ api }: { api: Api }) {
             disabled={pending !== null || blocked !== null}
             onClick={() => void act("decline")}
           >
-            No thanks
+            {t("No thanks")}
           </Button>
         </div>
         <p className="text-sm" role="status" aria-live="polite">

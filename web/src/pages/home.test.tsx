@@ -46,6 +46,9 @@ describe("HomePage", () => {
         (_, element) => element?.textContent?.replace(/\s+/g, " ").trim() === "3 SHORT · 12 UNKNOWN · 0 AT_RISK",
       ),
     ).toBeInTheDocument();
+    const unknownValues = screen.getAllByText("unknown");
+    expect(unknownValues.length).toBeGreaterThan(0);
+    for (const value of unknownValues) expect(value).toHaveClass("unknown-value");
     expect(
       screen
         .getAllByRole("link", { name: "Open demand view" })

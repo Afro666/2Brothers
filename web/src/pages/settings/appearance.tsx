@@ -1,11 +1,13 @@
 import { useId } from "react";
 
+import { LanguagePicker } from "@/components/purchasing/language-picker";
 import { ThemePicker } from "@/components/purchasing/theme-picker";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ACCENT_HUES, type Appearance, setAppearance, useAppearance } from "@/lib/appearance";
 import { formatDate, formatEur } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { SettingsSection } from "@/pages/settings/section";
 
 interface Option<T> {
@@ -37,7 +39,7 @@ const DATE_FORMATS: Option<Appearance["dateFormat"]>[] = [
   { value: "numeric", label: "14.11." },
   { value: "mdy", label: "Nov 14" },
 ];
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+export const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** Native radios styled as segments, like the theme picker: the browser gives the arrow keys and the checked state. */
 function Choice<T extends string>({
@@ -84,8 +86,11 @@ function Choice<T extends string>({
 
 /** Display choices for this browser. Each applies at once and is remembered (lib/appearance.ts). */
 export function AppearanceSection() {
+  const t = useT();
   const appearance = useAppearance();
-  const weekdays = appearance.weekStartsMonday ? WEEKDAYS : [WEEKDAYS[6], ...WEEKDAYS.slice(0, 6)];
+  const weekdays = (appearance.weekStartsMonday ? WEEKDAYS : [WEEKDAYS[6], ...WEEKDAYS.slice(0, 6)]).map((day) =>
+    t(day),
+  );
   return (
     <SettingsSection
       title="Appearance"
@@ -108,11 +113,10 @@ export function AppearanceSection() {
             options={DENSITIES}
             onChange={(density) => setAppearance({ density })}
           />
-          {/* Placeholder: the language choice comes with issue #254. */}
-          <div className="space-y-1.5">
-            <span className="block text-xs leading-none font-medium text-muted-foreground">Language</span>
-            <p className="text-sm">English. More languages will come here.</p>
+          <div className="max-w-xs">
+            <LanguagePicker />
           </div>
+          <p className="text-sm text-muted-foreground">{t("More languages will come here.")}</p>
         </CardContent>
       </Card>
       <Card>

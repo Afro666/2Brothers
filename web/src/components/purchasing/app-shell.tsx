@@ -23,12 +23,14 @@ import { type ReactNode, useId, useState } from "react";
 
 import type { Api } from "@/api/types";
 import { KitchenLogo } from "@/components/purchasing/kitchen-logo";
+import { LanguagePicker } from "@/components/purchasing/language-picker";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { ThemePicker } from "@/components/purchasing/theme-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useT } from "@/lib/i18n";
 import { usePendingApprovals } from "@/lib/pending-approvals";
 import { ROLE_LABELS, type Role, useRole } from "@/lib/role";
 import { useSession } from "@/lib/session";
@@ -131,11 +133,12 @@ function activeFromPath(items: NavItem[], pathname: string): string | undefined 
 }
 
 function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
+  const t = useT();
   const Icon = item.icon;
   const shared = {
     "aria-current": active ? ("page" as const) : undefined,
     // The count is in the description, so the link keeps its plain name.
-    "aria-description": item.count ? `${item.count} waiting` : undefined,
+    "aria-description": item.count ? t("{count} waiting", { count: item.count }) : undefined,
     onClick: onNavigate,
     className: cn(
       "flex items-center gap-2 rounded-sm border-l-2 font-medium outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/70",
@@ -146,7 +149,7 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
   const content = (
     <>
       <Icon className={item.foot ? "size-3.5" : "size-4"} aria-hidden />
-      <span className="flex-1">{item.label}</span>
+      <span className="flex-1">{t(item.label)}</span>
       {item.count ? (
         <span aria-hidden data-nav-count className="rounded-sm bg-foreground px-1.5 font-mono text-[11px] text-background">
           {item.count}
@@ -166,6 +169,7 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
 }
 
 function SignOutButton() {
+  const t = useT();
   const { signOut } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -183,7 +187,7 @@ function SignOutButton() {
   return (
     <>
       <Button variant="ghost" size="xs" className="text-muted-foreground" disabled={busy} onClick={() => void submit()}>
-        Sign out
+        {t("Sign out")}
       </Button>
       {error ? <span role="alert" className="block text-xs text-destructive">{error}</span> : null}
     </>
@@ -192,10 +196,11 @@ function SignOutButton() {
 
 /** The main entries as a list, then the small foot links in one row at the bottom. */
 function NavList({ items, activeId, onNavigate }: { items: NavItem[]; activeId?: string; onNavigate?: () => void }) {
+  const t = useT();
   const main = items.filter((item) => !item.foot);
   const foot = items.filter((item) => item.foot);
   return (
-    <nav aria-label="Main" className="flex flex-1 flex-col gap-4">
+    <nav aria-label={t("Main")} className="flex flex-1 flex-col gap-4">
       <ul className="space-y-1">
         {main.map((item) => (
           <li key={item.id}>
@@ -221,8 +226,9 @@ function NavList({ items, activeId, onNavigate }: { items: NavItem[]; activeId?:
 
 /** The pages of the current menu entry, as tabs above the page. */
 function SectionTabs({ label, items, activeId }: { label: string; items: NavItem[]; activeId?: string }) {
+  const t = useT();
   return (
-    <nav aria-label={label} className="mb-6 overflow-x-auto">
+    <nav aria-label={t(label)} className="mb-6 overflow-x-auto">
       <ul className="flex gap-1 border-b">
         {items.map((item) => {
           const active = item.id === activeId;
@@ -231,13 +237,13 @@ function SectionTabs({ label, items, activeId }: { label: string; items: NavItem
               <Link
                 to={item.href as LinkProps["to"]}
                 aria-current={active ? "page" : undefined}
-                aria-description={item.count ? `${item.count} waiting` : undefined}
+                aria-description={item.count ? t("{count} waiting", { count: item.count }) : undefined}
                 className={cn(
                   "-mb-px flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/70",
                   active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground",
                 )}
               >
-                {item.label}
+                {t(item.label)}
                 {item.count ? (
                   <span aria-hidden data-nav-count className="rounded-sm bg-foreground px-1.5 font-mono text-[11px] text-background">
                     {item.count}
@@ -254,12 +260,13 @@ function SectionTabs({ label, items, activeId }: { label: string; items: NavItem
 
 /** No login: the viewer picks a role, which also picks the side (Kitchen or Valio). */
 function RolePicker() {
+  const t = useT();
   const { role, setRole } = useRole();
   const id = useId();
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id} className="label-caps">
-        Your role
+        {t("Your role")}
       </Label>
       <Select value={role} onValueChange={(value) => setRole(value as Role)}>
         <SelectTrigger id={id} className="w-full">
@@ -268,7 +275,7 @@ function RolePicker() {
         <SelectContent>
           {(Object.keys(ROLE_LABELS) as Role[]).map((value) => (
             <SelectItem key={value} value={value}>
-              {ROLE_LABELS[value]}
+              {t(ROLE_LABELS[value])}
             </SelectItem>
           ))}
         </SelectContent>
@@ -281,6 +288,7 @@ function RolePicker() {
 function ShellFooter() {
   return (
     <div className="space-y-4">
+      <LanguagePicker />
       <ThemePicker />
     </div>
   );
@@ -304,6 +312,7 @@ function Brand() {
  * follows the viewer's side and highlights the current route.
  */
 export function AppShell({ items, activeId, children }: { items?: NavItem[]; activeId?: string; children: ReactNode }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const { side } = useRole();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -329,7 +338,7 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
       </aside>
 
       <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top,0px))] items-center gap-3 border-b bg-background/95 pt-[env(safe-area-inset-top,0px)] pr-[calc(1rem+env(safe-area-inset-right,0px))] pl-[calc(1rem+env(safe-area-inset-left,0px))] backdrop-blur md:hidden">
-        <Button variant="ghost" size="icon" aria-label="Open menu" onClick={() => setOpen(true)}>
+        <Button variant="ghost" size="icon" aria-label={t("Open menu")} onClick={() => setOpen(true)}>
           <Menu />
         </Button>
         <Brand />
@@ -340,7 +349,7 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
             <SheetTitle>
               <Brand />
             </SheetTitle>
-            <SheetDescription className="sr-only">Main navigation</SheetDescription>
+            <SheetDescription className="sr-only">{t("Main navigation")}</SheetDescription>
           </SheetHeader>
           <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4">
             <RolePicker />

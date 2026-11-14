@@ -3,6 +3,7 @@
  * Valio's server and of the restaurant, whatever the browser's zone is.
  */
 import { getAppearance } from "@/lib/appearance";
+import { getLanguage } from "@/lib/i18n";
 
 /** Valio's "stock not measured" values (docs/valio-data.md). Never show them as stock. */
 export const UNKNOWN_STOCK_SENTINELS: readonly number[] = [999999, 9999999999];
@@ -65,17 +66,41 @@ export function formatStock(amount: number | null | undefined, unit: string): st
   return `${formatNumber(amount as number)} ${unit}`;
 }
 
-const weekdayFmt = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: TZ });
+const weekdayFmt = {
+  en: new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: TZ }),
+  fi: new Intl.DateTimeFormat("fi-FI", { weekday: "short", timeZone: TZ }),
+};
 const dayMonthFmt = new Intl.DateTimeFormat("fi-FI", { day: "numeric", month: "numeric", timeZone: TZ });
 const dateFmt = {
   dmy: new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: TZ }),
   mdy: new Intl.DateTimeFormat("en-US", { weekday: "short", day: "numeric", month: "short", timeZone: TZ }),
 };
+const finnishDayFmt = new Intl.DateTimeFormat("fi-FI", { day: "numeric", timeZone: TZ });
+const finnishMonthNumberFmt = new Intl.DateTimeFormat("fi-FI", { month: "numeric", timeZone: TZ });
+const FINNISH_MONTHS = [
+  "tammik.",
+  "helmik.",
+  "maalisk.",
+  "huhtik.",
+  "toukok.",
+  "kesäk.",
+  "heinäk.",
+  "elok.",
+  "syysk.",
+  "lokak.",
+  "marrask.",
+  "jouluk.",
+];
 
-/** "Sat 14 Nov", "Sat 14.11." or "Sat, Nov 14": the weekday stays English in all three. */
 function dateText(date: Date): string {
+  const language = getLanguage();
   const format = getAppearance().dateFormat;
-  return format === "numeric" ? `${weekdayFmt.format(date)} ${dayMonthFmt.format(date)}` : dateFmt[format].format(date);
+  if (format === "numeric") return `${weekdayFmt[language].format(date)} ${dayMonthFmt.format(date)}`;
+  if (language === "en") return dateFmt[format].format(date);
+  const day = finnishDayFmt.format(date);
+  const month = FINNISH_MONTHS[Number(finnishMonthNumberFmt.format(date)) - 1];
+  const weekday = weekdayFmt.fi.format(date);
+  return format === "dmy" ? `${weekday} ${day}. ${month}` : `${weekday}, ${month} ${day}`;
 }
 
 const timeFmt = new Intl.DateTimeFormat("en-GB", {

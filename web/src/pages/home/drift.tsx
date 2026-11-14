@@ -5,9 +5,10 @@ import { useAsync } from "@/lib/use-async";
 import type { DriftReport, DriftWarning } from "@/types";
 
 import { SampleData } from "@/components/purchasing/sample-data";
+import { useT } from "@/lib/i18n";
 import { Tile, TileState } from "@/pages/home/tile";
 
-const KIND_LABEL: Record<DriftWarning["kind"], string> = {
+export const KIND_LABEL: Record<DriftWarning["kind"], string> = {
   portion_creep: "Portions creeping",
   cost_creep: "Price creeping",
 };
@@ -39,6 +40,7 @@ function DriftList({
   warnings: DriftWarning[];
   showKitchen: boolean;
 }) {
+  const t = useT();
   return (
     <ul className="divide-y text-sm">
       {warnings.map((warning) => (
@@ -57,7 +59,7 @@ function DriftList({
               ) : null}
             </span>
             <span className="text-right font-mono text-[13px] font-medium text-danger">
-              {KIND_LABEL[warning.kind]} +{Math.round(warning.change * 100)}%
+              {t(KIND_LABEL[warning.kind])} +{Math.round(warning.change * 100)}%
             </span>
           </div>
           <p className="text-muted-foreground">{warning.why}</p>
@@ -82,6 +84,7 @@ function DriftTileBody({
   side: "kitchen" | "supplier";
   quiet: string;
 }) {
+  const t = useT();
   // Call by name: an http Api is a Proxy that hands out a new function per read.
   const state = useAsync(
     () =>
@@ -94,10 +97,10 @@ function DriftTileBody({
   if (state.status === "ready" && state.data === null) return null;
   const week =
     state.status === "ready" && state.data
-      ? ` · week of ${formatDate(state.data.week)}`
+      ? ` · ${t("week of {date}", { date: formatDate(state.data.week) })}`
       : "";
   return (
-    <Tile title={`${title}${week}`} href={href} linkLabel={linkLabel}>
+    <Tile title={`${t(title)}${week}`} href={href} linkLabel={t(linkLabel)}>
       <SampleData of={side === "kitchen" ? "getDrift" : "getSupplierDrift"} />
       <TileState<DriftReport>
         status={state.status}
@@ -108,7 +111,7 @@ function DriftTileBody({
       >
         {(report) =>
           report.warnings.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{quiet}</p>
+            <p className="text-sm text-muted-foreground">{t(quiet)}</p>
           ) : (
             <DriftList warnings={report.warnings} showKitchen={showKitchen} />
           )

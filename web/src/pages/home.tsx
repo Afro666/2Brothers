@@ -4,6 +4,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useApi } from "@/api";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n";
 import { useRole } from "@/lib/role";
 import type { Api } from "@/api/types";
 
@@ -22,6 +23,7 @@ function dashboardNow(search: string): Date {
 }
 
 export function HomePage() {
+  const t = useT();
   const api = useApi();
   const { side } = useRole();
   const search = useRouterState({ select: (state) => state.location.searchStr });
@@ -34,12 +36,12 @@ export function HomePage() {
           <div>
             <h1 className="page-title">Kitchen Buyer</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {side === "kitchen" ? "What needs you today." : "Where demand may outrun supply."}
+              {side === "kitchen" ? t("What needs you today.") : t("Where demand may outrun supply.")}
             </p>
           </div>
           {side === "kitchen" ? (
             <Button asChild>
-              <Link to="/requests">Request an order</Link>
+              <Link to="/requests">{t("Request an order")}</Link>
             </Button>
           ) : null}
         </header>
