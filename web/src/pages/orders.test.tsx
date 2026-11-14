@@ -101,6 +101,17 @@ describe("orders pages", () => {
     expect(screen.queryByRole("button", { name: "It was not sent" })).not.toBeInTheDocument();
   });
 
+  it("shows the role explanation to a chef without loading or offering resolution actions", async () => {
+    const chef = createMockApi();
+    await chef.signIn("chef@demo.kitchen", "demo-kitchen-2026");
+    const lookup = vi.spyOn(chef, "getOrderResolution");
+    renderApp("/orders/ORD-1046", chef);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your role cannot resolve orders");
+    expect(lookup).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "It was placed" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "It was not sent" })).not.toBeInTheDocument();
+  });
+
   it("does not offer resolution actions when resolvable is false", async () => {
     const api = createMockApi();
     api.getOrderResolution = async () => ({ ...(await createMockApi().getOrderResolution("ORD-1046")), resolvable: false });
