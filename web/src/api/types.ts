@@ -183,7 +183,8 @@ export interface ShelfPhotoRow {
 export interface ShelfPhotoRead {
   /** The model that read the photo: `nemotron-3.5-super-vl`. */
   model: string;
-  durationMs: number;
+  /** null = the gateway sent no timing: unknown, not zero. */
+  durationMs: number | null;
   rows: ShelfPhotoRow[];
 }
 
@@ -206,7 +207,8 @@ export interface MenuPhotoDish {
 export interface MenuPhotoRead {
   /** The model that read the photo: `nemotron-3.5-super-vl`. */
   model: string;
-  durationMs: number;
+  /** null = the gateway sent no timing: unknown, not zero. */
+  durationMs: number | null;
   from: string;
   to: string;
   dishes: MenuPhotoDish[];
@@ -314,7 +316,8 @@ export interface DeliveryNoteOther extends DeliveryLot {
 export interface DeliveryNoteRead {
   orderId: string;
   model: string;
-  durationMs: number;
+  /** null = the gateway sent no timing: unknown, not zero. */
+  durationMs: number | null;
   orderRef: string;
   deliveryDate: string;
   complete: boolean;
@@ -751,5 +754,12 @@ export class ApiError extends Error {
     this.code = code;
     this.details = details;
     this.status = status;
+  }
+
+  /** Whole seconds to wait on a "busy, try again" error (`retry_after_s`, #1286), if the gateway sent it.
+   * shortcut: also reads `retry_after`, the SUPPLIER_BUSY name before #1286. Remove after one release. */
+  get retryAfterS(): number | undefined {
+    const seconds = this.details.retry_after_s ?? this.details.retry_after;
+    return typeof seconds === "number" && Number.isFinite(seconds) ? seconds : undefined;
   }
 }

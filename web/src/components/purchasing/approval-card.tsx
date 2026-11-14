@@ -22,7 +22,15 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate, formatDateTime, formatEur, formatNumber, formatStock, isStockUnconfirmed } from "@/lib/format";
+import {
+  formatDate,
+  formatDateTime,
+  formatEur,
+  formatNumber,
+  formatStock,
+  formatTime,
+  isStockUnconfirmed,
+} from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { splitChecks, statusChips } from "@/lib/proposal-checks";
 import { cn } from "@/lib/utils";
@@ -75,6 +83,39 @@ function requestDescription(request: ApprovalRequest, t: ReturnType<typeof useT>
 /** Wait this long after the last keystroke before searching addable products. */
 export const ADD_SEARCH_DEBOUNCE_MS = 250;
 
+type CutoffLine = NonNullable<ApprovalRequest["cutoffs"]>[number];
+
+export interface EarliestCutoff {
+  closingTime: string;
+  supplierName: string | null;
+  earliestOf: number | null;
+  passed: boolean;
+  warning: boolean;
+  minutesLeft: number;
+}
+
+export function earliestCutoff(lines: readonly CutoffLine[], now: Date): EarliestCutoff | null {
+  const known = lines.flatMap((line) => {
+    if (line.closingTime == null) return [];
+    const timestamp = new Date(line.closingTime).getTime();
+    return Number.isFinite(timestamp)
+      ? [{ closingTime: line.closingTime, supplierName: line.supplierName, timestamp }]
+      : [];
+  });
+  if (known.length === 0) return null;
+  const earliest = known.reduce((first, line) => line.timestamp < first.timestamp ? line : first);
+  const millisecondsLeft = earliest.timestamp - now.getTime();
+  const passed = millisecondsLeft <= 0;
+  return {
+    closingTime: earliest.closingTime,
+    supplierName: earliest.supplierName,
+    earliestOf: new Set(known.map((line) => line.timestamp)).size > 1 ? known.length : null,
+    passed,
+    warning: passed || millisecondsLeft < 2 * 60 * 60 * 1000,
+    minutesLeft: Math.max(0, Math.floor(millisecondsLeft / 60_000)),
+  };
+}
+
 /** Product pictures in the compact card before "+N". */
 const THUMBS_SHOWN = 4;
 /** Status chips in the compact card; the rest are in Inspect. */
@@ -104,7 +145,7 @@ const CHANGE_ERRORS: Record<string, string> = {
 export function ApprovalCard({
   request,
   order,
-  now = new Date(),
+  now,
   onApprove,
   onReject,
   onChangeProposal,
@@ -132,6 +173,7 @@ export function ApprovalCard({
   const [status, setStatus] = useState(request.status);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [, setClock] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [changeError, setChangeError] = useState<string | null>(null);
   const changing = useRef(false);
@@ -157,7 +199,14 @@ export function ApprovalCard({
   const reasonId = `${baseId}-reason`;
   const inspectId = `${baseId}-inspect`;
   const addId = `${baseId}-add`;
+  const stockBlockId = `${baseId}-stock-block`;
+  const accountBlockId = `${baseId}-account-block`;
   const pending = status === "PENDING";
+  useEffect(() => {
+    if (!pending) return;
+    const timer = window.setInterval(() => setClock((tick) => tick + 1), 60_000);
+    return () => window.clearInterval(timer);
+  }, [pending]);
   // A proposal held by a recall cannot be approved, but it can be rejected to close it.
   const held = status === "BLOCKED_BY_RECALL";
   const canDecide = pending || (held && onReject != null);
@@ -177,12 +226,32 @@ export function ApprovalCard({
     order?.lines.some((line) => isStockUnconfirmed(line.offer))
       ? t("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")
       : null;
+  const clock = now ?? new Date();
+  const cutoff = earliestCutoff(
+    request.cutoffs ?? order?.lines.map((line) => ({ closingTime: line.offer.closingTime, supplierName: null })) ?? [],
+    clock,
+  );
+  // No supplier block names the line: say no name rather than a generic one.
+  const cutoffOrigin = cutoff?.supplierName ? ` · ${t("{supplier}'s cut-off", { supplier: cutoff.supplierName })}` : "";
+  const cutoffEarliest = cutoff?.earliestOf == null ? "" : t(" (earliest of {count})", { count: cutoff.earliestOf });
+  const cutoffTimeLeft = cutoff && !cutoff.passed && cutoff.warning
+    ? cutoff.minutesLeft >= 60
+      ? t("{hours} h {minutes} min left", {
+          hours: Math.floor(cutoff.minutesLeft / 60),
+          minutes: cutoff.minutesLeft % 60,
+        })
+      : cutoff.minutesLeft > 0
+        ? t("{minutes} min left", { minutes: cutoff.minutesLeft })
+        : t("Less than 1 min left")
+    : null;
+  const approveBlockDescription = [stockMessage ? stockBlockId : null, approvalBlockedReason ? accountBlockId : null]
+    .filter(Boolean).join(" ") || undefined;
   const lines = order?.lines ?? [];
   const checks = splitChecks(request.reasons, lines);
   const chips = statusChips({
     request,
     order,
-    now,
+    now: clock,
     heldByRecall: held || recallMessage != null,
     leftOut: checks.leftOut.length,
   });
@@ -339,8 +408,21 @@ export function ApprovalCard({
             ))}
           </ul>
         ) : null}
+        {pending && cutoff ? (
+          <p className={cn("break-words text-sm", cutoff.warning ? "hatch text-warning" : "text-muted-foreground")}>
+            {cutoff.passed
+              ? `${t("The cut-off has passed")}${cutoffOrigin}${cutoffEarliest}`
+              : `${t("Approve before {time}", {
+                  time: `${formatDate(cutoff.closingTime)} ${formatTime(cutoff.closingTime)}`,
+                })}${cutoffOrigin}${cutoffEarliest}${cutoffTimeLeft ? ` · ${cutoffTimeLeft}` : ""}`}
+          </p>
+        ) : null}
         <RecallLines alerts={recalls} />
-        {pending && stockMessage ? <p className="hatch text-sm text-warning">{stockMessage}</p> : null}
+        {pending && stockMessage ? (
+          <p id={stockBlockId} className="hatch text-sm text-warning">
+            {stockMessage}
+          </p>
+        ) : null}
         <div id={inspectId} hidden={!inspecting} className="space-y-5 border-t pt-4">
           {inspecting ? (
             <>
@@ -359,7 +441,7 @@ export function ApprovalCard({
                   ) : null}
                   <ProposalLines
                     lines={order.lines}
-                    now={now}
+                    now={clock}
                     confirmBy="Valio"
                     checks={checks.perLine}
                     leftOut={checks.leftOut}
@@ -509,9 +591,16 @@ export function ApprovalCard({
               {t("Reject")}
             </Button>
             {pending ? (
-              <Button className="w-full sm:w-auto" disabled={busy || !!stockMessage || !!approvalBlockedReason} onClick={() => setOpen("approve")}>
+              <Button
+                className="w-full sm:w-auto"
+                disabled={busy || !!stockMessage || !!approvalBlockedReason}
+                aria-describedby={approveBlockDescription}
+                onClick={() => setOpen("approve")}
+              >
                 <Check aria-hidden />
-                {t("Approve {amount} incl VAT", { amount: formatEur(request.totalInclVat) })}
+                {stockMessage || approvalBlockedReason
+                  ? t("Approve")
+                  : t("Approve {amount} incl VAT", { amount: formatEur(request.totalInclVat) })}
               </Button>
             ) : null}
           </>
@@ -541,7 +630,7 @@ export function ApprovalCard({
           </p>
         )}
         {canDecide && approvalBlockedReason ? (
-          <p className="w-full text-sm text-muted-foreground">{approvalBlockedReason}</p>
+          <p id={accountBlockId} className="w-full text-sm text-muted-foreground">{approvalBlockedReason}</p>
         ) : null}
       </CardFooter>
 

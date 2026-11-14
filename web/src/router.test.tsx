@@ -69,6 +69,8 @@ describe("application routes", () => {
       "Reports",
       "Settings",
       "About",
+      // The open demo (the default mock) is offered sign-in, not sign-out (#1446).
+      "Sign in",
     ]);
     expect(menu.getByRole("link", { name: "Orders" })).toHaveAttribute("aria-current", "page");
     const tabs = within(screen.getByRole("navigation", { name: "Orders" }));

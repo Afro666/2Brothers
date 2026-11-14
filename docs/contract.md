@@ -45,14 +45,18 @@ What a caller sees during a rest:
 
 | Where | Answer |
 |---|---|
-| A route that needs a live Valio price or stock (`get_offer`, creating or changing a proposal, addable products, a supplier offer) | 503 `SUPPLIER_BUSY` with `retry_after` (whole seconds) in the error body and a `Retry-After` header. Nothing is stored. Try again after `retry_after`. |
+| A route that needs a live Valio price or stock (`get_offer`, creating or changing a proposal, addable products, a supplier offer) | 503 `SUPPLIER_BUSY` with `retry_after_s` (whole seconds) in the error body and a `Retry-After` header. Nothing is stored. Try again after `retry_after_s`. |
 | `search_products` with `need_id` | 200; `can_arrive` is `null` (unknown), as for any missing live answer. |
 | Supplier planner view (`/demand`) | 200; availability is unknown, `risk` is `UNKNOWN`; the demand still shows. |
 | Buyer agent | The `get_offer` tool fails, so the run ends `CANNOT_FULFIL` and says the tool failed; nothing is ordered. |
 
 ```json
-{"error": {"code": "SUPPLIER_BUSY", "message": "Valio rate limit: wait 27 s", "retry_after": 27}}
+{"error": {"code": "SUPPLIER_BUSY", "message": "Valio rate limit: wait 27 s", "retry_after_s": 27}}
 ```
+
+`retry_after_s` is the same field as on `LOOKUP_RATE_LIMITED` and `RECALL_CHECK_BUSY`
+(#1286), so a client reads any "busy, try again in N s" error the same way. Gateways
+before #1286 sent `retry_after`; the web reads both names for one release.
 
 ### Shared price and availability request
 
@@ -3597,8 +3601,12 @@ route errors, never an invented empty brief.
 
 ## Learning from kitchen changes and deliveries (#1300)
 
-**Future contract, implemented in stages.** This section does not make every route or field
-available immediately. The existing change route keeps its behaviour until each stage lands.
+**Implemented in stages.** Served so far: change reasons, context and outcomes (#1302),
+delivery results and the one-tap `/received` (#1304), and `GET`/`PUT /learned` with
+correction ratios applied to plan proposals (#1305 phase 2a). In this stage a
+`DECLINED_PRODUCT` fact and a late supplier (`SUPPLIER_LATE` with `on_time_rate` under
+0.7) only add a warning to the plan's `problems`: a declined recipe ingredient is never
+left out silently, and learned lead times do not change safety stock yet.
 Learning adds no model-controlled write endpoint and never changes a typed request quantity.
 
 ### Changes and human feedback

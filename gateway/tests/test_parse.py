@@ -61,6 +61,17 @@ def test_finnish_comma_is_a_decimal_mark():
     assert parse_request("1,000 L lactose-free milk by Monday", FRI).quantity == D(1000)
 
 
+@pytest.mark.parametrize("text,qty,unit,when", [
+    ("1 000 litraa laktoositonta maitoa maanantaiksi", D(1000), "L", MON),
+    ("100 litraa kermaa torstaiksi", D(100), "L", date(2026, 11, 19)),
+    ("400 kpl hedelmäjogurttia perjantaiksi", D(400), "ST", date(2026, 11, 20)),
+])
+def test_finnish_example_chips_parse(text, qty, unit, when):
+    """The exact Finnish chip texts in web/src/i18n/fi/orders.ts (#1222) go to the gateway."""
+    r = parse_request(text, FRI)
+    assert (r.quantity, r.unit, r.requested_date, r.language) == (qty, unit, when, "fi")
+
+
 def test_same_weekday_means_next_week():
     assert parse_request("10 l milk by friday", FRI).requested_date == date(2026, 11, 20)
 

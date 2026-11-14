@@ -293,4 +293,50 @@ Weeks 3–4, means per kitchen-week:
 - **No over-learning:** habit stock-outs do not rise (0.25 → 0.23), and score and lost covers are slightly better.
 - **Short window:** 4 weeks is short. A learned fact needs 3 edits, and a kitchen orders a few times a week.
 
-**Not yet:** part 2 adds the Nemotron arms (the Buyer without memory, and with the kitchen memory of #1308) on the frozen held-out seeds, as in #365. Until then, no claim about Nemotron is made from this table.
+### Part 2: does the kitchen memory help Nemotron? (#1309)
+
+We have only API access to Nemotron 3.5 Super VL, so it is not trained. It gets what the tool learned as **facts in its prompt**, the kitchen memory of #1308 (`agent/memory.py`).
+
+**Two Nemotron arms.** Both use the Buyer of #365 (`nemotron-nothink-v3`: thinking off, with the expected-use calculator), which sizes the order itself:
+- **`nemotron`:** no memory.
+- **`nemotron+memory`:** the same model, plus the facts learned so far from the chef's edits, added to its system prompt.
+  - The facts are correction ratios and declined products, in the memory format.
+  - One benchmark-only line explains what a fact means for its own number: in the product, the engine sizes every line, so this line exists only here.
+
+The chef and the learner are the ones from part 1.
+
+**Three rules keep the comparison fair:**
+- **No leak:** the model's calculator gets the *believed* expected use (recipe × forecast), never the simulation's hidden true use. A test pins this.
+- **The chef judges only its habit products** on a model's proposal. A model quantity that differs from the engine's elsewhere is not counted as a chef edit.
+- **Same conditions for both arms:** the same seeds and the same noise (drawn per seed, day and product).
+
+**Run:**
+
+```
+python -m env.learning_run --seeds 4-5 --weeks 4 --kitchen all --nemotron
+```
+
+This is held-out seeds 4–5 only, all 4 kitchen types, 4 chained weeks, 8 kitchen-weeks per cell. It made paid calls on 2026-11-14: 589,634 tokens without memory and 631,938 with memory, 1.22M in total.
+
+Weeks 3–4, means per kitchen-week:
+
+| Arm | Chef edits | Edits with a reason | Score | Lost covers | Waste | Habit stock-out days |
+|---|---:|---:|---:|---:|---:|---:|
+| engine | 7.62 | 5.31 | 6,706 | 78.5 | 369.4 | 0.00 |
+| engine + learning | 5.81 (−24%) | 3.43 | 6,706 | 78.5 | 369.4 | 0.00 |
+| nemotron | 9.94 | 7.37 | 2,812 | 379.3 | 591.4 | 0.62 |
+| **nemotron + memory** | **5.88 (−41%)** | **3.25 (−56%)** | **2,843** | **379.0** | **568.0** | 0.69 |
+
+**What it shows:**
+- **The memory makes Nemotron's orders need far fewer corrections:** the chef changes 41% less, and 56% less counting only edits with a reason. Score, lost covers and waste stay level or improve slightly.
+- **The memory adds about 7% more tokens.**
+- **Week by week**, edits without memory stay around 9–11, while with memory they drop from 10.6 to 5.0–6.8 as facts accumulate.
+- **No clear over-learning:** habit stock-outs go from 0.62 to 0.69 days, a difference within the noise of 8 kitchen-weeks.
+- **Nemotron is still far behind the engine** on score (2.8k vs 6.7k a week) when it sizes orders itself, as #365 found. That is why the product lets the engine set every quantity, and uses Nemotron to choose products, read photos and explain.
+
+**Limits:**
+- The chef is synthetic.
+- Each cell is 8 kitchen-weeks on two seeds, so the edit reduction is large but measured on a small sample.
+- Week 1 already differs between the arms, from the model's own day-to-day variation.
+
+**The claim this supports:** given the kitchen's learned facts, Nemotron needs about half as many human corrections, on held-out seeds, with no fine-tuning.

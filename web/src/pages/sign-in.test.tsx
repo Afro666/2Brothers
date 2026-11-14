@@ -8,6 +8,7 @@ import { renderApp } from "@/test/render";
 
 afterEach(() => {
   localStorage.clear();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
 
@@ -27,6 +28,47 @@ describe("authentication", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 
+  it("shows the form in the open demo, signs in, and returns to the open demo on sign out", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const getSession = vi.spyOn(api, "getSession");
+    const signOut = vi.spyOn(api, "signOut");
+    const { router } = renderApp("/sign-in", api);
+
+    expect(await screen.findByRole("heading", { name: "Sign in to Kitchen Buyer" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Sign in as Buyer" }));
+    expect(await screen.findByText("Waiting for your approval")).toBeVisible();
+    expect(screen.queryByTestId("open-demo-note")).not.toBeInTheDocument();
+
+    await user.click((await screen.findAllByRole("button", { name: "Sign out" }))[0]);
+
+    expect(await screen.findByTestId("open-demo-note")).toBeVisible();
+    expect(screen.getAllByRole("link", { name: "Sign in" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+    expect(signOut).toHaveBeenCalledOnce();
+    expect(getSession).toHaveBeenCalledTimes(2);
+    expect(router.state.location.pathname).toBe("/");
+  });
+
+  it("after sign-out a failed session read shows the error, not the sign-in page", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    await api.signIn("buyer@demo.kitchen", "demo-kitchen-2026");
+    const getSession = vi.spyOn(api, "getSession");
+    const { router } = renderApp("/", api);
+    const signOut = (await screen.findAllByRole("button", { name: "Sign out" }))[0];
+    getSession.mockRejectedValueOnce(new ApiError("GATEWAY_ERROR", "The gateway answered 503.", {}, 503));
+
+    await user.click(signOut);
+
+    expect(await screen.findByText("The gateway answered 503.")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Sign in to Kitchen Buyer" })).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByTestId("open-demo-note")).toBeVisible();
+    expect(router.state.location.pathname).toBe("/");
+  });
+
   it("shows the gateway error for a wrong password", async () => {
     const user = userEvent.setup();
     renderApp("/", createMockApi({ signedOut: true }));
@@ -39,7 +81,9 @@ describe("authentication", () => {
 
   it("returns to sign-in after signing out", async () => {
     const user = userEvent.setup();
-    const { router } = renderApp("/");
+    const api = createMockApi({ signedOut: true });
+    await api.signIn("buyer@demo.kitchen", "demo-kitchen-2026");
+    const { router } = renderApp("/", api);
     await user.click((await screen.findAllByRole("button", { name: "Sign out" }))[0]);
     expect(await screen.findByRole("heading", { name: "Sign in to Kitchen Buyer" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Open menu" })).not.toBeInTheDocument();
@@ -51,7 +95,8 @@ describe("authentication", () => {
     ["an expired gateway session", new ApiError("UNAUTHENTICATED", "Sign in first", {}, 401)],
   ])("returns to sign-in without an error after sign-out fails with %s", async (_case, error) => {
     const user = userEvent.setup();
-    const api = createMockApi();
+    const api = createMockApi({ signedOut: true });
+    await api.signIn("buyer@demo.kitchen", "demo-kitchen-2026");
     api.signOut = vi.fn().mockRejectedValue(error);
     const { router } = renderApp("/", api);
 
@@ -68,7 +113,8 @@ describe("authentication", () => {
     const { router } = renderApp("/sign-in", createMockApi({ signedOut: true }));
     await user.click(await screen.findByRole("button", { name: "Sign in as Valio planner" }));
     await router.navigate({ to: "/approvals" });
-    const approveButtons = await screen.findAllByRole("button", { name: /^Approve / });
+    // A disabled Approve names no total (#1227); the totals block still does.
+    const approveButtons = await screen.findAllByRole("button", { name: "Approve" });
     expect(approveButtons.length).toBeGreaterThan(0);
     expect(approveButtons.every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
     const rejectButtons = screen.getAllByRole("button", { name: "Reject" });

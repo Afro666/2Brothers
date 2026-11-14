@@ -49,7 +49,7 @@ export function createMockAuth(signedOut = false): Pick<Api, "getSession" | "sig
     },
     async signOut() {
       currentAccount = null;
-      openDemo = false;
+      openDemo = !signedOut;
     },
     async changePassword(current, next) {
       if (!currentAccount) throw new ApiError("UNAUTHENTICATED", "sign in first");

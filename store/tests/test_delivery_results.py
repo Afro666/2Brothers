@@ -262,3 +262,67 @@ def test_failed_selector_write_recovers_without_appending_again(monkeypatch):
     assert created is False and replay["revision"] == 1
     assert database[delivery_results.RESULTS].count_documents({}) == 1
     assert delivery_results.delivery_history(database, "k-1") == [replay]
+
+
+def test_retry_before_insert_preserves_first_snapshot(monkeypatch):
+    database = db()
+    real_insert = mongomock.collection.Collection.insert_one
+    failed = []
+
+    def fail_once(self, *args, **kwargs):
+        if self.name == delivery_results.RESULTS and not failed:
+            failed.append(True)
+            raise AutoReconnect("before result insert")
+        return real_insert(self, *args, **kwargs)
+
+    monkeypatch.setattr(mongomock.collection.Collection, "insert_one", fail_once)
+    with pytest.raises(AutoReconnect):
+        _received(database)
+    replay, created = _received(database, checked_by="chef-2", supplier_id="sup-2",
+                                checked_at=datetime(2026, 11, 18, tzinfo=timezone.utc))
+    assert created is False and replay["revision"] == 1
+    assert replay["checked_by"] == "chef-1" and replay["supplier_id"] == "sup-1"
+    assert replay["checked_at"] == "2026-11-17T08:00:00Z"
+    assert database[delivery_results.RESULTS].count_documents({}) == 1
+    assert delivery_results.delivery_history(database, "k-1") == [replay]
+    assert "observation" not in database[delivery_results.KEYS].find_one()
+
+
+def test_retry_races_before_original_insert_and_returns_same_operation(monkeypatch):
+    database = db()
+    real_insert = mongomock.collection.Collection.insert_one
+    followers = []
+    entered = []
+
+    def racing_insert(self, row, *args, **kwargs):
+        if self.name == delivery_results.RESULTS and row.get("_operation_id") and not entered:
+            entered.append(True)
+            # Force the follower onto a different revision. The operation index, rather
+            # than just the revision's _id, must stop the original insert afterward.
+            _check(database)
+            followers.append(_received(database))
+        return real_insert(self, row, *args, **kwargs)
+
+    monkeypatch.setattr(mongomock.collection.Collection, "insert_one", racing_insert)
+    first, created = _received(database)
+    assert created is True and first["revision"] == 2
+    assert followers == [(first, False)]
+    assert database[delivery_results.RESULTS].count_documents({}) == 2
+    assert database[delivery_results.RESULTS].count_documents({"source": "manual_complete"}) == 1
+    assert "_operation_id" not in first
+    assert delivery_results.delivery_history(database, "k-1") == [first]
+    # Sparse indexing must still allow successive observations without an operation.
+    photo = _check(database)
+    assert photo["revision"] == 3
+
+
+def test_legacy_pending_key_without_snapshot_fails_safely():
+    database = db()
+    delivery_results._ensure_indexes(database)
+    database[delivery_results.KEYS].insert_one({
+        "kitchen_id": "k-1", "idempotency_key": "received-new", "order_id": "order-1",
+        "operation_id": "legacy-operation", "pending": True,
+        "payload_hash": delivery_results._payload_hash("order-1", "2026-11-17", "received-new")})
+    with pytest.raises(RuntimeError, match="no valid stored snapshot"):
+        _received(database)
+    assert database[delivery_results.RESULTS].count_documents({}) == 0

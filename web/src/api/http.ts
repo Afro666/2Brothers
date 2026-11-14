@@ -52,13 +52,23 @@ export const SIGNED_OUT_EVENT = "kitchen-buyer:signed-out";
 /** Sent after a successful sign-in, so the event stream that a 401/403 stopped opens again. */
 export const SIGNED_IN_EVENT = "kitchen-buyer:signed-in";
 
-/** Run before every write, so a read that starts after it never joins a request from before it.
+/** Run before and after every write, so a read that starts after it never joins a request from before
+ * it, nor one that started while the write was in flight.
  * shortcut: an entry is never removed; the app makes one api per page. Remove on dispose if that changes. */
 const beforeWrite = new Set<() => void>([dropKeptAnswers]);
 
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
-  if ((init?.method ?? "GET").toUpperCase() !== "GET") beforeWrite.forEach((drop) => drop());
+  if ((init?.method ?? "GET").toUpperCase() === "GET") return send(baseUrl, path, init);
+  beforeWrite.forEach((drop) => drop());
+  try {
+    return await send(baseUrl, path, init);
+  } finally {
+    beforeWrite.forEach((drop) => drop());
+  }
+}
+
+async function send(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {

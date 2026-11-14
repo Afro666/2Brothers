@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createHttpApi, gatewayRequest, SIGNED_OUT_EVENT } from "@/api/http";
+import { ApiError } from "@/api/types";
 import { auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
 import { renderApp } from "@/test/render";
 
@@ -323,6 +324,23 @@ describe("createHttpApi", () => {
     ).rejects.toMatchObject({ code, status });
   });
 
+  // #1286: SUPPLIER_BUSY sends `retry_after_s`, as LOOKUP_RATE_LIMITED does. A gateway from before
+  // #1286 sends `retry_after`; the web reads both for one release.
+  it.each([
+    [{ retry_after_s: 27 }, 27],
+    [{ retry_after: 12 }, 12],
+    [{ retry_after_s: 27, retry_after: 12 }, 27],
+    [{}, undefined],
+    [{ retry_after_s: "soon" }, undefined],
+  ])("reads the wait of a busy answer (%o)", async (extra, seconds) => {
+    gateway({ [`POST ${K}/proposals/prop-1/change`]: () => error(503, "SUPPLIER_BUSY", extra) });
+    const refused = await createHttpApi("/api")
+      .changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human")
+      .catch((reason: unknown) => reason);
+    expect(refused).toBeInstanceOf(ApiError);
+    expect((refused as ApiError).retryAfterS).toBe(seconds);
+  });
+
   it("reads standing-order drift from the gateway for the kitchen and for the supplier", async () => {
     const warning = {
       product_id: "460008",
@@ -533,6 +551,27 @@ describe("createHttpApi", () => {
       void api.listApprovals();
       // The request form, the offers and the planning screens send their writes through gatewayRequest.
       await gatewayRequest("/api", "/v1/kitchens/demo-kitchen/proposals", { method: "POST", body: "{}" });
+      void api.listApprovals();
+      expect(calls.filter((call) => call === `GET ${K}/proposals`)).toHaveLength(2);
+      expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);
+    });
+
+    it("does not reuse a GET that started while a POST was in flight", async () => {
+      const calls: string[] = [];
+      let finishPost: () => void = () => {};
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === `POST ${K}/proposals`) {
+          return new Promise<Response>((reply) => (finishPost = () => reply(new Response("{}"))));
+        }
+        return new Promise<Response>(() => {});
+      });
+      const api = createHttpApi("/api");
+      const write = gatewayRequest("/api", "/v1/kitchens/demo-kitchen/proposals", { method: "POST", body: "{}" });
+      void api.listApprovals();
+      finishPost();
+      await write;
       void api.listApprovals();
       expect(calls.filter((call) => call === `GET ${K}/proposals`)).toHaveLength(2);
       expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);

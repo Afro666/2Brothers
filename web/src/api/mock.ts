@@ -44,6 +44,7 @@ import {
 } from "@/mocks/milk-case";
 import { formatEur } from "@/lib/format";
 import { isPassed, isUnknownStock } from "@/lib/format";
+import { dropKeptAnswers } from "@/lib/use-async";
 import type {
   AddableProduct,
   ApprovalRequest,
@@ -296,7 +297,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
 
   const auth = createMockAuth(options.signedOut);
 
-  return {
+  return forgetKeptAnswersOnWrite({
     subscribeEvents() {
       return () => {};
     },
@@ -662,5 +663,21 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     async getMandate() {
       return mandate;
     },
-  };
+  });
+}
+
+/** Methods that only read: every other method changes the demo state. */
+const READ_ONLY = /^(get|list|search|lookup|subscribe|count|verify|read)[A-Z]/;
+
+/** Like `beforeWrite` in api/http.ts: every mock write forgets the kept `useAsync` answers first. */
+function forgetKeptAnswersOnWrite<T extends object>(api: T): T {
+  const wrapped = { ...api } as Record<string, unknown>;
+  for (const [name, method] of Object.entries(api)) {
+    if (typeof method !== "function" || READ_ONLY.test(name)) continue;
+    wrapped[name] = (...args: unknown[]) => {
+      dropKeptAnswers();
+      return (method as (...args: unknown[]) => unknown).apply(wrapped, args);
+    };
+  }
+  return wrapped as T;
 }

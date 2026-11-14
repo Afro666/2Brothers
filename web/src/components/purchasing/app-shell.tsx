@@ -34,7 +34,7 @@ import { useT } from "@/lib/i18n";
 import { usePendingApprovals } from "@/lib/pending-approvals";
 import { ROLE_LABELS, type Role, useRole } from "@/lib/role";
 import { useSession } from "@/lib/session";
-import { getTelegramWebApp } from "@/lib/telegram";
+import { inTelegram, readyTelegram } from "@/lib/telegram";
 import { cn } from "@/lib/utils";
 
 export interface NavItem {
@@ -171,7 +171,7 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
 
 function SignOutButton() {
   const t = useT();
-  const { signOut } = useSession();
+  const { session, signOut } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function submit() {
@@ -184,6 +184,13 @@ function SignOutButton() {
     } finally {
       setBusy(false);
     }
+  }
+  if (session?.kind === "human" && !session.email) {
+    return (
+      <Button asChild variant="ghost" size="xs" className="text-muted-foreground">
+        <Link to="/sign-in">{t("Sign in")}</Link>
+      </Button>
+    );
   }
   return (
     <>
@@ -318,10 +325,9 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
   const { side } = useRole();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { count: waiting } = usePendingApprovals();
-  const telegram = getTelegramWebApp();
+  const telegram = inTelegram();
   useEffect(() => {
-    telegram?.ready();
-    telegram?.expand();
+    if (telegram) readyTelegram();
   }, [telegram]);
   const base = items ?? (side === "valio" ? VALIO_NAV : KITCHEN_NAV);
   // Only the kitchen's own menu shows what waits; zero or unknown shows no badge.

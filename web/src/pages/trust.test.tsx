@@ -22,6 +22,43 @@ describe("trust page", () => {
     expect(button.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("checks the chain when the page opens and checks again from the button", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const verify = vi.spyOn(api, "verifyAuditChain");
+    renderApp("/trust", api);
+
+    const initialResult = await screen.findByText("Chain OK: 8 lines checked");
+    expect(initialResult).toBeInTheDocument();
+    const result = within(initialResult.closest("[role=status]") as HTMLElement);
+    expect(verify).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Verify audit chain" }));
+    await vi.waitFor(() => expect(verify).toHaveBeenCalledTimes(2));
+    expect(result.getByText("Chain OK: 8 lines checked")).toBeInTheDocument();
+  });
+
+  it("shows the existing error state when the opening check fails", async () => {
+    const api = createMockApi();
+    api.verifyAuditChain = async () => {
+      throw new ApiError("NETWORK", "Could not reach the gateway.");
+    };
+    renderApp("/trust", api);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not reach the gateway.");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByText(/Chain OK/)).not.toBeInTheDocument();
+  });
+
+  it("shows loading instead of an unchecked result during the opening check", async () => {
+    const api = createMockApi();
+    api.verifyAuditChain = () => new Promise(() => {});
+    renderApp("/trust", api);
+
+    expect(await screen.findByText("Loading audit lines")).toBeInTheDocument();
+    expect(screen.queryByText("Not checked yet.")).not.toBeInTheDocument();
+  });
+
   it("verifies, shows the break on the tampered line, and is OK again after restore", async () => {
     const user = userEvent.setup();
     renderApp("/trust");
@@ -30,7 +67,7 @@ describe("trust page", () => {
     expect(screen.getByText("Sample data")).toBeInTheDocument();
     expect(screen.queryByText(/MongoDB Atlas/)).not.toBeInTheDocument();
     const result = within(screen.getByRole("status"));
-    expect(result.getByText("Not checked yet.")).toBeInTheDocument();
+    expect(await result.findByText("Chain OK: 8 lines checked")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Verify audit chain" }));
     expect(await result.findByText("Chain OK: 8 lines checked")).toBeInTheDocument();
@@ -57,7 +94,6 @@ describe("trust page", () => {
   });
 
   it("says so when the break is in another kitchen's entry", async () => {
-    const user = userEvent.setup();
     const api = createMockApi();
     api.verifyAuditChain = async () => ({
       ok: false,
@@ -68,15 +104,13 @@ describe("trust page", () => {
       checkedAt: "2026-11-14T10:00:00Z",
     });
     renderApp("/trust", api);
-    await user.click(await screen.findByRole("button", { name: "Verify audit chain" }));
-    const result = within(screen.getByRole("status"));
     expect(
-      await result.findByText("The break is in another kitchen's entry (the demo), not in yours"),
+      await screen.findByText("The break is in another kitchen's entry (the demo), not in yours"),
     ).toBeInTheDocument();
     expect(
-      result.getByText(/It is line 412 of the shared log\. 57 of the lines are this kitchen's\./),
+      screen.getByText(/It is line 412 of the shared log\. 57 of the lines are this kitchen's\./),
     ).toBeInTheDocument();
-    expect(result.queryByText(/Chain broken/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Chain broken/)).not.toBeInTheDocument();
   });
 
   it("says a refused tamper in plain words", async () => {
@@ -86,6 +120,7 @@ describe("trust page", () => {
       throw new ApiError("DEMO_ONLY", "demo_only");
     };
     renderApp("/trust", api);
+    expect(await screen.findByText("Chain OK: 8 lines checked")).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Tamper with one line" }));
     expect(await screen.findByText("The tamper demo only runs on the demo kitchen.")).toBeInTheDocument();
   });

@@ -2,7 +2,7 @@
 Never a host, key, status code or upstream error text."""
 from datetime import datetime, timezone
 import json
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 from types import SimpleNamespace
 
@@ -55,3 +55,26 @@ def test_health_needs_no_token_and_never_calls_valio():
     for _ in range(5):
         assert client.get("/health").status_code == 200
     assert calls == []
+
+
+def _last_call(transport):
+    valio = ValioClient("secret-test-key", transport=transport, now=lambda: NOW, retries=0, ttl=0)
+    try:
+        valio.ping()
+    except ValioError:
+        pass
+    return client_for(valio).get("/health").json()
+
+
+def test_a_network_error_says_unreachable():
+    def down(path, payload, headers):
+        raise URLError("no route to valio-host")
+    body = _last_call(down)
+    assert body["valio_reachable"] is False and body["valio_checked_at"] == NOW.isoformat()
+
+
+def test_invalid_json_says_reachable_with_its_time():
+    def broken(path, payload, headers):
+        raise ValueError("Expecting value")
+    body = _last_call(broken)
+    assert body["valio_reachable"] is True and body["valio_checked_at"] == NOW.isoformat()

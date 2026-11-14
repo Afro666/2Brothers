@@ -161,6 +161,8 @@ export interface OrderReceipt {
   total: number | null;
   /** `supplier_outcome` claim: `NOT_SENT` today; null when the claim is absent. */
   supplierOutcome: string | null;
+  /** `supplier_note` claim: the gateway's one-line explanation; null when absent or empty. */
+  supplierNote: string | null;
 }
 
 export type OrderSendOutcome = "CONFIRMED" | "NOT_SENT" | "UNCONFIRMED" | "SENT_READ_FAILED";
@@ -227,6 +229,8 @@ export interface ApprovalRequest {
   totalInclVat: number;
   reasons: MandateReason[];
   suppliersToConfirm: { supplierId: string; name: string }[];
+  /** Proposal-line cut-offs and the supplier block each line belongs to. */
+  cutoffs?: { closingTime: OrderLine["offer"]["closingTime"]; supplierName: string | null }[];
   /** Only PENDING can be approved; IN_PROGRESS and BLOCKED_BY_RECALL wait, they are not decided. */
   status: "PENDING" | "IN_PROGRESS" | "BLOCKED_BY_RECALL" | "APPROVED" | "REJECTED";
   /** The baskets the engine offers for this request; absent or empty when it offers one. */

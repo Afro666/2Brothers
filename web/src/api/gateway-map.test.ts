@@ -50,6 +50,7 @@ describe("mapApproval", () => {
         },
       ],
       suppliersToConfirm: [],
+      cutoffs: [{ closingTime: null, supplierName: null }],
       status: "PENDING",
       options: [],
       modelTrace: null, // no model_trace on this proposal (#1197)
@@ -78,6 +79,50 @@ describe("mapApproval", () => {
     const sentence = "Valio must confirm stock for: Valio Eila 3 % 1 L.";
     const result = mapApproval({ ...proposal, mandate: { ...proposal.mandate, reasons: [sentence] } });
     expect(result.reasons.map((reason) => reason.rule)).toContain(sentence);
+  });
+
+  it("maps each line's closing time and the name of its supplier block", () => {
+    const closingTime = "2026-11-15T17:00:00+02:00";
+    const result = mapApproval({
+      ...proposal,
+      lines: [{ ...proposal.lines[0], closing_time: closingTime }],
+      blocks: [{ supplier_id: "sup-valio", name: "Valio Aimo", lines: proposal.lines }],
+    });
+    expect(result.cutoffs).toEqual([{ closingTime, supplierName: "Valio" }]);
+  });
+
+  it("uses product names and plain sentences for known reason codes, leaving unknown codes alone", () => {
+    const result = mapApproval({
+      ...proposal,
+      lines: [{ ...proposal.lines[0], product_name: "Oat drink 1 L" }],
+      excluded: [{ product_id: "461332", name: "Coffee 500 g", reason: "BLOCKED_BY_RECALL" }],
+      mandate: {
+        ...proposal.mandate,
+        warnings: [],
+        reasons: [
+          "461332: BLOCKED_BY_RECALL",
+          "900001: order cut-off has passed for this delivery",
+          "900001: pack size unknown; check the pack",
+          "CLOSING_PASSED",
+          "STOCK_UNKNOWN",
+          "PACK_SIZE_UNKNOWN",
+          "NEW_GATEWAY_REASON",
+          "777777: NEW_LINE_CODE",
+        ],
+      },
+    });
+    expect(result.reasons.map(({ rule, detail }) => ({ rule, detail }))).toEqual([
+      { rule: "Coffee 500 g: Blocked by a recall. A product on this order matches a food recall. It cannot be approved.", detail: "" },
+      { rule: "Oat drink 1 L: order cut-off has passed for this delivery", detail: "" },
+      { rule: "Oat drink 1 L: pack size unknown; check the pack", detail: "" },
+      // A bare known code is a title and a detail, as CHECK_CODES are, so both have Finnish.
+      { rule: "Order cut-off passed", detail: "The supplier's cut-off for this delivery date has passed." },
+      { rule: "Stock not confirmed", detail: "The supplier does not report stock for some lines. They confirm it later." },
+      { rule: "PACK_SIZE_UNKNOWN", detail: "" },
+      { rule: "NEW_GATEWAY_REASON", detail: "" },
+      // #1142: a code after a product id is still put in words, even an unknown one.
+      { rule: "777777: New line code. The gateway flagged this. Check the order before you approve.", detail: "" },
+    ]);
   });
 
   it("uses no supplier confirmations when blocks are missing", () => {
@@ -182,6 +227,11 @@ describe("mapApproval", () => {
     const approval = mapApproval(refused, [{ kind: "proposal_created", proposal_id: "prop-1", actor: "chef@kitchen.example" }]);
     expect(approval.requestedBy).toBe("chef@kitchen.example");
     expect(approval.reasons[0].rule).toBe("472710: Excluded allergen: the kitchen excludes AN");
+    const named = mapApproval({
+      ...refused,
+      lines: [{ ...proposal.lines[0], product_id: "472710", product_name: "Milk 1 L" }],
+    });
+    expect(named.reasons[0].rule).toBe("Milk 1 L: Excluded allergen: the kitchen excludes AN");
   });
 
   it("lists ALLERGEN_DATA_MISSING under what to check, from a line or the mandate", () => {
@@ -506,11 +556,12 @@ describe("mapOrder", () => {
       signedAt: new Date(1_763_107_200_000).toISOString(),
       total: 91.2,
       supplierOutcome: null,
+      supplierNote: null,
     });
     expect(mapOrder(null, { ...placedOrder, receipt: null }).receipt).toBeNull();
     expect(mapOrder(null, placedOrder).receipt).toBeNull();
     expect(mapOrder(null, { ...placedOrder, receipt: "not-a-jws" }).receipt).toEqual({
-      jws: "not-a-jws", approvedBy: null, signedAt: null, total: null, supplierOutcome: null,
+      jws: "not-a-jws", approvedBy: null, signedAt: null, total: null, supplierOutcome: null, supplierNote: null,
     });
     expect(mapOrder(proposal, null).receipt).toBeUndefined();
   });

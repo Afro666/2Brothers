@@ -23,6 +23,7 @@ from typing import Any, Literal
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from gateway.service import Gateway, GatewayError
 from gateway.valio_client import ValioBusy
@@ -187,7 +188,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     async def _supplier_busy(_: Request, exc: ValioBusy) -> JSONResponse:
         return JSONResponse(status_code=503, headers={"Retry-After": str(exc.retry_after)},
                             content={"error": {"code": "SUPPLIER_BUSY", "message": str(exc),
-                                               "retry_after": exc.retry_after}})
+                                               "retry_after_s": exc.retry_after}})   # #1286
 
     @app.exception_handler(ValueError)
     async def _invalid(_: Request, exc: ValueError) -> JSONResponse:
@@ -328,15 +329,17 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need("kitchen:propose", kitchen_id)
         data = await body(request)
         data.pop("buyer_down", None)          # set by the gateway only, never by the client
+        # Gateway work that can call Valio runs in a worker thread: the limiter's wait
+        # (Gate.acquire, a blocking sleep) must never freeze the event loop (#1280).
         if 'needs' in data:
-            return gw().create_proposal(kitchen_id, data, who.name)    # the list body (#1375)
+            return await run_in_threadpool(gw().create_proposal, kitchen_id, data, who.name)   # list body (#1375)
         if 'text' in data and 'product_ids' not in data:
             several = gw().prepare_several(kitchen_id, data)
             if several is not None:
                 return several.get("replay") or await split_and_propose(kitchen_id, data, several["day"], who.name)
             # A request the kitchen's allergen rule removes ends here, with the reason (#974):
             # the Buyer would only see what the rule left and propose another kind of product.
-            refused = gw().refuse_excluded(kitchen_id, data, who.name)
+            refused = await run_in_threadpool(gw().refuse_excluded, kitchen_id, data, who.name)
             if refused is not None:
                 return refused
             from gateway.buyer_worker import run_buyer
@@ -357,7 +360,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
                     if exc.code == "BUYER_TIMEOUT":
                         buyer_breaker.trip()
                         data["buyer_down"] = True
-        return gw().create_proposal(kitchen_id, data, who.name)
+        return await run_in_threadpool(gw().create_proposal, kitchen_id, data, who.name)
 
     async def split_and_propose(kitchen_id: str, data: dict, day: str, actor: str) -> dict:
         """Several products in one text (#1375): Nemotron splits it, plain code checks the
@@ -391,7 +394,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         body = {"needs": needs, "requested_date": day, "idempotency_key": data["idempotency_key"], "text": text}
         if data.get("event") is True:
             body["event"] = True
-        return gw()._create_list(kitchen_id, body, actor, split_by=split_by)
+        return await run_in_threadpool(gw()._create_list, kitchen_id, body, actor, split_by=split_by)
 
     @app.get(k + "/proposals")
     def list_proposals(kitchen_id: str, who: Principal = Depends(principal)):
@@ -443,8 +446,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     async def approve(kitchen_id: str, proposal_id: str, request: Request, who: Principal = Depends(principal)):
         # A person: a signed-in approver, or a personal approval token (decision 2026-11-14).
         who.need("kitchen:read", kitchen_id)
-        return gw().approve(kitchen_id, proposal_id, await body(request), human=who.approver,
-                            via=who.via_audit)
+        return await run_in_threadpool(gw().approve, kitchen_id, proposal_id, await body(request),
+                                       human=who.approver, via=who.via_audit)
 
     @app.post(k + "/proposals/{proposal_id}/reject")
     async def reject(kitchen_id: str, proposal_id: str, request: Request, who: Principal = Depends(principal)):
@@ -457,7 +460,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
                             who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
         from gateway import options
-        return options.choose(gw(), kitchen_id, proposal_id, await body(request), human=who.human)
+        return await run_in_threadpool(options.choose, gw(), kitchen_id, proposal_id, await body(request),
+                                       human=who.human)
 
     @app.post(k + "/proposals/{proposal_id}/change", openapi_extra=document_body(ChangeProposalRequest))
     async def change_proposal(kitchen_id: str, proposal_id: str, request: Request,
@@ -465,8 +469,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         # A person or an agent may change a proposal (#303); only a person approves it.
         who.need("kitchen:propose", kitchen_id)
         from gateway import change
-        return change.change(gw(), kitchen_id, proposal_id, await body(request), actor=who.name,
-                             person=who.name if who.kind == "human" else None)
+        return await run_in_threadpool(change.change, gw(), kitchen_id, proposal_id, await body(request),
+                                       actor=who.name, person=who.name if who.kind == "human" else None)
 
     @app.post(k + "/recalls/{event_id}/dismiss")
     async def dismiss_recall(kitchen_id: str, event_id: str, request: Request, who: Principal = Depends(principal)):
@@ -716,13 +720,13 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         mode = data.get("mode")      # the Catalog page's "Search by meaning" switch (#1382)
         if mode is not None and mode not in ("text", "hybrid"):
             raise GatewayError(422, "INVALID_REQUEST", 'mode: "text" or "hybrid"')
-        return gw().tool_search(kitchen(who), data.get("query") or "", data.get("filters") or {}, limit,
-                                need_id, mode)
+        return await run_in_threadpool(gw().tool_search, kitchen(who), data.get("query") or "",
+                                       data.get("filters") or {}, limit, need_id, mode)
 
     @app.post("/tools/get_offer", openapi_extra=document_body(GetOfferRequest))
     async def get_offer(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose")
-        return gw().tool_get_offer(kitchen(who), await body(request))
+        return await run_in_threadpool(gw().tool_get_offer, kitchen(who), await body(request))
 
     @app.post("/tools/simulate_order", openapi_extra=document_body(SimulateOrderRequest))
     async def simulate(request: Request, who: Principal = Depends(principal)):
@@ -760,8 +764,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         if not isinstance(proposal_id, str) or not proposal_id:
             raise GatewayError(422, "INVALID_REQUEST", "proposal_id is required")
         from gateway import change
-        return change.change(gw(), kitchen(who), proposal_id, data, actor=who.name,
-                             person=who.name if who.kind == "human" else None)
+        return await run_in_threadpool(change.change, gw(), kitchen(who), proposal_id, data, actor=who.name,
+                                       person=who.name if who.kind == "human" else None)
 
     @app.post("/audit/events")
     async def audit_ingest(request: Request, who: Principal = Depends(principal)):
@@ -818,6 +822,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     # Kitchen planning routes (#74): stock, products, recipes, menu plans, suppliers, demand.
     from gateway.kitchen_routes import register as register_kitchen_routes
     register_kitchen_routes(app, gw, principal, body)
+    from gateway.learned import mount_learned   # learned facts for one kitchen (#1305-#1307)
+    mount_learned(app, gw, principal, body)
 
     # Count from a shelf photo (#373): Nemotron VL reads it in the worker; stores no count.
     from gateway.stock_photo import mount_stock_photo

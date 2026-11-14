@@ -58,6 +58,7 @@ describe("ApprovalsPage", () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => {
     delete window.Telegram;
+    delete window.TelegramWebviewProxy;
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -132,6 +133,23 @@ describe("ApprovalsPage", () => {
     expect(close).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("in a phone's Telegram web view without Telegram.WebApp, hides the menu and posts the close", async () => {
+    const postEvent = vi.fn();
+    window.TelegramWebviewProxy = { postEvent };
+    renderApp("/approvals?proposal=APR-312", withConfirmedStock());
+
+    fireEvent.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
+    expect(screen.queryByRole("button", { name: "Open menu" })).not.toBeInTheDocument();
+    expect(postEvent).toHaveBeenCalledWith("web_app_ready", "{}");
+    vi.useFakeTimers();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Yes, approve €148.76" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(postEvent).toHaveBeenCalledWith("web_app_close", "{}");
   });
 
   it("keeps the Mini App open when the gateway refuses the approval", async () => {
