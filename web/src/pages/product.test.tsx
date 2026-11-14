@@ -26,7 +26,7 @@ describe("product page", () => {
     const allergens = section("Allergens");
     expect(within(allergens).getByText("Fish")).toBeInTheDocument();
     expect(within(allergens).getByText("none declared")).toBeInTheDocument();
-    expect(within(allergens).getByText("Gluten")).toBeInTheDocument();
+    expect(within(allergens).getByText("Gluten cereals")).toBeInTheDocument();
 
     const price = section("Price, stock and VAT");
     expect(within(price).getByText("13.5 %")).toBeInTheDocument();

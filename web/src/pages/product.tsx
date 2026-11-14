@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { useApi } from "@/api";
 import type { NutrientKey, ProductPage, ProductPageAllergen, ProductPageSupplier, Texts } from "@/api/http-product-page";
-import { ALLERGEN_NAMES } from "@/api/http-catalog";
+import { allergenName } from "@/lib/allergens";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { LabelChip } from "@/components/purchasing/chips";
 import { EmptyState } from "@/components/purchasing/empty-state";
@@ -58,12 +58,6 @@ export function nextOrderCutoff(supplier: Pick<ProductPageSupplier, "orderDays" 
 function pick(texts: Texts, language: string): string | null {
   if (!texts) return null;
   return (language === "fi" ? texts.fi : undefined) ?? texts.en ?? texts.fi ?? texts.sv ?? null;
-}
-
-/** The name of an allergen code from the repo's table (as on the Catalog cards); a code in no table is named as such. */
-function allergenName(allergen: ProductPageAllergen, t: ReturnType<typeof useT>): string {
-  const name = Object.hasOwn(ALLERGEN_NAMES, allergen.code) ? ALLERGEN_NAMES[allergen.code] : null;
-  return name ? t(name) : t("Other allergen ({code})", { code: allergen.code });
 }
 
 /**
@@ -144,7 +138,7 @@ function Allergens({ allergens }: { allergens: ProductPage["allergens"] }) {
         ) : (
           list.map((allergen) => (
             <span key={allergen.code} className={cn(CHIP, tone)}>
-              {allergenName(allergen, t)}
+              {allergenName(allergen.code, t)}
             </span>
           ))
         )}
