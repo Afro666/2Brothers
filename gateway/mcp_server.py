@@ -1,4 +1,4 @@
-"""Seven MCP tools backed by the team gateway HTTP contract."""
+"""Eight MCP tools backed by the team gateway HTTP contract. None of them approves."""
 from __future__ import annotations
 
 import argparse
@@ -24,6 +24,15 @@ class SearchFilters(BaseModel):
     exclude_allergens: list[Annotated[str, Field(min_length=1, max_length=50)]] = Field(
         default_factory=list,
         description='Allergen names or GS1 codes to exclude, e.g. "milk" or "AM".')
+
+
+class LineQuantity(BaseModel):
+    """One product and its quantity in the product's sales unit (the `unit` of its line)."""
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: Identifier
+    quantity: Annotated[str, Field(pattern=r"^\d{1,7}(\.\d{1,3})?$",
+                                   description="Decimal string in the line's sales unit; 0 removes the line.")]
 
 
 class GatewayError(RuntimeError):
@@ -130,6 +139,20 @@ def build_server(gateway: GatewayClient) -> FastMCP:
     async def get_audit_log(run_id: Identifier) -> dict:
         """Read the run's audit events. The agent cannot alter audit history or approve decisions."""
         return await gateway.request("GET", "/tools/get_audit_log", params={"run_id": run_id})
+
+    change = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
+
+    @server.tool(annotations=change)
+    async def change_proposal(proposal_id: Identifier, idempotency_key: Identifier,
+                              lines: Annotated[list[LineQuantity], Field(max_length=200)] | None = None,
+                              add: Annotated[list[LineQuantity], Field(max_length=200)] | None = None) -> dict:
+        """Change a READY proposal: set a line's quantity in its sales unit (0 removes it) in lines, or add a product from the proposal's addable list in add. Use only quantities the person said; never invent one. The gateway re-quotes live, rounds to the lot size and returns the proposal with a new offer_id and expected_total. This approves and places nothing: a person approves the new exact total in the inbox."""
+        payload = {"proposal_id": proposal_id, "idempotency_key": idempotency_key}
+        if lines:
+            payload["lines"] = [entry.model_dump() for entry in lines]
+        if add:
+            payload["add"] = [entry.model_dump() for entry in add]
+        return await gateway.request("POST", "/tools/change_proposal", payload=payload)
 
     return server
 

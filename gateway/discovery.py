@@ -53,6 +53,9 @@ SKILLS = (
     ("place_order", "POST", "/tools/place_order", "kitchen:propose", "Read the approved order",
      "Returns the order only after a person approved the proposal; otherwise 403 NEEDS_APPROVAL.",
      ["order"]),
+    ("change_proposal", "POST", "/tools/change_proposal", "kitchen:propose", "Change a proposal",
+     "Set a line's quantity (0 removes it) or add a product from the addable list of a READY proposal. "
+     "Re-quotes live; a person approves the new total.", ["proposal", "change"]),
     ("get_order_status", "GET", "/tools/get_order_status", "kitchen:read", "Order status",
      "Read the status and outcome of an order.", ["order", "status"]),
     ("get_audit_log", "GET", "/tools/get_audit_log", "kitchen:read", "Audit log",
@@ -231,7 +234,8 @@ def llms_txt(d: dict) -> str:
         + (" on " + ", ".join(f"`{h['method']} {h['path']}`" for h in d["human_only"]) if d["human_only"] else "")
         + ". There is no MCP tool for them.",
         "- Totals come from simulate. Quote `expected_total` and line totals exactly as the gateway returns them; never compute or round your own.",
-        "- Quantities come from the stored need. `get_offer` and `simulate_order` take no quantity.",
+        "- Quantities come from the stored need. `get_offer` and `simulate_order` take no quantity. "
+        "`change_proposal` takes only a quantity the person said in the chat; the engine rounds it to the lot size.",
         "- Idempotency keys: every write that creates something takes a nonempty `idempotency_key` in the JSON body (not a header). "
         "The same key with the same body returns the stored result; the same key with another body gives 409 `IDEMPOTENCY_KEY_REUSED`.",
         "- After a timeout on a write, read the state before you send again; never resend blindly.",
