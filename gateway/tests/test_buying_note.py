@@ -75,6 +75,43 @@ def test_pick_orders_short_by_shortage_then_unknown_and_drops_kitchen_detail():
     assert len(many) == 8 and many[0]["product_id"] == "11"
 
 
+@pytest.mark.parametrize("unit, expected", [
+    ("PCS", ["6024", "230", "5795"]),
+    ("ST", ["6024", "230", "5795"]),
+    ("KG", ["6024.1", "229.5", "5794.6"]),
+    ("L", ["6024.1", "229.5", "5794.6"]),
+])
+@pytest.mark.parametrize("lang", ["en", "fi"])
+def test_note_rounds_once_for_model_and_checker_without_changing_source(unit, expected, lang):
+    source = {**ROWS[0], "unit": unit, "demand": "6024.083", "available": "229.5",
+              "shortage": "5794.583", "suggested_buy": "5794.583"}
+    before = copy.deepcopy(source)
+    rows = pick([source])
+    assert [rows[0][k] for k in ("demand", "available", "suggested_buy")] == expected
+    nums = [v.replace(".", ",") if lang == "fi" else v for v in expected]
+    text = (f"Tarve {nums[0]} {unit}, saatavilla {nums[1]} {unit}, osta {nums[2]} {unit}."
+            if lang == "fi" else f"Demand {nums[0]} {unit}, available {nums[1]} {unit}, buy {nums[2]} {unit}.")
+    answer = {"lines": [{"row": 0, "product_id": source["product_id"], "text": text, "numbers": nums}]}
+    note, dropped = check(answer, rows, lang)
+    assert dropped is None and len(note) == 1
+    assert source == before
+    unrounded = "6024,083" if lang == "fi" else "6024.083"
+    answer["lines"][0].update(text=f"{unrounded} {unit}", numbers=[unrounded])
+    assert check(answer, rows, lang) == (None, "NUMBER_NOT_IN_ROW")
+
+
+def test_note_rounding_preserves_unknowns_kitchen_count_and_original_priority():
+    unknown = {**ROWS[2], "unit": "PCS", "demand": "380.5", "available": None,
+               "shortage": None, "suggested_buy": None, "kitchens": 3}
+    short = {**ROWS[0], "unit": "L", "product_id": "a", "shortage": "10.01"}
+    larger = {**short, "product_id": "z", "shortage": "10.04"}
+    rows = pick([unknown, short, larger])
+    assert [r["product_id"] for r in rows] == ["z", "a", unknown["product_id"]]
+    assert rows[0]["shortage"] == rows[1]["shortage"] == "10"
+    assert rows[2]["demand"] == "381" and rows[2]["kitchens"] == 3
+    assert all(rows[2][k] is None for k in ("available", "shortage", "suggested_buy"))
+
+
 def test_a_correct_number_moved_to_another_product_drops_the_note():
     """Aron's review: "1250 L" is a real number, but of the cream row, not the milk row."""
     moved = with_line(0, text="Demand 1250 L, available 1700 L, suggested buy 700 L.",
