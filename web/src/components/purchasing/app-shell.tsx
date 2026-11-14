@@ -6,6 +6,7 @@ import {
   ChefHat,
   House,
   Inbox,
+  Info,
   Menu,
   Package,
   ScrollText,
@@ -38,6 +39,7 @@ export interface NavItem {
 
 const HOME: NavItem = { id: "home", label: "Home", href: "/", icon: House };
 const AUDIT: NavItem = { id: "audit", label: "Audit log", href: "/audit", icon: ScrollText };
+const ABOUT: NavItem = { id: "about", label: "About", href: "/about", icon: Info };
 
 export const KITCHEN_NAV: NavItem[] = [
   HOME,
@@ -51,9 +53,15 @@ export const KITCHEN_NAV: NavItem[] = [
   { id: "catalog", label: "Catalog", href: "/catalog", icon: BookOpen },
   { id: "settings", label: "Settings", href: "/settings", icon: Settings },
   AUDIT,
+  ABOUT,
 ];
 
-export const VALIO_NAV: NavItem[] = [HOME, { id: "demand", label: "Demand", href: "/demand", icon: TrendingUp }, AUDIT];
+export const VALIO_NAV: NavItem[] = [
+  HOME,
+  { id: "demand", label: "Demand", href: "/demand", icon: TrendingUp },
+  AUDIT,
+  ABOUT,
+];
 
 /** The kitchen side's items; the kit page builds its own list from these. */
 export const NAV_ITEMS = KITCHEN_NAV;

@@ -1,5 +1,6 @@
 import type { Api, AuditActor, ProductTemperature } from "@/api/types";
 import { ApiError } from "@/api/types";
+import { nameProducts } from "@/api/map";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
 import {
@@ -290,7 +291,12 @@ export function createMockApi(): MockApi {
       return found;
     },
     async listAudit(filter) {
-      return filter?.orderId ? audit.filter((event) => event.orderId === filter.orderId) : [...audit];
+      const names = new Map((Object.values(products) as Product[]).map((product) => [product.id, product.names.en]));
+      return (filter?.orderId ? audit.filter((event) => event.orderId === filter.orderId) : audit).map((event) => ({
+        ...event,
+        summary: nameProducts(event.summary, names),
+        reason: nameProducts(event.reason, names),
+      }));
     },
     async submitChefRequest() {
       return { order: demoOrders.get(seedApproval.orderId)!, substitutes, approval: approvals.get(seedApproval.id)! };

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { gatewayRequest } from "@/api/http";
-import { mapMoney } from "@/api/map";
+import { mapMoney, nameProducts } from "@/api/map";
 
 describe("mapMoney", () => {
   it("reads a contract decimal string", () => {
@@ -11,6 +11,20 @@ describe("mapMoney", () => {
 
   it.each([149.02, "", "1e5", "12,50", "abc", null, "9".repeat(400)])("rejects %j", (value) => {
     expect(() => mapMoney(value, "expected_total")).toThrow(/expected_total/);
+  });
+});
+
+describe("nameProducts", () => {
+  const names = new Map([["462775", "Arla UHT milk 1 L"]]);
+
+  it("replaces a known product id with its name", () => {
+    expect(nameProducts("Split: 51 ST of 462775", names)).toBe("Split: 51 ST of Arla UHT milk 1 L");
+  });
+
+  it("keeps the id when the name is unknown, and leaves other numbers alone", () => {
+    expect(nameProducts("950 ST of 463335 for €1,947.50 (ORD-1043)", names)).toBe(
+      "950 ST of 463335 for €1,947.50 (ORD-1043)",
+    );
   });
 });
 

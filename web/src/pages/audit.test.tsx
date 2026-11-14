@@ -22,6 +22,16 @@ describe("audit page", () => {
     expect(screen.getByText("8 steps")).toBeInTheDocument();
   });
 
+  it("names products instead of showing their ids", async () => {
+    renderApp("/audit");
+    expect(
+      await screen.findByText(
+        "Split: 51 ST of Arla 1 L lactose free fat free UHT milk drink and 950 ST of Valio Eila 3 % lactose free milk drink 1 L",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/462775|463335/)).not.toBeInTheDocument();
+  });
+
   it("filters by order and restores all steps with Clear filters", async () => {
     const user = userEvent.setup();
     renderApp("/audit");

@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
@@ -17,6 +17,18 @@ describe("PlannerPage", () => {
     expect(within(monday as HTMLElement).getByText(/Rice pudding/)).toBeInTheDocument();
     expect(within(monday as HTMLElement).getByText(/180 covers/)).toBeInTheDocument();
     expect(screen.getByText(/180 covers x 0\.15 L \(Rice pudding\)/)).toBeInTheDocument();
+  });
+
+  it("opens on next week when no week is asked for", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-13T12:00:00Z"));
+    try {
+      renderApp("/planner", createMockApi());
+      expect(await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" })).toBeInTheDocument();
+      expect((await screen.findAllByText(/Rice pudding/)).length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("adds and saves an entry, then refreshes the demand table", async () => {

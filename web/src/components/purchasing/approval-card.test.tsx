@@ -28,6 +28,13 @@ describe("ApprovalCard", () => {
     expect(onApprove).not.toHaveBeenCalled();
   });
 
+  it("lists what to check and never says an order can go without approval", () => {
+    render(<ApprovalCard request={approval} order={confirmedOrder} />);
+    expect(screen.getByRole("heading", { name: "What to check" })).toBeVisible();
+    expect(screen.getByText("3 % fat instead of 0 % in the first choice.")).toBeVisible();
+    expect(screen.queryByText(/without approval/)).not.toBeInTheDocument();
+  });
+
   it("blocks missing order details", () => {
     render(<ApprovalCard request={approval} />);
     expect(screen.getByText(/Order details are unavailable/)).toBeVisible();

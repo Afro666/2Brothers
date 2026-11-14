@@ -266,7 +266,7 @@ export const approval: ApprovalRequest = {
     },
     {
       rule: "Substitute changes the fat %",
-      detail: "3 % fat instead of 0 % in the first choice. The mandate allows 1.5 points without approval.",
+      detail: "3 % fat instead of 0 % in the first choice.",
     },
     {
       rule: "Stock not measured",
