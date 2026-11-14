@@ -97,12 +97,14 @@ not the human token or upstream Valio key. No worker port is published.
   check. Without it, or when Context.dev is slow or down, the check uses the recording in
   the image and the screen says "recording". `RECALL_CHECK_TIMEOUT_S` (default 45, at most
   120) bounds the call; a live list scrape took 30 seconds on 2026-11-14.
-- The demo needs an open proposal with the recalled coffee (461332) before the check. On
-  the server:
-  `docker compose --env-file /opt/2brothers/.env -f /opt/2brothers/deploy/compose.yaml exec gateway python -m demo.recall_demo`
-  It makes a READY proposal through the gateway and orders nothing. Run it before the first
-  check: after a check has recorded the recall, new quotes leave the coffee out and the
-  command says so.
+- The demo needs no seed since 2026-11-14 (#1068): the check also looks at the kitchen's
+  stock and recipes. The demo kitchen has the recalled coffee (461332) on the shelf, so
+  "Check recalls now" gives the alert "In stock: ... No open order holds it. New orders
+  leave it out." The alert is stored at the first check.
+- `python -m demo.recall_demo` (an open proposal with the coffee, which the check then
+  holds) works only while Valio's API lets the coffee be ordered. On 2026-11-14 it did
+  not: the API answered `closingTime: 2026-11-12T12:00` for every delivery date, so the
+  proposal came back without the coffee. The command says so and changes nothing.
 
 ## Switch sign-in on (and off again)
 
