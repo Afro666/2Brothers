@@ -5,6 +5,7 @@ import { useApi } from "@/api";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { useRole } from "@/lib/role";
 import type { Api } from "@/api/types";
@@ -36,7 +37,10 @@ export function HomePage() {
         <OpenDemoNote />
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="page-title">Kitchen Buyer</h1>
+            <p className="label-caps">
+              {t("Today's docket")} · <time dateTime={now.toISOString()}>{formatDate(now.toISOString())}</time>
+            </p>
+            <h1 className="page-title mt-1">Kitchen Buyer</h1>
             <p className="mt-1 max-w-prose text-sm">
               {t(
                 "A purchasing agent for professional kitchens: it proposes orders from live Valio prices and stock; a person approves every order.",
@@ -63,8 +67,8 @@ export function HomePage() {
 function KitchenDashboard({ api, now }: { api: Api; now: Date }) {
   return (
     <>
-      <SupplierOfferTile api={api} />
       <ApprovalTile api={api} />
+      <SupplierOfferTile api={api} />
       <CutoffTile api={api} now={now} />
       <StockTile api={api} now={now} />
       <DriftTile api={api} />
