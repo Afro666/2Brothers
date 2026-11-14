@@ -61,13 +61,13 @@ describe("theme", () => {
     meta.name = "theme-color";
     document.head.append(meta);
     renderPicker();
-    expect(meta).toHaveAttribute("content", "#ffffff");
+    expect(meta).toHaveAttribute("content", "#F4F1E9");
 
     await userEvent.click(screen.getByRole("radio", { name: "Dark" }));
 
     expect(screen.getByRole("radio", { name: "Dark" })).toBeChecked();
     expect(html).toHaveAttribute("data-theme", "dark");
-    expect(meta).toHaveAttribute("content", "#0a0a0a");
+    expect(meta).toHaveAttribute("content", "#151410");
     expect(localStorage.getItem("purchasing-theme")).toBe("dark");
     expect(screen.getByRole("status")).toHaveTextContent("dark");
   });

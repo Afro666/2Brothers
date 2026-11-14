@@ -12,6 +12,9 @@ Additive fields on kitchen proposal responses (same kitchen authorization):
 
 The names below match `monitor.recalls.scan`; `review` is the warning enum
 value (not `review_only`). Every alert has these fields unless marked optional.
+This table is the one source for the alert fields. `GET /recalls` and
+`POST /recalls/check` (below, and contract.md "Recall alerts (Context.dev)")
+return these alerts as they are, plus `proposals` and an always-present `status`.
 
 | Field | JSON type | Meaning |
 | --- | --- | --- |
@@ -98,6 +101,20 @@ The internal monitor applies recorded notices to currently open proposals
 through the shared store and gateway modules. There is no public mutation
 route accepting arbitrary recall alerts from a browser or model. Repeated
 polls preserve the original notice event and replacement identity.
+
+## Recall list and "check now" (#358)
+
+`GET /v1/kitchens/{kitchen_id}/recalls` (`kitchen:read`) lists the kitchen's
+recorded alerts with the proposals that carry them and the last check.
+`POST /v1/kitchens/{kitchen_id}/recalls/check` (`kitchen:write`, body
+`{"idempotency_key": "..."}`) runs the same monitor code as
+`python -m monitor.proposals` and gives the same answer as the list. It takes
+no alert in its body, so the rule above holds: no caller can inject a recall.
+A check makes at most one Context.dev call and says in `last_check.source`
+whether the list was scraped `live` or came from the `recording`. The full
+shape of both answers is in [contract.md](contract.md), "Recall alerts
+(Context.dev)". The error code for a held proposal is `BLOCKED_BY_RECALL`
+everywhere; no route uses another name for it.
 
 Ordering is serialized against a recall hold on the proposal state. An
 already committed order is not cancelled by a later notice; it remains an

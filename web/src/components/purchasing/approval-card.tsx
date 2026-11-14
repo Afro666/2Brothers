@@ -141,23 +141,25 @@ export function ApprovalCard({
   }
 
   return (
-    <Card className="gap-4">
-      <CardHeader>
-        <CardTitle className="leading-snug">{request.summary}</CardTitle>
-        <CardDescription>
+    <Card className="docket gap-4 p-4 sm:p-5">
+      <CardHeader className="px-0">
+        <CardTitle className="text-[19px] leading-[25px] font-[650]">{request.summary}</CardTitle>
+        <CardDescription className="font-mono text-xs leading-4 font-[450]">
           {request.lineCount} {request.lineCount === 1 ? "line" : "lines"} · delivery {formatDate(request.deliveryDate)}{" "}
           · asked by {request.requestedBy}, {formatDateTime(request.createdAt)}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <dl className="grid grid-cols-2 gap-3">
-          <div>
-            <dt className="text-xs text-muted-foreground">Total ex VAT</dt>
-            <dd className="text-lg font-semibold tabular-nums">{formatEur(request.totalExVat)}</dd>
+      <CardContent className="space-y-4 px-0">
+        <dl className="space-y-3 border-t pt-3">
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="text-sm text-muted-foreground">Total ex VAT</dt>
+            <dd className="font-mono text-sm tabular-nums">{formatEur(request.totalExVat)}</dd>
           </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Total incl VAT</dt>
-            <dd className="text-lg font-semibold tabular-nums">{formatEur(request.totalInclVat)}</dd>
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="text-sm text-muted-foreground">Total incl VAT</dt>
+            <dd className="inline-block border-b-[3px] border-double border-foreground text-2xl leading-7 font-bold tabular-nums">
+              {formatEur(request.totalInclVat)}
+            </dd>
           </div>
         </dl>
         {editCount > 0 ? (
@@ -166,11 +168,11 @@ export function ApprovalCard({
           </p>
         ) : null}
         <section className="space-y-2">
-          <h4 className="text-sm font-medium">What to check</h4>
+          <h4 className="label-caps">What to check</h4>
           <ul className="space-y-2">
             {request.reasons.map((r) => (
-              <li key={r.rule} className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.warning)}>
-                <div className="font-medium">{r.rule}</div>
+              <li key={r.rule} className="border-l-[3px] border-warning py-1 pl-3 text-sm">
+                <div className="font-semibold">{r.rule}</div>
                 <div className="text-foreground">{r.detail}</div>
               </li>
             ))}
@@ -178,7 +180,7 @@ export function ApprovalCard({
         </section>
         <RecallLines alerts={recalls} />
         {pending && stockMessage ? (
-          <p className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.warning)}>{stockMessage}</p>
+          <p className="hatch text-sm text-warning">{stockMessage}</p>
         ) : null}
         {pending && request.options?.length ? (
           <OptionCompare
@@ -321,7 +323,7 @@ export function ApprovalCard({
           </section>
         ) : null}
       </CardContent>
-      <CardFooter className="flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
+      <CardFooter className="flex-col items-stretch gap-2 border-t border-dashed border-input px-0 pt-4 [.border-t]:pt-4 sm:flex-row sm:justify-end">
         {pending ? (
           <>
             {error && (
@@ -329,11 +331,11 @@ export function ApprovalCard({
                 {error}
               </p>
             )}
-            <Button variant="outline" disabled={busy} onClick={() => setOpen("reject")}>
+            <Button variant="outline" className="w-full sm:w-auto" disabled={busy} onClick={() => setOpen("reject")}>
               <X aria-hidden />
               Reject
             </Button>
-            <Button disabled={busy || !!stockMessage} onClick={() => setOpen("approve")}>
+            <Button className="w-full sm:w-auto" disabled={busy || !!stockMessage} onClick={() => setOpen("approve")}>
               <Check aria-hidden />
               Approve {formatEur(request.totalInclVat)} incl VAT
             </Button>
@@ -342,10 +344,15 @@ export function ApprovalCard({
           <p
             role="status"
             className={cn(
-              "rounded-md border px-3 py-2 text-sm font-medium",
-              status === "APPROVED" ? TONE_CLASSES.success : TONE_CLASSES.neutral,
+              "stamp-mark w-full text-sm font-medium sm:w-auto",
+              status === "APPROVED" ? "text-success" : "text-muted-foreground",
             )}
           >
+            {status === "APPROVED" ? (
+              <span className="stamp text-lg" aria-hidden>
+                Approved
+              </span>
+            ) : null}
             {status === "APPROVED"
               ? `Approved: ${formatEur(request.totalExVat)} ex VAT, ${formatEur(request.totalInclVat)} incl VAT. The order may now be sent.`
               : "Rejected. This order will not be sent."}

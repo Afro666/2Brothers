@@ -1,0 +1,10 @@
+{
+  "_comment": "Demo kitchen products for #373: names from docs/valio-data.md; pack_size is litres per pack, the kitchen counts milk in L.",
+  "products": [
+    {"product_id": "462775", "name": "Arla 1 L lactose free fat free UHT", "unit": "L", "pack_size": "1"},
+    {"product_id": "463335", "name": "Valio Eila 3% 1 L", "unit": "L", "pack_size": "1"},
+    {"product_id": "462921", "name": "Valio Eila organic 1 L", "unit": "L", "pack_size": "1"},
+    {"product_id": "463038", "name": "Valio Eila 10 L novobox", "unit": "L", "pack_size": "10"},
+    {"product_id": "464179", "name": "Arla 10 L novobox ESL", "unit": "L", "pack_size": "10"}
+  ]
+}

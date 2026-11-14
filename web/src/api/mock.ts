@@ -279,7 +279,8 @@ export function createMockApi(): MockApi {
     async changeProposal(orderId, change: ProposalChange, actor) {
       const proposalOrder = demoOrders.get(orderId);
       if (!proposalOrder) throw new ApiError("NOT_FOUND", `Order ${orderId} was not found.`);
-      const approval = [...approvals.values()].find((row) => row.orderId === orderId)!;
+      const approval = [...approvals.values()].find((row) => row.orderId === orderId);
+      if (!approval) throw new ApiError("NOT_FOUND", `Order ${orderId} has no approval to change.`);
       pendingApproval(approval.id);
       if (change.type !== "REMOVE_LINE" && (!Number.isInteger(change.quantity) || change.quantity < 1)) {
         throw new ApiError("INVALID", "Quantity must be a whole number of at least 1.");

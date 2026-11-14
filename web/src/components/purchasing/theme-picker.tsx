@@ -19,7 +19,7 @@ export function ThemePicker() {
   const id = useId();
   return (
     <div role="radiogroup" aria-labelledby={id} className="space-y-1.5">
-      <span id={id} className="block text-xs leading-none font-medium text-muted-foreground">
+      <span id={id} className="label-caps block">
         Theme
       </span>
       <div className="grid grid-cols-3 gap-0.5 rounded-md border p-0.5">

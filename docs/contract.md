@@ -480,13 +480,14 @@ Known gap: the three token routes do not check yet that the signed-in person bel
 | GET | `/settings` | `kitchen:read` | Kitchen settings: how the engine sizes orders and what the Buyer may propose. Shape below. |
 | PUT | `/settings` | `kitchen:write` (human) | Change settings. Only the fields in the body change. Every change is an audit entry. Proposed; the gateway does not serve these two routes yet. |
 | GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
-| GET | `/drift` | `kitchen:read` | Standing-order drift for the last full week: products whose order per 100 guests (`portion_creep`) or spend per 100 guests (`cost_creep`) is 15% or more above the 4 weeks before. Shape below. Proposed; the gateway does not serve it yet (`store.drift.standing_order_drift`). |
+| GET | `/drift` | `kitchen:read` | Standing-order drift for the last full week: products whose order per 100 guests (`portion_creep`) or spend per 100 guests (`cost_creep`) is 15% or more above the 4 weeks before. Shape below. Served (`gateway/drift_routes.py` over `store.drift.standing_order_drift`). |
 | GET | `/audit/verify` | `kitchen:read` | Check the audit hash chain now. Shape below. Proposed, like the next three rows; the gateway does not serve them yet. |
 | POST | `/audit/demo-tamper` | `kitchen:approve` (human) | Demo only: edit one audit row of the synthetic demo kitchen, so `/audit/verify` shows the break. 403 `DEMO_ONLY` for any other kitchen. |
 | POST | `/audit/demo-restore` | `kitchen:approve` (human) | Demo only: put the tampered row back exactly as it was. |
 | GET | `/events` | `kitchen:read` | Server-sent events: this kitchen's new and changed proposals, approvals and audit entries, as they happen. Shape below. |
-| GET | `/recalls` | `kitchen:read` | This kitchen's open `recall.alert`s and the last check. Shape below. Proposed: the gateway does not serve it yet (#358). |
-| POST | `/recalls/check` | `kitchen:write` | Run the recall monitor now: Context.dev scrape of the Ruokavirasto list, matched to stock, recipes and open proposals. Body: `idempotency_key`. Proposed: the gateway does not serve it yet (#358). |
+| GET | `/recalls` | `kitchen:read` | This kitchen's recall alerts, the proposals they hold and the last check. Shape under "Recall alerts (Context.dev)". |
+| POST | `/recalls/check` | `kitchen:write` | Run the recall monitor now: one Context.dev scrape of the Ruokavirasto list (the recording when Context.dev is slow, down or has no key), applied to the open proposals. Body: `idempotency_key`. Never orders. Same answer as `GET /recalls`. |
+| POST | `/recalls/{event_id}/dismiss` | `kitchen:approve` (human) | A person dismisses one alert after checking the packs. Body: `reason`. Shape in [recall-contract.md](recall-contract.md). |
 | GET | `/label-checks` | `kitchen:read` | Recorded Hyvää Suomesta producer checks for catalog products 462535, 462576 and 462775, plus one synthetic `negative_control`. Answer: `{"checks": [...], "negative_control": {...}}`. Shape in [product-evidence-contract.md](product-evidence-contract.md). |
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
 
@@ -908,7 +909,7 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. |
 | GET | `/demand/shortage-risk` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability. |
-| GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Proposed. |
+| GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Today only a person's session passes: no token can hold `supplier:demand` yet. |
 | POST | `/offers` | `supplier:read-orders` | Proactive offer to a kitchen (substitute, promotion). It shows up as a suggestion, never as an order. |
 
 A supplier only sees demand from kitchens whose `/sharing` consent names it.
@@ -1053,6 +1054,11 @@ biggest change first. `week` is the Monday of the last full week. Each warning:
 - `kind`: `portion_creep` (more ordered per guest) or `cost_creep` (the same amount per
   guest costs more). A drop is not a warning.
 - Fewer than 3 weeks of history, or a week without guests, is never drift: it is left out.
+- `week` is always there, also with `"warnings": []`. A warning has `product_name` when
+  the catalog knows the product; on the supplier route also `kitchen_id` and
+  `kitchen_name` (`null` when the kitchen has no name).
+- When the database cannot run the aggregation: 503 `DRIFT_UNAVAILABLE`. The screens
+  then hide the drift tile; they never show an empty list as "no drift".
 - Rates are per 100 guests from the `covers` series; money values are numbers for display
   only, never a figure to approve (approval figures come from `simulate_order`).
 - Where it shows: a warning on the next proposal for that product, and a list on the
@@ -1306,33 +1312,45 @@ Rules:
 
 ### Recall alerts (Context.dev)
 
-The recall monitor (`monitor/recalls.py`) scrapes the Ruokavirasto recall list with
-Context.dev `POST /v1/web/scrape` and writes one `recall.alert` per notice, kitchen and
-product. These two routes show the alerts in the approval inbox and let a person run a
-check now. The gateway serves the routes (Aron); the monitor and the re-plan are #358
-(Maciek).
+The recall monitor (`monitor/recalls.py`) reads the Ruokavirasto recall list with
+Context.dev `POST /v1/web/scrape`. `monitor/proposals.py` applies the notices to the
+kitchen's open proposals: a recalled line puts the proposal on hold and the Buyer plans a
+separate replacement proposal. These two routes show that state and let a person run a
+check now. They are views: they keep no second recall store and no second matching logic.
+This is the agreed shape; the gateway change on branch `aron/358-recall-routes` serves it
+(until that is merged both routes answer 404).
 
-`GET /v1/kitchens/{kitchen_id}/recalls` and `POST .../recalls/check` both answer:
+**One source for the alert fields:** [recall-contract.md](recall-contract.md) ("Exact alert
+fields"). The same document holds the hold, the replacement proposal, the reject and the
+dismiss route. This section only adds what the two routes add.
+
+`GET /v1/kitchens/{kitchen_id}/recalls` and `POST /v1/kitchens/{kitchen_id}/recalls/check`
+both answer:
 
 ```json
 {
   "last_check": {
-    "checked_at": "2026-11-14T00:30:00+02:00",
+    "checked_at": "2026-11-14T04:30:00+00:00",
+    "checked_by": "chef@hotel.example",
     "source": "recording",
+    "live_error": "NO_KEY",
     "fetched_at": "2026-11-13T22:17:51+00:00",
-    "via": "/v1/web/scrape",
-    "notices_scanned": 38
+    "details_fetched_at": "2026-11-13T22:17:51+00:00",
+    "via": "Context.dev /v1/web/scrape (json)",
+    "notices_scanned": 38,
+    "notices_listed": null,
+    "notices_unread": null
   },
   "alerts": [
     {
       "event_id": "recall-3f1c9a0b5e7d2c4a8b6e1f0d",
       "type": "recall.alert",
-      "kitchen_id": "K10",
+      "kitchen_id": "demo-kitchen",
       "product_id": "461332",
       "product_name": "Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg",
       "match": "possible",
       "why": "same brand Kulta Katriina, shared word(s) kahvi, perinteinen",
-      "where": ["in stock: 5.673 KG", "in recipes: breakfast_buffet", "on the open purchase proposal"],
+      "where": ["on the open purchase proposal"],
       "recall": {
         "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suodatinkahvissa-vierasesineriski/",
         "date": "2026-03-06", "title": "Suodatinkahvissa vierasesineriski",
@@ -1342,42 +1360,92 @@ check now. The gateway serves the routes (Aron); the monitor and the re-plan are
         "lot": "23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027"
       },
       "next_step": "Do not use it until checked. Check your packs: ...",
-      "proposal_id": "prop-7c2e",
-      "line_status": "BLOCKED_BY_RECALL",
-      "replacement_line": {"product_id": "475842", "product_name": "12 x Löfbergs Crescendo Ground Coffee 500g Rainforest Alliance",
-                           "quantity": "2", "unit": "KI"},
-      "replacement_proposal": [{"product_id": "475842", "name": "...", "brand": "Löfbergs"}],
-      "detected_at": "2026-11-14T00:30:00+02:00"
+      "replacement_proposal": [],
+      "detected_at": "2026-11-14T04:30:00+00:00",
+      "status": "active",
+      "proposals": [
+        {
+          "proposal_id": "7c2e...",
+          "status": "BLOCKED_BY_RECALL",
+          "replacement_proposal_id": "9b41...",
+          "recall_replan_error": null,
+          "replacement": {
+            "proposal_id": "9b41...",
+            "status": "READY",
+            "expected_total": "56.75",
+            "currency": "EUR",
+            "lines": [{"product_id": "475842", "product_name": "12 x Löfbergs Crescendo Ground Coffee 500g Rainforest Alliance",
+                       "quantity": "1", "unit": "KI"}]
+          }
+        }
+      ]
     }
   ]
 }
 ```
 
-- The alert fields are the monitor's `recall.alert` as it is (monitor/README.md), plus three
-  fields the re-plan adds: `proposal_id`, `line_status` and `replacement_line`.
-- `last_check` is `null` when no check has run for this kitchen. Then the screens say "not
-  checked yet", never "no recalls". An empty `alerts` list with a `last_check` means the
-  check found nothing on this kitchen's stock, recipes or open proposals.
-- `source`: `live` when the scrape ran now; `recording` when Context.dev was slow or down
-  and the last saved scrape was used. `fetched_at` says how old the scrape is. The screens
-  show which one, so a recording is never shown as live.
-- `proposal_id` is the open proposal the alert hits, else `null`. `line_status` is
-  `BLOCKED_BY_RECALL` for an `exact` or `possible` match on a proposal line, `WARNING` for a
-  `review` match (shown, never blocking on its own).
-- `replacement_line` is the line the Buyer re-planned in place of the blocked one, sized by
-  the engine (`quantity` a decimal string in `unit`); `null` while it has not. A proposal
-  that still holds a `BLOCKED_BY_RECALL` line cannot be approved: approve answers 409
-  `BLOCKED_BY_RECALL`. After the re-plan the proposal has a new `expected_total`, and a person
-  approves that exact figure as usual. `replacement_proposal` stays ideas for the chef;
-  nothing is ordered from an alert.
-- `POST /recalls/check` with a repeat `idempotency_key` returns the stored result. A new
-  check that finds an alert already known (same `event_id`) does not re-plan again.
-- Every check and every re-plan is an audit entry (`store.audit`).
-- `CONTEXT_DEV_API_KEY` stays on the gateway and the monitor; the browser never calls
-  Context.dev. A check that cannot scrape and has no recording answers 502
-  `RECALL_CHECK_UNAVAILABLE`; the screens then show recalls as unknown.
-- The web client maps snake_case to camelCase, `proposal_id` to `orderId`, `replacement_proposal`
-  to `replacementIdeas` and `quantity` to a number.
+What the view adds to an alert:
+
+- `status` is always there: `active` or `dismissed` (the stored alert may omit it).
+  Dismissed alerts stay in the list with `dismissed_by`, `dismissed_at`, `dismiss_reason`.
+- `proposals`: every proposal of this kitchen that carries this alert, newest first; `[]`
+  when none does. `status` is the proposal status. An `exact` or `possible` alert holds the
+  proposal (`BLOCKED_BY_RECALL`) and its line of `product_id` has
+  `recall_status: "BLOCKED_BY_RECALL"`; a `review` alert is a warning and holds nothing.
+- `replacement_proposal_id` and `recall_replan_error` are the proposal's own fields
+  (recall-contract.md). The replacement is a **separate proposal** with its own total and
+  its own pending approval. There is no inline replacement line on the held proposal.
+- `replacement`: a short copy of that replacement proposal, so the screen can show it
+  without a second call: its `status`, `expected_total` and lines (`quantity` a decimal
+  string in `unit`, sized by the engine). `null` when there is no replacement or it cannot
+  be read. A person approves it through `/proposals/{id}/approve` as usual; the held
+  proposal is closed with `/proposals/{id}/reject`.
+- `replacement_proposal` (the monitor's field) stays a list of unapproved ideas; it is not
+  the replacement proposal.
+
+`last_check`:
+
+- `null` when no check has run for this kitchen. Then the screens say "not checked yet",
+  never "no recalls". An empty `alerts` list with a `last_check` means the check found
+  nothing on this kitchen's open proposals.
+- `source`: `live` when Context.dev scraped the Ruokavirasto list during this check;
+  `recording` when it did not, and the saved scrape (`monitor/fixtures/ruokavirasto.json`)
+  was used. The screens show which one, so a recording is never shown as live.
+- `live_error`: `null` for `live`; for `recording` the reason: `NO_KEY` (the gateway has no
+  `CONTEXT_DEV_API_KEY`), `TIMEOUT`, `UPSTREAM_ERROR` or `BAD_ANSWER`.
+- `fetched_at`: when the list was scraped (`live`: during this check; `recording`: when the
+  recording was made). `details_fetched_at`: when the notice pages (product, brand, EAN,
+  lot) were scraped; a check makes one scrape, the list, so the pages always come from the
+  recording.
+- `notices_scanned`: notices matched against the open proposals. `notices_listed`: notices
+  on the live list, `null` for `recording`. `notices_unread`: notices on the live list whose
+  page is not in the recording, `null` for `recording`. They were **not** matched: when it
+  is above 0 the screens say "N new notices not read yet", never "no recalls".
+
+`POST /recalls/check`:
+
+- Body: `{"idempotency_key": "<1 to 200 characters>"}`. A missing or wrong key is 422
+  `INVALID_REQUEST`.
+- Scope `kitchen:write`. A signed-in person who is not a `viewer` has it (403
+  `ROLE_REQUIRED` for a viewer). No kitchen token and no agent token holds
+  `kitchen:write` today (403 `SCOPE_REQUIRED`).
+- A repeat `idempotency_key` scrapes nothing and applies nothing: it answers the stored
+  `last_check` of that check with the alerts as they are now.
+- One check makes at most one Context.dev call, with one attempt and a timeout (20 seconds,
+  `RECALL_CHECK_TIMEOUT_S`). It never retries and never loops.
+- It never orders, approves or cancels anything. It holds proposals and plans replacement
+  proposals exactly as `monitor.proposals` does; an alert already known (same `event_id`)
+  is not re-planned and a dismissed alert is not applied again.
+- Audit: the monitor's entries as before (`recall.alert` per notice and product,
+  `recall_proposal_blocked`, `recall_replacement_proposed`, ...) plus one `recall_check`
+  entry per check with the `last_check` fields and the alert ids.
+- When neither the scrape nor the recording can be read: 502 `RECALL_CHECK_UNAVAILABLE`.
+  The screens then show recalls as unknown.
+- `CONTEXT_DEV_API_KEY` stays on the gateway; the browser never calls Context.dev.
+
+The web client maps snake_case to camelCase. One web `RecallAlert` per alert and
+proposal: `proposals[].proposal_id` becomes `orderId`, `replacement_proposal` becomes
+`replacementIdeas`, `quantity` becomes a number.
 
 ## Daily weather and holiday signals
 
