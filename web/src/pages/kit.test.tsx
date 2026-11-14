@@ -1,18 +1,20 @@
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiProvider } from "@/api";
+import { createHttpApi } from "@/api/http";
+import type { Api } from "@/api/types";
 import { ThemeProvider } from "@/lib/theme";
 import { createAppRouter } from "@/router";
 
-async function renderKit() {
+async function renderKit(api?: Api) {
   const router = createAppRouter(createMemoryHistory({ initialEntries: ["/kit"] }));
   render(
     <ThemeProvider>
-      <ApiProvider>
+      <ApiProvider api={api}>
         <TooltipProvider>
           <RouterProvider router={router} />
         </TooltipProvider>
@@ -23,6 +25,25 @@ async function renderKit() {
 }
 
 describe("/kit", () => {
+  it("never asks the gateway, even when the app runs on it", async () => {
+    const fetch = vi.fn(async () => {
+      throw new Error("/kit must not call the gateway.");
+    });
+    vi.stubGlobal("fetch", fetch);
+    try {
+      await renderKit(createHttpApi("https://gateway.test"));
+      expect(screen.getByRole("heading", { level: 2, name: "ApprovalCard" })).toBeInTheDocument();
+      // Let the cards' first loads (the explanation) run.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(screen.queryByText("Could not load this screen")).not.toBeInTheDocument();
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("renders a section for every purchasing component", async () => {
     await renderKit();
     for (const name of [

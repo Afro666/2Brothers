@@ -7,6 +7,7 @@ export default {
   "Password": "Salasana",
   "Signing in…": "Kirjaudutaan…",
   "Sign in": "Kirjaudu",
+  "Back to the demo": "Takaisin demoon",
   "Account": "Tili",
   "Manage the password for your kitchen account.": "Hallitse keittiötilisi salasanaa.",
   "Change password": "Vaihda salasana",

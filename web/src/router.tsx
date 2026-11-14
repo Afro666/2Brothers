@@ -6,8 +6,12 @@ import {
   createRoute,
   createRouter,
   redirect,
+  useRouterState,
 } from "@tanstack/react-router";
+import { useState } from "react";
 
+import { ApiProvider, useApi } from "@/api";
+import { createMockApi } from "@/api/mock";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
@@ -35,12 +39,18 @@ import { TrustPage } from "@/pages/trust";
 import { SignInPage } from "@/pages/sign-in";
 
 function RootLayout() {
+  const api = useApi();
+  // /kit is an internal page on sample data: neither its session nor its screens ask the gateway (#1596).
+  const kit = useRouterState({ select: (state) => state.location.pathname === "/kit" });
+  const [kitApi] = useState(createMockApi);
   return (
-    <SessionProvider>
-      <RoleProvider>
-        <Outlet />
-      </RoleProvider>
-    </SessionProvider>
+    <ApiProvider api={kit ? kitApi : api}>
+      <SessionProvider key={kit ? "kit" : "app"}>
+        <RoleProvider>
+          <Outlet />
+        </RoleProvider>
+      </SessionProvider>
+    </ApiProvider>
   );
 }
 /** An address no route knows: the menu stays, with two ways back. */

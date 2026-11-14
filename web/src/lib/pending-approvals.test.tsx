@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -128,7 +128,10 @@ describe("Waiting-approvals count", () => {
   });
 
   describe("reload on an interval", () => {
-    afterEach(() => vi.useRealTimers());
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
 
     it("shows a new PENDING approval without a page reload", async () => {
       vi.useFakeTimers();
@@ -157,6 +160,106 @@ describe("Waiting-approvals count", () => {
       });
       expect(screen.getByText("count: 2")).toBeInTheDocument();
     });
+
+    it("stops while the tab is hidden and resumes when it becomes visible", async () => {
+      vi.useFakeTimers();
+      const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+      const base = createMockApi();
+      const listApprovals = vi.fn(() => base.listApprovals());
+      const api = { ...base, listApprovals };
+      function Count() {
+        const { count } = usePendingApprovals();
+        return <p>count: {String(count)}</p>;
+      }
+      render(
+        <ApiProvider api={api}>
+          <PendingApprovalsProvider><Count /></PendingApprovalsProvider>
+        </ApiProvider>,
+      );
+      await act(async () => {});
+      expect(listApprovals).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PENDING_APPROVALS_REFRESH_MS);
+      });
+      expect(listApprovals).toHaveBeenCalledTimes(2);
+
+      hidden.mockReturnValue(true);
+      act(() => document.dispatchEvent(new Event("visibilitychange")));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PENDING_APPROVALS_REFRESH_MS * 3);
+      });
+      expect(listApprovals).toHaveBeenCalledTimes(2);
+
+      hidden.mockReturnValue(false);
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      // Seen again: asks at once, then every 30 s again.
+      expect(listApprovals).toHaveBeenCalledTimes(3);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PENDING_APPROVALS_REFRESH_MS);
+      });
+      expect(listApprovals).toHaveBeenCalledTimes(4);
+    });
+
+    it("does not poll while the event stream is connected", async () => {
+      vi.useFakeTimers();
+      const base = createMockApi();
+      const listApprovals = vi.fn(() => base.listApprovals());
+      let setConnected: ((connected: boolean) => void) | undefined;
+      const api = {
+        ...base,
+        listApprovals,
+        subscribeEvents(_onEvent: (event: LiveEvent) => void, onStatus?: (connected: boolean) => void) {
+          setConnected = onStatus;
+          return () => {};
+        },
+      };
+      function Count() {
+        const { count, refresh } = usePendingApprovals();
+        return (
+          <>
+            <p>count: {String(count)}</p>
+            <button type="button" onClick={refresh}>
+              Decided
+            </button>
+          </>
+        );
+      }
+      render(
+        <ApiProvider api={api}>
+          <LiveEventsProvider>
+            <PendingApprovalsProvider><Count /></PendingApprovalsProvider>
+          </LiveEventsProvider>
+        </ApiProvider>,
+      );
+      await act(async () => {});
+      expect(listApprovals).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        setConnected?.(true);
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      const connectedCalls = listApprovals.mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PENDING_APPROVALS_REFRESH_MS * 3);
+      });
+      expect(listApprovals).toHaveBeenCalledTimes(connectedCalls);
+
+      // Right after an approve or reject the count is asked again, also while the stream is live.
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Decided" }));
+      });
+      expect(listApprovals).toHaveBeenCalledTimes(connectedCalls + 1);
+
+      // The stream drops: the 30 s poll is the fallback again.
+      await act(async () => {
+        setConnected?.(false);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PENDING_APPROVALS_REFRESH_MS);
+      });
+      expect(listApprovals).toHaveBeenCalledTimes(connectedCalls + 2);
+    });
   });
 
   it("reloads the count after a proposal event", async () => {
@@ -175,8 +278,15 @@ describe("Waiting-approvals count", () => {
         },
       };
       function Count() {
-        const { count } = usePendingApprovals();
-        return <p>count: {String(count)}</p>;
+        const { count, refresh } = usePendingApprovals();
+        return (
+          <>
+            <p>count: {String(count)}</p>
+            <button type="button" onClick={refresh}>
+              Decided
+            </button>
+          </>
+        );
       }
       render(
         <ApiProvider api={api}>
