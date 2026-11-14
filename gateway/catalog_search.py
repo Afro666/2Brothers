@@ -19,6 +19,7 @@ minute to the Buyer, so trying the switch cannot use up the Buyer's budget.
 from __future__ import annotations
 
 import os
+import threading
 import time
 
 QUERY_TIMEOUT_S = 2.0      # cap on the query embedding call
@@ -30,6 +31,7 @@ BUYER_KEEPS = 1            # new embedding calls a minute the other callers leav
 
 _vectors: dict[str, list[float]] = {}
 _skip_until: dict[str, float] = {}      # caller -> end of its rest after a failure
+_calls_lock = threading.Lock()      # sync routes run in a thread pool
 _calls: list[float] = []                # when each new embedding call of the last minute went out
 
 
@@ -61,10 +63,11 @@ def rest(caller: str, now=time.monotonic) -> None:
 
 def _take_slot(caller: str, now) -> None:
     t = now()
-    _calls[:] = [c for c in _calls if t - c < 60.0]
-    if caller != BUYER and len(_calls) >= KEY_PER_MINUTE - BUYER_KEEPS:
-        raise SlotKept("the last embedding call of this minute is kept for the Buyer")
-    _calls.append(t)
+    with _calls_lock:
+        _calls[:] = [c for c in _calls if t - c < 60.0]
+        if caller != BUYER and len(_calls) >= KEY_PER_MINUTE - BUYER_KEEPS:
+            raise SlotKept("the last embedding call of this minute is kept for the Buyer")
+        _calls.append(t)
 
 
 def _query_embedder(caller: str = BUYER, now=time.monotonic):

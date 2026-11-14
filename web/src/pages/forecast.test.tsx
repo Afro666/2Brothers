@@ -45,7 +45,7 @@ describe("ForecastPage", () => {
     // The whole kitchen has L, KG and PCS: euros and one line per unit, never one sum (#1618).
     expect(tile("Waste")).not.toHaveTextContent("Our engine440");
     expect(tile("Waste")).toHaveTextContent(
-      "WasteOur engine€1,443.9024 KG183 L233 PCSWeekday average€3,949.3572 KG453 L606 PCS",
+      "WasteOur engineabout €1,443.9024 KG183 L233 PCSWeekday averageabout €3,949.3572 KG453 L606 PCS",
     );
 
     const chart = screen.getByRole("img", { name: "Needed and predicted per week" });
