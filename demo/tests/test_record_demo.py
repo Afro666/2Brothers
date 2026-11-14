@@ -137,3 +137,121 @@ def test_a_plain_approve_is_pressed_when_there_is_no_option_to_choose():
     page = _Page([_Button("Approve", clicks)], clicks)
     _decide()(page)
     assert clicks == ["Approve", "Yes, approve"]
+
+
+# ---- sign-in (a site with GATEWAY_REQUIRE_LOGIN=true) ------------------------------------
+
+class _Field:
+    def __init__(self, page, label):
+        self.page, self.label = page, label
+
+    def wait_for(self, state="visible", timeout=None):
+        self.page.log.append(("wait", self.label, state))
+        if state == "visible" and self.page.open_site:
+            raise TimeoutError("no sign-in page")
+        if state == "detached" and not self.page.accepts:
+            raise TimeoutError("still there")
+
+    def fill(self, value):
+        self.page.filled[self.label] = value
+
+    def click(self):
+        self.page.log.append(("click", self.label))
+
+
+class _Alert:
+    def __init__(self, text):
+        self.text = text
+        self.first = self
+
+    def count(self):
+        return 1 if self.text else 0
+
+    def inner_text(self):
+        return self.text
+
+
+class _SignInPage:
+    """The sign-in page: it goes away when the site accepts, else it shows `alert`."""
+
+    def __init__(self, accepts, alert="", open_site=False):
+        self.accepts, self.alert, self.log, self.filled, self.open_site = accepts, alert, [], {}, open_site
+
+    def goto(self, url):
+        self.log.append(("goto", url))
+
+    def get_by_label(self, label):
+        return _Field(self, label)
+
+    def get_by_role(self, role, name=None, exact=False):
+        return _Alert(self.alert) if role == "alert" else _Field(self, name)
+
+
+def test_sign_in_fills_the_form_on_the_sign_in_page_and_waits_until_it_is_gone():
+    from demo.record_demo import sign_in
+    page = _SignInPage(accepts=True)
+    assert sign_in(page, "https://x", "approver@example.test", "a-long-password") is True
+    assert page.log[0] == ("goto", "https://x/sign-in")
+    assert page.filled == {"Email": "approver@example.test", "Password": "a-long-password"}
+    assert page.log[-2:] == [("click", "Sign in"), ("wait", "Password", "detached")]
+
+
+def test_an_open_site_shows_no_sign_in_page_and_nothing_is_typed():
+    from demo.record_demo import sign_in
+    page = _SignInPage(accepts=True, open_site=True)
+    assert sign_in(page, "https://x", "approver@example.test", "a-long-password") is False
+    assert page.filled == {}
+
+
+def test_a_refused_sign_in_stops_with_the_sites_message_and_never_the_password():
+    from demo.record_demo import sign_in
+    page = _SignInPage(accepts=False, alert="wrong email or password")
+    with pytest.raises(RuntimeError) as error:
+        sign_in(page, "https://x", "approver@example.test", "a-long-password")
+    assert "wrong email or password" in str(error.value) and "approver@example.test" in str(error.value)
+    assert "a-long-password" not in str(error.value)
+
+
+def test_the_password_comes_from_the_environment_and_a_closed_site_is_named():
+    from demo.record_demo import sign_in_problem
+    assert "DEMO_PASSWORD" in sign_in_problem("a@b.c", None, lambda: False)
+    assert sign_in_problem("a@b.c", "a-long-password", lambda: pytest.fail("not asked")) is None
+    assert "--email" in sign_in_problem(None, None, lambda: True)       # the site has sign-in on
+    assert sign_in_problem(None, None, lambda: False) is None            # the open demo: as before
+
+
+def test_there_is_no_password_argument(monkeypatch, capsys):
+    from demo import record_demo
+    monkeypatch.delenv("DEMO_PASSWORD", raising=False)
+    with pytest.raises(SystemExit):
+        record_demo.main(["--email", "a@b.c", "--password", "x"])
+    assert "unrecognized arguments" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as stop:
+        record_demo.main(["--email", "a@b.c"])                          # no browser is started
+    assert "DEMO_PASSWORD" in str(stop.value)
+
+
+def test_site_needs_sign_in_reads_the_session_check():
+    import urllib.error
+    from demo.record_demo import site_needs_sign_in
+
+    def answers(code):
+        def opener(request, timeout=None):
+            assert request.full_url == "https://x/api/v1/me"
+            if code == 200:
+                class _Ok:
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *exc):
+                        return False
+                return _Ok()
+            if code is None:
+                raise OSError("no connection")
+            raise urllib.error.HTTPError(request.full_url, code, "refused", {}, None)
+        return opener
+
+    assert site_needs_sign_in("https://x", answers(401)) is True
+    assert site_needs_sign_in("https://x", answers(200)) is False        # the open demo
+    assert site_needs_sign_in("https://x", answers(502)) is False
+    assert site_needs_sign_in("https://x", answers(None)) is False
