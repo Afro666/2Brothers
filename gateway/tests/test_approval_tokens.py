@@ -521,6 +521,24 @@ def test_personal_token_of_a_person_moved_to_another_kitchen_is_401_on_mcp(mcp_e
 
 # ---- operator CLI -----------------------------------------------------------------------
 
+def test_the_operator_cli_lists_and_revokes_every_persons_token(env, monkeypatch, capsys):
+    client, _, db = env
+    aron, _ = personal(client, db)
+    users.create_user(db, "maciek@example.com", PW, name="Maciek", role="approver", kitchen_id="demo-kitchen")
+    sign_in(client, "maciek@example.com")
+    maciek = client.post(K + "/approval-tokens", json={}).json()
+    from gateway import tokens
+    import store.db
+    monkeypatch.setattr(store.db, "get_db", lambda: db)
+    capsys.readouterr()
+    assert tokens.main(["list-approvers"]) == 0
+    listing = capsys.readouterr().out
+    assert aron["token_id"] in listing and maciek["token_id"] in listing
+    for out in (aron, maciek):
+        assert tokens.main(["remove-approver", "--token-id", out["token_id"]]) == 0
+        assert db.approval_tokens.find_one({"_id": out["token_id"]})["revoked_at"] is not None
+
+
 def test_cli_add_list_remove(env, monkeypatch, capsys):
     _, _, db = env
     people(db)
