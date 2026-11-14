@@ -373,6 +373,22 @@ describe("OptionCompare", () => {
     expect(onApprove).not.toHaveBeenCalled();
   });
 
+  it("shows at most 3 basket thumbnails and a +N chip for the rest (#1250)", () => {
+    const line = optionA.lines[0];
+    const big: ProposalOption = { ...optionA, lines: Array.from({ length: 6 }, () => line) };
+    render(<OptionCompare options={[big]} onChoose={vi.fn()} onApprove={vi.fn()} />);
+    const thumbs = within(row("A")).getByTestId("option-thumbs");
+    expect(thumbs.children).toHaveLength(4);
+    const more = within(thumbs).getByTestId("option-thumbs-more");
+    expect(more).toHaveTextContent("+3");
+    expect(more).toHaveAttribute("aria-hidden");
+  });
+
+  it("shows no +N chip when the basket fits", () => {
+    render(<OptionCompare options={[optionA]} onChoose={vi.fn()} onApprove={vi.fn()} />);
+    expect(within(row("A")).queryByTestId("option-thumbs-more")).toBeNull();
+  });
+
   it("offers no way to switch baskets when the API cannot", () => {
     render(
       <OptionCompare
