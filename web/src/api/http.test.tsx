@@ -300,12 +300,30 @@ describe("createHttpApi", () => {
     const api = createHttpApi("/api");
     expect(await api.signIn("buyer@example.com", "demo-kitchen-2026")).toMatchObject({
       email: "buyer@example.com",
-      canApprove: false,
+      role: "approver",
+      canApprove: true,
     });
     await api.approve({ approvalId: "prop-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 }, "human");
     const approvalCall = calls.find((call) => call.route.includes("/approve"));
     expect(approvalCall?.headers).not.toHaveProperty("X-User");
     expect(calls[0].body).toEqual({ email: "buyer@example.com", password: "demo-kitchen-2026" });
+  });
+
+  it("lets a signed-in chef not approve, and reads a person's email from the /v1/me name", async () => {
+    gateway({
+      "POST /api/v1/auth/login": () => ({ email: "chef@example.com", name: "Chef", role: "chef" }),
+      "GET /api/v1/me": () => ({ kind: "human", name: "a@b.c", role: "approver", can_approve: true }),
+    });
+    const api = createHttpApi("/api");
+    expect(await api.signIn("chef@example.com", "demo-kitchen-2026")).toMatchObject({ canApprove: false });
+    expect(await api.getSession()).toMatchObject({ name: "a@b.c", email: "a@b.c", canApprove: true });
+  });
+
+  it("does not take an agent's name as an email", async () => {
+    gateway({
+      "GET /api/v1/me": () => ({ kind: "agent", name: "bot@example.com", role: "approver", can_approve: true }),
+    });
+    expect(await createHttpApi("/api").getSession()).toMatchObject({ email: null, canApprove: false });
   });
 
   it("does not allow an agent session to approve even when the approval flag is true", async () => {

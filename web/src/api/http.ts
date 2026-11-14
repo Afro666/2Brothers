@@ -115,13 +115,19 @@ export function createHttpApi(baseUrl: string): Api {
       headers: actor && !currentSession?.email ? { "X-User": actor } : undefined,
       body: JSON.stringify(body),
     });
+  // `GET /v1/me` has `kind` and `can_approve` but no email (a person's email is in `name`);
+  // `POST /v1/auth/login` has the email but no `kind` or `can_approve`, and only people sign in.
   const toSession = (body: Json): Session => {
     const role = body.role === "approver" || body.role === "chef" || body.role === "viewer" ? body.role : null;
+    const name = typeof body.name === "string" ? body.name : "";
+    const fromLogin = body.kind === undefined;
+    const human = fromLogin || body.kind === "human";
+    const email = typeof body.email === "string" ? body.email : human && name.includes("@") ? name : null;
     return {
-      name: typeof body.name === "string" ? body.name : "",
-      email: typeof body.email === "string" ? body.email : null,
+      name,
+      email,
       role,
-      canApprove: body.can_approve === true && body.kind === "human",
+      canApprove: fromLogin ? role === "approver" : body.can_approve === true && body.kind === "human",
     };
   };
   // The gateway lists at most its 100 newest proposals.
