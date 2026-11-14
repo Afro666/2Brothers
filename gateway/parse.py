@@ -78,9 +78,15 @@ class ParsedRequest:
 
 _NUM = r"(\d{1,3}(?:[ ,. ]\d{3})+|\d+(?:[.,]\d+)?)"
 _QTY = re.compile(_NUM + r"\s*(" + "|".join(sorted(UNITS, key=len, reverse=True)) + r")\b", re.I)
+# A pack word right after a quantity makes it a pack size, not a second product:
+# "50 kg flour, 25 kg sacks", "100 L milk and 1 l cartons".
+_PACK = (r"(?:(?:carton|bottle|sack|bag|pack|packet|box|can|tin|jar|tub|bucket|crate|case"
+         r"|keg|canister|pouch|container)(?:e?s)?"
+         r"|(?:pussi|pullo|tölk|säk|purk|rasi|laatik|pakkau|kanist|ämpär|astia)\w*)\b")
 # Two products in one text: a second quantity after "and", "ja", "sekä", "och", "&", "+"
-# or a comma (not the comma of a decimal number, "1,5 l").
-_SECOND = re.compile(r"(?:\b(?:and|ja|sekä|och)\b|[&+]|(?<!\d),)\s*" + _QTY.pattern, re.I)
+# or a comma (not the comma of a decimal number, "1,5 l"), that is not a pack size.
+_SECOND = re.compile(r"(?:\b(?:and|ja|sekä|och)\b|[&+]|(?<!\d),)\s*" + _QTY.pattern
+                     + r"(?!\s*" + _PACK + ")", re.I)
 _ISO = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _DMY = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})?")
 _DMON = re.compile(r"\b(\d{1,2})\s+(" + "|".join(MONTHS) + r")[a-z]*\b", re.I)
