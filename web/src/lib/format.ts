@@ -45,6 +45,20 @@ export function formatNumber(value: number): string {
   return num[getAppearance().numberFormat].format(value);
 }
 
+/** Units a kitchen weighs or measures; every other unit (PCS, ST, KI, ...) is counted. */
+const MEASURED_UNITS = new Set(["KG", "G", "L", "DL", "CL", "ML"]);
+
+/**
+ * A shortfall rounded up, so it is never understated: a whole number for counted
+ * units, at most one decimal for weights and volumes. "1,922 PCS", "41.5 KG".
+ */
+export function formatShortfall(amount: number, unit: string): string {
+  const step = MEASURED_UNITS.has(unit.toUpperCase()) ? 10 : 1;
+  // The small epsilon keeps float noise (41.4 * 10 = 413.99...) from rounding up a step.
+  const rounded = Math.ceil(amount * step - 1e-9) / step;
+  return `${formatNumber(rounded)} ${unit}`;
+}
+
 /** Stock in sales units, or "unknown" for a sentinel / missing value. */
 export function formatStock(amount: number | null | undefined, unit: string): string {
   if (isUnknownStock(amount)) return "unknown";
