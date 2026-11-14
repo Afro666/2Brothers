@@ -107,7 +107,7 @@ log = logging.getLogger(__name__)
 
 def missing_deps(model) -> list[str]:
     """The packages a covers model needs that this install lacks (the `covers` extra)."""
-    return [name for name in model.requires if importlib.util.find_spec(name) is None]
+    return [name for name in getattr(model, "requires", ()) if importlib.util.find_spec(name) is None]
 
 
 def demo_forecaster(kitchen, signals=None):
