@@ -12,6 +12,7 @@ import {
   Package,
   ScrollText,
   Settings,
+  ShieldCheck,
   ShoppingBasket,
   TrendingUp,
   Truck,
@@ -55,6 +56,7 @@ export const KITCHEN_NAV: NavItem[] = [
   { id: "catalog", label: "Catalog", href: "/catalog", icon: BookOpen },
   { id: "settings", label: "Settings", href: "/settings", icon: Settings },
   AUDIT,
+  { id: "trust", label: "Trust", href: "/trust", icon: ShieldCheck },
   ABOUT,
 ];
 

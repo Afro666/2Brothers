@@ -24,6 +24,7 @@ describe("application routes", () => {
     ["/demand", "Demand"],
     ["/forecast", "Forecast check"],
     ["/settings", "Settings"],
+    ["/trust", "Trust"],
   ])("renders %s", async (path, title) => {
     await renderAt(path);
     expect(await screen.findByRole("heading", { level: 1, name: title })).toBeInTheDocument();
