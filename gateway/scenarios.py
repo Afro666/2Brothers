@@ -168,9 +168,24 @@ def s02() -> Result:
     return r.finish()
 
 
+def _row_allergens(pid, contains):
+    return {"product_id": pid, "allergen_data_known": True,
+            "allergens": {"contains": list(contains), "may_contain": [], "undeclared": []}}
+
+
 def s03() -> Result:
-    return Result("S03", "Allergen-safe substitute for a school", "-", "NOT BUILT",
-                  problems=["kitchen allergen rules refusing a substitute: #16 mandate, #281 substitutes"])
+    from agent.substitutes import AllergenPolicy
+
+    r = Result("S03", "Allergen-safe substitute for a school", "agent (substitutes policy)")
+    school = AllergenPolicy(excluded=("AW",))                 # coeliac pupils: no gluten cereals
+    oddly = _row_allergens("468465", ["GO"])                  # oat drink, gluten free: oats only
+    oatly = _row_allergens("470863", ["AW", "GO"])            # Valio's own substitute, 1,414 in stock
+    r.expect("requested oat drink allowed", school.allowed(oddly), True)
+    r.expect("Oatly refused as substitute", school.allowed(oatly, substitute=True), False)
+    r.expect("same Oatly fine without the rule", AllergenPolicy().allowed(oatly, substitute=True), True)
+    r.codes([], ["ALLERGEN_RULE", "STOCK_UNKNOWN"])
+    r.checks.append("the refusal holds; no line carries ALLERGEN_RULE yet")
+    return r.finish()
 
 
 def _minimal_record(pid, name, allergens):
