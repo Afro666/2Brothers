@@ -39,6 +39,7 @@ def test_unknown_item_is_remembered_and_linking_it_clears_it(env):
         assert r.json()["error"]["remembered"] is True
     unknown = client.get(K + "/aliases", headers=AGENT).json()["unknown_items"]
     assert unknown[0]["phrase"] == "unicorn steak" and unknown[0]["times"] == 2
+    assert unknown[0]["suggestions"] == []                                       # nothing near: no guess
     assert db.products.count_documents({"names.en": "unicorn steak"}) == 0        # nothing invented
     client.put(K + "/aliases", headers=HUMAN, json={"phrase": "unicorn steak", "product_id": "463335"})
     assert client.get(K + "/aliases", headers=AGENT).json()["unknown_items"] == []
@@ -84,3 +85,37 @@ def test_another_kitchens_words_mean_nothing_here(env):
     client, _, db = env
     memory.set_alias(db, "other-kitchen", "house milk", "462775", "someone")
     assert memory.lookup(db, "demo-kitchen", "house milk") is None
+
+
+def test_unknown_words_get_nearest_products_as_suggestions_once(env):
+    client, _, db = env
+    memory.note_unknown(db, "demo-kitchen", "talon maito")      # the test search knows "maito"
+    first = client.get(K + "/aliases", headers=AGENT).json()["unknown_items"][0]
+    assert first["phrase"] == "talon maito" and first["suggested_by"] == "words"
+    assert [s["product_id"] for s in first["suggestions"]] == ["462775", "462921", "463335"]
+    assert first["suggestions"][0]["product_name"] == "milk 462775"
+    db.products.delete_many({})                                 # stored: the next call does not search again
+    again = client.get(K + "/aliases", headers=AGENT).json()["unknown_items"][0]
+    assert [s["product_id"] for s in again["suggestions"]] == ["462775", "462921", "463335"]
+
+
+def test_meaning_search_falls_back_to_words_and_a_limit_per_call(monkeypatch):
+    import mongomock
+    import store.search
+    db = mongomock.MongoClient(tz_aware=True)["t"]
+    db.products.insert_one({"_id": "p1", "names": {"en": "Valio butter 500 g"}})
+    calls = []
+
+    def fake(db, phrase, filters, limit, kitchen_id=None, hybrid=False, embedder=None):
+        calls.append(hybrid)
+        if hybrid:
+            raise RuntimeError("429 over the free tier")
+        return [{"product_id": "p1"}]
+    monkeypatch.setattr(store.search, "search_products", fake)
+    found, how = memory.suggest(db, "k", "voi")
+    assert how == "words" and found == [{"product_id": "p1", "product_name": "Valio butter 500 g"}]
+    assert calls == [True, False]
+    for i in range(5):
+        memory.note_unknown(db, "k", f"word {i}")
+    rows = memory.list_unknown(db, "k", with_suggestions=True)
+    assert sum(1 for r in rows if r["suggestions"] is not None) == memory.NEW_SUGGESTIONS_PER_CALL

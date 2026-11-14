@@ -90,11 +90,62 @@ def note_unknown(db, kitchen_id: str, phrase: str) -> None:
                                  "$setOnInsert": {"first_asked": now}, "$inc": {"times": 1}}, upsert=True)
 
 
-def list_unknown(db, kitchen_id: str) -> list[dict]:
-    return [{"phrase": r["phrase"], "times": r.get("times", 1),
-             "first_asked": r["first_asked"].isoformat() if r.get("first_asked") else None,
-             "last_asked": r["last_asked"].isoformat() if r.get("last_asked") else None}
-            for r in db.unknown_items.find({"kitchen_id": kitchen_id}).sort("times", -1).limit(100)]
+SUGGESTIONS = 3
+NEW_SUGGESTIONS_PER_CALL = 3      # free embedding tier: 3 query embeddings a minute
+
+
+def suggest(db, kitchen_id: str, phrase: str, *, injected=None) -> tuple[list[dict], str]:
+    """The nearest catalog products for words that matched nothing, and how they were found:
+    "meaning" (vector search over the 17,546 product vectors) or "words" (text search, when
+    the embedding service is not there or over its limit). Only a suggestion: a person links
+    one, or none. It can never change an order, so it may use meaning even while the order
+    search runs on words only (SEARCH_HYBRID off)."""
+    rows, how = [], "words"
+    try:
+        if injected is not None:
+            rows = injected(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id)
+        else:
+            from gateway import catalog_search
+            from store.search import search_products
+            try:
+                rows = search_products(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id,
+                                       hybrid=True, embedder=catalog_search._query_embedder())
+                how = "meaning"
+            except ValueError:
+                return [], "words"
+            except Exception:              # no key, limit, timeout, no index: words instead
+                rows = search_products(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id)
+    except Exception:
+        return [], "words"
+    ids = [str(r["product_id"]) for r in rows[:SUGGESTIONS] if r.get("product_id")]
+    names = {d["_id"]: (d.get("names") or {}).get("en")
+             for d in db.products.find({"_id": {"$in": ids}}, {"names": 1})} if ids else {}
+    return [{"product_id": pid, "product_name": names.get(pid)} for pid in ids], how
+
+
+def list_unknown(db, kitchen_id: str, *, injected=None, with_suggestions: bool = False) -> list[dict]:
+    """Unknown phrases, most asked first. With suggestions: up to NEW_SUGGESTIONS_PER_CALL
+    phrases without stored suggestions get them now (kept on the row, so the next call is free)."""
+    rows = list(db.unknown_items.find({"kitchen_id": kitchen_id}).sort("times", -1).limit(100))
+    if with_suggestions:
+        fresh = 0
+        for r in rows:
+            if "suggestions" in r or fresh >= NEW_SUGGESTIONS_PER_CALL:
+                continue
+            found, how = suggest(db, kitchen_id, r["phrase"], injected=injected)
+            db.unknown_items.update_one({"_id": r["_id"]}, {"$set": {"suggestions": found, "suggested_by": how}})
+            r["suggestions"], r["suggested_by"] = found, how
+            fresh += 1
+    out = []
+    for r in rows:
+        item = {"phrase": r["phrase"], "times": r.get("times", 1),
+                "first_asked": r["first_asked"].isoformat() if r.get("first_asked") else None,
+                "last_asked": r["last_asked"].isoformat() if r.get("last_asked") else None}
+        if with_suggestions:
+            item["suggestions"] = r.get("suggestions")          # None: not looked up yet
+            item["suggested_by"] = r.get("suggested_by")
+        out.append(item)
+    return out
 
 
 def forget_unknown(db, kitchen_id: str, phrase: str) -> bool:
@@ -108,7 +159,8 @@ def mount_memory(app, gw, principal, body) -> None:
     @app.get(k + "/aliases")
     def aliases(kitchen_id: str, who=Depends(principal)):
         who.need("kitchen:read", kitchen_id)
-        return {"aliases": list_aliases(gw().db, kitchen_id), "unknown_items": list_unknown(gw().db, kitchen_id)}
+        return {"aliases": list_aliases(gw().db, kitchen_id),
+                "unknown_items": list_unknown(gw().db, kitchen_id, injected=gw()._search, with_suggestions=True)}
 
     @app.put(k + "/aliases")
     async def put_alias(kitchen_id: str, request: Request, who=Depends(principal)):
