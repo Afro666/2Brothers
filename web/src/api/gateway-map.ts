@@ -4,6 +4,7 @@ import { mapModelTrace } from "@/api/model-trace";
 import { SUPPLIER_ID } from "@/api/supplier-id";
 import { ApiError } from "@/api/types";
 import { CODE_LABELS, codeLabel, plainReason } from "@/lib/codes";
+import { formatDate } from "@/lib/format";
 import type {
   AddableProduct,
   ApprovalRequest,
@@ -612,10 +613,72 @@ const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
 
 /** `expected_total: 148.76; verdict: NEEDS_APPROVAL`: the gateway's own values, as sent. */
 function describe(fields: unknown): string {
-  const parts = Object.entries(fields && typeof fields === "object" ? fields : {}).map(
+  let values = fields;
+  if (typeof fields === "string") {
+    try {
+      values = JSON.parse(fields);
+    } catch {
+      values = fields;
+    }
+  }
+  const parts = Object.entries(values && typeof values === "object" ? values : {}).map(
     ([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
   );
   return parts.join("; ") || "No details recorded.";
+}
+
+function record(value: unknown): Json | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Json;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Json) : null;
+  } catch {
+    return null;
+  }
+}
+
+function auditId(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
+  const parsed = record(value);
+  if (parsed) return null;
+  try {
+    const unquoted: unknown = JSON.parse(value);
+    return typeof unquoted === "string" && unquoted ? unquoted : value;
+  } catch {
+    return value;
+  }
+}
+
+function groupIds(value: unknown, key?: string, ids: string[] = []): string[] {
+  if (key === "run_id" || key === "offer_id" || key === "proposal_id" || key === "order_id") {
+    const id = auditId(value);
+    if (id && !ids.includes(id)) ids.push(id);
+    return ids;
+  }
+  const row = record(value);
+  if (row) for (const [childKey, child] of Object.entries(row)) groupIds(child, childKey, ids);
+  else if (Array.isArray(value)) for (const child of value) groupIds(child, key, ids);
+  return ids;
+}
+
+function toolReason(tool: string, value: unknown): string {
+  const args = record(value);
+  if (!args) return "";
+  if (tool === "search_products") {
+    return typeof args.query === "string" && args.query ? `Looking for “${args.query}”` : "";
+  }
+  if (tool !== "get_offer") return "";
+  const count = Array.isArray(args.product_ids) ? args.product_ids.length : null;
+  const requestedDate = typeof args.requested_date === "string" ? args.requested_date : null;
+  const date =
+    requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) && Number.isFinite(Date.parse(`${requestedDate}T12:00:00+02:00`))
+      ? formatDate(requestedDate)
+      : null;
+  const products = count == null ? null : count === 1 ? "1 product" : `${count} products`;
+  if (products && date) return `${products} for ${date}`;
+  if (products) return products;
+  return date ? `For ${date}` : "";
 }
 
 function mapAuditEvent(event: Json): AuditEvent {
@@ -624,15 +687,20 @@ function mapAuditEvent(event: Json): AuditEvent {
     // Agent tool events carry no `at` today: the time is unknown, not "now".
     at: typeof event.at === "string" ? event.at : null,
     orderId: [event.order_id, event.proposal_id].find((id): id is string => typeof id === "string"),
+    groupIds: groupIds(event),
   };
   if (typeof event.tool === "string") {
     const finished = event.type === "tool_call_finished";
-    const error = object(event.result ?? {}, "an audit result").error;
+    const result = record(event.result ?? {});
+    if (!result) invalid("an audit result");
+    const error = result.error;
     const verb = Object.hasOwn(TOOL_VERBS, event.tool) ? TOOL_VERBS[event.tool] : undefined;
     return {
       ...base,
       kind: TOOL_KINDS[event.tool] ?? "other",
       actor: "agent",
+      reason: toolReason(event.tool, event.arguments),
+      details: describe(finished ? event.result : event.arguments),
       summary: !finished
         ? (verb?.started ?? `Buyer called ${event.tool}`)
         : error == null
@@ -640,7 +708,6 @@ function mapAuditEvent(event: Json): AuditEvent {
           : verb
             ? `${verb.done}: it failed`
             : `${event.tool} failed`,
-      reason: describe(finished ? event.result : event.arguments),
     };
   }
   const {
@@ -655,6 +722,17 @@ function mapAuditEvent(event: Json): AuditEvent {
     ...rest
   } = event;
   const known = typeof kind === "string" ? EVENT_KINDS[kind] : undefined;
+  const humanReason =
+    typeof rest.summary === "string"
+      ? rest.summary
+      : typeof rest.reason === "string" && rest.reason
+        ? rest.reason
+        : "";
+  const details = humanReason
+    ? Object.fromEntries(
+        Object.entries(rest).filter(([key]) => key !== (typeof rest.summary === "string" ? "summary" : "reason")),
+      )
+    : rest;
   return {
     ...base,
     // With sign-in on, the gateway's actor is the account's email: the log says who, not only "a person".
@@ -671,12 +749,8 @@ function mapAuditEvent(event: Json): AuditEvent {
               ? "human"
             : "system",
     summary: known?.summary ?? (typeof kind === "string" ? kind : "Unknown step"),
-    reason:
-      typeof rest.summary === "string"
-        ? rest.summary
-        : typeof rest.reason === "string" && rest.reason
-          ? rest.reason
-          : describe(rest),
+    reason: humanReason || (typeof kind === "string" && kind.startsWith("supplier_offer_") ? describe(rest) : ""),
+    details: describe(details),
   };
 }
 

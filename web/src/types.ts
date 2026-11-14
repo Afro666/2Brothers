@@ -349,6 +349,10 @@ export interface AuditEvent {
   /** Why, in the words of the engine, the gateway or the human. */
   reason: string;
   orderId?: string;
+  /** Run, offer, proposal and order ids that connect the steps of one request. */
+  groupIds?: string[];
+  /** Raw fields from the gateway, kept behind the row's Details disclosure. */
+  details?: string;
 }
 
 /**

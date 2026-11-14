@@ -547,7 +547,9 @@ describe("mapAudit", () => {
         kind: "offer",
         actor: "agent",
         summary: "Buyer is asking for an offer",
-        reason: 'product_ids: ["900001"]; requested_date: 2026-11-20',
+        reason: "1 product for Fri 20 Nov",
+        details: 'product_ids: ["900001"]; requested_date: 2026-11-20',
+        groupIds: ["run-1"],
       },
       {
         id: "ev-2",
@@ -556,7 +558,9 @@ describe("mapAudit", () => {
         kind: "approval",
         actor: "agent",
         summary: "Buyer asked for approval: it failed",
-        reason: "error: Rejected by buyer policy; reason_code: POLICY_VIOLATION",
+        reason: "",
+        details: "error: Rejected by buyer policy; reason_code: POLICY_VIOLATION",
+        groupIds: ["run-1"],
       },
       {
         id: "ev-3",
@@ -565,7 +569,9 @@ describe("mapAudit", () => {
         kind: "approval",
         actor: "agent",
         summary: "Approval requested",
-        reason: "expected_total: 91.20",
+        reason: "",
+        details: "expected_total: 91.20",
+        groupIds: ["prop-1", "offer-1"],
       },
       {
         id: "ev-4",
@@ -574,7 +580,9 @@ describe("mapAudit", () => {
         kind: "order",
         actor: "chef",
         summary: "Order placed",
-        reason: "expected_total: 91.20",
+        reason: "",
+        details: "expected_total: 91.20",
+        groupIds: ["prop-1", "ord-1"],
       },
       {
         id: "ev-5",
@@ -583,7 +591,9 @@ describe("mapAudit", () => {
         kind: "other",
         actor: "human",
         summary: "something_new",
-        reason: "No details recorded.",
+        reason: "",
+        details: "No details recorded.",
+        groupIds: [],
       },
     ]);
   });
@@ -607,7 +617,9 @@ describe("mapAudit", () => {
         kind: "refused",
         actor: "system",
         summary: "Refused: the gateway said no (403)",
-        reason: "code: SCOPE_MISSING; method: POST; path: /kitchens/k-1/orders",
+        reason: "",
+        details: "code: SCOPE_MISSING; method: POST; path: /kitchens/k-1/orders",
+        groupIds: [],
       },
     ]);
     expect(mapAudit([{ ...refused, actor: "buyer-agent" }])[0].actor).toBe("agent");
@@ -634,6 +646,41 @@ describe("mapAudit", () => {
     expect(mapAudit(auditEvents, "ord-1").map((event) => event.id)).toEqual(["ev-3", "ev-4"]);
     expect(mapAudit(auditEvents, "prop-1").map((event) => event.id)).toEqual(["ev-3", "ev-4"]);
     expect(mapAudit(auditEvents, "ord-none")).toEqual([]);
+  });
+
+  it("keeps every old raw reason in details and only readable words in reason", () => {
+    const [tool] = mapAudit([
+      {
+        event_id: "tool",
+        run_id: "run",
+        type: "tool_call_started",
+        tool: "get_offer",
+        arguments: '{"product_ids":["1","2","3"],"requested_date":"2026-11-17","need_id":"need"}',
+      },
+    ]);
+    const oldToolReason = 'product_ids: ["1","2","3"]; requested_date: 2026-11-17; need_id: need';
+    expect(tool.reason).toBe("3 products for Tue 17 Nov");
+    expect(tool.details).toBe(oldToolReason);
+    expect(`${tool.reason}\n${tool.details}`).toContain("need_id: need");
+
+    const [gateway] = mapAudit([
+      {
+        event_id: "gateway",
+        kind: "decision_summary",
+        summary: "Asked for milk",
+        reason: "An additional explanation",
+        expected_total: "12.30",
+      },
+    ]);
+    expect(gateway.reason).toBe("Asked for milk");
+    expect(gateway.details).toContain("reason: An additional explanation");
+    expect(gateway.details).toContain("expected_total: 12.30");
+
+    const [search] = mapAudit([
+      { event_id: "search", type: "tool_call_finished", tool: "search_products", arguments: { query_present: true }, result: {} },
+    ]);
+    expect(search.reason).toBe("");
+    expect(search.details).toBe("No details recorded.");
   });
 });
 
