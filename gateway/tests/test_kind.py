@@ -314,3 +314,24 @@ def test_the_parser_path_prices_the_kind_only(gateway):
     _, gw = gateway
     read = gw._from_text("demo-kitchen", {"text": "100 L cream by Monday", "idempotency_key": "k"})
     assert read["product_ids"] and all(pid.startswith("cr") for pid in read["product_ids"])
+
+
+def test_the_kinds_are_read_again_after_the_ttl(gateway):
+    """#1044: a catalog reload is seen by the kind rule without a gateway restart."""
+    from datetime import timedelta
+    from gateway.service import KINDS_TTL
+    _, gw = gateway
+    clock = [NOW]
+    gw.now = lambda: clock[0]
+    gw._of_kind([], "cheese", {}, "50 kg cheese", "KG")
+    assert gw._kinds.categories("50 kg cheese") == ("10603",)
+    new = many("nc", "10699", [(f"{brand} cheese 1 kg", f"{brand} juusto 1 kg")
+                               for brand in ("Alpha", "Bravo", "Delta", "Gamma", "Sigma", "Omega")])
+    gw.db.products.insert_many([{"_id": r["product_id"], **{k: v for k, v in r.items() if k != "product_id"}}
+                                for r in new])
+    clock[0] = NOW + KINDS_TTL - timedelta(seconds=1)
+    gw._of_kind([], "cheese", {}, "50 kg cheese", "KG")
+    assert gw._kinds.categories("50 kg cheese") == ("10603",)      # still the old snapshot
+    clock[0] = NOW + KINDS_TTL
+    gw._of_kind([], "cheese", {}, "50 kg cheese", "KG")
+    assert "10699" in gw._kinds.categories("50 kg cheese")
