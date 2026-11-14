@@ -99,6 +99,7 @@ class EmbedTests(unittest.TestCase):
                 embed(["a"], "query", post=broken)
 
 
+@mock.patch.object(embeddings, "current_model", lambda: embeddings.EMBED_MODEL)  # not this machine's key
 class StaleTests(unittest.TestCase):
     def test_only_new_changed_or_differently_embedded_rows_are_stale(self):
         def row(product_id, name, **embedding):
@@ -116,6 +117,7 @@ class StaleTests(unittest.TestCase):
 
 
 @unittest.skipUnless(os.environ.get("STORE_LIVE_TESTS") == "1", "set STORE_LIVE_TESTS=1")
+@mock.patch.object(embeddings, "current_model", lambda: embeddings.EMBED_MODEL)  # not this machine's key
 class LiveEmbedProductsTests(unittest.TestCase):
     """Bulk writes on real MongoDB, with the fake embedder: a throwaway database."""
 
