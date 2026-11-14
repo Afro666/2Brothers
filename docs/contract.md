@@ -173,7 +173,7 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 
 | MCP tool | Method and path | Request / query fields | Success response fields |
 |---|---|---|---|
-| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object`, `limit: integer`, `need_id: string` (optional; see below) | `products: object[]`, `search: "text" \| "hybrid"`; with `need_id` also `requested_date`, `measure`, `note` |
+| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object`, `limit: integer`, `need_id: string` (optional; see below), `mode: "text" \| "hybrid"` (optional, HTTP only; see below) | `products: object[]`, `search: "text" \| "hybrid" \| "meaning-fallback"` (the last only with `need_id`), `meaning_unavailable: true` (only when `mode: "hybrid"` fell back to words); with `need_id` also `requested_date`, `measure`, `note` |
 | `get_offer` | POST `/tools/get_offer` | `product_ids: string[]`, `requested_date: YYYY-MM-DD`, `need_id: string` | `offer_id`, `valid_until`, `lines: object[]`, `signature`, `offer_hash` |
 | `simulate_order` | POST `/tools/simulate_order` | `offer_id: string` | `offer_id`, `expected_total`, `currency`, `mandate: object`, `lines: object[]`, `signature`, `offer_hash` |
 | `place_order` | POST `/tools/place_order` | `offer_id`, `expected_total: decimal string`, `idempotency_key: string` | `order_id`, `outcome`, `status` |
@@ -364,6 +364,9 @@ authenticated caller, never from a request field.
 Response: `products`, best match first. Each row is the product row below plus
 `score` (number) and `match_reasons` (short strings, for example `"size 1 L matches"`,
 `"allergen data missing"`, `"size read from the name"`).
+Each row also has `matched_by`: `"words"` (found by the text search only), `"meaning"`
+(found by Atlas Vector Search only; it also has the reason `"similar meaning, no word match"`)
+or `"both"`. A `"text"` search answers `"words"` on every row.
 
 **With `need_id` (string, optional).** The search becomes a shortlist for that stored
 need (#639):
@@ -404,6 +407,32 @@ scope) apply to both sides. When the vector side cannot answer in 2 seconds, or 
 the gateway answers with the text search and says `"text"`: a search never fails because
 of it.
 
+**Search by meaning for one request (`mode`, #1382).** `mode: "hybrid"` runs the hybrid
+search for this one request, whatever `SEARCH_HYBRID` says; `mode: "text"` runs the text
+search only. Without `mode`, `SEARCH_HYBRID` decides, as before. Any other value is 422
+`INVALID_REQUEST`. `mode` is for the web Catalog page: it is ignored with a `need_id` (the
+Buyer's shortlist), and the MCP tool `search_products` never sends it, so the Buyer's
+searches do not change. When `mode: "hybrid"` cannot make the query vector (no key, the
+embedding service's limit of 3 new texts a minute, more than 2 seconds, the rest time after
+a failure), the answer is the text search with `search: "text"` and `meaning_unavailable: true`.
+A query asked before keeps its vector in the gateway's memory, so asking it again runs hybrid
+without a new embedding call.
+
+**Meaning search when the words find nothing (`"meaning-fallback"`, #1384).** With
+`need_id`, when the word search finds no product, the gateway runs Atlas Vector Search
+once for the same query and the same hard filters (allergens with the group rule,
+`allergen_strictness`, labels, kitchen scope; with `strict`, a product with
+`allergen_data_known: false` never comes back). It runs whatever `SEARCH_HYBRID` says,
+and only on zero word hits: a request the words answer gets the same rows as before.
+The kind and measure steps above then run on what it found. Such an answer says
+`search: "meaning-fallback"`, and each of its rows has the match reason
+`"similar meaning, no word match"` (`matched_by: "meaning"`). It never runs for a need the allergen rule refuses
+(`products: []` as above), and not when the word search finds products only without the
+allergen filter: the excluded products are not replaced by others. When the query vector
+cannot be made (no key, the embedding rate limit, a slow answer, no vector index), the
+answer stays `products: []` with `search: "text"` and a `note` that says the meaning
+search could not run.
+
 Product row (the catalog row from the shared repository, without the raw record):
 
 | Field | Type | Notes |
@@ -439,7 +468,9 @@ types in `web/src/api/`.
 The web Catalog page and screens that hold product codes use these rows: `searchProducts`
 posts `search_products` with `limit: 50` and only the filters the person set (`exclude_allergens`
 with `allergen_strictness`, `require_labels`, `temperature`), and does not call it for an empty
-query with no filter. `getProducts` reads `GET /v1/kitchens/{kitchen_id}/catalog/products?ids=`
+query with no filter. With the switch "Search by meaning (Atlas Vector Search)" on, it also
+sends `mode: "hybrid"`; with it off it sends no `mode`. Each row shows its `matched_by`, and
+`meaning_unavailable: true` shows a line that the words were used. `getProducts` reads `GET /v1/kitchens/{kitchen_id}/catalog/products?ids=`
 in groups of 200; while the gateway does not serve that route (a 404 with no `error` envelope,
 before #1172), it answers from the sample products as it did before. A named 404 is an error. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
 `allergen_data_known: false` is `allergens: null` (unknown), never an empty list.
@@ -565,6 +596,41 @@ A person without the role gets 403 `ROLE_REQUIRED`. The shared human token acts 
 | 403 | `ROLE_REQUIRED` | The person's role cannot do this. |
 | 422 | `WEAK_PASSWORD` | The new password is shorter than 10 characters, or the same as the current one. |
 | 429 | `ACCOUNT_LOCKED` | Too many wrong passwords; try again in a few minutes. |
+
+### Kitchen aliases and unknown items
+
+`GET /v1/kitchens/{kitchen_id}/aliases` (`kitchen:read`) returns the kitchen's aliases
+and unknown phrases. Aliases are sorted by phrase; unknown phrases are sorted by
+ask count descending, at most 100:
+
+```json
+{
+  "aliases": [
+    {"phrase": "house milk", "product_id": "462775",
+     "product_name": "Valio Eila lactose-free milk 1 L", "set_by": "aron", "uses": 2}
+  ],
+  "unknown_items": [
+    {"phrase": "talon maito", "times": 2,
+     "first_asked": "2026-11-14T02:10:00+00:00",
+     "last_asked": "2026-11-14T02:31:00+00:00",
+     "suggestions": [{"product_id": "462775", "product_name": null}],
+     "suggested_by": "meaning"}
+  ]
+}
+```
+
+- An alias has `phrase`, `product_id`, `product_name`, `set_by` and `uses`;
+  `product_name` and `set_by` can be null.
+- An unknown item has `times` and nullable ISO `first_asked` and `last_asked`
+  timestamps. `suggestions` is null until looked up, otherwise a list of at most
+  three `{product_id, product_name}` objects; `product_name` is nullable.
+- `suggested_by` is `meaning` for vector search, `words` for text search, or null
+  when no lookup has completed.
+- Each call looks up at most three phrases without stored suggestions. Successful
+  lookups, including empty lists, are stored and reused without another search.
+  A search failure leaves the item unlooked-up so a later call retries it.
+- Suggestions never create an alias or link a product automatically, and never
+  create or change an order; a person decides whether to link one.
 
 ### Kitchen API tokens (#271)
 
@@ -726,6 +792,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
 | POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver` (create: signed-in session only) | Personal approval tokens. Shape under "Personal approval tokens". |
 | GET | `/model-usage` | `kitchen:read` | How much the Buyer agent used its model for this kitchen: runs, model calls, tokens, seconds. Shape under "Model usage". |
+| GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". Proposed (#1393); the store function exists, the route is not built. |
 | GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
 | POST, GET | `/webhooks` | human, role `approver` | Register a webhook (body `url`, `events`) or list them. Shape under "Webhooks". |
 | DELETE | `/webhooks/{id}` | human, role `approver` | Remove the webhook and its delivery log. |
@@ -749,6 +816,10 @@ products, menu plans, stock counts, stock, demand, settings and sharing.
   `stock_counted`, `settings_changed`, `share_granted`, `share_revoked`.
 - `POST /stock/photo` writes no kitchen data. It leaves one audit entry per call:
   `stock_photo_read` or `stock_photo_failed` (see "Count from a shelf photo").
+- `POST /orders/{order_id}/delivery-note/photo` leaves stock counts and the order
+  unchanged. Each call records `delivery_note_read` or `delivery_note_failed`; see
+  [Check a delivery from a photo of its note](#check-a-delivery-from-a-photo-of-its-note-362)
+  for fields and the staged structured-result persistence change (#1304).
 - `POST /menu-photo` leaves the stored menu plan unchanged. It writes a
   `menu_photo_read` or `menu_photo_failed` audit entry (see "Plan from a menu photo"),
   plus the pending proposal when matched dishes need ingredients.
@@ -1020,6 +1091,10 @@ The proposal's `request` object echoes what was quoted: `product_ids`, `quantity
 - `made_by`: `parser` when the parser read the free text, `structured` for a body with
   `product_ids`.
 - `query`: the product words the parser searched for. Only on `made_by: parser`.
+- `search`: `"meaning-fallback"`, only when the Buyer quoted a product that its search
+  found by meaning after the word search found nothing (#1384). The proposal's
+  `decision_summary.searched` then ends with "Found by meaning (Atlas Vector Search)
+  after the word search found nothing."
 - `event`: `true`, only when the request was an event.
 - `refusal`: only on a request the allergen rule removes (below): `code`
   (`ALLERGEN_RULE`), `allergens` (string[], the names a person reads, for example
@@ -1123,7 +1198,7 @@ One step:
 | `query` | string, optional | `search_products` only: the search words, only letters, digits, spaces and `-`, at most 60 characters. |
 | `products` | integer, optional | `get_offer` only: how many products were asked for. |
 | `count` | integer, optional | How many rows came back: products found (after the allergen rule), offer lines, simulated lines, shortlist entries. |
-| `code` | string, optional | A code, never text: the mandate verdict (`NEEDS_APPROVAL`, `REFUSED`), the approval status (`PENDING`), the order outcome, a policy reason code (`SCHEMA_INVALID`, `UNKNOWN_ID`, `NEED_MISMATCH`, ...), `TOOL_FAILED`, or `PICKED` for the seller's pick. |
+| `code` | string, optional | A code, never text: the mandate verdict (`NEEDS_APPROVAL`, `REFUSED`), the approval status (`PENDING`), the order outcome, a policy reason code (`SCHEMA_INVALID`, `UNKNOWN_ID`, `NEED_MISMATCH`, ...), `TOOL_FAILED`, `MEANING_FALLBACK` on a `search_products` step whose answer was `search: "meaning-fallback"` (#1384), or `PICKED` for the seller's pick. |
 
 **Never in it:** a key or token, the system prompt, any text the model wrote (its
 reply, its reasons, the seller's `reason`), prices, quantities, other kitchens' data
@@ -1351,8 +1426,9 @@ exact total through the existing workflow before placement.
 the engine's `partial_fill` names a part the supplier confirms, the gateway offers that part
 as the first option: `source: "confirmed"`, its own stored and signed quote, `stock_confirmed:
 true`, `recommended: true`, and `held` for the rest. Its `why` says what is ordered now and
-what waits. It is the option a person can approve at once; the proposal's own basket cannot
-be placed while a line's stock is unconfirmed. When the proposal's own basket has no
+what waits. It is the option whose every line has confirmed stock; a person may also approve
+the proposal's own basket, and the order then waits for the supplier (`supplier_must_confirm`).
+When the proposal's own basket has no
 confirmed stock at all, the gateway looks in the catalog shortlist for the request text and
 offers confirmed stock from there; the `why` then says it was found in the catalog. A request
 without text gets no such search. The gateway answers at most three options:
@@ -1374,6 +1450,12 @@ the confirmed one first, then the Buyer's, with tiers `good`, `better`, `best` i
   `offer_id`, so a client finds the current choice by comparing the two.
 - Nothing is approved and nothing is sent. The person then approves the new
   `expected_total` through `/approve`, as for any proposal.
+- A line whose fresh stock is unknown (Valio's filler of 999999 or more, or a manual or
+  csv price list) does not refuse the choice (#1313, the approve rule of 2026-11-14): the
+  chosen basket keeps `unknown_stock: true` on that line, the mandate reasons say
+  "<supplier> must confirm stock for: <products>.", and the approval places the order with
+  `supplier_must_confirm` and `stock: unknown` on that receipt line, as for any proposal.
+  A line that is not available (empty, null or zero) is still refused: 409 `OPTION_UNAVAILABLE`.
 - Only a human session may choose: 403 `HUMAN_SESSION_REQUIRED` for an API key or the
   Buyer's token.
 
@@ -1382,9 +1464,9 @@ the confirmed one first, then the Buyer's, with tiers `good`, `better`, `best` i
 | 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
 | 404 | `OPTION_NOT_FOUND` | `offer_id` is not one of this proposal's options. |
 | 409 | `NOT_PENDING` | The proposal is no longer `READY` (approved, rejected, expired). |
-| 409 | `STOCK_UNKNOWN` | The fresh simulation cannot confirm the stock of a line (choosing an option, or an auto-approval; a person's approve does not return it since 2026-11-14). |
+| 409 | `STOCK_UNKNOWN` | Only an auto-approval of a line with unconfirmed stock. Neither a person's approve (since 2026-11-14) nor choosing an option (since #1313) returns it. |
 | 409 | `CLOSING_PASSED` | The cut-off of a line has passed. |
-| 409 | `OPTION_UNAVAILABLE` | A product of the option cannot be ordered now for another reason (a recall hold, an allergen rule, no price). |
+| 409 | `OPTION_UNAVAILABLE` | A product of the option cannot be ordered now for another reason (no available stock, a recall hold, an allergen rule, no price). |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. |
 
 After a 409 the proposal is unchanged: it keeps the basket it had.
@@ -1700,6 +1782,31 @@ for each row only `product_id`, `product_name`, `date`, `unit`, `demand`, `kitch
 name, a menu, a recipe, a price or a pack size. It is told to write no dates and no
 product names (the answer shows both next to each line). A product name inside a line is not read for
 numbers, so the "1 l" of "Valio Eila 1 l" is not a quantity.
+
+The worker's model reply is validated against this strict internal shape:
+
+```json
+{
+  "lines": [
+    {
+      "row": 0,
+      "product_id": "462775",
+      "text": "Forecast 2400 L from 6 kitchens against 1700 L available: buy 700 L more.",
+      "numbers": ["2400", "6", "1700", "700"]
+    }
+  ]
+}
+```
+
+All four line fields are required and additional properties are rejected. There are
+at most eight lines; `text` is at most 240 characters and `numbers` at most six
+strings. Every number is a **string**, exactly as written in `text`, per `SCHEMA`.
+
+`row` is the zero-based index into the selected rows sent with this call, not a
+catalog index. The public `note` omits `row` and `numbers`. The model contributes
+only `product_id` and `text`: `product_id` must match the selected row, whose trusted
+data supplies the returned `product_id`, `product_name`, `date` and `risk`; only the
+validated `text` is copied from the model.
 
 Every line the model writes is checked by plain code before anyone sees it:
 
@@ -2476,6 +2583,40 @@ reached the Buyer worker):
 - Counts only: no request text, no reply text, no key.
 - Where it shows: the About page.
 
+### Atlas facts (proposed, #1393)
+
+`GET /v1/kitchens/{kitchen_id}/atlas` (`kitchen:read`) answers what MongoDB Atlas holds
+and runs for the product, read live. Proposed: the store function exists
+(`store.atlas.atlas_facts`); the gateway route is not built yet (#1383).
+
+```json
+{"mongodb_version": "8.0.37", "data_mb": 215, "products": 17548,
+ "vectors": [{"model": "voyage-4", "dimensions": 1024, "count": 17546}],
+ "search_indexes": [
+   {"name": "products_search", "type": "search", "status": "READY", "queryable": true},
+   {"name": "products_vector", "type": "vectorSearch", "status": "READY", "queryable": true}],
+ "time_series": [{"collection": "covers", "documents": 1780},
+                 {"collection": "orders_history", "documents": 1050}],
+ "audit_entries": 1487,
+ "change_stream_collections": ["proposals", "approvals", "audit_log"]}
+```
+
+- The numbers are for the whole database, the same for every kitchen: counts and index
+  states only. No address, no key, no document, no other kitchen's rows.
+- **Unknown is `null`, never zero.** Each top-level value except
+  `change_stream_collections` is `null` when it could not be read; the page then shows no
+  number for it. An empty list was read and is empty.
+- `data_mb`: data plus indexes, whole megabytes. `products`: rows the text search reads.
+- `vectors`: one row per embedding model and size, largest first. Two rows mean the
+  vectors are being replaced; the page shows both.
+- `search_indexes`: `type` is `search` (Atlas Search) or `vectorSearch` (Atlas Vector
+  Search); `status` is Atlas's own word (`READY`, `PENDING`, `BUILDING`, `FAILED`, ...).
+- `time_series`: the time-series collections behind forecasts and the drift aggregation.
+- `audit_entries`: the length of the hash-chained audit log, all kitchens.
+- `change_stream_collections`: the collections the live event stream (`/events`) watches.
+- The gateway keeps the answer for a minute. Never a 404 for a kitchen the session may read.
+- Where it shows: the About page (#1383, #1292).
+
 ### Standing-order drift
 
 `GET /v1/kitchens/{kitchen_id}/drift` answers `{"week": "2026-11-09", "warnings": [...]}`,
@@ -2844,11 +2985,12 @@ The Valio catalog and its API have no product photo (`synkkaData.medias[]` holds
 only, no URL). Photos from the web are not copied: that is a copyright risk. So a
 product shows one of two pictures, and both are honest about what they are:
 
-1. **A kind icon.** The web maps the product's `category` code to a kind (milk,
-   cheese, bread, fish, cleaning ...) and shows that kind's icon. The map is
-   `web/src/lib/product-kinds.json`, made once from the catalog names by
-   `scripts/product_kinds.py` (run it again when the catalog changes). A category
-   that is not in the map gets a neutral package icon. This needs no route.
+1. **A kind icon.** `ProductThumb`
+   (`web/src/components/purchasing/product-thumb.tsx`) uses
+   `web/src/lib/product-picture.ts` to read the product's English and Finnish names
+   and choose a Lucide icon on a tile tinted for its kind. These are icons, not
+   emoji, and represent only the kind, never an actual pack photo. A name matching
+   no rule gets the plain `Package` icon. This needs no route.
 2. **The brand logo, when it is known.** `brand` on the product row (from
    `synkkaData.brand`) is looked up with Context.dev and the answer is kept in
    MongoDB (`brand_logos`, through `store/`). The logo replaces the icon.
@@ -3217,7 +3359,7 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | `SENT_READ_FAILED` | It landed; only reading the answer failed | Re-read the order status. Never resend |
 
 Refusals before any send are errors, not outcomes: `TOTAL_MISMATCH` (409: re-simulate
-and ask the human again), `STOCK_UNKNOWN` (409 only for an auto-approval or a chosen option: a person's
+and ask the human again), `STOCK_UNKNOWN` (409 only for an auto-approval: a person's
 approval of an unconfirmed line places the order with `supplier_must_confirm`), `BLOCKED_BY_RECALL`
 (409: a recall holds the proposal; look at its replacement proposal), `NOT_PENDING`
 (409: the proposal is not `READY`), `APPROVAL_MISMATCH` (409: `place_order` names an

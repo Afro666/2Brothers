@@ -24,6 +24,7 @@ export const ALLERGENS = [...EU_ALLERGENS, { code: "ML", name: "Lactose" }] as c
 
 const LABEL_OPTIONS = Object.keys(LABEL_META) as ProductLabel[];
 const TEMPERATURES: ProductTemperature[] = ["ambient", "chilled", "frozen"];
+const EXAMPLE_SEARCHES = ["lactose-free milk", "butter", "oat drink"];
 
 export const TEMPERATURE_LABELS: Record<ProductTemperature, string> = {
   ambient: "Ambient",
@@ -132,6 +133,11 @@ export function CatalogPage() {
     update((current) => ({ ...current, q }));
   }
 
+  function runExample(q: string) {
+    setQuery(q);
+    update((current) => ({ ...current, q }));
+  }
+
   function clearFilters() {
     const cleared = parseSearch({});
     setQuery("");
@@ -172,6 +178,7 @@ export function CatalogPage() {
   const excluding = active.exclude.length > 0;
   const results = currentResult.status === "ready" ? (currentResult.data ?? []) : [];
   const withoutData = excluding && !active.strict ? results.filter((product) => product.allergens === null).length : 0;
+  const unfiltered = !active.q.trim() && !excluding && active.labels.length === 0 && !active.temp;
 
   return (
     <AppShell activeId="catalog">
@@ -244,7 +251,22 @@ export function CatalogPage() {
             onRetry={() => setReloadVersion((version) => version + 1)}
           />
         ) : null}
-        {currentResult.status === "ready" && results.length === 0 ? (
+        {currentResult.status === "ready" && results.length === 0 && unfiltered ? (
+          <EmptyState title={t("Search the Valio Aimo catalog")}>
+            <span>
+              {t("Type a product name, or pick an allergen, a label or a temperature.")}
+            </span>
+            <span className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              <span className="text-sm text-muted-foreground">{t("Try:")}</span>
+              {EXAMPLE_SEARCHES.map((example) => (
+                <Button key={example} type="button" size="sm" variant="outline" onClick={() => runExample(t(example))}>
+                  {t(example)}
+                </Button>
+              ))}
+            </span>
+          </EmptyState>
+        ) : null}
+        {currentResult.status === "ready" && results.length === 0 && !unfiltered ? (
           <EmptyState title={t("No products match this search")}>
             <Button className="mt-3" variant="outline" onClick={clearFilters}>
               {t("Clear filters")}

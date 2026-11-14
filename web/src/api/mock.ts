@@ -17,6 +17,7 @@ import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import { readShelfPhotoMock } from "@/api/mock-shelf";
 import { readMenuPhotoMock } from "@/api/mock-menu-photo";
 import { readPriceListPhotoMock } from "@/api/mock-price-list";
+import { readLabelPhotoMock } from "@/api/mock-label-photo";
 import { createMockAuth } from "@/api/mock-auth";
 import { createKitchenMock } from "@/api/mock-kitchen";
 import { createNotificationsMock } from "@/api/mock-notifications";
@@ -248,20 +249,22 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
   function resimulate(lines: OrderLine[], proposalOrder: Order): Order & { totalExVat: number } {
     let exVat = 0;
     let inclVat = 0;
-    for (const line of lines) {
+    const pricedLines = lines.map((line) => {
       if (line.offer.priceExVat == null || line.offer.taxRatePercent == null) {
         throw new ApiError("PRICE_UNKNOWN", `Price for ${line.product.id} is unknown.`);
       }
       const lineEx = line.offer.priceExVat * line.quantity;
       exVat += lineEx;
       inclVat += lineEx * (1 + line.offer.taxRatePercent / 100);
-    }
+      return { ...line, lineTotal: Math.round((lineEx + Number.EPSILON) * 100) / 100 };
+    });
     const totalExVat = Math.round((exVat + Number.EPSILON) * 100) / 100;
     const totalInclVat = Math.round((inclVat + 1e-10) * 100) / 100;
     return {
       ...proposalOrder,
-      lines,
+      lines: pricedLines,
       totalExVat,
+      vat: Math.round((totalInclVat - totalExVat + Number.EPSILON) * 100) / 100,
       totalInclVat,
       mov: proposalOrder.mov && { ...proposalOrder.mov, current: totalExVat },
     };
@@ -317,6 +320,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     readShelfPhoto: readShelfPhotoMock,
     readMenuPhoto: readMenuPhotoMock,
     readPriceListPhoto: readPriceListPhotoMock,
+    readLabelPhoto: readLabelPhotoMock,
     async readDeliveryNote() {
       throw new ApiError("VISION_NOT_CONFIGURED", "Delivery note reading needs the live gateway. Check the delivery by hand.");
     },
@@ -465,6 +469,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
           product,
           offer,
           quantity: change.quantity,
+          lineTotal: Math.round((offer.priceExVat * change.quantity + Number.EPSILON) * 100) / 100,
           why: "Added by a person reviewing the Buyer's proposal.",
         });
         to = change.quantity;

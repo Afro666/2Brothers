@@ -10,11 +10,19 @@ async function renderAt(path: string) {
 
 describe("application routes", () => {
   beforeEach(() => localStorage.clear());
+  it("shows a page with the menu and two ways back for an unknown address", async () => {
+    await renderAt("/no-such-page");
+    expect(await screen.findByRole("heading", { level: 1, name: "This page does not exist" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "See the orders to approve" })).toHaveAttribute("href", "/approvals");
+    expect(screen.getAllByRole("navigation").length).toBeGreaterThan(0);
+  });
+
   it.each([
     ["/requests", "Request an order"],
     ["/approvals", "To approve"],
     ["/orders", "Order history"],
-    ["/orders/ORD-1", "Order ORD-1"],
+    ["/orders/ORD-1", "Order"],
     ["/audit", "Activity log"],
     ["/catalog", "Products"],
     ["/stock", "Stock count"],

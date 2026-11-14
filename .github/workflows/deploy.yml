@@ -13,6 +13,7 @@ on:
       - "engine/**"
       - "store/**"
       - "agent/**"
+      - "bot/**"
       - "signals/**"
       - "env/**"
       - "demo/**"

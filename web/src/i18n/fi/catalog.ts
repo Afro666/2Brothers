@@ -5,6 +5,7 @@ export default {
   "Also hide products with no allergen data": "Piilota myös tuotteet ilman allergeenitietoja",
   "Any": "Kaikki",
   "Atlas Search": "Atlas Search",
+  "butter": "voi",
   "CO2 per kg": "CO2/kg",
   "Cannot make this delivery": "Tätä toimitusta ei voi tehdä",
   "Clear filters": "Tyhjennä suodattimet",
@@ -78,4 +79,9 @@ export default {
   "Sulphites": "Sulfiitit",
   "Lupin": "Lupiini",
   "Lactose": "Laktoosi",
+  "lactose-free milk": "laktoositon maito",
+  "oat drink": "kaurajuoma",
+  "Search the Valio Aimo catalog": "Hae Valio Aimon valikoimasta",
+  "Try:": "Kokeile:",
+  "Type a product name, or pick an allergen, a label or a temperature.": "Kirjoita tuotteen nimi tai valitse allergeeni, merkki tai lämpötila.",
 } satisfies Record<string, string>;

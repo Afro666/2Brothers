@@ -105,6 +105,7 @@ export interface OrderLine {
   offer: Offer;
   /** In the product's sales unit. Computed by the engine, never by the model. */
   quantity: number;
+  lineTotal: number | null;
   /** Deterministic one-sentence reason from the engine. */
   why: string;
 }
@@ -126,6 +127,8 @@ export interface Order {
   lines: OrderLine[];
   supplierMustConfirm: string[];
   totalExVat: number | null;
+  vat: number | null;
+  deliveryFee: number | null;
   totalInclVat: number;
   /** null = the supplier's delivery terms are not known. */
   mov: MovState | null;

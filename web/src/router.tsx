@@ -1,5 +1,6 @@
 import {
   type RouterHistory,
+  Link,
   Outlet,
   createRootRoute,
   createRoute,
@@ -7,6 +8,9 @@ import {
   redirect,
 } from "@tanstack/react-router";
 
+import { AppShell } from "@/components/purchasing/app-shell";
+import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n";
 import { AboutPage } from "@/pages/about";
 import { KitPage } from "@/pages/kit";
 import { RoleProvider } from "@/lib/role";
@@ -39,7 +43,27 @@ function RootLayout() {
     </SessionProvider>
   );
 }
-const rootRoute = createRootRoute({ component: RootLayout });
+/** An address no route knows: the menu stays, with two ways back. */
+function NotFoundPage() {
+  const t = useT();
+  return (
+    <AppShell>
+      <div className="mx-auto max-w-prose space-y-3">
+        <h1 className="page-title">{t("This page does not exist")}</h1>
+        <p className="text-sm text-muted-foreground">{t("The address may be mistyped, or what it pointed to is gone.")}</p>
+        <div className="flex flex-wrap gap-3">
+          <Button asChild>
+            <Link to="/">{t("Go to Home")}</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/approvals">{t("See the orders to approve")}</Link>
+          </Button>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
+const rootRoute = createRootRoute({ component: RootLayout, notFoundComponent: NotFoundPage });
 
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: HomePage });
 const signInRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sign-in", component: SignInPage });

@@ -1,8 +1,8 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createHttpApi, SIGNED_OUT_EVENT } from "@/api/http";
+import { createHttpApi, gatewayRequest, SIGNED_OUT_EVENT } from "@/api/http";
 import { auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
 import { renderApp } from "@/test/render";
 
@@ -86,6 +86,7 @@ describe("createHttpApi", () => {
         "getSession",
         "listAddableProducts",
         "listApprovals",
+        "countPendingApprovals",
         "listAudit",
         "listBrandLogos",
         "subscribeEvents",
@@ -116,6 +117,7 @@ describe("createHttpApi", () => {
         "readMenuPhoto",
         "readPriceListPhoto",
         "readDeliveryNote",
+        "readLabelPhoto",
         "getDemand",
         "proposeOrderForPlan",
         "getSharing",
@@ -427,6 +429,178 @@ describe("createHttpApi", () => {
     expect((await createHttpApi("/api").reject("prop-1", "Too much", "human")).status).toBe("REJECTED");
     expect(calls[0].body).toEqual({ reason: "Too much", idempotency_key: "web-reject:prop-1" });
     expect(calls[0].headers).toMatchObject({ "X-User": "human" });
+  });
+
+  describe("one request while one is in flight", () => {
+    /** A gateway whose GETs wait for the test, so it decides when they settle. */
+    function slowGateway() {
+      const pending: (() => void)[] = [];
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === `POST ${K}/proposals/prop-1/reject`) {
+          return Promise.resolve(new Response(JSON.stringify({ status: "REJECTED" })));
+        }
+        return new Promise((reply) => {
+          pending.push(() => {
+            const body = route.endsWith("/audit") ? { events: auditEvents } : { proposals: [proposal] };
+            reply(new Response(JSON.stringify(body)));
+          });
+        });
+      });
+      return {
+        answer: () => pending.splice(0).forEach((reply) => reply()),
+        count: (route: string) => calls.filter((call) => call === route).length,
+      };
+    }
+
+    it("shares the proposals and audit GETs between calls started together", async () => {
+      const gateway = slowGateway();
+      const api = createHttpApi("/api");
+      const first = api.listApprovals();
+      const second = api.listApprovals();
+      const audit = api.listAudit();
+      expect(gateway.count(`GET ${K}/proposals`)).toBe(1);
+      expect(gateway.count(`GET ${K}/audit`)).toBe(1);
+      gateway.answer();
+      await Promise.all([first, second, audit]);
+
+      const again = api.listAudit();
+      expect(gateway.count(`GET ${K}/audit`)).toBe(2);
+      gateway.answer();
+      await again;
+    });
+
+    it("does not reuse a GET that started before a POST began", async () => {
+      const calls: string[] = [];
+      let run = 0;
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === "GET /api/v1/me") return Promise.resolve(new Response("null"));
+        if (route === `GET ${K}/proposals` && run++ === 0) return new Promise<Response>(() => {});
+        const rejected = { ...proposal, status: "REJECTED" };
+        const body =
+          route === `GET ${K}/proposals`
+            ? { proposals: [rejected] }
+            : route === `GET ${K}/proposals/prop-1`
+              ? rejected
+              : route === `GET ${K}/audit`
+                ? { events: auditEvents }
+                : { status: "REJECTED" };
+        return Promise.resolve(new Response(JSON.stringify(body)));
+      });
+      const api = createHttpApi("/api");
+      void api.listApprovals();
+      await api.reject("prop-1", "Too much", "human");
+      const after = api.listApprovals();
+      expect(calls.filter((call) => call === `GET ${K}/proposals`)).toHaveLength(2);
+      await after;
+    });
+
+    it("rejects every caller of a failed GET, then asks again", async () => {
+      let answers = 1;
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", (url: string) => {
+        calls.push(`GET ${url}`);
+        return Promise.resolve(
+          answers-- > 0
+            ? error(503, "UNAVAILABLE")
+            : new Response(JSON.stringify({ events: auditEvents })),
+        );
+      });
+      const api = createHttpApi("/api");
+      const first = api.listAudit();
+      const second = api.listAudit();
+      await expect(first).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      await expect(second).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      await expect(api.listAudit()).resolves.toBeInstanceOf(Array);
+      expect(calls).toEqual([`GET ${K}/audit`, `GET ${K}/audit`]);
+    });
+
+    it("does not reuse a GET that started before a write another module sent", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === `GET ${K}/proposals` || route === `GET ${K}/audit`) return new Promise<Response>(() => {});
+        return Promise.resolve(new Response("{}"));
+      });
+      const api = createHttpApi("/api");
+      void api.listApprovals();
+      // The request form, the offers and the planning screens send their writes through gatewayRequest.
+      await gatewayRequest("/api", "/v1/kitchens/demo-kitchen/proposals", { method: "POST", body: "{}" });
+      void api.listApprovals();
+      expect(calls.filter((call) => call === `GET ${K}/proposals`)).toHaveLength(2);
+      expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);
+    });
+
+    it("does not reuse a GET that started before a live event", async () => {
+      const calls: string[] = [];
+      const encoder = new TextEncoder();
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === `GET ${K}/events`) {
+          const body = new ReadableStream<Uint8Array>({
+            start: (controller) => controller.enqueue(encoder.encode('event: proposal\ndata: {"operation":"insert"}\n\n')),
+          });
+          return Promise.resolve(new Response(body));
+        }
+        return new Promise<Response>(() => {});
+      });
+      const api = createHttpApi("/api");
+      void api.listApprovals();
+      const seen: string[] = [];
+      const stop = api.subscribeEvents!((event) => {
+        // What a list does on a live event: it reads again, and that read must be a new request.
+        seen.push(event.kind);
+        void api.listApprovals();
+      });
+      await waitFor(() => expect(seen).toEqual(["proposal"]));
+      expect(calls.filter((call) => call === `GET ${K}/proposals`)).toHaveLength(2);
+      stop();
+    });
+
+    it("does not reuse a GET that started before the event stream connected again", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        // An open stream with no event: only the connection itself is reported.
+        if (route === `GET ${K}/events`) return Promise.resolve(new Response(new ReadableStream<Uint8Array>()));
+        return new Promise<Response>(() => {});
+      });
+      const api = createHttpApi("/api");
+      void api.listAudit();
+      let connected = false;
+      const stop = api.subscribeEvents!(
+        () => {},
+        (isConnected) => {
+          connected = isConnected;
+          if (isConnected) void api.listAudit();
+        },
+      );
+      await waitFor(() => expect(connected).toBe(true));
+      expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);
+      stop();
+    });
+
+    it("counts pending approvals from the proposals alone", async () => {
+      const waiting = { ...proposal, status: "READY" };
+      const calls = gateway({
+        [`GET ${K}/proposals`]: () => ({
+          proposals: [
+            waiting,
+            { ...waiting, proposal_id: "prop-2", approval_id: "appr-2" },
+            { ...proposal, status: "REJECTED", approval_id: "appr-3" },
+          ],
+        }),
+      });
+      expect(await createHttpApi("/api").countPendingApprovals!()).toBe(2);
+      expect(calls.map((call) => call.route)).toEqual([`GET ${K}/proposals`]);
+    });
   });
 
   it("lists and checks recalls through the gateway with a fresh key and actor on every check", async () => {
