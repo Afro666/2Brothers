@@ -818,6 +818,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     # Kitchen planning routes (#74): stock, products, recipes, menu plans, suppliers, demand.
     from gateway.kitchen_routes import register as register_kitchen_routes
     register_kitchen_routes(app, gw, principal, body)
+    from gateway.learned import mount_learned   # learned facts for one kitchen (#1305-#1307)
+    mount_learned(app, gw, principal, body)
 
     # Count from a shelf photo (#373): Nemotron VL reads it in the worker; stores no count.
     from gateway.stock_photo import mount_stock_photo

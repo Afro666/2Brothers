@@ -72,7 +72,21 @@ _LINE_NUMBERS = ("reliability", "carbon_kg_co2e_per_kg", "delivery_reliability")
 def _line_out(line: dict) -> dict:
     """A stored offer or order line as the API answers it: the two dataset values are numbers
     (docs/contract.md), kept as text in Mongo because the store refuses a binary float (#570)."""
-    return {**line, **{key: float(line[key]) for key in _LINE_NUMBERS if line.get(key) is not None}}
+    out = {**line, **{key: float(line[key]) for key in _LINE_NUMBERS if line.get(key) is not None}}
+    out.pop("unlearned_quantity", None)     # internal basis for a later correction
+    return out
+
+
+def _learned_out(info: dict | None) -> dict | None:
+    """A stored learned entry as the API answers it: ratio is a JSON number."""
+    if not isinstance(info, dict):
+        return info
+    out = dict(info)
+    try:
+        out["ratio"] = float(Decimal(str(out["ratio"])))
+    except (ArithmeticError, KeyError, TypeError, ValueError):
+        pass
+    return out
 
 
 def _matched_by(rows: list[dict]) -> list[dict]:
@@ -448,6 +462,18 @@ class Gateway:
                  for sid in set(supplier_of.values())}
         plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
         sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
+        if request.get("made_by") == "menu_plan":
+            # The change helper measures a later correction against the unlearned engine
+            # number, never against the already learned line (#1305).
+            ratios = {}
+            for need in needs:
+                ratio = (need.get("learned") or {}).get("ratio")
+                if ratio is not None:
+                    ratios[need["product_id"]] = Decimal(str(ratio))
+            for line in sim["lines"]:
+                ratio = ratios.get(line["product_id"])
+                if ratio is not None and ratio > 0:
+                    line["unlearned_quantity"] = f"{(Decimal(str(line['quantity'])) / ratio).normalize():f}"
         sim["shortfalls"] = [{"product_id": p, "shortfall": f"{q.normalize():f}", "unit": u} for p, q, u in short]
         for p, q, u in short:
             sim["mandate"]["reasons"].append(f"{p}: {q.normalize():f} {u} of the plan's need cannot be covered for this date.")
@@ -856,6 +882,29 @@ class Gateway:
         if not needs:
             raise GatewayError(422, "NOTHING_NEEDED", "the plan needs nothing beyond the stock in this window",
                                problems=problems)
+        # Learned facts are computed once for this plan. Only a plan proposal adjusts a
+        # quantity; the stored need keeps the unlearned number as the correction basis.
+        from engine.learning import apply_ratio
+        from gateway import learned as learned_facts
+        facts = learned_facts.compute_facts(self, kitchen_id, self.now().date())
+        ratios = {fact["product_id"]: fact for fact in facts
+                  if fact.get("kind") == "CORRECTION_RATIO" and fact.get("active") is True
+                  and fact.get("applicable") is True}
+        for need in needs:
+            fact = ratios.get(need["product_id"])
+            if fact is None:
+                continue
+            original = need["quantity"]
+            adjusted, info = apply_ratio(original, fact)
+            if info is None:
+                continue
+            need["quantity"] = f"{adjusted.normalize():f}"
+            # The offer store refuses binary floats; the API turns this back into a number.
+            need["learned"] = {**info, "ratio": f"{Decimal(str(info['ratio'])).normalize():f}",
+                               "unit": need["unit"]}
+            need["unlearned_quantity"] = original
+        problems = [*problems, *learned_facts.plan_problems(
+            self, kitchen_id, facts, [need["product_id"] for need in needs])]
         return {"product_ids": [n["product_id"] for n in needs], "quantity": str(len(needs)), "unit": "products",
                 "requested_date": str(body.get("requested_date") or body["from"]), "needs": needs,
                 "text": body.get("text") or f"Order for the menu plan {start.isoformat()} to {end.isoformat()}",
@@ -953,6 +1002,13 @@ class Gateway:
         self._audit(kitchen_id, "proposal_created", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], expected_total=sim["expected_total"],
                     verdict=sim["mandate"]["verdict"])
+        applied = [{"product_id": need["product_id"], "fact_id": need["learned"].get("fact_id"),
+                    "from_qty": need["learned"].get("from_qty"), "to_qty": need["learned"].get("to_qty"),
+                    "unit": need["learned"].get("unit")}
+                   for need in request.get("needs") or [] if need.get("learned")]
+        if applied:
+            self._audit(kitchen_id, "learned_fact_applied", actor, proposal_id=doc["_id"],
+                        offer_id=offer["offer_id"], applied=applied)
         self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], summary=self._summary(request, sim)["text"])
         if auto_approve:
@@ -1003,7 +1059,12 @@ class Gateway:
         substitutes = options.merged(doc)
         found = product_names.labels(self.db, product_names.proposal_ids(
             {**offer["simulation"], "substitute_options": substitutes}), doc["kitchen_id"])
-        result = {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
+        request_out = dict(doc["request"])
+        if request_out.get("needs"):
+            request_out["needs"] = [{**need, "learned": _learned_out(need["learned"])}
+                                    if need.get("learned") else need
+                                    for need in request_out["needs"]]
+        result = {"proposal_id": doc["_id"], "status": doc["status"], "request": request_out,
                 "substitute_options": substitutes,
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
@@ -1013,7 +1074,10 @@ class Gateway:
         result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
         result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []))
         blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
-        result['lines'] = [{**_line_out(line), **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
+        learned = {need['product_id']: _learned_out(need['learned']) for need in doc['request'].get('needs') or []
+                   if need.get('learned')}
+        result['lines'] = [{**_line_out(line), **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {}),
+                            **({'learned': learned[line['product_id']]} if line['product_id'] in learned else {})}
                            for line in result['lines']]
         result['blocks'] = _blocks_out(result, result['lines'])
         from monitor.labels import checks

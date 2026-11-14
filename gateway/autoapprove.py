@@ -139,6 +139,8 @@ def decide(db, kitchen_id: str, simulation: dict, request: dict, now: datetime) 
         why.append("the request is not fully covered")
     if any(n.get("stock_counted") is False for n in request.get("needs") or []):
         why.append("needs a person: kitchen stock not counted")
+    if any(n.get("learned") for n in request.get("needs") or []):
+        why.append("a learned adjustment needs a person")
     if request.get("event") or request.get("made_by") == "recall-buyer":
         why.append("not a routine order")
     try:
