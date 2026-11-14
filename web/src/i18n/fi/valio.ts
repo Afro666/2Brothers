@@ -42,5 +42,6 @@ export default {
   "Risk": "Riski",
   "Forecasts come only from kitchens that agreed to share them.": "Ennusteet tulevat vain keittiöistä, jotka ovat suostuneet jakamaan ne.",
   "Buying note": "Ostomuistio",
+  "from {day}": "{day} alkaen",
   "Written by {model}. Every number is checked against its row in the table.": "Kirjoittanut {model}. Jokainen luku on tarkistettu taulukon omalta riviltä.",
 } satisfies Record<string, string>;

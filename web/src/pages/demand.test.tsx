@@ -421,10 +421,10 @@ describe("DemandPage", () => {
     expect(within(box).getAllByText("Arla lactose-free milk")).toHaveLength(1);
     const lines = box.querySelectorAll("[data-note-risk]");
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toHaveTextContent("Mon 16 Nov");
+    expect(lines[0]).toHaveTextContent("from Mon 16 Nov");
     expect(lines[0]).toHaveTextContent("Forecast 2400 L from 6 kitchens: buy 700 L more.");
     expect(lines[0]).toHaveAttribute("data-note-risk", "SHORT");
-    expect(lines[1]).toHaveTextContent("Tue 17 Nov");
+    expect(lines[1]).toHaveTextContent("from Tue 17 Nov");
     expect(lines[2]).toHaveAttribute("data-note-risk", "UNKNOWN");
     expect(box).toHaveTextContent(
       "Written by nemotron-3.5-super-vl. Every number is checked against its row in the table.",

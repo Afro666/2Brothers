@@ -121,7 +121,7 @@ const noteTone: Record<string, string> = {
 function BuyingNoteBox({ note }: { note: BuyingNote }) {
   const t = useT();
   const model = note.model || "Nemotron 3.5 Super VL";
-  // The note often has one line per day for the same product: name it once.
+  // One line per product over the window's days (#1767); `date` is its first short day.
   const byProduct = new Map<string, BuyingNote["lines"]>();
   for (const line of note.lines) byProduct.set(line.productId, [...(byProduct.get(line.productId) ?? []), line]);
   const products = [...byProduct.values()];
@@ -141,7 +141,7 @@ function BuyingNoteBox({ note }: { note: BuyingNote }) {
                   data-note-risk={line.risk}
                   className={`flex flex-col gap-x-2 rounded px-2 py-1 sm:flex-row sm:items-baseline ${noteTone[line.risk] ?? ""}`}
                 >
-                  <span className="shrink-0 font-mono text-xs">{formatDate(line.date)}</span>
+                  <span className="shrink-0 font-mono text-xs">{t("from {day}", { day: formatDate(line.date) })}</span>
                   <RiskBadge risk={line.risk} />
                   <span>{line.text}</span>
                 </li>
