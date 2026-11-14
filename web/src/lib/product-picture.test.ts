@@ -1,9 +1,19 @@
-import { Cheese, Milk, Package } from "lucide-react";
+import { Carrot, Cheese, Milk, Package } from "lucide-react";
 import { describe, expect, it } from "vitest";
 
 import { FALLBACK_PICTURE, pictureFor, TINTS } from "./product-picture";
+import { Potato } from "./product-icons";
 
 describe("pictureFor", () => {
+  it("pictures English and Finnish potatoes as potatoes, keeping carrots distinct", () => {
+    for (const [en, fi] of [["POTATO ROSAMUNDA WASHED", ""], ["Potatoes peeled 5 kg", ""],
+                             ["", "Pesty peruna"], ["", "Kuoritut perunat 5 kg"]]) {
+      expect(pictureFor(en, fi).icon).toBe(Potato);
+    }
+    expect(pictureFor("Carrots, Finnish 10 kg").icon).toBe(Carrot);
+    expect(pictureFor("", "Porkkana 10 kg").icon).toBe(Carrot);
+  });
+
   it.each([
     ["Valio Eila® 3 % milk drink 1 l lactose free", "", "milk and cream"],
     ["Valio Edam 17 % e1 kg slices", "", "cheese"],
