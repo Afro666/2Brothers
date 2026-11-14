@@ -5,6 +5,7 @@ import hmac
 import os
 import re
 from contextlib import asynccontextmanager
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request
@@ -131,8 +132,17 @@ class BuyerWorker:
                     break
             if outcome['status'] != 'SENT_FOR_APPROVAL':
                 raise WorkerError(503, 'BUYER_INCOMPLETE', fallback_safe=not buyer.mutations)
-            proposals = await self.gateway.request('GET', f'/v1/kitchens/{kitchen_id}/proposals')
-            result = next((p for p in proposals['proposals'] if p.get('approval_id') == outcome['approval_id']), None)
+            proposal_id = outcome.get('proposal_id')
+            result = None
+            if isinstance(proposal_id, str) and proposal_id.strip() and len(proposal_id) <= 200:
+                result = await self.gateway.request('GET',
+                    f'/v1/kitchens/{kitchen_id}/proposals/{quote(proposal_id, safe="")}')
+                if result.get('proposal_id') != proposal_id or result.get('approval_id') != outcome['approval_id']:
+                    result = None
+            elif proposal_id is None:
+                # Compatibility with older gateways only. Never fall back after an ID mismatch.
+                proposals = await self.gateway.request('GET', f'/v1/kitchens/{kitchen_id}/proposals')
+                result = next((p for p in proposals['proposals'] if p.get('approval_id') == outcome['approval_id']), None)
             if result is None:
                 raise WorkerError(503, 'BUYER_RECONCILIATION_REQUIRED')
             if outcome.get('substitute_options'):

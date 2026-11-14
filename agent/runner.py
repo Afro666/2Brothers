@@ -390,7 +390,8 @@ class Buyer:
                 if name == "request_approval":
                     if result.get("status") == "PENDING" and result.get("approval_id"):
                         sim = self.simulations[args["offer_id"]]
-                        return self.final("SENT_FOR_APPROVAL", "; ".join(sim["mandate"]["reasons"]), approval_id=result["approval_id"])
+                        return self.final("SENT_FOR_APPROVAL", "; ".join(sim["mandate"]["reasons"]),
+                                          approval_id=result["approval_id"], proposal_id=result.get("proposal_id"))
                     return self.final("CANNOT_FULFIL", "Approval not confirmed; human reconciliation required", reconciliation_required=True)
                 if name == "place_order":
                     if result.get("outcome") == "CONFIRMED" and result.get("order_id"):
