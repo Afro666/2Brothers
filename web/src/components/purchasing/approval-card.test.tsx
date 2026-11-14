@@ -16,6 +16,42 @@ const confirmedOrder = {
 };
 
 describe("ApprovalCard", () => {
+  it.each([false, true])("names suppliers that must confirm without changing Approve when stock is unconfirmed: %s", (unconfirmed) => {
+    const order = structuredClone(confirmedOrder);
+    if (unconfirmed) order.lines[0].offer.availableAmount = 999999;
+    const withoutNotice = { ...approval, suppliersToConfirm: [] };
+    const first = render(<ApprovalCard request={withoutNotice} order={order} />);
+    const disabledWithoutNotice = (screen.getByRole("button", { name: /^Approve/ }) as HTMLButtonElement).disabled;
+    first.unmount();
+
+    render(
+      <ApprovalCard
+        request={{
+          ...withoutNotice,
+          suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
+        }}
+        order={order}
+      />,
+    );
+    const checks = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
+    expect(within(checks).getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
+    expect((screen.getByRole("button", { name: /^Approve/ }) as HTMLButtonElement).disabled).toBe(disabledWithoutNotice);
+  });
+
+  it("shows the gateway's manual-supplier confirmation reason as sent under What to check", () => {
+    const reason =
+      "Töölö Bakery is a price list the kitchen entered: its stock is not known until the supplier confirms. You may approve it; the order then waits for the supplier's confirmation (call or e-mail them).";
+    render(
+      <ApprovalCard
+        request={{ ...approval, reasons: [{ rule: reason, detail: "" }] }}
+        order={orders.needsApproval}
+      />,
+    );
+
+    const checks = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
+    expect(within(checks).getByText(reason)).toBeVisible();
+  });
+
   it("searches addable products once the person stops typing", async () => {
     const user = userEvent.setup();
     const listAddableProducts = vi.fn().mockResolvedValue([]);

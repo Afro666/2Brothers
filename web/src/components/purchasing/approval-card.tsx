@@ -219,6 +219,16 @@ export function ApprovalCard({
                 <div className="text-foreground">{r.detail}</div>
               </li>
             ))}
+            {request.suppliersToConfirm.map((supplier) => (
+              <li
+                key={supplier.supplierId}
+                className="rounded-r-md border-l-[3px] border-warning bg-warning-surface px-3 py-2 text-sm text-warning"
+              >
+                {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", {
+                  supplier: supplier.name,
+                })}
+              </li>
+            ))}
           </ul>
         </section>
         <RecallLines alerts={recalls} />

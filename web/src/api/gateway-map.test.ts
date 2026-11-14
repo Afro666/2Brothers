@@ -45,9 +45,32 @@ describe("mapApproval", () => {
         { rule: "10 L of the request cannot be covered for this date.", detail: "" },
         { rule: "OVER_BUDGET_WARNING", detail: "A warning. It does not block the order.", warning: true },
       ],
+      suppliersToConfirm: [],
       status: "PENDING",
       options: [],
     });
+  });
+
+  it("lists non-Valio blocks with unknown stock whose supplier must confirm", () => {
+    const unknown = { ...proposal.lines[0], unknown_stock: true };
+    const confirmed = { ...proposal.lines[0], unknown_stock: false };
+    const result = mapApproval({
+      ...proposal,
+      blocks: [
+        { supplier_id: "sup-bakery", name: "Leipomo Demo", lines: [unknown] },
+        { supplier_id: "sup-nameless", lines: [{ ...confirmed, unknown_stock: true }] },
+        { supplier_id: "sup-valio", name: "Valio Aimo", lines: [unknown] },
+        { supplier_id: "sup-confirmed", name: "Confirmed Supplier", lines: [confirmed] },
+      ],
+    });
+    expect(result.suppliersToConfirm).toEqual([
+      { supplierId: "sup-bakery", name: "Leipomo Demo" },
+      { supplierId: "sup-nameless", name: "sup-nameless" },
+    ]);
+  });
+
+  it("uses no supplier confirmations when blocks are missing", () => {
+    expect(mapApproval(proposal).suppliersToConfirm).toEqual([]);
   });
 
   it("carries the gateway's substitute baskets as options, the proposal's own offer marked chosen", () => {
@@ -259,6 +282,19 @@ describe("mapRecalls", () => {
 });
 
 describe("mapOrder", () => {
+  it("maps the suppliers whose confirmation the placed order still needs", () => {
+    const placed = { ...placedOrder, supplier_must_confirm: ["sup-bakery", "sup-fish"] };
+    expect(mapOrder(proposal, placed).supplierMustConfirm).toEqual(["sup-bakery", "sup-fish"]);
+  });
+
+  it("uses no supplier confirmations when the field is absent or malformed", () => {
+    expect(mapOrder(proposal, placedOrder).supplierMustConfirm).toEqual([]);
+    expect(mapOrder(proposal, null).supplierMustConfirm).toEqual([]);
+    for (const supplier_must_confirm of [null, "sup-bakery", 42, { id: "sup-bakery" }]) {
+      expect(mapOrder(proposal, { ...placedOrder, supplier_must_confirm }).supplierMustConfirm).toEqual([]);
+    }
+  });
+
   it("maps a waiting proposal; what the gateway does not send stays unknown, never zero", () => {
     const order = mapOrder(proposal, null);
     expect(order).toMatchObject({

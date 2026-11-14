@@ -68,7 +68,7 @@ describe("ApprovalsPage recalls", () => {
     );
     renderApp("/approvals", api);
 
-    const waiting = (await screen.findByRole("heading", { name: "Waiting for you (2)" })).closest("section") as HTMLElement;
+    const waiting = (await screen.findByRole("heading", { name: "Waiting for you (3)" })).closest("section") as HTMLElement;
     const held = screen.getByRole("heading", { name: "Held by a recall (1)" }).closest("section") as HTMLElement;
     const decided = screen.getByRole("heading", { name: "Decided" }).closest("section") as HTMLElement;
     expect(within(waiting).queryByText("Breakfast buffet coffee for next week")).not.toBeInTheDocument();

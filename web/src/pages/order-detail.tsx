@@ -85,6 +85,10 @@ export function OrderDetailPage() {
   const { orderId } = useParams({ from: "/orders/$orderId" });
   const api = useApi();
   const state = useAsync(() => api.getOrder(orderId), [api, orderId]);
+  const suppliers = useAsync(() => api.listSuppliers(), [api]);
+  const supplierNames = new Map(
+    suppliers.status === "ready" ? suppliers.data.map((supplier) => [supplier.id, supplier.name]) : [],
+  );
 
   return (
     <AppShell activeId="orders">
@@ -99,6 +103,17 @@ export function OrderDetailPage() {
         {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
         {state.status === "ready" ? (
           <>
+            {state.data.supplierMustConfirm.length > 0 ? (
+              <div className="space-y-2 rounded-md border border-warning/40 bg-warning-surface p-4 text-warning">
+                {state.data.supplierMustConfirm.map((supplierId) => (
+                  <p key={supplierId} className="text-sm font-medium">
+                    {t("Waiting for {supplier} to confirm. Call or e-mail them: this order was sent without a stock confirmation.", {
+                      supplier: supplierNames.get(supplierId) ?? supplierId,
+                    })}
+                  </p>
+                ))}
+              </div>
+            ) : null}
             {state.data.status === "UNCONFIRMED" || state.data.status === "SENT_READ_FAILED" ? (
               <OrderResolutionPanel order={state.data} onChanged={state.reload} />
             ) : null}

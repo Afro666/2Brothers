@@ -82,6 +82,11 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     ...structuredClone(seedOrders.placed),
     receipt: sampleReceipt(seedOrders.placed, "aron", "2026-11-14T08:15:00Z"),
   };
+  const supplierConfirmationOrder: Order = {
+    ...structuredClone(seedOrders.placed),
+    id: "ORD-1047",
+    supplierMustConfirm: ["SUP-BAKERY"],
+  };
   const unknownApproval: ApprovalRequest = {
     ...structuredClone(seedApproval),
     id: "APR-UNKNOWN-1046",
@@ -89,19 +94,29 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     orderId: unknownOrder.id,
     status: "APPROVED",
   };
+  const supplierConfirmationApproval: ApprovalRequest = {
+    ...structuredClone(confirmedDemoApproval),
+    id: "APR-314",
+    approvalRef: "APR-314",
+    orderId: supplierConfirmationOrder.id,
+    summary: "Demo: bakery stock waiting for supplier confirmation",
+    totalExVat: 80,
+    totalInclVat: 91.2,
+    suppliersToConfirm: [{ supplierId: "SUP-BAKERY", name: "Leipomo Demo" }],
+  };
   const approvals = new Map(
     [
       { ...confirmedDemoApproval, options: milkOptions },
       seedApproval,
       coffeeApproval,
       unknownApproval,
+      supplierConfirmationApproval,
     ].map((row) => [row.id, structuredClone(row)]),
   );
   const demoOrders = new Map(
-    [placedOrder, seedOrders.needsApproval, confirmedDemoOrder, coffeeOrder, unknownOrder].map((row) => [
-      row.id,
-      structuredClone(row),
-    ]),
+    [placedOrder, seedOrders.needsApproval, confirmedDemoOrder, coffeeOrder, unknownOrder, supplierConfirmationOrder].map(
+      (row) => [row.id, structuredClone(row)],
+    ),
   );
   const resolutions = new Map<string, OrderResolution>([
     [

@@ -124,6 +124,7 @@ export interface Order {
   urgency: Urgency;
   deliveryDate: string | null;
   lines: OrderLine[];
+  supplierMustConfirm: string[];
   totalExVat: number | null;
   totalInclVat: number;
   /** null = the supplier's delivery terms are not known. */
@@ -209,6 +210,7 @@ export interface ApprovalRequest {
   totalExVat: number;
   totalInclVat: number;
   reasons: MandateReason[];
+  suppliersToConfirm: { supplierId: string; name: string }[];
   /** Only PENDING can be approved; IN_PROGRESS and BLOCKED_BY_RECALL wait, they are not decided. */
   status: "PENDING" | "IN_PROGRESS" | "BLOCKED_BY_RECALL" | "APPROVED" | "REJECTED";
   /** The baskets the engine offers for this request; absent or empty when it offers one. */

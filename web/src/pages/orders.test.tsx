@@ -10,6 +10,43 @@ import { renderApp } from "@/test/render";
 describe("orders pages", () => {
   beforeEach(() => localStorage.clear());
 
+  it("shows supplier confirmation notices by name and falls back to the supplier id", async () => {
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    api.getOrder = async (id) => ({
+      ...(await getOrder(id)),
+      supplierMustConfirm: ["SUP-BAKERY", "sup-unknown"],
+    });
+    renderApp("/orders/ORD-1047", api);
+
+    expect(
+      await screen.findByText(
+        "Waiting for Töölö Bakery to confirm. Call or e-mail them: this order was sent without a stock confirmation.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Waiting for sup-unknown to confirm. Call or e-mail them: this order was sent without a stock confirmation.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("badges the order history row without replacing its gateway status", async () => {
+    renderApp("/orders");
+
+    const row = await screen.findByRole("link", { name: /ORD-1047/ });
+    expect(within(row).getByText("Call Töölö Bakery to confirm")).toBeVisible();
+    expect(within(row).getByText("Placed", { selector: "[data-status='PLACED']" })).toBeVisible();
+  });
+
+  it("shows no supplier confirmation notice for a regular order", async () => {
+    renderApp("/orders/ORD-1042");
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Order ORD-1042" })).toBeVisible();
+    expect(screen.queryByText(/Waiting for .* to confirm\. Call or e-mail them/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Call .* to confirm/)).not.toBeInTheDocument();
+  });
+
   it("links from the order list to its detail and shows lines and filtered history", async () => {
     const user = userEvent.setup();
     renderApp("/orders");

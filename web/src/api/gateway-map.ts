@@ -210,6 +210,7 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     urgency: "UNKNOWN",
     deliveryDate,
     lines: source.lines.map((line) => mapLine(object(line, "an order line"), deliveryDate ?? "")),
+    supplierMustConfirm: placed ? strings(placed.supplier_must_confirm) : [],
     totalExVat: proposal ? mapMoney(proposal.total_ex_vat, "total_ex_vat") : null,
     totalInclVat: mapMoney((placed ?? source).expected_total, "expected_total"),
     mov: proposal ? mapMov(proposal) : null,
@@ -392,6 +393,26 @@ const CHECK_CODES: Record<string, { rule: string; detail: string }> = {
   },
 };
 
+export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalRequest["suppliersToConfirm"] {
+  if (!Array.isArray(proposal.blocks)) return [];
+  return proposal.blocks.flatMap((block) => {
+    if (
+      !block ||
+      typeof block.supplier_id !== "string" ||
+      !block.supplier_id ||
+      block.supplier_id === "sup-valio" ||
+      !Array.isArray(block.lines) ||
+      !block.lines.some((line: Json | null) => line?.unknown_stock === true)
+    ) {
+      return [];
+    }
+    return [{
+      supplierId: block.supplier_id,
+      name: typeof block.name === "string" && block.name ? block.name : block.supplier_id,
+    }];
+  });
+}
+
 /**
  * The approval card for one proposal. `events` is the kitchen's audit log: the proposal
  * itself does not say who asked or when, the event that created it does.
@@ -444,6 +465,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
     reasons: reasons.length
       ? reasons
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],
+    suppliersToConfirm: mapSuppliersToConfirm(proposal),
     status: approvalStatus(proposal.status),
     options: mapProposalOptions(
       proposal.substitute_options,
