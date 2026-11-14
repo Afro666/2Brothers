@@ -30,7 +30,7 @@ function lineFacts(line: OrderLine, now: Date) {
       product.baseUnitsPerSalesUnit == null
         ? null
         : formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit),
-    soldByWeight: product.salesUnit.toUpperCase() === "KG" || (product.baseUnit ?? "").toUpperCase() === "KG",
+    soldByWeight: product.salesUnit.toUpperCase() === "KG",
     salesUnit: peopleUnit(product.salesUnit, 1),
     quantity: `${formatNumber(line.quantity)} ${peopleUnit(product.salesUnit, line.quantity)}`,
     lineTotal: line.lineTotal,
@@ -39,6 +39,7 @@ function lineFacts(line: OrderLine, now: Date) {
       offer.comparisonPrice == null || offer.comparisonUnit == null
         ? "unknown"
         : `${formatEur(offer.comparisonPrice)} / ${peopleUnit(offer.comparisonUnit, 1)}`,
+    comparisonUnit: offer.comparisonUnit == null ? null : peopleUnit(offer.comparisonUnit, 1),
     stock: formatOfferStock(offer),
     stockUnknown: isStockUnconfirmed(offer),
     available: formatDate(offer.availableDate),
@@ -54,6 +55,8 @@ type Facts = ReturnType<typeof lineFacts>;
 
 function PackText({ f }: { f: Facts }) {
   const t = useT();
+  // Sold per kg: there is no pack size to miss (#1803).
+  if (f.pack == null && f.soldByWeight) return <>{t("Sold by weight, per kg")}</>;
   return (
     <>
       {f.pack ?? f.salesUnit}
@@ -94,9 +97,13 @@ function AvailableText({ f }: { f: Facts }) {
   );
 }
 
-/** `offerDetails` false: an order recorded without its proposal, so the offer's facts and the why are not known. */
-function ReceiptLines({ facts, offerDetails }: { facts: Facts[]; offerDetails: boolean }) {
+/**
+ * `offerDetails` false: an order recorded without its proposal, so the offer's facts and the why are not known.
+ * `decided`: the order is placed, so an offer fact that is unknown helps nobody and is left out (#1803).
+ */
+function ReceiptLines({ facts, offerDetails, decided }: { facts: Facts[]; offerDetails: boolean; decided: boolean }) {
   const t = useT();
+  const shows = (value: string) => offerDetails && !(decided && value === "unknown");
   return (
     <ul className="divide-y divide-dashed divide-input" aria-label={t("Lines")}>
       {facts.map((f) => (
@@ -104,20 +111,16 @@ function ReceiptLines({ facts, offerDetails }: { facts: Facts[]; offerDetails: b
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
             <div className="min-w-0">
               <div className="font-medium [overflow-wrap:anywhere]">{f.name}</div>
-              {offerDetails && f.soldByWeight ? (
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("Sold by weight, per kg")}</p>
-              ) : (
-                <div className="mt-1 font-mono text-xs leading-5 break-words text-muted-foreground">
-                  {offerDetails ? (
-                    <>
-                      {f.name !== f.code ? <>{f.code} · </> : null}
-                      <PackText f={f} />
-                    </>
-                  ) : (
-                    f.code
-                  )}
-                </div>
-              )}
+              <div className="mt-1 font-mono text-xs leading-5 break-words text-muted-foreground">
+                {offerDetails ? (
+                  <>
+                    {f.name !== f.code ? <>{f.code} · </> : null}
+                    <PackText f={f} />
+                  </>
+                ) : (
+                  f.code
+                )}
+              </div>
             </div>
             <div className="text-right font-mono text-sm tabular-nums">
               <div>
@@ -133,17 +136,21 @@ function ReceiptLines({ facts, offerDetails }: { facts: Facts[]; offerDetails: b
           <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-xs">
             <dt className="text-muted-foreground">{t("Unit price ex VAT")}</dt>
             <dd className="text-right font-mono tabular-nums">{t(f.unitPrice)}</dd>
-            {offerDetails && f.comparison !== "unknown" ? (
+            {shows(f.comparison) ? (
               <>
-                <dt className="text-muted-foreground">{t("Price per kg")}</dt>
-                <dd className="text-right font-mono tabular-nums">{f.comparison}</dd>
+                <dt className="text-muted-foreground">
+                  {f.comparisonUnit ? t("Price per {unit}", { unit: f.comparisonUnit }) : t("Compare")}
+                </dt>
+                <dd className="text-right font-mono tabular-nums">
+                  {f.comparison === "unknown" ? t("unknown") : f.comparison}
+                </dd>
               </>
             ) : null}
             <dt className="text-muted-foreground">{t("Stock")}</dt>
             <dd className="text-right">
               <StockText f={f} />
             </dd>
-            {offerDetails && f.available !== "unknown" ? (
+            {shows(f.available) ? (
               <>
                 <dt className="text-muted-foreground">{t("Available")}</dt>
                 <dd className="text-right">
@@ -151,7 +158,7 @@ function ReceiptLines({ facts, offerDetails }: { facts: Facts[]; offerDetails: b
                 </dd>
               </>
             ) : null}
-            {offerDetails && f.closing !== "unknown" ? (
+            {shows(f.closing) ? (
               <>
                 <dt className="text-muted-foreground">{t("Order by")}</dt>
                 <dd className="text-right">
@@ -182,16 +189,19 @@ export function OrderLinesTable({
   now,
   variant = "default",
   offerDetails = true,
+  decided = false,
 }: {
   lines: OrderLine[];
   now: Date;
   variant?: "default" | "receipt";
   /** Receipt only: false leaves out the before-the-order facts an order without its proposal does not carry. */
   offerDetails?: boolean;
+  /** Receipt only: the order is placed, so unknown offer facts are left out. */
+  decided?: boolean;
 }) {
   const t = useT();
   const facts = lines.map((l) => lineFacts(l, now));
-  if (variant === "receipt") return <ReceiptLines facts={facts} offerDetails={offerDetails} />;
+  if (variant === "receipt") return <ReceiptLines facts={facts} offerDetails={offerDetails} decided={decided} />;
   return (
     <div>
       <div className="hidden md:block">
