@@ -2,6 +2,7 @@ import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { createMockApi } from "@/api/mock";
+import type { Api } from "@/api/types";
 import type { Supplier } from "@/types";
 import { renderApp } from "@/test/render";
 import { nextCutoff } from "@/pages/home/cutoff";
@@ -34,6 +35,22 @@ describe("HomePage", () => {
     expect(screen.getByText("Hakaniemi Fish").parentElement).toHaveTextContent("terms not set");
     expect(screen.getAllByText("not counted").length).toBeGreaterThan(0);
     expect(screen.getByText("Latest steps")).toBeInTheDocument();
+    // Who decides what: two machines and the person, in that order.
+    expect(
+      [...screen.getByRole("region", { name: "Who decides what" }).querySelectorAll(".actor-box")].map(
+        (box) => `${box.textContent}:${box.getAttribute("data-actor")}`,
+      ),
+    ).toEqual(["Buyer agent:machine", "Ordering engine:machine", "You:person"]);
+    // The mock is not Atlas, so nothing on the page says it is.
+    expect(screen.queryByTestId("atlas-mark")).not.toBeInTheDocument();
+  });
+
+  it("marks the activity log as MongoDB Atlas only when the gateway serves it", async () => {
+    const api = Object.assign(createMockApi(), { live: new Set<keyof Api>(["listAudit"]) });
+    renderApp(`/?now=${DEMO_NOW}`, api);
+    expect(await screen.findByText("Latest steps")).toBeInTheDocument();
+    expect(screen.getAllByTestId("atlas-mark")).toHaveLength(1);
+    expect(screen.getByTestId("atlas-mark")).toHaveTextContent("MongoDB Atlas");
   });
 
   it("shows Valio risk counts and demand navigation for a Valio planner", async () => {

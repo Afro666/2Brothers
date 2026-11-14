@@ -5,6 +5,9 @@
 import type { ReactNode } from "react";
 
 import { AppShell, NAV_ITEMS } from "@/components/purchasing/app-shell";
+import { AtlasMarkLabel } from "@/components/atlas-mark";
+import { NemotronMark } from "@/components/nemotron-mark";
+import { DecisionStrip } from "@/components/purchasing/decision-strip";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
@@ -184,6 +187,10 @@ export function KitPage() {
         <Section id="states" title="Shared states" usedIn="Every screen while data loads, is empty, or fails">
           <EmptyState title="No requests yet">New requests will appear here.</EmptyState>
           <LoadingState />
+          <p className="flex flex-wrap items-center gap-2 text-sm">
+            <AtlasMarkLabel /> <NemotronMark /> Nemotron 3.5 Super VL
+          </p>
+          <DecisionStrip />
           <ErrorState message="Could not load this screen." onRetry={() => {}} />
         </Section>
       </div>

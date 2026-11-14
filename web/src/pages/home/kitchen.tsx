@@ -5,6 +5,9 @@ import { Link } from "@tanstack/react-router";
 import type { Api } from "@/api/types";
 import type { ApprovalRequest, AuditEvent, DemandLine, StockItem, Supplier } from "@/types";
 
+import { AtlasMark } from "@/components/atlas-mark";
+import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
+import { DecisionStrip } from "@/components/purchasing/decision-strip";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
@@ -24,7 +27,13 @@ export function ApprovalTile({ api }: { api: Api }) {
   const t = useT();
   const state = useAsync(() => api.listApprovals(), [api]);
   return (
-    <Tile title={t("Waiting for your approval")} href="/approvals" linkLabel={t("Review orders to approve")} emphasis>
+    <Tile
+      title={t("Waiting for your approval")}
+      href="/approvals"
+      linkLabel={t("Review orders to approve")}
+      emphasis
+      footer={<DecisionStrip />}
+    >
       <TileState
         status={state.status}
         error={state.error}
@@ -35,13 +44,23 @@ export function ApprovalTile({ api }: { api: Api }) {
         {(approvals: ApprovalRequest[]) => {
           const pending = approvals.filter((approval) => approval.status === "PENDING");
           const oldest = [...pending].sort((a, b) => Date.parse(a.createdAt ?? "") - Date.parse(b.createdAt ?? ""))[0];
+          const byNemotron = oldest?.modelTrace?.madeBy === "model" && isNemotron(oldest.modelTrace.model);
           return pending.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("Nothing is waiting.")}</p>
           ) : (
-            <div className="space-y-2">
-              <p className="stamp text-3xl font-semibold tabular-nums">{pending.length}</p>
-              <p className="text-sm">{oldest?.summary}</p>
-              <p className="text-sm font-medium tabular-nums">
+            <div className="grid gap-x-6 gap-y-3 sm:grid-cols-[auto_1fr_auto] sm:items-end">
+              <p className="docket-figure text-3xl tabular-nums sm:text-[5.5rem] sm:leading-[0.8]">{pending.length}</p>
+              <div className="min-w-0 space-y-1">
+                <p className="label-caps">{t("Oldest waiting")}</p>
+                <p className="max-w-[60ch] text-lg font-semibold leading-snug">{oldest?.summary}</p>
+                {byNemotron ? (
+                  <p className="font-mono text-xs text-muted-foreground">
+                    <NemotronMark />
+                    {t("Proposed by the Buyer agent ({model})", { model: "Nemotron 3.5 Super VL" })}
+                  </p>
+                ) : null}
+              </div>
+              <p className="w-fit border-b-[3px] border-double border-foreground text-2xl font-bold tabular-nums sm:justify-self-end">
                 {t(formatEur(oldest?.totalInclVat ?? null))} {t("incl VAT")}
               </p>
             </div>
@@ -156,7 +175,12 @@ export function AuditTile({ api }: { api: Api }) {
   const t = useT();
   const state = useAsync(() => api.listAudit(), [api], { keep: "audit" });
   return (
-    <Tile title={t("Latest steps")} href="/audit" linkLabel={t("Open activity log")}>
+    <Tile
+      title={t("Latest steps")}
+      href="/audit"
+      linkLabel={t("Open activity log")}
+      mark={<AtlasMark of="listAudit" what="The activity log is stored in MongoDB Atlas and read from it." />}
+    >
       <TileState
         status={state.status}
         error={state.error}
