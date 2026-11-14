@@ -39,6 +39,8 @@ function uuid(): string {
 }
 
 export const SIGNED_OUT_EVENT = "kitchen-buyer:signed-out";
+/** Sent after a successful sign-in, so the event stream that a 401/403 stopped opens again. */
+export const SIGNED_IN_EVENT = "kitchen-buyer:signed-in";
 
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
@@ -157,6 +159,7 @@ export function createHttpApi(baseUrl: string): Api {
     },
     async signIn(email, password) {
       currentSession = toSession((await post("/v1/auth/login", { email, password })) as Json);
+      window.dispatchEvent(new Event(SIGNED_IN_EVENT));
       return currentSession;
     },
     async signOut() {
