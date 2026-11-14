@@ -33,6 +33,14 @@ export function mapLabelPhoto(body: unknown, orderId: string, productId: string)
   const unknown: unknown[] = Array.isArray(label.unknown_words) ? label.unknown_words : invalid();
   if (!Array.isArray(raw.please_check)) invalid();
   const pleaseCheck = (raw.please_check as unknown[]).map((v) => one(REASONS, v));
+  const productCheck = one(CHECKS, raw.product_check);
+  const unknownWords = unknown.filter((w): w is string => typeof w === "string" && w !== "");
+  // docs/contract.md: these cases are always "please check"; do not trust the gateway to say so.
+  const must: LabelPleaseCheck[] = [];
+  if (productCheck === "MISMATCH") must.push("PRODUCT_MISMATCH");
+  if (productCheck === "NOT_CONFIRMED") must.push("PRODUCT_NOT_CONFIRMED");
+  if (unknownWords.length) must.push("WORD_UNKNOWN");
+  for (const reason of must) if (!pleaseCheck.includes(reason)) pleaseCheck.push(reason);
   let outcome = one(OUTCOMES, raw.outcome);
   // A reason to check never reads as agreement, whatever the outcome field says.
   if (pleaseCheck.length && (outcome === "AGREES" || outcome === "DIFFERS" || outcome === "CATALOG_UNKNOWN")) outcome = "PLEASE_CHECK";
@@ -50,13 +58,13 @@ export function mapLabelPhoto(body: unknown, orderId: string, productId: string)
     inOrder: raw.in_order !== false,
     outcome,
     message: typeof raw.message === "string" ? raw.message : "",
-    productCheck: one(CHECKS, raw.product_check),
+    productCheck,
     label: {
       productName: textOrNull(label.product_name),
       ean: textOrNull(label.ean),
       contains: rows(label, "contains").map(words),
       mayContain: rows(label, "may_contain").map(words),
-      unknownWords: unknown.filter((w): w is string => typeof w === "string" && w !== ""),
+      unknownWords,
     },
     excludedHits,
     differences: rows(body, "differences").map((r): LabelPhotoRead["differences"][number] => ({
