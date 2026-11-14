@@ -275,6 +275,13 @@ export function ApprovalCard({
         ? t("{minutes} min left", { minutes: cutoff.minutesLeft })
         : t("Less than 1 min left")
     : null;
+  const cutoffText = !(pending && cutoff)
+    ? null
+    : cutoff.passed
+      ? `${t("The cut-off has passed")}${cutoffOrigin}${cutoffEarliest}`
+      : `${t("Approve before {time}", {
+          time: `${formatDate(cutoff.closingTime)} ${formatTime(cutoff.closingTime)}`,
+        })}${cutoffOrigin}${cutoffEarliest}${cutoffTimeLeft ? ` · ${cutoffTimeLeft}` : ""}`;
   const approveBlockDescription = [stockMessage ? stockBlockId : null, approvalBlockedReason ? accountBlockId : null]
     .filter(Boolean).join(" ") || undefined;
   const lines = order?.lines ?? [];
@@ -500,16 +507,21 @@ export function ApprovalCard({
             ) : null}
           </div>
         </div>
-        <dl className="flex items-baseline gap-3 sm:block sm:text-right">
-          <dt className="sr-only">{t("Total incl VAT")}</dt>
-          <dd className="inline-block border-b-[3px] border-double border-foreground text-xl leading-7 font-bold tabular-nums">
-            {inclVat !== null ? formatEur(inclVat) : inclVatText(request, t, formatEur)}
-          </dd>
-          <dt className="sr-only">{t("Total ex VAT")}</dt>
-          <dd className="font-mono text-xs text-muted-foreground tabular-nums">
-            {t("{amount} ex VAT", { amount: formatEur(request.totalExVat) })}
-          </dd>
-        </dl>
+        <div className="space-y-1">
+          <dl className="flex items-baseline gap-3 sm:block sm:text-right">
+            <dt className="sr-only">{t("Total incl VAT")}</dt>
+            <dd className="inline-block border-b-[3px] border-double border-foreground text-xl leading-7 font-bold tabular-nums">
+              {inclVat !== null ? formatEur(inclVat) : inclVatText(request, t, formatEur)}
+            </dd>
+            <dt className="sr-only">{t("Total ex VAT")}</dt>
+            <dd className="font-mono text-xs text-muted-foreground tabular-nums">
+              {t("{amount} ex VAT", { amount: formatEur(request.totalExVat) })}
+            </dd>
+          </dl>
+          {pending && cutoff && !cutoff.warning && !cutoff.passed ? (
+            <p className="break-words text-xs text-muted-foreground sm:max-w-56 sm:text-right">{cutoffText}</p>
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent className="space-y-3 px-0">
         {chips.length > 0 ? (
@@ -527,13 +539,9 @@ export function ApprovalCard({
             ))}
           </ul>
         ) : null}
-        {pending && cutoff ? (
+        {pending && cutoff && (cutoff.warning || cutoff.passed) ? (
           <p className={cn("break-words text-sm", cutoff.warning ? "hatch text-warning" : "text-muted-foreground")}>
-            {cutoff.passed
-              ? `${t("The cut-off has passed")}${cutoffOrigin}${cutoffEarliest}`
-              : `${t("Approve before {time}", {
-                  time: `${formatDate(cutoff.closingTime)} ${formatTime(cutoff.closingTime)}`,
-                })}${cutoffOrigin}${cutoffEarliest}${cutoffTimeLeft ? ` · ${cutoffTimeLeft}` : ""}`}
+            {cutoffText}
           </p>
         ) : null}
         <RecallLines alerts={recalls} />
