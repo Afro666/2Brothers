@@ -32,6 +32,8 @@ import type {
   AutoApproveLearning,
   RecallList,
   KitchenBrandLookup,
+  SupplierOffer,
+  SupplierOfferAccepted,
 } from "@/types";
 
 /** Who a decision is recorded as in the audit log. */
@@ -234,6 +236,11 @@ export interface Api {
   /** Drift warnings of the kitchens that share with this supplier (`GET /demand/drift`). */
   getSupplierDrift(): Promise<DriftReport>;
   getPermissions(): Promise<BuyerPermissions>;
+  /** Suggestions a supplier sent to this kitchen, open ones first (`GET /supplier-offers`). */
+  listSupplierOffers(): Promise<SupplierOffer[]>;
+  /** Turns an open offer into a normal proposal. It approves and orders nothing. */
+  acceptSupplierOffer(offerId: string, actor: AuditActor): Promise<SupplierOfferAccepted>;
+  declineSupplierOffer(offerId: string, actor: AuditActor, reason?: string): Promise<SupplierOffer>;
   /** Progress only. There is no method to switch auto-approve on: a person approves every order. */
   getAutoApproveLearning(): Promise<AutoApproveLearning>;
   /**

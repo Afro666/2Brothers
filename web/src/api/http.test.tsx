@@ -120,6 +120,10 @@ describe("createHttpApi", () => {
         "verifyAuditChain",
         "tamperAuditRow",
         "restoreAuditRow",
+        // Supplier offers (api/http-offers.ts).
+        "listSupplierOffers",
+        "acceptSupplierOffer",
+        "declineSupplierOffer",
       ].sort(),
     );
     expect((await api.getMandate()).restaurant).toBeTruthy();

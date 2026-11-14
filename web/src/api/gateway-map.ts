@@ -415,6 +415,10 @@ const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   proposal_rejected: { kind: "approval", summary: "Proposal rejected" },
   // #548: a 403 to the agent or a kitchen API token; the details (code, method, path) are the reason.
   refused: { kind: "refused", summary: "Refused: the gateway said no (403)" },
+  // #374: a supplier's selling agent suggests a substitute; only a person turns it into a proposal.
+  supplier_offer_received: { kind: "offer", summary: "Offer received from the supplier's selling agent" },
+  supplier_offer_accepted: { kind: "offer", summary: "Supplier offer accepted: a proposal was made from it" },
+  supplier_offer_declined: { kind: "offer", summary: "Supplier offer declined" },
 };
 
 /** `expected_total: 148.76; verdict: NEEDS_APPROVAL`: the gateway's own values, as sent. */
@@ -467,8 +471,10 @@ function mapAuditEvent(event: Json): AuditEvent {
         ? "agent"
         : actor === "chef"
           ? "chef"
-          : typeof actor === "string" && !actor.startsWith("token:")
-            ? "human"
+          : typeof actor === "string" && actor.startsWith("supplier:")
+            ? "valio"
+            : typeof actor === "string" && !actor.startsWith("token:")
+              ? "human"
             : "system",
     summary: known?.summary ?? (typeof kind === "string" ? kind : "Unknown step"),
     reason:

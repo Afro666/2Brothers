@@ -1,3 +1,4 @@
+import { createOffersHttp } from "@/api/http-offers";
 import { createOnboardingHttp } from "@/api/http-onboarding";
 import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
 import { createShelfHttp } from "@/api/http-shelf";
@@ -178,6 +179,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createOnboardingHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createShelfHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);

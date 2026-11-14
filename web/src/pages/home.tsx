@@ -10,6 +10,7 @@ import type { Api } from "@/api/types";
 import { ApprovalTile, AuditTile, CutoffTile, StockTile } from "@/pages/home/kitchen";
 import { KitchensTile, ShortageTile, useSupplierDemand } from "@/pages/home/valio";
 import { DriftTile, SupplierDriftTile } from "@/pages/home/drift";
+import { SupplierOfferTile } from "@/pages/home/offer";
 
 function dashboardNow(search: string): Date {
   const requested = new URLSearchParams(search).get("now");
@@ -53,6 +54,7 @@ export function HomePage() {
 function KitchenDashboard({ api, now }: { api: Api; now: Date }) {
   return (
     <>
+      <SupplierOfferTile api={api} />
       <ApprovalTile api={api} />
       <CutoffTile api={api} now={now} />
       <StockTile api={api} now={now} />
