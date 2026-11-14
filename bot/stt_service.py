@@ -42,6 +42,11 @@ class Transcript:
     audio_seconds: float
 
 
+def _log(what: str, exc: Exception) -> None:
+    """The kind of failure, for the container log. Never the audio and never a transcript."""
+    print(f"stt: {what}: {type(exc).__name__}: {str(exc)[:200]}", file=sys.stderr, flush=True)
+
+
 class WhisperEngine:
     """One Whisper model, loaded once, one transcription at a time (it uses every core it gets)."""
 
@@ -68,14 +73,16 @@ class WhisperEngine:
     def _run(self, audio: bytes, language: str | None):
         try:
             model = self.load()
-        except Exception:
+        except Exception as exc:
             # No model (the first download failed, or no memory): not the caller's audio.
+            _log("model load failed", exc)
             raise SttError(503, "STT_UNAVAILABLE", "Speech to text is not ready. Type the request instead.") from None
         try:
             # vad_filter drops silence, so a silent message gives no text instead of invented words.
             return model.transcribe(io.BytesIO(audio), language=language, beam_size=5, vad_filter=True)
-        except Exception:
-            # The decoder's own message can quote the input: say only that it could not be read.
+        except Exception as exc:
+            # The caller gets a fixed sentence; the reason goes to this container's log only.
+            _log("transcribe failed", exc)
             raise SttError(422, "CANNOT_READ_AUDIO", "The audio could not be read. Send a voice message again.") from None
 
     def transcribe(self, audio: bytes, language: str | None = None) -> Transcript:
