@@ -1,0 +1,122 @@
+07:25:05 UTC  Reading existing live proposal created by the unchanged public-docs client.
+07:25:06 UTC  GET https://31-22-104-201.sslip.io/gateway/v1/kitchens/demo-kitchen/proposals/0619d3c19a7b494d9d5a2b1e38795c29
+{
+  "proposal_id": "0619d3c19a7b494d9d5a2b1e38795c29",
+  "status": "READY",
+  "expected_total": "2545.01",
+  "lines": 2,
+  "unknown_stock_lines": 1
+}
+07:25:06 UTC  The proposal still needs human approval and stock confirmation. No order was placed by this experiment.
+07:25:07 UTC  GitHub PR #1083 actual status:
+{
+  "number": 1083,
+  "state": "OPEN",
+  "mergedAt": null,
+  "checks": {
+    "opus-review": "IN_PROGRESS",
+    "python": "IN_PROGRESS",
+    "advisory-review": "SKIPPED",
+    "gateway-image": "SUCCESS",
+    "web": "IN_PROGRESS"
+  }
+}
+07:25:24 UTC  GitHub PR #1083 actual status:
+{
+  "number": 1083,
+  "state": "OPEN",
+  "mergedAt": null,
+  "checks": {}
+}
+07:25:33 UTC  GitHub PR #1083 actual status:
+{
+  "number": 1083,
+  "state": "OPEN",
+  "mergedAt": null,
+  "checks": {
+    "python": "IN_PROGRESS",
+    "advisory-review": "SKIPPED",
+    "gateway-image": "IN_PROGRESS",
+    "web": "IN_PROGRESS"
+  }
+}
+07:25:42 UTC  GitHub PR #1083 actual status:
+{
+  "number": 1083,
+  "state": "OPEN",
+  "mergedAt": null,
+  "checks": {
+    "opus-review": "IN_PROGRESS",
+    "python": "IN_PROGRESS",
+    "advisory-review": "SKIPPED",
+    "gateway-image": "IN_PROGRESS",
+    "web": "IN_PROGRESS"
+  }
+}
+07:25:59 UTC  GitHub PR #1083 actual status:
+{
+  "number": 1083,
+  "state": "OPEN",
+  "mergedAt": null,
+  "checks": {
+    "opus-review": "IN_PROGRESS",
+    "python": "IN_PROGRESS",
+    "advisory-review": "SKIPPED",
+    "gateway-image": "SUCCESS",
+    "web": "IN_PROGRESS"
+  }
+}
+07:26:52 UTC  GitHub PR #1083 actual status:
+{
+  "number": 1083,
+  "state": "OPEN",
+  "mergedAt": null,
+  "checks": {
+    "python": "IN_PROGRESS",
+    "advisory-review": "SKIPPED",
+    "opus-review": "SUCCESS",
+    "gateway-image": "SUCCESS",
+    "web": "IN_PROGRESS"
+  }
+}
+07:27:09 UTC  GitHub PR #1083 actual status:
+{
+  "number": 1083,
+  "state": "OPEN",
+  "mergedAt": null,
+  "checks": {
+    "python": "IN_PROGRESS",
+    "advisory-review": "SKIPPED",
+    "opus-review": "SUCCESS",
+    "gateway-image": "SUCCESS",
+    "web": "SUCCESS"
+  }
+}
+07:27:18 UTC  GitHub PR #1083 actual status:
+{
+  "number": 1083,
+  "state": "OPEN",
+  "mergedAt": null,
+  "checks": {
+    "advisory-review": "SKIPPED",
+    "opus-review": "SUCCESS",
+    "python": "SUCCESS",
+    "gateway-image": "SUCCESS",
+    "web": "SUCCESS"
+  }
+}
+07:28:02 UTC  GitHub PR #1083 actual status:
+{
+  "number": 1083,
+  "state": "MERGED",
+  "mergedAt": "2026-11-14T07:27:57Z",
+  "checks": {
+    "start": "QUEUED",
+    "advisory-review": "SKIPPED",
+    "opus-review": "SUCCESS",
+    "python": "SUCCESS",
+    "gateway-image": "SUCCESS",
+    "web": "SUCCESS"
+  }
+}
+07:28:02 UTC  Recording ends. Client generation, operator review/execution, and PR review are separate steps.
