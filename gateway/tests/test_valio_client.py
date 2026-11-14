@@ -68,7 +68,7 @@ class ValioTests(unittest.TestCase):
     def test_unknown_stock_stays_visible_but_unconfirmed_with_future_cutoff(self):
         now = datetime(2026, 11, 13, tzinfo=timezone.utc)
         for model in ["Terminal", "Stock"]:
-            for amount in [999999, 666666666, 1999999999, 9999999999, None]:
+            for amount in [999999, 666666666, 1999999999, 9999999999, 2499999999]:
                 with self.subTest(model=model, amount=amount):
                     data = fixture("availability")
                     original = data["products"][0]
@@ -84,6 +84,33 @@ class ValioTests(unittest.TestCase):
                     self.assertIsNone(line["availableAmount"])
                     self.assertTrue(line["unknown_stock"])
                     self.assertFalse(line["orderable"])
+
+    def test_empty_amount_is_not_available_not_unknown(self):
+        # Valio, challenge Discord, 14 Nov: "Empty = not available". Absent or null is zero.
+        now = datetime(2026, 11, 13, tzinfo=timezone.utc)
+        for missing in [True, False]:
+            with self.subTest(missing=missing):
+                data = fixture("availability")
+                line = data["products"][0]["scheduleLines"][0]
+                if missing:
+                    del line["availableAmount"]
+                else:
+                    line["availableAmount"] = None
+                result = self.client(lambda *args: data, now=lambda: now).availability(["462775"], "2026-11-16")
+                out = result["products"][0]["scheduleLines"][0]
+                self.assertEqual(out["availableAmount"], 0)
+                self.assertFalse(out["unknown_stock"])
+                self.assertFalse(out["orderable"])
+
+    def test_largest_measured_amount_is_not_filler(self):
+        # Seen live 2026-11-14: the largest measured amount was 68293, fillers start at 999999.
+        data = fixture("availability")
+        data["products"][0]["scheduleLines"][0]["availableAmount"] = 999998.0
+        now = datetime(2026, 11, 13, tzinfo=timezone.utc)
+        out = self.client(lambda *args: data, now=lambda: now).availability(["462775"], "2026-11-16")
+        line = out["products"][0]["scheduleLines"][0]
+        self.assertEqual(line["availableAmount"], 999998.0)
+        self.assertFalse(line["unknown_stock"])
 
     def test_confirmed_zero_stock_is_unavailable_not_unknown(self):
         data = fixture("availability")

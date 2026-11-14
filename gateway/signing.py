@@ -118,7 +118,9 @@ def sign_receipt(db, *, order_id: str, kitchen_id: str, offer_id: str, offer_has
         "iss": ISSUER, "type": RECEIPT_TYPE, "sub": order_id, "kitchen_id": kitchen_id,
         "offer_id": offer_id, "offer_hash": offer_hash, "iat": int(at.timestamp()),
         "currency": "EUR", "expected_total": expected_total,
-        "lines": [{"product_id": ln.get("product_id"), "quantity": str(ln.get("quantity")), "unit": ln.get("unit")}
+        # `stock` says which lines the supplier in `supplier_must_confirm` must still confirm.
+        "lines": [{"product_id": ln.get("product_id"), "quantity": str(ln.get("quantity")), "unit": ln.get("unit"),
+                   "stock": "unknown" if ln.get("unknown_stock") is not False else "confirmed"}
                   for ln in lines],
         "approved_by": approved_by,
         "supplier_outcome": "NOT_SENT", "supplier_note": NOT_SENT_NOTE,
