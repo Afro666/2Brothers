@@ -296,12 +296,12 @@ daily_use: 4
 lead_time_days: 3
 safety_stock: 6
 reorder_point: 18              # 4 x 3 + 6
-cover_ceiling_days: 17         # lead time 3 + target 14
+cover_ceiling_days: 17         # lead time 3 + target 14; ceiling = 17 x 4 + safety 6 = 74
 decision:
   action: no_order_now
   reason: "position 40 (10 + 30) is above the reorder point 18"
   if_chef_insists:
-    max_within_ceiling: {qty: 28, total_eur: 179.20}    # 17 x 4 = 68 - 40
+    max_within_ceiling: {qty: 34, total_eur: 217.60}    # 17 x 4 + 6 safety = 74 - 40 (Aron, 2026-11-14)
     qty_150: {total_eur: 960.00, days_of_cover: 47, needs: approval}
   reason_codes: [POSITION_OK, COVER_CEILING]
 ```

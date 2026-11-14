@@ -11,7 +11,7 @@ Rules:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
@@ -31,6 +31,7 @@ class Offer:
     cutoff_passed: bool | None          # None = no cut-off known
     available_date: date | None
     sales_block: bool = False
+    allergen_data_known: bool | None = True   # False or None: ALLERGEN_DATA_MISSING (S02)
 
     @property
     def price_per_measure(self) -> Decimal:
@@ -86,6 +87,8 @@ def _line(o: Offer, qty: Decimal, codes: list[str], why: str) -> PlanLine:
     total = (qty * o.unit_price).quantize(CENT, ROUND_HALF_UP)
     if o.pack.derived:
         codes = [*codes, "PACK_SIZE_DERIVED"]
+    if not o.allergen_data_known:
+        codes = [*codes, "ALLERGEN_DATA_MISSING"]
     return PlanLine(o.product_id, qty, o.pack.sales_unit, o.unit_price, total,
                     o.available is None, tuple(codes), why)
 
@@ -129,7 +132,9 @@ def _fill(need: Decimal, measure: str, usable: list[Offer], *, confirmed_first: 
 
 
 def plan_request(need: Decimal, measure: str, offers: list[Offer], requested: date,
-                 params: KitchenParams | None = None) -> RequestPlan:
+                 params: KitchenParams | None = None, *, event: bool = False) -> RequestPlan:
+    """`event`: one-off demand (a party, S05). Every line carries EVENT_LINE so the
+    forecast keeps it out of the base demand."""
     if need <= 0:
         raise ValueError("need must be positive")
     excluded: list[tuple[str, str]] = []
@@ -146,6 +151,8 @@ def plan_request(need: Decimal, measure: str, offers: list[Offer], requested: da
 
     def build(confirmed_first: bool) -> RequestPlan:
         lines, shortfall, codes = _fill(need, measure, usable, confirmed_first=confirmed_first)
+        if event:
+            lines = [replace(ln, reason_codes=(*ln.reason_codes, "EVENT_LINE")) for ln in lines]
         if any("cut-off has passed" in r for _, r in excluded):
             codes.add("CLOSING_PASSED")
         if shortfall > 0:
@@ -154,7 +161,8 @@ def plan_request(need: Decimal, measure: str, offers: list[Offer], requested: da
         warnings = ()
         if params and params.budget_warning_order_eur is not None and total > params.budget_warning_order_eur:
             warnings = ("OVER_BUDGET_WARNING",)
-        order = ["CLOSING_PASSED", "PARTIAL_STOCK", "STOCK_UNKNOWN", "LOT_SIZE_ROUNDED", "PACK_SIZE_DERIVED"]
+        order = ["CLOSING_PASSED", "PARTIAL_STOCK", "STOCK_UNKNOWN", "LOT_SIZE_ROUNDED", "PACK_SIZE_DERIVED",
+                 "ALLERGEN_DATA_MISSING", "EVENT_LINE"]
         codes |= {c for ln in lines for c in ln.reason_codes}
         return RequestPlan(need, measure, tuple(lines), total, shortfall, tuple(excluded),
                            tuple(c for c in order if c in codes), warnings)
