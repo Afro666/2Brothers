@@ -7,7 +7,8 @@ import { mapApproval } from "@/api/gateway-map";
 import { ApiError } from "@/api/types";
 import { formatDate, formatDateTime, formatEur, formatNumber, formatTime, peopleUnit } from "@/lib/format";
 import { proposal } from "@/test/gateway-fixtures";
-import { approval, orders } from "@/mocks/milk-case";
+import { approval, milkOptions, orders } from "@/mocks/milk-case";
+import { CHOOSE_TIMEOUT_MS } from "@/components/purchasing/option-compare";
 
 const confirmedOrder = {
   ...orders.needsApproval,
@@ -783,6 +784,156 @@ describe("ApprovalCard", () => {
     expect(await within(orderSection).findByRole("alert")).toHaveTextContent(message);
     expect(within(orderSection).getByRole("alert")).toHaveTextContent("The proposal is unchanged.");
     expect(quantity).toHaveValue(originalQuantity);
+  });
+
+  describe("the recommended option leads the card (#1866)", () => {
+    const [mockA, mockB, mockC] = milkOptions;
+    // The live milk proposal: A is recommended (confirmed stock), B is the proposal's own basket.
+    const optionA = { ...mockA, id: "offer-a", recommended: true, stockConfirmed: true, chosen: false, cutoffPassed: false, totalInclVat: 2099.41, held: { quantity: 302, unit: "L" } };
+    const optionB = { ...mockB, id: "offer-b", source: "original" as const, recommended: false, stockConfirmed: false, chosen: true, cutoffPassed: false, totalInclVat: 2634.13, held: null };
+    const optionC = { ...mockC, id: "offer-c", recommended: false, stockConfirmed: false, chosen: false, cutoffPassed: false, totalInclVat: 2701.55, held: null };
+    const proposed = {
+      ...approval,
+      reasons: [],
+      totalExVat: 2320.82,
+      inclVat: 2634.13,
+      totalInclVat: 2634.13,
+      options: [optionA, optionB, optionC],
+    };
+    /** The proposal after the gateway made option A its basket: a new offer id, A's own totals. */
+    const afterA = {
+      ...proposed,
+      totalExVat: 1849.7,
+      inclVat: 2099.41,
+      totalInclVat: 2099.41,
+      options: [{ ...optionA, id: "offer-a2", chosen: true }, { ...optionB, chosen: false }, optionC],
+    };
+    const mainApprove = () => within(screen.getByTestId("card-actions")).getByRole("button", { name: /^Approve/ });
+
+    it("shows the recommended option's total and approves that option by default", () => {
+      render(<ApprovalCard request={proposed} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />);
+      const totals = screen.getByTestId("card-totals");
+      expect(within(totals).getByText("€2,099.41")).toBeVisible();
+      expect(within(totals).getByText("Option A, recommended by the Buyer")).toBeVisible();
+      expect(within(totals).getByText("302 l waits for stock confirmation")).toBeVisible();
+      expect(within(totals).getByText("Option B, the basket proposed now: €2,634.13")).toBeVisible();
+      expect(mainApprove()).toHaveAccessibleName("Approve option A: €2,099.41");
+      expect(mainApprove()).toBeEnabled();
+    });
+
+    it("keeps Over budget on the card and says which option its figures are for", () => {
+      const order = structuredClone(confirmedOrder);
+      order.lines[0].offer.availableAmount = 999999;
+      const request = {
+        ...proposed,
+        reasons: [{ rule: "The total is above your kitchen's budget warning.", detail: "A warning only. It does not block the order.", warning: true }],
+      };
+      render(<ApprovalCard request={request} order={order} onApprove={vi.fn()} onChooseOption={vi.fn()} budgetWarningExVat={1500} />);
+      expect(screen.getByText("Over budget")).toBeVisible();
+      expect(
+        screen.getByText("Option B: €2,320.82 ex VAT is €820.82 above your kitchen's budget warning of €1,500.00 per order. A warning only."),
+      ).toBeVisible();
+      // "Valio must confirm 1" is about option B's line: not beside option A's total.
+      expect(screen.queryByText("Valio must confirm 1")).toBeNull();
+    });
+
+    it("chooses the recommended option first, then asks for the yes to its new exact total", async () => {
+      const user = userEvent.setup();
+      const onApprove = vi.fn();
+      const onChooseOption = vi.fn().mockResolvedValue(undefined);
+      const { rerender } = render(
+        <ApprovalCard request={proposed} order={confirmedOrder} onApprove={onApprove} onChooseOption={onChooseOption} />,
+      );
+      await user.click(mainApprove());
+      expect(onChooseOption).toHaveBeenCalledExactlyOnceWith("offer-a");
+      // Nothing is approved by the choice, and no dialog names a total before the new basket is on screen.
+      expect(onApprove).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).toBeNull();
+
+      rerender(<ApprovalCard request={afterA} order={confirmedOrder} onApprove={onApprove} onChooseOption={onChooseOption} />);
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(/You approve exactly €1,849\.70 ex VAT/)).toBeVisible();
+      expect(onApprove).not.toHaveBeenCalled();
+      await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,099.41" }));
+      expect(onApprove).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ expectedTotalExVat: 1849.7, expectedTotalInclVat: 2099.41 }),
+      );
+    });
+
+    it("follows the person's own pick: the total and the button change together to option B", async () => {
+      const user = userEvent.setup();
+      const onChooseOption = vi.fn();
+      render(<ApprovalCard request={proposed} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={onChooseOption} />);
+      await user.click(screen.getByRole("button", { name: "Inspect (3 options)" }));
+      await user.click(screen.getByRole("button", { name: /^Choose option B/ })); // B, the basket, is open by default
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByRole("button", { name: "Yes, approve €2,634.13" })).toBeVisible();
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+      expect(onChooseOption).not.toHaveBeenCalled(); // B is already the proposal's basket
+      const totals = screen.getByTestId("card-totals");
+      expect(within(totals).getByText("€2,634.13")).toBeVisible();
+      expect(within(totals).queryByText("Option A, recommended by the Buyer")).toBeNull();
+      expect(mainApprove()).toHaveAccessibleName(/^Approve €2,634\.13/);
+    });
+
+    it("says why when the gateway refuses the choice, and opens no approval", async () => {
+      const user = userEvent.setup();
+      const onChooseOption = vi.fn().mockRejectedValue(new ApiError("OPTION_UNAVAILABLE", "gone"));
+      render(<ApprovalCard request={proposed} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={onChooseOption} />);
+      await user.click(mainApprove());
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Could not choose this option. This option is no longer available. The current basket is unchanged; choose another option. Nothing was approved.",
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("frees the button and says so when the chosen basket does not arrive", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+        render(<ApprovalCard request={proposed} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn().mockResolvedValue(undefined)} />);
+        await user.click(mainApprove());
+        expect(mainApprove()).toBeDisabled();
+        await act(() => vi.advanceTimersByTimeAsync(CHOOSE_TIMEOUT_MS));
+        expect(screen.getByRole("alert")).toHaveTextContent("Could not load the updated options. Nothing was approved. Please try again.");
+        expect(mainApprove()).toBeEnabled();
+        expect(screen.queryByRole("dialog")).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps the proposal's own basket when the options cannot be switched, or the recommended one is already it", () => {
+      const { unmount } = render(<ApprovalCard request={proposed} order={confirmedOrder} onApprove={vi.fn()} />);
+      expect(mainApprove()).toHaveAccessibleName(/^Approve €2,634\.13/);
+      unmount();
+      render(<ApprovalCard request={afterA} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />);
+      expect(mainApprove()).toHaveAccessibleName(/^Approve €2,099\.41/);
+      expect(screen.queryByText(/the basket proposed now/)).toBeNull();
+    });
+
+    it("shows a basket the person chose or edited, not the recommended option", () => {
+      // After an edit no option is the basket; after choosing C the basket is not the Buyer's own.
+      const edited = [optionA, { ...optionB, chosen: false }, optionC];
+      const choseC = [optionA, { ...optionB, chosen: false }, { ...optionC, source: "catalog" as const, chosen: true }];
+      for (const options of [edited, choseC]) {
+        const { unmount } = render(
+          <ApprovalCard request={{ ...proposed, options }} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />,
+        );
+        expect(mainApprove()).toHaveAccessibleName(/^Approve €2,634\.13/);
+        unmount();
+      }
+    });
+
+    it("never leads with a recommended option whose stock is not confirmed or whose cut-off has passed", () => {
+      for (const blocked of [{ stockConfirmed: false }, { cutoffPassed: true }]) {
+        const request = { ...proposed, options: [{ ...optionA, ...blocked }, optionB, optionC] };
+        const { unmount } = render(<ApprovalCard request={request} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />);
+        expect(mainApprove()).toHaveAccessibleName(/^Approve €2,634\.13/);
+        unmount();
+      }
+    });
   });
 
   describe("the facts behind the total (#1865)", () => {
