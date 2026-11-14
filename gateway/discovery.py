@@ -34,6 +34,8 @@ K = "/v1/kitchens/{kitchen_id}"
 SCOPE_TEXT = {
     "kitchen:read": "search the catalog; read proposals, orders and the audit log of the token's kitchen",
     "kitchen:propose": "store a need, get an offer, simulate it and ask a person to approve it",
+    "kitchen:write": ("push stock counts and change the menus, recipes, own products and suppliers of the "
+                      "token's kitchen (for a POS or stock system, never the Buyer agent)"),
 }
 
 # (id, method, path, scope, name, description when there is no MCP tool of that name, tags)
