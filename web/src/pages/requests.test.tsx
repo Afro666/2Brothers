@@ -11,6 +11,8 @@ async function ask(api = createMockApi()) {
   renderApp("/requests", api);
   await screen.findByRole("heading", { level: 1, name: "Request an order" });
   await user.type(screen.getByLabelText("What do you need?"), "1,000 L lactose-free milk by Monday");
+  // The field starts with tomorrow's date: the test sets its own day.
+  await user.clear(screen.getByLabelText("Needed by"));
   await user.type(screen.getByLabelText("Needed by"), "2026-11-16");
   await user.click(screen.getByRole("button", { name: "Ask the agent" }));
   return user;

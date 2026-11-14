@@ -8,6 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/lib/i18n";
 import type { ChefRequest } from "@/types";
 
+/** Tomorrow in Helsinki, `YYYY-MM-DD`: "Needed by" starts with a day, so an example goes out in one press. */
+function tomorrow(): string {
+  return new Date(Date.now() + 24 * 60 * 60 * 1000).toLocaleDateString("en-CA", { timeZone: "Europe/Helsinki" });
+}
+
 /**
  * The chef says what they need in their own words. Covers and date are
  * separate fields so the engine reads numbers, not the model's guess.
@@ -26,7 +31,7 @@ export function ChefRequestBox({
   const textRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(initial?.text ?? "");
   const [covers, setCovers] = useState(initial?.covers == null ? "" : String(initial.covers));
-  const [date, setDate] = useState(initial?.deliveryDate ?? "");
+  const [date, setDate] = useState(initial?.deliveryDate ?? tomorrow);
   const [sent, setSent] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
