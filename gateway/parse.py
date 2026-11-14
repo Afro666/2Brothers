@@ -184,6 +184,11 @@ def named_day(text: str, today: date) -> date | None:
     return None
 
 
+def language(low: str) -> str:
+    """"fi" or "en" for a lower-case text: its numbers' decimal mark depends on it."""
+    return "fi" if re.search(r"[äö]|ksi\b|aa\b|tta\b|tarvi|maito|kpl", low) else "en"
+
+
 def parse_request(text: str, today: date, default_day: date | None = None) -> ParsedRequest:
     """`default_day`: the delivery day when the text names none (the day picked in a form)."""
     if not text or not text.strip():
@@ -191,12 +196,12 @@ def parse_request(text: str, today: date, default_day: date | None = None) -> Pa
     if len(text) > 500:
         raise ParseError("the request is too long (500 characters at most)")
     low = text.lower()
-    language = "fi" if re.search(r"[äö]|ksi\b|aa\b|tta\b|tarvi|maito|kpl", low) else "en"
+    lang = language(low)
 
     m = _QTY.search(low)
     if not m:
         raise ParseError("no quantity with a unit (for example '1000 L' or '20 kg')")
-    quantity, unit = _number(m.group(1), language), UNITS[m.group(2).lower()]
+    quantity, unit = _number(m.group(1), lang), UNITS[m.group(2).lower()]
     if unit == "G":
         quantity, unit = quantity / 1000, "KG"
     rest = low[:m.start()] + " " + low[m.end():]
@@ -224,4 +229,4 @@ def parse_request(text: str, today: date, default_day: date | None = None) -> Pa
     query = " ".join(" ".join(kept).replace("-", " ").split())
     if not query:
         raise ParseError("no product named")
-    return ParsedRequest(quantity, unit, query, when, language)
+    return ParsedRequest(quantity, unit, query, when, lang)

@@ -88,7 +88,7 @@ def _all_confirmed(quote: dict) -> bool:
 
 
 def _confirmed_option(gw, kitchen_id: str, request: dict, sim: dict) -> dict | None:
-    if request.get("needs") or not sim.get("lines"):
+    if request.get("needs") or request.get("items") or not sim.get("lines"):
         return None
     if all(line.get("unknown_stock") is False for line in sim["lines"]):
         return None      # the plan is placeable as it is
