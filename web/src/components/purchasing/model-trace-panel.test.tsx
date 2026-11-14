@@ -100,6 +100,57 @@ describe("ModelTracePanel", () => {
     expect(mapModelTrace({ made_by: "person", reader: "buyer" })).toBeNull();
   });
 
+  // The live milk card of 14 Nov (#1867): one pick call, then the explanation call.
+  const PICK = {
+    ...BUYER, calls: 1, seconds: 0.276,
+    steps: [
+      { by: "code", attempt: 1, tool: "search_products", query: "lactose free milk", count: 20 },
+      { by: "model", attempt: 1, tool: "pick", products: 2, code: "PICKED" },
+    ],
+  };
+  const WRITTEN = { text: "A checked text.", model: "nemotron-3.5-super-vl", durationMs: 757 };
+  const showWith = (value: unknown, explanation: typeof WRITTEN | { text: string; model: string; durationMs: null } | null) =>
+    render(
+      <LanguageProvider>
+        <ModelTracePanel trace={mapModelTrace(value)} explanation={explanation} />
+      </LanguageProvider>,
+    );
+
+  it("counts the explanation call and lists it as its own step with its time (#1867)", async () => {
+    showWith(PICK, WRITTEN);
+    // 1 pick call + 1 explanation call; 0.276 s + 0.757 s.
+    const summary = screen.getByText("2 model calls, 1 s, thinking off");
+    expect(screen.queryByText(/^1 model call/)).not.toBeInTheDocument();
+    await userEvent.click(summary);
+    const items = screen.getAllByRole("listitem").map((item) => item.textContent);
+    expect(items).toEqual([
+      "Code: Searched the catalog for “lactose free milk”: 20 products",
+      "Model: Picked one product from the shortlist",
+      "Model: Wrote the explanation on this card from the checked decision record: 0.8 s",
+    ]);
+  });
+
+  it("counts the explanation call without a time when the gateway sent none", async () => {
+    showWith(PICK, { ...WRITTEN, durationMs: null });
+    await userEvent.click(screen.getByText("2 model calls, 0.3 s, thinking off"));
+    expect(screen.getAllByRole("listitem").at(-1)).toHaveTextContent(
+      /^Model: Wrote the explanation on this card from the checked decision record$/,
+    );
+  });
+
+  it("keeps the count of the run alone while there is no explanation", () => {
+    showWith(PICK, null);
+    expect(screen.getByText("1 model call, 0.3 s, thinking off")).toBeInTheDocument();
+  });
+
+  it("does not say no model ran on a rule-made proposal that has a model explanation", () => {
+    showWith({ ...BUYER, made_by: "rule", reader: "parser", model: null, thinking: null, calls: 0, seconds: 0, attempts: 0, steps: [] }, WRITTEN);
+    expect(screen.queryByText(/No model ran/)).not.toBeInTheDocument();
+    expect(screen.getByText("The gateway’s request parser made the proposal: no model picked the products.")).toBeVisible();
+    expect(screen.getByText("Nemotron 3.5 Super VL wrote the explanation on this card: 1 model call, 0.8 s.")).toBeVisible();
+    expect(screen.getByTestId("nemotron-mark")).toBeInTheDocument();
+  });
+
   it("speaks Finnish", () => {
     localStorage.setItem("purchasing-language", "fi");
     show(BUYER);

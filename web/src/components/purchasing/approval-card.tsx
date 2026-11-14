@@ -1,7 +1,7 @@
 import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
+import { ModelTraceLine, ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OptionCompare } from "@/components/purchasing/option-compare";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
@@ -514,6 +514,7 @@ export function ApprovalCard({
               {requestDescription(request, t)}
               <span className="text-muted-foreground"> · {suppliers.join(", ")}</span>
             </CardDescription>
+            <ModelTraceLine trace={request.modelTrace} />
             <ProposalExplanationBlock
               explanation={explanation}
               openDetails={!inspecting ? () => setInspecting(true) : undefined}
@@ -739,7 +740,7 @@ export function ApprovalCard({
                   ))}
                 </ul>
               </section>
-              <ModelTracePanel trace={request.modelTrace} />
+              <ModelTracePanel trace={request.modelTrace} explanation={explanation} />
             </>
           ) : null}
         </div>
