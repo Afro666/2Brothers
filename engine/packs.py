@@ -11,6 +11,12 @@ from dataclasses import dataclass
 from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 
 COUNTABLE = {"ST", "KI", "PAK", "BAG", "RAS", "PRK", "BOT", "CS", "KRT", "KRS", "PAL"}
+# A request in pieces (#975): the kitchen's unit (PCS) and Valio's (ST).
+PIECES = {"PCS", "ST"}
+# Unit codes that are one item a person can count: a piece, a cup, a pack, a bag, a box,
+# a bottle. A case, a crate or a pallet (KI, KRS, KRT, CS, PAL) holds a number of items
+# that units[] gives only when the base unit is one of these.
+ITEMS = {"ST", "PRK", "PAK", "BAG", "RAS", "BOT"}
 
 
 class PackDataError(ValueError):
@@ -37,6 +43,10 @@ def pack_info(product: dict, *, price: Decimal | None = None,
 
     `measure` is the unit the request is in. When it is the base unit, units[] answers.
     Otherwise the price ratio does (a 5 x 1 L case at 10.97, 2.19 per L, holds 5 L).
+
+    A request in pieces (`PCS` or `ST`) counts items: one base unit when the base unit is
+    an item (a cup `PRK` is a piece), so a case of 20 cups holds 20 pieces. When the
+    catalog has no item count for the pack, the error says so and names a unit that works.
     """
     sales, base = product["salesUnit"], product["baseUnit"]
     units = _units(product)
@@ -49,6 +59,16 @@ def pack_info(product: dict, *, price: Decimal | None = None,
         return PackInfo(sales, base, in_base, lot, derived=False)
     if want == sales:
         return PackInfo(sales, sales, Decimal(1), lot, derived=False)
+    if want in PIECES:
+        if base in ITEMS and in_base:
+            return PackInfo(sales, want, in_base, lot, derived=False)
+        if sales in ITEMS:
+            return PackInfo(sales, want, Decimal(1), lot, derived=False)
+        other = comparison_unit if comparison_unit in ("KG", "L") else "KG or L"
+        if sales not in COUNTABLE:
+            raise PackDataError(f"this product is sold by weight, not by the piece; ask for it in {other}")
+        raise PackDataError(f"the catalog does not say how many pieces one {sales} holds; "
+                            f"ask for this product in {other}")
     if price is None or comparison_price is None or comparison_unit != want:
         raise PackDataError(f"no way to convert {want} to {sales} for product {product['id']}")
     if comparison_price <= 0 or price <= 0:
