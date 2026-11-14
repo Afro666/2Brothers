@@ -88,3 +88,121 @@ it feeds, a unit too many costs what expires.
 
 Mean total cost: 23,856 EUR -> 20,061 EUR (-15.9%), lower on every seed, with fewer lost
 covers and less waste at the same time.
+
+## Covers models v2 (#433)
+
+Reproduce: `python -m env.covers_backtest --write` (install `.[covers]`).
+20 kitchens, 12 weeks, 21-day warm-up; seeds 1-3 selection, 4-6 holdout.
+Weekly rolling origins: Monday forecasts Mon-Sun before observing Monday.
+Covers WAPE sums daily absolute errors, including closed days. Inventory orders
+update daily, with identical demand streams, recipes, reference policy and full supply.
+Cost = lost covers × 4 EUR + expired-stock waste EUR (#432 convention).
+
+Features: weekday, cyclical ISO week, Finnish public holidays, kitchen school holidays,
+temperature, rain, event flag, occupancy and reservations with missing indicators.
+Weather uses signals/weather snapshots; only as_of <= last observed day is visible.
+Training features use versions available on their observation day. No realized future weather.
+The existing synthetic guests contain no weather/events/bookings effects; these inputs
+are absent unless --signals supplies archived snapshots. This run cannot validate their benefit.
+Ridge models residuals around the planned pattern (alpha=10 fixed before evaluation).
+ETS: statsmodels additive level and weekly seasonality. All models use current for cold start.
+
+Comparison: complete.
+
+| seed | type | model | covers WAPE | lost covers | waste EUR | cost EUR |
+|---|---|---|---|---|---|---|
+| 1 | hospital | current | 6.0% | 66.3 | 7807.3 | 8072.5 |
+| 1 | hospital | ets | 6.6% | 77.0 | 7859.9 | 8168.1 |
+| 1 | hospital | ridge | 6.1% | 66.3 | 7851.7 | 8116.7 |
+| 1 | hotel | current | 6.8% | 67.8 | 3200.2 | 3471.3 |
+| 1 | hotel | ets | 8.3% | 116.2 | 3247.4 | 3712.0 |
+| 1 | hotel | ridge | 6.8% | 63.4 | 3264.4 | 3518.0 |
+| 1 | restaurant | current | 6.1% | 40.1 | 456.8 | 617.2 |
+| 1 | restaurant | ets | 6.8% | 42.8 | 648.5 | 819.6 |
+| 1 | restaurant | ridge | 6.0% | 37.3 | 434.9 | 584.0 |
+| 1 | school | current | 7.3% | 877.0 | 8325.6 | 11833.5 |
+| 1 | school | ets | 9.0% | 1613.5 | 7364.8 | 13818.8 |
+| 1 | school | ridge | 7.2% | 999.1 | 8225.3 | 12221.9 |
+| 2 | hospital | current | 6.2% | 152.0 | 7019.9 | 7627.9 |
+| 2 | hospital | ets | 6.5% | 176.6 | 6855.4 | 7561.8 |
+| 2 | hospital | ridge | 6.0% | 132.6 | 7036.5 | 7566.9 |
+| 2 | hotel | current | 6.0% | 43.7 | 3265.8 | 3440.5 |
+| 2 | hotel | ets | 7.4% | 70.0 | 3622.0 | 3901.8 |
+| 2 | hotel | ridge | 5.9% | 45.2 | 3283.6 | 3464.4 |
+| 2 | restaurant | current | 6.8% | 54.3 | 543.0 | 760.1 |
+| 2 | restaurant | ets | 7.8% | 44.5 | 793.9 | 972.0 |
+| 2 | restaurant | ridge | 6.7% | 52.0 | 543.0 | 751.0 |
+| 2 | school | current | 6.4% | 597.2 | 6491.8 | 8880.7 |
+| 2 | school | ets | 9.0% | 1195.0 | 5845.8 | 10625.8 |
+| 2 | school | ridge | 6.4% | 627.4 | 6394.1 | 8903.5 |
+| 3 | hospital | current | 6.4% | 312.7 | 7397.2 | 8647.8 |
+| 3 | hospital | ets | 6.6% | 294.1 | 7360.1 | 8536.6 |
+| 3 | hospital | ridge | 6.4% | 283.5 | 7351.6 | 8485.4 |
+| 3 | hotel | current | 6.3% | 30.3 | 2971.7 | 3092.8 |
+| 3 | hotel | ets | 7.7% | 49.0 | 3206.5 | 3402.6 |
+| 3 | hotel | ridge | 6.4% | 32.2 | 2835.5 | 2964.2 |
+| 3 | restaurant | current | 6.6% | 55.7 | 345.9 | 568.5 |
+| 3 | restaurant | ets | 7.7% | 41.5 | 828.3 | 994.4 |
+| 3 | restaurant | ridge | 6.5% | 50.2 | 447.5 | 648.5 |
+| 3 | school | current | 6.7% | 1354.7 | 6592.8 | 12011.7 |
+| 3 | school | ets | 10.2% | 2357.0 | 5889.4 | 15317.4 |
+| 3 | school | ridge | 6.9% | 1318.3 | 6565.1 | 11838.4 |
+| 4 | hospital | current | 6.0% | 164.9 | 7944.9 | 8604.5 |
+| 4 | hospital | ets | 6.3% | 201.3 | 8026.5 | 8831.8 |
+| 4 | hospital | ridge | 6.0% | 173.4 | 8011.2 | 8704.8 |
+| 4 | hotel | current | 6.9% | 55.7 | 3363.0 | 3585.9 |
+| 4 | hotel | ets | 7.9% | 105.5 | 3556.7 | 3978.7 |
+| 4 | hotel | ridge | 6.7% | 46.7 | 3481.9 | 3668.9 |
+| 4 | restaurant | current | 7.1% | 55.8 | 463.1 | 686.5 |
+| 4 | restaurant | ets | 8.1% | 45.1 | 860.8 | 1041.3 |
+| 4 | restaurant | ridge | 7.1% | 40.9 | 459.1 | 622.6 |
+| 4 | school | current | 6.4% | 752.4 | 6456.0 | 9465.5 |
+| 4 | school | ets | 8.2% | 1204.1 | 5612.2 | 10428.5 |
+| 4 | school | ridge | 6.2% | 747.0 | 6508.5 | 9496.4 |
+| 5 | hospital | current | 5.9% | 184.7 | 9012.2 | 9751.2 |
+| 5 | hospital | ets | 6.2% | 189.0 | 9137.9 | 9893.8 |
+| 5 | hospital | ridge | 5.8% | 165.2 | 8906.2 | 9567.0 |
+| 5 | hotel | current | 6.6% | 61.4 | 3535.0 | 3780.5 |
+| 5 | hotel | ets | 8.8% | 210.0 | 3908.1 | 4748.0 |
+| 5 | hotel | ridge | 6.5% | 55.8 | 3569.0 | 3792.3 |
+| 5 | restaurant | current | 6.6% | 40.9 | 634.2 | 798.0 |
+| 5 | restaurant | ets | 7.9% | 52.4 | 749.9 | 959.4 |
+| 5 | restaurant | ridge | 6.4% | 35.6 | 673.4 | 815.6 |
+| 5 | school | current | 6.4% | 654.9 | 6430.1 | 9049.9 |
+| 5 | school | ets | 8.5% | 1061.2 | 5965.5 | 10210.2 |
+| 5 | school | ridge | 6.3% | 555.0 | 6636.7 | 8856.7 |
+| 6 | hospital | current | 6.5% | 224.2 | 9211.5 | 10108.3 |
+| 6 | hospital | ets | 6.6% | 241.2 | 9390.9 | 10355.7 |
+| 6 | hospital | ridge | 6.4% | 201.6 | 9264.6 | 10070.9 |
+| 6 | hotel | current | 6.4% | 21.8 | 2575.8 | 2663.0 |
+| 6 | hotel | ets | 7.9% | 50.5 | 2970.7 | 3172.7 |
+| 6 | hotel | ridge | 6.4% | 27.6 | 2574.3 | 2684.7 |
+| 6 | restaurant | current | 6.5% | 52.9 | 786.8 | 998.4 |
+| 6 | restaurant | ets | 7.4% | 57.0 | 981.9 | 1209.8 |
+| 6 | restaurant | ridge | 6.4% | 50.1 | 743.1 | 943.7 |
+| 6 | school | current | 6.7% | 1245.5 | 8168.8 | 13150.9 |
+| 6 | school | ets | 8.6% | 1799.2 | 7394.2 | 14590.9 |
+| 6 | school | ridge | 6.5% | 1187.0 | 8094.6 | 12842.4 |
+
+Holdout cost regressions versus current (seed numbers):
+- hospital, ets: 4, 5, 6.
+- hospital, ridge: 4.
+- hotel, ets: 4, 5, 6.
+- hotel, ridge: 4, 5, 6.
+- restaurant, ets: 4, 5, 6.
+- restaurant, ridge: 5.
+- school, ets: 4, 5, 6.
+- school, ridge: 4.
+
+Selection: `{"hospital": "current", "hotel": "current", "restaurant": "current", "school": "current"}`.
+Candidates must lower selection cost, lower cost on every holdout seed, and lower
+both holdout aggregate lost covers and waste. Otherwise retain current per kitchen type.
+demo/seed.py uses env.covers.demo_forecaster for forecasts and menu plans.
+
+Human corrections FVA (positive = lower absolute quantity error, reported per unit):
+```json
+{"by_unit": {}, "improved": 0, "scored": 0, "unchanged": 0, "unscorable": 0, "worsened": 0}
+```
+No matched feedback outcomes means no measured chef benefit. Existing feedback rows
+need an explicit proposal/product/unit/horizon outcome join; purchase edits alone cannot
+be treated as corrected covers or realized demand. --feedback accepts these joined rows.
