@@ -93,6 +93,13 @@ The shelf reader is live on the Stock page ("Count from a photo", #373): on a pr
 test photo it filled five counts in about 2 s, and the half hidden pack got "please count"
 and no number; a person saves (`gateway/stock_photo.py`, `agent/shelf_service.py`,
 `docs/demo.md` "Photo beat").
+It also has a second role, on the supplier's side (#374): Valio's selling agent
+(`agent/seller.py`). Code reads the shortage view and builds a shortlist of at most five
+substitutes; the model picks one and writes the reason; a pick outside the shortlist means
+no offer. The gateway takes no price and no quantity from it (`gateway/supplier_offers.py`).
+Live on 2026-11-14 it offered the demo kitchen Rosamunda washed potato in place of washed
+potato that is predicted short on 16 Nov; a person made a proposal from the tile, and that
+proposal waits for approval like any other (`docs/demo.md` "Selling-agent beat").
 
 **How much we use it.** A token meter counts every model call per role from the
 endpoint's `usage` field (`agent/usage.py`, `agent/README.md` "Token meter"). Measured on
