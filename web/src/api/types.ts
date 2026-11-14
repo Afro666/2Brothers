@@ -364,7 +364,6 @@ export interface KitchenWords {
   unknownItems: UnknownWord[];
 }
 
-/** Everything the screens ask the gateway for. Mock and HTTP both implement it. */
 /** A brand's logo from Context.dev, kept by the gateway; only `found` has a logo. */
 export interface BrandLogo {
   brand: string;
@@ -376,6 +375,7 @@ export interface BrandLogo {
   checkedAt: string | null;
 }
 
+/** Everything the screens ask the gateway for. Mock and HTTP both implement it. */
 export interface Api {
   /**
    * Gateway mode only: the methods the real gateway answers. Every other method still
