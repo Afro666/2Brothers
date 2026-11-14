@@ -1,4 +1,5 @@
 import json
+import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
@@ -85,11 +86,6 @@ class LearningRunTest(unittest.TestCase):
         self.assertLess(learned[2]["edits"], plain[2]["edits"])
         self.assertLessEqual(learned[2]["habit_stockout_days"], plain[2]["habit_stockout_days"])
 
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 class NemotronArmTest(unittest.TestCase):
     """#1309 part 2: the model arms see the engine's belief, never the patched truth, and
     the memory arm gets the learned facts in its system prompt."""
@@ -103,9 +99,6 @@ class NemotronArmTest(unittest.TestCase):
         return policy, seen
 
     def test_the_calculator_sees_the_belief_not_the_truth(self):
-        import tempfile
-        from env.chef import Habits, apply_truth
-        from env.week import KitchenWeek
         env = KitchenWeek(seed=4, kitchen_type="restaurant")
         obs = env.reset()
         habits = Habits.for_kitchen(env.kitchen, 4)
@@ -125,8 +118,6 @@ class NemotronArmTest(unittest.TestCase):
         self.assertNotAlmostEqual(sent, round(env._expected_use(pid, day), 3))   # the truth differs
 
     def test_memory_goes_into_the_system_prompt_and_nothing_without_it(self):
-        import tempfile
-        from env.week import KitchenWeek
         env = KitchenWeek(seed=4, kitchen_type="restaurant")
         obs = env.reset()
         while not obs["order_for"]:
@@ -149,3 +140,7 @@ class NemotronArmTest(unittest.TestCase):
         facts = learned_facts(rows, [pid], "2026-11-20")
         self.assertEqual([(f["kind"], f["value"], f["evidence"]["rows"]) for f in facts],
                          [("CORRECTION_RATIO", 0.5, 3)])
+
+
+if __name__ == "__main__":
+    unittest.main()
