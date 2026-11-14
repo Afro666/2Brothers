@@ -22,8 +22,9 @@ def busy(answer):
     assert answer.status_code == 503, answer.text
     error = answer.json()["error"]
     assert error["code"] == "SUPPLIER_BUSY"
-    assert 1 <= error["retry_after"] <= 30
-    assert answer.headers["Retry-After"] == str(error["retry_after"])
+    assert 1 <= error["retry_after_s"] <= 30                       # #1286: same field as LOOKUP_RATE_LIMITED
+    assert "retry_after" not in error
+    assert answer.headers["Retry-After"] == str(error["retry_after_s"])
     assert "test-not-a-real-key" not in answer.text
     return error
 
@@ -34,7 +35,7 @@ def test_get_offer_answers_supplier_busy_and_sends_nothing_during_the_rest(env):
         "quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
     rest(fake)
     offer = {"need_id": need["need_id"], "product_ids": ["462775"]}
-    assert busy(client.post("/tools/get_offer", headers=AGENT, json=offer))["retry_after"] == 30
+    assert busy(client.post("/tools/get_offer", headers=AGENT, json=offer))["retry_after_s"] == 30
     sent = []
     fake.hook = lambda: sent.append(1)
     busy(client.post("/tools/get_offer", headers=AGENT, json=offer))       # still resting

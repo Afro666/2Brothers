@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createHttpApi, gatewayRequest, SIGNED_OUT_EVENT } from "@/api/http";
+import { ApiError } from "@/api/types";
 import { auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
 import { renderApp } from "@/test/render";
 
@@ -321,6 +322,23 @@ describe("createHttpApi", () => {
     await expect(
       createHttpApi("/api").changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
     ).rejects.toMatchObject({ code, status });
+  });
+
+  // #1286: SUPPLIER_BUSY sends `retry_after_s`, as LOOKUP_RATE_LIMITED does. A gateway from before
+  // #1286 sends `retry_after`; the web reads both for one release.
+  it.each([
+    [{ retry_after_s: 27 }, 27],
+    [{ retry_after: 12 }, 12],
+    [{ retry_after_s: 27, retry_after: 12 }, 27],
+    [{}, undefined],
+    [{ retry_after_s: "soon" }, undefined],
+  ])("reads the wait of a busy answer (%o)", async (extra, seconds) => {
+    gateway({ [`POST ${K}/proposals/prop-1/change`]: () => error(503, "SUPPLIER_BUSY", extra) });
+    const refused = await createHttpApi("/api")
+      .changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human")
+      .catch((reason: unknown) => reason);
+    expect(refused).toBeInstanceOf(ApiError);
+    expect((refused as ApiError).retryAfterS).toBe(seconds);
   });
 
   it("reads standing-order drift from the gateway for the kitchen and for the supplier", async () => {
