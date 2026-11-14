@@ -61,6 +61,31 @@ def test_recipes_menu_plan_stock_and_demand_end_to_end(env):
     assert "menu_plan_changed" in kinds and "stock_counted" in kinds
 
 
+def test_engine_unit_mismatch_is_unknown_with_a_problem():
+    rows = [{"product_id": "460708", "date": "2026-11-16", "unit": "G", "gross_need": D(800)},
+            {"product_id": "460708", "date": "2026-11-17", "unit": "G", "gross_need": D(800)}]
+    problems: list[str] = []
+    out = net_needs(rows, {"460708": ("KG", D(5))}, problems)
+    assert [r["net_need"] for r in out] == [None, None]                # never a 1000x guess
+    assert problems == ["460708: stock counted in KG, recipe uses G"]  # once per product
+
+
+def test_demand_unit_mismatch_is_unknown_with_a_problem(env):
+    client, _, _ = env
+    salad = {"recipe_id": "salad", "name": "Carrot salad", "ingredients": [
+        {"product_id": "460708", "qty_per_portion": "0.08", "unit": "L"}]}
+    assert client.post(K + "/recipes", headers=HUMAN, json=salad).status_code == 200
+    plan = {"days": [{"date": "2026-11-16", "meal": "lunch", "recipe_id": "salad", "covers": 10}]}
+    assert client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan).status_code == 200
+    count = {**COUNT, "idempotency_key": "c2",
+             "counts": [{"product_id": "460708", "on_hand": "5", "unit": "KG"}]}
+    assert client.post(K + "/stock-counts", headers=HUMAN, json=count).status_code == 200
+    demand = client.get(K + "/demand?from=2026-11-16&to=2026-11-16", headers=AGENT).json()
+    row = next(r for r in demand["rows"] if r["product_id"] == "460708")
+    assert row["unit"] == "L" and row["net_need"] is None
+    assert "460708: stock counted in KG, recipe uses L" in demand["problems"]
+
+
 def test_suppliers_crud_and_validation(env):
     client, _, _ = env
     body = {"supplier_id": "sup-bakery", "name": "Bakery", "adapter": "manual",

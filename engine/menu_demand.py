@@ -49,15 +49,28 @@ def gross_needs(menu_days: list[dict], recipes: dict[str, dict]) -> tuple[list[d
     return rows, problems
 
 
-def net_needs(rows: list[dict], stock: dict[str, Decimal | None]) -> list[dict]:
+def net_needs(rows: list[dict], stock: dict[str, object],
+              problems: list[str] | None = None) -> list[dict]:
     """Add `net_need` to each row: what is still missing after the stock (on hand plus on
-    order) is used up day by day. `stock[product_id]` None, or a product not in `stock`,
-    means unknown: then net_need is None."""
-    left = dict(stock)
+    order) is used up day by day. `stock[product_id]` is `(unit, position)` or a bare
+    position (unit not checked). A position of None, or a product not in `stock`, means
+    unknown: then net_need is None. A stock unit that differs from the row's unit is
+    unknown too (never a guess), and one line per product goes to `problems`."""
+    left: dict[str, Decimal | None] = {}
+    units: dict[str, str | None] = {}
+    for pid, value in stock.items():
+        units[pid], left[pid] = value if isinstance(value, tuple) else (None, value)
+    reported: set[str] = set()
     out = []
     for row in sorted(rows, key=lambda r: (r["date"], r["product_id"])):
         pid = row["product_id"]
         have = left.get(pid)
+        unit = units.get(pid)
+        if have is not None and unit is not None and unit != row["unit"]:
+            if problems is not None and pid not in reported:
+                problems.append(f"{pid}: stock counted in {unit}, recipe uses {row['unit']}")
+                reported.add(pid)
+            have = None
         if have is None:
             out.append({**row, "net_need": None})
             continue

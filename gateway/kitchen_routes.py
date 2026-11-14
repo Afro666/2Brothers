@@ -195,9 +195,10 @@ def register(app, gw, principal, body) -> None:
                 rows.append({"product_id": f["meta"]["product_id"], "date": day, "unit": f["unit"],
                              "covers": None, "gross_need": Decimal(str(f["need"])),
                              "why": f.get("why") or "forecast from history", "source": "history"})
-        stock = {item["product_id"]: item["position"] for item in stock_items(kitchen_id)}
+        stock = {item["product_id"]: (item["unit"], item["position"]) for item in stock_items(kitchen_id)}
+        net = net_needs(rows, stock, problems)
         return {"from": start.isoformat(), "to": end.isoformat(),
-                "rows": _json(net_needs(rows, stock)), "problems": problems}
+                "rows": _json(net), "problems": problems}
 
     # ---- settings and sharing: an approver only -----------------------------------------
     @app.get(k + "/settings")
