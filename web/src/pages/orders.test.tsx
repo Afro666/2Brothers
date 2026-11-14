@@ -357,7 +357,7 @@ describe("orders pages", () => {
     expect(screen.queryByText("Recorded")).not.toBeInTheDocument();
   });
 
-  it("order history says the same, and an order whose receipt says it was sent reads Recorded, without the not-sent text", async () => {
+  it("order history says the same, and an order whose receipt says it was sent reads Recorded", async () => {
     const api = createMockApi();
     const all = await api.listOrders();
     const sent = all.find((order) => order.receipt?.supplierOutcome === "NOT_SENT")!;
