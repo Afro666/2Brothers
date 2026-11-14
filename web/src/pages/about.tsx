@@ -3,6 +3,7 @@ import { Link, type LinkProps } from "@tanstack/react-router";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { AtlasCard } from "@/components/purchasing/atlas-card";
 import { ModelUsageCard } from "@/components/purchasing/model-usage-card";
+import { NemotronJobsCard } from "@/components/purchasing/nemotron-jobs-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useT } from "@/lib/i18n";
 
@@ -255,6 +256,10 @@ export function AboutPage() {
               </li>
             ))}
           </ol>
+        </section>
+
+        <section aria-labelledby="about-nemotron-jobs">
+          <NemotronJobsCard />
         </section>
 
         <section aria-labelledby="about-model">
