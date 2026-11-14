@@ -10,6 +10,7 @@ import { LoadingState } from "@/components/purchasing/loading-state";
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
 import { DeliveryNotePhoto } from "@/components/purchasing/delivery-note-photo";
+import { LabelPhotoCheck } from "@/components/purchasing/label-photo-check";
 import { OrderResolutionPanel } from "@/components/purchasing/order-resolution-panel";
 import { StatusBadge } from "@/components/purchasing/status-badge";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
@@ -180,6 +181,7 @@ export function OrderDetailPage() {
             </CardContent>
             </Card>
             {state.data.status === "PLACED" ? <DeliveryNotePhoto key={state.data.id} order={state.data} /> : null}
+            {state.data.status === "PLACED" ? <LabelPhotoCheck key={`label-${state.data.id}`} order={state.data} /> : null}
           </>
         ) : null}
       </div>

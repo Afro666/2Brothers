@@ -8,6 +8,7 @@ import { createBuyingNoteHttp } from "@/api/http-buying-note";
 import { createShelfHttp } from "@/api/http-shelf";
 import { createMenuPhotoHttp } from "@/api/http-menu-photo";
 import { createDeliveryNoteHttp } from "@/api/http-delivery-note";
+import { createLabelPhotoHttp } from "@/api/http-label-photo";
 import { createTrustHttp } from "@/api/http-trust";
 import { createUsageHttp } from "@/api/http-usage";
 import { createTokensHttp } from "@/api/http-tokens";
@@ -187,6 +188,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createShelfHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createMenuPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeliveryNoteHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createLabelPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createUsageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
