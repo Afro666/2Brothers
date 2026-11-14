@@ -59,6 +59,11 @@ services:
       # Optional: the key that signs offers (#290), base64 of 32 bytes. Without it a key is
       # created once and kept in the database.
       GATEWAY_SIGNING_KEY: ${GATEWAY_SIGNING_KEY:-}
+      # Hybrid catalog search (#366): text plus meaning. Off unless SEARCH_HYBRID=true. The query
+      # is embedded with MONGODB_AI_API_KEY (free tier: 3 requests a minute); on any error, limit
+      # or missing key the search falls back to text and says so. Off again: SEARCH_HYBRID=false.
+      SEARCH_HYBRID: ${SEARCH_HYBRID:-false}
+      MONGODB_AI_API_KEY: ${MONGODB_AI_API_KEY:-}
       # Caddy strips this prefix (web/Caddyfile); the agent card and llms.txt print it in their URLs (#293).
       GATEWAY_PUBLIC_PREFIX: /gateway
 
