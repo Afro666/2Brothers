@@ -21,6 +21,11 @@ import { getLanguage, translate, useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import type { OrderReceipt } from "@/types";
 
+/** A long order id (a 32-character hex id) is cut to its first 8 characters so the title fits a phone. */
+function shortOrderId(id: string): string {
+  return id.length > 12 ? `${id.slice(0, 8)}…` : id;
+}
+
 function OrderHistory({ orderId }: { orderId: string }) {
   const t = useT();
   const api = useApi();
@@ -95,7 +100,9 @@ export function OrderDetailPage() {
     <AppShell activeId="orders">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">{t("Order {id}", { id: orderId })}</h1>
+          <h1 className="text-2xl font-semibold" title={orderId}>
+            {t("Order {id}", { id: shortOrderId(orderId) })}
+          </h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             {t("The lines, the totals and every step taken for this order.")}
           </p>
@@ -121,7 +128,7 @@ export function OrderDetailPage() {
             <Card>
             <div className="space-y-4 px-6">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold">{state.data.id}</h2>
+                <h2 className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere]">{state.data.id}</h2>
                 <StatusBadge status={state.data.status} />
                 <UrgencyBadge urgency={state.data.urgency} />
               </div>
