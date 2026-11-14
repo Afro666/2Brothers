@@ -5,6 +5,8 @@ import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { RecallPanel, type RecallStatus } from "@/components/purchasing/recall-panel";
 import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 import { useApi } from "@/api";
@@ -63,6 +65,9 @@ export function ApprovalsPage() {
   );
 }
 
+/** Decided cards shown before "Show all decided". */
+const DECIDED_SHOWN = 5;
+
 function ApiApprovalsPage() {
   const t = useT();
   const api = useApi();
@@ -74,6 +79,7 @@ function ApiApprovalsPage() {
   const approveUnconfirmedManual = useApproveUnconfirmedManual();
   const { refresh: refreshWaiting } = usePendingApprovals();
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
+  const [allDecided, setAllDecided] = useState(false);
   const recalls = useAsync(() => loadRecalls(api), [api]);
 
   // The gateway has no route to change a proposal yet, so its proposals are read-only.
@@ -272,16 +278,23 @@ function ApiApprovalsPage() {
                   {t("Decided")}
                 </h2>
                 <div className="space-y-4">
-                  {decided.map(({ approval, order }) => (
+                  {/* Decided cards start folded, and only the first few show: a phone stays short (#1142). */}
+                  {(allDecided ? decided : decided.slice(0, DECIDED_SHOWN)).map(({ approval, order }) => (
                     <ApprovalCard
                       key={approval.id}
                       request={approval}
                       order={order ?? undefined}
                       approveUnconfirmedManual={approveUnconfirmedManual}
                       recalls={recallsFor(approval.orderId)}
+                      folded
                     />
                   ))}
                 </div>
+                {!allDecided && decided.length > DECIDED_SHOWN ? (
+                  <Button type="button" variant="outline" onClick={() => setAllDecided(true)}>
+                    {t("Show all decided ({count})", { count: decided.length })}
+                  </Button>
+                ) : null}
               </section>
             ) : null}
           </div>
