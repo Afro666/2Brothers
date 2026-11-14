@@ -3,6 +3,7 @@
     python -m demo.record_demo                      # records, approves nothing
     python -m demo.record_demo --approve            # also takes the confirmed option and approves it
     python -m demo.record_demo --base-url https://31-22-104-201.sslip.io --out demo/out
+    DEMO_PASSWORD=... python -m demo.record_demo --email approver@kitchen.example   # a site with sign-in on
 
 It drives a real browser through the live site, the way docs/demo.md says: the challenge's
 request (1,000 L of lactose-free milk), the proposal with its reasons, the approval inbox,
@@ -10,6 +11,11 @@ the option that confirmed stock covers, the activity log, the tamper check and t
 discovery files. Each step shows a caption,
 so the video explains itself without sound. A step that fails is reported and skipped; the
 recording goes on.
+
+When the site asks for a sign-in (GATEWAY_REQUIRE_LOGIN=true, deploy/README.md), give the
+account with `--email`; the password comes from the environment variable DEMO_PASSWORD, never
+from an argument, and is never printed. The recorder signs in on the sign-in page before its
+first step. `--approve` needs an approver's account.
 
 Needs Playwright with Chromium (`pip install playwright && playwright install chromium`);
 it is not a dependency of the app. The video is a .webm file (browsers and VLC play it).
@@ -23,9 +29,12 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, timedelta
+import os
 from pathlib import Path
 import sys
 import time
+import urllib.error
+import urllib.request
 
 CAPTION_JS = """
 (text) => {
@@ -45,6 +54,41 @@ CAPTION_JS = """
 def next_monday(today: date) -> date:
     """The Monday after today; a Monday itself gives the one a week later."""
     return today + timedelta(days=(7 - today.weekday()) or 7)
+
+
+def site_needs_sign_in(base: str, opener=urllib.request.urlopen) -> bool:
+    """True when the site has sign-in switched on: its session check answers 401 to a visitor.
+    Any other answer, or no answer, is False: the recording itself then shows what is wrong."""
+    request = urllib.request.Request(base + "/api/v1/me", headers={"User-Agent": "record-demo/0.1"})
+    try:
+        with opener(request, timeout=20):
+            return False
+    except urllib.error.HTTPError as error:
+        return error.code == 401
+    except OSError:
+        return False
+
+
+def sign_in(page, base: str, email: str, password: str) -> bool:
+    """Signs in on the site's sign-in page. False when the site shows no sign-in page (the open
+    demo sends a visitor on to Home). Raises when the site refuses: every later step would
+    only record the sign-in page."""
+    page.goto(base + "/sign-in")
+    form = page.get_by_label("Password")
+    try:
+        form.wait_for(timeout=10_000)
+    except Exception:
+        return False
+    page.get_by_label("Email").fill(email)
+    form.fill(password)
+    page.get_by_role("button", name="Sign in", exact=True).click()
+    try:
+        form.wait_for(state="detached", timeout=20_000)
+    except Exception:
+        alert = page.get_by_role("alert")
+        reason = alert.first.inner_text().strip() if alert.count() else "the sign-in page did not go away"
+        raise RuntimeError(f"sign-in as {email} failed: {reason}") from None
+    return True
 
 
 def steps(base: str, text: str, needed_by: str, approve: bool) -> list[tuple[str, str, object]]:
@@ -130,7 +174,8 @@ def steps(base: str, text: str, needed_by: str, approve: bool) -> list[tuple[str
     return plan
 
 
-def record(base: str, out: Path, text: str, needed_by: str, approve: bool, pause: float) -> Path:
+def record(base: str, out: Path, text: str, needed_by: str, approve: bool, pause: float,
+           email: str | None = None, password: str | None = None) -> Path:
     from playwright.sync_api import sync_playwright   # optional tool, not an app dependency
 
     out.mkdir(parents=True, exist_ok=True)
@@ -140,6 +185,17 @@ def record(base: str, out: Path, text: str, needed_by: str, approve: bool, pause
                                       record_video_dir=str(out),
                                       record_video_size={"width": 1280, "height": 720})
         page = context.new_page()
+        if email:
+            try:
+                asked = sign_in(page, base, email, password or "")
+            except Exception:
+                context.close()
+                browser.close()
+                raise
+            if asked:
+                page.evaluate(CAPTION_JS, "A person signs in. Only an approver's account can approve an order.")
+                page.wait_for_timeout(int(pause * 1000))
+            print(f"ok    {'sign-in':9}" if asked else "      sign-in   the site is open: it asked for no sign-in")
         for name, caption, action in steps(base, text, needed_by, approve):
             started = time.time()
             try:
@@ -155,7 +211,17 @@ def record(base: str, out: Path, text: str, needed_by: str, approve: bool, pause
         return Path(video.path())
 
 
-def main() -> None:
+def sign_in_problem(email: str | None, password: str | None, needs_sign_in) -> str | None:
+    """Why the recording cannot start, or None. `needs_sign_in` is asked only without an email."""
+    if email and not password:
+        return "--email needs the password in the environment variable DEMO_PASSWORD (never as an argument)"
+    if not email and needs_sign_in():
+        return ("this site asks for a sign-in: pass --email <account> and put its password in the "
+                "environment variable DEMO_PASSWORD")
+    return None
+
+
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base-url", default="https://31-22-104-201.sslip.io")
     parser.add_argument("--out", default="demo/out", help="folder for the .webm file (git-ignored)")
@@ -164,11 +230,22 @@ def main() -> None:
                         help="needed-by date; pick one whose order cut-offs are still open")
     parser.add_argument("--approve", action="store_true", help="also approve the proposal (records one order)")
     parser.add_argument("--pause", type=float, default=4.0, help="seconds each caption stays")
-    args = parser.parse_args()
+    parser.add_argument("--email", default=None,
+                        help="sign in as this account first (a site with sign-in on); "
+                             "the password is read from the environment variable DEMO_PASSWORD")
+    args = parser.parse_args(argv)
+    base = args.base_url.rstrip("/")
+    password = os.environ.get("DEMO_PASSWORD") or None
+    problem = sign_in_problem(args.email, password, lambda: site_needs_sign_in(base))
+    if problem:
+        sys.exit(problem)
     try:
-        path = record(args.base_url.rstrip("/"), Path(args.out), args.text, args.date, args.approve, args.pause)
+        path = record(base, Path(args.out), args.text, args.date, args.approve, args.pause,
+                      email=args.email, password=password)
     except ImportError:
         sys.exit("Playwright is not installed: pip install playwright && playwright install chromium")
+    except RuntimeError as error:      # the sign-in was refused: nothing useful can be recorded
+        sys.exit(str(error))
     print(f"video: {path}")
 
 

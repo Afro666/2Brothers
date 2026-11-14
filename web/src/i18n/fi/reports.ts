@@ -49,7 +49,7 @@ export default {
   "{count} steps": "{count} vaihetta",
   "No audit steps yet": "Ei vielä lokivaiheita",
   "Recorded events will appear here.": "Tallennetut tapahtumat näkyvät täällä.",
-  "No audit steps match these filters": "Suodattimiin ei osunu lokivaiheita",
+  "No audit steps match these filters": "Suodattimiin ei osunut lokivaiheita",
   "Clear filters": "Tyhjennä suodattimet",
   "No steps yet.": "Ei vielä vaiheita.",
   "Search": "Haku",
