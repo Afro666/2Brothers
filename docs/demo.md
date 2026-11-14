@@ -34,6 +34,7 @@ shaky ones.
    `python -m demo.record_demo --approve` (about 75 seconds, captions, no sound; it sends the
    1,000 L request, takes option A and approves it; the file
    lands in `demo/out/`). Record again after any change to the demo path.
+   Story A ("Valio sees it first"): `python -m demo.record_demo --story offer --approve`.
 7. **Clear the inbox.** Test requests pile up: on 14 Nov the menu badge showed 24 waiting
    proposals. On the server, through the gateway container:
    `python -m demo.clear_inbox` lists them, `python -m demo.clear_inbox --apply` removes
