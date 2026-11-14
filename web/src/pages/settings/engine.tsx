@@ -154,7 +154,8 @@ export function EngineSection() {
             <CardContent className="space-y-3">
               {draft.maxDaysOfCover.map((rule, index) => (
                 <div
-                  key={`${index}-${rule.category}`}
+                  // Index, not category: a key that changes while typing remounts the row and drops focus.
+                  key={index}
                   className="grid gap-2 sm:grid-cols-[1fr_10rem_auto] sm:items-end"
                 >
                   <div className="space-y-1.5">

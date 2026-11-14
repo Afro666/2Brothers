@@ -85,4 +85,18 @@ describe("Ordering engine settings", () => {
     expect(input).toHaveValue(97.5);
     expect(screen.getByRole("button", { name: "Save settings" })).toBeDisabled();
   });
+
+  it("keeps focus while typing a new cover category", async () => {
+    const user = userEvent.setup();
+    renderApp("/settings/engine", createMockApi());
+
+    await user.click(await screen.findByRole("button", { name: "Add category" }));
+    const inputs = screen.getAllByLabelText("Category");
+    const input = inputs[inputs.length - 1];
+    await user.click(input);
+    await user.type(input, "Meat");
+
+    expect(input).toHaveValue("Meat");
+    expect(input).toHaveFocus();
+  });
 });
