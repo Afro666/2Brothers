@@ -12,6 +12,8 @@ import csv
 import json
 from pathlib import Path
 
+from pymongo.errors import OperationFailure
+
 from store.db import ensure_indexes, get_db
 from store.products import flatten, upsert_products
 from store.search import ensure_search_index
@@ -52,7 +54,10 @@ def main() -> None:
     megabytes = (stats["dataSize"] + stats["indexSize"]) / 1e6
     print(f"upserted {count} products; products in {db.name}: {db.products.count_documents({})}")
     print(f"data + indexes: {megabytes:.0f} MB of the 512 MB free tier")
-    print(f"search index: {ensure_search_index(db)}")
+    try:
+        print(f"search index: {ensure_search_index(db)}")
+    except OperationFailure as exc:  # not Atlas, or no search-index rights
+        print(f"search index: not created ({exc})")
 
 
 if __name__ == "__main__":

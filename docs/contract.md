@@ -211,7 +211,7 @@ A hard rule works per product, not on the whole mandate (#146):
 - Each line carries its own `reason_codes`. `mandate.reason_codes` is the set of the
   line codes plus `CLOSING_PASSED` and `PARTIAL_STOCK` for the whole request.
 - `mandate.warnings` holds only codes of the kind "warning" in "Reason codes" (today
-  `OVER_BUDGET_WARNING`). A warning is shown on the approval card; it never blocks and
+  `OVER_BUDGET_WARNING` and `CERTAINTY_PREMIUM_HIGH`). A warning is shown on the approval card; it never blocks and
   never approves. A warning code is never in `reason_codes`.
 
 For example, the milk case:
@@ -1299,6 +1299,7 @@ engine's default, except `excluded_allergens`, which is `null` until a person se
   "stockout_cap": "1.8",
   "budget_warning_order_eur": "1500.00",
   "budget_warning_week_eur": "5000.00",
+  "certainty_premium_max": "3",
   "excluded_allergens": ["AP", "AN", "AS"],
   "standing_orders": {"469549": "200"}
 }
@@ -1310,6 +1311,7 @@ engine's default, except `excluded_allergens`, which is `null` until a person se
 | `max_cover_days` | object of integers | Never order more than this many days of cover. Keys are the engine's categories: `fresh_dairy`, `vegetables`, `meat`, `fish`, `frozen`, `dry`, `other`. Each at least 1. Another key is a 422, never ignored. |
 | `stockout_cap` | decimal string | Demand seen during a stock-out is scaled up by at most this factor. From 1 to 3. |
 | `budget_warning_order_eur`, `budget_warning_week_eur` | decimal string or null | Above it the approval shows `OVER_BUDGET_WARNING`. `null` means no warning. A warning only: a person approves every order anyway. |
+| `certainty_premium_max` | decimal string or null | How much more the kitchen pays for stock the supplier confirms: the main plan uses a confirmed-stock offer only when its price per litre or kilo is at most this many times the cheapest orderable price. At least `1`; default `3`; `null` means no limit. A dearer confirmed offer is left out of the plan and listed in `excluded` with the two prices. When leaving it out would make the order short, it stays and the plan carries `CERTAINTY_PREMIUM_HIGH`. Engine default until `store/` saves it and the settings page shows it. |
 | `excluded_allergens` | string[] or null | GS1 codes or the allergen names of `search_products`. A product that lists one as CONTAINS, MAY_CONTAIN or UNDECLARED is refused. `[]` means the kitchen has explicitly no exclusions. `null` means nobody has set the policy yet: unknown, not "none". |
 | `standing_orders` | object of decimal strings | Per `product_id`: the kitchen's standing order per delivery, in that product's sales unit. `{}` means none. The engine only flags a standing order more than 10 % off the need (`STANDING_ORDER_DRIFT`, S08); a person changes it. |
 
@@ -1393,6 +1395,14 @@ Which Context.dev endpoint, and why:
 - An address that is neither an email nor a domain: 422 `INVALID_QUERY`. Context.dev down,
   out of credits or slow (a cold domain can take more than 10 s; use a timeout of at least
   10,000 ms): 502 `LOOKUP_UNAVAILABLE`. The page shows a blank form in both cases.
+- Too many lookups (#604): 429 `LOOKUP_RATE_LIMITED`, with a `Retry-After` header (whole
+  seconds) and the same number in the body:
+  `{"error": {"code": "LOOKUP_RATE_LIMITED", "message": "...", "retry_after_s": 42}}`.
+  The limit is 10 Context.dev calls per 60 seconds per caller: a signed-in person by
+  account, anyone else (the open demo's shared token) by client address
+  (`ONBOARDING_RATE_LIMIT`, `ONBOARDING_RATE_WINDOW_S`). Only a lookup that would call
+  Context.dev counts; a bad query (422) and an answer from the cache do not. A 429 is
+  never an empty profile: the page shows a blank form and says the lookup is busy.
 
 Rules:
 
@@ -1402,6 +1412,13 @@ Rules:
   and presses "Confirm and save"; only then is the profile stored. Until the kitchen
   profile has a save route, the web keeps the confirmed profile in the browser and shows
   the logo in the app shell.
+- "Nothing is saved" means no database write. The gateway process keeps the answer for a
+  domain in memory for a short time (#604), so the same domain asked again makes no second
+  paid Context.dev call: 10 minutes for a found brand (`ONBOARDING_CACHE_TTL_S`), 1 minute
+  for `found: false` (`ONBOARDING_CACHE_NOT_FOUND_TTL_S`). An email lookup and a website
+  lookup of one domain are kept apart, and the email itself is not kept. An error (502,
+  422) is never kept. The answer has the same shape either way; a restart of the gateway
+  empties the memory.
 - Every pre-filled field shows "From your website via Context.dev" and its
   `source.endpoint` until the person edits it.
 - The web client maps `logo_url` to `logoUrl`, `kitchen_type` to `kitchenType`,
@@ -1532,6 +1549,19 @@ What the view adds to an alert:
   `kitchen:write` today (403 `SCOPE_REQUIRED`).
 - A repeat `idempotency_key` scrapes nothing and applies nothing: it answers the stored
   `last_check` of that check with the alerts as they are now.
+- Cooldown (#652): a new `idempotency_key` sent while this kitchen's newest check is
+  younger than 60 seconds (`RECALL_CHECK_COOLDOWN_S`; 0 switches it off) scrapes nothing
+  and applies nothing. The answer is that newest check's `last_check` (its own
+  `checked_at` and `checked_by`) with the alerts as they are now, plus `"reused": true`
+  at the top level, next to `last_check` and `alerts`. `reused` is only there when it is
+  `true`. A cooldown answer only reads: no matching, no hold, no audit entry, and the new
+  key is not recorded (sent again after the cooldown, it runs a check). The cooldown is
+  per kitchen; another kitchen's check is not reused.
+- One check at a time per kitchen (#652): a second check for the same kitchen waits for
+  the running one and then gets the cooldown answer, so two clicks make one scrape. When
+  the running check does not end in time: 429 `RECALL_CHECK_BUSY` with a `Retry-After`
+  header (whole seconds) and `error.retry_after_s`. A 429 says nothing about recalls: the
+  screens keep what they showed and never say "no recalls".
 - One check makes at most one Context.dev call, with one attempt and a timeout (45 seconds;
   `RECALL_CHECK_TIMEOUT_S`, at most 120). It never retries and never loops. A live list
   scrape took 30 seconds on 2026-11-14, so the button shows "Checking recalls…" that long.
@@ -1610,6 +1640,7 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | `ALLERGEN_RULE` | reason | a kitchen allergen rule refuses a product: its known allergens (CONTAINS, MAY_CONTAIN or UNDECLARED) include an excluded code. That product is left out, listed under `excluded` with reason `ALLERGEN_RULE: the kitchen excludes <codes>` (per product, not the whole mandate), on every path: `POST /proposals` and MCP `get_offer`. Unknown allergen data is not a hit: the line stays with `ALLERGEN_DATA_MISSING`. |
 | `ALLERGEN_DATA_MISSING` | reason | no allergen data; treated as unknown |
 | `OVER_BUDGET_WARNING` | warning | total is above the kitchen's budget warning. A warning only: a human approves every order anyway. Replaces `OVER_SPEND_LIMIT`. |
+| `CERTAINTY_PREMIUM_HIGH` | warning | the plan uses confirmed stock that costs more than `certainty_premium_max` times the cheapest orderable price per litre or kilo, because the order would be short without it. Show it on the approval card with the line's price. |
 | `LOT_SIZE_ROUNDED` | reason | quantity rounded up to `allowedLotSize` or pack |
 | `EVENT_LINE` | reason | one-off demand, kept out of the base forecast |
 | `MOV_PADDED` | reason | lines pulled forward to reach free delivery |
