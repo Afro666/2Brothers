@@ -31,6 +31,7 @@ import {
   formatTime,
   isStockUnconfirmed,
 } from "@/lib/format";
+import { translateReason } from "@/lib/codes";
 import { useT } from "@/lib/i18n";
 import { splitChecks, statusChips } from "@/lib/proposal-checks";
 import { cn } from "@/lib/utils";
@@ -661,7 +662,7 @@ export function ApprovalCard({
                 <ul className="space-y-1.5">
                   {checks.general.map((r) => (
                     <li key={r.rule} className="border-l-[3px] border-warning py-0.5 pl-3 text-sm">
-                      <div className="font-semibold">{t(r.rule)}</div>
+                      <div className="font-semibold">{translateReason(r.rule, t)}</div>
                       {r.detail ? <div className="text-foreground">{t(r.detail)}</div> : null}
                     </li>
                   ))}

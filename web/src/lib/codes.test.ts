@@ -1,6 +1,30 @@
 import { describe, expect, it } from "vitest";
 
-import { CODE_LABELS, codeLabel, plainReason } from "@/lib/codes";
+import { CODE_LABELS, codeLabel, plainReason, translateReason } from "@/lib/codes";
+import { translate } from "@/lib/i18n";
+
+const fi = (text: string) => translate("fi", text);
+
+describe("translateReason (#1169)", () => {
+  it("has a Finnish entry for every code title", () => {
+    for (const { title } of Object.values(CODE_LABELS)) expect(fi(title), title).not.toBe(title);
+  });
+
+  it("shows the Finnish title inside a gateway reason in Finnish mode", () => {
+    const reason = plainReason("472710: ALLERGEN_RULE: the kitchen excludes AN", new Map([["472710", "Peanut butter"]]));
+    expect(translateReason(reason, fi)).toBe("Peanut butter: Poissuljettu allergeeni: the kitchen excludes AN");
+    expect(translateReason("Excluded allergen: the kitchen excludes AN", fi)).toBe(
+      "Poissuljettu allergeeni: the kitchen excludes AN",
+    );
+    expect(translateReason(plainReason("461332: BLOCKED_BY_RECALL"), fi)).toMatch(/^461332: Takaisinveto estää\. /);
+  });
+
+  it("leaves English and unrelated sentences as they are", () => {
+    const en = (text: string) => translate("en", text);
+    expect(translateReason("472710: Excluded allergen: x", en)).toBe("472710: Excluded allergen: x");
+    expect(translateReason("15 KG of the request cannot be covered.", fi)).toBe("15 KG of the request cannot be covered.");
+  });
+});
 
 describe("codeLabel", () => {
   it("gives the over-budget warning a plain title and says it does not block", () => {
