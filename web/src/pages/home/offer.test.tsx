@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import { sampleSupplierOffer } from "@/api/mock-offers";
+import { mapModelTrace } from "@/api/model-trace";
 import { ApiError } from "@/api/types";
 import { madeByLabel } from "@/pages/home/offer";
 import { renderApp } from "@/test/render";
@@ -38,6 +39,24 @@ describe("SupplierOfferTile", () => {
     expect(
       await screen.findByText("The catalog has no allergen data for this product. Check the label before you approve."),
     ).toBeInTheDocument();
+  });
+
+  it("shows what Nemotron did for the offer, folded, and who set the numbers (#1197)", async () => {
+    const api = createMockApi();
+    api.listSupplierOffers = async () => [{
+      ...sampleSupplierOffer,
+      modelTrace: mapModelTrace({
+        made_by: "model", reader: "seller", model: "nemotron-3.5-super-vl", thinking: false, calls: 1,
+        seconds: 1.204, attempts: 1, truncated: false,
+        steps: [{ by: "code", attempt: 1, tool: "shortlist", count: 5 }, { by: "model", attempt: 1, tool: "pick", code: "PICKED" }],
+      }),
+    }];
+    renderApp("/", api);
+
+    await userEvent.click(await screen.findByText("1 model call, 1.2 s, thinking off"));
+    expect(screen.getByText("Built a shortlist of 5 products from the catalog")).toBeVisible();
+    expect(screen.getByText("Picked one product from the shortlist")).toBeVisible();
+    expect(screen.getByText("Quantities and prices: the engine. Approval: you.")).toBeVisible();
   });
 
   it("shows the supplier's text as text, never as markup", async () => {

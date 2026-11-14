@@ -218,7 +218,75 @@ search (read only) and Valio's API. The photo rows are the four fixture photos w
 
 Tests: `agent/tests/test_usage.py` (a fake transport, no model call).
 
-## Buyer loop settings (#706, #882)
+## One model pick per request (#1208)
+
+The live worker defaults to `NEMOTRON_BUYER_STRATEGY=single_pick`. Code searches the
+need-bound catalog and gets an engine offer, then Nemotron selects up to three
+indices from a compact shortlist with names, packs, arrival flags and quoted unit
+prices where known. It gets no tool definitions, audit history or full catalog
+documents. The model cannot set quantities or call a mutation. Reasons in the
+selection JSON are untrusted and are not shown as the offer's decision record.
+
+The existing Buyer runner still authorizes and audits every tool step. Code gets a
+fresh offer for the selected subset, simulates, assesses safe substitutes through
+the existing host planner, and requests human approval. It never approves or orders.
+One JSON model call, thinking off, 512 output tokens, a 20-second call deadline, no
+model retry. The whole worker has a 35-second bound; a safe timeout follows the
+existing explicit parser fallback and circuit breaker. This is a complete-call
+deadline, not streaming first-token instrumentation.
+
+Only product IDs are cached for ten minutes, scoped to kitchen, request, day,
+quantity/unit, allergen policy and the eligible catalog shortlist. Prices, stock,
+offers and approval are never reused by this cache: every new request re-quotes and
+simulates live. The same idempotency key replays its original result as before.
+An identical choice already in flight does not start another model call; its
+60-second lease outlives the bounded worker and expires after interruption. Lost
+claim ownership stops the run before approval is requested. Failed model selections cool down for five
+seconds. Pick calls are metered under `buyer_pick`; a cache hit uses zero calls.
+The model trace marks orchestration tools as code and the selection as a model
+`pick`, or a code `pick` with `CACHED_PICK` when reusing an earlier choice.
+
+Set `NEMOTRON_BUYER_STRATEGY=loop` to retain the previous multi-turn implementation.
+The CLI tool agent still uses that audited loop. The legacy worker-mode tests set
+`strategy="loop"` explicitly; `test_single_pick.py` covers the new default, cache
+scope/expiry, live-price changes, concurrent selection and invalid model output.
+
+### Live measurements, 14 November 2026
+
+Matched 200 L requests used `L`, `litres`, and `liters`, for 2026-11-16. All made
+waiting proposals; no order was approved. Small samples on the live demo, spanning
+concurrent changes on main (including model-trace reads), are not a controlled
+provider-queue benchmark.
+
+| Version/cohort | n | End-to-end times (s) | Median (s) | Model calls/request |
+|---|---:|---|---:|---:|
+| Before: tool loop | 3 | 6.359, 4.594, 4.203 | 4.594 | 4 |
+| First single-pick deployment: cold | 3 | 11.813, 17.000, 4.187 | 11.813 | 1 |
+| First single-pick deployment: cached | 2 | 7.078, 5.141 | 6.110 | 0 |
+| Direct receipt read (#1316): cold | 3 | 3.843, 2.469, 2.766 | 2.766 | 1 |
+| Direct receipt read (#1316): cached | 2 | 2.375, 1.937 | 2.156 | 0 |
+
+The loop used roughly 43,500 prompt tokens per request. Single-pick cold calls used
+741-742 prompt and 79-131 completion tokens (0.293-0.538 model seconds); cache hits
+used zero model tokens. The first cold median did **not** meet the under-10-second
+goal. Provider time alone does not explain that end-to-end delay.
+
+Stored run/audit times for those three cold requests show 3.537/4.584/3.048 worker
+seconds, with about 1.2 seconds in each spent after the approval mutation on fetching
+the full proposal list. The worker now carries the proposal ID from the mutation
+receipt and fetches only that proposal, checking both identities. A bounded list
+read remains only for older receipts lacking the ID. This avoids enriching up to
+100 unrelated proposals and their model traces; it does not explain all ingress
+overhead. After deploying #1316, the cold median was 2.766 seconds and the cached
+median 2.156 seconds. These requests added a final period to each earlier text to
+start fresh cache keys; quantities and delivery date stayed the same. The three
+cold calls used 2,224 prompt and 355 completion tokens in total (one call each,
+0.345-0.441 model seconds); the two cache hits used zero calls/tokens. Every result
+was a READY waiting proposal with no order. The endpoint was healthy during this
+cohort: slow provider queueing was not observed or tested. #1208 remains open for
+that acceptance check; these small samples establish no congestion guarantee.
+
+## Legacy Buyer loop settings (#706, #882)
 
 The live tool loop runs Nemotron with **thinking off** and a **2,048 token** reply budget,
 temperature 0 (`BUYER_THINKING`, `BUYER_MAX_TOKENS` in `agent/model.py`). The request

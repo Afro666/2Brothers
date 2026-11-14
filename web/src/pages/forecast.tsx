@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { ForecastChart, formatQuantity } from "@/components/purchasing/forecast-chart";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -216,8 +217,13 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
               {data.products.map((product) => (
                 <TableRow key={product.productId} data-product={product.productId}>
                   <TableCell>
-                    {product.name}
-                    <span className="block text-xs text-muted-foreground">{product.productId}</span>
+                    <div className="flex items-center gap-2">
+                      <ProductThumb en={product.name} size="sm" />
+                      <div className="min-w-0">
+                        {product.name}
+                        <span className="block text-xs text-muted-foreground">{product.productId}</span>
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     {formatQuantity(needed(product), product.unit, t("unknown"))}

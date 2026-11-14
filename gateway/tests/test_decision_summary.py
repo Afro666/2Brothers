@@ -108,10 +108,11 @@ def test_manual_supplier_line_names_its_supplier():
     s = decision_summary({"product_ids": ["7", "own-bread"], "quantity": "8", "unit": "ST",
                           "requested_date": "2026-11-16"}, _two_supplier_sim())
     assert "with supplier prices and stock" in s["searched"] and "Valio" not in s["searched"]
-    assert ("Kotileipomo has not confirmed stock for own-bread (3 ST): the order cannot be placed "
-            "until Kotileipomo confirms that stock.") in s["decide"]
-    assert ("Valio has not confirmed stock for 7 (5 ST): the order cannot be placed "
-            "until Valio confirms that stock.") in s["decide"]
+    # Aron, 2026-11-14: a person may still approve; the order is sent and waits for the supplier.
+    assert ("Kotileipomo has not confirmed stock for own-bread (3 ST): you can still approve; the order "
+            "is sent and waits for Kotileipomo to confirm that stock.") in s["decide"]
+    assert ("Valio has not confirmed stock for 7 (5 ST): you can still approve; the order "
+            "is sent and waits for Valio to confirm that stock.") in s["decide"]
 
 
 def test_valio_only_wording_is_unchanged():
@@ -120,8 +121,8 @@ def test_valio_only_wording_is_unchanged():
     s = decision_summary({"product_ids": ["7"], "quantity": "5", "unit": "ST",
                           "requested_date": "2026-11-16"}, sim)
     assert s["searched"] == "Checked 1 product(s) with Valio prices and stock for 2026-11-16: 7."
-    assert s["decide"][-1] == ("Valio has not confirmed stock for 7 (5 ST): the order cannot be placed "
-                               "until Valio confirms that stock.")
+    assert s["decide"][-1] == ("Valio has not confirmed stock for 7 (5 ST): you can still approve; the order "
+                               "is sent and waits for Valio to confirm that stock.")
 
 
 def test_no_lines_means_no_total_sentence():

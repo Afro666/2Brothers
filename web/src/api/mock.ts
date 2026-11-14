@@ -345,11 +345,12 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
         throw new ApiError("TOTAL_MISMATCH", "The order total changed since you read it.");
       }
       const order = demoOrders.get(current.orderId)!;
-      if (order.lines.some((line) => isUnknownStock(line.offer.availableAmount))) {
-        throw new ApiError("STOCK_UNKNOWN", "Waiting for supplier stock confirmation.");
-      }
+      // A person's yes sends unconfirmed stock too (Aron, 2026-11-14); the order then waits
+      // for the supplier, as the gateway's supplier_must_confirm says.
+      const unconfirmed = order.lines.some((line) => isUnknownStock(line.offer.availableAmount));
       const short = order.lines.find(
-        (line) => line.offer.availableAmount != null && line.quantity > line.offer.availableAmount,
+        (line) => !isUnknownStock(line.offer.availableAmount) && line.offer.availableAmount != null
+          && line.quantity > line.offer.availableAmount,
       );
       if (short) {
         throw new ApiError(
@@ -357,13 +358,22 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
           `Only ${short.offer.availableAmount} of ${short.product.id} in supplier stock; ${short.quantity} requested.`,
         );
       }
-      demoOrders.set(order.id, { ...order, status: "PLACED" });
+      demoOrders.set(order.id, {
+        ...order,
+        status: "PLACED",
+        // The demo names its one supplier; the gateway names each supplier that must confirm.
+        supplierMustConfirm: unconfirmed
+          ? (order.supplierMustConfirm.length ? order.supplierMustConfirm : ["SUP-VALIO"])
+          : order.supplierMustConfirm,
+      });
       const decided = decide(
         current, "APPROVED", actor, `Approved ${current.orderId}`,
         `Approved exactly ${formatEur(current.totalExVat)} ex VAT (${formatEur(current.totalInclVat)} incl VAT).`,
       );
       audit.push({ id: `EV-${audit.length + 1}`, at: new Date().toISOString(), kind: "order", actor: "gateway",
-        orderId: order.id, summary: `Placed ${order.id}`, reason: "Human approved the exact simulated demo total; stock was measured." });
+        orderId: order.id, summary: `Placed ${order.id}`, reason: unconfirmed
+          ? "Human approved the exact simulated demo total; the order waits for the supplier to confirm stock."
+          : "Human approved the exact simulated demo total; stock was measured." });
       return decided;
     },
     async reject(approvalId, reason, actor) {

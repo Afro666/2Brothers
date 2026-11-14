@@ -28,7 +28,7 @@ from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 EVENTS = ("proposal.ready", "proposal.approved", "proposal.rejected", "order.placed",
-          "total_mismatch", "recall.alert")
+          "total_mismatch", "recall.alert", "agent.refused", "delivery.checked")
 PING = "ping"                      # sent by POST .../test only; not a subscription
 # Audit kind (Gateway._audit) -> the events a developer sees.
 KIND_EVENTS = {
@@ -38,6 +38,8 @@ KIND_EVENTS = {
     "proposal_rejected": ("proposal.rejected",),
     "total_mismatch": ("total_mismatch",),
     "recall_proposal_blocked": ("recall.alert",),
+    "refused": ("agent.refused",),
+    "delivery_note_read": ("delivery.checked",),
 }
 MAX_HOOKS = 10
 MAX_ATTEMPTS = 3
@@ -49,6 +51,14 @@ INTERNAL_SUFFIXES = (".localhost", ".local", ".internal", ".lan", ".home", ".cor
                      ".home.arpa")
 
 Send = Callable[[str, bytes, dict], int]
+
+REFUSAL_WINDOW = 60.0              # seconds: one agent.refused delivery per hook, actor and code (#1188)
+_refused_seen: dict[tuple, float] = {}
+
+
+def _clock() -> float:
+    """Monotonic seconds; tests replace this function so a minute passes at once."""
+    return time.monotonic()
 
 
 class WebhookError(ValueError):
@@ -251,21 +261,63 @@ def run_async(job: Callable[[], None]) -> None:
     threading.Thread(target=job, name="webhook-delivery", daemon=True).start()
 
 
-def dispatch(db, kitchen_id: str, kind: str, data: dict) -> None:
+def _refused_payload(data: dict, actor: str) -> dict:
+    """The audit entry without its path: a developer sees the route pattern, never an id."""
+    return {"actor": actor, "code": data.get("code"), "method": data.get("method"),
+            "route": data.get("route")}
+
+
+def _checked_payload(data: dict, actor: str) -> dict:
+    """Only the counters a developer may see; never the photo or the note's text."""
+    return {key: data.get(key) for key in
+            ("order_id", "statuses", "complete", "needs_approval", "duration_ms")}
+
+
+_PAYLOADS = {"refused": _refused_payload, "delivery_note_read": _checked_payload}
+
+
+def _first_refusal(kitchen_id: str, hook_id: str, actor: str, code, now: float) -> bool:
+    """True when this hook has not had this actor's code in the last minute (#1188)."""
+    key = (kitchen_id, hook_id, actor, code)
+    if now - _refused_seen.get(key, -REFUSAL_WINDOW) < REFUSAL_WINDOW:
+        return False
+    if len(_refused_seen) > 10_000:
+        for stale in [k for k, t in _refused_seen.items() if now - t >= REFUSAL_WINDOW]:
+            del _refused_seen[stale]
+        if len(_refused_seen) > 10_000:
+            _refused_seen.clear()
+    _refused_seen[key] = now
+    return True
+
+
+def dispatch(db, kitchen_id: str, kind: str, data: dict, actor: str = "") -> None:
     """Called once for every audit event (Gateway._audit). Maps the audit kind to webhook
     events and delivers them in a background thread. Never raises, never waits for a receiver."""
     try:
         events = KIND_EVENTS.get(kind)
         if not events:
             return
-        wanted = [e for e in events if db.webhooks.count_documents({"kitchen_id": kitchen_id, "events": e}, limit=1)]
-        if not wanted:
+        hooks = list(db.webhooks.find({"kitchen_id": kitchen_id, "events": {"$in": list(events)}}))
+        if not hooks:
             return
-        payload = dict(data)
+        payload = _PAYLOADS.get(kind, lambda d, a: dict(d))(data, actor)
+        now = _clock()
+        targets = []
+        for hook in hooks:
+            subscribed = hook.get("events") or ()
+            for event in events:
+                if event not in subscribed:
+                    continue
+                if kind == "refused" and not _first_refusal(
+                        kitchen_id, hook["_id"], actor, data.get("code"), now):
+                    continue
+                targets.append((event, hook["_id"]))
+        if not targets:
+            return
 
         def job() -> None:
-            for event in wanted:
-                deliver(db, kitchen_id, event, payload)
+            for event, hook_id in targets:
+                deliver(db, kitchen_id, event, payload, hook_id=hook_id)
 
         run_async(job)
     except Exception:

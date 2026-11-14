@@ -25,6 +25,35 @@ The upstream specification has no order-placement endpoint. Any order simulation
 approval, or placement implemented by our gateway is a team-owned interface and
 must not be described as an upstream order submission.
 
+### Valio's rate limit and `SUPPLIER_BUSY` (#1237)
+
+Valio's rule (challenge Discord, 2026-11-14): a few hundred calls a minute is fine,
+more than 10 a second is not. Above it Valio answers 429 and blocks the caller for
+30 seconds. The gateway's Valio client honours this for the whole server process:
+
+- **Limiter.** At most 5 calls at once, then 4 a second (a token bucket shared by every
+  Valio client in the process), so never more than 9 calls in any one second. A call
+  waits briefly for its turn. A call that would wait more than 5 seconds is not sent:
+  it fails as `SUPPLIER_BUSY`.
+- **Rest after a 429.** No call goes to Valio for 30 seconds, or for `Retry-After`
+  seconds when Valio sends a longer one (at most 300). A 429 is never retried inside
+  that time. 5xx and network errors keep their short retries.
+- **Cache first.** An answer still in the client's cache (30 seconds) is served during
+  a rest. Only a call that would reach Valio fails.
+
+What a caller sees during a rest:
+
+| Where | Answer |
+|---|---|
+| A route that needs a live Valio price or stock (`get_offer`, creating or changing a proposal, addable products, a supplier offer) | 503 `SUPPLIER_BUSY` with `retry_after` (whole seconds) in the error body and a `Retry-After` header. Nothing is stored. Try again after `retry_after`. |
+| `search_products` with `need_id` | 200; `can_arrive` is `null` (unknown), as for any missing live answer. |
+| Supplier planner view (`/demand`) | 200; availability is unknown, `risk` is `UNKNOWN`; the demand still shows. |
+| Buyer agent | The `get_offer` tool fails, so the run ends `CANNOT_FULFIL` and says the tool failed; nothing is ordered. |
+
+```json
+{"error": {"code": "SUPPLIER_BUSY", "message": "Valio rate limit: wait 27 s", "retry_after": 27}}
+```
+
 ### Shared price and availability request
 
 ```json
@@ -399,7 +428,8 @@ The web Catalog page and screens that hold product codes use these rows: `search
 posts `search_products` with `limit: 50` and only the filters the person set (`exclude_allergens`
 with `allergen_strictness`, `require_labels`, `temperature`), and does not call it for an empty
 query with no filter. `getProducts` reads `GET /v1/kitchens/{kitchen_id}/catalog/products?ids=`
-in groups of 200. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
+in groups of 200; while the gateway does not serve that route (a 404 with no `error` envelope,
+before #1172), it answers from the sample products as it did before. A named 404 is an error. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
 `allergen_data_known: false` is `allergens: null` (unknown), never an empty list.
 
 ### Stored rows: order, approval, audit entry
@@ -654,7 +684,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | GET | `/proposals` | `kitchen:read` | `{"proposals": [...]}`, newest first, at most 100, each in the `GET /proposals/{id}` shape. |
 | GET | `/proposals/{id}` | `kitchen:read` | Lines with `why`, one block per supplier, simulated totals (`expected_total`, `mov_gap`, `delivery_fee`), mandate reasons, warnings. |
 | GET | `/proposals/{id}/addable` | `kitchen:read` | What the buyer can add to this proposal, most probable first, and the lines that reach free delivery. Shape under "Addable products". |
-| POST | `/proposals/{id}/approve` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN` (one exception: the kitchen setting `approve_unconfirmed_manual`, see "Kitchen settings"); a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
+| POST | `/proposals/{id}/approve` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed does not block a person's approval (2026-11-14, any supplier, Valio too): the order is placed, its lines keep `unknown_stock: true` and its `supplier_must_confirm` names each supplier that must still confirm (earned auto-approve never places such a proposal); a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". |
 | POST | `/proposals/{id}/change` | `kitchen:propose` (a person or an agent) | Set a line's quantity (0 removes it) or add a product from the addable list. Re-quotes live; approves and sends nothing. Returns the proposal in the `GET /proposals/{id}` shape with a new `offer_id` and `expected_total`. Body and errors under "Changing a proposal". MCP tool `change_proposal`. |
@@ -1337,7 +1367,7 @@ the confirmed one first, then the Buyer's, with tiers `good`, `better`, `best` i
 | 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
 | 404 | `OPTION_NOT_FOUND` | `offer_id` is not one of this proposal's options. |
 | 409 | `NOT_PENDING` | The proposal is no longer `READY` (approved, rejected, expired). |
-| 409 | `STOCK_UNKNOWN` | The fresh simulation cannot confirm the stock of a line. |
+| 409 | `STOCK_UNKNOWN` | The fresh simulation cannot confirm the stock of a line (choosing an option, or an auto-approval; a person's approve does not return it since 2026-11-14). |
 | 409 | `CLOSING_PASSED` | The cut-off of a line has passed. |
 | 409 | `OPTION_UNAVAILABLE` | A product of the option cannot be ordered now for another reason (a recall hold, an allergen rule, no price). |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. |
@@ -2655,7 +2685,7 @@ engine's default, except `excluded_allergens`, which is `null` until a person se
 | `certainty_premium_max` | decimal string or null | How much more the kitchen pays for stock the supplier confirms: the main plan uses a confirmed-stock offer only when its price per litre or kilo is at most this many times the cheapest orderable price. At least `1`; default `3`; `null` means no limit. A dearer confirmed offer is left out of the plan and listed in `excluded` with the two prices. When leaving it out would make the order short, it stays and the plan carries `CERTAINTY_PREMIUM_HIGH`. Engine default until `store/` saves it and the settings page shows it. |
 | `excluded_allergens` | string[] or null | GS1 codes or the allergen names of `search_products`. A product that lists one as CONTAINS, MAY_CONTAIN or UNDECLARED is refused. `[]` means the kitchen has explicitly no exclusions. `null` means nobody has set the policy yet: unknown, not "none". |
 | `standing_orders` | object of decimal strings | Per `product_id`: the kitchen's standing order per delivery, in that product's sales unit. `{}` means none. The engine only flags a standing order more than 10 % off the need (`STANDING_ORDER_DRIFT`, S08); a person changes it. |
-| `approve_unconfirmed_manual` | boolean | Off by default (#631). Absent from `GET` until a person sets it; absent means off. Another type is a 422. When `true`, an approver may approve a proposal whose unknown-stock lines all belong to a manual or csv supplier's block. The order then carries that block's `supplier_id` in `supplier_must_confirm` and waits for the supplier's confirmation; the block's mandate reason says so. A Valio line with unknown stock is still 409 `STOCK_UNKNOWN`. Earned auto-approve never applies to these blocks: it refuses every unknown-stock line. When `false` or absent, every unknown-stock line is 409 `STOCK_UNKNOWN`. |
+| `approve_unconfirmed_manual` | boolean | Redundant since 2026-11-14 (Aron): still stored and returned, and another type is still a 422, but approval no longer reads it. A person may approve any proposal with unknown-stock lines, from any supplier, Valio too; the order then names those suppliers in `supplier_must_confirm` and waits for their confirmation. Earned auto-approve never applies to these lines: it refuses every unknown-stock line. Off by default (#631); absent from `GET` until a person sets it. |
 
 `PUT /settings` takes any subset of these fields plus `idempotency_key`. A field that is
 left out keeps its value, so a partial save can never drop the allergen policy.
@@ -3115,7 +3145,7 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | Code | Kind | Meaning |
 |---|---|---|
 | `CLOSING_PASSED` | reason | `closingTime` is at or before now for this delivery. The product is left out; the code is on the mandate. |
-| `STOCK_UNKNOWN` | reason | availability is a sentinel (999999 or 9999999999), missing or null. Also a 409 error on approve. |
+| `STOCK_UNKNOWN` | reason | availability is a sentinel (999999 or 9999999999), missing or null. A warning on approve: a person may still approve, the order then waits for the supplier (`supplier_must_confirm`). |
 | `PARTIAL_STOCK` | reason | less is available than needed |
 | `SUBSTITUTE_NEEDS_OK` | reason | a substitute changes the product; a human agrees |
 | `SUBSTITUTE_FAT_LEVEL` | reason | two lines of one plan have known fat levels more than 0.5 g per 100 g apart (fat-free and 3 % milk, S01). From the supplier record's `FAT` nutrient; unknown fat is never compared. On the mandate. |
@@ -3145,8 +3175,8 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | `SENT_READ_FAILED` | It landed; only reading the answer failed | Re-read the order status. Never resend |
 
 Refusals before any send are errors, not outcomes: `TOTAL_MISMATCH` (409: re-simulate
-and ask the human again), `STOCK_UNKNOWN` (409: the supplier has not confirmed the stock
-of a line; nothing is recorded and the proposal stays `READY`), `BLOCKED_BY_RECALL`
+and ask the human again), `STOCK_UNKNOWN` (409 only for an auto-approval or a chosen option: a person's
+approval of an unconfirmed line places the order with `supplier_must_confirm`), `BLOCKED_BY_RECALL`
 (409: a recall holds the proposal; look at its replacement proposal), `NOT_PENDING`
 (409: the proposal is not `READY`), `APPROVAL_MISMATCH` (409: `place_order` names an
 offer other than the one the person approved), `HUMAN_SESSION_REQUIRED` (403),

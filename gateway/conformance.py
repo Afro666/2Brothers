@@ -172,6 +172,22 @@ class Kit:
         bad = [n for n in names if any(w in n for w in ("approve", "reject", "cancel"))]
         return not bad, f"{len(names)} MCP tools, none approves, rejects or cancels"
 
+    def c13(self):
+        """The approve tool is listed only for a personal approval token; called by name with
+        this token it runs the approve route and gets that route's 403."""
+        response = self.http.post("/mcp", headers={**self.auth, "Accept": "application/json, text/event-stream",
+                                                   "Content-Type": "application/json", "MCP-Protocol-Version": "2025-06-18"},
+                                  json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+                                      "name": "approve_proposal", "arguments": {
+                                          "proposal_id": "conformance-none", "expected_total": "1.00",
+                                          "idempotency_key": "conformance"}}})
+        if response.status_code != 200:
+            return None, f"/mcp not reachable with this token (HTTP {response.status_code})"
+        result = self._rpc_result(response, 2)
+        text = " ".join(str(part.get("text", "")) for part in result.get("content") or [])
+        refused = bool(result.get("isError")) and "403" in text and             any(code in text for code in ("HUMAN_SESSION_REQUIRED", "ROLE_REQUIRED"))
+        return refused, "approve_proposal by name: " + ("403, refused" if refused else "not refused")
+
     def run(self) -> list[Check]:
         for cid, rule, fn in (
             ("C01", "The gateway answers /health", self.c01),
@@ -185,7 +201,8 @@ class Kit:
             ("C09", "There is no cancel or edit route for an order", self.c09),
             ("C10", "A kitchen token cannot read another kitchen", self.c10),
             ("C11", "An unknown offer is 404, not a guess", self.c11),
-            ("C12", "The MCP server exposes no approve, reject or cancel tool", self.c12),
+            ("C12", "The MCP server lists no approve, reject or cancel tool for this token", self.c12),
+            ("C13", "The hidden MCP approve tool, called by this token, is refused (403)", self.c13),
         ):
             self.check(cid, rule, fn)
         return self.results

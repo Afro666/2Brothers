@@ -33,9 +33,10 @@ def test_a_short_order_offers_the_confirmed_part_as_an_option(env):
     assert "51 L now" in option["why"] and "949 L" in option["why"]
     assert option["offer_id"] != p["offer_id"]            # its own stored quote
     assert option["expected_total"] != p["expected_total"]
-    # The proposal itself is unchanged: still the engine's full plan, still not placeable.
+    # The proposal itself is unchanged: still the engine's full plan. A person may approve it
+    # as it is (Aron, 2026-11-14); the order then waits for Valio's stock confirmation.
     assert [(ln["product_id"], ln["quantity"]) for ln in p["lines"]] == [("462775", "51"), ("463335", "949")]
-    assert approve(client, p).json()["error"]["code"] == "STOCK_UNKNOWN"
+    assert approve(client, p).json()["supplier_must_confirm"] == ["sup-valio"]
 
 
 def test_no_option_when_the_plan_is_fully_confirmed(env):

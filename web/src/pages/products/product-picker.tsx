@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/lib/i18n";
@@ -45,6 +46,16 @@ function catalogChoice(product: Product, t: ReturnType<typeof useT>): PickerProd
     unit: product.baseUnit,
     source: product.vendorName || t("supplier not set"),
   };
+}
+
+/** The picture's names and brand: a catalog product has all three, an own product only its name. */
+function PickerThumb({ choice }: { choice: PickerProduct }) {
+  const { product } = choice;
+  return "names" in product ? (
+    <ProductThumb en={product.names.en} fi={product.names.fi} brand={product.brand} size="sm" />
+  ) : (
+    <ProductThumb en={product.name} size="sm" />
+  );
 }
 
 function matchesQuery(choice: PickerProduct, words: readonly string[]): boolean {
@@ -163,7 +174,8 @@ export function ProductPicker({
     const shown = findProduct(value.productId) ?? (chosen?.product.id === value.productId ? chosen : null);
     return (
       <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm">
-        <span className="font-medium">{shown?.name ?? value.productName}</span>
+        {shown ? <PickerThumb choice={shown} /> : <ProductThumb en={value.productName} size="sm" />}
+        <span className="min-w-0 font-medium break-words">{shown?.name ?? value.productName}</span>
         {shown ? <span className="text-muted-foreground">{`${shown.unit} · ${shown.source}`}</span> : null}
         {!shown && unavailableId === value.productId ? (
           <span className="text-xs text-muted-foreground">{t("details unavailable")}</span>
@@ -246,12 +258,15 @@ function PickerOption({ choice, onChoose }: { choice: PickerProduct; onChoose: (
   return (
     <button
       type="button"
-      className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
       onClick={() => onChoose(choice)}
     >
-      <span className="font-medium">{choice.name}</span>
-      <span className="text-muted-foreground">
-        {choice.unit} · {choice.source}
+      <PickerThumb choice={choice} />
+      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="font-medium break-words">{choice.name}</span>
+        <span className="text-muted-foreground">
+          {choice.unit} · {choice.source}
+        </span>
       </span>
     </button>
   );

@@ -66,3 +66,4 @@ def ensure_indexes(db: Database) -> None:
     db.audit_log.create_index("event.run_id")
     db.audit_log.create_index("event.order_id")
     db.audit_log.create_index("server.kitchen_id")
+    db.buyer_pick_cache.create_index('expires_at', expireAfterSeconds=0)

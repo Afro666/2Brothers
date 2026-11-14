@@ -17,7 +17,6 @@ import { formatEur } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import { LiveConnectionLabel, useLiveEvents } from "@/lib/live-events";
-import { useApproveUnconfirmedManual } from "@/lib/approve-unconfirmed-manual";
 import { useSession } from "@/lib/session";
 import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
 import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
@@ -76,7 +75,6 @@ function ApiApprovalsPage() {
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
   useLiveEvents(["proposal", "approval"], approvals.reload);
-  const approveUnconfirmedManual = useApproveUnconfirmedManual();
   const { refresh: refreshWaiting } = usePendingApprovals();
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
   const [allDecided, setAllDecided] = useState(false);
@@ -236,7 +234,6 @@ function ApiApprovalsPage() {
                         canEdit ? (query) => api.listAddableProducts(approval.orderId, query) : undefined
                       }
                       editCount={editCounts[approval.orderId] ?? 0}
-                      approveUnconfirmedManual={approveUnconfirmedManual}
                       approvalBlockedReason={
                         session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined
                       }
@@ -262,7 +259,6 @@ function ApiApprovalsPage() {
                       request={approval}
                       order={order ?? undefined}
                       onReject={reject}
-                      approveUnconfirmedManual={approveUnconfirmedManual}
                       approvalBlockedReason={
                         session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined
                       }
@@ -284,7 +280,6 @@ function ApiApprovalsPage() {
                       key={approval.id}
                       request={approval}
                       order={order ?? undefined}
-                      approveUnconfirmedManual={approveUnconfirmedManual}
                       recalls={recallsFor(approval.orderId)}
                       folded
                     />
