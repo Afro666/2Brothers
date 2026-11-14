@@ -263,11 +263,13 @@ provider-queue benchmark.
 | Before: tool loop | 3 | 6.359, 4.594, 4.203 | 4.594 | 4 |
 | First single-pick deployment: cold | 3 | 11.813, 17.000, 4.187 | 11.813 | 1 |
 | First single-pick deployment: cached | 2 | 7.078, 5.141 | 6.110 | 0 |
+| Direct receipt read (#1316): cold | 3 | 3.843, 2.469, 2.766 | 2.766 | 1 |
+| Direct receipt read (#1316): cached | 2 | 2.375, 1.937 | 2.156 | 0 |
 
 The loop used roughly 43,500 prompt tokens per request. Single-pick cold calls used
 741-742 prompt and 79-131 completion tokens (0.293-0.538 model seconds); cache hits
-used zero model tokens. The cold median above does **not** meet the under-10-second
-goal. Provider time alone does not explain the end-to-end delay.
+used zero model tokens. The first cold median did **not** meet the under-10-second
+goal. Provider time alone does not explain that end-to-end delay.
 
 Stored run/audit times for those three cold requests show 3.537/4.584/3.048 worker
 seconds, with about 1.2 seconds in each spent after the approval mutation on fetching
@@ -275,8 +277,14 @@ the full proposal list. The worker now carries the proposal ID from the mutation
 receipt and fetches only that proposal, checking both identities. A bounded list
 read remains only for older receipts lacking the ID. This avoids enriching up to
 100 unrelated proposals and their model traces; it does not explain all ingress
-overhead. Post-fix measurements follow after deployment. No broad congestion or
-latency guarantee is claimed from these samples.
+overhead. After deploying #1316, the cold median was 2.766 seconds and the cached
+median 2.156 seconds. These requests added a final period to each earlier text to
+start fresh cache keys; quantities and delivery date stayed the same. The three
+cold calls used 2,224 prompt and 355 completion tokens in total (one call each,
+0.345-0.441 model seconds); the two cache hits used zero calls/tokens. Every result
+was a READY waiting proposal with no order. The endpoint was healthy during this
+cohort: slow provider queueing was not observed or tested. #1208 remains open for
+that acceptance check; these small samples establish no congestion guarantee.
 
 ## Legacy Buyer loop settings (#706, #882)
 
