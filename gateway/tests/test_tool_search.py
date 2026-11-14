@@ -93,7 +93,7 @@ def test_own_products_are_never_sent_to_valio_availability(env):
         need = client.post(K + "/needs", headers=AGENT, json={
             "quantity": "20", "unit": "L", "requested_date": "2026-11-16"}).json()
         found = client.post("/tools/search_products", headers=AGENT, json={
-            "query": "oat milk", "filters": {}, "need_id": need["need_id"]}).json()
+            "query": "oats", "filters": {}, "need_id": need["need_id"]}).json()   # "oat milk": #1700, plant drinks only
         assert asked == [["462775"]]
         arrive = {p["product_id"]: p["can_arrive"] for p in found["products"]}
         assert arrive == {"462775": True, "own-oat-1": None}
