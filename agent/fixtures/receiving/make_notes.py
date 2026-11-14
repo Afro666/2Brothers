@@ -26,7 +26,7 @@ NOTES = {
 }
 
 
-def draw(name, lines, seed):
+def draw(name, lines, seed, ref="ORD-DEMO-0001", day="2026-11-16"):
     rnd = random.Random(seed)
     img = Image.new("RGB", (1240, 900), (250, 248, 240))
     d = ImageDraw.Draw(img)
@@ -34,7 +34,7 @@ def draw(name, lines, seed):
     d.text((60, 50), "DELIVERY NOTE / LAHETE", font=b, fill=(20, 20, 20))
     d.text((60, 100), "SYNTHETIC TEST NOTE - not a real supplier document", font=f, fill=(150, 30, 30))
     d.text((60, 150), "Supplier: Valio (demo)      Customer: demo-kitchen", font=f, fill=(20, 20, 20))
-    d.text((60, 190), "Order ref: ORD-DEMO-0001     Delivery date: 2026-11-16", font=f, fill=(20, 20, 20))
+    d.text((60, 190), f"Order ref: {ref}     Delivery date: {day}", font=f, fill=(20, 20, 20))
     y = 260
     for x, h in zip(X, HEAD):
         d.text((x, y), h, font=ImageFont.truetype(BOLD, 24), fill=(20, 20, 20))
