@@ -1393,6 +1393,14 @@ Which Context.dev endpoint, and why:
 - An address that is neither an email nor a domain: 422 `INVALID_QUERY`. Context.dev down,
   out of credits or slow (a cold domain can take more than 10 s; use a timeout of at least
   10,000 ms): 502 `LOOKUP_UNAVAILABLE`. The page shows a blank form in both cases.
+- Too many lookups (#604): 429 `LOOKUP_RATE_LIMITED`, with a `Retry-After` header (whole
+  seconds) and the same number in the body:
+  `{"error": {"code": "LOOKUP_RATE_LIMITED", "message": "...", "retry_after_s": 42}}`.
+  The limit is 10 Context.dev calls per 60 seconds per caller: a signed-in person by
+  account, anyone else (the open demo's shared token) by client address
+  (`ONBOARDING_RATE_LIMIT`, `ONBOARDING_RATE_WINDOW_S`). Only a lookup that would call
+  Context.dev counts; a bad query (422) and an answer from the cache do not. A 429 is
+  never an empty profile: the page shows a blank form and says the lookup is busy.
 
 Rules:
 
@@ -1402,6 +1410,13 @@ Rules:
   and presses "Confirm and save"; only then is the profile stored. Until the kitchen
   profile has a save route, the web keeps the confirmed profile in the browser and shows
   the logo in the app shell.
+- "Nothing is saved" means no database write. The gateway process keeps the answer for a
+  domain in memory for a short time (#604), so the same domain asked again makes no second
+  paid Context.dev call: 10 minutes for a found brand (`ONBOARDING_CACHE_TTL_S`), 1 minute
+  for `found: false` (`ONBOARDING_CACHE_NOT_FOUND_TTL_S`). An email lookup and a website
+  lookup of one domain are kept apart, and the email itself is not kept. An error (502,
+  422) is never kept. The answer has the same shape either way; a restart of the gateway
+  empties the memory.
 - Every pre-filled field shows "From your website via Context.dev" and its
   `source.endpoint` until the person edits it.
 - The web client maps `logo_url` to `logoUrl`, `kitchen_type` to `kitchenType`,
@@ -1532,6 +1547,19 @@ What the view adds to an alert:
   `kitchen:write` today (403 `SCOPE_REQUIRED`).
 - A repeat `idempotency_key` scrapes nothing and applies nothing: it answers the stored
   `last_check` of that check with the alerts as they are now.
+- Cooldown (#652): a new `idempotency_key` sent while this kitchen's newest check is
+  younger than 60 seconds (`RECALL_CHECK_COOLDOWN_S`; 0 switches it off) scrapes nothing
+  and applies nothing. The answer is that newest check's `last_check` (its own
+  `checked_at` and `checked_by`) with the alerts as they are now, plus `"reused": true`
+  at the top level, next to `last_check` and `alerts`. `reused` is only there when it is
+  `true`. A cooldown answer only reads: no matching, no hold, no audit entry, and the new
+  key is not recorded (sent again after the cooldown, it runs a check). The cooldown is
+  per kitchen; another kitchen's check is not reused.
+- One check at a time per kitchen (#652): a second check for the same kitchen waits for
+  the running one and then gets the cooldown answer, so two clicks make one scrape. When
+  the running check does not end in time: 429 `RECALL_CHECK_BUSY` with a `Retry-After`
+  header (whole seconds) and `error.retry_after_s`. A 429 says nothing about recalls: the
+  screens keep what they showed and never say "no recalls".
 - One check makes at most one Context.dev call, with one attempt and a timeout (45 seconds;
   `RECALL_CHECK_TIMEOUT_S`, at most 120). It never retries and never loops. A live list
   scrape took 30 seconds on 2026-11-14, so the button shows "Checking recalls…" that long.
