@@ -59,12 +59,24 @@ export function StockChip({ line, confirmBy }: { line: OrderLine; confirmBy: str
   );
 }
 
-/** A muted "(demo)" after a value the demo invented (#1453): never Valio's or a supplier's number. */
-export function DemoNote({ source }: { source: DeliverySource | null | undefined }) {
+/** One shown delivery value and where it came from (#1453). */
+export interface SourcedValue {
+  label: string;
+  source: DeliverySource | null | undefined;
+}
+
+/**
+ * One muted "(demo)" for a cell that holds a value the demo invented (#1453): never
+ * Valio's or a supplier's number. However many of the cell's values are demo values, the
+ * note shows once; its title names which ones.
+ */
+export function DemoNote({ values }: { values: readonly SourcedValue[] }) {
   const t = useT();
-  if (source !== "demo") return null;
+  const demo = values.filter((value) => value.source === "demo").map((value) => value.label);
+  if (demo.length === 0) return null;
+  const which = t("Demo data: {facts}", { facts: demo.join(", ") });
   return (
-    <span data-demo className="font-normal text-muted-foreground">
+    <span data-demo title={which} className="font-normal text-muted-foreground">
       {" "}({t("demo")})
     </span>
   );
@@ -79,9 +91,19 @@ export function leadTimeText(days: number | null | undefined, t: ReturnType<type
 function CutoffText({ line, now }: { line: OrderLine; now: Date }) {
   const t = useT();
   const late = isLater(line.offer.availableDate, line.offer.requestedDate);
+  const passed = isPassed(line.offer.closingTime, now);
+  const lead = leadTimeText(line.offer.leadTimeDays, t);
+  const reliability = line.offer.deliveryReliability;
+  const hasFacts = lead != null || reliability != null;
+  // Every value this cell shows, with its source: one "(demo)" at the end covers them all.
+  const shown: SourcedValue[] = [
+    ...(passed ? [] : [{ label: t("Order cut-off"), source: line.offer.cutoffSource }]),
+    ...(lead != null ? [{ label: t("Lead time"), source: line.offer.leadTimeSource }] : []),
+    ...(reliability != null ? [{ label: t("Delivery reliability"), source: line.offer.reliabilitySource }] : []),
+  ];
   return (
     <span className="inline-flex flex-col items-start gap-0.5">
-      {isPassed(line.offer.closingTime, now) ? (
+      {passed ? (
         <span data-closed className={cn(CHIP, TONE_CLASSES.danger)}>
           {t("Cut-off passed")}
         </span>
@@ -89,38 +111,24 @@ function CutoffText({ line, now }: { line: OrderLine; now: Date }) {
         <span className="text-xs text-muted-foreground tabular-nums">
           <span className="md:sr-only">{t("order by")} </span>
           {t(formatDateTime(line.offer.closingTime))}
-          <DemoNote source={line.offer.cutoffSource} />
+          {hasFacts ? null : <DemoNote values={shown} />}
         </span>
       )}
-      <DeliveryFacts line={line} />
+      {hasFacts ? (
+        <span className="text-[11px] leading-4 text-muted-foreground tabular-nums">
+          {lead != null ? <span title={t("Lead time")}>{lead}</span> : null}
+          {lead != null && reliability != null ? " · " : null}
+          {reliability != null ? (
+            <span title={t("Delivery reliability")}>
+              {t("{percent} delivered", { percent: formatPercent(reliability) })}
+            </span>
+          ) : null}
+          <DemoNote values={shown} />
+        </span>
+      ) : null}
       {late ? (
         <span className="text-xs font-medium text-warning">
           {t("arrives {date}", { date: t(formatDate(line.offer.availableDate)) })}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-/** Lead time and delivery reliability of a line, when a source knows them (#1453). */
-function DeliveryFacts({ line }: { line: OrderLine }) {
-  const t = useT();
-  const lead = leadTimeText(line.offer.leadTimeDays, t);
-  const reliability = line.offer.deliveryReliability;
-  if (lead == null && reliability == null) return null;
-  return (
-    <span className="text-[11px] leading-4 text-muted-foreground tabular-nums">
-      {lead != null ? (
-        <span title={t("Lead time")}>
-          {lead}
-          <DemoNote source={line.offer.leadTimeSource} />
-        </span>
-      ) : null}
-      {lead != null && reliability != null ? " · " : null}
-      {reliability != null ? (
-        <span title={t("Delivery reliability")}>
-          {t("{percent} delivered", { percent: formatPercent(reliability) })}
-          <DemoNote source={line.offer.reliabilitySource} />
         </span>
       ) : null}
     </span>

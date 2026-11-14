@@ -274,7 +274,7 @@ export function OptionCompare({
                           : option.cutoffAt
                             ? t("met (order by {date})", { date: formatDateTime(option.cutoffAt) })
                             : t("met")}
-                      <DemoNote source={option.cutoffSource} />
+                      <DemoNote values={[{ label: t("Order cut-off"), source: option.cutoffSource }]} />
                     </>
                   )}
                 </Fact>
@@ -284,7 +284,7 @@ export function OptionCompare({
                   ) : (
                     <>
                       {formatPercent(option.deliveryReliability)}
-                      <DemoNote source={option.reliabilitySource} />
+                      <DemoNote values={[{ label: t("Delivery reliability"), source: option.reliabilitySource }]} />
                     </>
                   )}
                 </Fact>
@@ -294,7 +294,7 @@ export function OptionCompare({
                   ) : (
                     <>
                       {leadTimeText(option.leadTimeDays, t)}
-                      <DemoNote source={option.leadTimeSource} />
+                      <DemoNote values={[{ label: t("Lead time"), source: option.leadTimeSource }]} />
                     </>
                   )}
                 </Fact>

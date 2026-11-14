@@ -75,6 +75,27 @@ describe("ProductThumb with a brand", () => {
     expect(list).toHaveBeenCalledWith(["Valio"]);
   });
 
+  it("never renders a blank tile: the kind icon stays under the logo, which shows only once loaded", async () => {
+    const list = vi.fn(async (names: string[]) => names.map((name) => logo(name, true)));
+    const { container } = render(
+      <ApiProvider api={withLogos(list)}>
+        <ProductThumb en="Valio Eila lactose free milk drink 1 L" brand="Valio Eila" size="sm" />
+      </ApiProvider>,
+    );
+    const img = await screen.findByAltText("Valio Eila logo");
+    const tile = container.querySelector("[data-kind]");
+    expect(tile).toHaveAttribute("data-kind", "milk and cream");
+    expect(tile?.querySelector(":scope > svg")).not.toBeNull();
+    // The logo is a badge inside the kind tile, hidden while its image is still loading.
+    const badge = tile?.querySelector('[data-logo="Valio Eila"]');
+    expect(badge).toContainElement(img);
+    expect(badge?.className).toMatch(/\binvisible\b/);
+    fireEvent.load(img);
+    expect(badge?.className).not.toMatch(/\binvisible\b/);
+    expect(badge).toHaveAttribute("data-loaded");
+    expect(tile?.querySelector(":scope > svg")).not.toBeNull();
+  });
+
   it("goes back to the kind tile when the image does not load", async () => {
     const list = vi.fn(async (names: string[]) => names.map((name) => logo(name, true)));
     const { container } = render(
@@ -84,7 +105,8 @@ describe("ProductThumb with a brand", () => {
     );
     fireEvent.error(await screen.findByAltText("Valio logo"));
     expect(container.querySelector("img")).toBeNull();
-    expect(container.querySelector("[data-kind]")).not.toBeNull();
+    expect(container.querySelector("[data-logo]")).toBeNull();
+    expect(container.querySelector("[data-kind] svg")).not.toBeNull();
   });
 
   it("keeps the kind tile when the logo list fails", async () => {
