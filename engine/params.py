@@ -23,6 +23,9 @@ class KitchenParams:
     stockout_cap: float = 1.8
     budget_warning_order_eur: Decimal | None = Decimal("1500")
     budget_warning_week_eur: Decimal | None = Decimal("5000")
+    # Confirmed stock is used only up to this many times the cheapest orderable price per
+    # litre or kilo (engine/premium.py). None = no limit.
+    certainty_premium_max: Decimal | None = Decimal("3")
 
     def z(self, abc: str | None) -> float:
         """Unknown class gets the A level: a missing value is never the safe one."""
@@ -56,4 +59,10 @@ class KitchenParams:
         for key in ("budget_warning_order_eur", "budget_warning_week_eur"):
             if key in data:
                 changes[key] = None if data[key] is None else Decimal(str(data[key]))
+        if "certainty_premium_max" in data:
+            raw = data["certainty_premium_max"]
+            limit = None if raw is None else Decimal(str(raw))
+            if limit is not None and limit < 1:
+                raise ValueError("certainty_premium_max must be at least 1")
+            changes["certainty_premium_max"] = limit
         return replace(base, **changes)
