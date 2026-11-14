@@ -4,10 +4,14 @@ import type {
   AuditEvent,
   AddableProduct,
   ChefRequest,
+  CurrentSession,
   DemandLine,
   Mandate,
   MenuPlanEntry,
   Order,
+  OrderResolution,
+  OrderResolutionInput,
+  OrderResolutionResult,
   OwnProduct,
   PlanProposal,
   Product,
@@ -123,6 +127,10 @@ export interface Api {
   listFeedback(filter?: { orderId?: string }): Promise<FeedbackRow[]>;
   listOrders(): Promise<Order[]>;
   getOrder(id: string): Promise<Order>;
+  /** The current `/v1/me` identity, including whether this person may resolve orders. */
+  getCurrentSession(): Promise<CurrentSession>;
+  getOrderResolution(orderId: string): Promise<OrderResolution>;
+  resolveOrder(orderId: string, resolution: OrderResolutionInput, actor: string): Promise<OrderResolutionResult>;
   listAudit(filter?: { orderId?: string }): Promise<AuditEvent[]>;
   /** The newest `limit` audit lines with their chain hashes, oldest first. */
   listAuditChain(limit: number): Promise<AuditChainRow[]>;

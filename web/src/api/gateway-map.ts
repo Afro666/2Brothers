@@ -11,6 +11,10 @@ import type {
   Offer,
   Order,
   OrderLine,
+  OrderResolution,
+  OrderResolutionRecord,
+  OrderResolutionResult,
+  OrderSendOutcome,
   OrderStatus,
   PermissionRow,
   Product,
@@ -48,6 +52,61 @@ export function rows(body: unknown, key: string): Json[] {
 /** A decimal string, or null when the gateway says unknown. */
 export function decimal(value: unknown, label: string): number | null {
   return value == null ? null : mapMoney(value, label);
+}
+
+function nullableText(value: unknown, what: string): string | null {
+  return value == null || value === "" ? null : text(value, what);
+}
+
+function sendOutcome(value: unknown): OrderSendOutcome | null {
+  return value === "CONFIRMED" || value === "NOT_SENT" || value === "UNCONFIRMED" || value === "SENT_READ_FAILED"
+    ? value
+    : null;
+}
+
+function resolutionRecord(value: unknown): OrderResolutionRecord | null {
+  if (value == null) return null;
+  const row = object(value, "order resolution");
+  const resolution = row.resolution;
+  if (resolution !== "placed" && resolution !== "not_sent") invalid("order resolution");
+  return {
+    resolution,
+    supplierOrderRef: nullableText(row.supplier_order_ref, "supplier_order_ref"),
+    note: row.note == null ? null : typeof row.note === "string" ? row.note : invalid("resolution note"),
+    resolvedBy: nullableText(row.resolved_by, "resolved_by"),
+    resolvedAt: nullableText(row.resolved_at, "resolved_at"),
+    fromOutcome: sendOutcome(row.from_outcome),
+  };
+}
+
+export function mapOrderResolutionResult(value: unknown): OrderResolutionResult {
+  const row = object(value, "order resolution");
+  return {
+    orderId: text(row.order_id, "order_id"),
+    proposalId: nullableText(row.proposal_id, "proposal_id"),
+    proposalStatus: nullableText(row.proposal_status, "proposal_status"),
+    outcome: sendOutcome(row.outcome),
+    status: nullableText(row.status, "order status"),
+    resolution: resolutionRecord(row.resolution),
+  };
+}
+
+export function mapOrderResolution(value: unknown): OrderResolution {
+  const row = object(value, "order resolution");
+  if (!Array.isArray(row.lines)) invalid("order lines");
+  return {
+    ...mapOrderResolutionResult(row),
+    idempotencyKey: nullableText(row.idempotency_key, "idempotency_key"),
+    payloadHash: nullableText(row.payload_hash, "payload_hash"),
+    offerId: nullableText(row.offer_id, "offer_id"),
+    supplierId: nullableText(row.supplier_id, "supplier_id"),
+    approvedBy: nullableText(row.approved_by, "approved_by"),
+    expectedTotal: decimal(row.expected_total, "expected_total"),
+    lines: row.lines.map((line) => mapLine(object(line, "an order line"), "")),
+    createdAt: nullableText(row.created_at, "created_at"),
+    updatedAt: nullableText(row.updated_at, "updated_at"),
+    resolvable: row.resolvable === true,
+  };
 }
 
 /** The gateway names a product by its code only (#304 adds the row): the rest is unknown. */
@@ -149,6 +208,7 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     totalExVat: proposal ? mapMoney(proposal.total_ex_vat, "total_ex_vat") : null,
     totalInclVat: mapMoney((placed ?? source).expected_total, "expected_total"),
     mov: proposal ? mapMov(proposal) : null,
+    supplierOrderRef: placed ? resolutionRecord(placed.resolution)?.supplierOrderRef ?? null : null,
   };
 }
 

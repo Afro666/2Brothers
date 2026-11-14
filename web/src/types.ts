@@ -128,6 +128,60 @@ export interface Order {
   totalInclVat: number;
   /** null = the supplier's delivery terms are not known. */
   mov: MovState | null;
+  /** The supplier's own reference after a person resolves an unknown send. */
+  supplierOrderRef?: string | null;
+}
+
+export type OrderSendOutcome = "CONFIRMED" | "NOT_SENT" | "UNCONFIRMED" | "SENT_READ_FAILED";
+
+export interface OrderResolutionRecord {
+  resolution: "placed" | "not_sent";
+  supplierOrderRef: string | null;
+  note: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  fromOutcome: OrderSendOutcome | null;
+}
+
+export interface OrderResolution {
+  orderId: string;
+  proposalId: string | null;
+  proposalStatus: string | null;
+  idempotencyKey: string | null;
+  payloadHash: string | null;
+  offerId: string | null;
+  supplierId: string | null;
+  approvedBy: string | null;
+  outcome: OrderSendOutcome | null;
+  status: string | null;
+  expectedTotal: number | null;
+  lines: OrderLine[];
+  createdAt: string | null;
+  updatedAt: string | null;
+  resolvable: boolean;
+  resolution: OrderResolutionRecord | null;
+}
+
+export interface OrderResolutionResult {
+  orderId: string;
+  proposalId: string | null;
+  proposalStatus: string | null;
+  outcome: OrderSendOutcome | null;
+  status: string | null;
+  resolution: OrderResolutionRecord | null;
+}
+
+export type OrderResolutionInput =
+  | { resolution: "placed"; supplierOrderRef: string }
+  | { resolution: "not_sent"; note?: string };
+
+export interface CurrentSession {
+  kind: "human" | "agent" | "token" | null;
+  name: string | null;
+  role: string | null;
+  kitchenId: string | null;
+  canApprove: boolean;
+  scopes: string[] | null;
 }
 
 /** One rule of the mandate that this order breaks or touches. */

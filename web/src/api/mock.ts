@@ -33,6 +33,8 @@ import type {
   FeedbackRow,
   Order,
   OrderLine,
+  OrderResolution,
+  OrderResolutionResult,
   Product,
   ProposalChange,
 } from "@/types";
@@ -58,10 +60,56 @@ export interface MockApiOptions {
 
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
 export function createMockApi(options: MockApiOptions = {}): MockApi {
+  const unknownOrder: Order = {
+    ...structuredClone(seedOrders.placed),
+    id: "ORD-1046",
+    status: "UNCONFIRMED",
+    urgency: "UNKNOWN",
+    supplierOrderRef: null,
+  };
+  const unknownApproval: ApprovalRequest = {
+    ...structuredClone(seedApproval),
+    id: "APR-UNKNOWN-1046",
+    orderId: unknownOrder.id,
+    status: "APPROVED",
+  };
   const approvals = new Map(
-    [{ ...confirmedDemoApproval, options: milkOptions }, seedApproval, coffeeApproval].map((row) => [row.id, structuredClone(row)]),
+    [
+      { ...confirmedDemoApproval, options: milkOptions },
+      seedApproval,
+      coffeeApproval,
+      unknownApproval,
+    ].map((row) => [row.id, structuredClone(row)]),
   );
-  const demoOrders = new Map([...Object.values(seedOrders), confirmedDemoOrder, coffeeOrder].map((row) => [row.id, structuredClone(row)]));
+  const demoOrders = new Map(
+    [...Object.values(seedOrders), confirmedDemoOrder, coffeeOrder, unknownOrder].map((row) => [
+      row.id,
+      structuredClone(row),
+    ]),
+  );
+  const resolutions = new Map<string, OrderResolution>([
+    [
+      unknownOrder.id,
+      {
+        orderId: unknownOrder.id,
+        proposalId: unknownApproval.id,
+        proposalStatus: "COMMITTING",
+        idempotencyKey: "approve-unknown-1046",
+        payloadHash: "3a08f1a95f244b7f9d8f6f7e8e7e51e2",
+        offerId: "OFR-MILK-UNKNOWN",
+        supplierId: "sup-valio",
+        approvedBy: "aron",
+        outcome: "UNCONFIRMED",
+        status: null,
+        expectedTotal: unknownOrder.totalInclVat,
+        lines: structuredClone(unknownOrder.lines),
+        createdAt: "2026-11-14T02:10:00+00:00",
+        updatedAt: "2026-11-14T02:10:01+00:00",
+        resolvable: true,
+        resolution: null,
+      },
+    ],
+  ]);
   const audit: AuditEvent[] = [...auditEvents];
   const feedback: FeedbackRow[] = [];
   let nextFailure: ApiError | null = null;
@@ -84,7 +132,9 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     reason: nameProducts(event.reason, productNames),
   });
 
-  const recordAudit = (event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason">) => {
+  const recordAudit = (
+    event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason"> & Partial<Pick<AuditEvent, "orderId">>,
+  ) => {
     audit.push({
       ...event,
       id: `EV-${audit.length + 1}`,
@@ -382,6 +432,72 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       const found = demoOrders.get(id);
       if (!found) throw new ApiError("NOT_FOUND", `Order ${id} was not found.`);
       return found;
+    },
+    async getCurrentSession() {
+      return { kind: "human", name: "aron", role: "approver", kitchenId: KITCHEN_ID, canApprove: true, scopes: null };
+    },
+    async getOrderResolution(orderId) {
+      const found = resolutions.get(orderId);
+      if (!found) throw new ApiError("ORDER_NOT_FOUND", `Order ${orderId} was not found.`);
+      return structuredClone(found);
+    },
+    async resolveOrder(orderId, input, actor) {
+      const current = resolutions.get(orderId);
+      if (!current) throw new ApiError("ORDER_NOT_FOUND", `Order ${orderId} was not found.`);
+      const supplierOrderRef = input.resolution === "placed" ? input.supplierOrderRef.trim() : null;
+      const note = input.resolution === "not_sent" ? (input.note?.trim() ?? "") : "";
+      if (input.resolution === "placed" && (!supplierOrderRef || supplierOrderRef.length > 200)) {
+        throw new ApiError("INVALID_REQUEST", "The supplier order reference must be 1 to 200 characters.");
+      }
+      if (note.length > 500) throw new ApiError("INVALID_REQUEST", "The note must be at most 500 characters.");
+      if (current.resolution) {
+        if (
+          current.resolution.resolution !== input.resolution ||
+          current.resolution.supplierOrderRef !== supplierOrderRef
+        ) {
+          throw new ApiError("ALREADY_RESOLVED", "Someone else already resolved this order another way.");
+        }
+      } else if (!current.resolvable) {
+        throw new ApiError("ORDER_NOT_RESOLVABLE", "This order is no longer waiting for resolution.");
+      } else {
+        const resolvedAt = new Date().toISOString();
+        current.resolution = {
+          resolution: input.resolution,
+          supplierOrderRef,
+          note,
+          resolvedBy: actor,
+          resolvedAt,
+          fromOutcome: current.outcome,
+        };
+        current.resolvable = false;
+        current.updatedAt = resolvedAt;
+        recordAudit({
+          kind: "order",
+          actor: "human",
+          orderId,
+          summary: `${input.resolution === "placed" ? "Marked placed" : "Marked not sent"}: ${orderId}`,
+          reason: note || supplierOrderRef || `Checked with the supplier; recorded by ${actor}.`,
+        });
+      }
+      const placed = current.resolution.resolution === "placed";
+      current.outcome = placed ? "CONFIRMED" : "NOT_SENT";
+      current.status = placed ? "SENT" : null;
+      current.proposalStatus = placed ? "APPROVED" : "READY";
+      demoOrders.set(orderId, {
+        ...demoOrders.get(orderId)!,
+        status: placed ? "PLACED" : "NOT_SENT",
+        supplierOrderRef: current.resolution.supplierOrderRef,
+      });
+      approvals.set(unknownApproval.id, { ...approvals.get(unknownApproval.id)!, status: placed ? "APPROVED" : "PENDING" });
+      const result: OrderResolutionResult = {
+        orderId,
+        proposalId: current.proposalId,
+        proposalStatus: current.proposalStatus,
+        outcome: current.outcome,
+        status: current.status,
+        resolution: structuredClone(current.resolution),
+      };
+      return structuredClone(result);
     },
     async listAudit(filter) {
       return (filter?.orderId ? audit.filter((event) => event.orderId === filter.orderId) : audit).map(named);
