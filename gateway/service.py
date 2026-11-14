@@ -631,6 +631,10 @@ class Gateway:
                         seen=str(seen), now=fresh["simulation"]["expected_total"])
             raise GatewayError(409, "TOTAL_MISMATCH", "the price or stock moved; look at the new total",
                                expected_total=fresh["simulation"]["expected_total"])
+        # Unchanged basket on an expired offer: place it on the fresh live quote, so the
+        # order and audit point at a valid offer, not a stale snapshot (#534).
+        if datetime.fromisoformat(stored["valid_until"]) <= self.now():
+            stored = fresh
         sim = stored["simulation"]
         # A person's consent is not supplier stock confirmation. Keep unknown
         # lines visible in proposals, but never record a placed order for them.
@@ -639,7 +643,8 @@ class Gateway:
         # Atomic commit point shared with the recall monitor. A notice arriving
         # during the live quote can still claim APPROVING and prevent this order.
         committed = self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
-            'status': 'APPROVING', 'approving_key': key}, {'$set': {'status': 'COMMITTING'}})
+            'status': 'APPROVING', 'approving_key': key},
+            {'$set': {'status': 'COMMITTING', 'offer_id': stored['offer_id']}})
         if not committed.modified_count:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
         payload = {"offer_id": stored["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}

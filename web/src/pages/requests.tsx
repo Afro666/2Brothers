@@ -47,7 +47,7 @@ function DemoRequestsPage() {
     <AppShell activeId="requests">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-[28px] leading-8 font-bold tracking-[-0.015em]">Request an order</h1>
+          <h1 className="page-title">Request an order</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Say what the kitchen needs. The Buyer agent proposes an order, and a person approves it before it is sent.
           </p>

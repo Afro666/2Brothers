@@ -78,7 +78,7 @@ def _env_principal(request: Request, token: str) -> Principal:
     raise GatewayError(401, "UNAUTHENTICATED", "a valid bearer token is required")
 
 
-def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
+def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None) -> FastAPI:
     app = FastAPI(
         title="Trusted Kitchen Buyer gateway", version="0.1.0",
         description=("REST and MCP gateway between a kitchen's Buyer agent and its suppliers. "
@@ -106,7 +106,16 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         return state["gw"]
 
     @app.exception_handler(GatewayError)
-    async def _error(_: Request, exc: GatewayError) -> JSONResponse:
+    async def _error(request: Request, exc: GatewayError) -> JSONResponse:
+        # #548: every refusal of a token or agent is audit evidence, also when a caller skips
+        # the Buyer and calls the gateway directly. People's 403s are UI guards, not attacks.
+        who = getattr(request.state, "who", None)
+        if exc.status == 403 and who is not None and who.kind != "human":
+            try:
+                gw()._audit(request.path_params.get("kitchen_id") or kitchen(who), "refused", who.name,
+                            code=exc.code, method=request.method, path=request.url.path)
+            except Exception:
+                pass                # a failed audit write never turns a refusal into a 500
         return JSONResponse(status_code=exc.status,
                             content={"error": {"code": exc.code, "message": exc.message, **exc.extra}})
 
@@ -119,6 +128,11 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         return JSONResponse(status_code=422, content={"error": {"code": "INVALID_REQUEST", "message": "a number field is not a number"}})
 
     def principal(request: Request) -> Principal:
+        who = _resolve(request)
+        request.state.who = who            # the error handler audits a token's refusals (#548)
+        return who
+
+    def _resolve(request: Request) -> Principal:
         """The session cookie of a signed-in person first, then the server env tokens (Buyer
         worker, open-demo stand-in), then kitchen API tokens."""
         from gateway import users
@@ -539,6 +553,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     # Kitchen planning routes (#74): stock, products, recipes, menu plans, suppliers, demand.
     from gateway.kitchen_routes import register as register_kitchen_routes
     register_kitchen_routes(app, gw, principal, body)
+
+    # Count from a shelf photo (#373): Nemotron VL reads it in the worker; stores no count.
+    from gateway.stock_photo import mount_stock_photo
+    mount_stock_photo(app, gw, principal, shelf_worker)
 
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp

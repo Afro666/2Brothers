@@ -219,10 +219,30 @@ def _named(db, rows: list[dict]) -> list[dict]:
     return [{**row, "product_name": names.get(row["product_id"])} for row in rows]
 
 
-def _open_orders(db, kitchen_id: str, today: date) -> tuple[dict, dict, set]:
-    """What is on order per product, in kitchen units: approved orders whose delivery day is
-    today or later. Returns (quantity per product, next delivery day per product, products
-    whose order line cannot be converted to kitchen units: for those on order is unknown)."""
+# Net content units scaled to a kitchen unit: (kitchen unit, factor).
+_CONTENT_UNITS = {"l": ("L", Decimal(1)), "ml": ("L", Decimal("0.001")),
+                  "kg": ("KG", Decimal(1)), "g": ("KG", Decimal("0.001"))}
+
+
+def _content_per_base_unit(content: dict | None, kitchen_unit: str | None) -> Decimal | None:
+    """How much of the kitchen unit one base unit holds, or None when the units do not match.
+    No net content means one base unit is one piece, so it only fits a kitchen counting in PCS."""
+    kitchen_unit = (kitchen_unit or "").upper()
+    if not content or content.get("value") is None:
+        return Decimal(1) if kitchen_unit == "PCS" else None
+    unit, factor = _CONTENT_UNITS.get(str(content.get("unit") or "").lower(), (None, None))
+    if unit is None or unit != kitchen_unit:
+        return None
+    return Decimal(str(content["value"])) * factor
+
+
+def _open_orders(db, kitchen_id: str, today: date,
+                 kitchen_units: dict[str, str] | None = None) -> tuple[dict, dict, set]:
+    """What is on order per product, in kitchen units (`kitchen_units`: the unit the kitchen
+    counts each product in): approved orders whose delivery day is today or later. Returns
+    (quantity per product, next delivery day per product, products whose order line cannot be
+    converted to kitchen units: for those on order is unknown)."""
+    kitchen_units = kitchen_units or {}
     qty: dict[str, Decimal] = {}
     due: dict[str, date] = {}
     unknown: set[str] = set()
@@ -246,11 +266,11 @@ def _open_orders(db, kitchen_id: str, today: date) -> tuple[dict, dict, set]:
             doc = docs.get(pid) or {}
             sizes = {u.get("unit"): u.get("size_in_base_units") for u in doc.get("units") or []}
             base_units = sizes.get(line.get("unit"))
-            content = (doc.get("net_content") or {}).get("value")
-            if base_units is None:
+            content = _content_per_base_unit(doc.get("net_content"), kitchen_units.get(pid))
+            if base_units is None or content is None:
                 unknown.add(pid)
                 continue
-            per = Decimal(str(base_units)) * (Decimal(str(content)) if content else Decimal(1))
+            per = Decimal(str(base_units)) * content
             qty[pid] = qty.get(pid, Decimal(0)) + Decimal(str(line.get("quantity"))) * per
             due[pid] = min(due.get(pid, delivery), delivery)
     return qty, due, unknown
@@ -258,9 +278,11 @@ def _open_orders(db, kitchen_id: str, today: date) -> tuple[dict, dict, set]:
 
 def _stock_items(db, kitchen_id: str, today: date | None = None) -> list[dict]:
     from store.history import current_stock
-    qty, due, unknown = _open_orders(db, kitchen_id, today or datetime.now().date())
+    rows = current_stock(db, kitchen_id)
+    qty, due, unknown = _open_orders(db, kitchen_id, today or datetime.now().date(),
+                                     {row["product_id"]: row["unit"] for row in rows})
     items = []
-    for row in current_stock(db, kitchen_id):
+    for row in rows:
         pid = row["product_id"]
         on_hand = row.get("on_hand")
         on_hand = None if on_hand is None else Decimal(str(on_hand))

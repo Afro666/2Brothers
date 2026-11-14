@@ -1,8 +1,10 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiProvider } from "@/api";
 import { createMockApi } from "@/api/mock";
+import { PENDING_APPROVALS_REFRESH_MS, PendingApprovalsProvider, usePendingApprovals } from "@/lib/pending-approvals";
 import { renderApp } from "@/test/render";
 
 function menu() {
@@ -78,5 +80,37 @@ describe("Waiting-approvals count", () => {
     renderApp("/", createMockApi());
 
     expect(await screen.findByRole("link", { name: "Request an order" })).toHaveAttribute("href", "/requests");
+  });
+
+  describe("reload on an interval", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("shows a new PENDING approval without a page reload", async () => {
+      vi.useFakeTimers();
+      const base = createMockApi();
+      const all = await base.listApprovals();
+      const pending = all.filter((approval) => approval.status === "PENDING");
+      let shown = pending.slice(0, 1);
+      const api = { ...base, listApprovals: () => Promise.resolve(shown) };
+      function Count() {
+        const { count } = usePendingApprovals();
+        return <p>count: {String(count)}</p>;
+      }
+      render(
+        <ApiProvider api={api}>
+          <PendingApprovalsProvider>
+            <Count />
+          </PendingApprovalsProvider>
+        </ApiProvider>,
+      );
+      await act(async () => {});
+      expect(screen.getByText("count: 1")).toBeInTheDocument();
+
+      shown = [...pending.slice(0, 1), { ...pending[0], id: `${pending[0].id}-new` }];
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PENDING_APPROVALS_REFRESH_MS);
+      });
+      expect(screen.getByText("count: 2")).toBeInTheDocument();
+    });
   });
 });

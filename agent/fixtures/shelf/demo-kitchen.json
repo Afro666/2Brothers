@@ -1,0 +1,11 @@
+{
+  "_comment": "Products on the live demo kitchen's stock list (#373), with their English catalog names as GET /stock gave them on 2026-11-14; pack_size is kitchen units (L or KG) per pack.",
+  "products": [
+    {"product_id": "463335", "name": "Valio Eila® 3 % milk drink 1 l lactose free", "unit": "L", "pack_size": "1"},
+    {"product_id": "464194", "name": "Valio whipping cream 1 l UHT lactose free", "unit": "L", "pack_size": "1"},
+    {"product_id": "464187", "name": "Keiju Rapeseed oil 1 l", "unit": "L", "pack_size": "1"},
+    {"product_id": "462718", "name": "Valio Turkish cooking yoghurt 2 kg lactose free", "unit": "KG", "pack_size": "2"},
+    {"product_id": "463437", "name": "Valio Eila® butter 500 g salted lactose free", "unit": "KG", "pack_size": "0.5"},
+    {"product_id": "462616", "name": "Valio Edam 17 % e1 kg slices", "unit": "KG", "pack_size": "1"}
+  ]
+}

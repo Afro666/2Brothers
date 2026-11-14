@@ -31,7 +31,7 @@ export function HomePage() {
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-[28px] leading-8 font-bold tracking-[-0.015em]">Kitchen Buyer</h1>
+            <h1 className="page-title">Kitchen Buyer</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {side === "kitchen" ? "What needs you today." : "Where demand may outrun supply."}
             </p>

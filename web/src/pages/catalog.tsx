@@ -16,25 +16,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EU_ALLERGENS } from "@/lib/allergens";
 import type { ProductLabel } from "@/types";
 
-const ALLERGENS = [
-  { code: "AM", name: "Milk" },
-  { code: "AW", name: "Gluten cereals" },
-  { code: "AE", name: "Egg" },
-  { code: "AF", name: "Fish" },
-  { code: "AN", name: "Tree nuts" },
-  { code: "AP", name: "Peanuts" },
-  { code: "AS", name: "Sesame" },
-  { code: "AY", name: "Soy" },
-  { code: "AC", name: "Crustaceans" },
-  { code: "UM", name: "Molluscs" },
-  { code: "BC", name: "Celery" },
-  { code: "BM", name: "Mustard" },
-  { code: "AU", name: "Sulphites" },
-  { code: "NL", name: "Lupin" },
-  { code: "ML", name: "Lactose" },
-] as const;
+const ALLERGENS = [...EU_ALLERGENS, { code: "ML", name: "Lactose" }] as const;
 
 const LABEL_OPTIONS = Object.keys(LABEL_META) as ProductLabel[];
 const TEMPERATURES: ProductTemperature[] = ["ambient", "chilled", "frozen"];

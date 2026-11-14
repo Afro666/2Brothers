@@ -214,7 +214,10 @@ def test_demo_routes_refuse_other_kitchens_agents_and_missing_keys(env, route):
         r = client.post(DEMO + route, headers=HUMAN, json=bad)
         assert r.status_code == 422 and code(r) == "INVALID_REQUEST", bad
     assert client.post(DEMO + route, headers=HUMAN, content=b"not json").status_code == 422
-    assert db.audit_log.count_documents({}) == count
+    # Nothing but the two token refusals (#548: a token's 403 is audit evidence) was written.
+    refused = {"event.kind": "refused"}
+    assert db.audit_log.count_documents({"event.kind": {"$ne": "refused"}}) == count
+    assert db.audit_log.count_documents(refused) == 2
     assert db.audit_tamper_demo.count_documents({}) == 0
 
 
