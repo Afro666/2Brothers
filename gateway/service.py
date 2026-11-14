@@ -1058,7 +1058,10 @@ class Gateway:
         if doc["status"] == "COMMITTING" and self._release_stuck_commit(kitchen_id, doc, human):
             doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id}) or doc
         if doc["status"] != "READY":
-            return self._approved_or_conflict(kitchen_id, proposal_id, key)
+            result = self._approved_or_conflict(kitchen_id, proposal_id, key)
+            self._decision_feedback(kitchen_id, proposal_id, "approved", human,
+                                    total=result.get("expected_total"))
+            return result
         stored = orders.get_offer(self.db, doc["offer_id"])
         if Decimal(str(seen)) - Decimal(stored["simulation"]["expected_total"]) != 0:
             raise GatewayError(409, "TOTAL_MISMATCH", "this is not the total of the proposal",
@@ -1069,9 +1072,12 @@ class Gateway:
             {"_id": proposal_id, "kitchen_id": kitchen_id, "status": "READY", "offer_id": stored["offer_id"]},
             {"$set": {"status": "APPROVING", "approving_key": key}})
         if claimed is None:
-            return self._approved_or_conflict(kitchen_id, proposal_id, key)
+            result = self._approved_or_conflict(kitchen_id, proposal_id, key)
+            self._decision_feedback(kitchen_id, proposal_id, "approved", human,
+                                    total=result.get("expected_total"))
+            return result
         try:
-            return self._place(kitchen_id, proposal_id, doc, stored, seen, key, human, via)
+            placed = self._place(kitchen_id, proposal_id, doc, stored, seen, key, human, via)
         except BaseException:
             # A write may have succeeded before its response failed. Only a
             # confirmed absence permits releasing the post-quote commit claim.
@@ -1098,6 +1104,29 @@ class Gateway:
                 except Exception:
                     pass
             raise
+        self._decision_feedback(kitchen_id, proposal_id, "approved", human,
+                                total=placed.get("expected_total"))
+        return placed
+
+    def _decision_feedback(self, kitchen_id: str, proposal_id: str, kind: str, human: str,
+                           *, total=None, reason=None) -> None:
+        """One learning row per human decision, never for auto-approval. A replay finds
+        its row and writes none. Feedback is never a reason to fail the decision."""
+        if not human or human.startswith("auto-approve"):
+            return
+        try:
+            from store.feedback import record_feedback
+            existing = self.db.feedback.find_one(
+                {"meta.kitchen_id": kitchen_id, "proposal_id": proposal_id, "kind": kind},
+                {"_id": 1})
+            if existing is not None:
+                return
+            record_feedback(self.db, kitchen_id, proposal_id, [{
+                "feedback_id": f"{proposal_id}:{kind}", "kind": kind,
+                "reason": reason, "total": total}], human)
+        except Exception:
+            log.warning("decision feedback failed: kitchen_id=%s proposal_id=%s kind=%s",
+                        kitchen_id, proposal_id, kind, exc_info=True)
 
     def _release_stuck_commit(self, kitchen_id: str, doc: dict, human: str) -> bool:
         """A COMMITTING claim whose rollback failed (#715): with no order attempt for its key
@@ -1224,6 +1253,12 @@ class Gateway:
                                   actor=doc.get('rejected_by', human))
             except Exception:
                 pass
+        try:
+            total = orders.get_offer(self.db, doc["offer_id"])["simulation"]["expected_total"]
+        except Exception:
+            total = None
+        self._decision_feedback(kitchen_id, proposal_id, "rejected", human, total=total,
+                                reason=doc.get("reject_reason") or reason.strip())
         return {"proposal_id": proposal_id, "status": "REJECTED"}
 
     def dismiss_recall(self, kitchen_id: str, event_id: str, body: dict, *, human: str | None) -> dict:

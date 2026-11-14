@@ -13,7 +13,7 @@ from datetime import date
 from decimal import Decimal
 import os
 import re
-from typing import Annotated, Callable
+from typing import Annotated, Callable, Literal
 from urllib.parse import quote
 from uuid import NAMESPACE_URL, uuid5
 
@@ -41,6 +41,10 @@ class LineQuantity(BaseModel):
     product_id: Identifier
     quantity: Annotated[str, Field(pattern=r"^\d{1,7}(\.\d{1,3})?$",
                                    description="Decimal string in the line's sales unit; 0 removes the line.")]
+    reason: Literal["TOO_MUCH", "TOO_LITTLE", "IN_STOCK", "MENU_CHANGED", "BUDGET", "OTHER"] | None = Field(
+        default=None, description="Why the person changed it; absent means legacy.")
+    note: Annotated[str, Field(max_length=200)] | None = Field(
+        default=None, description="Only with reason OTHER, at most 200 characters.")
 
 
 class GatewayError(RuntimeError):
@@ -177,7 +181,7 @@ def build_server(gateway: GatewayClient, is_person: Callable[[], bool] = lambda:
     async def change_proposal(proposal_id: Identifier, idempotency_key: Identifier,
                               lines: Annotated[list[LineQuantity], Field(max_length=200)] | None = None,
                               add: Annotated[list[LineQuantity], Field(max_length=200)] | None = None) -> dict:
-        """Change a READY proposal: set a line's quantity in its sales unit (0 removes it) in lines, or add a product from the proposal's addable list in add. Use only quantities the person said; never invent one. The gateway re-quotes live, rounds to the lot size and returns the proposal with a new offer_id and expected_total. This approves and places nothing: a person approves the new exact total in the inbox."""
+        """Change a READY proposal: set a line's quantity in its sales unit (0 removes it) in lines, or add a product from the proposal's addable list in add. Use only quantities the person said; never invent one. Each entry may carry the person's reason (TOO_MUCH, TOO_LITTLE, IN_STOCK, MENU_CHANGED, BUDGET or OTHER) and a note only with OTHER. The gateway re-quotes live, rounds to the lot size and returns the proposal with a new offer_id and expected_total. This approves and places nothing: a person approves the new exact total in the inbox."""
         payload = {"proposal_id": proposal_id, "idempotency_key": idempotency_key}
         if lines:
             payload["lines"] = [entry.model_dump() for entry in lines]
