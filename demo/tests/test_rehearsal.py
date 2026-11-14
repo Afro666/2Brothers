@@ -105,3 +105,33 @@ def test_a_retried_buyer_post_keeps_its_idempotency_key():
     keys = [json.loads(p.content)["idempotency_key"] for p in posts]
     assert len(keys) == 2 and keys[0] == keys[1]
     assert check.rows[0][1] == "OK"
+
+
+def test_login_on_fails_clearly_without_sign_in_and_passes_with_it():
+    state = {"cookie": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/login":
+            body = __import__("json").loads(request.content)
+            if body == {"email": "aron@example.com", "password": "right password"}:
+                state["cookie"] = True
+                return httpx.Response(200, json={"role": "approver", "kitchen_id": "demo-kitchen"})
+            return httpx.Response(401, json={"error": {"code": "INVALID_LOGIN"}})
+        if request.url.path == "/api/v1/kitchens/demo-kitchen/permissions":
+            return httpx.Response(200 if state["cookie"] else 401, json={"never": [1, 2, 3]})
+        return httpx.Response(404, json={})
+
+    def fresh():
+        state["cookie"] = False
+        return Rehearsal("https://site.test", client=httpx.Client(base_url="https://site.test",
+                                                                  transport=httpx.MockTransport(handler)), today=TODAY)
+    closed = fresh()
+    closed.check("Open demo or sign-in", closed.login_state)
+    assert closed.rows[0][1] == "FAIL" and "--email" in closed.rows[0][2]
+    wrong = fresh()
+    wrong.check("Sign in", lambda: wrong.sign_in("aron@example.com", "wrong"))
+    assert wrong.rows[0][1] == "FAIL" and "wrong" not in wrong.rows[0][2]
+    ok = fresh()
+    ok.check("Sign in", lambda: ok.sign_in("aron@example.com", "right password"))
+    ok.check("Open demo or sign-in", ok.login_state)
+    assert [r[1] for r in ok.rows] == ["OK", "OK"] and "right password" not in str(ok.rows)
