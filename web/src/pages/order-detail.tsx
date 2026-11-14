@@ -16,16 +16,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, formatDateTime, formatEur } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import type { OrderReceipt } from "@/types";
 
 function OrderHistory({ orderId }: { orderId: string }) {
+  const t = useT();
   const api = useApi();
   const state = useAsync(() => api.listAudit({ orderId }), [api, orderId]);
 
-  if (state.status === "loading") return <LoadingState label="Loading order history" />;
+  if (state.status === "loading") return <LoadingState label={t("Loading order history")} />;
   if (state.status === "error") return <ErrorState message={state.error.message} onRetry={state.reload} />;
-  if (state.data.length === 0) return <EmptyState title="No history yet">Order history will appear here.</EmptyState>;
+  if (state.data.length === 0) return <EmptyState title={t("No history yet")}>{t("Order history will appear here.")}</EmptyState>;
   return <AuditTimeline events={state.data} />;
 }
 
@@ -78,6 +80,7 @@ function SignedReceipt({ receipt }: { receipt: OrderReceipt | null }) {
 }
 
 export function OrderDetailPage() {
+  const t = useT();
   const { orderId } = useParams({ from: "/orders/$orderId" });
   const api = useApi();
   const state = useAsync(() => api.getOrder(orderId), [api, orderId]);
@@ -86,9 +89,9 @@ export function OrderDetailPage() {
     <AppShell activeId="orders">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Order {orderId}</h1>
+          <h1 className="text-2xl font-semibold">{t("Order {id}", { id: orderId })}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            The lines, the totals and every step taken for this order.
+            {t("The lines, the totals and every step taken for this order.")}
           </p>
         </header>
         {state.status === "loading" ? <LoadingState /> : null}
@@ -107,20 +110,20 @@ export function OrderDetailPage() {
               </div>
               <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-3">
                 <div>
-                  <dt className="text-muted-foreground">Delivery</dt>
-                  <dd>{formatDate(state.data.deliveryDate)}</dd>
+                  <dt className="text-muted-foreground">{t("Delivery")}</dt>
+                  <dd>{t(formatDate(state.data.deliveryDate))}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Total ex VAT</dt>
-                  <dd>{formatEur(state.data.totalExVat)}</dd>
+                  <dt className="text-muted-foreground">{t("Total ex VAT")}</dt>
+                  <dd>{t(formatEur(state.data.totalExVat))}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Total incl VAT</dt>
+                  <dt className="text-muted-foreground">{t("Total incl VAT")}</dt>
                   <dd>{formatEur(state.data.totalInclVat)}</dd>
                 </div>
                 {state.data.supplierOrderRef ? (
                   <div className="sm:col-span-3">
-                    <dt className="text-muted-foreground">Supplier order reference</dt>
+                    <dt className="text-muted-foreground">{t("Supplier order reference")}</dt>
                     <dd className="break-all">{state.data.supplierOrderRef}</dd>
                   </div>
                 ) : null}
@@ -130,8 +133,8 @@ export function OrderDetailPage() {
             <CardContent>
               <Tabs defaultValue="lines">
                 <TabsList>
-                  <TabsTrigger value="lines">Lines</TabsTrigger>
-                  <TabsTrigger value="history">History</TabsTrigger>
+                  <TabsTrigger value="lines">{t("Lines")}</TabsTrigger>
+                  <TabsTrigger value="history">{t("History")}</TabsTrigger>
                 </TabsList>
                 <TabsContent value="lines" className="space-y-5">
                   <OrderLinesTable lines={state.data.lines} now={new Date()} />

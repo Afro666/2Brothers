@@ -12,6 +12,7 @@ import { ApiError, type Api } from "@/api/types";
 import { usePendingApprovals } from "@/lib/pending-approvals";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { formatEur } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import { useSession } from "@/lib/session";
 import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
@@ -60,6 +61,7 @@ export function ApprovalsPage() {
 }
 
 function ApiApprovalsPage() {
+  const t = useT();
   const api = useApi();
   const { role } = useRole();
   const { session } = useSession();
@@ -75,7 +77,9 @@ function ApiApprovalsPage() {
   async function approve(decision: ApprovalDecision): Promise<void> {
     try {
       await api.approve(decision, actor);
-      toast.success(`Approved: ${formatEur(decision.expectedTotalInclVat)} incl VAT`, { testId: "approval-toast" });
+      toast.success(t("Approved: {amount} incl VAT", { amount: formatEur(decision.expectedTotalInclVat) }), {
+        testId: "approval-toast",
+      });
     } finally {
       // Also after a refusal: when the total moved, the card must show the new one before asking again.
       approvals.reload();
@@ -85,7 +89,7 @@ function ApiApprovalsPage() {
 
   async function reject(approvalId: string, reason: string): Promise<void> {
     await api.reject(approvalId, reason, actor);
-    toast.success("Rejected. The reason goes back to the Buyer.", { testId: "approval-toast" });
+    toast.success(t("Rejected. The reason goes back to the Buyer."), { testId: "approval-toast" });
     approvals.reload();
     refreshWaiting();
   }
@@ -93,7 +97,7 @@ function ApiApprovalsPage() {
   async function change(orderId: string, proposalChange: ProposalChange): Promise<void> {
     await api.changeProposal(orderId, proposalChange, actor);
     setEditCounts((counts) => ({ ...counts, [orderId]: (counts[orderId] ?? 0) + 1 }));
-    toast.success("Proposal updated. Check the new total before you approve.");
+    toast.success(t("Proposal updated. Check the new total before you approve."));
     approvals.reload();
   }
 
@@ -152,24 +156,26 @@ function ApiApprovalsPage() {
     <AppShell activeId="approvals">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">To approve</h1>
+          <h1 className="text-2xl font-semibold">{t("To approve")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Every order the Buyer proposes waits here. Nothing is sent until a person approves it.
+            {t("Every order the Buyer proposes waits here. Nothing is sent until a person approves it.")}
           </p>
         </header>
         <RecallPanel status={recallStatus} onCheck={checkRecalls} />
-        {approvals.status === "loading" ? <LoadingState label="Loading approvals" /> : null}
+        {approvals.status === "loading" ? <LoadingState label={t("Loading approvals")} /> : null}
         {approvals.status === "error" ? (
           <ErrorState message={approvals.error.message} onRetry={approvals.reload} />
         ) : null}
         {approvals.status === "ready" && approvals.data.length === 0 ? (
-          <EmptyState title="No approvals yet">Orders that need a human decision will appear here.</EmptyState>
+          <EmptyState title={t("No approvals yet")}>
+            {t("Orders that need a human decision will appear here.")}
+          </EmptyState>
         ) : null}
         {approvals.status === "ready" && approvals.data.length > 0 ? (
           <div className="space-y-8">
             <section className="space-y-4" aria-labelledby="waiting-heading">
               <h2 id="waiting-heading" className="text-lg font-semibold">
-                Waiting for you ({pending.length})
+                {t("Waiting for you ({count})", { count: pending.length })}
               </h2>
               {pending.length > 0 ? (
                 <div className="space-y-4">
@@ -188,7 +194,7 @@ function ApiApprovalsPage() {
                         (async (optionId) => {
                           try {
                             await api.chooseOption?.(approval.id, optionId, actor);
-                            toast.success("Option chosen. Check the new total before you approve.");
+                            toast.success(t("Option chosen. Check the new total before you approve."));
                           } finally {
                             // A refused choice keeps its basket; reload that same proposal after either answer.
                             approvals.reload();
@@ -200,20 +206,22 @@ function ApiApprovalsPage() {
                       }
                       editCount={editCounts[approval.orderId] ?? 0}
                       approvalBlockedReason={
-                        session && !session.canApprove ? "Your account cannot approve or reject orders." : undefined
+                        session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined
                       }
                       recalls={recallsFor(approval.orderId)}
                     />
                   ))}
                 </div>
               ) : (
-                <EmptyState title="Nothing waiting for you">No proposals are waiting for your approval.</EmptyState>
+                <EmptyState title={t("Nothing waiting for you")}>
+                  {t("No proposals are waiting for your approval.")}
+                </EmptyState>
               )}
             </section>
             {held.length > 0 ? (
               <section className="space-y-4" aria-labelledby="held-heading">
                 <h2 id="held-heading" className="text-lg font-semibold">
-                  Held by a recall ({held.length})
+                  {t("Held by a recall ({count})", { count: held.length })}
                 </h2>
                 <div className="space-y-4">
                   {held.map(({ approval, order }) => (
@@ -223,7 +231,7 @@ function ApiApprovalsPage() {
                       order={order ?? undefined}
                       onReject={reject}
                       approvalBlockedReason={
-                        session && !session.canApprove ? "Your account cannot approve or reject orders." : undefined
+                        session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined
                       }
                       recalls={recallsFor(approval.orderId)}
                     />
@@ -234,7 +242,7 @@ function ApiApprovalsPage() {
             {decided.length > 0 ? (
               <section className="space-y-4" aria-labelledby="decided-heading">
                 <h2 id="decided-heading" className="text-lg font-semibold">
-                  Decided
+                  {t("Decided")}
                 </h2>
                 <div className="space-y-4">
                   {decided.map(({ approval, order }) => (

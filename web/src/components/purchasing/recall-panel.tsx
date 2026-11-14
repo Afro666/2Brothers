@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/format";
+import { useT, type TranslationVariables } from "@/lib/i18n";
 import { TONE_CLASSES } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import type { RecallCheck } from "@/types";
@@ -19,8 +20,10 @@ export type RecallStatus =
   | { kind: "unknown"; message: string }
   | { kind: "ready"; affecting: number; lastCheck: RecallCheck | null };
 
-function plural(count: number) {
-  return count === 1 ? "1 recall affects your open order" : `${count} recalls affect your open orders`;
+function plural(count: number, t: (text: string, vars?: TranslationVariables) => string) {
+  return count === 1
+    ? t("1 recall affects your open order")
+    : t("{count} recalls affect your open orders", { count });
 }
 
 /**
@@ -36,6 +39,7 @@ export function RecallPanel({
   /** Absent when the gateway cannot run a check. */
   onCheck?: () => Promise<void>;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +47,7 @@ export function RecallPanel({
   if (status.kind === "unavailable") {
     return (
       <p className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.neutral)}>
-        Recall check is not available on this server yet. Recalls are not checked here.
+        {t("Recall check is not available on this server yet. Recalls are not checked here.")}
       </p>
     );
   }
@@ -55,7 +59,9 @@ export function RecallPanel({
     try {
       await onCheck();
     } catch (e) {
-      setError(`Recall check failed: ${e instanceof Error ? e.message : String(e)}. Recalls are unknown.`);
+      setError(t("Recall check failed: {message}. Recalls are unknown.", {
+        message: e instanceof Error ? e.message : String(e),
+      }));
     } finally {
       setBusy(false);
     }
@@ -67,23 +73,25 @@ export function RecallPanel({
   let headline: string;
   if (status.kind === "unknown") {
     tone = "warning";
-    headline = `Recalls unknown: ${status.message}`;
+    headline = t("Recalls unknown: {message}", { message: status.message });
   } else if (affecting && affecting > 0) {
     tone = "danger";
-    headline = plural(affecting);
+    headline = plural(affecting, t);
   } else if (last?.noticesUnread != null && last.noticesUnread > 0) {
     tone = "warning";
-    headline = `${last.noticesUnread} new ${last.noticesUnread === 1 ? "notice" : "notices"} not read yet`;
+    headline = last.noticesUnread === 1
+      ? t("1 new notice not read yet")
+      : t("{count} new notices not read yet", { count: last.noticesUnread });
   } else if (last) {
     tone = "success";
-    headline = "No recall matches your open orders.";
+    headline = t("No recall matches your open orders.");
   } else {
-    headline = "Recalls not checked yet.";
+    headline = t("Recalls not checked yet.");
   }
 
   return (
     <section
-      aria-label="Food recalls"
+      aria-label={t("Food recalls")}
       className={cn(
         "flex flex-col gap-3 rounded-lg border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between",
         TONE_CLASSES[tone],
@@ -96,24 +104,29 @@ export function RecallPanel({
         </p>
         {last ? (
           <p className="text-foreground">
-            Checked {last.noticesScanned ?? "an unknown number of"} Ruokavirasto notices, {formatDateTime(last.checkedAt)}.{" "}
+            {t("Checked {count} Ruokavirasto notices, {date}.", {
+              count: last.noticesScanned ?? t("an unknown number of"),
+              date: formatDateTime(last.checkedAt),
+            })}{" "}
             {last.source === "recording"
-              ? `From the recorded scrape of ${formatDateTime(last.fetchedAt)}, not a live one. ${
+              ? `${t("From the recorded scrape of {date}, not a live one.", { date: formatDateTime(last.fetchedAt) })} ${
                   last.liveError == null
-                    ? "Shown from the recording."
+                    ? t("Shown from the recording.")
                     : last.liveError === "NO_KEY"
-                      ? "Context.dev key is not set on this server."
+                      ? t("Context.dev key is not set on this server.")
                       : last.liveError === "TIMEOUT"
-                        ? "Context.dev was too slow."
-                        : "Context.dev could not be read."
+                        ? t("Context.dev was too slow.")
+                        : t("Context.dev could not be read.")
                 }`
-              : `Scraped live: ${last.noticesListed ?? "an unknown number of"} notices on the list.`}
+              : t("Scraped live: {count} notices on the list.", {
+                  count: last.noticesListed ?? t("an unknown number of"),
+                })}
           </p>
         ) : (
-          <p className="text-foreground">Food Authority recalls, matched to the lines on your open orders.</p>
+          <p className="text-foreground">{t("Food Authority recalls, matched to the lines on your open orders.")}</p>
         )}
         <p className="text-xs text-muted-foreground">
-          Powered by Context.dev <code>{last?.via.match(/\/v1\/web\/scrape/)?.[0] ?? "/v1/web/scrape"}</code>
+          {t("Powered by Context.dev")} <code>{last?.via.match(/\/v1\/web\/scrape/)?.[0] ?? "/v1/web/scrape"}</code>
         </p>
         {error ? (
           <p role="alert" className="text-danger">
@@ -124,7 +137,7 @@ export function RecallPanel({
       {onCheck ? (
         <Button type="button" variant="outline" className="shrink-0" disabled={busy} onClick={() => void check()}>
           <RefreshCw aria-hidden className={cn(busy && "animate-spin")} />
-          {busy ? "Checking recalls…" : "Check recalls now"}
+          {busy ? t("Checking recalls…") : t("Check recalls now")}
         </Button>
       ) : null}
     </section>

@@ -1,6 +1,7 @@
 import { AlarmClock, CalendarClock, CircleQuestionMark, Clock, Users, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import { TONE_CLASSES, type Tone } from "@/lib/tone";
 import type { Urgency } from "@/types";
 
@@ -56,12 +57,13 @@ export function compareUrgency(a: Urgency, b: Urgency): number {
 }
 
 export function UrgencyBadge({ urgency, className }: { urgency: Urgency; className?: string }) {
+  const t = useT();
   const meta = URGENCY_META[urgency];
   const Icon = meta.icon;
   return (
     <span
       data-urgency={urgency}
-      title={meta.meaning}
+      title={t(meta.meaning)}
       className={cn(
         "inline-flex w-fit shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap",
         TONE_CLASSES[meta.tone],
@@ -69,7 +71,7 @@ export function UrgencyBadge({ urgency, className }: { urgency: Urgency; classNa
       )}
     >
       <Icon className="size-3" aria-hidden />
-      {meta.label}
+      {t(meta.label)}
     </span>
   );
 }
