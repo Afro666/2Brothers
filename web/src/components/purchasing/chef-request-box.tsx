@@ -5,16 +5,33 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatDayAndDate } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import type { ChefRequest } from "@/types";
 
-/** Tomorrow in Helsinki, `YYYY-MM-DD`: "Needed by" starts with a day, so an example goes out in one press. */
-function tomorrow(): string {
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+
+/** A day in Helsinki `offset` days from today as `YYYY-MM-DD`; "tomorrow" is 1. */
+function helsinkiDay(offset: number): string {
   // The calendar day in Helsinki first, then one day on: adding 24 hours is wrong on the two clock-change nights.
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Helsinki" });
   const next = new Date(`${today}T12:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
+  next.setUTCDate(next.getUTCDate() + offset);
   return next.toISOString().slice(0, 10);
+}
+
+function tomorrow(): string {
+  return helsinkiDay(1);
+}
+
+/**
+ * The next `weekday`, always ahead of today and inside the week a chip says: a Sunday request
+ * moves the date from tomorrow to Monday 16 Nov, and a "Monday" chip on a Sunday means the next day, not eight days on.
+ */
+function nextWeekday(weekday: string): string {
+  const today = new Date(`${helsinkiDay(0)}T12:00:00Z`).getUTCDay();
+  const ahead = (WEEKDAYS.indexOf(weekday as (typeof WEEKDAYS)[number]) - today + 7) % 7;
+  return helsinkiDay(ahead === 0 ? 7 : ahead);
 }
 
 /**
@@ -95,7 +112,7 @@ export function ChefRequestBox({
           className="text-[17px] md:text-[17px]"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={t("1,000 L lactose-free milk by Monday")}
+          placeholder={t("Type what you need, or pick an example below")}
           rows={3}
         />
         <div role="group" aria-label={t("Examples")} className="flex flex-wrap gap-2">
@@ -111,6 +128,9 @@ export function ChefRequestBox({
               onClick={() => {
                 // The box gets the text the chip shows; the gateway parser reads Finnish too.
                 setText(t(example));
+                // The day the sentence names: the page and the request carry the same date.
+                const weekday = /for (\w+)$/.exec(example)?.[1] ?? /by (\w+)$/.exec(example)?.[1];
+                if (weekday) setDate(nextWeekday(weekday));
                 textRef.current?.focus();
               }}
             >
@@ -137,6 +157,7 @@ export function ChefRequestBox({
         <div className="space-y-2">
           <Label htmlFor={dateId} className="label-caps text-[11px] leading-4 font-semibold">{t("Needed by")}</Label>
           <Input id={dateId} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <p className="text-sm text-muted-foreground">{formatDayAndDate(date || null)}</p>
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">

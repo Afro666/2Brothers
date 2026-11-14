@@ -6,7 +6,7 @@ import { compareUrgency } from "@/components/purchasing/urgency-badge";
 
 import { updateLanguage } from "@/lib/i18n";
 
-import { formatAmount, formatEur, formatNumber, formatPack, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
+import { formatAmount, formatDayAndDate, formatEur, formatNumber, formatPack, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
 
 describe("stock sentinels", () => {
   it("treats both Valio sentinels and a missing value as unknown", () => {
@@ -107,6 +107,7 @@ describe("amounts for people", () => {
     expect(formatShortfall(41.41, "KG")).toBe("41.5 kg");
     expect(formatShortfall(41.4, "KG")).toBe("41.4 kg");
   });
+});
 
 describe("number format follows the language until the person picks one", () => {
   afterEach(() => {
@@ -155,4 +156,21 @@ describe("formatAmount at the edges", () => {
     expect(formatAmount(-0.04, "L")).toBe("> -0.1 L");
   });
 });
+
+describe("day and date", () => {
+  afterEach(() => {
+    updateLanguage("en", false);
+    loadAppearance();
+  });
+
+  it("names the weekday in words, so the date is clear whatever the browser's date field shows", () => {
+    expect(formatDayAndDate("2026-11-16")).toBe("Mon 16 Nov");
+    expect(formatDayAndDate(null)).toBe("unknown");
+  });
+
+  it("is the same in Finnish", () => {
+    loadAppearance();
+    updateLanguage("fi", false);
+    expect(formatDayAndDate("2026-11-16")).toBe("ma 16. marrask.");
+  });
 });
