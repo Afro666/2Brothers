@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
+import { DeliveryNotePhoto } from "@/components/purchasing/delivery-note-photo";
 import { OrderResolutionPanel } from "@/components/purchasing/order-resolution-panel";
 import { StatusBadge } from "@/components/purchasing/status-badge";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
@@ -162,6 +163,7 @@ export function OrderDetailPage() {
               </Tabs>
             </CardContent>
             </Card>
+            {state.data.status === "PLACED" ? <DeliveryNotePhoto key={state.data.id} order={state.data} /> : null}
           </>
         ) : null}
       </div>

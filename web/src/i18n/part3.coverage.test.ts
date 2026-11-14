@@ -23,6 +23,7 @@ const TRANSLATED_FILES = [
   "pages/suppliers.tsx",
   "pages/onboarding.tsx",
   "components/purchasing/shelf-photo-count.tsx",
+  "components/purchasing/delivery-note-photo.tsx",
   "components/purchasing/product-card.tsx",
   "components/purchasing/offer-compare.tsx",
   "components/purchasing/chips.tsx",
