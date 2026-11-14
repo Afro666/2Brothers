@@ -155,7 +155,9 @@ class BuyerWorker:
         finally:
             if model is not None:
                 emit(getattr(model, 'meter', None), run='buyer', status=status,
-                     thinking=getattr(model, 'thinking', None), max_tokens=getattr(model, 'max_tokens', None))
+                     strategy=self.strategy,
+                     thinking=False if self.strategy == 'single_pick' else getattr(model, 'thinking', None),
+                     max_tokens=512 if self.strategy == 'single_pick' else getattr(model, 'max_tokens', None))
                 await model.close()
 
 
