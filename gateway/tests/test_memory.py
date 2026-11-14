@@ -1,12 +1,20 @@
 """What a kitchen calls things: aliases a person sets, and unknown items it remembers."""
 
+import pytest
 from fastapi.testclient import TestClient
 
-from gateway import memory
+from gateway import catalog_search, memory
 from gateway.app import create_app
 from gateway.service import Gateway
 from gateway.tests.test_gateway_app import AGENT, HUMAN, K, NOW, env  # noqa: F401 (fixture)
 from gateway.valio_client import ValioClient
+
+
+@pytest.fixture(autouse=True)
+def _fresh_embedding_state():
+    catalog_search.reset()
+    yield
+    catalog_search.reset()
 
 
 def test_normalise_keeps_letters_of_any_language():
@@ -141,3 +149,29 @@ def test_a_failed_search_stores_nothing_and_the_next_call_fills_it(monkeypatch):
     rows = memory.list_unknown(db, "k", with_suggestions=True)
     assert rows[0]["suggestions"] == [{"product_id": "p1", "product_name": "Valio butter 500 g"}]
     assert db.unknown_items.find_one({"_id": "k:voi"})["suggestions"] == rows[0]["suggestions"]
+
+
+def test_after_a_failed_embedding_call_suggestions_use_words_until_the_cooldown_ends(monkeypatch):
+    import time
+    import mongomock
+    import store.search
+    db = mongomock.MongoClient(tz_aware=True)["t"]
+    db.products.insert_one({"_id": "p1", "names": {"en": "Valio butter 500 g"}})
+    calls = []
+
+    def fake(db, phrase, filters, limit, kitchen_id=None, hybrid=False, embedder=None):
+        calls.append(hybrid)
+        if hybrid:
+            raise RuntimeError("429 over the free tier")
+        return [{"product_id": "p1"}]
+    monkeypatch.setattr(store.search, "search_products", fake)
+    assert memory.suggest(db, "k", "voi")[1] == "words"
+    assert calls == [True, False]
+    calls.clear()
+    assert memory.suggest(db, "k", "maito")[1] == "words"
+    assert memory.suggest(db, "k", "kerma")[1] == "words"
+    assert calls == [False, False]                                   # no embedding call while resting
+    catalog_search._state["skip_until"] = time.monotonic() - 1       # the cooldown ends
+    calls.clear()
+    memory.suggest(db, "k", "juusto")
+    assert calls == [True, False]
