@@ -629,10 +629,13 @@ class Gateway:
                 "idempotency_key": body.get("idempotency_key")}
 
     def create_proposal(self, kitchen_id: str, body: dict, actor: str, *, auto_approve: bool = True,
-                        read: dict | None = None, plan_entries=None, menu_photo=None) -> dict:
+                        read: dict | None = None, plan_entries=None, menu_photo=None,
+                        needs: list[dict] | None = None) -> dict:
         """`auto_approve=False`: this proposal always waits for a person, whatever the kitchen's
         auto-approve rule says (a proposal made from a supplier's offer, #374).
-        `read`: what `_from_text` already made of this free text (`refuse_excluded`)."""
+        `read`: what `_from_text` already made of this free text (`refuse_excluded`).
+        `needs`: internal callers only (the recall replan, #1482): each line's own
+        `{product_id, quantity, unit}`, so a structured body is not sized as "N products"."""
         original_body = body
         planned = False
         if body.get("from") and body.get("to") and not body.get("product_ids") and not body.get("text"):
@@ -672,6 +675,8 @@ class Gateway:
         request["made_by"] = "menu_plan" if planned else ("parser" if parsed else "structured")
         if planned:
             request.update({key: body[key] for key in ("needs", "window", "problems")})
+        elif needs:
+            request["needs"] = needs
         if parsed and body.get("query"):
             request["query"] = body["query"]
         if parsed and body.get("refusal"):
@@ -698,7 +703,7 @@ class Gateway:
             self.db.proposals.insert_one(doc)
         except DuplicateKeyError:
             return self.create_proposal(kitchen_id, original_body, actor, auto_approve=auto_approve, read=read,
-                                         plan_entries=plan_entries, menu_photo=menu_photo)
+                                         plan_entries=plan_entries, menu_photo=menu_photo, needs=needs)
         if sim["lines"]:
             approval, _ = orders.request_approval(
                 self.db, kitchen_id=kitchen_id, idempotency_key=f"proposal:{doc['_id']}",
