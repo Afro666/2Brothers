@@ -156,3 +156,45 @@ def test_a_proposal_made_through_the_buyer_tools_gets_the_option_too(env):
     assert [(ln["product_id"], ln["quantity"]) for ln in option["lines"]] == [("462775", "51")]
     chosen = choose(client, p, option["offer_id"]).json()
     assert approve(client, chosen).status_code == 200
+
+
+def buyer_proposal(client, product_ids, quantity="1000", text="1000 L lactose-free milk by Monday"):
+    """A proposal made the way the Nemotron Buyer makes one: need, offer, request_approval."""
+    need = client.post(K + "/needs", headers=AGENT, json={
+        "quantity": quantity, "unit": "L", "requested_date": "2026-11-16", "text": text}).json()
+    offer = client.post("/tools/get_offer", headers=AGENT,
+                        json={"need_id": need["need_id"], "product_ids": product_ids}).json()
+    asked = client.post("/tools/request_approval", headers=AGENT,
+                        json={"offer_id": offer["offer_id"], "idempotency_key": f"buyer-{quantity}-{len(product_ids)}"})
+    assert asked.status_code == 200, asked.text
+    return client.get(f"{K}/proposals/{asked.json()['proposal_id']}", headers=HUMAN).json()
+
+
+def test_confirmed_stock_from_the_catalog_when_the_buyers_basket_has_none(env):
+    """Live 2026-11-14: the Buyer once chose a single product whose stock Valio does not
+    report, for all 1,000 L. Its basket had no confirmed part, so nothing could be approved,
+    although the catalog had confirmed stock of another lactose-free milk."""
+    client, _, _ = env
+    p = buyer_proposal(client, ["463335"])                       # stock unknown, 1000 L
+    assert [(ln["product_id"], ln["unknown_stock"]) for ln in p["lines"]] == [("463335", True)]
+    option = confirmed(p)
+    assert [(ln["product_id"], ln["quantity"]) for ln in option["lines"]] == [("462775", "51")]
+    assert option["held"] == {"quantity": "949", "unit": "L"}
+    assert "found in the catalog" in option["why"]
+    chosen = choose(client, p, option["offer_id"]).json()
+    assert approve(client, chosen).status_code == 200
+
+
+def test_a_small_need_gets_a_fully_confirmed_basket_from_the_catalog(env):
+    client, _, _ = env
+    p = buyer_proposal(client, ["463335"], quantity="40")       # the Buyer picked unknown stock
+    option = confirmed(p)
+    assert [(ln["product_id"], ln["quantity"]) for ln in option["lines"]] == [("462775", "40")]
+    assert "held" not in option                                   # the whole need is covered
+    assert "40 L" in option["why"] and option["stock_confirmed"] is True
+
+
+def test_no_text_means_no_catalog_search(env):
+    client, _, _ = env
+    p = buyer_proposal(client, ["463335"], text="")
+    assert p["substitute_options"] == []
