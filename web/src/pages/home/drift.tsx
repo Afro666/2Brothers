@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
 import type { DriftReport, DriftWarning } from "@/types";
 
+import { AtlasMark } from "@/components/atlas-mark";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
@@ -105,7 +106,17 @@ function DriftTileBody({
       ? ` · ${t("week of {date}", { date: formatDate(state.data.week) })}`
       : "";
   return (
-    <Tile title={`${t(title)}${week}`} href={href} linkLabel={t(linkLabel)}>
+    <Tile
+      title={`${t(title)}${week}`}
+      href={href}
+      linkLabel={t(linkLabel)}
+      mark={
+        <AtlasMark
+          of={side === "kitchen" ? "getDrift" : "getSupplierDrift"}
+          what="Worked out by an aggregation in MongoDB Atlas over the order history."
+        />
+      }
+    >
       <SampleData of={side === "kitchen" ? "getDrift" : "getSupplierDrift"} />
       <TileState<DriftReport>
         status={state.status}

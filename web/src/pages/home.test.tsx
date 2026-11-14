@@ -2,6 +2,7 @@ import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { createMockApi } from "@/api/mock";
+import type { Api } from "@/api/types";
 import type { Supplier } from "@/types";
 import { renderApp } from "@/test/render";
 import { nextCutoff } from "@/pages/home/cutoff";
@@ -44,6 +45,16 @@ describe("HomePage", () => {
       false,
       true,
     ]);
+    // The mock is not Atlas, so nothing on the page says it is.
+    expect(screen.queryByTestId("atlas-mark")).not.toBeInTheDocument();
+  });
+
+  it.each<keyof Api>(["listAudit", "getDrift"])("marks only the tile fed by %s as MongoDB Atlas", async (method) => {
+    const api = Object.assign(createMockApi(), { live: new Set<keyof Api>([method]) });
+    renderApp(`/?now=${DEMO_NOW}`, api);
+    expect(await screen.findByText("Latest steps")).toBeInTheDocument();
+    expect(screen.getAllByTestId("atlas-mark")).toHaveLength(1);
+    expect(screen.getByTestId("atlas-mark")).toHaveTextContent("MongoDB Atlas");
   });
 
   it("shows Valio risk counts and demand navigation for a Valio planner", async () => {

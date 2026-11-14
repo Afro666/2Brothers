@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import type { Api } from "@/api/types";
 import type { ApprovalRequest, AuditEvent, DemandLine, StockItem, Supplier } from "@/types";
 
+import { AtlasMark } from "@/components/atlas-mark";
 import { DecisionStrip } from "@/components/purchasing/decision-strip";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
@@ -163,7 +164,12 @@ export function AuditTile({ api }: { api: Api }) {
   const t = useT();
   const state = useAsync(() => api.listAudit(), [api], { keep: "audit" });
   return (
-    <Tile title={t("Latest steps")} href="/audit" linkLabel={t("Open activity log")}>
+    <Tile
+      title={t("Latest steps")}
+      href="/audit"
+      linkLabel={t("Open activity log")}
+      mark={<AtlasMark of="listAudit" what="The activity log is stored in MongoDB Atlas and read from it." />}
+    >
       <TileState
         status={state.status}
         error={state.error}

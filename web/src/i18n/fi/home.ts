@@ -7,6 +7,8 @@ export default {
   "You": "Sinä",
   "approve the exact total": "hyväksyt tarkan summan",
   "nothing is sent before that": "mitään ei lähetetä ennen sitä",
+  "The activity log is stored in MongoDB Atlas and read from it.": "Toimintaloki tallennetaan MongoDB Atlakseen ja luetaan sieltä.",
+  "Worked out by an aggregation in MongoDB Atlas over the order history.": "Laskettu MongoDB Atlaksen aggregaatiolla tilaushistoriasta.",
   "What needs you today.": "Nämä tarvitsevat sinua tänään.",
   "Where demand may outrun supply.": "Kun kysyntä voi ylittää saatavuuden.",
   "Waiting for your approval": "Odottaa hyväksyntääsi",

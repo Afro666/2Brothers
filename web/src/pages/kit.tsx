@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 
 import { AppShell, NAV_ITEMS } from "@/components/purchasing/app-shell";
+import { AtlasMarkLabel } from "@/components/atlas-mark";
 import { DecisionStrip } from "@/components/purchasing/decision-strip";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
@@ -184,6 +185,10 @@ export function KitPage() {
 
         <Section id="decision" title="DecisionStrip" usedIn="Home: under the approval docket">
           <DecisionStrip />
+        </Section>
+
+        <Section id="atlas" title="AtlasMark" usedIn="Home: tiles whose data the gateway reads from MongoDB Atlas">
+          <AtlasMarkLabel meaning="The activity log is stored in MongoDB Atlas and read from it." />
         </Section>
 
         <Section id="states" title="Shared states" usedIn="Every screen while data loads, is empty, or fails">
