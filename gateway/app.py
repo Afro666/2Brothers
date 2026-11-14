@@ -285,6 +285,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     # ---- API tokens (#271): a person creates and revokes them; tokens never approve ----
     @app.post(k + "/tokens")
     async def create_token(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can create a token")
@@ -299,6 +300,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.get(k + "/tokens")
     def list_tokens(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can list tokens")
@@ -306,6 +308,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.delete(k + "/tokens/{token_id}")
     def revoke_token(kitchen_id: str, token_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can revoke a token")
