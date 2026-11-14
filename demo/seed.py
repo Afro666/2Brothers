@@ -116,7 +116,7 @@ def build(seed: int, today: date, future_weeks: int, kitchens: int = 20,
                         "kitchen_id": kid, "product_id": pid, "date": target.isoformat(), "need": need,
                         "unit": unit, "method": "engine", "made_on": day.isoformat(),
                         "why": f"{round(covers)} covers forecast ({engine.name}) x menu recipe quantity"})
-                    if target < today:
+                    if target < today and baseline.has_history(pid, target):
                         out["baseline"].append({
                             "kitchen_id": kid, "product_id": pid, "date": target.isoformat(),
                             "need": round(baseline.use(pid, target), 3), "unit": unit,

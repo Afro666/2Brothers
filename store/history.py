@@ -162,18 +162,53 @@ def forecast_vs_actual(db, kitchen_id: str, start, end, collection: str = "forec
     """(product_id, day, predicted, actual) for days that have both a forecast and a count.
 
     Actual demand is used + short (what the kitchen needed, also during a stock-out).
+    The weekday baseline must have observed the product on that weekday before its
+    forecast origin. This also removes warm-up placeholders in legacy seeded data.
     """
     if collection not in ("forecasts", "forecast_baseline"):
         raise ValueError("collection must be forecasts or forecast_baseline")
     window = {"meta.kitchen_id": kitchen_id, "ts": {"$gte": _day(start), "$lte": _day(end, end=True)}}
+    forecasts = list(db[collection].find(window))
+    if collection == 'forecast_baseline':
+        forecasts = _with_weekday_history(db, kitchen_id, forecasts)
     predicted = {(d["meta"]["product_id"], d["ts"].date()): float(str(d["need"]))
-                 for d in db[collection].find(window)}
+                 for d in forecasts}
     out = []
     for d in db.kitchen_stock.find({**window, "used": {"$exists": True, "$ne": None}}):
         key = (d["meta"]["product_id"], d["ts"].date())
         if key in predicted:
             out.append((key[0], key[1], predicted[key], float(d["used"]) + float(d.get("short") or 0)))
     return out
+
+
+def _with_weekday_history(db, kitchen_id: str, forecasts: list[dict]) -> list[dict]:
+    """Keep baseline rows with actual history available at issuance, not at the target.
+
+    Older rows without made_on use the documented Monday origin. Training history
+    is read independently of the requested display window, and never across kitchens.
+    """
+    dated = []
+    for row in forecasts:
+        day = row['ts'].date()
+        try:
+            origin = date.fromisoformat(row['made_on']) if row.get('made_on') else day - timedelta(days=day.weekday())
+        except (TypeError, ValueError):
+            continue  # an invalid origin cannot establish point-in-time eligibility
+        if origin <= day:
+            dated.append((row, origin))
+    if not dated:
+        return []
+    first = {}
+    match = {'meta.kitchen_id': kitchen_id,
+             'meta.product_id': {'$in': list({r['meta']['product_id'] for r, _ in dated})},
+             'ts': {'$lt': _day(max(origin for _, origin in dated))},
+             'used': {'$exists': True, '$ne': None}}
+    for row in db.kitchen_stock.find(match, {'meta.product_id': 1, 'ts': 1}):
+        day = row['ts'].date()
+        key = (row['meta']['product_id'], day.weekday())
+        first[key] = min(first.get(key, day), day)
+    return [row for row, origin in dated
+            if first.get((row['meta']['product_id'], row['ts'].weekday()), origin) < origin]
 
 
 def _day(value, end: bool = False) -> datetime:

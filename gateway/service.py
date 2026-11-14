@@ -1254,8 +1254,15 @@ class Gateway:
         if d1 < d0 or (d1 - d0).days > 400:
             raise GatewayError(422, "INVALID_REQUEST", "from must be before to, at most 400 days")
         out = {"kitchen_id": kitchen_id, "from": start, "to": end, "methods": {}}
+        compared = {}
         for method, collection in (("engine", "forecasts"), ("weekday-average", "forecast_baseline")):
-            pairs = forecast_vs_actual(self.db, kitchen_id, d0, d1, collection)
+            compared[method] = forecast_vs_actual(self.db, kitchen_id, d0, d1, collection)
+        # Compare identical product/day observations, so missing baseline history
+        # cannot inflate its error or give either method a different evaluation set.
+        common = set.intersection(*({(pid, day) for pid, day, _, _ in pairs}
+                                    for pairs in compared.values()))
+        for method, candidates in compared.items():
+            pairs = [row for row in candidates if (row[0], row[1]) in common]
             out["methods"][method] = {"total": accuracy(pairs), "weeks": accuracy_by_week(pairs)}
         return out
 
