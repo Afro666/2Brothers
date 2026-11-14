@@ -3,13 +3,14 @@ import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { useApi } from "@/api";
-import type { MatchedBy, ProductSearchFilters, ProductTemperature } from "@/api/types";
+import type { MatchedBy, ProductSearchFilters, ProductTemperature, SearchedProduct } from "@/api/types";
 import { AppShell } from "@/components/purchasing/app-shell";
-import { LABEL_META } from "@/components/purchasing/chips";
+import { AllergenUnknownChip, LABEL_META } from "@/components/purchasing/chips";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { ProductCard } from "@/components/purchasing/product-card";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,7 +18,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EU_ALLERGENS } from "@/lib/allergens";
+import { formatEur, formatPack } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { PHONE_QUERY, useMediaQuery } from "@/lib/use-media-query";
 import type { ProductLabel } from "@/types";
 
 export const ALLERGENS = [...EU_ALLERGENS, { code: "ML", name: "Lactose" }] as const;
@@ -126,6 +129,10 @@ export function CatalogPage() {
   const [query, setQuery] = useState(search.q);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(RESULTS_PER_PAGE);
+  const phone = useMediaQuery(PHONE_QUERY);
+  const resultList = useRef<HTMLUListElement>(null);
+  /** The index of the first product the last "Show more" added; null before one. */
+  const [focusFrom, setFocusFrom] = useState<number | null>(null);
   // A click and a navigation render later, so chained toggles read the latest params here.
   const latest = useRef(search);
   latest.current = search;
@@ -192,7 +199,14 @@ export function CatalogPage() {
   const active = latest.current;
   const excluding = active.exclude.length > 0;
   const results = currentResult.status === "ready" ? (currentResult.data ?? []) : [];
-  useEffect(() => setVisibleCount(RESULTS_PER_PAGE), [searchKey]);
+  useEffect(() => {
+    setVisibleCount(RESULTS_PER_PAGE);
+    setFocusFrom(null);
+  }, [searchKey]);
+  // "Show more" takes focus to the first product it added, where reading goes on.
+  useEffect(() => {
+    if (focusFrom != null) resultList.current?.children[focusFrom]?.querySelector<HTMLElement>("button, a")?.focus();
+  }, [focusFrom]);
   const withoutData = excluding && !active.strict ? results.filter((product) => product.allergens === null).length : 0;
   const unfiltered = !active.q.trim() && !excluding && active.labels.length === 0 && !active.temp;
 
@@ -330,18 +344,34 @@ export function CatalogPage() {
                 </p>
               ) : null}
             </div>
-            <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {results.slice(0, visibleCount).map((product) => (
-                <li key={product.id} className="space-y-1 tabular-nums">
-                  {active.meaning && product.matchedBy ? (
-                    <Badge variant="outline">{t(MATCHED_BY_LABELS[product.matchedBy])}</Badge>
-                  ) : null}
-                  <ProductCard product={product} />
-                </li>
-              ))}
+            {/* A phone gets one compact row per product, with the card behind a tap (#1142). */}
+            <ul
+              ref={resultList}
+              data-catalog-results
+              className={phone ? "divide-y border-y" : "grid gap-3 md:grid-cols-2 lg:grid-cols-3"}
+            >
+              {results.slice(0, visibleCount).map((product) => {
+                const mark = active.meaning && product.matchedBy ? t(MATCHED_BY_LABELS[product.matchedBy]) : null;
+                return phone ? (
+                  <CompactResult key={product.id} product={product} mark={mark} />
+                ) : (
+                  <li key={product.id} className="space-y-1 tabular-nums">
+                    {mark ? <Badge variant="outline">{mark}</Badge> : null}
+                    <ProductCard product={product} />
+                  </li>
+                );
+              })}
             </ul>
             {results.length > visibleCount ? (
-              <Button variant="outline" className="w-full" onClick={() => setVisibleCount((count) => count + RESULTS_PER_PAGE)}>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full"
+                onClick={() => {
+                  setFocusFrom(visibleCount);
+                  setVisibleCount((count) => count + RESULTS_PER_PAGE);
+                }}
+              >
                 {t("Show more ({count} more)", { count: results.length - visibleCount })}
               </Button>
             ) : null}
@@ -349,6 +379,54 @@ export function CatalogPage() {
         ) : null}
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * One product on a phone: name, code and pack, a price when the row has one, how it was
+ * found, and missing allergen data. The full card opens on a tap.
+ */
+function CompactResult({ product, mark }: { product: SearchedProduct; mark: string | null }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="tabular-nums">
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-auto min-h-11 w-full justify-start gap-3 px-1 py-2 text-left font-normal whitespace-normal"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ProductThumb en={product.names.en} fi={product.names.fi} brand={product.brand} size="sm" />
+        <span className="block min-w-0 flex-1 space-y-1">
+          <span className="block font-medium break-words">{product.names.en}</span>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              {product.id} · {formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit)}
+            </span>
+            {/* Only the kitchen's own products carry a price in a search row; a supplier's comes with the offer. */}
+            {product.priceExVat != null ? (
+              <span className="font-medium text-foreground">
+                {t("{price} per {unit} ex VAT", { price: formatEur(product.priceExVat), unit: product.salesUnit })}
+              </span>
+            ) : null}
+            {mark ? <Badge variant="outline">{mark}</Badge> : null}
+            {/* Missing allergen data is a risk, so the closed row says it too. */}
+            {product.allergens == null ? <AllergenUnknownChip /> : null}
+          </span>
+        </span>
+        <ChevronDown
+          className={`size-4 text-muted-foreground transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </Button>
+      {open ? (
+        <div className="pb-3">
+          <ProductCard product={product} />
+        </div>
+      ) : null}
+    </li>
   );
 }
 

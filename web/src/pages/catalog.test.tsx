@@ -1,8 +1,8 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "@/api";
+import { ApiError, type Api } from "@/api";
 import { createMockApi } from "@/api/mock";
 import { products as sampleProducts } from "@/mocks/milk-case";
 import { renderApp } from "@/test/render";
@@ -370,5 +370,158 @@ describe("catalog page", () => {
       await screen.findByText("5 products");
       expect(screen.queryByRole("checkbox", { name: "Search by meaning (Atlas Vector Search)" })).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("catalog page: a short result list on a phone (#1142)", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => vi.unstubAllGlobals());
+
+  const SAMPLE = Object.values(sampleProducts);
+
+  /** `count` products named "Product 01" …; the first has no allergen data, the second is an own product. */
+  function manyProducts(count: number) {
+    const api: Api = Object.assign(createMockApi(), { live: new Set(["searchProducts" as const]) });
+    api.searchProducts = async (_query, filters = {}) =>
+      Array.from({ length: count }, (_, index) => ({
+        ...SAMPLE[index % SAMPLE.length],
+        id: `9${String(index + 1).padStart(5, "0")}`,
+        names: { en: `Product ${String(index + 1).padStart(2, "0")}` },
+        salesUnit: "KI",
+        baseUnit: "L",
+        baseUnitsPerSalesUnit: 10,
+        allergens: index === 0 ? null : [],
+        ...(index === 1 ? { priceExVat: 12.5 } : {}),
+        ...(filters.byMeaning ? { matchedBy: index === 0 ? ("meaning" as const) : ("words" as const) } : {}),
+      }));
+    return api;
+  }
+
+  /** A phone: the `max-width` query matches; every other media query does not. */
+  function onAPhone() {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("max-width"),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+  }
+
+  function resultItems(): HTMLElement[] {
+    return [...document.querySelectorAll<HTMLElement>("ul[data-catalog-results] > li")];
+  }
+
+  it("moves focus to the first product that Show more adds, also in the next search", async () => {
+    const user = userEvent.setup();
+    renderApp("/catalog?q=milk", manyProducts(30));
+
+    expect(await screen.findByText("30 products")).toBeInTheDocument();
+    expect(resultItems()).toHaveLength(12);
+
+    await user.click(screen.getByRole("button", { name: "Show more (18 more)" }));
+    expect(resultItems()).toHaveLength(24);
+    expect(resultItems()[12]).toHaveTextContent("Product 13");
+    expect(resultItems()[12]).toContainElement(document.activeElement as HTMLElement);
+
+    await user.clear(screen.getByRole("searchbox"));
+    await user.type(screen.getByRole("searchbox"), "butter{Enter}");
+    await waitFor(() => expect(resultItems()).toHaveLength(12));
+    // The same step in the new search moves focus again.
+    await user.click(screen.getByRole("button", { name: "Show more (18 more)" }));
+    expect(resultItems()[12]).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it("keeps the full cards at desktop width", async () => {
+    renderApp("/catalog?q=milk", manyProducts(3));
+
+    await screen.findByText("3 products");
+    expect(resultItems()).toHaveLength(3);
+    expect(screen.getAllByText("CO2 per kg")).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /Product 01/ })).not.toBeInTheDocument();
+  });
+
+  it("shows a compact row on a phone: name, code, pack and a known price; the card opens on a tap", async () => {
+    onAPhone();
+    const user = userEvent.setup();
+    renderApp("/catalog?q=milk", manyProducts(3));
+    await screen.findByText("3 products");
+
+    const [first, second, third] = resultItems();
+    const toggle = within(second).getByRole("button", { name: /Product 02/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveTextContent("900002");
+    expect(toggle).toHaveTextContent("1 case = 10 l");
+    expect(toggle).toHaveTextContent(/12[.,]50.* per KI ex VAT/);
+    // A supplier's search row has no price: the closed row shows none, the card says where it comes from.
+    expect(within(third).getByRole("button", { name: /Product 03/ })).not.toHaveTextContent("ex VAT");
+    // Missing allergen data is a risk: it shows on the closed row too.
+    expect(within(first).getByRole("button", { name: /Product 01/ })).toHaveTextContent("Allergen data missing: unknown");
+    expect(toggle).not.toHaveTextContent("Allergen data missing");
+    expect(screen.queryByText("CO2 per kg")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(second).getByText("CO2 per kg")).toBeInTheDocument();
+    expect(within(second).getByText("No allergens declared")).toBeInTheDocument();
+    expect(within(second).getByRole("link", { name: /Suppliers, VAT and stock/ })).toHaveAttribute(
+      "href",
+      "/catalog/900002",
+    );
+    expect(screen.getAllByText("CO2 per kg")).toHaveLength(1);
+
+    await user.click(within(third).getByRole("button", { name: /Product 03/ }));
+    expect(within(third).getByText("Live price and stock come with the offer")).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(within(second).queryByText("CO2 per kg")).not.toBeInTheDocument();
+  });
+
+  it("shows twelve compact rows and Show more on a phone", async () => {
+    onAPhone();
+    const user = userEvent.setup();
+    renderApp("/catalog?q=milk", manyProducts(30));
+    await screen.findByText("30 products");
+
+    expect(resultItems()).toHaveLength(12);
+    await user.click(screen.getByRole("button", { name: "Show more (18 more)" }));
+    expect(resultItems()).toHaveLength(24);
+    expect(within(resultItems()[12]).getByRole("button", { name: /Product 13/ })).toHaveFocus();
+  });
+
+  it("keeps the meaning switch, the Atlas badge and the row marks on a phone (#1448)", async () => {
+    onAPhone();
+    const user = userEvent.setup();
+    renderApp("/catalog?q=milk", manyProducts(3));
+    await screen.findByText("3 products");
+
+    expect(screen.getByText("Atlas Search")).toBeInTheDocument();
+    expect(screen.queryByText("By meaning")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Search by meaning (Atlas Vector Search)" }));
+
+    await waitFor(() => expect(screen.getAllByText("By words")).toHaveLength(2));
+    const [first] = resultItems();
+    expect(within(first).getByRole("button", { name: /Product 01/ })).toHaveTextContent("By meaning");
+  });
+
+  it("keeps the fallback line and the marks on a phone when meaning is not available", async () => {
+    onAPhone();
+    const api = manyProducts(3);
+    const search = api.searchProducts;
+    api.searchProducts = async (query, filters) =>
+      Object.assign(
+        (await search(query, filters)).map((row) => ({ ...row, matchedBy: "words" as const })),
+        { meaningUnavailable: true as const },
+      );
+    renderApp("/catalog?q=milk&meaning=true", api);
+
+    const rows = await waitFor(() => {
+      expect(resultItems()).toHaveLength(3);
+      return resultItems();
+    });
+    expect(
+      screen.getByText("Search by meaning is not available right now. These products match by words."),
+    ).toBeInTheDocument();
+    for (const row of rows) expect(within(row).getByRole("button", { expanded: false })).toHaveTextContent("By words");
   });
 });
