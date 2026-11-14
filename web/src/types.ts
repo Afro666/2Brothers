@@ -157,6 +157,8 @@ export interface Order {
    * No person approved such an order, so it has no receipt.
    */
   placedBy?: "demo-seed";
+  /** A placed order read without its proposal: the before-the-order facts (offer details, why) are not known. */
+  withoutProposal?: true;
   /** What the person asked for (the proposal's request text); null or absent when not known. */
   requestText?: string | null;
   /** When the order was placed (the order's `created_at`); null or absent when not known. */

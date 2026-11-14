@@ -352,6 +352,7 @@ export default {
   "This order is blocked by a recall. Reject it and approve the replacement order instead": "Takaisinveto estää tämän tilauksen. Hylkää se ja hyväksy sen sijaan korvaava tilaus",
   "This order is no longer waiting for resolution. Reloading the latest details.": "Tämä tilaus ei enää odota selvitystä. Ladataan uusimmat tiedot.",
   "This order is not placed yet: a human must approve it first.": "Tätä tilausta ei ole vielä tehty: ihmisen on hyväksyttävä se ensin.",
+  "This order was recorded without its proposal, so the offer details are not shown.": "Tämä tilaus tallennettiin ilman ehdotustaan, joten tarjouksen tietoja ei näytetä.",
   "This order will not be sent. Your reason goes in the audit log.": "Tätä tilausta ei lähetetä. Syy tallennetaan toimintolokiin.",
   "This proposal could not be found in this kitchen. The current basket is unchanged. Nothing was approved.": "Ehdotusta ei löytynyt tästä keittiöstä. Nykyinen kori on ennallaan. Mitään ei hyväksytty.",
   "This proposal is no longer waiting for approval. Its current status is being reloaded. Nothing was changed or approved by this choice.": "Tämä ehdotus ei enää odota hyväksyntää. Sen nykyinen tila ladataan uudelleen. Tämä valinta ei muuttanut tai hyväksynyt mitään.",
@@ -549,4 +550,5 @@ export default {
   "A person checks whether this notice is about your product.": "Ihminen tarkistaa, koskeeko ilmoitus tuotettasi.",
   "Asked: “{text}”": "Pyydetty: ”{text}”",
   "Ordered {time}": "Tilattu {time}",
+  "not recorded": "ei tallennettu",
 } satisfies Record<string, string>;
