@@ -843,6 +843,8 @@ is written to audit. The signed offer and receipt remain authoritative.
      of `completion_tokens`. A run that was started again counts both attempts. The
      field is missing when the model client has no meter.
 
+   The answer also has `model_trace` (what the model did, see "What the model did"
+   below). Unlike the three fields above, a later `GET /proposals/{id}` has it too.
    A replay with the same key returns the same answer, with the same three fields.
    The sum over a kitchen's runs is under "Model usage".
 2. The deterministic parser (`gateway/parse.py`), only when the worker is not
@@ -926,6 +928,81 @@ supplier `blocks`, one approval, signed) with these additions:
 Recall holds and the kitchen's `excluded_allergens` apply per product, as for any quote.
 Approve, reject, the live re-check (`TOTAL_MISMATCH`) and signing work as for any proposal.
 Earned auto-approve never applies while any line has unknown stock or a shortfall.
+
+### What the model did: `model_trace` (#1197)
+
+A proposal the Buyer made and an offer Valio's selling agent made carry `model_trace`:
+what the model did, in counts and codes. The web shows it as a folded panel, "What
+Nemotron did". It shows which work the model did (it chose the tools and the products)
+and which work it did not do (the engine sets every quantity and price; a person
+approves).
+
+```json
+{"model_trace": {
+  "made_by": "model", "reader": "buyer", "model": "nemotron-3.5-super-vl", "thinking": false,
+  "calls": 4, "failed": 0, "prompt_tokens": 23110, "completion_tokens": 910,
+  "reasoning_tokens": 0, "seconds": 6.214, "attempts": 1, "truncated": false,
+  "steps": [
+    {"by": "model", "attempt": 1, "tool": "search_products", "query": "lactose free milk", "count": 12},
+    {"by": "model", "attempt": 1, "tool": "get_offer", "products": 3, "count": 3},
+    {"by": "model", "attempt": 1, "tool": "simulate_order", "count": 3, "code": "NEEDS_APPROVAL"},
+    {"by": "model", "attempt": 1, "tool": "request_approval", "code": "PENDING"}]}}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `made_by` | `model` or `rule` | `model`: Nemotron chose the products and the tool calls. `rule`: code chose (the gateway's parser, or the selling agent run with `--no-model`). |
+| `reader` | `buyer`, `parser` or `seller` | Who read the request: the Buyer worker, the gateway's parser (`gateway/parse.py`), or Valio's selling agent (`agent/seller.py`). |
+| `model` | string or `null` | The model name, `"nemotron-3.5-super-vl"`. `null` when no model ran. |
+| `thinking` | boolean or `null` | Thinking on or off for the model calls. `null` when no model ran. |
+| `calls`, `failed` | integer | Model calls, and the calls of those that failed. |
+| `prompt_tokens`, `completion_tokens`, `reasoning_tokens` | integer | As in `buyer_usage`; `reasoning_tokens` is a part of `completion_tokens`. |
+| `seconds` | number | Time in model calls, at most 3 decimals. |
+| `attempts` | integer | Buyer runs for this request: 1, or 2 when a run that wrote nothing was started again (#735). 1 for the seller, 0 for the parser. |
+| `steps` | array | In order, at most 40 (`truncated: true` when more were cut). Empty when no model ran. |
+| `truncated` | boolean | Steps were cut at 40. |
+
+Every count is 0 and `seconds` is 0 when no model ran. All counts come from the
+endpoint's own `usage` (`agent/usage.py`), both attempts together.
+
+One step:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `by` | `model` or `code` | `model`: the model asked for this step. `code`: the runner or agent did it itself (the substitute reads after a short simulation, the seller's shortlist, a rule pick). |
+| `attempt` | integer | 1 or 2. |
+| `tool` | string | One of the seven Buyer tools (`search_products`, `get_offer`, `simulate_order`, `request_approval`, `place_order`, `get_order_status`, `get_audit_log`); `invalid` for a call the policy could not read; for the seller, `shortlist` (code) and `pick`. |
+| `query` | string, optional | `search_products` only: the search words, only letters, digits, spaces and `-`, at most 60 characters. |
+| `products` | integer, optional | `get_offer` only: how many products were asked for. |
+| `count` | integer, optional | How many rows came back: products found (after the allergen rule), offer lines, simulated lines, shortlist entries. |
+| `code` | string, optional | A code, never text: the mandate verdict (`NEEDS_APPROVAL`, `REFUSED`), the approval status (`PENDING`), the order outcome, a policy reason code (`SCHEMA_INVALID`, `UNKNOWN_ID`, `NEED_MISMATCH`, ...), `TOOL_FAILED`, or `PICKED` for the seller's pick. |
+
+**Never in it:** a key or token, the system prompt, any text the model wrote (its
+reply, its reasons, the seller's `reason`), prices, quantities, other kitchens' data
+(the seller's shortlist facts such as the demand of all kitchens stay out). The search
+words are the one exception to "no model text": cleaned as above, and shown only to the
+kitchen that asked.
+
+**Where it is.**
+
+- `POST /proposals`, the Buyer's answer: `model_trace` with `reader: buyer`. It is
+  stored with the run (`db.agent_runs`, `result.model_trace`, through
+  `store/agent_runs.py`), so a replay answers the same trace.
+- `GET /proposals` and `GET /proposals/{id}`: a proposal the Buyer made carries the
+  trace of its run. A proposal the parser made (`request.made_by: parser`) carries
+  `{"made_by": "rule", "reader": "parser", "model": null, "thinking": null, ...0,
+  "attempts": 0, "steps": []}`: the panel says the parser answered and shows no model
+  steps. Every other proposal (structured, menu plan, an accepted offer) has
+  `model_trace: null`.
+- Supplier offers: an optional `model_trace` in the `POST /offers` body, with
+  `reader: seller`, is checked, stored on the offer and returned in the offer shape
+  (`null` when none was sent). See "Supplier offers".
+- A trace from before #1197 does not exist: such a proposal has `model_trace: null`.
+  The web then shows no panel.
+
+The web: one folded line ("4 model calls, 6.2 s, thinking off"), unfolded the steps as
+a short list, and the last line "Quantities and prices: the engine. Approval: you."
+Strings go through the web's i18n (English and Finnish).
 
 ### Addable products
 
@@ -1548,6 +1625,7 @@ offers and stops accepting the open ones.
 | `reason` | string | Plain text, at most 300 characters. Control characters are removed. |
 | `made_by` | string | Who chose the product: a model name, `rule` or a person. At most 100 characters. |
 | `idempotency_key` | string | Scoped to the supplier. |
+| `model_trace` | object, optional | What the selling agent's model did (#1197), in the shape of "What the model did", with `reader: seller`. The gateway keeps only the fields that shape names; a wrong type, more than 40 steps, a `query` on a seller step, or a `made_by` that disagrees with the offer's `made_by` (`rule` against anything else) is 422 `INVALID_REQUEST`. It is not part of the idempotency payload. It is the supplier's account of its own agent: shown to a person as that, never read as a price, a quantity or a reason. |
 
 There is no price and no quantity in the body. The gateway takes the quantity and the unit
 from the kitchen's own forecast: its `demand` for `replaces_product_id` on that date, in
@@ -1575,9 +1653,17 @@ The answer is the stored offer:
   "proposal_id": null,
   "decided_by": null,
   "decided_at": null,
-  "allergen_data_known": true
+  "allergen_data_known": true,
+  "model_trace": {"made_by": "model", "reader": "seller", "model": "nemotron-3.5-super-vl",
+                  "thinking": false, "calls": 1, "failed": 0, "prompt_tokens": 812,
+                  "completion_tokens": 48, "reasoning_tokens": 0, "seconds": 1.204,
+                  "attempts": 1, "truncated": false,
+                  "steps": [{"by": "code", "attempt": 1, "tool": "shortlist", "count": 5},
+                            {"by": "model", "attempt": 1, "tool": "pick", "code": "PICKED"}]}
 }
 ```
+
+`model_trace` is `null` on an offer sent without one, and on offers from before #1197.
 
 **Allergen data.** A product that declares an allergen the kitchen excludes is always
 refused. A product without allergen data is refused too, with one exception: the product it
