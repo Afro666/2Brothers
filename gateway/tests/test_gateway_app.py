@@ -1,7 +1,7 @@
 """End-to-end milk flow through the HTTP gateway: test database, recorded Valio answers."""
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import json
 from pathlib import Path
 
@@ -387,3 +387,20 @@ def test_offer_lines_carry_delivery_date_and_cut_off(env):
     assert line["available_date"] == "2026-11-16"
     assert line["cutoff_passed"] is False
     assert line["closing_time"].startswith("2026-11-15T")
+
+
+def test_offer_line_without_a_cut_off_from_valio_shows_null_not_false(env):
+    """#547: Valio gives no closingTime: closing_time and cutoff_passed are unknown (null), never false."""
+    client, fake, db = env
+    for p in fake.avail_data["products"]:
+        if p["productId"] == "462775":
+            p.pop("closingTime", None)
+    gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: NOW), now=lambda: NOW)
+    offers, _, _, when = gw._offers(["462775"], "L", date(2026, 11, 16))
+    assert when["462775"]["closing_time"] is None
+    assert when["462775"]["cutoff_passed"] is None
+    assert offers[0].cutoff_passed is None
+    # unknown is never safe: the engine keeps it off the order instead of treating it as open
+    p = milk(client, quantity="1000")
+    assert "462775" not in [ln["product_id"] for ln in p["lines"]]
+    assert any(e["product_id"] == "462775" and "cut-off" in e["reason"] for e in p["excluded"])
