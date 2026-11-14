@@ -3265,7 +3265,13 @@ Response (no wrapper):
 `made_by` is `model` when all returned lines passed, `mixed` when some passed,
 or `rule` when none passed. `nothing_urgent` means no reportable rows: empty
 `lines` and `true`; a nonempty brief has `false`, even with no urgent row.
-Only cut-offs today and active recalls have `urgent:true`.
+Only cut-offs today and active recalls have `urgent:true`. Tomorrow-morning
+cut-offs included in an evening brief have `urgent:false` until their local date.
+An empty brief or missing worker configuration has `made_by:"rule"` and
+`model:null`. `model` names Nemotron only when a model was attempted; rejected
+model output can therefore have `made_by:"rule"` with a non-null model.
+`duration_ms` is measured handler elapsed time (including fact reads, cache lookup
+and any worker wait), even when no model call is made or a cache entry is used.
 
 One model call, no retry, with a 30-second model deadline and a 35-second worker
 request deadline. Missing configuration, timeout, invalid reply or a busy writer
