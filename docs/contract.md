@@ -480,7 +480,7 @@ Known gap: the three token routes do not check yet that the signed-in person bel
 | GET | `/settings` | `kitchen:read` | Kitchen settings: how the engine sizes orders and what the Buyer may propose. Shape below. |
 | PUT | `/settings` | `kitchen:write` (human) | Change settings. Only the fields in the body change. Every change is an audit entry. Proposed; the gateway does not serve these two routes yet. |
 | GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
-| GET | `/drift` | `kitchen:read` | Standing-order drift for the last full week: products whose order per 100 guests (`portion_creep`) or spend per 100 guests (`cost_creep`) is 15% or more above the 4 weeks before. Shape below. Proposed; the gateway does not serve it yet (`store.drift.standing_order_drift`). |
+| GET | `/drift` | `kitchen:read` | Standing-order drift for the last full week: products whose order per 100 guests (`portion_creep`) or spend per 100 guests (`cost_creep`) is 15% or more above the 4 weeks before. Shape below. Served (`gateway/drift_routes.py` over `store.drift.standing_order_drift`). |
 | GET | `/audit/verify` | `kitchen:read` | Check the audit hash chain now. Shape below. Proposed, like the next three rows; the gateway does not serve them yet. |
 | POST | `/audit/demo-tamper` | `kitchen:approve` (human) | Demo only: edit one audit row of the synthetic demo kitchen, so `/audit/verify` shows the break. 403 `DEMO_ONLY` for any other kitchen. |
 | POST | `/audit/demo-restore` | `kitchen:approve` (human) | Demo only: put the tampered row back exactly as it was. |
@@ -908,7 +908,7 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. |
 | GET | `/demand/shortage-risk` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability. |
-| GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Proposed. |
+| GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Today only a person's session passes: no token can hold `supplier:demand` yet. |
 | POST | `/offers` | `supplier:read-orders` | Proactive offer to a kitchen (substitute, promotion). It shows up as a suggestion, never as an order. |
 
 A supplier only sees demand from kitchens whose `/sharing` consent names it.
@@ -1053,6 +1053,11 @@ biggest change first. `week` is the Monday of the last full week. Each warning:
 - `kind`: `portion_creep` (more ordered per guest) or `cost_creep` (the same amount per
   guest costs more). A drop is not a warning.
 - Fewer than 3 weeks of history, or a week without guests, is never drift: it is left out.
+- `week` is always there, also with `"warnings": []`. A warning has `product_name` when
+  the catalog knows the product; on the supplier route also `kitchen_id` and
+  `kitchen_name` (`null` when the kitchen has no name).
+- When the database cannot run the aggregation: 503 `DRIFT_UNAVAILABLE`. The screens
+  then hide the drift tile; they never show an empty list as "no drift".
 - Rates are per 100 guests from the `covers` series; money values are numbers for display
   only, never a figure to approve (approval figures come from `simulate_order`).
 - Where it shows: a warning on the next proposal for that product, and a list on the
