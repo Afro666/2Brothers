@@ -10,6 +10,7 @@ import type { Api } from "@/api/types";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { useAsync } from "@/lib/use-async";
 import type { ApprovalRequest, Order, ProposalChange } from "@/types";
+import { LiveApprovalsPage } from "@/pages/live-approvals";
 
 interface ApprovalWithOrder {
   approval: ApprovalRequest;
@@ -30,6 +31,10 @@ async function loadApprovals(api: Api): Promise<ApprovalWithOrder[]> {
 }
 
 export function ApprovalsPage() {
+  return import.meta.env.VITE_LIVE_BUYER === "true" ? <LiveApprovalsPage /> : <MockApprovalsPage />;
+}
+
+function MockApprovalsPage() {
   const api = useApi();
   const { role } = useRole();
   const actor = auditActorForRole(role);

@@ -243,6 +243,7 @@ export function LiveBuyerRequests() {
                 ))}
               </ul>
               <p>No order has been placed. This proposal and the Buyer’s steps are recorded for human review.</p>
+              <a className="underline" href="/approvals">Open live approval inbox</a>
               {result.substitute_options?.length ? (
                 <section className="space-y-3" aria-label="Chef substitute choices">
                   <h2 className="font-semibold">Other baskets for the chef to consider</h2>
