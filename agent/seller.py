@@ -344,13 +344,17 @@ def main(argv=None) -> None:
                 emit(model.meter, run="seller", apply=a.apply)
                 await model.close()
 
-    report = asyncio.run(go())
-    for entry in report:
-        print(json.dumps(entry, ensure_ascii=False))
-    sent = sum(1 for e in report if e.get("result") == "OPEN")
-    would = sum(1 for e in report if e.get("result") == "DRY_RUN")
-    print(f"{len(report)} kitchen and product pairs looked at; "
-          + (f"{sent} offers sent" if a.apply else f"{would} offers would be sent (dry run, nothing sent)"))
+    try:
+        report = asyncio.run(go())
+        for entry in report:
+            print(json.dumps(entry, ensure_ascii=False))
+        sent = sum(1 for e in report if e.get("result") == "OPEN")
+        would = sum(1 for e in report if e.get("result") == "DRY_RUN")
+        print(f"{len(report)} kitchen and product pairs looked at; "
+              + (f"{sent} offers sent" if a.apply else f"{would} offers would be sent (dry run, nothing sent)"))
+    finally:
+        from gateway import webhooks
+        webhooks.wait_for_deliveries()
 
 
 if __name__ == "__main__":
