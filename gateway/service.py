@@ -480,7 +480,8 @@ class Gateway:
         for category in categories[:KIND_SEARCHES]:
             try:
                 more, _ = catalog_search.search(self.db, words, {**filters, "category": category},
-                                                SEARCH_LIMIT, kitchen_id, injected=self._search)
+                                                SEARCH_LIMIT, kitchen_id, injected=self._search,
+                                                hybrid_ok=False)     # inside one category: words are enough
             except Exception:
                 log.warning("kind search failed: category=%s", category, exc_info=True)
                 continue
@@ -1011,11 +1012,11 @@ class Gateway:
         # Text search, or text plus meaning when SEARCH_HYBRID is on (gateway/catalog_search.py).
         rows, kind = catalog_search.search(self.db, query, filters, 50, injected=self._search)
         measure = need["unit"]
-        if kind == "text":
-            # The kind of product the person named, from their own words, not the model's
-            # query: "50 kg cheese" gets cheese, never a cheese sauce (gateway/kind.py).
-            # A need stored with no text (an outside client): the query is all there is.
-            rows = self._of_kind(rows, query, filters, need["text"] or query, measure)
+        # The kind of product the person named, from their own words, not the model's
+        # query: "50 kg cheese" gets cheese, never a cheese sauce (gateway/kind.py). After
+        # a hybrid search too: its first hit for "cheese" was a cheddar cheese sauce.
+        # A need stored with no text (an outside client): the query is all there is.
+        rows = self._of_kind(rows, query, filters, need["text"] or query, measure)
         same = [r for r in rows if (r.get("net_content") or {}).get("unit") == measure]
         filtered = bool(same) and measure in ("L", "KG")
         if filtered:

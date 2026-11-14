@@ -219,6 +219,31 @@ def test_cheese_gets_cheese_not_a_cheese_sauce_or_nuggets(gateway):
     assert found["measure"] == "KG"
 
 
+def test_the_kind_rule_also_runs_after_a_hybrid_search(gateway, monkeypatch):
+    """With SEARCH_HYBRID on, the first hybrid hit for "cheese" on the live catalog was a
+    cheddar cheese sauce (2026-11-14). The kind rule must narrow a hybrid answer too, and
+    its own category searches must be word searches: they must not spend an embedding call."""
+    from gateway import catalog_search
+    client, gw = gateway
+    inner = gw._search
+    gw._search = lambda db, q, f, n, kitchen_id=None: (
+        inner(db, q, f, n, kitchen_id) if f.get("category") is not None
+        else [r for r in inner(db, q, f, n, kitchen_id) if r["category"] != "10603"])
+    real, calls = catalog_search.search, []
+
+    def as_hybrid(db, query, filters, limit, kitchen_id=None, **kwargs):
+        rows, _ = real(db, query, filters, limit, kitchen_id, **kwargs)
+        hybrid_ok = kwargs.get("hybrid_ok", True)
+        calls.append(((filters or {}).get("category"), hybrid_ok))
+        return rows, "hybrid" if hybrid_ok else "text"
+    monkeypatch.setattr(catalog_search, "search", as_hybrid)
+    found = shortlist(client, "50 kg cheese by Monday", "KG", "cheese")
+    assert found["search"] == "hybrid"
+    assert found["products"] and {p["category"] for p in found["products"]} == {"10603"}
+    assert calls[0] == (None, True)
+    assert calls[1:] and all(category is not None and hybrid_ok is False for category, hybrid_ok in calls[1:])
+
+
 def test_milk_in_finnish_gets_milk_not_condensed_milk(gateway):
     """Live: "1000 l laktoositonta maitoa" was filled up with sweetened condensed milk."""
     client, _ = gateway
