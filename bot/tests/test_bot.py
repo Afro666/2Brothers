@@ -108,12 +108,12 @@ def bot(tmp_path):
     return made
 
 
-def say(bot, text, chat=7):
-    bot.handle({"message": {"chat": {"id": chat}, "text": text, "from": {"first_name": "Aron"}}})
+def say(bot, text, chat=7, kind="private"):
+    bot.handle({"message": {"chat": {"id": chat, "type": kind}, "text": text, "from": {"first_name": "Aron"}}})
 
 
-def press(bot, data, message_id=555, chat=7):
-    bot.handle({"callback_query": {"id": "cb", "data": data, "message": {"chat": {"id": chat}, "message_id": message_id}}})
+def press(bot, data, message_id=555, chat=7, kind="private"):
+    bot.handle({"callback_query": {"id": "cb", "data": data, "message": {"chat": {"id": chat, "type": kind}, "message_id": message_id}}})
 
 
 # ---- linking -----------------------------------------------------------------------------
@@ -160,6 +160,14 @@ def test_a_request_gives_a_summary_and_one_message_per_supplier(bot):
     assert "Lactose-free milk 1 L" in valio and "463380" not in valio
     assert "stock not confirmed: the order waits for the supplier's answer" in bakery
     assert "product own-1" in bakery                   # no name known: said so, never invented
+
+
+@pytest.mark.parametrize("kind", ["group", "supergroup"])
+def test_a_group_chat_gets_a_url_button_and_the_supplier_messages(bot, kind):
+    say(bot, "what the menu needs", kind=kind)
+    button = bot.tg.edits[0]["markup"]["inline_keyboard"][0][0]
+    assert button == {"text": "Open to approve", "url": f"https://site.example/approvals?proposal={PID}"}
+    assert len(bot.tg.sent) == 3                      # the status message, then one per supplier
 
 
 def test_week_starts_on_the_next_working_day_and_names_it_as_the_delivery_day(bot):

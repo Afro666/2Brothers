@@ -38,6 +38,7 @@ class Bot:
         self._products: dict[str, dict] = {}                 # product_id -> {"name", "lot"}
         self._summaries: dict[tuple[int, str], int] = {}     # (chat, proposal) -> summary message id
         self._heard: dict[tuple[int, str], str] = {}
+        self._private: dict[int, bool] = {}                  # chat -> is a private chat (web_app buttons work)
         self._lock = threading.Lock()
 
     # ---- entry -------------------------------------------------------------------------
@@ -54,6 +55,7 @@ class Bot:
 
     def _message(self, message: dict) -> None:
         chat = message["chat"]["id"]
+        self._private[chat] = message["chat"].get("type") == "private"
         text = (message.get("text") or "").strip()
         if text.startswith("/start"):
             return self._start(chat, text, message)
@@ -143,7 +145,7 @@ class Bot:
         if message_id is None:
             return          # after a restart the summary is not known: the PO message is still right
         url = f"{self.site_url}/approvals?proposal={pid}" if self.site_url and pid else None
-        message = render.summary(proposal, url, self._heard.get((chat, pid)))
+        message = render.summary(proposal, url, self._heard.get((chat, pid)), self._private.get(chat, False))
         self.tg.edit(chat, message_id, message.text, message.markup)
 
     def _names(self, proposal: dict) -> dict[str, str]:
@@ -159,6 +161,8 @@ class Bot:
     def _callback(self, query: dict) -> None:
         message = query.get("message") or {}
         chat, message_id = (message.get("chat") or {}).get("id"), message.get("message_id")
+        if chat is not None:
+            self._private[chat] = (message.get("chat") or {}).get("type") == "private"
         parts = str(query.get("data") or "").split(":")
         if chat is None or not self.links.linked(chat) or parts[0] == "noop" or len(parts) < 3:
             self.tg.answer(query["id"])
