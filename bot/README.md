@@ -51,6 +51,9 @@ person opens it in Telegram and presses Start. Only linked chats get an answer.
   lines. Then one order message per supplier, 6 at most. The lines come from the gateway's brief
   route (#1332, wording by Nemotron, numbers checked there); the counts and totals are added up
   from the waiting proposals, and a total with an unknown part is not shown.
+- `Add product` in a supplier's message: the first 6 rows of the proposal's addable list (counted
+  products that are not on the order, most probable first), each with the engine's suggested
+  quantity, or one lot when it has none. One press adds it; the gateway gives the new total.
 - A photo of a shelf: Nemotron reads it (`POST /stock/photo`, which stores nothing) and the chat
   shows the count: counted rows, rows to count by hand, labels it did not recognise. `Save` sends
   only the counted rows to `POST /stock-counts`; `Discard` drops them. The bot never saves a count

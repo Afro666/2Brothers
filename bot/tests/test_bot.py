@@ -56,6 +56,11 @@ class FakeGateway:
     def __init__(self, current=None, error=None):
         self.current, self.error, self.calls = current or proposal(), error, []
         self.brief_answer, self.waiting_list = None, None
+        self.addable_rows = [
+            {"rank": 1, "product_id": "469549b", "name": "Butter 500 g", "suggested_qty": "12", "unit": "ST",
+             "unit_price": "3.85", "addable": True},
+            {"rank": 2, "product_id": "463380b", "name": "Cream <1 L>", "suggested_qty": None, "unit": "ST",
+             "unit_price": "2.10", "addable": True}]
         self.shelf_answer = {"model": "nemotron-3.5-super-vl", "duration_ms": 4210, "saved": False, "rows": [
             {"row": "COUNTED", "product_id": "463335", "product_name": "Valio Eila 3 % milk drink 1 l",
              "label": "Valio Eila 3% 1L", "confidence": "high", "packs": 6, "pack_size": "1", "count": "6", "unit": "L"},
@@ -106,6 +111,20 @@ class FakeGateway:
             raise self.error
         return {"stock_count_id": "c1", "stored": len(counts)}
 
+    def addable(self, proposal_id):
+        self.calls.append(("addable", proposal_id))
+        if self.error:
+            raise self.error
+        return self.addable_rows
+
+    def add(self, proposal_id, product_id, quantity):
+        self.calls.append(("add", product_id, quantity))
+        if self.error:
+            raise self.error
+        self.current["blocks"][0]["lines"].append(line(product_id, quantity))
+        self.current["expected_total"] = "2098.70"
+        return self.current
+
     def waiting(self):
         return self.waiting_list if self.waiting_list is not None else [self.current]
 
@@ -123,7 +142,8 @@ class FakeGateway:
         return self.current
 
     def products(self, ids, lang="en"):
-        known = {"463380": {"name": "Lactose-free milk 1 L", "lot": 6}, "469549": {"name": "Butter 500 g", "lot": None}}
+        known = {"463380": {"name": "Lactose-free milk 1 L", "lot": 6}, "469549": {"name": "Butter 500 g", "lot": None},
+                 "463380b": {"name": "Cream <1 L>", "lot": 6}}
         return {i: known[i] for i in ids if i in known}
 
 
@@ -329,7 +349,7 @@ def test_a_long_order_shows_eight_lines_and_show_all_shows_the_rest():
                              "lines": [line(str(i), "1") for i in range(11)]}])
     short = render.supplier_message(many, 0)
     assert "... and 3 more" in short.text
-    assert [b["text"] for b in short.buttons[0]] == ["Change", "Show all"]
+    assert [b["text"] for b in short.buttons[0]] == ["Change", "Add product", "Show all"]
     full = render.supplier_message(many, 0, show_all=True)
     assert "more" not in full.text and full.text.count("product ") == 11
 
@@ -549,3 +569,46 @@ def test_a_failed_photo_download_says_so(bot):
     photo(bot)
     assert bot.tg.edits[-1]["text"] == "I could not fetch that photo. Send it again."
     assert not [c for c in bot.gw.calls if c[0] == "shelf_photo"]
+
+
+# ---- add a product -----------------------------------------------------------------------
+def test_add_product_lists_what_the_gateway_offers_with_the_engines_quantity(bot):
+    press(bot, f"p:{PID}:0")
+    shown = bot.tg.edits[-1]
+    rows = shown["markup"]["inline_keyboard"]
+    assert [r[0]["text"] for r in rows] == ["+ 12 pcs  Butter 500 g", "+ 6 pcs  Cream <1 L>", "Done"]   # no suggestion: one lot
+    assert rows[0][0]["callback_data"] == f"d:{PID}:0:469549b"
+    assert all(len(r[0]["callback_data"].encode()) <= 64 for r in rows)          # Telegram's limit
+    assert "Press a product to add it" in shown["text"]
+
+
+def test_a_press_adds_the_product_and_the_total_moves(bot):
+    say(bot, "20 L oat drink")
+    summary_id = bot.tg.sent[0]["id"]
+    press(bot, f"p:{PID}:0")
+    press(bot, f"d:{PID}:0:469549b")
+    assert ("add", "469549b", "12") in bot.gw.calls
+    assert bot.tg.answers[-1] == "Added."
+    assert "<b>Valio Aimo · 3 items" in bot.tg.edits[-1]["text"]                 # back in view, with the new line
+    assert [b["text"] for b in bot.tg.edits[-1]["markup"]["inline_keyboard"][0]] == ["Change", "Add product"]
+    summary = [e for e in bot.tg.edits if e["id"] == summary_id][-1]
+    assert "EUR 2,098.70" in summary["text"]
+
+
+def test_nothing_to_add_and_a_refused_add_are_said(bot):
+    bot.gw.addable_rows = []
+    press(bot, f"p:{PID}:0")
+    assert bot.tg.answers[-1].startswith("Nothing to add")
+    bot.gw.addable_rows = [{"product_id": "469549b", "name": "Butter", "suggested_qty": "12", "unit": "ST", "addable": True}]
+    press(bot, f"p:{PID}:0")
+    bot.gw.error = GatewayError(409, "NOT_ADDABLE", "This product cannot be added now.")
+    press(bot, f"d:{PID}:0:469549b")
+    assert bot.tg.answers[-1] == "This product cannot be added now."
+    bot.gw.error = None
+    press(bot, f"d:{PID}:0:unknown")                                             # an old button
+    assert bot.tg.answers[-1] == "This product can no longer be added. Press Add product again."
+
+
+def test_add_works_after_a_restart_of_the_bot(bot):
+    press(bot, f"d:{PID}:0:469549b")                                             # no list in memory
+    assert ("addable", PID) in bot.gw.calls and ("add", "469549b", "12") in bot.gw.calls

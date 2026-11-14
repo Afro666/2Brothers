@@ -136,9 +136,27 @@ def summary(proposal: dict, approve_url: str | None = None, heard: str | None = 
     return Message("\n".join(out), buttons)
 
 
+ADD_ROWS = 6          # products offered after "Add product": a phone shows about this many buttons
+
+
+def add_quantity(row: dict, lot=None) -> str | None:
+    """The quantity one press adds: the engine's own suggestion, or one lot when it has none.
+    None when neither is a number above 0."""
+    for value in (row.get("suggested_qty"), lot, 1):
+        try:
+            number = Decimal(str(value))
+        except (InvalidOperation, TypeError):
+            continue
+        if number > 0:
+            return f"{number.normalize():f}"
+    return None
+
+
 def supplier_message(proposal: dict, index: int, names: dict[str, str] | None = None,
-                     show_all: bool = False, mode: str = "view", line: int | None = None) -> Message:
-    """One supplier's whole order. `mode`: view, change (pick a line) or line (− / + / remove)."""
+                     show_all: bool = False, mode: str = "view", line: int | None = None,
+                     addable: list[dict] | None = None) -> Message:
+    """One supplier's whole order. `mode`: view, change (pick a line), line (− / + / remove) or
+    add (pick a product from `addable`, the gateway's own list, most probable first)."""
     names = names or {}
     block = blocks_of(proposal)[index]
     lines = block.get("lines") or []
@@ -171,12 +189,18 @@ def supplier_message(proposal: dict, index: int, names: dict[str, str] | None = 
                     {"text": "+", "callback_data": f"q:{pid}:{index}:{line}:+"}],
                    [{"text": "Remove", "callback_data": f"q:{pid}:{index}:{line}:0"},
                     {"text": "Done", "callback_data": f"v:{pid}:{index}"}]]
+    elif mode == "add":
+        out.append("<i>Press a product to add it. The quantity is the engine's suggestion; change it after.</i>")
+        buttons = [[{"text": f"+ {quantity(row['add_qty'], row.get('unit'))}  {row.get('name') or row['product_id']}"[:60],
+                     "callback_data": f"d:{pid}:{index}:{row['product_id']}"}] for row in (addable or [])[:ADD_ROWS]]
+        buttons.append([{"text": "Done", "callback_data": f"v:{pid}:{index}"}])
     elif mode == "change":
         buttons = [[{"text": f"{quantity(ln.get('quantity'), ln.get('unit'))}  {name_of(ln)}"[:60],
                      "callback_data": f"l:{pid}:{index}:{i}"}] for i, ln in enumerate(lines)]
         buttons.append([{"text": "Done", "callback_data": f"v:{pid}:{index}"}])
     else:
-        row = [{"text": "Change", "callback_data": f"c:{pid}:{index}"}]
+        row = [{"text": "Change", "callback_data": f"c:{pid}:{index}"},
+               {"text": "Add product", "callback_data": f"p:{pid}:{index}"}]
         if len(lines) > SHOWN_LINES and not show_all:
             row.append({"text": "Show all", "callback_data": f"a:{pid}:{index}"})
         buttons = [row]
