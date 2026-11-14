@@ -474,3 +474,45 @@ def test_agent_audit_events_carry_a_time(env):
                              "server": {"kitchen_id": "demo-kitchen"}})     # an event stored before this fix
     events = client.get(K + "/audit", headers=AGENT).json()["events"]
     assert all(e["at"] for e in events) and len(events) == 2
+
+
+def test_failed_rollback_never_leaves_committing_without_an_attempt(env, monkeypatch):
+    """#715: the send fails before any attempt row and the rollback cannot read the
+    database. The proposal stays COMMITTING for now, the failure is audited, and a later
+    approve releases the stale claim (no attempt exists) and places the order."""
+    from datetime import timedelta
+    from store import orders
+    client, _, db = env
+    p = milk(client)
+    real_record, real_attempt = orders.record_attempt, orders.attempt_for_key
+
+    def send_fails(*args, **kwargs):
+        raise RuntimeError('send failed')
+
+    def db_down(*args, **kwargs):
+        raise RuntimeError('database unavailable')
+
+    monkeypatch.setattr(orders, 'record_attempt', send_fails)
+    monkeypatch.setattr(orders, 'attempt_for_key', db_down)
+    body = {'expected_total': p['expected_total'], 'idempotency_key': 'first'}
+    with pytest.raises(RuntimeError):
+        client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
+    monkeypatch.setattr(orders, 'record_attempt', real_record)
+    monkeypatch.setattr(orders, 'attempt_for_key', real_attempt)
+    assert db.proposals.find_one({'_id': p['proposal_id']})['status'] == 'COMMITTING'
+    assert db.orders.count_documents({}) == 0
+    assert db.audit_log.find_one({'event.kind': 'commit_rollback_failed',
+                                  'event.proposal_id': p['proposal_id']}) is not None
+
+    # A fresh claim may still be a live approval: never released at once.
+    body['idempotency_key'] = 'second'
+    assert client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body).status_code == 409
+    assert db.proposals.find_one({'_id': p['proposal_id']})['status'] == 'COMMITTING'
+
+    # Once stale, with no attempt row, a later approve releases it and places one order.
+    db.proposals.update_one({'_id': p['proposal_id']}, {'$set': {'committing_at': NOW - timedelta(minutes=5)}})
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
+    assert r.status_code == 200, r.text
+    assert db.proposals.find_one({'_id': p['proposal_id']})['status'] == 'APPROVED'
+    assert db.orders.count_documents({}) == 1
+    assert db.audit_log.find_one({'event.kind': 'commit_released'}) is not None
