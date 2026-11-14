@@ -223,6 +223,34 @@ Not yet run in Claude Desktop itself: the endpoint was checked with raw MCP call
 (above). The header has no space after the colon on purpose; the space is inside the
 `KITCHEN_AUTH` value (Claude Desktop on Windows splits arguments at spaces).
 
+### An independent MCP client, run on the live site
+
+`python -m demo.second_agent --make-token` is a second agent that is not the team's Buyer.
+It uses the public `mcp` client library and the Python standard library, and none of the
+gateway's code. It does what an outside agent would do, then tries to approve its own
+proposal. Output on the live site, 2026-11-14 05:30 UTC:
+
+```
+0. token made            scopes ['kitchen:propose', 'kitchen:read'] (the value is not printed)
+1. agent card            HTTP 200, 8 skills, approve among them: False
+2. who am I              HTTP 200, kind token, can_approve False, scopes ['kitchen:propose', 'kitchen:read']
+3. store the need        HTTP 200, 40 L for 2026-11-16
+4. MCP tools/list        7 tools: get_audit_log, get_offer, get_order_status, place_order, request_approval, search_products, simulate_order
+                         an approve tool exists: False
+5. MCP search_products   20 products (text search), 8 can arrive; the agent picks ['473625', '474390', '463380']
+6. MCP get_offer         offer 2e8f0aba..., 1 line(s): 40 x 463380
+7. MCP simulate_order    total 145.31 EUR, mandate verdict NEEDS_APPROVAL
+8. MCP request_approval  status PENDING, proposal aa6f9489... waits for a person
+9. the agent tries to approve its own proposal: HTTP 403 HUMAN_SESSION_REQUIRED
+10. the proposal after that: READY, order None
+RESULT: an outside agent reached a waiting proposal over MCP, and could not approve it
+11. token revoked        HTTP 200
+```
+
+The agent picked three products; the engine sized one line from the stored need (40 L) and
+left the other two out. With login switched on, make the token as a signed-in person and
+pass it as `KITCHEN_TOKEN`.
+
 ### The need comes first
 
 No MCP tool stores a need, on purpose: quantities come from the kitchen's app, not from
