@@ -22,6 +22,8 @@ describe("ChefRequestBox examples", () => {
     const group = screen.getByRole("group", { name: "Examples" });
 
     expect(group.querySelectorAll("button")).toHaveLength(3);
+    // A thumb hits a chip on a phone: each one is at least 44 px high.
+    for (const chip of group.querySelectorAll("button")) expect(chip).toHaveClass("min-h-11");
     await user.click(screen.getByRole("button", { name: "400 pcs single-serve fruit yoghurt for Friday" }));
 
     expect(box).toHaveValue("400 pcs single-serve fruit yoghurt for Friday");
