@@ -25,6 +25,7 @@ import { SuppliersPage } from "@/pages/suppliers";
 import { HomePage } from "@/pages/home";
 import { DEFAULT_SETTINGS_SECTION } from "@/pages/settings/sections";
 import { SettingsPage } from "@/pages/settings/settings-page";
+import { TrustPage } from "@/pages/trust";
 
 function RootLayout() {
   return (
@@ -71,6 +72,7 @@ const settingsSectionRoute = createRoute({
   component: SettingsPage,
 });
 const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: "/about", component: AboutPage });
+const trustRoute = createRoute({ getParentRoute: () => rootRoute, path: "/trust", component: TrustPage });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -90,6 +92,7 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
   settingsSectionRoute,
   aboutRoute,
+  trustRoute,
 ]);
 
 export function createAppRouter(history?: RouterHistory) {

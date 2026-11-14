@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -131,5 +131,28 @@ describe("catalog page", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("runs the allergen-exclusion example from the chip", async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp("/catalog");
+    await screen.findByText("5 products");
+
+    await user.click(screen.getByRole("button", { name: "Example: milk without the milk allergen" }));
+
+    expect(await screen.findByText("1 product")).toBeInTheDocument();
+    expect(screen.getByText("1 has no allergen data: unknown, not safe")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search the catalog" })).toHaveValue("milk");
+    expect(router.state.location.href).toBe("/catalog?q=milk&exclude=AM");
+  });
+
+  it("says Atlas Search only when the gateway answers the search", async () => {
+    renderApp("/catalog");
+    await screen.findByText("5 products");
+    expect(screen.queryByText("Atlas Search")).not.toBeInTheDocument();
+    cleanup();
+
+    renderApp("/catalog", Object.assign(createMockApi(), { live: new Set(["searchProducts" as const]) }));
+    expect(await screen.findByText("Atlas Search")).toBeInTheDocument();
   });
 });

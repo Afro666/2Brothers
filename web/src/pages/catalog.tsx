@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { ProductCard } from "@/components/purchasing/product-card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -192,6 +193,21 @@ export function CatalogPage() {
                 Search
               </Button>
             </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Only when the gateway answers the search: the mock is not Atlas. */}
+            {api.live?.has("searchProducts") ? <Badge variant="secondary">Atlas Search</Badge> : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setQuery("milk");
+                update((current) => ({ ...current, q: "milk", exclude: ["AM"] }));
+              }}
+            >
+              Example: milk without the milk allergen
+            </Button>
           </div>
 
           <div className="rounded-xl border bg-card px-4 py-3 shadow-sm md:px-6 md:py-6">
