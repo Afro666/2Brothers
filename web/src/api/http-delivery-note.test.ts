@@ -44,10 +44,23 @@ describe("Delivery note gateway boundary", () => {
     expect(mapDeliveryNote(DELIVERY_NOTE, "ORD-1042")).toEqual({
       orderId: "ORD-1042", model: "nemotron-3.5-super-vl", durationMs: 5120, orderRef: "ORD-DEMO-0001", deliveryDate: "2026-11-16", complete: false,
       lines: [{ productId: "462775", status: "SHORT", ordered: 51, received: 36, missing: 15, baseUnit: "ST",
-        lots: [{ lot: "L2611A", bestBefore: "unknown", quantity: 3, unit: "KI" }] }],
+        lots: [{ lot: "L2611A", bestBefore: "unknown", quantity: 3, unit: "KI" }],
+        orderQuantity: 51, orderUnit: "ST", missingOrderQty: 15, unitPrice: 1.1, claimEur: 16.5 }],
       notOrdered: [{ productId: "462921", status: "SUBSTITUTE", replaces: "462775", quantity: 2, unit: "KI", received: 10, baseUnit: "ST",
         lot: "L2611B", bestBefore: "2026-11-28", needsApproval: true }],
+      claim: { totalEur: 16.5, lines: 1, quantity: 15, unit: "ST", notValued: 0, supplierName: "Valio Aimo" },
     });
+  });
+  it("takes the claim as the gateway computed it and never values an unknown line (#1198)", () => {
+    const r = structuredClone(DELIVERY_NOTE);
+    r.lines[0].status = "UNKNOWN"; r.lines[0].claim_eur = "16.50";
+    expect(mapDeliveryNote(r, "ORD-1042").lines[0]).toMatchObject({ claimEur: null, missingOrderQty: null });
+    const mixed = structuredClone(DELIVERY_NOTE); mixed.claim = { ...mixed.claim, quantity: null as unknown as string, unit: null as unknown as string };
+    expect(mapDeliveryNote(mixed, "ORD-1042").claim).toMatchObject({ quantity: null, unit: null, totalEur: 16.5 });
+    const { claim: _drop, ...older } = DELIVERY_NOTE;
+    expect(mapDeliveryNote(older, "ORD-1042").claim).toBeNull();
+    invalidResponse(() => mapDeliveryNote({ ...DELIVERY_NOTE, claim: { ...DELIVERY_NOTE.claim, total_eur: null } }, "ORD-1042"));
+    invalidResponse(() => mapDeliveryNote({ ...DELIVERY_NOTE, claim: { ...DELIVERY_NOTE.claim, lines: -1 } }, "ORD-1042"));
   });
   it("throws ApiError INVALID_RESPONSE on a wrong order, a saved answer or an unknown status", () => {
     invalidResponse(() => mapDeliveryNote(DELIVERY_NOTE, "another-order"));

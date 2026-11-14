@@ -200,6 +200,10 @@ def load(db, data: dict) -> dict:
         if standing:
             repo.settings.put(DEMO_ID, {"standing_orders": standing})
         counts["standing_orders"] = len(standing)
+        # The fixed order the delivery-note beat checks (#1198); placed once, found again.
+        from demo.delivery_order import place
+        place(db)
+        counts["delivery_order"] = 1
     counts["sharing"] = len(seed_sharing(db, ids, VALIO))
     from store.buyer_context import seed_demo_policy
     if DEMO_ID in ids:

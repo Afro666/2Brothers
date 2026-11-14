@@ -143,3 +143,79 @@ def test_end_to_end_gateway_to_worker_with_the_recorded_nemotron_reply(monkeypat
     assert [(ln["product_id"], ln["status"], ln["received"], ln["needs_approval"]) for ln in data["not_ordered"]] == [
         ("462921", "SUBSTITUTE", "10", True)]
     assert len(model.requests) == 1 and db.kitchen_stock.count_documents({}) == 0
+
+
+# ---- The claim (#1198): the value of what did not come, from the order's own prices ----
+
+DEMO_ORDER = [{"product_id": "463982", "quantity": "3", "unit": "KI", "unit_price": "31.01"},
+              {"product_id": "460838", "quantity": "1", "unit": "KI", "unit_price": "29.06"},
+              {"product_id": "463335", "quantity": "40", "unit": "ST", "unit_price": "1.40"}]
+DEMO_LINES = [{"product_id": "463982", "status": "SHORT", "ordered": "3", "received": "1", "missing": "2",
+               "base_unit": "KI", "lots": []},
+              {"product_id": "460838", "status": "MISSING", "ordered": "1", "received": "0", "missing": "1",
+               "base_unit": "KI", "lots": []},
+              {"product_id": "463335", "status": "RECEIVED", "ordered": "40", "received": "40", "missing": "0",
+               "base_unit": "ST", "lots": []}]
+
+
+def test_each_short_line_has_its_value_at_the_orders_price_and_one_total(monkeypatch):
+    client, db = make(monkeypatch, FakeWorker({**SHORT, "lines": DEMO_LINES, "not_ordered": []}))
+    db.orders.update_one({"_id": ORDER}, {"$set": {"lines": DEMO_ORDER, "blocks": [
+        {"supplier_id": "sup-valio", "name": "Valio Aimo", "product_ids": ["463982", "460838", "463335"]}]}})
+    data = client.post(URL, headers=HUMAN, json=BODY).json()
+    assert [(ln["order_quantity"], ln["order_unit"], ln["missing_order_qty"], ln["unit_price"], ln["claim_eur"])
+            for ln in data["lines"]] == [("3", "KI", "2", "31.01", "62.02"), ("1", "KI", "1", "29.06", "29.06"),
+                                         ("40", "ST", "0", "1.40", "0.00")]
+    assert data["claim"] == {"currency": "EUR", "total_eur": "91.08", "lines": 2, "quantity": "3", "unit": "KI",
+                             "not_valued": 0, "supplier_name": "Valio Aimo"}
+
+
+def test_the_value_converts_base_units_to_the_order_unit_and_rounds_half_up(monkeypatch):
+    # 7 of a 12-pack case ordered as 2 KI (24 ST) at EUR 10.00 a case: 7/12 case = EUR 5.8333 -> 5.83.
+    lines = [{"product_id": "462775", "status": "SHORT", "ordered": "24", "received": "17", "missing": "7",
+              "base_unit": "ST", "lots": []}]
+    client, db = make(monkeypatch, FakeWorker({**SHORT, "lines": lines, "not_ordered": []}))
+    db.orders.update_one({"_id": ORDER}, {"$set": {"lines": [
+        {"product_id": "462775", "quantity": "2", "unit": "KI", "unit_price": "10.00"}]}})
+    data = client.post(URL, headers=HUMAN, json=BODY).json()
+    assert (data["lines"][0]["missing_order_qty"], data["lines"][0]["claim_eur"]) == ("0.583", "5.83")
+    assert (data["claim"]["total_eur"], data["claim"]["quantity"], data["claim"]["unit"]) == ("5.83", "0.583", "KI")
+    assert data["claim"]["supplier_name"] is None                                   # no supplier block stored
+
+
+def test_unknown_or_unpriced_lines_are_never_given_a_value(monkeypatch):
+    lines = [{"product_id": "463982", "status": "UNKNOWN", "ordered": "3", "received": None, "missing": None,
+              "base_unit": "KI", "lots": []},
+             {"product_id": "460838", "status": "MISSING", "ordered": "1", "received": "0", "missing": "1",
+              "base_unit": "KI", "lots": []},
+             {"product_id": "463335", "status": "SHORT", "ordered": "40", "received": "30", "missing": "10",
+              "base_unit": "ST", "lots": []}]
+    client, db = make(monkeypatch, FakeWorker({**SHORT, "lines": lines, "not_ordered": []}))
+    db.orders.update_one({"_id": ORDER}, {"$set": {"lines": [
+        {**DEMO_ORDER[0]}, {**DEMO_ORDER[1], "unit_price": None}, {**DEMO_ORDER[2]}]}})
+    data = client.post(URL, headers=HUMAN, json=BODY).json()
+    assert [ln["claim_eur"] for ln in data["lines"]] == [None, None, "14.00"]
+    assert data["lines"][0]["missing_order_qty"] is None
+    claim = data["claim"]
+    assert (claim["total_eur"], claim["lines"], claim["not_valued"]) == ("14.00", 2, 2)
+    assert (claim["quantity"], claim["unit"]) == (None, None)                       # KI and ST: no one unit
+
+
+def test_a_line_that_does_not_match_the_stored_order_gets_no_price(monkeypatch):
+    # The worker's lines follow the order's lines; one that names another product is never priced.
+    lines = [{**DEMO_LINES[0], "product_id": "999999"}]
+    client, db = make(monkeypatch, FakeWorker({**SHORT, "lines": lines, "not_ordered": []}))
+    db.orders.update_one({"_id": ORDER}, {"$set": {"lines": DEMO_ORDER[:1]}})
+    data = client.post(URL, headers=HUMAN, json=BODY).json()
+    assert (data["lines"][0]["claim_eur"], data["lines"][0]["unit_price"]) == (None, None)
+    assert (data["claim"]["total_eur"], data["claim"]["not_valued"]) == ("0.00", 1)
+
+
+def test_a_complete_delivery_claims_nothing(monkeypatch):
+    lines = [{**DEMO_LINES[2]}]
+    client, db = make(monkeypatch, FakeWorker({**SHORT, "lines": lines, "not_ordered": []}))
+    db.orders.update_one({"_id": ORDER}, {"$set": {"lines": DEMO_ORDER[2:]}})
+    data = client.post(URL, headers=HUMAN, json=BODY).json()
+    assert data["complete"] is True
+    assert data["claim"] == {"currency": "EUR", "total_eur": "0.00", "lines": 0, "quantity": None, "unit": None,
+                             "not_valued": 0, "supplier_name": None}

@@ -220,6 +220,65 @@ in rehearsal and decide then if you press Save on stage.
 **If it fails.** The panel says why, and the counts can still be typed by hand. "no vision
 model is configured" means `VERDA_INFERENCE_KEY` is missing in the `buyer` container.
 
+## Delivery beat: the note is short, and the app says what to claim (#1198)
+
+**Not yet run on the live site.** The Verda model endpoint was overloaded on 14 Nov (#1135).
+Run it once in rehearsal before you put it on stage. Put it after beat 3 (the order and its
+receipt): order, delivery, check. About 20 seconds.
+
+**Which order.** A fixed demo order, reference `DEMO-1198`, made by `demo/delivery_order.py`
+(the seed places it too). It never changes, unlike the order beat 2 places. Three Valio lines
+at the catalog prices of 13 Nov, EUR 178.09 ex VAT:
+
+| Product | Ordered | On the note | Status | To claim |
+|---|---|---|---|---|
+| 463982 Kieku barn eggs L, 180 pcs | 3 KI at EUR 31.01 | 1 KI | SHORT 2 KI | EUR 62.02 |
+| 460838 Cherry tomato 4 kg Finland | 1 KI at EUR 29.06 | not on the note | MISSING 1 KI | EUR 29.06 |
+| 463335 Valio Eila 3 % milk drink 1 L | 40 ST at EUR 1.40 | 40 ST | RECEIVED | EUR 0.00 |
+
+The screen shows: "3 cases short: €91.08 to claim from Valio Aimo".
+
+**Find the order on demo morning.** On the server (`/opt/2brothers`):
+
+    docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m demo.delivery_order
+
+It prints `order <id>  reference DEMO-1198  open /orders/<id>` and writes nothing. If it
+says "no demo delivery order yet", run it once with `--apply` (one order, one audit entry
+`demo_delivery_order_placed`; a second run finds the same order). In the web app: Orders,
+the order of EUR 178.09 with eggs, cherry tomato and milk drink. Open `/orders/<id>` in a tab.
+
+The order has no proposal, so it has no delivery day: the stock screens never count it as
+on order. It is marked `approved_by: demo-seed`.
+
+**Which photo.** `agent/fixtures/receiving/demo-note.png` (drawn by
+`agent/fixtures/receiving/make_demo_note.py`; it says "SYNTHETIC TEST NOTE" on it). Copy it
+to the phone or laptop before the demo. `demo-note.reply.json` is the answer a correct reader
+gives; it is written by hand, not recorded from the live model.
+
+**What you do.**
+
+1. Open the demo order (`/orders/<id>`). Scroll to "Photo of the delivery note".
+2. Press "Choose a delivery note photo" and pick `demo-note.png`.
+3. Point at the lines: eggs "Short delivery", ordered 3, received 1; cherry tomato "Missing";
+   milk drink "Received". Each short line says "To claim: €...".
+4. Point at the total: "3 cases short: €91.08 to claim from Valio Aimo".
+5. Press "Copy the claim". The toast says nothing was sent. Paste it in a note app if you
+   want to show the text: the order id, each line with the price and the amount, the total.
+
+**What you say.** "The delivery came. The chef takes a photo of the paper note. Nemotron
+reads it, and plain code checks it against the order: two egg cases are missing, and the
+tomatoes did not come at all. The money is not the model's: the app takes the price from the
+order the chef approved. Three cases, 91 euros to claim from Valio. One tap copies the claim.
+Valio's API has no claim route, so a person sends it. Nothing changes stock until a person
+counts."
+
+**If it fails.** The panel says why ("the vision model did not answer in time; nothing was
+read, check the delivery by hand"); nothing is stored but one audit entry. Say: "the model is
+busy; the check is plain code and works the same by hand", and go on. Without the model the
+beat cannot be shown live; do not fake it. The tests run the same photo through the gateway,
+the worker and the matcher with the hand-written reply
+(`demo/tests/test_delivery_order.py`): 3 KI short, EUR 91.08.
+
 ## Selling-agent beat: Valio's agent offers a substitute (#374)
 
 **What it shows.** Nemotron in a second role, on the supplier's side. Code reads Valio's
@@ -304,4 +363,7 @@ are planned, and none of them scores in three minutes.
       "Check recalls now" in rehearsal on the live kitchen.
 - [x] Tamper check beat: live on `/trust` (#747, #818).
 - [x] Choose button on the option card (#403, #843): the big request can be approved.
+- [ ] Delivery beat (#1198): place the demo order on the server
+      (`python -m demo.delivery_order --apply`) and run the beat once on the live site
+      when the Verda endpoint answers (#1135). Target: under 10 s.
 - [ ] Claude Desktop as the second agent (`docs/byoa.md`): run it once before the demo.
