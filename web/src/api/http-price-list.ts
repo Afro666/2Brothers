@@ -84,7 +84,7 @@ export function mapPriceListPhoto(body: unknown): PriceListRead {
   if (typeof raw.model !== "string" || !raw.model) invalid("the price list model");
   return {
     model: raw.model,
-    durationMs: typeof raw.duration_ms === "number" ? raw.duration_ms : 0,
+    durationMs: typeof raw.duration_ms === "number" ? raw.duration_ms : null,
     supplierId: typeof raw.supplier_id === "string" ? raw.supplier_id : "",
     currency: raw.currency === "EUR" ? "EUR" : null,
     vat: raw.vat === "INCLUDED" || raw.vat === "EXCLUDED" ? raw.vat : null,

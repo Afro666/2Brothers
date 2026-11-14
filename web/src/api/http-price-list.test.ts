@@ -151,6 +151,11 @@ describe("mapPriceListRow", () => {
     expect(read.vat).toBeNull();
     expect(read.currency).toBeNull();
   });
+
+  it("keeps a missing timing unknown, not zero", () => {
+    const { duration_ms: _timing, ...untimed } = ANSWER;
+    expect(mapPriceListPhoto(untimed).durationMs).toBeNull();
+  });
 });
 
 describe("ownProductBody from a price-list row", () => {

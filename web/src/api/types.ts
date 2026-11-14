@@ -248,7 +248,8 @@ export interface PriceListRow {
 export interface PriceListRead {
   /** The model that read the photo: `nemotron-3.5-super-vl`. */
   model: string;
-  durationMs: number;
+  /** null = the gateway sent no timing: unknown, not zero. */
+  durationMs: number | null;
   supplierId: string;
   currency: "EUR" | null;
   vat: "INCLUDED" | "EXCLUDED" | null;

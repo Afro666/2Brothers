@@ -9,6 +9,7 @@ export default {
   "{model} is reading the price list. This takes a few seconds.": "{model} lukee hinnastoa. Tämä kestää muutaman sekunnin.",
   "Read by {model} in {seconds} s: {count} rows, {check} to check.":
     "Lukija {model}, {seconds} s: {count} riviä, {check} tarkistettavaa.",
+  "Read by {model}: {count} rows, {check} to check.": "Lukija {model}: {count} riviä, {check} tarkistettavaa.",
   "The list says the prices include VAT.": "Hinnaston mukaan hinnat sisältävät arvonlisäveron.",
   "The list says the prices are without VAT.": "Hinnaston mukaan hinnat ovat ilman arvonlisäveroa.",
   "The list does not say whether the prices include VAT.": "Hinnasto ei kerro, sisältävätkö hinnat arvonlisäveron.",
