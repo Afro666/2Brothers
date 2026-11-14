@@ -633,8 +633,9 @@ const TOOL_VERBS: Record<string, { started: string; done: string }> = {
  * and a Finnish text in `i18n/fi/audit-events.ts`.
  */
 export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
-  // #1776: every kind the gateway, the recall monitor and the demo scripts write.
-  approval_token_created: { kind: "settings", summary: "Approval token created" },
+  // #1776: every kind the gateway, the recall monitor and the demo scripts write. A kind that
+  // `lib/codes.ts` already names (#1591, #1783) takes its title from there: one text, one place.
+  approval_token_created: { kind: "settings", summary: CODE_LABELS.approval_token_created.title },
   approval_token_revoked: { kind: "settings", summary: "Approval token revoked" },
   token_created: { kind: "settings", summary: "API token created" },
   token_revoked: { kind: "settings", summary: "API token revoked" },
@@ -666,13 +667,13 @@ export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> =
   price_list_photo_failed: { kind: "offer", summary: "Price list photo could not be read" },
   label_photo_read: { kind: "order", summary: "Label photo read" },
   label_photo_failed: { kind: "order", summary: "Label photo could not be read" },
-  delivery_note_read: { kind: "other", summary: "Delivery note read" },
+  delivery_note_read: { kind: "other", summary: CODE_LABELS.delivery_note_read.title },
   delivery_note_failed: { kind: "order", summary: "Delivery note could not be read" },
   delivery_result_saved: { kind: "order", summary: "Delivery result saved" },
-  kitchen_brief_read: { kind: "other", summary: "Kitchen brief read" },
-  proposal_changed: { kind: "request", summary: "Proposal changed" },
+  kitchen_brief_read: { kind: "other", summary: CODE_LABELS.kitchen_brief_read.title },
+  proposal_changed: { kind: "request", summary: CODE_LABELS.proposal_changed.title },
   proposal_explanation_ready: { kind: "other", summary: "Proposal explanation written" },
-  proposal_explanation_failed: { kind: "other", summary: "Proposal explanation failed" },
+  proposal_explanation_failed: { kind: "other", summary: CODE_LABELS.proposal_explanation_failed.title },
   auto_approved: { kind: "approval", summary: "Approved automatically, inside the kitchen's limit" },
   auto_approve_skipped: { kind: "approval", summary: "Not approved automatically: a person decides" },
   approve_rollback_failed: { kind: "approval", summary: "An approval failed and could not be undone: a person checks the order" },
