@@ -325,7 +325,7 @@ def llms_txt(d: dict) -> str:
     if pa:
         lines += ["", "## A person approving from their own chat", "",
                   f"- {pa['rule']}",
-                  f"- A signed-in approver creates it: `POST {pa['create']}` with `{{\"hours\": {pa['hours_default']}}}` "
+                  f"- An approver creates it (in the open demo: any visitor, for the demo kitchen only): `POST {pa['create']}` with `{{\"hours\": {pa['hours_default']}}}` "
                   f"(1 to {pa['hours_max']}). It starts with `{pa['token_prefix']}` and is shown once.",
                   "- With it, `/mcp` lists these tools (an agent or kitchen token does not see them):"]
         lines += [f"  - `{t['name']}`: {t['description']}" for t in pa["mcp_tools"]]
