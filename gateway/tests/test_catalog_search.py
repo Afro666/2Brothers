@@ -1,8 +1,15 @@
 """The gateway's catalog search: hybrid behind a switch, text as the fallback."""
 
+import mongomock
 import pytest
+from fastapi.testclient import TestClient
 
 from gateway import catalog_search
+from gateway.app import create_app
+from gateway.service import Gateway
+from gateway.tests import test_gateway_app as app_tests
+from gateway.tests.test_gateway_app import AGENT, K
+from gateway.valio_client import ValioClient
 from store import embeddings, search as store_search
 
 
@@ -110,23 +117,13 @@ def test_the_query_embedder_never_waits_or_retries(monkeypatch):
     assert seen["kind"] == "query" and len(vectors[0]) == embeddings.EMBED_DIMENSIONS
 
 
-def test_the_tool_answer_says_which_search_ran():
-    from gateway.tests.test_gateway_app import AGENT, K
-    import importlib
-    app_tests = importlib.import_module("gateway.tests.test_gateway_app")
-    import mongomock
-    from fastapi.testclient import TestClient
-    from gateway.app import create_app
-    from gateway.service import Gateway
-    from gateway.valio_client import ValioClient
-
+def test_the_tool_answer_says_which_search_ran(monkeypatch):
     db = mongomock.MongoClient(tz_aware=True)["test"]
     fake = app_tests.FakeValio()
     gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: app_tests.NOW),
                  now=lambda: app_tests.NOW,
                  search=lambda db, q, f, n, kitchen_id=None: [{"product_id": "462775"}])
-    import os
-    os.environ.setdefault("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
     client = TestClient(create_app(gw))
     plain = client.post("/tools/search_products", headers=AGENT, json={"query": "milk"})
     assert plain.status_code == 200 and plain.json()["search"] == "text"
