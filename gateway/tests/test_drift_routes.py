@@ -168,3 +168,39 @@ def test_database_failure_is_a_clean_503(env, monkeypatch, path):
     assert r.json() == {"error": {"code": "DRIFT_UNAVAILABLE",
                                   "message": "drift cannot be computed right now"}}
     assert "mongodb.net" not in r.text
+
+
+@pytest.mark.parametrize("path, collection", [
+    ("/v1/kitchens/K01/drift", "products"),
+    (SUPPLIER, "products"),
+    (SUPPLIER, "kitchens"),
+])
+def test_name_lookup_failure_is_a_clean_503(env, monkeypatch, path, collection):
+    client, db, by_kitchen, _ = env
+    set_sharing(db, "K01", "sup-valio", True, "aron")
+    by_kitchen["K01"] = [warning("462775", 0.4)]
+    real_find = mongomock.collection.Collection.find
+
+    def find(self, *args, **kwargs):
+        if self.name == collection:
+            raise OperationFailure("not authorized on cluster0.example.mongodb.net")
+        return real_find(self, *args, **kwargs)
+
+    monkeypatch.setattr(mongomock.collection.Collection, "find", find)
+    r = client.get(path, headers=HUMAN)
+    assert r.status_code == 503, r.text
+    assert r.json() == {"error": {"code": "DRIFT_UNAVAILABLE",
+                                  "message": "drift cannot be computed right now"}}
+    assert "mongodb.net" not in r.text
+
+
+def test_consent_lookup_failure_is_a_clean_503(env, monkeypatch):
+    client, *_ = env
+
+    def broken(*_, **__):
+        raise OperationFailure("not authorized on cluster0.example.mongodb.net")
+
+    monkeypatch.setattr(drift_routes, "consenting_kitchens", broken)
+    r = client.get(SUPPLIER, headers=HUMAN)
+    assert r.status_code == 503 and r.json()["error"]["code"] == "DRIFT_UNAVAILABLE"
+    assert "mongodb.net" not in r.text

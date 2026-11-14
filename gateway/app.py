@@ -44,6 +44,14 @@ class Principal:
         if kitchen_id is not None and self.kitchen_id is not None and kitchen_id != self.kitchen_id:
             raise GatewayError(403, "KITCHEN_SCOPE", "this token belongs to another kitchen")
 
+    def need_supplier(self, scope: str) -> None:
+        """A supplier's view across kitchens (#599). A caller bound to one kitchen (its
+        people, its tokens) never reads it: consent names the supplier, not other kitchens.
+        Until supplier accounts exist, only unbound server sessions (the demo) pass."""
+        self.need(scope)
+        if self.kitchen_id is not None:
+            raise GatewayError(403, "SCOPE_REQUIRED", "a kitchen's session cannot read a supplier's view")
+
     @property
     def human(self) -> str | None:
         """The name of a person who may approve, reject and manage tokens; else None."""
@@ -508,6 +516,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     from gateway.supplier_routes import mount_supplier   # the wholesaler's demand view (#33)
     mount_supplier(app, gw, principal)
 
+    # Trust (#711): audit chain verify, the tamper demo, the live event stream.
+    from gateway.trust_routes import mount_trust
+    mount_trust(app, gw, principal, body)
+
     # Onboarding lookup (#375): Context.dev brand lookup for the sign-up form.
     from gateway.onboarding import mount_onboarding
     mount_onboarding(app, principal, body)
@@ -532,4 +544,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 def main() -> None:
     import uvicorn
     uvicorn.run("gateway.app:create_app", factory=True, host="0.0.0.0",
-                port=int(os.environ.get("PORT", "8000")), access_log=False)
+                port=int(os.environ.get("PORT", "8000")), access_log=False,
+                # An open event stream (#711) must not hold a restart: after this long uvicorn
+                # cancels what still runs, and the stream closes its change stream.
+                timeout_graceful_shutdown=3)
