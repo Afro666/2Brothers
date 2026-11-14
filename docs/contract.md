@@ -255,6 +255,31 @@ A simulated offer line also carries three optional fields from the Valio dataset
 | `carbon_kg_co2e_per_kg` | number or null | kg CO2-eq per kg, the average of the product group, not this product's own figure. Null means unknown. |
 | `labels` | string[] | Product labels, for example `EU_ORGANIC_FARMING`. May be empty. |
 
+**Cut-off, lead time and delivery reliability to show (#1453).** A simulated offer line
+(also in `blocks[].lines` and on order lines) carries six more fields, for display only.
+They never change a quantity, a line, `cutoff_passed`, `closing_time` or `reliability`
+(those keep their meaning above), so the engine and every basket are the same. Each
+value says where it came from; real data always wins:
+
+1. `valio`: Valio's own answer (`closingTime` from availability, the delivery
+   reliability CSV).
+2. `supplier_terms`: the supplier's user-set terms (`order_days`, `cutoff_time`,
+   `lead_time_days`, see "Suppliers").
+3. `demo`: demo values for a synthetic demo kitchen only (`python -m demo.delivery_terms`).
+   They are invented for the demo, never Valio's or a supplier's numbers; the screen
+   marks them "(demo)". A real kitchen has no demo values.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `cutoff_at` | timestamp with offset, or null | Order by this moment for the line's delivery. Valio's `closingTime` when Valio gives one. Otherwise the last order day at the cut-off time (kitchen time, Europe/Helsinki) that still delivers, with the lead time, by the delivery date: the later of `available_date` and the requested date. Null when no source knows it. |
+| `cutoff_source` | `"valio"`, `"supplier_terms"`, `"demo"` or null | Where `cutoff_at` came from. `demo` when any part of it (order days, cut-off time or lead time) is a demo value. |
+| `lead_time_days` | integer or null | Days from order to delivery: a per-product demo value, else the supplier's terms, else the supplier's demo value. |
+| `lead_time_source` | `"supplier_terms"`, `"demo"` or null | Where `lead_time_days` came from. |
+| `delivery_reliability` | number or null | Delivered versus ordered, 0 to 1: Valio's `reliability` when known, else the product's demo value, else the supplier's demo value. |
+| `reliability_source` | `"valio"`, `"demo"` or null | Where `delivery_reliability` came from. |
+
+A proposal stored before #1453 has none of these fields: read a missing field as null.
+
 `expected_total` includes fees and tax. Simulation also includes `mov_gap` and
 `delivery_fee` as decimal strings. Expired offers must be refreshed and simulated.
 
