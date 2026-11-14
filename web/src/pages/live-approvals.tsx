@@ -199,6 +199,12 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
     </div>}
     {confirm === "approve" && pending && <div role="dialog" aria-label={t("Confirm approval")} className="space-y-3 rounded border p-4">
       <p>{t("Confirm this exact basket for {amount}? The gateway checks price and stock again.", { amount: formatEur(mapMoney(row.expected_total)) })}</p>
+      <ul className="divide-y">{row.lines.map(l => {
+        const name = lineText(l.product_name);
+        return <li key={l.product_id} data-testid="confirm-line" className="py-1 font-mono text-[13px] break-words">
+          {l.quantity} {l.unit} · {name ? `${name} (${l.product_id})` : l.product_id}
+        </li>;
+      })}</ul>
       <Button disabled={busy || !!approvalBlockedReason} onClick={() => void decide(true)}>{t("Confirm and record order")}</Button>
       <Button variant="outline" disabled={busy} onClick={() => setConfirm(null)}>{t("Cancel")}</Button>
     </div>}
