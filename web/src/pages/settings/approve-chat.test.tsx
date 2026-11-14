@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
-import { ApiError } from "@/api/types";
+import { ApiError, type Api } from "@/api/types";
 import { desktopConfig } from "@/pages/settings/approve-chat";
 import { renderApp } from "@/test/render";
 
@@ -23,8 +23,23 @@ describe("Approve from chat settings", () => {
 
     expect(await screen.findByText("Not available in the open demo")).toBeVisible();
     expect(screen.getByText(/everyone is the same demo approver/)).toBeVisible();
+    expect(within(screen.getByTestId("approve-chat-open-demo")).getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/sign-in",
+    );
     expect(screen.queryByRole("button", { name: "Create approval token" })).not.toBeInTheDocument();
     expect(await screen.findByText("No approval tokens yet")).toBeVisible();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("never calls the mock create when gateway mode does not serve it", async () => {
+    const mock = await signedIn();
+    const api: Api = { ...mock, live: new Set<keyof Api>() };
+    const create = vi.spyOn(api, "createApprovalToken");
+    renderApp("/settings/approve-chat", api);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The gateway does not serve approval token creation.");
+    expect(screen.queryByRole("button", { name: "Create approval token" })).not.toBeInTheDocument();
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -158,5 +173,22 @@ describe("Approve from chat settings", () => {
 
     await user.click(await screen.findByRole("button", { name: "Create approval token" }));
     expect(await screen.findByText("A personal approval token needs your own signed-in account.")).toBeVisible();
+  });
+
+  it.each([
+    new ApiError("PERSONAL_TOKEN_NEEDS_SIGN_IN", "needs sign in", {}, 403),
+    new ApiError("GATEWAY_ERROR", "gateway failed", {}, 500),
+    new ApiError("INVALID_RESPONSE", "the one-time approval token is missing"),
+  ])("create failed: no token shown for $code", async (error) => {
+    const user = userEvent.setup();
+    const api = await signedIn();
+    vi.spyOn(api, "createApprovalToken").mockRejectedValue(error);
+    renderApp("/settings/approve-chat", api);
+
+    await user.click(await screen.findByRole("button", { name: "Create approval token" }));
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(screen.queryByLabelText("New approval token")).not.toBeInTheDocument();
+    expect(screen.queryByText("Approval token created")).not.toBeInTheDocument();
   });
 });

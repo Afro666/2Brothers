@@ -170,7 +170,7 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
 
 function SignOutButton() {
   const t = useT();
-  const { signOut } = useSession();
+  const { session, signOut } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function submit() {
@@ -183,6 +183,13 @@ function SignOutButton() {
     } finally {
       setBusy(false);
     }
+  }
+  if (session?.kind === "human" && !session.email) {
+    return (
+      <Button asChild variant="ghost" size="xs" className="text-muted-foreground">
+        <Link to="/sign-in">{t("Sign in")}</Link>
+      </Button>
+    );
   }
   return (
     <>

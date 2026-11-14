@@ -15,7 +15,7 @@ interface SessionContextValue {
   signInRevision: number;
   signIn(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
-  reload(): Promise<void>;
+  reload(): Promise<Session | null>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -36,6 +36,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const next = await api.getSession();
       setSession(next);
       setStatus(next ? "signed-in" : "signed-out");
+      return next;
     } catch (cause) {
       if (cause instanceof ApiError && (cause.code === "UNAUTHENTICATED" || cause.status === 401)) {
         setSession(null);
@@ -43,6 +44,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       } else {
         setFailure(cause instanceof Error ? cause : new Error(String(cause)));
       }
+      return null;
     }
   }, [api]);
 
@@ -76,11 +78,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       await api.signOut();
     } catch {
+      setFailure(null);
+      setSession(null);
+      setStatus("signed-out");
+      await navigate({ to: "/sign-in" });
+      return;
     }
     setFailure(null);
-    setSession(null);
-    setStatus("signed-out");
-    await navigate({ to: "/sign-in" });
+    const next = await reload();
+    await navigate({ to: next ? "/" : "/sign-in" });
   }
 
   let content = children;
