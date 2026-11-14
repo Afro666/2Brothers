@@ -49,7 +49,7 @@ describe("Notification settings", () => {
 
   it("is read-only for a non-approver", async () => {
     const api = createMockApi();
-    vi.spyOn(api, "getSession").mockResolvedValue({ name: "Viewer", email: "viewer@demo.kitchen", role: "viewer", canApprove: false });
+    vi.spyOn(api, "getSession").mockResolvedValue({ name: "Viewer", email: "viewer@demo.kitchen", role: "viewer", canApprove: false, kind: "human" });
     renderApp("/settings/notifications", api);
 
     expect(await screen.findByRole("checkbox", { name: "Approval waiting" })).toBeDisabled();

@@ -73,7 +73,7 @@ describe("Developer settings", () => {
 
   it("hides webhook writes and tests from a non-approver", async () => {
     const api = createMockApi();
-    vi.spyOn(api, "getSession").mockResolvedValue({ name: "Viewer", email: "viewer@demo.kitchen", role: "viewer", canApprove: false });
+    vi.spyOn(api, "getSession").mockResolvedValue({ name: "Viewer", email: "viewer@demo.kitchen", role: "viewer", canApprove: false, kind: "human" });
     renderApp("/settings/developer", api);
 
     expect(await screen.findByText("https://hooks.example.test/kitchen")).toBeVisible();

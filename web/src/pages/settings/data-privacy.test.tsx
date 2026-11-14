@@ -111,7 +111,7 @@ describe("Data & privacy settings", () => {
 
   it("keeps sharing and deletion read-only for a non-approver while allowing export", async () => {
     const api = createMockApi();
-    vi.spyOn(api, "getSession").mockResolvedValue({ name: "Viewer", email: "viewer@demo.kitchen", role: "viewer", canApprove: false });
+    vi.spyOn(api, "getSession").mockResolvedValue({ name: "Viewer", email: "viewer@demo.kitchen", role: "viewer", canApprove: false, kind: "human" });
     renderApp("/settings/data-privacy", api);
 
     expect(await screen.findByRole("checkbox", { name: "Share forecast with Valio Aimo" })).toBeDisabled();

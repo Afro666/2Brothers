@@ -24,6 +24,7 @@ describe("Team settings", () => {
       email: "viewer@demo.kitchen",
       role: "viewer",
       canApprove: false,
+      kind: "human",
     });
     renderApp("/settings/team", api);
 
