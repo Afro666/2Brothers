@@ -248,6 +248,22 @@ describe("createHttpApi", () => {
       { type: "SET_QUANTITY", productId: "900001", quantity: 30 },
       { lines: [{ product_id: "900001", quantity: "30" }] },
     ],
+    [
+      { type: "SET_QUANTITY", productId: "900001", quantity: 20, reason: "TOO_MUCH" },
+      { lines: [{ product_id: "900001", quantity: "20", reason: "TOO_MUCH" }] },
+    ],
+    [
+      { type: "REMOVE_LINE", productId: "900001", reason: "OTHER", note: "Event cancelled" },
+      { lines: [{ product_id: "900001", quantity: "0", reason: "OTHER", note: "Event cancelled" }] },
+    ],
+    [
+      { type: "SET_QUANTITY", productId: "900001", quantity: 20, reason: "TOO_MUCH", note: "Not sent" },
+      { lines: [{ product_id: "900001", quantity: "20", reason: "TOO_MUCH" }] },
+    ],
+    [
+      { type: "REMOVE_LINE", productId: "900001", reason: "OTHER", note: "" },
+      { lines: [{ product_id: "900001", quantity: "0", reason: "OTHER" }] },
+    ],
     [{ type: "REMOVE_LINE", productId: "900001" }, { lines: [{ product_id: "900001", quantity: "0" }] }],
     [
       { type: "ADD_LINE", productId: "900002", quantity: 8 },

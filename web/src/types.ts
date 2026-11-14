@@ -636,9 +636,11 @@ export interface AddableProduct {
   why: string;
 }
 
+export type ProposalChangeReason = "TOO_MUCH" | "TOO_LITTLE" | "IN_STOCK" | "MENU_CHANGED" | "BUDGET" | "OTHER";
+
 export type ProposalChange =
-  | { type: "SET_QUANTITY"; productId: ProductCode; quantity: number }
-  | { type: "REMOVE_LINE"; productId: ProductCode }
+  | { type: "SET_QUANTITY"; productId: ProductCode; quantity: number; reason?: ProposalChangeReason; note?: string }
+  | { type: "REMOVE_LINE"; productId: ProductCode; reason?: ProposalChangeReason; note?: string }
   | { type: "ADD_LINE"; productId: ProductCode; quantity: number };
 
 /** One human correction, kept as learning data for the engine. */

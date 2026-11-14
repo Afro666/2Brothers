@@ -1,5 +1,5 @@
 import { Check, Trash2, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,12 @@ export interface LineEditing {
   onUpdate: (line: OrderLine) => void;
   onRemove: (line: OrderLine) => void;
   inputId: (line: OrderLine) => string;
+  /** #1301: true while the line's Remove waits for its confirm; its quantity is then fixed. */
+  removing?: (line: OrderLine) => boolean;
+  /** #1301: the id of the line's Remove, so the confirm can give focus back to it. */
+  removeId?: (line: OrderLine) => string;
+  /** #1301: the reason chips and the Remove confirm under a line, or null. */
+  below?: (line: OrderLine) => ReactNode;
 }
 
 /** A product that a gateway reason names but that is not a line: the engine left it out. */
@@ -220,8 +226,10 @@ export function ProposalLines({
             const value = editing?.value(line) ?? String(line.quantity);
             const number = Number(value);
             const valid = Number.isInteger(number) && number >= 1;
+            const removing = editing?.removing?.(line) ?? false;
+            const below = editing?.below?.(line);
             const update = () => {
-              if (editing && valid && number !== line.quantity && !editing.busy) editing.onUpdate(line);
+              if (editing && valid && number !== line.quantity && !editing.busy && !removing) editing.onUpdate(line);
             };
             return (
               <div
@@ -271,7 +279,7 @@ export function ProposalLines({
                         min={1}
                         step={1}
                         value={value}
-                        disabled={editing.busy}
+                        disabled={editing.busy || removing}
                         onChange={(event) => editing.onType(line, event.target.value)}
                         className="h-8 w-16 px-1.5 text-right font-mono tabular-nums"
                       />
@@ -281,7 +289,7 @@ export function ProposalLines({
                         size="icon"
                         variant="ghost"
                         className="size-7"
-                        disabled={editing.busy || !valid || number === line.quantity}
+                        disabled={editing.busy || removing || !valid || number === line.quantity}
                         aria-label={t("Update {product}", { product: name })}
                         title={t("Update")}
                       >
@@ -321,13 +329,21 @@ export function ProposalLines({
                       size="icon"
                       variant="ghost"
                       className="size-7 text-muted-foreground hover:text-danger"
+                      id={editing.removeId?.(line)}
                       disabled={editing.busy}
+                      // A disclosure when Remove asks first: it stays mounted, so focus stays on it.
+                      aria-expanded={editing.removing ? removing : undefined}
                       aria-label={t("Remove {product}", { product: name })}
                       title={t("Remove")}
                       onClick={() => editing.onRemove(line)}
                     >
                       <Trash2 aria-hidden />
                     </Button>
+                  </div>
+                ) : null}
+                {below ? (
+                  <div role="cell" className="col-span-full pt-1">
+                    {below}
                   </div>
                 ) : null}
               </div>
