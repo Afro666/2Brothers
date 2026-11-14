@@ -255,7 +255,6 @@ describe("mapCatalogProduct", () => {
       labels: ["GOODS_FROM_FINLAND_BLUE_SWAN"],
       co2KgPerKg: 1.2,
       deliveryReliability: 0.97,
-      priceExVat: null,
     });
   });
 
