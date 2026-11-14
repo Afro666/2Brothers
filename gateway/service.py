@@ -97,7 +97,7 @@ class Gateway:
         audit.append_event(self.db, event, {"kitchen_id": kitchen_id, "at": self.now().isoformat()})
         try:    # webhooks (#277): after the event is stored; a receiver can never break an order
             from gateway import webhooks
-            webhooks.dispatch(self.db, kitchen_id, kind, data)
+            webhooks.dispatch(self.db, kitchen_id, kind, data, actor=actor)
         except Exception:
             pass
 
@@ -939,7 +939,8 @@ class Gateway:
             try:
                 from gateway import webhooks
                 webhooks.dispatch(self.db, kitchen_id, 'proposal_rejected',
-                                  {'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')})
+                                  {'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')},
+                                  actor=doc.get('rejected_by', human))
             except Exception:
                 pass
         return {"proposal_id": proposal_id, "status": "REJECTED"}
