@@ -1264,7 +1264,11 @@ class Gateway:
         common = set.intersection(*({(pid, day) for pid, day, _, _ in pairs}
                                     for pairs in compared.values()))
         for method, candidates in compared.items():
-            pairs = [row for row in candidates if (row[0], row[1]) in common]
+            # Without one method there is no comparison to make, but the other
+            # method's own measured accuracy remains useful. Empty series are
+            # already mapped to unknown by the web, never a perfect 0% baseline.
+            pairs = ([row for row in candidates if (row[0], row[1]) in common]
+                     if all(compared.values()) else candidates)
             out["methods"][method] = {"total": accuracy(pairs), "weeks": accuracy_by_week(pairs)}
         return out
 

@@ -2,6 +2,7 @@
 from datetime import date, datetime, timezone
 
 import mongomock
+import pytest
 
 from gateway.service import Gateway
 from store.history import forecast_vs_actual
@@ -51,10 +52,26 @@ def test_history_must_precede_issuance_not_just_the_target_day():
     assert forecast_vs_actual(db, 'k1', '2026-08-24', '2026-08-24', 'forecast_baseline') == []
 
 
-def test_no_common_evaluation_data_produces_no_scored_weeks():
+@pytest.mark.parametrize('legacy_placeholder', [False, True])
+def test_engine_accuracy_is_kept_when_the_baseline_is_unavailable(legacy_placeholder):
     db = mongomock.MongoClient(tz_aware=True).test
     add(db, 'kitchen_stock', '2026-08-17')
     add(db, 'forecasts', '2026-08-17', need=100)
-    add(db, 'forecast_baseline', '2026-08-17', made_on='2026-08-17')
+    if legacy_placeholder:
+        add(db, 'forecast_baseline', '2026-08-17', made_on='2026-08-17')
     methods = Gateway(db, None).forecast_accuracy('k1', '2026-08-17', '2026-08-17')['methods']
-    assert all(m['weeks'] == [] and m['total']['series'] == 0 for m in methods.values())
+    assert methods['engine']['total']['actual'] == 100
+    assert methods['engine']['total']['series'] == 1
+    assert methods['engine']['weeks'][0]['week'] == '2026-W34'
+    assert methods['weekday-average']['weeks'] == []
+    assert methods['weekday-average']['total']['series'] == 0
+
+
+def test_baseline_accuracy_is_kept_if_only_engine_is_missing():
+    db = mongomock.MongoClient(tz_aware=True).test
+    add(db, 'kitchen_stock', '2026-08-17')
+    add(db, 'kitchen_stock', '2026-08-24')
+    add(db, 'forecast_baseline', '2026-08-24', need=90, made_on='2026-08-24')
+    methods = Gateway(db, None).forecast_accuracy('k1', '2026-08-24', '2026-08-24')['methods']
+    assert methods['weekday-average']['total']['series'] == 1
+    assert methods['engine']['total']['series'] == 0
