@@ -66,4 +66,22 @@ describe("statusChips: who must confirm stock", () => {
       { text: "{supplier} must confirm", values: { supplier: "Leipomo Demo" } },
     ]);
   });
+
+  it("takes Valio's count from Valio's own block when the order lines disagree (#1899)", () => {
+    // The order lines show one unconfirmed line; the gateway's blocks say Valio has two and the fish supplier one.
+    const request = {
+      ...approval,
+      valioToConfirm: 2,
+      suppliersToConfirm: [{ supplierId: "sup-demo-fish", name: "Baltic Catch", count: 1 }],
+    };
+    expect(confirmChips(request, threeLines())).toEqual([
+      { text: "Valio must confirm {count}", values: { count: 2 } },
+      { text: "{supplier} must confirm {count}", values: { supplier: "Baltic Catch", count: 1 } },
+    ]);
+  });
+
+  it("shows no Valio chip when Valio's block has no unknown-stock lines, even if an order line looks unconfirmed", () => {
+    const request = { ...approval, valioToConfirm: 0, suppliersToConfirm: [] };
+    expect(confirmChips(request, threeLines())).toEqual([]);
+  });
 });

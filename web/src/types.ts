@@ -295,6 +295,8 @@ export interface ApprovalRequest {
   reasons: MandateReason[];
   /** Suppliers other than Valio with unconfirmed stock; `count` is how many of the proposal's lines (the gateway's `blocks`). */
   suppliersToConfirm: { supplierId: string; name: string; count?: number }[];
+  /** #1899: Valio's own block's `unknown_stock` lines; absent when the gateway sent no blocks. */
+  valioToConfirm?: number;
   /** The gateway's per-supplier fees (`blocks[].delivery_fee` above zero), for a proposal with no single fee (#1858). */
   blockDeliveryFees?: { supplierName: string; amount: number }[];
   /** Proposal-line cut-offs and the supplier block each line belongs to. */
