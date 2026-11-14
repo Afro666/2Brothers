@@ -75,6 +75,18 @@ class TamperDemoTests(unittest.TestCase):
         trust.restore(self.db, "demo-kitchen")
         self.assertTrue(trust.verify(self.db, "demo-kitchen")["ok"])
 
+    def test_a_db_handle_without_tz_aware_works(self):
+        from datetime import datetime, timedelta, timezone
+        db = mongomock.MongoClient()["naive"]
+        seed(db)
+        trust.tamper(db, "demo-kitchen")
+        self.assertIsNone(db.audit_tamper_demo.find_one({})["tampered_at"].tzinfo)
+        self.assertFalse(trust.verify(db, "real-kitchen")["ok"])  # fresh: still broken
+        old = datetime.now(timezone.utc) - trust.TAMPER_TTL - timedelta(seconds=1)
+        db.audit_tamper_demo.update_one({"_id": "demo-kitchen"}, {"$set": {"tampered_at": old}})
+        self.assertTrue(trust.verify(db, "real-kitchen")["ok"])
+        self.assertIsNone(db.audit_tamper_demo.find_one({}))
+
     def test_a_removed_row_is_a_break_nobody_can_attribute(self):
         self.db.audit_log.delete_one({"_id": 2})
         result = trust.verify(self.db, "demo-kitchen")
