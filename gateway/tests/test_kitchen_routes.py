@@ -143,3 +143,25 @@ def test_approved_orders_count_as_on_order_until_their_delivery_day(env):
     items = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}
     assert items["463335"]["on_order"] is None and items["463335"]["position"] is None
     assert items["463335"]["on_order_known"] is False
+
+
+def test_on_order_is_unknown_when_net_content_unit_differs_from_the_kitchen_unit(env):
+    client, _, db = env
+    db.products.update_one({"_id": "462775"}, {"$set": {
+        "units": [{"unit": "ST", "size_in_base_units": 1.0}], "net_content": {"value": 500, "unit": "g"}}})
+    count = {"idempotency_key": "c10", "counted_at": "2026-11-13T22:00:00+02:00", "source": "manual",
+             "counts": [{"product_id": "462775", "on_hand": "5", "unit": "L"}]}
+    client.post(K + "/stock-counts", headers=HUMAN, json=count)
+    db.proposals.insert_one({"_id": "p-unit", "request": {"requested_date": "2026-11-16"}})
+    db.orders.insert_one({"kitchen_id": "demo-kitchen", "proposal_id": "p-unit", "outcome": "CONFIRMED",
+                          "status": "SENT", "lines": [{"product_id": "462775", "quantity": "30", "unit": "ST"}]})
+    item = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}["462775"]
+    assert item["on_order"] is None and item["on_order_known"] is False and item["position"] is None
+    # 500 ml per piece in a kitchen counting litres: 30 pieces are 15 L.
+    db.products.update_one({"_id": "462775"}, {"$set": {"net_content": {"value": 500, "unit": "ml"}}})
+    item = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}["462775"]
+    assert item["on_order_known"] is True and D(item["on_order"]) == 15 and D(item["position"]) == 20
+    # No net content: a piece is not a litre, so on order is unknown.
+    db.products.update_one({"_id": "462775"}, {"$unset": {"net_content": ""}})
+    item = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}["462775"]
+    assert item["on_order"] is None and item["on_order_known"] is False
