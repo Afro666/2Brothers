@@ -175,25 +175,35 @@ check the notice pages come from the recording; only the list is scraped live. O
 
 ## OpenAI: Best Use of Codex
 
-What the repo proves today:
+The evidence is in `docs/codex.md`: numbers from the GitHub API, six episodes with PR
+links, and the limits. The numbers below are from `python docs/codex_metrics.py --until
+2026-11-14T03:30:00Z`.
 
 - One rule set for every agent. `AGENTS.md` points Codex at `CLAUDE.md`: one issue, one
   branch, one PR, and an automatic review on every PR.
-- `CLAUDE.md` names Codex as Maciek's agent. His areas are `agent/`, `env/` and `signals/`.
-- `agent/README.md:271` records that Codex implemented the Valio adapter (#20), the MCP
-  integration (#21) and the Buyer loop (#22), each on its own issue branch with a reviewed
-  PR. The MCP tools are `gateway/mcp_server.py` (PR #54); the loop is `agent/runner.py`
-  (PR #63).
+- Maciek works with Codex and, next to it, a Claude Code session. 42 merged PRs came from
+  his Codex session: 11% of the 368 merged PRs, with 6,478 added lines. 2,613 of those
+  lines (40%) are in test files.
+- 41 of the 42 Codex PRs passed the first automatic review. The review blocked one (#87)
+  because its code was ahead of the contract.
+- Codex built the Valio client (#45), the MCP tools (#54), the Nemotron Buyer loop (#63),
+  the weather and season signals (#183, #207), the human approval flow (#436) and the
+  recall holds with replacement baskets (#455). `agent/README.md:271` records the first three.
+- Codex also worked as a second reviewer: on #120 it found six failing cases in code that
+  the Claude Code session wrote, before the PR opened.
 - Five decisions in `docs/decisions.md` are tagged Codex: the unknown-stock rule (#48),
   read-only policy recovery (#67), the closed reason-code list (#96), the fine-tuning
   no-go (#364) and the recall-hold rule (#459).
 - The gateway serves the Buyer tools over MCP at `/mcp`, so Codex can also be the Buyer
   (`gateway/README.md`, "Remote MCP").
-- The team set up Codex CLI profiles for Kimi and DeepSeek on Verda as optional workers
-  (`docs/decisions.md`, 2026-11-13 20:40).
 
-**Not built:** `docs/codex.md` with metrics and a recording (#360). We have no measured
-number for how much Codex sped the work up, so we state none here.
+**Not Codex:** `env/` (Kitchen Week and the benchmark) and the first recall monitor came
+from Maciek's Claude Code session. Aron and Tymon use Claude Code. The review bot and the
+fix bot are Claude.
+
+**Not built:** the screen recording, and Maciek's own prompts and time estimates (#360,
+"For Maciek to fill in" in `docs/codex.md`). We have no measured number for how much Codex
+sped the work up, so we state none here. No CI step runs Codex (#361).
 
 ## Open items before submission
 
