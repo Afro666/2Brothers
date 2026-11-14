@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { useApi } from "@/api";
@@ -446,16 +446,19 @@ export function SuppliersPage() {
   const actor = auditActorForRole(role);
   const suppliersState = useAsync(() => api.listSuppliers(), [api]);
   // Diff by id: React keeps a card when the same supplier comes back, so per-card errors survive a reload.
-  const [rows, setRows] = useState<Supplier[]>([]);
+  // Derived during render, so a ready state never shows zero rows for one frame.
+  const previousRows = useRef<Supplier[]>([]);
+  const readyData = suppliersState.status === "ready" ? suppliersState.data : null;
+  const rows = useMemo(() => {
+    if (!readyData) return previousRows.current;
+    return readyData.map((supplier) => {
+      const previous = previousRows.current.find((row) => row.id === supplier.id);
+      return previous && JSON.stringify(previous) === JSON.stringify(supplier) ? previous : supplier;
+    });
+  }, [readyData]);
   useEffect(() => {
-    if (suppliersState.status !== "ready") return;
-    setRows((current) =>
-      suppliersState.data.map((supplier) => {
-        const previous = current.find((row) => row.id === supplier.id);
-        return previous && JSON.stringify(previous) === JSON.stringify(supplier) ? previous : supplier;
-      }),
-    );
-  }, [suppliersState.status, suppliersState.status === "ready" ? suppliersState.data : null]);
+    previousRows.current = rows;
+  }, [rows]);
   const suppliers = { ...suppliersState, data: rows };
   const [sharing, setSharing] = useState<SharingState>({ status: "loading" });
   const [sharingVersion, setSharingVersion] = useState(0);
