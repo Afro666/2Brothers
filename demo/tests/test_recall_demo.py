@@ -102,3 +102,28 @@ def test_stock_alert_needs_no_seed(monkeypatch):
     assert alert["proposals"] == [] and alert["status"] == "active"
     out = seed(gw, today=TODAY, kitchen_id="hotel", key="after")
     assert not out["has_coffee"] and out["excluded"] == [{"product_id": COFFEE, "reason": "BLOCKED_BY_RECALL"}]
+
+
+@pytest.mark.parametrize("reason", ["BLOCKED_BY_RECALL", "BLOCKED_BY_RECALL: exact match"])
+def test_open_day_stops_after_one_quote_for_recalled_coffee(reason):
+    from demo.recall_demo import open_day
+    class Held:
+        calls = 0
+        def _quote(self, kitchen_id, request):
+            self.calls += 1
+            return {"simulation": {"lines": [], "excluded": [{"product_id": COFFEE, "reason": reason}]}}
+    gateway = Held()
+    assert open_day(gateway, TODAY) == next_monday(TODAY)
+    assert gateway.calls == 1
+
+
+def test_open_day_keeps_searching_when_another_product_is_recalled():
+    from demo.recall_demo import open_day
+    class Other(Gw):
+        def _quote(self, kitchen_id, request):
+            result = super()._quote(kitchen_id, request)
+            result["simulation"]["excluded"] = [{"product_id": "other", "reason": "BLOCKED_BY_RECALL"}]
+            return result
+    gateway = Other()
+    assert open_day(gateway, TODAY) == date(2026, 11, 17)
+    assert len(gateway.asked) == 2
