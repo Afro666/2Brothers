@@ -38,8 +38,8 @@ DEMAND_CLASSES = ("A", "B", "C")
 # The engine's categories (engine/params.py); another key would silently do nothing there.
 COVER_CATEGORIES = ("fresh_dairy", "vegetables", "meat", "fish", "frozen", "dry", "other")
 BUDGET_WARNINGS = ("budget_warning_order_eur", "budget_warning_week_eur")
-SETTINGS = ("service_level", "max_cover_days", "stockout_cap", *BUDGET_WARNINGS,
-            "excluded_allergens")
+SETTINGS = ("service_level", "max_cover_days", "stockout_cap", "certainty_premium_max",
+            *BUDGET_WARNINGS, "excluded_allergens")
 _CLOCK = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 _WEEK = re.compile(r"\d{4}-W(0[1-9]|[1-4]\d|5[0-3])")
 
@@ -271,6 +271,11 @@ def settings_fields(data: dict) -> dict:
         if cap is None or not 1 <= cap <= 3:
             raise ValueError("stockout_cap must be from 1 to 3")
         out["stockout_cap"] = float(cap)  # a factor, not money; the engine reads a float
+    if "certainty_premium_max" in data:
+        limit = _decimal(data["certainty_premium_max"], "certainty_premium_max")
+        if limit is not None and limit < 1:
+            raise ValueError("certainty_premium_max must be at least 1, or null for no limit")
+        out["certainty_premium_max"] = limit  # None: no limit
     for field in BUDGET_WARNINGS:
         if field in data:
             out[field] = _decimal(data[field], field)  # None: no warning
