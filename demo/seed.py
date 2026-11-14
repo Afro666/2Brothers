@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 import tempfile
 import json
@@ -139,6 +140,23 @@ def build(seed: int, today: date, future_weeks: int, kitchens: int = 20) -> dict
     return out
 
 
+# A standing order that no longer matches usage, so the demo shows STANDING_ORDER_DRIFT (S08):
+# the Eila milk is set about 60 % above what one delivery cycle really uses.
+STANDING_PRODUCT, STANDING_OVER, STANDING_CYCLE_DAYS = "463335", Decimal("1.6"), 3
+
+
+def demo_standing_orders(data: dict) -> dict[str, str]:
+    """{product: qty} for demo-kitchen, from its own last 28 recorded days of use."""
+    used = [Decimal(str(r["used"])) for r in data.get("stock", [])
+            if r.get("meta", {}).get("kitchen_id") == DEMO_ID
+            and r.get("meta", {}).get("product_id") == STANDING_PRODUCT and r.get("used") is not None]
+    if not used:
+        return {}
+    daily = sum(used[-28:]) / len(used[-28:])
+    qty = (daily * STANDING_CYCLE_DAYS * STANDING_OVER).to_integral_value()
+    return {STANDING_PRODUCT: f"{qty:f}"} if qty > 0 else {}
+
+
 def load(db, data: dict) -> dict:
     """Write `data` through the store (repository module). Safe to run again."""
     from store.history import load_history, save_forecasts, seed_sharing
@@ -169,6 +187,10 @@ def load(db, data: dict) -> dict:
             repo.own_products.delete(DEMO_ID, product["product_id"])
             repo.own_products.create(DEMO_ID, product)
         counts["suppliers"], counts["own_products"] = len(DEMO_SUPPLIERS), len(DEMO_OWN_PRODUCTS)
+        standing = demo_standing_orders(data)
+        if standing:
+            repo.settings.put(DEMO_ID, {"standing_orders": standing})
+        counts["standing_orders"] = len(standing)
     counts["sharing"] = len(seed_sharing(db, ids, VALIO))
     from store.buyer_context import seed_demo_policy
     if DEMO_ID in ids:
