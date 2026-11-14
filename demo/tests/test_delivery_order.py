@@ -40,7 +40,7 @@ def test_the_demo_order_is_placed_once_with_the_catalog_prices(db):
     assert first["order_id"] == again["order_id"] and db.orders.count_documents({}) == 1
     order = db.orders.find_one({})
     assert (order["kitchen_id"], order["outcome"], order["status"], order["reference"]) == (
-        "demo-kitchen", "CONFIRMED", "SENT", "DEMO-1198")
+        "demo-kitchen", "CONFIRMED", "RECORDED", "DEMO-1198")
     assert [(ln["product_id"], ln["quantity"], ln["unit"], ln["unit_price"], ln["total"]) for ln in order["lines"]] == [
         ("463982", "3", "KI", "31.01", "93.03"), ("460838", "1", "KI", "29.06", "29.06"),
         ("463335", "40", "ST", "1.40", "56.00")]

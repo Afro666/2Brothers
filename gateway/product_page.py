@@ -20,6 +20,7 @@ from gateway.service import GatewayError
 from gateway.suppliers import KITCHEN_TZ, VALIO, vat_rate
 from gateway.valio_client import ValioBusy
 from store import demo_delivery
+from store.orders import public_status
 from store.products import get_product, get_products
 from store.search import ALLERGENS
 
@@ -249,7 +250,7 @@ def _kitchen(gw, kitchen_id: str, pid: str, today: date) -> dict:
         line = _line(order.get("lines"), pid) or {}
         placed.append({"order_id": order["_id"], "created_at": _when(order.get("created_at")),
                        "quantity": line.get("quantity"), "unit": line.get("unit"), "total": line.get("total"),
-                       "status": order.get("status"), "outcome": order.get("outcome")})
+                       "status": public_status(order.get("status")), "outcome": order.get("outcome")})
     ready = {p["offer_id"]: p for p in db.proposals.find({"kitchen_id": kitchen_id, "status": "READY"},
                                                          {"offer_id": 1, "created_at": 1})
              .sort("created_at", -1).limit(200)}     # the newest 200, never a random 200 (#1632)

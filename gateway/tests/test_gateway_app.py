@@ -139,7 +139,7 @@ def test_human_approves_order_is_placed_once(env):
     r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
     assert r.status_code == 200, r.text
     order = r.json()
-    assert order["outcome"] == "CONFIRMED" and order["status"] == "SENT"
+    assert order["outcome"] == "CONFIRMED" and order["status"] == "RECORDED"   # nothing sent to a supplier
     again = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body)
     assert again.json()["order_id"] == order["order_id"]
     assert db.orders.count_documents({}) == 1
@@ -230,7 +230,7 @@ def test_human_approval_places_unknown_stock_and_the_order_waits_for_the_supplie
                            json={'expected_total': p['expected_total'], 'idempotency_key': 'a1'})
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body['status'] == 'SENT' and body['supplier_must_confirm'] == ['sup-valio']
+    assert body['status'] == 'RECORDED' and body['supplier_must_confirm'] == ['sup-valio']
     assert [ln['unknown_stock'] for ln in body['lines']] == [ln['unknown_stock'] for ln in p['lines']]
     order = db.orders.find_one({})
     assert order['supplier_must_confirm'] == ['sup-valio']
