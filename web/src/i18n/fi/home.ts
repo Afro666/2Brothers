@@ -13,6 +13,9 @@ export default {
   "Stock covers the next 7 days.": "Varasto riittää seuraavaksi 7 päiväksi.",
   "not counted": "ei laskettu",
   "short by {amount}": "puuttuu {amount}",
+  "+{count} more": "+{count} lisää",
+  "A purchasing agent for professional kitchens: it proposes orders from live Valio prices and stock; a person approves every order.":
+    "Ostoagentti ammattikeittiöille: se ehdottaa tilauksia Valion ajantasaisista hinnoista ja varastosta; ihminen hyväksyy jokaisen tilauksen.",
   " (on order unknown)": " (tilauksessa tuntematon)",
   "Latest steps": "Viimeisimmät toimenpiteet",
   "Open activity log": "Avaa toimintaloki",
@@ -40,7 +43,7 @@ export default {
   "That did not work. Try again.": "Toiminto ei onnistunut. Yritä uudelleen.",
   "Offer from {supplier}": "Tarjous: {supplier}",
   "in place of {product}, which is predicted short on": "tuotteen {product} tilalle, josta ennustetaan puutetta",
-  "{quantity} {unit}, from your own forecast": "{quantity} {unit}, oman ennusteesi perusteella",
+  "{amount}, from your own forecast": "{amount}, oman ennusteesi perusteella",
   "No reason given.": "Perustelua ei annettu.",
   "written by {possessive} selling agent ({madeBy})": "{possessive} myyntiagentin kirjoittama ({madeBy})",
   "Valio's": "Valion",

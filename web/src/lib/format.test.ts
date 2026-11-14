@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { compareUrgency } from "@/components/purchasing/urgency-badge";
 
-import { formatEur, formatStock, isLater, isPassed, isUnknownStock } from "./format";
+import { formatEur, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
 
 describe("stock sentinels", () => {
   it("treats both Valio sentinels and a missing value as unknown", () => {
@@ -49,5 +49,28 @@ describe("urgency order", () => {
       .slice()
       .sort(compareUrgency);
     expect(sorted).toEqual(["GUESTS_AFFECTED_TODAY", "UNKNOWN", "RUNS_OUT_BEFORE_NEXT_DELIVERY", "DUE_NOW", "CAN_WAIT"]);
+  });
+});
+
+describe("amounts for people", () => {
+  it("rounds a weight to one decimal and writes the unit in small letters", () => {
+    expect(formatQuantity(12.226, "KG")).toBe("12.2 kg");
+    expect(formatQuantity(151.64, "L")).toBe("151.6 l");
+    expect(formatQuantity(3, "KG")).toBe("3 kg");
+  });
+
+  it("gives whole pieces for counted units", () => {
+    expect(formatQuantity(87.341, "PCS")).toBe("87 pcs");
+    expect(formatQuantity("12.6", "BAG")).toBe("13 BAG");
+  });
+
+  it("keeps a text that is not a number as it is", () => {
+    expect(formatQuantity("about 10", "KG")).toBe("about 10 kg");
+  });
+
+  it("rounds a shortfall up, never down", () => {
+    expect(formatShortfall(1921.159, "PCS")).toBe("1,922 pcs");
+    expect(formatShortfall(41.41, "KG")).toBe("41.5 kg");
+    expect(formatShortfall(41.4, "KG")).toBe("41.4 kg");
   });
 });
