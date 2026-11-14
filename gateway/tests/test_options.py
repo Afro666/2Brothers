@@ -156,3 +156,22 @@ def test_a_proposal_made_through_the_buyer_tools_gets_the_option_too(env):
     assert [(ln["product_id"], ln["quantity"]) for ln in option["lines"]] == [("462775", "51")]
     chosen = choose(client, p, option["offer_id"]).json()
     assert approve(client, chosen).status_code == 200
+
+
+def test_a_failing_confirmed_option_is_logged_and_the_proposal_is_still_made(env, caplog, monkeypatch):
+    import logging
+
+    from gateway import options
+
+    def boom(*args, **kwargs):
+        raise KeyError("requested_date")
+
+    monkeypatch.setattr(options, "_confirmed_option", boom)
+    client, _, _ = env
+    with caplog.at_level(logging.WARNING, logger="gateway.options"):
+        p = milk(client, quantity="1000")
+    assert p["proposal_id"] and p["substitute_options"] == []
+    records = [r for r in caplog.records if r.name == "gateway.options"]
+    assert len(records) == 1 and records[0].levelno == logging.WARNING
+    assert records[0].exc_info is not None
+    assert p["proposal_id"] in records[0].getMessage()

@@ -18,9 +18,12 @@ Contract: docs/contract.md, "Chef substitute choices".
 
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 
 from store import orders
+
+log = logging.getLogger(__name__)
 
 TIERS = ("good", "better", "best")
 CONFIRMED = "confirmed"
@@ -45,8 +48,9 @@ def attach_confirmed(gw, kitchen_id: str, proposal_id: str, request: dict, sim: 
         if option:
             gw.db.proposals.update_one({"_id": proposal_id, "kitchen_id": kitchen_id},
                                        {"$set": {"confirmed_option": option}})
-    except Exception:
-        return
+    except Exception:   # never fails a proposal, but leaves a trace
+        log.warning("confirmed-stock option failed: kitchen_id=%s proposal_id=%s",
+                    kitchen_id, proposal_id, exc_info=True)
 
 
 def _confirmed_option(gw, kitchen_id: str, request: dict, sim: dict) -> dict | None:
