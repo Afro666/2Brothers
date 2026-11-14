@@ -476,6 +476,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     from gateway.onboarding import mount_onboarding
     mount_onboarding(app, principal, body)
 
+    # Recall list and "check now" (#358): views over the monitor's holds and replacements.
+    from gateway.recalls_view import mount_recalls
+    mount_recalls(app, gw, principal, body)
+
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp
     mount_mcp(app)

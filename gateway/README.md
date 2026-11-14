@@ -255,3 +255,21 @@ a line:
 - Approve is still one human yes and one order; the order stores `blocks`. A line with
   unknown stock still returns 409 `STOCK_UNKNOWN`, so a block of a manual supplier cannot
   be placed until a supplier confirmation exists.
+
+## Recall list and "check now" (#358)
+
+`gateway/recalls_view.py` serves `GET /v1/kitchens/{k}/recalls` (`kitchen:read`) and
+`POST /v1/kitchens/{k}/recalls/check` (`kitchen:write`: a person who is not a viewer; body
+`idempotency_key`). Both answer `{"last_check": ..., "alerts": [...]}`; the shape is in
+`docs/contract.md`, "Recall alerts (Context.dev)", the alert fields in `docs/recall-contract.md`.
+
+- Views only: the match is `monitor.recalls.scan`, the hold and the replacement proposal are
+  `monitor.proposals.apply_notices`, the alerts are the rows of `store.recalls`.
+- A check makes one Context.dev call (the Ruokavirasto list, one attempt,
+  `RECALL_CHECK_TIMEOUT_S`, default 45 s). No key, slow, down or a wrong answer: it uses the
+  recording `monitor/fixtures/ruokavirasto.json` and says `source: "recording"` with the
+  reason in `live_error`. The notice pages always come from the recording; a live list
+  counts the notices it has not read (`notices_unread`).
+- The `recall_check` audit entry is also the idempotency record: a repeat key scrapes and
+  applies nothing. A check never orders, approves or cancels.
+- Demo: `python -m demo.recall_demo` makes the open coffee proposal the check blocks.

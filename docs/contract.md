@@ -1317,8 +1317,7 @@ Context.dev `POST /v1/web/scrape`. `monitor/proposals.py` applies the notices to
 kitchen's open proposals: a recalled line puts the proposal on hold and the Buyer plans a
 separate replacement proposal. These two routes show that state and let a person run a
 check now. They are views: they keep no second recall store and no second matching logic.
-This is the agreed shape; the gateway change on branch `aron/358-recall-routes` serves it
-(until that is merged both routes answer 404).
+The code is `gateway/recalls_view.py`.
 
 **One source for the alert fields:** [recall-contract.md](recall-contract.md) ("Exact alert
 fields"). The same document holds the hold, the replacement proposal, the reject and the
@@ -1338,6 +1337,7 @@ both answer:
     "details_fetched_at": "2026-11-13T22:17:51+00:00",
     "via": "Context.dev /v1/web/scrape (json)",
     "notices_scanned": 38,
+    "scanned_since": "2026-03-02",
     "notices_listed": null,
     "notices_unread": null
   },
@@ -1417,10 +1417,14 @@ What the view adds to an alert:
   recording was made). `details_fetched_at`: when the notice pages (product, brand, EAN,
   lot) were scraped; a check makes one scrape, the list, so the pages always come from the
   recording.
-- `notices_scanned`: notices matched against the open proposals. `notices_listed`: notices
-  on the live list, `null` for `recording`. `notices_unread`: notices on the live list whose
-  page is not in the recording, `null` for `recording`. They were **not** matched: when it
-  is above 0 the screens say "N new notices not read yet", never "no recalls".
+- `notices_scanned`: notices matched against the open proposals. `scanned_since`: the date
+  of the oldest of them (`YYYY-MM-DD`); the recording starts there and older notices were
+  left out when it was made.
+- `notices_listed`: notices on the live list, of any age; `null` for `recording`.
+  `notices_unread`: notices on the live list, dated `scanned_since` or later or with no
+  date, whose page is not in the recording; `null` for `recording`. They were **not**
+  matched: when it is above 0 the screens say "N new notices not read yet", never "no
+  recalls".
 
 `POST /recalls/check`:
 
@@ -1431,8 +1435,9 @@ What the view adds to an alert:
   `kitchen:write` today (403 `SCOPE_REQUIRED`).
 - A repeat `idempotency_key` scrapes nothing and applies nothing: it answers the stored
   `last_check` of that check with the alerts as they are now.
-- One check makes at most one Context.dev call, with one attempt and a timeout (20 seconds,
-  `RECALL_CHECK_TIMEOUT_S`). It never retries and never loops.
+- One check makes at most one Context.dev call, with one attempt and a timeout (45 seconds;
+  `RECALL_CHECK_TIMEOUT_S`, at most 120). It never retries and never loops. A live list
+  scrape took 30 seconds on 2026-11-14, so the button shows "Checking recalls…" that long.
 - It never orders, approves or cancels anything. It holds proposals and plans replacement
   proposals exactly as `monitor.proposals` does; an alert already known (same `event_id`)
   is not re-planned and a dismissed alert is not applied again.
