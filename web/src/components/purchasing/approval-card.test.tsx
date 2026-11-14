@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ADD_SEARCH_DEBOUNCE_MS, ApprovalCard } from "@/components/purchasing/approval-card";
+import { ApiError } from "@/api/types";
 import { approval, orders } from "@/mocks/milk-case";
 
 const confirmedOrder = {
@@ -112,6 +113,21 @@ describe("ApprovalCard", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
+  });
+
+  it("says a refused approval stays held when the gateway reports a recall", async () => {
+    const user = userEvent.setup();
+    const onApprove = vi.fn(() => Promise.reject(new ApiError("BLOCKED_BY_RECALL", "blocked by a recall")));
+    render(<ApprovalCard request={approval} order={confirmedOrder} onApprove={onApprove} />);
+
+    await user.click(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Approval failed: This order is blocked by a recall. Reject it and approve the replacement order instead. The order stays held by the recall.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("The order is still pending");
   });
 
   it("stays pending with an error when the rejection fails", async () => {

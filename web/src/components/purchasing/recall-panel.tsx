@@ -71,6 +71,9 @@ export function RecallPanel({
   } else if (affecting && affecting > 0) {
     tone = "danger";
     headline = plural(affecting);
+  } else if (last?.noticesUnread != null && last.noticesUnread > 0) {
+    tone = "warning";
+    headline = `${last.noticesUnread} new ${last.noticesUnread === 1 ? "notice" : "notices"} not read yet`;
   } else if (last) {
     tone = "success";
     headline = "No recall matches your open orders.";
@@ -95,17 +98,23 @@ export function RecallPanel({
           <p className="text-foreground">
             Checked {last.noticesScanned ?? "an unknown number of"} Ruokavirasto notices, {formatDateTime(last.checkedAt)}.{" "}
             {last.source === "recording"
-              ? `From the recorded scrape of ${formatDateTime(last.fetchedAt)}, not a live one.`
-              : "Scraped live."}
+              ? `From the recorded scrape of ${formatDateTime(last.fetchedAt)}, not a live one. ${
+                  last.liveError == null
+                    ? "Shown from the recording."
+                    : last.liveError === "NO_KEY"
+                      ? "Context.dev key is not set on this server."
+                      : last.liveError === "TIMEOUT"
+                        ? "Context.dev was too slow."
+                        : "Context.dev could not be read."
+                }`
+              : `Scraped live: ${last.noticesListed ?? "an unknown number of"} notices on the list.`}
           </p>
         ) : (
           <p className="text-foreground">Food Authority recalls, matched to the lines on your open orders.</p>
         )}
-        {last ? (
-          <p className="text-xs text-muted-foreground">
-            Powered by Context.dev <code>{last.via}</code>
-          </p>
-        ) : null}
+        <p className="text-xs text-muted-foreground">
+          Powered by Context.dev <code>{last?.via.match(/\/v1\/web\/scrape/)?.[0] ?? "/v1/web/scrape"}</code>
+        </p>
         {error ? (
           <p role="alert" className="text-danger">
             {error}

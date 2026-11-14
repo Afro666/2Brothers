@@ -10,7 +10,7 @@
  * PLACEHOLDERS: the order quantity, both prices, the stock figures, the request text and the
  * times. Replace them with the engine's answer once #358 serves the re-planned proposal.
  */
-import type { ApprovalRequest, Offer, Order, OrderLine, Product, RecallAlert, RecallReplacementLine } from "@/types";
+import type { ApprovalRequest, Offer, Order, OrderLine, Product, RecallAlert } from "@/types";
 
 const REQUESTED = "2026-11-16";
 const FOOD_VAT = 13.5;
@@ -119,18 +119,29 @@ export const coffeeApproval: ApprovalRequest = {
   status: "PENDING",
 };
 
+export const coffeeReplacementOrder: Order = {
+  ...coffeeOrder,
+  id: "ORD-1045-R",
+  lines: [coffeeReplacementLine],
+  totalExVat: 129.6,
+  totalInclVat: 147.1,
+  mov: coffeeOrder.mov && { ...coffeeOrder.mov, current: 129.6 },
+};
+
+export const coffeeReplacementApproval: ApprovalRequest = {
+  ...coffeeApproval,
+  id: "APR-313-R",
+  orderId: coffeeReplacementOrder.id,
+  summary: "Replacement coffee for the recalled breakfast order",
+  totalExVat: 129.6,
+  totalInclVat: 147.1,
+};
+
 /** The recorded scrape the mock answers from. */
 export const coffeeRecording = {
   fetchedAt: "2026-11-13T22:17:51+00:00",
   via: "/v1/web/scrape",
   noticesScanned: 38,
-};
-
-const replacement: RecallReplacementLine = {
-  productId: coffeeReplacementLine.product.id,
-  productName: coffeeReplacementLine.product.names.en,
-  quantity: coffeeReplacementLine.quantity,
-  unit: coffeeReplacementLine.product.salesUnit,
 };
 
 /** The `possible` alert the monitor writes for the hotel, on the open coffee order. */
@@ -160,12 +171,28 @@ export function coffeeRecallAlert(detectedAt: string): RecallAlert {
       "Do not use it until checked. Check your packs: only 23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027 are recalled.",
     orderId: coffeeOrder.id,
     lineStatus: "BLOCKED_BY_RECALL",
-    replacementLine: replacement,
+    replacement: {
+      orderId: coffeeReplacementOrder.id,
+      status: "READY",
+      expectedTotal: coffeeReplacementOrder.totalInclVat,
+      lines: coffeeReplacementOrder.lines.map((line) => ({
+        productId: line.product.id,
+        productName: line.product.names.en,
+        quantity: line.quantity,
+        unit: line.product.salesUnit,
+      })),
+    },
+    replanError: null,
+    proposalStatus: "BLOCKED_BY_RECALL",
     replacementIdeas: [
       { productId: "475842", name: "12 x Löfbergs Crescendo Ground Coffee 500g Rainforest Alliance", brand: "Löfbergs" },
       { productId: "463452", name: "12 x Löfbergs Kharisma Ground coffee 500g Rainforest Alliance", brand: "Löfbergs" },
       { productId: "468896", name: "12 x Löfbergs Magnifika Brygg Kaffe 500g Rainforest alliance", brand: "Löfbergs" },
     ],
     detectedAt,
+    status: "active",
+    dismissedBy: null,
+    dismissedAt: null,
+    dismissReason: null,
   };
 }

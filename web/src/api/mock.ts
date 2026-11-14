@@ -143,10 +143,12 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     });
   };
 
-  function pendingApproval(id: string): ApprovalRequest {
+  function pendingApproval(id: string, allowRecallHold = false): ApprovalRequest {
     const approval = approvals.get(id);
     if (!approval) throw new ApiError("NOT_FOUND", `Approval ${id} was not found.`);
-    if (approval.status !== "PENDING") throw new ApiError("ALREADY_DECIDED", `Approval ${id} is already decided.`);
+    if (approval.status !== "PENDING" && !(allowRecallHold && approval.status === "BLOCKED_BY_RECALL")) {
+      throw new ApiError("ALREADY_DECIDED", `Approval ${id} is already decided.`);
+    }
     return approval;
   }
 
@@ -240,12 +242,15 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     ...createRecallMock({
       getOrder: (id) => demoOrders.get(id),
       isPending: (orderId) => [...approvals.values()].some((row) => row.orderId === orderId && row.status === "PENDING"),
-      replan(orderId, lines) {
-        const order = demoOrders.get(orderId)!;
-        const next = resimulate(lines, order);
-        Object.assign(order, next);
-        const approval = [...approvals.values()].find((row) => row.orderId === orderId)!;
-        approvals.set(approval.id, { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length });
+      addReplacement(order, approval) {
+        demoOrders.set(order.id, order);
+        approvals.set(approval.id, approval);
+      },
+      hold: (orderId) => {
+        const approval = [...approvals.values()].find((row) => row.orderId === orderId);
+        if (approval) approvals.set(approval.id, { ...approval, status: "BLOCKED_BY_RECALL" });
+        const order = demoOrders.get(orderId);
+        if (order) demoOrders.set(orderId, { ...order, status: "BLOCKED_BY_RECALL" });
       },
       recordAudit: (event) => audit.push({ ...event, id: `EV-${audit.length + 1}`, at: new Date().toISOString() }),
     }),
@@ -264,7 +269,13 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       return approval;
     },
     async approve(decision, actor) {
-      const current = pendingApproval(decision.approvalId);
+      const current = pendingApproval(decision.approvalId, true);
+      if (current.status === "BLOCKED_BY_RECALL") {
+        throw new ApiError(
+          "BLOCKED_BY_RECALL",
+          "This order is blocked by a recall and cannot be approved. Reject it and approve the replacement order instead.",
+        );
+      }
       if (nextFailure) {
         const failure = nextFailure;
         nextFailure = null;
@@ -299,8 +310,9 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       return decided;
     },
     async reject(approvalId, reason, actor) {
-      const current = pendingApproval(approvalId);
-      return decide(current, "REJECTED", actor, `Rejected ${current.orderId}`, reason.trim() || null);
+      const current = pendingApproval(approvalId, true);
+      const rejected = decide(current, "REJECTED", actor, `Rejected ${current.orderId}`, reason.trim() || null);
+      return rejected;
     },
 
     async listAddableProducts(orderId, query = "") {

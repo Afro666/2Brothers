@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createHttpApi } from "@/api/http";
 import { createMockApi } from "@/api/mock";
@@ -11,10 +11,14 @@ function coffeeCard() {
   return screen.getByText("Breakfast buffet coffee for next week").closest('[data-slot="card"]') as HTMLElement;
 }
 
+function replacementCard() {
+  return screen.getByText("Replacement coffee for the recalled breakfast order").closest('[data-slot="card"]') as HTMLElement;
+}
+
 describe("ApprovalsPage recalls", () => {
   beforeEach(() => localStorage.clear());
 
-  it("checks recalls, shows the banner, blocks the coffee line and puts the replacement in the total", async () => {
+  it("checks recalls, holds the coffee and adds a separate approvable replacement order", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
     renderApp("/approvals", api);
@@ -32,9 +36,22 @@ describe("ApprovalsPage recalls", () => {
     const card = coffeeCard();
     expect(await within(card).findByText("Blocked by recall")).toBeInTheDocument();
     expect(within(card).getByText("Suodatinkahvissa vierasesineriski")).toBeInTheDocument();
-    expect(within(card).getByText("Replacement line")).toBeInTheDocument();
-    // 2 KI Löfbergs at the placeholder €64.80, 13.5 % VAT: the re-planned exact total.
-    expect(await within(card).findByRole("button", { name: /Approve €147\.10 incl VAT/ })).toBeEnabled();
+    expect(within(card).getByText("Replacement order")).toBeInTheDocument();
+    expect(within(card).getByText("Blocked by a recall. This proposal cannot be approved as it is.")).toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: /^Approve/ })).not.toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: /Review replacement order/ })).toHaveAttribute(
+      "href",
+      "#proposal-ORD-1045-R",
+    );
+    const replacement = replacementCard();
+    expect(replacement).toHaveAttribute("id", "proposal-ORD-1045-R");
+    expect(replacement).toHaveAttribute("tabindex", "-1");
+    expect(await within(replacement).findByRole("button", { name: /Approve €147\.10 incl VAT/ })).toBeEnabled();
+    await user.click(within(card).getByRole("link", { name: /Review replacement order/ }));
+    expect(replacement).toHaveFocus();
+    expect((await api.getOrder("ORD-1045")).lines.map((line) => line.product.id)).toEqual(["461332"]);
+    expect((await api.getOrder("ORD-1045-R")).lines.map((line) => line.product.id)).toEqual(["475842"]);
 
     await waitFor(async () => {
       const events = await api.listAudit({ orderId: "ORD-1045" });
@@ -42,22 +59,82 @@ describe("ApprovalsPage recalls", () => {
     });
   });
 
-  it("is a replay when checked twice: one alert, one re-plan", async () => {
+  it("keeps held proposals between the waiting and decided groups without counting them as waiting", async () => {
+    const api = createMockApi();
+    await api.checkRecalls!("human");
+    await api.approve(
+      { approvalId: "APR-313-R", expectedTotalExVat: 129.6, expectedTotalInclVat: 147.1 },
+      "human",
+    );
+    renderApp("/approvals", api);
+
+    const waiting = (await screen.findByRole("heading", { name: "Waiting for you (2)" })).closest("section") as HTMLElement;
+    const held = screen.getByRole("heading", { name: "Held by a recall (1)" }).closest("section") as HTMLElement;
+    const decided = screen.getByRole("heading", { name: "Decided" }).closest("section") as HTMLElement;
+    expect(within(waiting).queryByText("Breakfast buffet coffee for next week")).not.toBeInTheDocument();
+    expect(within(held).getByText("Breakfast buffet coffee for next week")).toBeInTheDocument();
+    expect(within(held).queryByText("Replacement coffee for the recalled breakfast order")).not.toBeInTheDocument();
+    expect(within(decided).getByText("Replacement coffee for the recalled breakfast order")).toBeInTheDocument();
+    expect(waiting.compareDocumentPosition(held)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(held.compareDocumentPosition(decided)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("is a replay when checked twice: one alert and one replacement proposal", async () => {
     const api = createMockApi();
     await api.checkRecalls!("human");
     const second = await api.checkRecalls!("human");
     expect(second.alerts).toHaveLength(1);
-    expect((await api.getOrder("ORD-1045")).lines.map((line) => line.product.id)).toEqual(["475842"]);
+    expect((await api.getOrder("ORD-1045")).lines.map((line) => line.product.id)).toEqual(["461332"]);
+    expect((await api.listApprovals()).filter((row) => row.orderId === "ORD-1045-R")).toHaveLength(1);
     const replans = (await api.listAudit({ orderId: "ORD-1045" })).filter((event) => event.summary.startsWith("Blocked"));
     expect(replans).toHaveLength(1);
   });
 
-  it("does not re-plan a decided order", async () => {
+  it("approves the replacement with its own total while the held proposal stays blocked", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    await api.checkRecalls!("human");
+    const approve = vi.spyOn(api, "approve");
+    renderApp("/approvals", api);
+
+    expect(await screen.findByText("Replacement coffee for the recalled breakfast order")).toBeInTheDocument();
+    const replacement = replacementCard();
+    await user.click(within(replacement).getByRole("button", { name: /Approve €147\.10 incl VAT/ }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    expect(dialog).toHaveTextContent("You approve exactly €129.60 ex VAT (€147.10 incl VAT).");
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €147.10" }));
+
+    await waitFor(() => {
+      expect(approve).toHaveBeenCalledWith(
+        { approvalId: "APR-313-R", expectedTotalExVat: 129.6, expectedTotalInclVat: 147.1 },
+        "human",
+      );
+    });
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect((await api.getApproval("APR-313-R")).status).toBe("APPROVED");
+    expect(await within(replacementCard()).findByText(/Approved: €129\.60 ex VAT, €147\.10 incl VAT/)).toBeInTheDocument();
+    expect((await api.getApproval("APR-313")).status).toBe("BLOCKED_BY_RECALL");
+    expect(within(coffeeCard()).queryByRole("button", { name: /^Approve/ })).not.toBeInTheDocument();
+  });
+
+  it("does not hold or replace a decided order", async () => {
     const api = createMockApi();
     await api.reject("APR-313", "not needed", "human");
     const result = await api.checkRecalls!("human");
-    expect(result.alerts[0]).toMatchObject({ orderId: null, replacementLine: null });
+    expect(result.alerts[0]).toMatchObject({ orderId: null, replacement: null });
     expect((await api.getOrder("ORD-1045")).lines.map((line) => line.product.id)).toEqual(["461332"]);
+    expect((await api.listApprovals()).some((row) => row.orderId === "ORD-1045-R")).toBe(false);
+  });
+
+  it("refuses direct approval of a held order while allowing its rejection", async () => {
+    const api = createMockApi();
+    await api.checkRecalls!("human");
+    await expect(
+      api.approve({ approvalId: "APR-313", expectedTotalExVat: 145.3, expectedTotalInclVat: 164.92 }, "human"),
+    ).rejects.toMatchObject({ code: "BLOCKED_BY_RECALL", message: expect.stringContaining("blocked by a recall") });
+    expect((await api.reject("APR-313", "Recalled line; replacement proposed", "human")).status).toBe("REJECTED");
+    expect((await api.getApproval("APR-313-R")).status).toBe("PENDING");
   });
 
   it("says recalls are unknown when loading them fails", async () => {
@@ -70,11 +147,16 @@ describe("ApprovalsPage recalls", () => {
     expect(await within(panel).findByText(/Recalls unknown: Could not reach the gateway\./)).toBeInTheDocument();
   });
 
-  it("says the check is not available on a gateway that does not serve it", async () => {
+  it("uses the real recall methods in gateway mode instead of saying they are unavailable", async () => {
     const api = createHttpApi("http://gateway.test");
+    api.listRecalls = async () => ({ lastCheck: null, alerts: [] });
     api.getSession = createMockApi().getSession;
     renderApp("/approvals", api);
-    expect(await screen.findByText(/Recall check is not available on this server yet/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Check recalls now" })).not.toBeInTheDocument();
+    const panel = await screen.findByRole("region", { name: "Food recalls" });
+    expect(within(panel).getByText("Recalls not checked yet.")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Check recalls now" })).toBeInTheDocument();
+    expect(api.live).toEqual(expect.objectContaining(new Set()));
+    expect(api.live!.has("listRecalls")).toBe(true);
+    expect(api.live!.has("checkRecalls")).toBe(true);
   });
 });

@@ -99,10 +99,24 @@ function ApiApprovalsPage() {
 
   const pending =
     approvals.status === "ready" ? approvals.data.filter(({ approval }) => approval.status === "PENDING") : [];
+  const held =
+    approvals.status === "ready"
+      ? approvals.data.filter(({ approval }) => approval.status === "BLOCKED_BY_RECALL")
+      : [];
   const decided =
-    approvals.status === "ready" ? approvals.data.filter(({ approval }) => approval.status !== "PENDING") : [];
+    approvals.status === "ready"
+      ? approvals.data.filter(
+          ({ approval }) => approval.status !== "PENDING" && approval.status !== "BLOCKED_BY_RECALL",
+        )
+      : [];
 
-  const pendingOrders = new Set(pending.map(({ approval }) => approval.orderId));
+  const openOrders = new Set(
+    approvals.status === "ready"
+      ? approvals.data
+          .filter(({ approval }) => approval.status === "PENDING" || approval.status === "BLOCKED_BY_RECALL")
+          .map(({ approval }) => approval.orderId)
+      : [],
+  );
   const recallsFor = (orderId: string) =>
     recalls.status === "ready" ? (recalls.data?.alerts ?? []).filter((alert) => alert.orderId === orderId) : [];
   // An order a recall hits comes first, so nobody scrolls past it.
@@ -118,8 +132,12 @@ function ApiApprovalsPage() {
           : {
               kind: "ready",
               lastCheck: recalls.data.lastCheck,
-              affecting: recalls.data.alerts.filter((alert) => alert.orderId != null && pendingOrders.has(alert.orderId))
-                .length,
+              affecting: recalls.data.alerts.filter(
+                (alert) =>
+                  alert.proposalStatus === "BLOCKED_BY_RECALL" &&
+                  alert.orderId != null &&
+                  openOrders.has(alert.orderId),
+              ).length,
             };
   const checkRecalls =
     api.checkRecalls && recallStatus.kind !== "unavailable"
@@ -189,9 +207,26 @@ function ApiApprovalsPage() {
                   ))}
                 </div>
               ) : (
-                <EmptyState title="Nothing waiting for you">All approvals have been decided.</EmptyState>
+                <EmptyState title="Nothing waiting for you">No proposals are waiting for your approval.</EmptyState>
               )}
             </section>
+            {held.length > 0 ? (
+              <section className="space-y-4" aria-labelledby="held-heading">
+                <h2 id="held-heading" className="text-lg font-semibold">
+                  Held by a recall ({held.length})
+                </h2>
+                <div className="space-y-4">
+                  {held.map(({ approval, order }) => (
+                    <ApprovalCard
+                      key={approval.id}
+                      request={approval}
+                      order={order ?? undefined}
+                      recalls={recallsFor(approval.orderId)}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
             {decided.length > 0 ? (
               <section className="space-y-4" aria-labelledby="decided-heading">
                 <h2 id="decided-heading" className="text-lg font-semibold">
@@ -199,7 +234,12 @@ function ApiApprovalsPage() {
                 </h2>
                 <div className="space-y-4">
                   {decided.map(({ approval, order }) => (
-                    <ApprovalCard key={approval.id} request={approval} order={order ?? undefined} />
+                    <ApprovalCard
+                      key={approval.id}
+                      request={approval}
+                      order={order ?? undefined}
+                      recalls={recallsFor(approval.orderId)}
+                    />
                   ))}
                 </div>
               </section>

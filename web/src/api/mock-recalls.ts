@@ -1,12 +1,20 @@
 import type { Api, AuditActor } from "@/api/types";
-import { coffeeLine, coffeeRecallAlert, coffeeRecording, coffeeReplacementLine } from "@/mocks/coffee-recall";
-import type { AuditEvent, Order, OrderLine, RecallAlert, RecallCheck } from "@/types";
+import {
+  coffeeRecallAlert,
+  coffeeRecording,
+  coffeeReplacementApproval,
+  coffeeReplacementLine,
+  coffeeReplacementOrder,
+} from "@/mocks/coffee-recall";
+import type { ApprovalRequest, AuditEvent, Order, RecallAlert, RecallCheck } from "@/types";
 
 interface RecallMockDeps {
   /** The open order the recall hits, or undefined when it is gone. */
   getOrder(id: string): Order | undefined;
-  /** Puts the re-planned lines on the order and the new totals on its pending approval. */
-  replan(orderId: string, lines: OrderLine[]): void;
+  /** Adds the replacement as its own proposal with its own pending approval. */
+  addReplacement(order: Order, approval: ApprovalRequest): void;
+  /** Marks the original proposal blocked by recall, so it is never approvable. */
+  hold(orderId: string): void;
   /** True while the order's approval is still pending. */
   isPending(orderId: string): boolean;
   recordAudit(event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason" | "orderId">): void;
@@ -15,9 +23,9 @@ interface RecallMockDeps {
 /**
  * The recall monitor (#358) in memory. Nothing is known before the first check, so the
  * screens say "not checked yet", never "no recalls". A check answers from the recorded
- * Context.dev scrape; it blocks the recalled line and puts the Buyer's replacement in its
- * place. A person still approves the new total. A repeat check is a replay: same alert, no
- * second re-plan.
+ * Context.dev scrape; it holds the original and adds a separate replacement proposal.
+ * A person rejects the original and approves the replacement's own total. A repeat check
+ * is a replay: same alert, no second replacement.
  */
 export function createRecallMock(deps: RecallMockDeps): Required<Pick<Api, "listRecalls" | "checkRecalls">> {
   const alerts = new Map<string, RecallAlert>();
@@ -44,15 +52,14 @@ export function createRecallMock(deps: RecallMockDeps): Required<Pick<Api, "list
         alert = {
           ...alert,
           orderId: null,
-          replacementLine: null,
+          proposalStatus: "UNKNOWN",
+          replacement: null,
           where: alert.where.filter((place) => !place.includes("proposal")),
         };
       }
       if (!alerts.has(alert.eventId) && order && onOpenOrder) {
-        const lines = order.lines.flatMap((line) =>
-          line.product.id === coffeeLine.product.id ? [structuredClone(coffeeReplacementLine)] : [line],
-        );
-        deps.replan(order.id, lines);
+        deps.hold(order.id);
+        deps.addReplacement(structuredClone(coffeeReplacementOrder), structuredClone(coffeeReplacementApproval));
         deps.recordAudit({
           kind: "approval",
           actor: "gateway",
@@ -68,6 +75,12 @@ export function createRecallMock(deps: RecallMockDeps): Required<Pick<Api, "list
         fetchedAt: coffeeRecording.fetchedAt,
         via: coffeeRecording.via,
         noticesScanned: coffeeRecording.noticesScanned,
+        liveError: "NO_KEY",
+        noticesListed: null,
+        noticesUnread: null,
+        scannedSince: "2026-03-02",
+        detailsFetchedAt: coffeeRecording.fetchedAt,
+        checkedBy: actor,
       };
       return { lastCheck, alerts: [...alerts.values()] };
     },
