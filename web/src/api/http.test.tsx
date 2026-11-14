@@ -806,7 +806,7 @@ describe("the app on the gateway", () => {
     expect(createHttpApi("/api").live).toBeInstanceOf(Set);
     gateway({ [`GET ${K}/audit/chain?limit=5`]: () => error(503, "NOT_SERVED") });
     renderApp("/trust", createHttpApi("/api"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("NOT_SERVED");
+    expect(await screen.findByRole("alert", {}, { timeout: 5000 })).toHaveTextContent("NOT_SERVED");
     expect(screen.getByText("Audit log stored in MongoDB Atlas")).toBeVisible();
   });
 

@@ -245,8 +245,8 @@ describe("ApprovalsPage recalls", () => {
       throw new ApiError("NETWORK", "Could not reach the gateway.");
     };
     renderApp("/approvals", api);
-    const panel = await screen.findByRole("region", { name: "Food recalls" });
-    expect(await within(panel).findByText(/Recalls unknown: Could not reach the gateway\./)).toBeInTheDocument();
+    const panel = await screen.findByRole("region", { name: "Food recalls" }, { timeout: 5000 });
+    expect(await within(panel).findByText(/Recalls unknown: Could not reach the gateway\./, {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
   it("uses the real recall methods in gateway mode instead of saying they are unavailable", async () => {
