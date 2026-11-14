@@ -24,6 +24,7 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from gateway.decision import decision_summary
+from gateway.partial_fill import partial_out
 from store import audit, orders, recalls
 from store.audit import canonical
 from store.history import current_stock
@@ -200,6 +201,7 @@ class Gateway:
                 "lines": [{"product_id": ln.product_id, "quantity": f"{ln.quantity.normalize():f}",
                            "unit": ln.unit, "total": _money(ln.total), "why": ln.why}
                           for ln in plan.alternative.lines]},
+            "partial_fill": partial_out(plan.partial),   # confirmed stock now, a plan for the rest (#288)
         }
 
     def _quote(self, kitchen_id: str, request: dict) -> dict:
@@ -368,6 +370,10 @@ class Gateway:
                     self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
                         'status': 'COMMITTING', 'approving_key': key},
                         {'$set': {'status': state}, '$unset': {'approving_key': ''}})
+                elif attempt.get('proposal_id') == proposal_id and attempt['outcome'] is None:
+                    # The attempt never ended: the send result is unknown. The proposal stays
+                    # held; a person resolves the order (gateway/resolve.py, #291).
+                    orders.set_outcome(self.db, attempt['order_id'], outcome='UNCONFIRMED', status=None)
             except Exception:
                 pass  # Cannot prove absence while the database is unavailable.
             raise
@@ -438,10 +444,19 @@ class Gateway:
             raise GatewayError(404, "PROPOSAL_NOT_FOUND", "no such proposal")
         if doc["status"] != "REJECTED":
             raise GatewayError(409, "NOT_PENDING", f"proposal is {doc['status']}")
-        audit.append_event(self.db, {'event_id': 'proposal-rejected:' + _hash([kitchen_id, proposal_id]),
+        event_id = 'proposal-rejected:' + _hash([kitchen_id, proposal_id])
+        first_time = self.db.audit_log.find_one({'event.event_id': event_id}, {'_id': 1}) is None
+        audit.append_event(self.db, {'event_id': event_id,
             'kind': 'proposal_rejected', 'actor': doc.get('rejected_by', human),
             'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')},
             {'kitchen_id': kitchen_id, 'at': doc.get('rejected_at', self.now().isoformat())})
+        if first_time:   # this path writes its audit event itself, so it also tells the webhooks (#277)
+            try:
+                from gateway import webhooks
+                webhooks.dispatch(self.db, kitchen_id, 'proposal_rejected',
+                                  {'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')})
+            except Exception:
+                pass
         return {"proposal_id": proposal_id, "status": "REJECTED"}
 
     def dismiss_recall(self, kitchen_id: str, event_id: str, body: dict, *, human: str | None) -> dict:
@@ -669,10 +684,22 @@ class Gateway:
         lo = datetime.combine(d0, datetime.min.time(), tzinfo=timezone.utc)
         hi = datetime.combine(d1, datetime.max.time(), tzinfo=timezone.utc)
         rows = self.db.forecasts.find({"meta.kitchen_id": kitchen_id, "ts": {"$gte": lo, "$lte": hi}}).sort("ts", 1)
-        return {"kitchen_id": kitchen_id, "lines": [
-            {"product_id": r["meta"]["product_id"], "date": r["ts"].date().isoformat(),
-             "need": f"{Decimal(str(r['need'])).normalize():f}", "unit": r["unit"],
-             "made_on": r.get("made_on"), "why": r.get("why")} for r in rows]}
+        # The band (p10-p90) comes from this kitchen's own forecast errors of the last 8
+        # weeks (engine.newsvendor, #432); with too few, a normal with 15% spread.
+        from engine.newsvendor import interval
+        from store.history import forecast_vs_actual
+        today = self.now().date()
+        past = forecast_vs_actual(self.db, kitchen_id, today - timedelta(days=56), today - timedelta(days=1))
+        ratios = [actual / predicted for _, _, predicted, actual in past if predicted > 0]
+        lines = []
+        for r in rows:
+            need = float(str(r["need"]))
+            lines.append({"product_id": r["meta"]["product_id"], "date": r["ts"].date().isoformat(),
+                          "need": f"{Decimal(str(r['need'])).normalize():f}", "unit": r["unit"],
+                          "made_on": r.get("made_on"), "why": r.get("why"),
+                          **interval(need, ratios=ratios)})
+        return {"kitchen_id": kitchen_id, "band_from": "own forecast errors" if len(ratios) >= 20 else "default spread",
+                "lines": lines}
 
     def audit_log(self, kitchen_id: str) -> list[dict]:
         return [{"seq": e["seq"], **e["event"], "at": e["server"].get("at")}

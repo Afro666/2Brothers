@@ -1,0 +1,4 @@
+{
+  "role": "assistant",
+  "content": "{\"items\": [{\"label\": \"Arla lactose free 1L\", \"count\":   \t\"7\", \"confidence\": \"high\"}, {\"label\": \"Valio Eila 3% 1L\", \"count\":   \t\"6\", \"confidence\": \"high\"}, {\"label\": \"Valio Eila organic 1L\", \"count\":   \t\"4\", \"confidence\": \"high\"}, {\"label\": \"Valio Eila 10 L novobox\", \"count\":   \t\"2\", \"confidence\": \"high\"}, {\"label\": \"Arla L m\", \"count\":  \t\"1\", \"confidence\": \"low\"}]}"
+}

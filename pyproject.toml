@@ -22,7 +22,7 @@ two-brothers-buyer-worker = "agent.service:main"
 store = ["*.json"]
 signals = ["*.json"]
 monitor = ["fixtures/*.json"]
-agent = ["fixtures/*.json"]
+agent = ["fixtures/*.json", "fixtures/receiving/*.json", "fixtures/receiving/*.png", "fixtures/shelf/*.json", "fixtures/shelf/*.png"]
 
 [tool.setuptools.packages.find]
 include = ["gateway*", "engine*", "agent*", "store*", "signals*", "monitor*"]
