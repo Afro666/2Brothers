@@ -11,6 +11,7 @@ import {
 import { useApi } from "@/api";
 import type { LiveEvent } from "@/api/types";
 import { useT } from "@/lib/i18n";
+import { dropKeptAnswers } from "@/lib/use-async";
 
 type Notice = { event: LiveEvent; reconnected?: never } | { event?: never; reconnected: true };
 type Listener = (notice: Notice) => void;
@@ -29,8 +30,13 @@ export function LiveEventsProvider({ children }: { children: ReactNode }) {
     setConnected(false);
     if (!api.subscribeEvents) return;
     return api.subscribeEvents(
-      (event) => listeners.current.forEach((listener) => listener({ event })),
+      (event) => {
+        // Something changed in the kitchen: no page may show its kept answer as current.
+        dropKeptAnswers();
+        listeners.current.forEach((listener) => listener({ event }));
+      },
       (isConnected) => {
+        if (isConnected) dropKeptAnswers();
         setConnected(isConnected);
         // Nothing is replayed, so every connect (also the first: a change can land between a
         // page's first load and the stream opening) tells the lists to load again.

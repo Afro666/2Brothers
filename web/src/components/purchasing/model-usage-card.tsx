@@ -38,7 +38,7 @@ function figures(usage: ModelUsage): [string, string][] {
 export function ModelUsageCard() {
   const t = useT();
   const api = useApi();
-  const usage = useAsync(() => api.getModelUsage());
+  const usage = useAsync(() => api.getModelUsage(), [], { keep: "model-usage" });
   const empty = usage.status === "ready" && nothingCounted(usage.data);
   return (
     <Card>

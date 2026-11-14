@@ -264,7 +264,7 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
 export function ForecastPage() {
   const t = useT();
   const api = useApi();
-  const state = useAsync(() => api.getForecastAccuracy(), [api]);
+  const state = useAsync(() => api.getForecastAccuracy(), [api], { keep: "forecast" });
   return (
     <AppShell activeId="forecast">
       <div className="mx-auto max-w-5xl space-y-6">
