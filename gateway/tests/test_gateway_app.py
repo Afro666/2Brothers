@@ -203,6 +203,10 @@ def test_expired_proposal_is_requoted_and_unchanged_basket_can_be_approved(env):
     assert result.status_code == 200, result.text
     assert result.json()['expected_total'] == p['expected_total']
     assert db.orders.count_documents({}) == 1
+    order = db.orders.find_one({})
+    assert order['offer_id'] != p['offer_id']
+    assert db.offers.find_one({'_id': order['offer_id']})['valid_until'] > NOW.isoformat()
+    assert db.proposals.find_one({'_id': p['proposal_id']})['offer_id'] == order['offer_id']
 
 
 def test_wrong_total_from_the_client_is_refused(env):
