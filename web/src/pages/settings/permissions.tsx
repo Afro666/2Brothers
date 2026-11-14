@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/
 import { formatNumber, formatPercent } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
 import { cn } from "@/lib/utils";
+import { SampleData } from "@/components/purchasing/sample-data";
 import { SettingsSection } from "@/pages/settings/section";
 import type { BuyerPermissions } from "@/types";
 
@@ -46,6 +47,7 @@ export function PermissionsSection() {
       title="Permissions"
       description="What the Buyer decides alone, what a person signs off, and what the Buyer can never do. Each row opens the audit log on the matching steps."
     >
+      <SampleData of="getPermissions" />
       {permissions.status === "loading" ? <LoadingState label="Loading permissions" /> : null}
       {permissions.status === "error" ? (
         <ErrorState message={permissions.error.message} onRetry={permissions.reload} />

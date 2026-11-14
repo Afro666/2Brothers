@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
 import type { DriftReport, DriftWarning } from "@/types";
 
+import { SampleData } from "@/components/purchasing/sample-data";
 import { Tile, TileState } from "@/pages/home/tile";
 
 const KIND_LABEL: Record<DriftWarning["kind"], string> = {
@@ -89,6 +90,7 @@ function DriftTileBody({
       : "";
   return (
     <Tile title={`${title}${week}`} href={href} linkLabel={linkLabel}>
+      <SampleData of={side === "kitchen" ? "getDrift" : "getSupplierDrift"} />
       <TileState<DriftReport>
         status={state.status}
         error={state.error}

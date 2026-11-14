@@ -27,6 +27,7 @@ export const KIND_META: Record<AuditKind, { label: string; icon: LucideIcon }> =
   stock: { label: "Stock", icon: Boxes },
   forecast_share: { label: "Forecast shared", icon: Share2 },
   settings: { label: "Settings", icon: Settings },
+  other: { label: "Other", icon: ClipboardList },
 };
 
 export const ACTOR_LABEL: Record<AuditEvent["actor"], string> = {
@@ -41,7 +42,8 @@ export const ACTOR_LABEL: Record<AuditEvent["actor"], string> = {
 /** Every step, oldest first, each with who did it and why. */
 export function AuditTimeline({ events }: { events: AuditEvent[] }) {
   // Array.sort is stable, so steps with the same time keep the order the API recorded them in.
-  const sorted = [...events].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  // A step with no recorded time keeps its place in that order too.
+  const sorted = [...events].sort((a, b) => (a.at && b.at ? new Date(a.at).getTime() - new Date(b.at).getTime() : 0));
   if (sorted.length === 0) {
     return (
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -60,7 +62,7 @@ export function AuditTimeline({ events }: { events: AuditEvent[] }) {
               <Icon className="size-3.5 text-muted-foreground" aria-hidden />
             </span>
             <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
-              <time dateTime={e.at} className="tabular-nums">
+              <time dateTime={e.at ?? undefined} className="tabular-nums">
                 {formatDateTime(e.at)}
               </time>
               <span>·</span>

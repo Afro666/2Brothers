@@ -149,11 +149,11 @@ export function createMockApi(): MockApi {
     });
   }
 
-  function resimulate(lines: OrderLine[], proposalOrder: Order): Order {
+  function resimulate(lines: OrderLine[], proposalOrder: Order): Order & { totalExVat: number } {
     let exVat = 0;
     let inclVat = 0;
     for (const line of lines) {
-      if (line.offer.priceExVat == null) {
+      if (line.offer.priceExVat == null || line.offer.taxRatePercent == null) {
         throw new ApiError("PRICE_UNKNOWN", `Price for ${line.product.id} is unknown.`);
       }
       const lineEx = line.offer.priceExVat * line.quantity;
@@ -167,7 +167,7 @@ export function createMockApi(): MockApi {
       lines,
       totalExVat,
       totalInclVat,
-      mov: { ...proposalOrder.mov, current: totalExVat },
+      mov: proposalOrder.mov && { ...proposalOrder.mov, current: totalExVat },
     };
   }
 
@@ -320,10 +320,11 @@ export function createMockApi(): MockApi {
       const lines = structuredClone(milkOptionLines[optionId]);
       if (!lines) throw new ApiError("NOT_FOUND", `Option ${optionId} has no basket.`);
       const order = demoOrders.get(current.orderId)!;
-      Object.assign(order, resimulate(lines, order));
+      const next = resimulate(lines, order);
+      Object.assign(order, next);
       const approval = {
         ...current,
-        totalExVat: order.totalExVat,
+        totalExVat: next.totalExVat,
         totalInclVat: order.totalInclVat,
         lineCount: lines.length,
         options: current.options?.map((row) => ({ ...row, chosen: row.id === optionId })),

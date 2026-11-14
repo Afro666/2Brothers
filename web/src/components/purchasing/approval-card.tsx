@@ -23,9 +23,10 @@ import {
   formatDateTime,
   formatEur,
   formatNumber,
+  formatOfferStock,
   formatStock,
   isPassed,
-  isUnknownStock,
+  isStockUnconfirmed,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
@@ -81,7 +82,7 @@ export function ApprovalCard({
   const stockMessage =
     !order || order.lines.length === 0
       ? "Order details are unavailable. Reload them before approving."
-      : order.lines.some((line) => isUnknownStock(line.offer.availableAmount))
+      : order.lines.some((line) => isStockUnconfirmed(line.offer))
         ? "Waiting for supplier stock confirmation. You can review or reject this proposal; approval is available once stock is confirmed."
         : null;
   const editing = pending && onChangeProposal != null && listAddableProducts != null;
@@ -194,7 +195,7 @@ export function ApprovalCard({
                         </div>
                         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
                           <dt className="text-muted-foreground">Stock</dt>
-                          <dd>{formatStock(line.offer.availableAmount, line.offer.salesUnit)}</dd>
+                          <dd>{formatOfferStock(line.offer)}</dd>
                           <dt className="text-muted-foreground">Cut-off</dt>
                           <dd>
                             {formatDateTime(line.offer.closingTime)}
