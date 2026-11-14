@@ -50,7 +50,8 @@ def gateway(monkeypatch):
                              for r in CATALOG])
     for pid, raw in RAW.items():     # the recorded Valio milks, cow's milk in category 10400
         db.products.insert_one({"_id": pid, "category": "10400", "names": {"en": f"Valio milk {pid}"},
-                                "source": "valio", "supplier_id": "valio_aimo", "raw": raw})
+                                "source": "valio", "supplier_id": "valio_aimo", "raw": raw,
+                                "lactose_free": True})     # the catalog's own flag (#1869)
     valio = ValioClient("test-not-a-real-key", transport=FakeValio().transport, ttl=0, now=lambda: NOW)
     gw = Gateway(db, valio, now=lambda: NOW, search=milk_only_search)
     return TestClient(create_app(gw)), gw

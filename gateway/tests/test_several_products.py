@@ -31,7 +31,7 @@ def search(db, query, filters, limit, kitchen_id=None):
     if "oat" in query:
         return [{"product_id": OAT, "names": {"en": "Oat drink 1 L"}}]
     if "milk" in query:
-        return [{"product_id": pid, "names": {"en": f"milk {pid}"}} for pid in MILK]
+        return [{"product_id": pid, "names": {"en": f"milk {pid}"}, "lactose_free": True} for pid in MILK]
     return []
 
 
@@ -42,7 +42,7 @@ def kitchen(monkeypatch):
     monkeypatch.delenv("BUYER_WORKER_URL", raising=False)
     db = mongomock.MongoClient(tz_aware=True)["test"]
     for pid, raw in RAW.items():
-        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
+        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "lactose_free": True, "raw": raw})
     for r in PEANUT_BUTTER + BUTTER:
         db.products.insert_one({"_id": r["product_id"], **{k: v for k, v in r.items() if k != "product_id"}})
     bakery(db, {**BAKERY_DAYS, "free_delivery_threshold_eur": "100.00", "delivery_fee_eur": "9.50"})
