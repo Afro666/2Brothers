@@ -146,6 +146,9 @@ function mapEach<T>(list: Json[], what: string, idKey: string, map: (row: Json) 
  * No Authorization header is sent: in production the web server adds the gateway's human
  * token (web/Caddyfile).
  */
+/** The gateway sends at most this many newest audit steps from `GET /audit`. */
+export const AUDIT_LIMIT = 1000;
+
 export function createHttpApi(baseUrl: string): Api {
   let currentSession: Session | null = null;
   const mock = createMockApi();
