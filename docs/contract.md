@@ -414,6 +414,18 @@ need (#639):
   row of the kind is sold in the need's measure, when `filters.category` is set, or
   when the search was `"hybrid"`. A need with no text uses the query. This step runs
   first; the two steps below run on what it keeps.
+- A text that names a plant drink (#1700) has one kind, with no fallback: the catalog's
+  plant drinks (category `10402`) whose name holds that plant. A plant drink is a plant
+  word (almond, oat, soy or soya, rice, coconut, pea, cashew, hemp, hazelnut, or plant
+  and vegan; Finnish and Swedish too) before milk or drink, maito or juoma, mjölk or
+  dryck, also as one compound ("kauramaitoa", "havremjölk"). Those plant drinks are
+  searched with the catalog's words ("almond drink"), whatever language the text is in.
+  Cow's milk is never of that kind. When no plant drink of that plant is found, the
+  shortlist is `products: []` with the reason in `note`, and the parser path answers 422
+  `NO_PRODUCTS_FOUND` with the reason in the message. `get_offer` (and every quote of a
+  request with that `text`) leaves out any product that is not such a plant drink: it is
+  listed under `excluded` with the reason `not the <plant> drink asked: no other kind of
+  product is proposed in its place`, and that sentence is also in `mandate.reasons`.
 - When the need's unit is `L` or `KG` and at least one match is sold in that measure
   (`net_content.unit`), only those products stay. Otherwise nothing is filtered.
 - Each product gets `can_arrive`: `true` when it can arrive by the need's date (stock
