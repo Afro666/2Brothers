@@ -70,6 +70,25 @@ describe("nutrition on the recipes tab", () => {
     expect(dish).toHaveTextContent("No nutrition table: Rye bread loaf");
     expect(dish).not.toHaveTextContent("kcal");
   });
+
+  it("shows at most 3 missing-nutrition thumbnails, then a +N chip", async () => {
+    const api = createMockApi();
+    const real = api.getRecipeNutrition;
+    const names = ["Rye bread loaf", "Oat flakes", "Sugar", "Butter", "Cream"];
+    api.getRecipeNutrition = async (id): Promise<RecipeNutrition> => {
+      const nutrition = await real(id);
+      return id === "REC-RICE-PUDDING"
+        ? { ...nutrition, complete: false, unknown: names.map((productName, i) => ({ productId: `P${i}`, productName })) }
+        : nutrition;
+    };
+    renderApp("/products", api);
+
+    const pudding = await recipeCard("Rice pudding");
+    const line = (await within(pudding).findByText(/No nutrition table:/)).parentElement as HTMLElement;
+    expect(line.querySelectorAll("[data-kind], [data-logo]")).toHaveLength(3);
+    expect(line.querySelector("[data-more]")).toHaveTextContent("+2");
+    expect(line).toHaveTextContent(`No nutrition table: ${names.join(", ")}`);
+  });
 });
 
 describe("energy on the planner", () => {
