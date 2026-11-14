@@ -118,6 +118,7 @@ def test_a_person_sets_standing_orders_in_settings_and_drift_shows(env):  # noqa
     r = client.put(f"{K}/settings", headers=HUMAN, json={"standing_orders": {"462921": "12"}})
     assert r.json()["standing_orders"] == {"462921": "12"}                    # replaced, not merged
     assert client.put(f"{K}/settings", headers=HUMAN, json={"standing_orders": {"462921": "-1"}}).status_code == 422
+    assert client.put(f"{K}/settings", headers=HUMAN, json={"standing_orders": {"a.b": "1"}}).status_code == 422
     assert client.put(f"{K}/settings", headers=AGENT, json={"standing_orders": {}}).status_code == 403
 
 

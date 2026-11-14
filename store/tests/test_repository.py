@@ -232,6 +232,21 @@ class RepositoryTest(unittest.TestCase):
         self.repo.settings.put("k1", {"excluded_allergens": ["AW", "AM", "nuts"]})  # known ones save
         self.assertEqual(self.repo.settings.get("k1")["excluded_allergens"], ["AW", "AM", "nuts"])
 
+    def test_standing_orders_are_replaced_not_merged(self):
+        settings, _ = self.repo.settings.put("k1", {"standing_orders": {"900001": "2", "own-ab12": "0.5"}})
+        self.assertEqual(settings["standing_orders"], {"900001": Decimal("2"), "own-ab12": Decimal("0.5")})
+        self.repo.settings.put("k1", {"standing_orders": {"900002": "3"}})
+        self.assertEqual(self.repo.settings.get("k1")["standing_orders"], {"900002": Decimal("3")})
+        self.repo.settings.put("k1", {"standing_orders": {}})  # {} clears them all
+        self.assertEqual(self.repo.settings.get("k1")["standing_orders"], {})
+
+    def test_standing_orders_validation(self):
+        for bad in ({"900001": "0"}, {"900001": "-1"}, {"900001": 2.0}, {"900001": "many"},
+                    {"a.b": "1"}, {"$x": "1"}, {"": "1"}, {"x" * 65: "1"}, ["900001"]):
+            with self.assertRaises((ValueError, TypeError), msg=bad):  # both answer 422
+                self.repo.settings.put("k1", {"standing_orders": bad})
+        self.assertNotIn("standing_orders", self.repo.settings.get("k1"))
+
     # Recipes
 
     def test_recipe_in_the_contract_shape(self):

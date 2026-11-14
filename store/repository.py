@@ -42,6 +42,7 @@ SETTINGS = ("service_level", "max_cover_days", "stockout_cap", *BUDGET_WARNINGS,
             "excluded_allergens", "standing_orders")
 _CLOCK = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 _WEEK = re.compile(r"\d{4}-W(0[1-9]|[1-4]\d|5[0-3])")
+_PRODUCT_CODE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 def connect(db_name: str | None = None):
@@ -290,7 +291,9 @@ def settings_fields(data: dict) -> dict:
         # whole map is replaced, never merged (contract #414): {} clears them all.
         orders = data["standing_orders"]
         message = "standing_orders must map product codes to positive decimal strings"
-        if not isinstance(orders, dict) or not all(isinstance(pid, str) and pid for pid in orders):
+        # Codes become Mongo field names (engine.standing_orders.<code>): no '.' or '$'.
+        if not isinstance(orders, dict) or not all(
+                isinstance(pid, str) and _PRODUCT_CODE.fullmatch(pid) for pid in orders):
             raise ValueError(message)
         values = {pid: _decimal(qty, "standing_orders") for pid, qty in orders.items()}
         if any(value is None or not value.is_finite() or value <= 0 for value in values.values()):
