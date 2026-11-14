@@ -118,6 +118,18 @@ describe("DemandPage", () => {
     expect(firstBody).toHaveAttribute("data-product-section", "462775");
   });
 
+  it("links to the product page from outside the row's toggle button", async () => {
+    renderApp("/demand?week=2026-W47", createMockApi());
+    await demandTableReady();
+
+    expect(document.querySelector("button a, a button")).toBeNull();
+    const [head] = productSection("462775");
+    const link = within(head).getByRole("link", { name: "Open the product page Arla lactose-free milk" });
+    expect(link).toHaveAttribute("href", "/catalog/462775");
+    const phone = document.querySelector<HTMLElement>('[data-phone-product="462775"]');
+    expect(phone?.querySelector('a[href="/catalog/462775"]')).not.toBeNull();
+  });
+
   it("shows unknown availability as Unknown: check stock with an unknown buy figure", async () => {
     renderApp("/demand?week=2026-W47", createMockApi());
 

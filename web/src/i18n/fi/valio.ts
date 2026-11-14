@@ -12,6 +12,7 @@ export default {
   "Buy {amount}": "Osta {amount}",
   "+ days with an unknown amount: {count}": "+ päiviä, joiden määrä on tuntematon: {count}",
   "kitchens: up to {count}": "keittiöitä enintään {count}",
+  "Open the product page": "Avaa tuotesivu",
   "Covered products: {count}": "Katettuja tuotteita: {count}",
   "All ({n})": "Kaikki ({n})",
   "Short ({n})": "Puute ({n})",
