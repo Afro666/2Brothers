@@ -454,10 +454,14 @@ describe("the order for the menu plan", () => {
     });
   });
 
+  it("maps an auto-approved proposal", () => {
+    expect(mapPlanProposal({ ...body, status: "APPROVED" })).toMatchObject({ status: "APPROVED", lineCount: 2 });
+  });
+
   it("refuses a proposal without needs, with a total that is not a decimal string, or with an unknown status", () => {
     expect(() => mapPlanProposal({ ...body, request: {} })).toThrow(/unexpected shape/);
     expect(() => mapPlanProposal({ ...body, expected_total: 212.4 })).toThrow(/decimal string/);
-    expect(() => mapPlanProposal({ ...body, status: "APPROVED" })).toThrow(/unexpected shape/);
+    expect(() => mapPlanProposal({ ...body, status: "PLACED" })).toThrow(/unexpected shape/);
   });
 });
 

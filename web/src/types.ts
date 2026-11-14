@@ -341,8 +341,8 @@ export interface DemandLine {
  */
 export interface PlanProposal {
   id: string;
-  /** REJECTED: the gateway could not put one line in the basket. */
-  status: "READY" | "REJECTED";
+  /** REJECTED: the gateway could not put one line in the basket. APPROVED: earned auto-approve placed it. */
+  status: "READY" | "APPROVED" | "REJECTED";
   /** The total a person approves (the gateway's `expected_total`). */
   totalInclVat: number;
   lineCount: number;
