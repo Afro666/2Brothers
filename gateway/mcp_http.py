@@ -13,12 +13,19 @@ and not the tools that propose. Each tool call goes through the gateway's own ro
 in-process with the caller's token, so every refusal, the principal and the audit trail
 are exactly those of the HTTP API.
 
+Connector link (decision 2026-11-14 19:00 UTC, #1693): `/mcp/t/<token>` is the same MCP with
+the path token as the bearer, for a personal approval token only, so a person pastes one
+link into Claude's "Add custom connector" and edits no config file. Anything else there is
+one identical 401. The token is in the URL, so every uvicorn log line masks it to its prefix.
+
 Stateless JSON responses: no server-side MCP session, so any worker can answer.
 """
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 
@@ -29,6 +36,47 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from gateway.mcp_server import GatewayClient, build_server
 
 PATH = "/mcp"
+TOKEN_PATH = PATH + "/t/"          # /mcp/t/<personal approval token>: the connector link (#1693)
+SHOWN = 8                          # characters of a path token a log line keeps: the stored prefix
+_IN_PATH = re.compile(r"(/mcp/t/)([^/\s?#\"']*)")
+_UNAUTHENTICATED = b'{"error":{"code":"UNAUTHENTICATED","message":"the agent bearer token is required"}}'
+
+
+def mask_path_token(text: str) -> str:
+    """`/mcp/t/tka_abcdefgh...` -> `/mcp/t/tka_abcd...`: never the whole token in a log line."""
+    return _IN_PATH.sub(lambda m: m.group(1) + m.group(2)[:SHOWN] + ("..." if len(m.group(2)) > SHOWN else ""), text)
+
+
+class MaskPathToken(logging.Filter):
+    """Masks /mcp/t/<token> in a record's message and its args (uvicorn's access formatter
+    reads the args tuple, so the args stay a tuple of the same length). An arg that is not a
+    str but prints the path (httpx passes a URL object) becomes its masked text."""
+
+    @staticmethod
+    def _arg(value):
+        if isinstance(value, (int, float)) or value is None:
+            return value
+        text = value if isinstance(value, str) else str(value)
+        return mask_path_token(text) if TOKEN_PATH in text else value
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = mask_path_token(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(self._arg(a) for a in record.args)
+        elif isinstance(record.args, dict):
+            record.args = {k: self._arg(v) for k, v in record.args.items()}
+        return True
+
+
+LOGGERS = ("uvicorn", "uvicorn.access", "uvicorn.error", "gateway", "httpx")
+
+
+def install_log_mask() -> None:
+    for name in LOGGERS:
+        log = logging.getLogger(name)
+        if not any(isinstance(f, MaskPathToken) for f in log.filters):
+            log.addFilter(MaskPathToken())
 # The caller's own token for this request: a kitchen API token keeps its kitchen and scopes
 # all the way through the /tools routes (#271). Empty = the server agent token.
 _CALLER: ContextVar[str] = ContextVar("mcp_caller_token", default="")
@@ -55,6 +103,9 @@ class RequireAgentToken:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"].startswith(TOKEN_PATH):
+            await self._path_token(scope, receive, send)
+            return
         if scope["type"] == "http" and scope["path"].rstrip("/") == PATH:
             from gateway.app import _token_matches  # one token check for the whole gateway
             auth = dict(scope.get("headers") or []).get(b"authorization", b"").decode("latin-1")
@@ -85,12 +136,37 @@ class RequireAgentToken:
                         _CALLER.reset(reset)
                     return
             if not allowed:
-                body = b'{"error":{"code":"UNAUTHENTICATED","message":"the agent bearer token is required"}}'
-                await send({"type": "http.response.start", "status": 401, "headers": [
-                    (b"content-type", b"application/json"), (b"www-authenticate", b'Bearer realm="mcp"')]})
-                await send({"type": "http.response.body", "body": body})
+                await _unauthenticated(send, _UNAUTHENTICATED)
                 return
         await self.app(scope, receive, send)
+
+    async def _path_token(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """/mcp/t/<token>: a personal approval token only; any other caller, the same 401."""
+        token = scope["path"][len(TOKEN_PATH):].rstrip("/")
+        state = getattr(scope.get("app"), "state", None)
+        verify_person = getattr(state, "verify_approval_token", None)
+        if ("/" in token or not token.startswith("tka_") or verify_person is None
+                or verify_person(token) is None):
+            await _unauthenticated(send, b'{"error":{"code":"UNAUTHENTICATED","message":"unauthenticated"}}',
+                                   challenge=False)
+            return
+        # The MCP app below sees a plain /mcp request; a header token never overrides the path's.
+        inner = {**scope, "path": PATH, "raw_path": PATH.encode(),
+                 "headers": [(k, v) for k, v in scope.get("headers") or [] if k.lower() != b"authorization"]}
+        reset, person = _CALLER.set(token), _PERSON.set(True)
+        try:
+            await self.app(inner, receive, send)
+        finally:
+            _PERSON.reset(person)
+            _CALLER.reset(reset)
+
+
+async def _unauthenticated(send: Send, body: bytes, challenge: bool = True) -> None:
+    headers = [(b"content-type", b"application/json")]
+    if challenge:
+        headers.append((b"www-authenticate", b'Bearer realm="mcp"'))
+    await send({"type": "http.response.start", "status": 401, "headers": headers})
+    await send({"type": "http.response.body", "body": body})
 
 
 def mount_mcp(app: FastAPI) -> None:
@@ -114,3 +190,4 @@ def mount_mcp(app: FastAPI) -> None:
 
     app.router.lifespan_context = lifespan
     app.add_middleware(RequireAgentToken)
+    install_log_mask()
