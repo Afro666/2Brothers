@@ -33,7 +33,7 @@ def test_markdown_table_and_exit_code(capsys):
 # a reason code stopped matching docs/scenarios.md. When a case gets better (a
 # PARTIAL starts emitting its codes), update this table in the same PR.
 EXPECTED_STATUS = {
-    "S01": "PARTIAL",
+    "S01": "PASS",
     "S02": "PARTIAL",
     "S03": "PARTIAL",
     "S04": "PASS",

@@ -231,6 +231,15 @@ class Gateway:
             "partial_fill": partial_out(plan.partial),   # confirmed stock now, a plan for the rest (#288)
         }
 
+    def _mixed_fat(self, plan: RequestPlan) -> bool:
+        """S01: the lines of one plan have different fat levels (fat-free and 3 % milk)."""
+        from engine.fat import fat_levels_differ, fat_per_100g
+        ids = [ln.product_id for ln in plan.lines]
+        if len(ids) < 2:
+            return False
+        docs = self.db.products.find({"_id": {"$in": ids}}, {"raw.synkkaData.nutritionalContent": 1})
+        return fat_levels_differ([fat_per_100g(d.get("raw")) for d in docs])
+
     def _quote(self, kitchen_id: str, request: dict) -> dict:
         requested = date.fromisoformat(request["requested_date"])
         measure = request["unit"]
@@ -247,6 +256,8 @@ class Gateway:
                  for sid in set(supplier_of.values())}
         plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
         sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
+        if self._mixed_fat(plan) and "SUBSTITUTE_FAT_LEVEL" not in sim["mandate"]["reason_codes"]:
+            sim["mandate"]["reason_codes"].append("SUBSTITUTE_FAT_LEVEL")   # S01: a person picks
         now = self.now()
         offer = orders.save_offer(self.db, {
             "offer_id": uuid4().hex, "kitchen_id": kitchen_id, "supplier_id": VALIO,
