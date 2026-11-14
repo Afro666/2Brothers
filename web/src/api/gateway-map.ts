@@ -500,6 +500,7 @@ export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalR
     return [{
       supplierId: block.supplier_id,
       name: typeof block.name === "string" && block.name ? block.name : block.supplier_id,
+      count: block.lines.filter((line: Json | null) => line?.unknown_stock === true).length,
     }];
   });
 }

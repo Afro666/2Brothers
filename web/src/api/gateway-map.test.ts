@@ -73,9 +73,19 @@ describe("mapApproval", () => {
       ],
     });
     expect(result.suppliersToConfirm).toEqual([
-      { supplierId: "sup-bakery", name: "Leipomo Demo" },
-      { supplierId: "sup-nameless", name: "sup-nameless" },
+      { supplierId: "sup-bakery", name: "Leipomo Demo", count: 1 },
+      { supplierId: "sup-nameless", name: "sup-nameless", count: 1 },
     ]);
+  });
+
+  it("counts each other supplier's unconfirmed lines (#1865)", () => {
+    const unknown = { ...proposal.lines[0], unknown_stock: true };
+    const confirmed = { ...proposal.lines[0], unknown_stock: false };
+    const result = mapApproval({
+      ...proposal,
+      blocks: [{ supplier_id: "sup-fish", name: "Baltic Catch", lines: [unknown, confirmed, unknown] }],
+    });
+    expect(result.suppliersToConfirm).toEqual([{ supplierId: "sup-fish", name: "Baltic Catch", count: 2 }]);
   });
 
   it("shows the gateway's must-confirm sentence as it is (Valio, 14 Nov)", () => {

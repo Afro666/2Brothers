@@ -67,6 +67,7 @@ export const CHIP_TEXTS = [
   "Over budget",
   "Valio must confirm {count}",
   "{supplier} must confirm",
+  "{supplier} must confirm {count}",
   "Left out: {count}",
 ] as const;
 
@@ -104,11 +105,23 @@ export function statusChips({
     chips.push({ key: "budget", tone: "warning", text: "Over budget" });
   }
   const unconfirmed = lines.filter((line) => !line.offer.salesBlock && isStockUnconfirmed(line.offer)).length;
-  if (unconfirmed) {
-    chips.push({ key: "confirm", tone: "warning", text: "Valio must confirm {count}", values: { count: unconfirmed } });
+  // #1865: a line in another supplier's block is that supplier's to confirm, never Valio's.
+  const othersLines = request.suppliersToConfirm.reduce((sum, supplier) => sum + (supplier.count ?? 0), 0);
+  const valioLines = Math.max(0, unconfirmed - othersLines);
+  if (valioLines) {
+    chips.push({ key: "confirm", tone: "warning", text: "Valio must confirm {count}", values: { count: valioLines } });
   }
   for (const supplier of request.suppliersToConfirm) {
-    chips.push({ key: `confirm-${supplier.supplierId}`, tone: "warning", text: "{supplier} must confirm", values: { supplier: supplier.name } });
+    chips.push(
+      supplier.count == null
+        ? { key: `confirm-${supplier.supplierId}`, tone: "warning", text: "{supplier} must confirm", values: { supplier: supplier.name } }
+        : {
+            key: `confirm-${supplier.supplierId}`,
+            tone: "warning",
+            text: "{supplier} must confirm {count}",
+            values: { supplier: supplier.name, count: supplier.count },
+          },
+    );
   }
   if (leftOut) chips.push({ key: "left-out", tone: "neutral", text: "Left out: {count}", values: { count: leftOut } });
   return chips;

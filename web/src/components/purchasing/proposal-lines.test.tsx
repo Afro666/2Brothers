@@ -148,6 +148,9 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
     );
     const input = screen.getByRole("spinbutton", { name: `Quantity for ${line.product.names.en} (kg)` });
     expect(input).toHaveValue(20);
+    // #1865: "698" showed as "69". The box is wide enough for 5 digits and has no spinner arrows over them.
+    expect(input).toHaveClass("w-[4.5rem]", "[appearance:textfield]");
+    expect(input).not.toHaveClass("w-12");
     await user.type(input, "{Enter}");
     expect(onUpdate).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: `Update ${line.product.names.en}` }));

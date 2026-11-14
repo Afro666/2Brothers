@@ -212,7 +212,7 @@ export function ProposalLines({
   // One grid for the header and every row, so the columns line up like a table. On a phone
   // each row is two short lines: picture, name, quantity and total; then stock, cut-off, why.
   const columns = editing
-    ? "md:grid-cols-[minmax(10rem,1.2fr)_7.25rem_4.25rem_5rem_7.75rem_10rem_minmax(7.5rem,1.4fr)_1.75rem]"
+    ? "md:grid-cols-[minmax(10rem,1.2fr)_9.5rem_4.25rem_5rem_7.75rem_10rem_minmax(7.5rem,1.4fr)_1.75rem]"
     : "md:grid-cols-[minmax(10rem,1.2fr)_5rem_4.25rem_5rem_7.75rem_10rem_minmax(7.5rem,1.4fr)]";
   const head = "label-caps whitespace-nowrap";
   return (
@@ -253,7 +253,9 @@ export function ProposalLines({
                 key={product.id}
                 data-testid="proposal-line"
                 className={cn(
-                  "grid grid-cols-[minmax(0,1fr)_7.75rem] items-center gap-x-2 gap-y-1 border-b border-dashed border-input py-1.5 last:border-b-0 md:hover:bg-muted/40",
+                  "grid items-center gap-x-2 gap-y-1 border-b border-dashed border-input py-1.5 last:border-b-0 md:hover:bg-muted/40",
+                  // On a phone the second track holds the quantity box, its unit and Update when the lines can be changed.
+                  editing ? "grid-cols-[minmax(0,1fr)_9.5rem]" : "grid-cols-[minmax(0,1fr)_7.75rem]",
                   columns,
                 )}
               >
@@ -299,7 +301,8 @@ export function ProposalLines({
                         value={value}
                         disabled={editing.busy || removing}
                         onChange={(event) => editing.onType(line, event.target.value)}
-                        className="h-8 w-12 shrink-0 px-1 text-right font-mono tabular-nums"
+                        // #1865: 5 digits must fit ("698" showed as "69"): wider, and no spinner arrows over the number.
+                        className="h-8 w-[4.5rem] shrink-0 px-1.5 text-right font-mono tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       />
                       <span className="min-w-0 flex-1 text-[11px] leading-3 text-muted-foreground">
                         {peopleUnit(product.salesUnit, number)}

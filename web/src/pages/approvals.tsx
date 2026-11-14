@@ -56,6 +56,17 @@ async function loadRecalls(api: Api): Promise<RecallList | null> {
   }
 }
 
+/** The kitchen's per-order budget warning, ex VAT; null when it is not set or cannot be read. */
+async function loadBudgetWarning(api: Api): Promise<number | null> {
+  // In gateway mode an unserved method answers from the mock: a sample limit is never shown as the kitchen's.
+  if (api.live && !api.live.has("getKitchenSettings")) return null;
+  try {
+    return (await api.getKitchenSettings()).budgetWarningPerOrderExVat;
+  } catch {
+    return null;
+  }
+}
+
 export function ApprovalsPage() {
   const api = useApi();
   // In gateway mode the Api itself reads and decides the real proposals, so the inbox below is the live one.
@@ -83,6 +94,9 @@ function ApiApprovalsPage() {
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
   const [allDecided, setAllDecided] = useState(false);
   const recalls = useAsync(() => loadRecalls(api), [api]);
+  // #1865: the limit behind "Over budget". Unknown (null) when the settings do not load: never a guess.
+  const budget = useAsync(() => loadBudgetWarning(api), [api]);
+  const budgetWarningExVat = budget.status === "ready" ? budget.data : null;
   const closeTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(closeTimer.current), []);
   // Decided here: the toast says so, the "already decided" line is only for a link that was stale.
@@ -288,6 +302,7 @@ function ApiApprovalsPage() {
                         canEdit ? (query) => api.listAddableProducts(approval.orderId, query) : undefined
                       }
                       editCount={editCounts[approval.orderId] ?? 0}
+                      budgetWarningExVat={budgetWarningExVat}
                       approvalBlockedReason={
                         session && !session.canApprove ? t("Your account cannot approve or reject orders.") : undefined
                       }

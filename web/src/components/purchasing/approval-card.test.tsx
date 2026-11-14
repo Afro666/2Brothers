@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ADD_SEARCH_DEBOUNCE_MS, ApprovalCard, earliestCutoff } from "@/components/purchasing/approval-card";
 import { mapApproval } from "@/api/gateway-map";
 import { ApiError } from "@/api/types";
-import { formatDate, formatDateTime, formatTime } from "@/lib/format";
+import { formatDate, formatDateTime, formatEur, formatNumber, formatTime, peopleUnit } from "@/lib/format";
 import { proposal } from "@/test/gateway-fixtures";
 import { approval, orders } from "@/mocks/milk-case";
 
@@ -258,7 +258,7 @@ describe("ApprovalCard", () => {
     expect(screen.getByText("Leipomo Demo must confirm")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     const checks = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
-    expect(within(checks).getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
+    expect(within(checks).getByText("Leipomo Demo must confirm stock. If you approve, the order is recorded and waits for their answer: call or e-mail them. Nothing is sent to the supplier.")).toBeVisible();
     expect((screen.getByRole("button", { name: /^Approve/ }) as HTMLButtonElement).disabled).toBe(disabledWithoutNotice);
   });
 
@@ -286,14 +286,14 @@ describe("ApprovalCard", () => {
     expect(screen.getByText("Valio must confirm")).toBeVisible();
   });
 
-  it("says the order is sent and waits for the supplier, with no kitchen setting (Aron, 2026-11-14)", async () => {
+  it("says the order is recorded and waits for the supplier, with no kitchen setting (Aron, 2026-11-14)", async () => {
     const request = {
       ...approval,
       suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
     };
     render(<ApprovalCard request={request} order={confirmedOrder} />);
     await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
-    expect(screen.getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
+    expect(screen.getByText("Leipomo Demo must confirm stock. If you approve, the order is recorded and waits for their answer: call or e-mail them. Nothing is sent to the supplier.")).toBeVisible();
     expect(screen.queryByText(/before this order can be approved/)).toBeNull();
   });
 
@@ -349,7 +349,7 @@ describe("ApprovalCard", () => {
     expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
     await user.click(approve);
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
-    expect(within(dialog).getByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
+    expect(within(dialog).getByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is recorded and waits for the supplier's answer. Nothing is sent to the supplier.")).toBeVisible();
     await user.click(within(dialog).getByRole("button", { name: /^Yes, approve/ }));
     expect(onApprove).toHaveBeenCalledTimes(1);
   });
@@ -783,5 +783,71 @@ describe("ApprovalCard", () => {
     expect(await within(orderSection).findByRole("alert")).toHaveTextContent(message);
     expect(within(orderSection).getByRole("alert")).toHaveTextContent("The proposal is unchanged.");
     expect(quantity).toHaveValue(originalQuantity);
+  });
+
+  describe("the facts behind the total (#1865)", () => {
+    const budgetRequest = {
+      ...approval,
+      totalExVat: 2320.82,
+      reasons: [{ rule: "The total is above your kitchen's budget warning.", detail: "A warning only. It does not block the order.", warning: true }],
+    };
+
+    it("says against which budget and by how much the order is over", () => {
+      render(<ApprovalCard request={budgetRequest} order={confirmedOrder} budgetWarningExVat={1500} />);
+      expect(screen.getByText("Over budget")).toBeVisible();
+      expect(
+        screen.getByText("€2,320.82 ex VAT is €820.82 above your kitchen's budget warning of €1,500.00 per order. A warning only."),
+      ).toBeVisible();
+    });
+
+    it("names the budget without figures when the kitchen's limit is not known, and never invents one", () => {
+      render(<ApprovalCard request={budgetRequest} order={confirmedOrder} />);
+      expect(screen.getByText("The total is above your kitchen's budget warning per order. A warning only.")).toBeVisible();
+      expect(screen.queryByText(/above your kitchen's budget warning of/)).toBeNull();
+    });
+
+    it("shows no budget line on an order that is not over budget", () => {
+      render(<ApprovalCard request={{ ...approval, reasons: [] }} order={confirmedOrder} budgetWarningExVat={1500} />);
+      expect(screen.queryByText(/budget warning/)).toBeNull();
+    });
+
+    it("shows beside the total which part waits for the supplier's answer, from the gateway's own line figures", () => {
+      const order = structuredClone(confirmedOrder);
+      order.lines[0].offer.availableAmount = 999999;
+      const line = order.lines[0];
+      render(<ApprovalCard request={approval} order={order} />);
+      expect(screen.getByTestId("waiting-part")).toHaveTextContent(
+        `In this total, 1 line waits for the supplier's answer: ${formatNumber(line.quantity)} ${peopleUnit(line.product.salesUnit, line.quantity)} (${formatEur(line.lineTotal)} ex VAT)`,
+      );
+    });
+
+    it("shows no waiting part when every line has confirmed stock, or when the card is decided", () => {
+      const { unmount } = render(<ApprovalCard request={approval} order={confirmedOrder} />);
+      expect(screen.queryByTestId("waiting-part")).toBeNull();
+      unmount();
+      const order = structuredClone(confirmedOrder);
+      order.lines[0].offer.availableAmount = 999999;
+      render(<ApprovalCard request={{ ...approval, status: "APPROVED" }} order={order} />);
+      expect(screen.queryByTestId("waiting-part")).toBeNull();
+    });
+
+    it("never says the order is sent: it is recorded and waits for the supplier's answer", async () => {
+      const order = structuredClone(confirmedOrder);
+      order.lines[0].offer.availableAmount = 999999;
+      render(
+        <ApprovalCard
+          request={{ ...approval, suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo", count: 1 }] }}
+          order={order}
+        />,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
+      expect(
+        screen.getByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is recorded and waits for the supplier's answer. Nothing is sent to the supplier."),
+      ).toBeVisible();
+      expect(
+        screen.getByText("Leipomo Demo must confirm stock. If you approve, the order is recorded and waits for their answer: call or e-mail them. Nothing is sent to the supplier."),
+      ).toBeVisible();
+      expect(screen.queryByText(/order is sent/)).toBeNull();
+    });
   });
 });

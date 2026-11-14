@@ -132,6 +132,8 @@ export function earliestCutoff(lines: readonly CutoffLine[], now: Date): Earlies
 const THUMBS_SHOWN = 4;
 /** Status chips in the compact card; the rest are in Inspect. */
 const CHIPS_SHOWN = 3;
+/** Unconfirmed lines named beside the total before "+N". */
+const WAITING_SHOWN = 2;
 
 const CHANGE_ERRORS: Record<string, string> = {
   NOT_PENDING: "This proposal is no longer waiting for approval. Refresh the page to see its current status.",
@@ -182,6 +184,7 @@ export function ApprovalCard({
   editCount = 0,
   approvalBlockedReason,
   recalls = [],
+  budgetWarningExVat,
 }: {
   request: ApprovalRequest;
   order?: Order;
@@ -195,6 +198,8 @@ export function ApprovalCard({
   approvalBlockedReason?: string;
   /** Recall alerts on this order; a blocked line still on it holds the approval. */
   recalls?: RecallAlert[];
+  /** The kitchen's per-order budget warning, ex VAT (`GET /settings`); absent or null when not known. */
+  budgetWarningExVat?: number | null;
 }) {
   const t = useT();
   // #1630: `totalInclVat` is the approve figure; incl VAT is `inclVat`, or unknown when a rate is.
@@ -261,10 +266,10 @@ export function ApprovalCard({
   const stockMessage =
     recallMessage ??
     (!order || order.lines.length === 0 ? t("Order details are unavailable. Reload them before approving.") : null);
-  // Unconfirmed supplier stock does not hold it (Aron, 2026-11-14): the order is sent and waits.
+  // Unconfirmed supplier stock does not hold it (Aron, 2026-11-14): the order is recorded and waits.
   const waitingNotice =
     order?.lines.some((line) => isStockUnconfirmed(line.offer))
-      ? t("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")
+      ? t("Some lines wait for the supplier's stock confirmation. You can still approve: the order is recorded and waits for the supplier's answer. Nothing is sent to the supplier.")
       : null;
   const clock = now ?? new Date();
   const cutoff = earliestCutoff(
@@ -306,6 +311,28 @@ export function ApprovalCard({
   // engine's own reason for a one-line order.
   const why = !explanation?.text && lines.length === 1 ? lines[0].why : null;
   const optionCount = pending ? (request.options?.length ?? 0) : 0;
+  // #1865: the lines inside the total whose stock nobody confirmed. The gateway gives no
+  // confirmed / waiting split of the total, so each line shows its own quantity and line total.
+  const waitingLines = pending ? lines.filter((line) => !line.offer.salesBlock && isStockUnconfirmed(line.offer)) : [];
+  const waitingItems = waitingLines
+    .slice(0, WAITING_SHOWN)
+    .map((line) => {
+      const amount = `${formatNumber(line.quantity)} ${peopleUnit(line.product.salesUnit, line.quantity)}`;
+      return line.lineTotal == null ? amount : `${amount} (${t("{amount} ex VAT", { amount: formatEur(line.lineTotal) })})`;
+    })
+    .join(", ");
+  const waitingMore = waitingLines.length > WAITING_SHOWN ? ` +${waitingLines.length - WAITING_SHOWN}` : "";
+  // #1865: "Over budget" says against which budget and by how much, when the kitchen's limit is known.
+  const overBudget = chips.some((chip) => chip.key === "budget");
+  const budgetLine = !overBudget
+    ? null
+    : budgetWarningExVat != null && request.totalExVat > budgetWarningExVat
+      ? t("{total} ex VAT is {over} above your kitchen's budget warning of {limit} per order. A warning only.", {
+          total: formatEur(request.totalExVat),
+          over: formatEur(Math.round((request.totalExVat - budgetWarningExVat) * 100) / 100),
+          limit: formatEur(budgetWarningExVat),
+        })
+      : t("The total is above your kitchen's budget warning per order. A warning only.");
 
   async function changeProposal(change: ProposalChange) {
     // The ref closes the gap before `busy` disables the buttons: two fast presses are one change.
@@ -590,6 +617,19 @@ export function ApprovalCard({
                 ) : null}
               </>
             ) : null}
+            {waitingLines.length > 0 ? (
+              <>
+                <dt className="sr-only">{t("Waiting for the supplier's answer")}</dt>
+                <dd data-testid="waiting-part" className="w-full text-xs font-medium text-warning sm:ml-auto sm:max-w-64">
+                  {waitingLines.length === 1
+                    ? t("In this total, 1 line waits for the supplier's answer: {items}", { items: waitingItems })
+                    : t("In this total, {count} lines wait for the supplier's answer: {items}", {
+                        count: waitingLines.length,
+                        items: `${waitingItems}${waitingMore}`,
+                      })}
+                </dd>
+              </>
+            ) : null}
           </dl>
         )}
       </CardHeader>
@@ -609,6 +649,7 @@ export function ApprovalCard({
             ))}
           </ul>
         ) : null}
+        {budgetLine ? <p className="text-sm text-muted-foreground">{budgetLine}</p> : null}
         {pending && cutoff ? (
           <p className={cn("break-words text-sm", cutoff.warning ? "hatch text-warning" : "text-muted-foreground")}>
             {cutoff.passed
@@ -758,7 +799,7 @@ export function ApprovalCard({
                       key={supplier.supplierId}
                       className="rounded-r-md border-l-[3px] border-warning bg-warning-surface px-3 py-2 text-sm text-warning"
                     >
-                      {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", {
+                      {t("{supplier} must confirm stock. If you approve, the order is recorded and waits for their answer: call or e-mail them. Nothing is sent to the supplier.", {
                         supplier: supplier.name,
                       })}
                     </li>

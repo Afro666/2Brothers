@@ -28,7 +28,7 @@ function withConfirmedStock() {
 
 describe("ApprovalsPage", () => {
   it.each(["on", "off", "absent", "failed"] as const)(
-    "says the order is sent and waits for the supplier whatever the kitchen setting (%s)",
+    "says the order is recorded and waits for the supplier whatever the kitchen setting (%s)",
     async (setting) => {
       const api = createMockApi();
       const listApprovals = api.listApprovals;
@@ -46,7 +46,7 @@ describe("ApprovalsPage", () => {
 
       expect((await screen.findAllByText("Leipomo Demo must confirm")).length).toBeGreaterThan(0);
       for (const inspect of await screen.findAllByRole("button", { name: /^Inspect/ })) await userEvent.click(inspect);
-      expect((await screen.findAllByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).length).toBeGreaterThan(0);
+      expect((await screen.findAllByText("Leipomo Demo must confirm stock. If you approve, the order is recorded and waits for their answer: call or e-mail them. Nothing is sent to the supplier.")).length).toBeGreaterThan(0);
       expect(screen.queryByText(/before this order can be approved/)).toBeNull();
     },
   );
@@ -57,7 +57,7 @@ describe("ApprovalsPage", () => {
     // Compact: a chip names who must confirm; the full sentence is under Inspect.
     expect(await screen.findByText("Valio must confirm 1")).toBeVisible();
     await userEvent.click(screen.getAllByRole("button", { name: /^Inspect/ })[1]);
-    expect(await screen.findByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
+    expect(await screen.findByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is recorded and waits for the supplier's answer. Nothing is sent to the supplier.")).toBeVisible();
     expect(screen.getAllByRole("button", { name: /^Approve/ }).filter((button) => button.hasAttribute("disabled"))).toHaveLength(0);
     expect(screen.getAllByRole("button", { name: "Reject" })[0]).toBeEnabled();
   });
