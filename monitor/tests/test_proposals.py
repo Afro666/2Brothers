@@ -188,3 +188,41 @@ def test_an_uncounted_product_on_the_stock_list_is_unknown_never_zero():
     kitchen = {'stock': {'461332': (None, 'KG'), '475842': (3.253, 'KG')}, 'recipes': {'461332': ['Breakfast coffee']}}
     assert _where('461332', kitchen) == ['on the stock list: amount not counted', 'in recipes: Breakfast coffee']
     assert _where('475842', kitchen) == ['in stock: 3.253 KG']
+
+
+def _basket_proposal(kind):
+    """#1482: a menu-plan or list proposal for 5 KG coffee (recalled) and 7 milk."""
+    db, gw, _ = setup()
+    db.products.insert_one({'_id': 'M1', 'brand': 'Valio', 'names': {'en': 'Milk', 'fi': 'Maito'},
+        'substitutions': [], 'allergen_data_known': True,
+        'allergens': {'contains': [], 'may_contain': [], 'undeclared': []},
+        'raw': {'id': 'M1', 'salesUnit': 'ST', 'baseUnit': 'ST', 'allowedLotSize': 1,
+                'units': [{'unitId': 'ST', 'sizeInBaseUnits': 1}]}})
+    needs = [{'product_id': '461332', 'quantity': '5', 'unit': 'KG'},
+             {'product_id': 'M1', 'quantity': '7', 'unit': 'ST'}]
+    p = gw.create_proposal('hotel', {'product_ids': ['461332', 'M1'], 'quantity': '2', 'unit': 'products',
+        'requested_date': '2026-11-16', 'idempotency_key': kind}, 'test', needs=needs)
+    if kind == 'menu_plan':
+        changes = {'$set': {'request.made_by': 'menu_plan',
+                            'request.window': {'from': '2026-11-16', 'to': '2026-11-22'}}}
+    else:
+        items = [{'text': 'coffee', 'quantity': '5', 'unit': 'KG', 'query': 'coffee',
+                  'product_ids': ['461332'], 'result': 'proposed', 'problem': None},
+                 {'text': 'milk', 'quantity': '7', 'unit': 'ST', 'query': 'milk',
+                  'product_ids': ['M1'], 'result': 'proposed', 'problem': None}]
+        changes = {'$set': {'request.made_by': 'list', 'request.items': items}, '$unset': {'request.needs': ''}}
+    db.proposals.update_one({'_id': p['proposal_id']}, changes)
+    return db, gw, p
+
+
+@pytest.mark.parametrize('kind', ['menu_plan', 'list'])
+def test_basket_replacement_keeps_each_lines_quantity_and_unit(kind):
+    db, gw, p = _basket_proposal(kind)
+    apply_notices(gw, 'hotel', NOTICES)
+    original = gw.get_proposal('hotel', p['proposal_id'])
+    assert original['status'] == 'BLOCKED_BY_RECALL' and not original.get('recall_replan_error')
+    replacement = gw.get_proposal('hotel', original['replacement_proposal_id'])
+    assert replacement['status'] == 'READY'
+    assert sorted((l['product_id'], l['quantity']) for l in replacement['lines']) == [('475842', '5'), ('M1', '7')]
+    assert {(n['product_id'], n['quantity'], n['unit']) for n in replacement['request']['needs']} == {
+        ('475842', '5', 'KG'), ('M1', '7', 'ST')}
