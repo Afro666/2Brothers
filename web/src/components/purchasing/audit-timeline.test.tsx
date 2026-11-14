@@ -150,6 +150,15 @@ describe("AuditTimeline", () => {
     expect(groups.flatMap((group) => group.rows).some((event) => event.summary === "Buyer is searching the catalog")).toBe(true);
   });
 
+  it("shows what was asked as the heading and the whole summary under it", () => {
+    const events = mapAudit(sample);
+    render(<AuditTimeline events={events} groups={groupSteps(events)} />);
+    expect(screen.getByRole("heading", { name: "200 liters lactose-free milk by Monday" })).toBeInTheDocument();
+    expect(screen.getByText(/^Asked: "200 liters lactose-free milk by Monday" \(200 L for 2026-11-16\)\./)).toHaveTextContent(
+      "Checked 3 products.",
+    );
+  });
+
   it("titles a block with what was asked, not with the whole decision summary", () => {
     expect(
       shortTitle('Asked: "20L oat drink for monday" (20 L for 2026-11-16). Checked 3 product(s) with Valio prices.'),
