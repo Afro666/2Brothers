@@ -1,0 +1,308 @@
+"""The bot with a fake Telegram and a fake gateway: no network, no token."""
+from datetime import datetime
+
+import pytest
+
+from bot import render
+from bot.app import NOT_LINKED, Bot
+from bot.clients import GatewayError, SpeechError
+from bot.links import Links
+
+PID = "0bfc95fb26a047cc876f7a2f034c9762"
+
+
+def line(product_id, quantity, unit="ST", total="10.00", unknown=False, closing="2026-11-15T17:00:00+02:00", **more):
+    return {"product_id": product_id, "quantity": quantity, "unit": unit, "total": total, "unknown_stock": unknown,
+            "cutoff_passed": False, "closing_time": closing, "why": "", "reason_codes": [], **more}
+
+
+def proposal(blocks=None, status="READY", total="2052.50", **more):
+    blocks = blocks if blocks is not None else [
+        {"supplier_id": "sup-valio", "name": "Valio Aimo", "expected_total": "1240.10",
+         "lines": [line("463380", "698", "L"), line("469549", "40", "KG")]},
+        {"supplier_id": "sup-bakery", "name": "Corner Bakery <demo>", "expected_total": "812.40",
+         "lines": [line("own-1", "40", "ST", unknown=True, closing=None)]},
+    ]
+    return {"proposal_id": PID, "status": status, "expected_total": total, "blocks": blocks,
+            "lines": [ln for b in blocks for ln in b["lines"]],
+            "request": {"requested_date": "2026-11-16", "made_by": "menu_plan"}, **more}
+
+
+class FakeTelegram:
+    def __init__(self):
+        self.sent, self.edits, self.answers, self.next_id = [], [], [], 100
+
+    def send(self, chat_id, text, markup=None, silent=False):
+        self.next_id += 1
+        self.sent.append({"chat": chat_id, "id": self.next_id, "text": text, "markup": markup})
+        return self.next_id
+
+    def edit(self, chat_id, message_id, text, markup=None):
+        self.edits.append({"chat": chat_id, "id": message_id, "text": text, "markup": markup})
+
+    def answer(self, callback_id, text=None):
+        self.answers.append(text)
+
+    def typing(self, chat_id):
+        pass
+
+    def download(self, file_id, limit=0):
+        return b"OggS"
+
+
+class FakeGateway:
+    kitchen_id = "test-kitchen"
+
+    def __init__(self, current=None, error=None):
+        self.current, self.error, self.calls = current or proposal(), error, []
+
+    def _answer(self, *call):
+        self.calls.append(call)
+        if self.error:
+            raise self.error
+        return self.current
+
+    def ask(self, text, requested_date):
+        return self._answer("ask", text, requested_date)
+
+    def plan(self, first, last, delivery):
+        return self._answer("plan", first, last, delivery)
+
+    def proposal(self, proposal_id):
+        return self.current
+
+    def change(self, proposal_id, product_id, quantity):
+        self.calls.append(("change", product_id, quantity))
+        if self.error:
+            raise self.error
+        for block in self.current["blocks"]:
+            for ln in block["lines"]:
+                if ln["product_id"] == product_id:
+                    ln["quantity"] = quantity
+            block["lines"] = [ln for ln in block["lines"] if ln["quantity"] != "0"]
+        self.current["blocks"] = [b for b in self.current["blocks"] if b["lines"]]
+        self.current["expected_total"] = "2100.00"
+        return self.current
+
+    def products(self, ids, lang="en"):
+        known = {"463380": {"name": "Lactose-free milk 1 L", "lot": 6}, "469549": {"name": "Butter 500 g", "lot": None}}
+        return {i: known[i] for i in ids if i in known}
+
+
+class FakeSpeech:
+    def __init__(self, text="twenty litres of oat drink for Monday", error=None):
+        self._text, self._error = text, error
+
+    def text(self, audio):
+        if self._error:
+            raise self._error
+        return self._text
+
+
+@pytest.fixture
+def bot(tmp_path):
+    links = Links(tmp_path)
+    assert links.redeem(links.new_code(), 7, "Aron")
+    made = Bot(FakeTelegram(), FakeGateway(), links, FakeSpeech(), "https://site.example/",
+               now=lambda: datetime(2026, 11, 14, 16, 0, tzinfo=render.HELSINKI))
+    return made
+
+
+def say(bot, text, chat=7):
+    bot.handle({"message": {"chat": {"id": chat}, "text": text, "from": {"first_name": "Aron"}}})
+
+
+def press(bot, data, message_id=555, chat=7):
+    bot.handle({"callback_query": {"id": "cb", "data": data, "message": {"chat": {"id": chat}, "message_id": message_id}}})
+
+
+# ---- linking -----------------------------------------------------------------------------
+def test_an_unlinked_chat_gets_one_line_and_no_gateway_call(bot):
+    say(bot, "20 L oat drink", chat=99)
+    assert [m["text"] for m in bot.tg.sent] == [NOT_LINKED]
+    assert bot.gw.calls == []
+
+
+def test_a_code_links_a_chat_once(tmp_path):
+    links = Links(tmp_path)
+    code = links.new_code()
+    made = Bot(FakeTelegram(), FakeGateway(), links)
+    say(made, f"/start {code}", chat=5)
+    assert "Linked to your kitchen" in made.tg.sent[0]["text"]
+    say(made, f"/start {code}", chat=6)
+    assert made.tg.sent[-1]["text"] == NOT_LINKED
+    assert links.chats() == [5]
+
+
+def test_an_old_code_does_not_link(tmp_path):
+    clock = [1000.0]
+    links = Links(tmp_path, clock=lambda: clock[0])
+    code = links.new_code()
+    clock[0] += 31 * 60
+    assert links.redeem(code, 5, "x") is False
+
+
+# ---- a request ---------------------------------------------------------------------------
+def test_a_request_gives_a_summary_and_one_message_per_supplier(bot):
+    say(bot, "what the menu needs")
+    assert bot.gw.calls == [("ask", "what the menu needs", "2026-11-15")]
+    assert len(bot.tg.sent) == 3                      # the status message, then one per supplier
+    summary = bot.tg.edits[0]
+    assert summary["id"] == bot.tg.sent[0]["id"]       # the status message became the summary
+    first = summary["text"].splitlines()[0]
+    assert first == "<b>3 products · 2 suppliers · EUR 2,052.50</b> for Mon 16 Nov"
+    assert "Valio Aimo: 2 items, <b>EUR 1,240.10</b>, before Sun 15 Nov 17:00" in summary["text"]
+    assert "Corner Bakery &lt;demo&gt;: 1 item, <b>EUR 812.40</b>, stock not confirmed" in summary["text"]
+    assert summary["markup"]["inline_keyboard"][0][0]["web_app"]["url"] == f"https://site.example/approvals?proposal={PID}"
+    valio, bakery = bot.tg.sent[1]["text"], bot.tg.sent[2]["text"]
+    assert valio.splitlines()[0] == "<b>Valio Aimo · 2 items · EUR 1,240.10</b>"
+    assert "<b>Approve before Sun 15 Nov 17:00</b> · stock confirmed" in valio
+    assert "Lactose-free milk 1 L" in valio and "463380" not in valio
+    assert "stock not confirmed: the order waits for the supplier's answer" in bakery
+    assert "product own-1" in bakery                   # no name known: said so, never invented
+
+
+def test_week_starts_on_the_next_working_day_and_names_it_as_the_delivery_day(bot):
+    say(bot, "/week")                # the fixture's "now" is Saturday 14 Nov: Sunday is skipped
+    assert bot.gw.calls == [("plan", "2026-11-16", "2026-11-22", "2026-11-16")]
+    assert "from Mon 16 Nov" in bot.tg.sent[0]["text"]
+
+
+def test_week_on_a_weekday_starts_tomorrow(bot):
+    bot.now = lambda: datetime(2026, 11, 17, 9, 0, tzinfo=render.HELSINKI)      # a Tuesday
+    say(bot, "/week")
+    assert bot.gw.calls == [("plan", "2026-11-18", "2026-11-24", "2026-11-18")]
+
+
+def test_a_refused_request_is_one_sentence_in_the_status_message(bot):
+    bot.gw.error = GatewayError(422, "CANNOT_READ_REQUEST", "one product per request")
+    say(bot, "cream and cheese")
+    assert len(bot.tg.sent) == 1
+    assert bot.tg.edits[0]["text"].startswith("I could not read that as an order.")
+
+
+def test_a_rejected_proposal_shows_the_reason_and_no_supplier_message(bot):
+    bot.gw.current = proposal(blocks=[], status="REJECTED",
+                              mandate={"reasons": ["This kitchen excludes peanuts, so \"peanut butter\" cannot be ordered."]})
+    say(bot, "15 kg peanut butter")
+    assert len(bot.tg.sent) == 1
+    assert "<b>Nothing can be ordered.</b> This kitchen excludes peanuts" in bot.tg.edits[0]["text"]
+    assert bot.tg.edits[0]["markup"] is None
+
+
+def test_text_from_a_supplier_or_a_person_is_escaped():
+    text = render.summary(proposal(), heard="<b>50</b> kg").text
+    assert 'Heard: "&lt;b&gt;50&lt;/b&gt; kg"' in text
+    assert "Corner Bakery &lt;demo&gt;" in text
+
+
+# ---- voice -------------------------------------------------------------------------------
+def test_a_voice_message_shows_what_was_heard_first(bot):
+    bot.handle({"message": {"chat": {"id": 7}, "voice": {"file_id": "f", "duration": 6}}})
+    assert bot.gw.calls[0][:2] == ("ask", "twenty litres of oat drink for Monday")
+    assert bot.tg.sent[0]["text"].startswith('Heard: "twenty litres of oat drink for Monday"')
+    assert bot.tg.edits[0]["text"].startswith('Heard: "twenty litres of oat drink for Monday"')
+
+
+def test_silence_asks_again_and_makes_no_request(bot):
+    bot.speech = FakeSpeech(text="")
+    bot.handle({"message": {"chat": {"id": 7}, "voice": {"file_id": "f", "duration": 3}}})
+    assert bot.gw.calls == []
+    assert bot.tg.sent[0]["text"] == "I did not catch that. Say it again or type it."
+
+
+def test_a_long_voice_message_is_not_downloaded(bot):
+    bot.handle({"message": {"chat": {"id": 7}, "voice": {"file_id": "f", "duration": 45}}})
+    assert bot.gw.calls == []
+    assert "longer than 30 seconds" in bot.tg.sent[0]["text"]
+
+
+def test_no_speech_service_says_to_type(bot):
+    bot.speech = None
+    bot.handle({"message": {"chat": {"id": 7}, "voice": {"file_id": "f", "duration": 3}}})
+    assert bot.tg.sent[0]["text"] == "I cannot listen here yet. Type the request instead."
+
+
+def test_a_speech_error_is_said_plainly(bot):
+    bot.speech = FakeSpeech(error=SpeechError("STT_UNAVAILABLE", "I cannot listen right now. Type the request instead."))
+    bot.handle({"message": {"chat": {"id": 7}, "voice": {"file_id": "f", "duration": 3}}})
+    assert bot.tg.sent[0]["text"] == "I cannot listen right now. Type the request instead."
+
+
+# ---- buttons -----------------------------------------------------------------------------
+def test_change_turns_the_lines_into_buttons_in_the_same_message(bot):
+    press(bot, f"c:{PID}:0")
+    edit = bot.tg.edits[-1]
+    assert edit["id"] == 555
+    rows = edit["markup"]["inline_keyboard"]
+    assert rows[0][0] == {"text": "698 L  Lactose-free milk 1 L", "callback_data": f"l:{PID}:0:0"}
+    assert rows[-1][0]["text"] == "Done"
+
+
+def test_plus_moves_one_lot_and_updates_the_po_and_the_summary(bot):
+    say(bot, "milk")
+    summary_id = bot.tg.sent[0]["id"]
+    press(bot, f"q:{PID}:0:0:+")
+    assert ("change", "463380", "704") in bot.gw.calls          # 698 + the lot size of 6
+    assert any(e["id"] == summary_id and "EUR 2,100.00" in e["text"] for e in bot.tg.edits)
+    assert bot.tg.edits[-1]["id"] == 555 and "704 L" in bot.tg.edits[-1]["text"]
+
+
+def test_minus_without_a_lot_size_moves_one_unit(bot):
+    press(bot, f"q:{PID}:0:1:-")
+    assert ("change", "469549", "39") in bot.gw.calls
+
+
+def test_remove_takes_the_line_off_and_the_last_line_takes_the_supplier_off(bot):
+    press(bot, f"q:{PID}:1:0:0")
+    assert ("change", "own-1", "0") in bot.gw.calls
+    assert bot.tg.edits[-1]["text"] == "Removed from the order."
+
+
+def test_a_refused_change_is_told_on_the_button_and_the_message_stays(bot):
+    bot.gw.error = GatewayError(409, "NOT_READY", "This proposal is already approved.")
+    press(bot, f"q:{PID}:0:0:+")
+    assert bot.tg.answers == ["This proposal is already approved."]
+    assert bot.tg.edits == []
+
+
+def test_a_button_from_an_unlinked_chat_does_nothing(bot):
+    press(bot, f"q:{PID}:0:0:+", chat=99)
+    assert bot.gw.calls == [] and bot.tg.edits == []
+
+
+def test_an_out_of_date_button_does_not_crash(bot):
+    press(bot, f"q:{PID}:5:0:+")
+    press(bot, "garbage")
+    assert bot.gw.calls == []
+
+
+# ---- layout ------------------------------------------------------------------------------
+def test_a_long_order_shows_eight_lines_and_show_all_shows_the_rest():
+    many = proposal(blocks=[{"supplier_id": "sup-valio", "name": "Valio Aimo", "expected_total": "99.00",
+                             "lines": [line(str(i), "1") for i in range(11)]}])
+    short = render.supplier_message(many, 0)
+    assert "... and 3 more" in short.text
+    assert [b["text"] for b in short.buttons[0]] == ["Change", "Show all"]
+    full = render.supplier_message(many, 0, show_all=True)
+    assert "more" not in full.text and full.text.count("product ") == 11
+
+
+def test_only_first_lines_totals_and_deadlines_are_bold():
+    text = render.supplier_message(proposal(), 0, {"463380": "Milk"}).text
+    assert text.count("<b>") == 2                         # the first line and the deadline
+    assert "<b>Milk" not in text
+
+
+def test_a_passed_cut_off_is_said():
+    late = proposal(blocks=[{"supplier_id": "sup-valio", "name": "Valio Aimo", "expected_total": "9.00",
+                             "lines": [line("1", "1", cutoff_passed=True)]}])
+    assert "<b>The cut-off has passed</b>" in render.supplier_message(late, 0).text
+    assert "the cut-off has passed" in render.summary(late).text
+
+
+def test_money_and_quantity_formats():
+    assert render.money("1240.1") == "EUR 1,240.10"
+    assert render.quantity("3", "BAG") == "3 bag"
+    assert render.quantity("2.50", "KG") == "2.5 kg"
+    assert render.quantity("12", "ST") == "12 pcs"

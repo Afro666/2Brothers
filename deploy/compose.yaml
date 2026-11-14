@@ -120,7 +120,33 @@ services:
       # The first start downloads the model.
       start_period: 300s
 
+  # The Telegram bot of the kitchen (#1330): a client of the gateway with a kitchen token, which
+  # never approves. No published port: it asks Telegram for new messages (long polling).
+  # Without TELEGRAM_BOT or BOT_KITCHEN_TOKEN in .env it stays idle and says so once in its log.
+  # Only one running bot may use a token: stop a laptop test before this one starts.
+  bot:
+    build:
+      context: ..
+      dockerfile: bot/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    environment:
+      TELEGRAM_BOT: ${TELEGRAM_BOT:-}
+      # A kitchen API token with read and propose (Settings > API & MCP tokens).
+      BOT_KITCHEN_TOKEN: ${BOT_KITCHEN_TOKEN:-}
+      BOT_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}
+      BOT_GATEWAY_URL: http://gateway:8000
+      # The public address of the site, for the "Open to approve" button (https://...).
+      BOT_SITE_URL: ${BOT_SITE_URL:-}
+      BOT_STT_URL: http://stt:8002
+    volumes:
+      # The list of linked chats.
+      - bot_data:/data
+    mem_limit: 256m
+
 volumes:
   caddy_data:
   caddy_config:
   stt_models:
+  bot_data:

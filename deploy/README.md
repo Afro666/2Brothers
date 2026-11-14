@@ -16,6 +16,10 @@ reached only inside the compose network. Its first start downloads the model (ab
 for `small`) into the `stt_models` volume. Check it on the server:
 `docker compose -f deploy/compose.yaml exec stt python -m bot.stt_service --check <audio file>`.
 
+`bot` is the kitchen's Telegram bot (#1330), a client of the gateway. It needs `TELEGRAM_BOT`,
+`BOT_KITCHEN_TOKEN` and `BOT_SITE_URL` in `.env`; without the first two it stays idle. Link a chat:
+`docker compose -f deploy/compose.yaml exec bot python -m bot.links <bot username>`.
+
 | Path | Who | Protection |
 |---|---|---|
 | `/api/ping` | monitors | none; answers `{"status":"ok"}` |
