@@ -1,3 +1,4 @@
+import { createOnboardingHttp } from "@/api/http-onboarding";
 import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
 import { createTrustHttp } from "@/api/http-trust";
 import {
@@ -164,6 +165,7 @@ export function createHttpApi(baseUrl: string): Api {
       await post("/v1/auth/change-password", { current_password: current, new_password: next });
     },
     ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createOnboardingHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
@@ -309,13 +311,10 @@ export function createHttpApi(baseUrl: string): Api {
     ...createMockApi(),
     ...real,
     // Never the mock for what acts on real input: it would change a sample order, not the real
-    // proposal, or answer a lookup of the person's own kitchen with sample data.
+    // proposal.
     chooseOption: undefined,
     async changeProposal() {
       throw new ApiError("NOT_SERVED", "The gateway cannot change a proposal yet. Reject it and ask the Buyer again");
-    },
-    async lookupKitchenBrand() {
-      throw new ApiError("NOT_SERVED", "The gateway does not serve this yet.");
     },
     live: new Set(Object.keys(real) as (keyof Api)[]),
   };

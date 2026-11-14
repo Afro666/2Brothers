@@ -92,6 +92,8 @@ describe("createHttpApi", () => {
         // Standing-order drift (store/drift.py behind the gateway).
         "getDrift",
         "getSupplierDrift",
+        // Onboarding (api/http-onboarding.ts).
+        "lookupKitchenBrand",
         // The Trust page (api/http-trust.ts).
         "listAuditChain",
         "verifyAuditChain",
@@ -107,7 +109,6 @@ describe("createHttpApi", () => {
     ).rejects.toMatchObject({
       code: "NOT_SERVED",
     });
-    await expect(api.lookupKitchenBrand({ website: "example.fi" })).rejects.toMatchObject({ code: "NOT_SERVED" });
     expect(api.chooseOption).toBeUndefined();
   });
 
@@ -155,7 +156,9 @@ describe("createHttpApi", () => {
     const api = createHttpApi("/api");
     expect((api as unknown as { then?: unknown }).then).toBeUndefined();
     await expect(Promise.resolve(api)).resolves.toBe(api);
-    await expect(api.lookupKitchenBrand({ website: "example.fi" })).rejects.toMatchObject({ code: "NOT_SERVED" });
+    await expect(
+      api.changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
+    ).rejects.toMatchObject({ code: "NOT_SERVED" });
   });
 
   it("approves the exact total the person read, as that person, with no token from the browser", async () => {

@@ -2,10 +2,9 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { createHttpApi } from "@/api/http";
 import { createMockApi } from "@/api/mock";
 import { domainOf, lookupKitchenBrandMock } from "@/api/mock-onboarding";
-import type { Api } from "@/api/types";
+import { ApiError, type Api } from "@/api/types";
 import { safeLogoUrl } from "@/lib/kitchen-brand";
 import { renderApp } from "@/test/render";
 
@@ -139,12 +138,18 @@ describe("OnboardingPage", () => {
     expect(screen.getByRole("combobox", { name: "Kitchen type" })).toHaveTextContent("Unknown");
   });
 
-  it("fails soft when the gateway does not serve the lookup yet", async () => {
-    const http = createHttpApi("https://gateway.invalid");
-    await lookUp("hotelkuusi.fi", { ...createMockApi(), lookupKitchenBrand: http.lookupKitchenBrand });
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Lookup is not available yet. Fill in the form yourself.",
-    );
+  it.each([
+    ["NOT_SERVED", "Lookup is not available yet. Fill in the form yourself."],
+    ["LOOKUP_UNAVAILABLE", "The lookup did not work this time. Fill in the form yourself, or try again."],
+    ["RATE_LIMITED", "Too many lookups just now. Wait a minute, or fill in the form yourself."],
+  ])("fails soft when the gateway answers %s", async (code, message) => {
+    await lookUp("hotelkuusi.fi", {
+      ...createMockApi(),
+      lookupKitchenBrand: async () => {
+        throw new ApiError(code, code);
+      },
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent(message);
     expect(screen.getByLabelText("Kitchen name")).toHaveValue("");
     expect(within(field("name")).queryByText(FROM_CONTEXT)).not.toBeInTheDocument();
   });
