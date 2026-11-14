@@ -24,8 +24,7 @@ import type {
   ForecastAccuracy,
   BuyerPermissions,
   AutoApproveLearning,
-  RecallAlert,
-  RecallCheck,
+  RecallList,
 } from "@/types";
 
 /** Who a decision is recorded as in the audit log. */
@@ -155,13 +154,13 @@ export interface Api {
   /** Progress only. There is no method to switch auto-approve on: a person approves every order. */
   getAutoApproveLearning(): Promise<AutoApproveLearning>;
   /**
-   * Recall alerts for this kitchen's open orders. Optional, like `checkRecalls`: the contract
+   * Recall alerts for this kitchen and its last check. Optional, like `checkRecalls`: the contract
    * routes are proposed (#358); a gateway that does not serve them answers `NOT_SERVED`, and the
    * screens then say the check is not available instead of showing "no recalls".
    */
-  listRecalls?(): Promise<RecallAlert[]>;
+  listRecalls?(): Promise<RecallList>;
   /** Runs the recall monitor now (Context.dev scrape, or its recording when Context.dev is slow). */
-  checkRecalls?(actor: AuditActor): Promise<RecallCheck>;
+  checkRecalls?(actor: AuditActor): Promise<RecallList>;
 }
 
 /** A gateway error: `code` is the contract's error code, e.g. `TOTAL_MISMATCH`. */

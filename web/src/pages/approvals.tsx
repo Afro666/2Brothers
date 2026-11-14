@@ -10,7 +10,7 @@ import { useApi } from "@/api";
 import { ApiError, type Api } from "@/api/types";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { useAsync } from "@/lib/use-async";
-import type { ApprovalRequest, Order, ProposalChange, RecallAlert } from "@/types";
+import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
 
 interface ApprovalWithOrder {
   approval: ApprovalRequest;
@@ -31,7 +31,7 @@ async function loadApprovals(api: Api): Promise<ApprovalWithOrder[]> {
 }
 
 /** null when this gateway does not serve recalls yet (hidden, never shown as "no recalls"). */
-async function loadRecalls(api: Api): Promise<RecallAlert[] | null> {
+async function loadRecalls(api: Api): Promise<RecallList | null> {
   if (!api.listRecalls) return null;
   try {
     return await api.listRecalls();
@@ -72,7 +72,7 @@ export function ApprovalsPage() {
 
   const pendingOrders = new Set(pending.map(({ approval }) => approval.orderId));
   const recallsFor = (orderId: string) =>
-    recalls.status === "ready" ? (recalls.data ?? []).filter((alert) => alert.orderId === orderId) : [];
+    recalls.status === "ready" ? (recalls.data?.alerts ?? []).filter((alert) => alert.orderId === orderId) : [];
   // An order a recall hits comes first, so nobody scrolls past it.
   const hit = (row: ApprovalWithOrder) => Number(recallsFor(row.approval.orderId).length > 0);
   const recallFirst = [...pending].sort((a, b) => hit(b) - hit(a));
@@ -85,15 +85,16 @@ export function ApprovalsPage() {
           ? { kind: "unavailable" }
           : {
               kind: "ready",
-              affecting: recalls.data.filter((alert) => alert.orderId != null && pendingOrders.has(alert.orderId)).length,
+              lastCheck: recalls.data.lastCheck,
+              affecting: recalls.data.alerts.filter((alert) => alert.orderId != null && pendingOrders.has(alert.orderId))
+                .length,
             };
   const checkRecalls =
     api.checkRecalls && recallStatus.kind !== "unavailable"
       ? async () => {
-          const result = await api.checkRecalls!(actor);
+          await api.checkRecalls!(actor);
           recalls.reload();
           approvals.reload();
-          return result;
         }
       : undefined;
 

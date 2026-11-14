@@ -57,7 +57,7 @@ describe("ApprovalCard with a recall", () => {
 
 describe("RecallPanel", () => {
   it("never says the orders are clear before a check or when recalls are unknown", () => {
-    const { rerender } = render(<RecallPanel status={{ kind: "ready", affecting: 0 }} onCheck={async () => { throw new Error("x"); }} />);
+    const { rerender } = render(<RecallPanel status={{ kind: "ready", affecting: 0, lastCheck: null }} onCheck={async () => { throw new Error("x"); }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Recalls not checked yet.");
     rerender(<RecallPanel status={{ kind: "unknown", message: "Could not reach the gateway." }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Recalls unknown: Could not reach the gateway.");

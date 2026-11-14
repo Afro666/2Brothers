@@ -11,13 +11,13 @@ import type { RecallCheck } from "@/types";
  * What the inbox knows about recalls:
  * - `unavailable`: this gateway does not serve the recall routes yet.
  * - `unknown`: loading them failed, so nobody can say the open orders are clear.
- * - `ready`: the alerts that hit an open order (`affecting`), and whether a check ran yet.
+ * - `ready`: the alerts that hit an open order (`affecting`), and the last check (null: none ran).
  */
 export type RecallStatus =
   | { kind: "loading" }
   | { kind: "unavailable" }
   | { kind: "unknown"; message: string }
-  | { kind: "ready"; affecting: number };
+  | { kind: "ready"; affecting: number; lastCheck: RecallCheck | null };
 
 function plural(count: number) {
   return count === 1 ? "1 recall affects your open order" : `${count} recalls affect your open orders`;
@@ -34,11 +34,10 @@ export function RecallPanel({
 }: {
   status: RecallStatus;
   /** Absent when the gateway cannot run a check. */
-  onCheck?: () => Promise<RecallCheck>;
+  onCheck?: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [last, setLast] = useState<RecallCheck | null>(null);
 
   if (status.kind === "loading") return null;
   if (status.kind === "unavailable") {
@@ -54,7 +53,7 @@ export function RecallPanel({
     setBusy(true);
     setError(null);
     try {
-      setLast(await onCheck());
+      await onCheck();
     } catch (e) {
       setError(`Recall check failed: ${e instanceof Error ? e.message : String(e)}. Recalls are unknown.`);
     } finally {
@@ -63,6 +62,7 @@ export function RecallPanel({
   }
 
   const affecting = status.kind === "ready" ? status.affecting : null;
+  const last = status.kind === "ready" ? status.lastCheck : null;
   let tone: keyof typeof TONE_CLASSES = "neutral";
   let headline: string;
   if (status.kind === "unknown") {

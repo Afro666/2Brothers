@@ -1,6 +1,6 @@
 import type { Api, AuditActor } from "@/api/types";
 import { coffeeLine, coffeeRecallAlert, coffeeRecording, coffeeReplacementLine } from "@/mocks/coffee-recall";
-import type { AuditEvent, Order, OrderLine, RecallAlert } from "@/types";
+import type { AuditEvent, Order, OrderLine, RecallAlert, RecallCheck } from "@/types";
 
 interface RecallMockDeps {
   /** The open order the recall hits, or undefined when it is gone. */
@@ -21,10 +21,11 @@ interface RecallMockDeps {
  */
 export function createRecallMock(deps: RecallMockDeps): Required<Pick<Api, "listRecalls" | "checkRecalls">> {
   const alerts = new Map<string, RecallAlert>();
+  let lastCheck: RecallCheck | null = null;
 
   return {
     async listRecalls() {
-      return [...alerts.values()];
+      return { lastCheck, alerts: [...alerts.values()] };
     },
     async checkRecalls(actor: AuditActor) {
       const checkedAt = new Date().toISOString();
@@ -61,14 +62,14 @@ export function createRecallMock(deps: RecallMockDeps): Required<Pick<Api, "list
         });
       }
       if (!alerts.has(alert.eventId)) alerts.set(alert.eventId, alert);
-      return {
+      lastCheck = {
         checkedAt,
         source: "recording",
         fetchedAt: coffeeRecording.fetchedAt,
         via: coffeeRecording.via,
         noticesScanned: coffeeRecording.noticesScanned,
-        alerts: [...alerts.values()],
       };
+      return { lastCheck, alerts: [...alerts.values()] };
     },
   };
 }

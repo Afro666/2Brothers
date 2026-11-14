@@ -546,5 +546,11 @@ export interface RecallCheck {
   via: string;
   /** null when the monitor does not say. */
   noticesScanned: number | null;
+}
+
+/** What the inbox knows about recalls: the open alerts and the last check. */
+export interface RecallList {
+  /** null when no check has run: the screens then say "not checked yet", never "no recalls". */
+  lastCheck: RecallCheck | null;
   alerts: RecallAlert[];
 }
