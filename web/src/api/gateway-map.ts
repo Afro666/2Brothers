@@ -292,6 +292,8 @@ const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   total_mismatch: { kind: "simulate", summary: "The total moved before placing: nothing was sent" },
   order_placed: { kind: "order", summary: "Order placed" },
   proposal_rejected: { kind: "approval", summary: "Proposal rejected" },
+  // #548: a 403 to the agent or a kitchen API token; the details (code, method, path) are the reason.
+  refused: { kind: "refused", summary: "Refused: the gateway said no (403)" },
 };
 
 /** `expected_total: 148.76; verdict: NEEDS_APPROVAL`: the gateway's own values, as sent. */
@@ -340,7 +342,13 @@ function mapAuditEvent(event: Json): AuditEvent {
     ...base,
     kind: known?.kind ?? "other",
     actor:
-      actor === "buyer-agent" ? "agent" : actor === "chef" ? "chef" : typeof actor === "string" ? "human" : "system",
+      actor === "buyer-agent"
+        ? "agent"
+        : actor === "chef"
+          ? "chef"
+          : typeof actor === "string" && !actor.startsWith("token:")
+            ? "human"
+            : "system",
     summary: known?.summary ?? (typeof kind === "string" ? kind : "Unknown step"),
     reason:
       typeof rest.summary === "string"
@@ -374,6 +382,7 @@ const AUDIT_KINDS = new Set<string>([
   "stock",
   "forecast_share",
   "settings",
+  "refused",
   "other",
 ] satisfies AuditKind[]);
 
