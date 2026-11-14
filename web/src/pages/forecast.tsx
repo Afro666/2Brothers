@@ -97,7 +97,7 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
         </h2>
         <ul className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {TILES.map((tile) => (
-            <li key={tile.label}>
+            <li key={tile.label} className="last:odd:col-span-2 lg:last:odd:col-span-1">
               <Card className="h-full gap-0 py-4">
                 <CardContent className="space-y-1 px-4">
                   <h3 className="text-sm font-medium">{tile.label}</h3>
