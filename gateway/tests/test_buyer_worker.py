@@ -79,3 +79,10 @@ def test_event_flag_reaches_the_worker(worker):
     seen.clear()
     asyncio.run(buyer_worker.run_buyer('k1', BODY))
     assert 'event' not in seen
+
+
+def test_a_misspelt_kitchen_rule_keeps_its_code(worker):
+    """The worker fails closed with KITCHEN_POLICY_INVALID; the client must see that code."""
+    worker(lambda req: httpx.Response(503, json={'error': {'code': 'KITCHEN_POLICY_INVALID', 'fallback_safe': True}}))
+    err = _call()
+    assert (err.status, err.code) == (503, 'KITCHEN_POLICY_INVALID')
