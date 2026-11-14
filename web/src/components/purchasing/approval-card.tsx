@@ -503,7 +503,7 @@ export function ApprovalCard({
         {request.lineCount === 0 ? (
           <p className="text-sm font-medium sm:max-w-64 sm:text-right">
             {checks.leftOut.length > 0
-              ? t("Nothing could be ordered: {count} products left out", { count: checks.leftOut.length })
+              ? t("Nothing could be ordered. Left out: {count}", { count: checks.leftOut.length })
               : t("Nothing could be ordered")}
           </p>
         ) : (
@@ -770,9 +770,9 @@ export function ApprovalCard({
               </span>
             ) : null}
             {status === "APPROVED"
-              ? t("Approved and recorded: {exVat} ex VAT, {total}. Nothing is sent to the supplier.", {
+              ? t("Approved and recorded: {total} in all ({exVat} ex VAT). Nothing is sent to the supplier.", {
                   exVat: formatEur(request.totalExVat),
-                  total: inclVatText(request, t, formatEur),
+                  total: formatEur(request.totalInclVat),
                 })
               : status === "IN_PROGRESS"
                 ? t("In progress. This proposal cannot be approved yet.")

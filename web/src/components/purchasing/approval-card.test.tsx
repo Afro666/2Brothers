@@ -196,8 +196,8 @@ describe("ApprovalCard", () => {
     const emptyOrder = { ...confirmedOrder, lines: [], totalExVat: 0, totalInclVat: 0, inclVat: 0, deliveryFee: 0 };
     render(<ApprovalCard request={emptyRequest} order={emptyOrder} />);
 
-    expect(screen.getByText("Nothing could be ordered: 35 products left out")).toBeVisible();
-    expect(screen.getByText("35 products left out")).toBeVisible();
+    expect(screen.getByText("Nothing could be ordered. Left out: 35")).toBeVisible();
+    expect(screen.getByText("Left out: 35")).toBeVisible();
     expect(screen.queryByText("€0.00")).not.toBeInTheDocument();
   });
 
@@ -206,7 +206,7 @@ describe("ApprovalCard", () => {
     render(<ApprovalCard request={emptyRequest} order={{ ...confirmedOrder, lines: [] }} />);
 
     expect(screen.getByText("Nothing could be ordered")).toBeVisible();
-    expect(screen.queryByText(/0 products left out/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Left out: 0/)).not.toBeInTheDocument();
     expect(screen.queryByText("€0.00")).not.toBeInTheDocument();
   });
 
@@ -421,7 +421,7 @@ describe("ApprovalCard", () => {
 
     confirm();
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Approved and recorded: €1,947.50 ex VAT, €2,210.41 incl VAT. Nothing is sent to the supplier.",
+      "Approved and recorded: €2,210.41 in all (€1,947.50 ex VAT). Nothing is sent to the supplier.",
     );
     expect(screen.queryByText(/The order may now be sent/)).not.toBeInTheDocument();
   });

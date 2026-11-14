@@ -113,7 +113,7 @@ describe("ApprovalsPage recalls", () => {
     });
     expect(approve).toHaveBeenCalledTimes(1);
     expect((await api.getApproval("APR-313-R")).status).toBe("APPROVED");
-    expect(await within(replacementCard()).findByText(/Approved and recorded: €129\.60 ex VAT, €147\.10 incl VAT\. Nothing is sent to the supplier\./)).toBeInTheDocument();
+    expect(await within(replacementCard()).findByText(/Approved and recorded: €147\.10 in all \(€129\.60 ex VAT\)\. Nothing is sent to the supplier\./)).toBeInTheDocument();
     expect((await api.getApproval("APR-313")).status).toBe("BLOCKED_BY_RECALL");
     expect(within(coffeeCard()).queryByRole("button", { name: /^Approve/ })).not.toBeInTheDocument();
   });
