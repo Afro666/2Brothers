@@ -70,6 +70,26 @@ until docker compose --env-file /opt/2brothers/.env -f deploy/compose.yaml exec 
 	fi
 	sleep 2
 done
+# The site itself (#213): Caddy exits at once on a bad Caddyfile or SITE_ADDRESS, and the
+# job must fail then. Wait until web runs, then look again: a crash loop is "restarting".
+web_running() {
+	docker compose --env-file /opt/2brothers/.env -f deploy/compose.yaml ps --status running --services 2>/dev/null |
+		grep -qx web
+}
+tries=0
+until web_running; do
+	tries=$((tries + 1))
+	if [ "$tries" -ge 15 ]; then
+		echo "the web container is not running after the deploy" >&2
+		exit 1
+	fi
+	sleep 2
+done
+sleep 5
+if ! web_running; then
+	echo "the web container stopped right after the deploy (check the Caddyfile and SITE_ADDRESS)" >&2
+	exit 1
+fi
 # Outside the checkout, so git clean leaves it.
 echo "$head" > /opt/2brothers.deployed
 echo "deployed $head (run started by $sha)"
