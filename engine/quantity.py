@@ -121,6 +121,8 @@ def cover_limit(item: Item, params: KitchenParams, extra: float) -> dict:
     The ceiling is lead time + the category's max days of cover + safety stock, but never
     less than what lasts to the next delivery. Returns the most that fits and the days of
     cover `extra` would give; above the ceiling the line carries COVER_CEILING.
+    `days_of_cover` is None when daily demand is 0 (cover is unbounded; None keeps the
+    result valid JSON, where float("inf") would not be).
     """
     d, lt = item.daily_demand, item.lead_time_days
     ss = item.safety_stock if item.safety_stock is not None else safety_stock(
@@ -129,7 +131,7 @@ def cover_limit(item: Item, params: KitchenParams, extra: float) -> dict:
     position = on_hand + item.on_order
     ceiling = d * (lt + max(item.review_days, params.cover_days(item.category))) + ss
     after = position + extra
-    days = after / d if d > 0 else float("inf")
+    days = after / d if d > 0 else None
     return {"max_extra": max(ceiling - position, 0.0), "ceiling": ceiling,
             "days_of_cover": days, "over_ceiling": after > ceiling,
             "reason_codes": ("COVER_CEILING",) if after > ceiling else ()}
