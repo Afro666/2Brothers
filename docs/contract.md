@@ -1243,7 +1243,7 @@ never holds the image or the text the model read.
   token with `kitchen:write`. The Buyer agent token is refused (403 `SCOPE_REQUIRED`).
 - One read per kitchen at a time (#839): a second photo while one is being read answers
   429 `STOCK_PHOTO_BUSY` and never reaches the model. Wait for the first answer, then send
-  again. Each read is one model call of up to 60 s on shared credits.
+  again. Each read is one model call of up to 75 s on shared credits.
 - Body: JSON, like every other gateway route (no multipart parser is installed, and the
   web client and the tokens already speak JSON). The image is base64 in one field:
 
@@ -1317,6 +1317,7 @@ and nothing is stored:
 | 413 | `IMAGE_TOO_LARGE` | The body is over 6 MB or the decoded image is over 4 MB. |
 | 422 | `INVALID_JSON`, `INVALID_REQUEST` | The body is not a JSON object, or `image_base64` is missing or not base64. |
 | 422 | `NOT_AN_IMAGE` | The decoded bytes are not PNG or JPEG. |
+| 429 | `STOCK_PHOTO_BUSY` | A shelf photo for this kitchen is still being read (one read per kitchen at a time); try again when it ends. |
 | 502 | `VISION_REPLY_INVALID` | The model answered outside the strict schema. Nothing is repaired or guessed. |
 | 503 | `VISION_NOT_CONFIGURED` | The server has no vision worker or no model key. |
 | 503 | `VISION_UNAVAILABLE` | The worker or the model could not be reached, or answered with an error. |
