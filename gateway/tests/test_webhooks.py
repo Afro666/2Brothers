@@ -253,3 +253,21 @@ def test_only_an_approver_manages_webhooks(env, receiver):
     assert receiver.calls == []
     sign_in(client, "aron@example.com")
     assert client.get(K + "/webhooks").json()["webhooks"][0]["webhook_id"] == hook["webhook_id"]
+
+
+def test_the_real_sender_connects_to_the_address_it_checked(monkeypatch):
+    """#562 (DNS rebinding): a second DNS answer is never used. The POST goes to the IP
+    that passed the check; Host and TLS name stay the host name."""
+    import httpx
+    answers = iter([[(2, 1, 6, "", ("93.184.215.14", 443))], [(2, 1, 6, "", ("169.254.169.254", 443))]])
+    monkeypatch.setattr(webhooks.socket, "getaddrinfo", lambda *a, **k: next(answers))
+    seen = {}
+
+    def handler(request):
+        seen.update(url=str(request.url), host=request.headers["host"], sni=request.extensions.get("sni_hostname"))
+        return httpx.Response(204)
+    real = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
+    assert webhooks.http_send("https://rebind.example.com/x?a=1", b"{}", {}) == 204
+    assert seen == {"url": "https://93.184.215.14/x?a=1", "host": "rebind.example.com", "sni": "rebind.example.com"}
+    assert next(answers)[0][4][0] == "169.254.169.254"        # the second answer was never asked for

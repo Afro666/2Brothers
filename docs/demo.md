@@ -37,7 +37,7 @@ shaky ones.
 | 0:00 | 1. The request | On `/requests` type: `1,000 L lactose-free milk by Monday`. Press "Ask the agent". | "This is the sentence from your challenge. No product codes." | A, B |
 | 0:15 | 2. The honest answer | The card appears (about 12 s). Read the "Why this basket" list. | "It checked 20 products with live Valio prices and stock. 12 cannot make Monday: their cut-off passed. Valio confirms stock for 698 litres only. The rest is on the cheapest milk, and the card says its stock is not confirmed. A chatbot would have promised 1,000 litres." | B, D |
 | 0:50 | 3. The human decides | Open `/approvals` on the phone. Show the total and the options. Approve or reject with one tap. Open `/audit`. | "The agent can propose. It has no approve tool. A person approves the exact total; if the price moves, the old yes is refused. Every step is in a hash-chained log." | C |
-| 1:30 | 4. An exception | Show one: the recall hold (*not live in the web yet*, #655), or the tamper check on `/trust` (*mock data in gateway mode until the trust routes merge*). Until then: run `python -m gateway.scenarios` in the terminal. | "13 golden cases with the correct decision. 12 pass. They include a moved price, an allergen with missing data, and a duplicate send." | D |
+| 1:30 | 4. An exception | Show one: the recall hold (*not live in the web yet*, #655), or the tamper check on `/trust` (*mock data in gateway mode until the trust routes merge*). Until then: run `python -m gateway.scenarios` in the terminal. | "13 golden cases with the correct decision. All 13 pass. They include a moved price, an allergen with missing data, and a duplicate send." | D |
 | 2:10 | 5. Any agent | In the terminal: `curl -s https://31-22-104-201.sslip.io/llms.txt \| head -20`, then the search call from `docs/byoa.md`. | "This is not our agent's private door. Any agent with a URL and a token can read the catalog, get an offer, simulate and propose. The agent card, the OpenAPI file and the MCP endpoint are public. Our conformance kit runs 12 trust checks against any gateway." | E |
 | 2:40 | 6. Close | Show the Valio side: role "Valio planner", Home. | "The kitchen shares its forecast if it agrees. Valio sees demand before the orders arrive: 16 kitchens share, and 8 lines are short for Monday and Tuesday." (Numbers from 14 Nov; read them from the screen.) | bonus |
 
@@ -50,7 +50,7 @@ shaky ones.
   stock, but ... 5.8 times the cheapest". That is the certainty premium limit (#700).
 - `/llms.txt`, `/.well-known/agent-card.json`, `/gateway/openapi.json`: all answer 200.
 - Conformance kit on the server: 11 passed, 0 failed, 1 skipped (#609).
-- `python -m gateway.scenarios`: 12 PASS, 1 PARTIAL.
+- `python -m gateway.scenarios`: 13 PASS.
 
 Time to order: the agent path is about 12 s plus one tap. The manual webshop time is
 **not measured yet**: do one order by hand in the Valio webshop with a stopwatch and put

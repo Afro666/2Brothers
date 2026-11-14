@@ -11,17 +11,24 @@ is also the idempotency record.
 
 A check never orders, approves or cancels. Unknown is never "no recalls": `last_check` is
 null until a check ran, and notices the recording does not hold are counted, not hidden.
+
+Each scrape costs Context.dev credits and up to 45 s of a worker thread (#652), so: one
+check runs at a time per kitchen, and a check asked for while the kitchen's newest one is
+younger than the cooldown answers from that one (`reused: true`) without scraping. A
+cooldown answer only reads: it does not match, hold, plan or write an audit entry.
 """
 
 from __future__ import annotations
 
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
 from fastapi import Depends, FastAPI, Request
 
+from gateway.limits import KeyedLocks, TooMany, env_number
 from gateway.service import Gateway, GatewayError, _hash
 from monitor.recalls import LIST_SCHEMA, LIST_URL, ContextDev, parse_date
 from store import audit, recalls
@@ -31,6 +38,14 @@ RECORDING = Path(__file__).resolve().parent.parent / "monitor" / "fixtures" / "r
 VIA = "Context.dev /v1/web/scrape (json)"
 # A live list scrape took 30 s on 2026-11-14 (102 notices, JSON extraction): 20 s would never be live.
 DEFAULT_TIMEOUT, MAX_TIMEOUT = 45.0, 120.0
+COOLDOWN_S = 60             # RECALL_CHECK_COOLDOWN_S: a newer check than this is reused; 0 = off
+LOCK_WAIT_SLACK_S = 30      # RECALL_CHECK_LOCK_WAIT_S overrides: the scrape timeout plus this
+BUSY_RETRY_S = 10           # Retry-After of 429 RECALL_CHECK_BUSY
+# One check at a time per kitchen. Process-local: it holds for the one gateway process the
+# demo runs; a second process would not see this lock (the audit cooldown still would).
+# Keyed by kitchen, and the cooldown reads only that kitchen's audit entry, so one kitchen's
+# check or alerts never answer another kitchen.
+_LOCKS = KeyedLocks()
 CHECK_FIELDS = ("source", "live_error", "fetched_at", "details_fetched_at", "via",
                 "notices_scanned", "scanned_since", "notices_listed", "notices_unread")
 
@@ -159,6 +174,18 @@ def recall_view(gw: Gateway, kitchen_id: str, entry: dict | None = None) -> dict
                        for alert in recalls.alerts(gw.db, kitchen_id)]}
 
 
+def _fresh(entry: dict | None, now: datetime) -> bool:
+    """True when this kitchen's newest check is younger than the cooldown."""
+    cooldown = env_number("RECALL_CHECK_COOLDOWN_S", COOLDOWN_S)
+    if entry is None or cooldown <= 0:
+        return False
+    try:
+        age = (now - datetime.fromisoformat(entry["server"]["at"])).total_seconds()
+    except (KeyError, TypeError, ValueError):       # no readable time: check again
+        return False
+    return 0 <= age < cooldown
+
+
 def run_check(gw: Gateway, kitchen_id: str, body: dict, actor: str) -> dict:
     key = body.get("idempotency_key")
     if not isinstance(key, str) or not 1 <= len(key.strip()) <= 200:
@@ -167,6 +194,24 @@ def run_check(gw: Gateway, kitchen_id: str, body: dict, actor: str) -> dict:
     stored = recalls.check_entry(gw.db, kitchen_id, event_id)
     if stored is not None:      # a replay: no scrape, nothing applied
         return recall_view(gw, kitchen_id, stored)
+    wait = env_number("RECALL_CHECK_LOCK_WAIT_S", _timeout() + LOCK_WAIT_SLACK_S)
+    with _LOCKS.hold(kitchen_id, wait) as held:
+        if not held:    # the running check did not end in time: say so, never "no recalls"
+            raise TooMany("RECALL_CHECK_BUSY",
+                          "a recall check is already running for this kitchen; try again shortly",
+                          BUSY_RETRY_S)
+        return _check(gw, kitchen_id, event_id, actor)
+
+
+def _check(gw: Gateway, kitchen_id: str, event_id: str, actor: str) -> dict:
+    """One check, with the kitchen's lock held."""
+    stored = recalls.check_entry(gw.db, kitchen_id, event_id)
+    if stored is not None:      # the same key, sent twice at once: the first one stands
+        return recall_view(gw, kitchen_id, stored)
+    newest = recalls.check_entry(gw.db, kitchen_id)
+    if _fresh(newest, gw.now()):
+        # Cooldown: read only. The key is not recorded; after the cooldown it runs a check.
+        return {**recall_view(gw, kitchen_id, newest), "reused": True}
     now_iso = gw.now().isoformat()
     notices, facts = fetch_notices(now_iso)
     from monitor.proposals import apply_notices     # imports the agent package: only when used
@@ -197,4 +242,7 @@ def mount_recalls(app: FastAPI, gw, principal, body) -> None:
         data = await body(request)
         # The scrape and the Valio quotes block: off the event loop, like a sync route.
         from starlette.concurrency import run_in_threadpool
-        return await run_in_threadpool(run_check, gw(), kitchen_id, data, who.name)
+        try:
+            return await run_in_threadpool(run_check, gw(), kitchen_id, data, who.name)
+        except TooMany as busy:
+            return busy.answer()        # 429 with Retry-After; app.py's handler has no headers

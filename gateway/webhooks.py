@@ -24,7 +24,7 @@ import socket
 import threading
 import time
 from typing import Callable
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 EVENTS = ("proposal.ready", "proposal.approved", "proposal.rejected", "order.placed",
@@ -100,24 +100,42 @@ def check_url(url: str) -> str:
     return url
 
 
-def _resolves_public(url: str) -> bool:
-    """True when every address the host resolves to is public (or it is the dev exception)."""
+def _checked_address(url: str) -> str | None:
+    """Resolve the host once and return the one address to connect to. Every address it
+    resolves to must be public. None for the dev exception (http://localhost)."""
     parts = urlsplit(url)
     host = (parts.hostname or "").lower().rstrip(".")
     if parts.scheme == "http" and host in DEV_HOSTS and _dev():
-        return True
+        return None
     infos = socket.getaddrinfo(host, parts.port or 443, type=socket.SOCK_STREAM)
-    return bool(infos) and all(_public(info[4][0]) for info in infos)
+    if not infos or not all(_public(info[4][0]) for info in infos):
+        raise WebhookError("receiver resolves to a private address")
+    return infos[0][4][0]
 
 
 def http_send(url: str, body: bytes, headers: dict) -> int:
-    """The real sender: one POST, 3 seconds, no redirects. Returns the status code."""
+    """The real sender: one POST, 3 seconds, no redirects. Returns the status code.
+
+    The connection goes to the address that was checked, not to a second DNS answer
+    (#562: a short-TTL record could answer public for the check and private for the
+    POST). The Host header and the TLS name (SNI, certificate check) stay the host name.
+    """
     import httpx
     check_url(url)
-    if not _resolves_public(url):
-        raise WebhookError("receiver resolves to a private address")
-    return httpx.post(url, content=body, headers=headers, timeout=TIMEOUT,
-                      follow_redirects=False).status_code
+    address = _checked_address(url)
+    if address is None:
+        return httpx.post(url, content=body, headers=headers, timeout=TIMEOUT,
+                          follow_redirects=False).status_code
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower().rstrip(".")
+    ip = f"[{address}]" if ":" in address else address
+    pinned = urlunsplit((parts.scheme, ip + (f":{parts.port}" if parts.port else ""), parts.path or "/",
+                         parts.query, ""))
+    netloc = host + (f":{parts.port}" if parts.port else "")
+    with httpx.Client(timeout=TIMEOUT, follow_redirects=False, trust_env=False) as client:
+        request = client.build_request("POST", pinned, content=body, headers={**headers, "Host": netloc},
+                                       extensions={"sni_hostname": host})
+        return client.send(request).status_code
 
 
 def sign(secret: str, body: bytes) -> str:
