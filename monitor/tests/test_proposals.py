@@ -64,6 +64,20 @@ def test_coffee_hold_replans_different_brand_without_ordering():
     assert verify_chain(db)['ok']
 
 
+@pytest.mark.parametrize('error', [ValueError('identity'), OSError('network down')])
+def test_failed_enrichment_still_audits_replacement(monkeypatch, error):
+    import monitor.enrichment
+    def failing(*args, **kwargs):
+        raise error
+    monkeypatch.setattr(monitor.enrichment, 'attach', failing)
+    db, gw, p = setup()
+    apply_notices(gw, 'hotel', NOTICES, live_enrichment=True)
+    original = gw.get_proposal('hotel', p['proposal_id'])
+    assert original['replacement_proposal_id']
+    kinds = [e['event'].get('kind') for e in list_events(db, kitchen_id='hotel')]
+    assert 'replacement_enrichment_unknown' in kinds and 'recall_replacement_proposed' in kinds
+
+
 def test_unknown_policy_or_unsafe_substitute_keeps_hold():
     db, gw, p = setup()
     db.kitchen_settings.delete_many({})
