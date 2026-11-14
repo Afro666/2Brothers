@@ -1,4 +1,4 @@
-import type { Api, AuditActor, AuditChainRow, ProductTemperature } from "@/api/types";
+import type { Api, AuditActor, AuditChainRow, ProductTemperature, ProposalExplanation } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { GENESIS, KITCHEN_ID, mapChainCheck, rowHash, verifyRows } from "@/api/audit-chain";
 import { nameProducts } from "@/api/map";
@@ -73,6 +73,11 @@ export interface MockApi extends Api {
 
 export interface MockApiOptions {
   signedOut?: boolean;
+  /**
+   * Sample explanations by proposal id and language (#1173). A proposal without one answers
+   * null, as the sample data did before the explanation existed.
+   */
+  explanations?: Record<string, Partial<Record<"en" | "fi", ProposalExplanation>>>;
 }
 
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
@@ -337,6 +342,9 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       const approval = approvals.get(id);
       if (!approval) throw new ApiError("NOT_FOUND", `Approval ${id} was not found.`);
       return approval;
+    },
+    async getProposalExplanation(proposalId, language) {
+      return options.explanations?.[proposalId]?.[language] ?? null;
     },
     async approve(decision, actor) {
       const current = pendingApproval(decision.approvalId, true);

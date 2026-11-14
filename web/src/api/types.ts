@@ -417,6 +417,13 @@ export interface AuditChainCheck {
   checkedAt: string;
 }
 
+/** A checked, short Nemotron explanation of a proposal (#1173); null until the job is done. */
+export interface ProposalExplanation {
+  text: string;
+  model: string;
+  durationMs: number | null;
+}
+
 /** `GET /model-usage`: what the Buyer agent used on its model, summed over this kitchen's runs. */
 export interface ModelUsage {
   model: string;
@@ -585,6 +592,11 @@ export interface Api {
   /** How many approvals wait for a person, without loading the audit log. */
   countPendingApprovals?(): Promise<number>;
   getApproval(id: string): Promise<ApprovalRequest>;
+  /**
+   * A short checked explanation of the proposal, in `language` (#1173). Never fails the card:
+   * null while the job runs, and for a missing, invalid or unavailable explanation.
+   */
+  getProposalExplanation(proposalId: string, language: "en" | "fi"): Promise<ProposalExplanation | null>;
   approve(decision: ApprovalDecision, actor: AuditActor): Promise<ApprovalRequest>;
   reject(approvalId: string, reason: string, actor: AuditActor): Promise<ApprovalRequest>;
   /** Products that could be added to this order, ranked; `query` filters by name. */
