@@ -123,3 +123,18 @@ refused: a token can never approve. A token acts only for its own kitchen (403
 audit entries. A token with `kitchen:propose` can also drive `/mcp`:
 
     claude mcp add --transport http kitchen-buyer https://<host>/api/mcp --header "Authorization: Bearer tkb_..."
+
+## Sign-in (#270)
+
+`POST /v1/auth/login {email, password}` sets an httpOnly, SameSite=Strict session cookie
+(12 hours; Secure over HTTPS). `GET /v1/me`, `POST /v1/auth/logout`,
+`POST /v1/auth/change-password {current_password, new_password}` (10+ characters; ends
+every other session). Passwords are scrypt hashes; five wrong tries lock the account for
+five minutes; an unknown email and a wrong password give the same answer.
+
+Roles: `approver` approves, rejects and manages tokens; `chef` asks; `viewer` reads
+(403 `ROLE_REQUIRED` otherwise). A session is bound to its kitchen.
+
+The first approver comes from the server `.env`: `DEMO_USER_EMAIL`, `DEMO_USER_PASSWORD`.
+Set `GATEWAY_REQUIRE_LOGIN=true` to switch off the shared human token: then only a signed-in
+person can approve (the open demo stops being open). The Buyer agent token is not affected.
