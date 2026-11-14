@@ -26,19 +26,23 @@ def next_monday(today: date) -> date:
     return today + timedelta(days=7 - today.weekday())
 
 
-def open_day(gateway, today: date, days: int = 10) -> date:
-    """The first delivery day from next Monday on whose Valio order cut-off has not passed.
-    Read-only (one availability call per day tried), so a passed cut-off never leaves a
-    REJECTED proposal behind (2026-11-14: Monday's cut-off had passed on Saturday)."""
+def open_day(gateway, today: date, days: int = 10, kitchen_id: str = DEMO_ID) -> date:
+    """The first delivery day from next Monday on whose live quote holds the coffee.
+
+    It asks the gateway for a quote per day (an offer, never a proposal: nothing shows in
+    the inbox), so every rule that can leave the coffee out counts: Valio's closing time,
+    the kitchen's own order days and cut-off for the supplier, stock. On 2026-11-14 the
+    Valio-only check still picked Monday, whose cut-off had passed in the kitchen's terms.
+    """
     start = next_monday(today)
     for offset in range(days):
         day = start + timedelta(days=offset)
         try:
-            rows = gateway.valio.availability([COFFEE], day.isoformat())["products"]
+            offer = gateway._quote(kitchen_id, {
+                "product_ids": [COFFEE], "quantity": "5", "unit": "KG", "requested_date": day.isoformat()})
         except Exception:
-            return start                    # no live answer: keep the old rule, the quote says why
-        row = next((r for r in rows if r.get("productId") == COFFEE), {})
-        if row.get("cutoff_passed") is not True and row.get("scheduleLines"):
+            return start                    # no live answer: keep the old rule, the proposal says why
+        if any(line["product_id"] == COFFEE for line in offer["simulation"]["lines"]):
             return day
     return start
 
@@ -46,7 +50,7 @@ def open_day(gateway, today: date, days: int = 10) -> date:
 def seed(gateway, *, today: date, key: str | None = None, kitchen_id: str = DEMO_ID,
          day: date | None = None) -> dict:
     """Create (or replay) the coffee proposal through the gateway; return what to print."""
-    day = day or open_day(gateway, today)
+    day = day or open_day(gateway, today, kitchen_id=kitchen_id)
     proposal = gateway.create_proposal(kitchen_id, {
         "product_ids": [COFFEE], "quantity": "5", "unit": "KG", "requested_date": day.isoformat(),
         "text": "5 kg Kulta Katriina filter coffee for the breakfast buffet",
