@@ -204,23 +204,32 @@ def sign_in(page, base: str, email: str, password: str) -> bool:
 def approve_in(page, cards, what: str) -> None:
     """Approve inside `cards` only, never a button of another card.
 
-    A proposal with unconfirmed stock has no Approve button a person can press: its
-    "Choose option" button takes the option that confirmed stock covers and opens the
-    same dialog. That button comes first; a plain Approve is the other case.
-    The inbox shows the options folded: "Choose option" exists only after "Option A" is
-    opened, so a folded "Option A" is opened first.
+    The recorder takes the option that confirmed stock covers. Two cards do that differently:
+    - The card of #1866: its main button reads "Approve option A: <amount>". One press chooses
+      the recommended option and opens the dialog. That button comes first.
+    - The card before it, and the #1866 card once a person picked an option: the main button
+      approves the proposal's own basket. The options are inside the folded "Inspect (N options)"
+      part (#1142), and "Choose option" exists only after "Option A" is opened. So a folded
+      Inspect is opened, then a folded "Option A", then "Choose option" opens the same dialog.
+    A plain Approve is for a card with no option to choose.
     """
 
     def enabled(name):
         return [b for b in cards.get_by_role("button", name=name, exact=False).all() if b.is_enabled()]
 
-    buttons = enabled("Choose option")
-    if not buttons:
-        for header in enabled("Option A"):
-            if header.get_attribute("aria-expanded") == "false":
-                header.scroll_into_view_if_needed()
-                header.click()
+    def unfold(name):
+        # A name matches in any letter case: "Option A" also finds "Approve option A", which
+        # has no aria-expanded and is never pressed here.
+        for fold in enabled(name):
+            if fold.get_attribute("aria-expanded") == "false":
+                fold.scroll_into_view_if_needed()
+                fold.click()
                 page.wait_for_timeout(600)
+
+    buttons = enabled("Approve option") or enabled("Choose option")
+    if not buttons:
+        unfold("Inspect (")        # "Inspect (3 options)"; a card with no options says "Inspect"
+        unfold("Option A")
         buttons = enabled("Choose option")
     buttons = buttons or enabled("Approve")
     if not buttons:
