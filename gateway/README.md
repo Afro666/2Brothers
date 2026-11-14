@@ -122,7 +122,7 @@ refused: a token can never approve. A token acts only for its own kitchen (403
 `KITCHEN_SCOPE`), and a missing scope gives 403 `SCOPE_REQUIRED`. Create and revoke are
 audit entries. A token with `kitchen:propose` can also drive `/mcp`:
 
-    claude mcp add --transport http kitchen-buyer https://<host>/api/mcp --header "Authorization: Bearer tkb_..."
+    claude mcp add --transport http kitchen-buyer https://<host>/gateway/mcp --header "Authorization: Bearer tkb_..."
 
 ## Webhooks (#277)
 
@@ -153,6 +153,20 @@ The URL must be `https`. Private, loopback and link-local addresses and internal
 are refused, at registration and again at delivery time; redirects are not followed. For a
 receiver on your own machine set `GATEWAY_WEBHOOKS_DEV=true`: then `http://localhost` and
 `http://127.0.0.1` are allowed. Never set it in production.
+
+## Agent discovery (#293)
+
+`GET /.well-known/agent-card.json` (an A2A-style agent card) and `GET /llms.txt` (Markdown
+for an LLM) need no token. `gateway/discovery.py` builds both from the running app on every
+request: a skill is listed only when its route is registered, the MCP tool names and
+descriptions come from the mounted MCP server, the scopes from `gateway/tokens.py`, and the
+URLs from the request plus `GATEWAY_PUBLIC_PREFIX` (the prefix the proxy strips: `/gateway`
+on the deployed site, set in `deploy/compose.yaml`). The card says plainly that the gateway
+does not serve the A2A message protocol; it points at HTTP + JSON and MCP. Caddy serves both
+files at the site root too. A token must come in through `/gateway/*`: on `/api/*` the
+server replaces the `Authorization` header with the demo person's session.
+The copy-paste curl sequence and the MCP client config are in `docs/byoa.md`.
+Tests: `gateway/tests/test_discovery.py`.
 
 ## Sign-in (#270)
 
