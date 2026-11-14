@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAsync } from "@/lib/use-async";
 import { formatDate, formatEur, formatNumber } from "@/lib/format";
-import { isoWeekOf, weekDates } from "@/lib/week";
+import { isoWeekOf, shiftWeek, weekDates } from "@/lib/week";
 import type { DemandLine, MenuPlanEntry, PlanProposal, Recipe } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { randomHex } from "@/lib/random-id";
@@ -26,12 +26,6 @@ function todayIso(): string {
     2,
     "0",
   )}`;
-}
-
-function shiftWeek(week: string, amount: number): string {
-  const monday = new Date(`${weekDates(week)[0]}T12:00:00Z`);
-  monday.setUTCDate(monday.getUTCDate() + amount * 7);
-  return isoWeekOf(monday.toISOString().slice(0, 10));
 }
 
 /** Without `?week=` the planner opens on next week: that is the week a kitchen plans and orders for. */
