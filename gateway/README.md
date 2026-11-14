@@ -211,6 +211,30 @@ golden scenarios S01-S13 are `python -m gateway.scenarios`.
 The aggregation needs Atlas or MongoDB 7; the tests replace it
 (`gateway/tests/test_drift_routes.py`).
 
+## Trust routes (#711)
+
+`gateway/trust_routes.py` serves the four contract routes over `store.trust`
+(docs/contract.md, "Trust: audit verification and the live event stream"):
+
+- `GET /v1/kitchens/{k}/audit/verify` (`kitchen:read`): the chain check.
+- `POST /v1/kitchens/{k}/audit/demo-tamper` and `.../audit/demo-restore`: a person with
+  the role `approver`, the synthetic `demo-kitchen` only (403 `DEMO_ONLY` otherwise). Each
+  one that changes a row writes an audit entry (`audit_demo_tamper`, `audit_demo_restore`)
+  with the person and `tampered_seq`. That entry is also the replay store: the same
+  `idempotency_key` answers the stored result.
+- `GET /v1/kitchens/{k}/events` (`kitchen:read`): server-sent events, one MongoDB change
+  stream per connection. `: connected` at once, `: ping` after 5 s without a message.
+  The stream ends after 10 minutes (the client connects again) and at most 16 are open
+  per gateway process. The change stream is closed when the client leaves.
+- A change stream needs a replica set (Atlas has one). On a standalone MongoDB, and when
+  16 streams are open, the answer is 503 `EVENTS_UNAVAILABLE`.
+- Caddy needs no setting: `reverse_proxy` flushes a `text/event-stream` at once, also with
+  `encode` on (checked with caddy:2 in front of a local gateway).
+
+Local check with a real change stream:
+`docker run -d --rm -p 27047:27017 mongo:7 --replSet rs0`, `rs.initiate()` in `mongosh`,
+then `MONGODB_URI=mongodb://localhost:27047/?directConnection=true`.
+
 ## Earned auto-approve (#299)
 
 Off by default. `GET /v1/kitchens/{k}/auto-approve` shows the setting and the learning

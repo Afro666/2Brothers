@@ -508,6 +508,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     from gateway.supplier_routes import mount_supplier   # the wholesaler's demand view (#33)
     mount_supplier(app, gw, principal)
 
+    # Trust (#711): audit chain verify, the tamper demo, the live event stream.
+    from gateway.trust_routes import mount_trust
+    mount_trust(app, gw, principal, body)
+
     # Onboarding lookup (#375): Context.dev brand lookup for the sign-up form.
     from gateway.onboarding import mount_onboarding
     mount_onboarding(app, principal, body)
@@ -532,4 +536,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 def main() -> None:
     import uvicorn
     uvicorn.run("gateway.app:create_app", factory=True, host="0.0.0.0",
-                port=int(os.environ.get("PORT", "8000")), access_log=False)
+                port=int(os.environ.get("PORT", "8000")), access_log=False,
+                # An open event stream (#711) must not hold a restart: after this long uvicorn
+                # cancels what still runs, and the stream closes its change stream.
+                timeout_graceful_shutdown=3)
