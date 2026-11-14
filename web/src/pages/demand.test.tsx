@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockApi } from "@/api/mock";
 import type { Api } from "@/api/types";
 import { renderApp } from "@/test/render";
+import type { SupplierDemandRow } from "@/types";
+import { groupByProduct } from "./demand";
 
 /** The desktop table comes first in the document; a phone gets the list below it. */
 function productSections(): HTMLElement[] {
@@ -24,9 +26,65 @@ function kitchensFor(productId: string): number {
   return Number(text.match(/^\d+/)?.[0]);
 }
 
+async function openProduct(productId: string) {
+  await userEvent.click(within(productSection(productId)[0]).getByRole("button"));
+}
+
 async function demandTableReady() {
   await waitFor(() => expect(productSections().length).toBeGreaterThan(0));
 }
+
+function demandRow(overrides: Partial<SupplierDemandRow> = {}): SupplierDemandRow {
+  return {
+    productId: "milk",
+    productName: "Milk",
+    unit: "L",
+    date: "2026-11-16",
+    forecastDemand: 100,
+    kitchens: 2,
+    byKitchen: [],
+    available: 50,
+    risk: "SHORT",
+    suggestedBuy: 50,
+    ...overrides,
+  };
+}
+
+function demandApi(rows: SupplierDemandRow[]): Api {
+  const api = createMockApi();
+  api.getSupplierDemand = async () => rows;
+  return api;
+}
+
+describe("groupByProduct", () => {
+  it("sums known buys only and counts short and unknown days", () => {
+    const [group] = groupByProduct([
+      demandRow({ date: "2026-11-18", risk: "COVERED", suggestedBuy: 8, kitchens: 3 }),
+      demandRow({ date: "2026-11-16", risk: "SHORT", suggestedBuy: 12, kitchens: 2 }),
+      demandRow({ date: "2026-11-17", risk: "UNKNOWN", available: null, suggestedBuy: null, kitchens: 5 }),
+    ]);
+
+    expect(group).toMatchObject({ totalBuy: 20, unknownBuyDays: 1, shortDays: 1, maxKitchens: 5, worst: "SHORT" });
+    expect(group.rows.map((row) => row.date)).toEqual(["2026-11-16", "2026-11-17", "2026-11-18"]);
+
+    const [unknown] = groupByProduct([
+      demandRow({ risk: "UNKNOWN", available: null, suggestedBuy: null }),
+      demandRow({ date: "2026-11-17", risk: "UNKNOWN", available: null, suggestedBuy: null }),
+    ]);
+    expect(unknown).toMatchObject({ totalBuy: null, unknownBuyDays: 2, shortDays: 0 });
+  });
+
+  it("orders short by largest known buy, then unknown and covered", () => {
+    const groups = groupByProduct([
+      demandRow({ productId: "covered", productName: "Butter", risk: "COVERED", available: 500, suggestedBuy: 0 }),
+      demandRow({ productId: "short-low", productName: "Yogurt", suggestedBuy: 5 }),
+      demandRow({ productId: "unknown", productName: "Flour", risk: "UNKNOWN", available: null, suggestedBuy: null }),
+      demandRow({ productId: "short-high", productName: "Cheese", suggestedBuy: 50 }),
+    ]);
+
+    expect(groups.map((group) => group.productId)).toEqual(["short-high", "short-low", "unknown", "covered"]);
+  });
+});
 
 describe("DemandPage", () => {
   beforeEach(() => localStorage.clear());
@@ -41,9 +99,16 @@ describe("DemandPage", () => {
 
     const [head, ...days] = productSection("462775");
     expect(head).toHaveTextContent("Arla lactose-free milk");
-    expect(head).toHaveTextContent("462775·short this week·3 days");
+    expect(head).toHaveTextContent("462775");
+    expect(head).toHaveTextContent("Short on 3 of 3 days");
+    expect(head).toHaveTextContent(/Buy [\d,.]+ L/);
+    expect(head).toHaveTextContent("up to 4 kitchens");
+    expect(within(head).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
     expect(days).toHaveLength(3);
+    for (const day of days) expect(day).not.toBeVisible();
+    await openProduct("462775");
     for (const day of days) {
+      expect(day).toBeVisible();
       expect(within(day).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
       expect(within(day).getByText("Buy")).toBeInTheDocument();
       const forecast = within(day).getAllByRole("cell")[1].textContent ?? "";
@@ -58,7 +123,11 @@ describe("DemandPage", () => {
 
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
     await demandTableReady();
-    const [, ...days] = productSection("462921");
+    const [head, ...days] = productSection("462921");
+    expect(head).toHaveTextContent("+ unknown on 3 days");
+    expect(head).not.toHaveTextContent("Buy 0 L");
+    expect(head).toHaveTextContent("up to 4 kitchens");
+    await openProduct("462921");
     expect(days).toHaveLength(3);
     for (const day of days) {
       expect(within(day).getByText("Unknown: check stock")).toHaveAttribute("data-risk", "UNKNOWN");
@@ -71,6 +140,7 @@ describe("DemandPage", () => {
     renderApp("/demand?week=2026-W47", createMockApi());
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
     await demandTableReady();
+    await openProduct("462775");
     expect(kitchensFor("462775")).toBe(4);
   });
 
@@ -80,6 +150,7 @@ describe("DemandPage", () => {
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
     await demandTableReady();
 
+    await openProduct("463335");
     const firstDay = productSection("463335")[1];
     const button = within(firstDay).getByRole("button", { name: /^5 kitchens for Valio Eila 3 % milk, / });
     expect(button).toHaveAttribute("aria-expanded", "false");
@@ -114,6 +185,7 @@ describe("DemandPage", () => {
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
     await demandTableReady();
 
+    await openProduct("462775");
     const firstDay = productSection("462775")[1];
     await user.click(within(firstDay).getByRole("button", { name: /^4 kitchens/ }));
     expect(
@@ -151,12 +223,77 @@ describe("DemandPage", () => {
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
     await demandTableReady();
 
+    await openProduct("462775");
     expect(kitchensFor("462775")).toBe(3);
+    await openProduct("463335");
     const firstDay = productSection("463335")[1];
     const user = userEvent.setup();
     await user.click(within(firstDay).getByRole("button", { name: /^4 kitchens/ }));
     expect(within(firstDay).queryByText("K00 Demo restaurant, Helsinki")).not.toBeInTheDocument();
     expect(within(firstDay).getByText("K01 School 1 Tampere")).toBeVisible();
+  });
+
+  it("keeps covered products in one closed group and opens their product lines first", async () => {
+    const user = userEvent.setup();
+    renderApp(
+      "/demand?week=2026-W47",
+      demandApi([
+        demandRow({ productId: "butter", productName: "Butter", risk: "COVERED", available: 500, suggestedBuy: 0 }),
+      ]),
+    );
+    await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await demandTableReady();
+
+    const table = within(document.querySelector("table")!);
+    const covered = table.getByRole("button", { name: "Covered: 1 products" });
+    expect(covered).toHaveAttribute("aria-expanded", "false");
+    expect(productSection("butter")[0]).not.toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Covered (1)" }));
+    expect(covered).toHaveAttribute("aria-expanded", "true");
+    expect(productSection("butter")[0]).toBeVisible();
+    expect(productSection("butter")[1]).not.toBeVisible();
+    await openProduct("butter");
+    expect(productSection("butter")[1]).toBeVisible();
+  });
+
+  it("filters to short products and opens every day with Open all", async () => {
+    const user = userEvent.setup();
+    renderApp(
+      "/demand?week=2026-W47",
+      demandApi([
+        demandRow({ productId: "short-low", productName: "Yogurt", suggestedBuy: 5 }),
+        demandRow({ productId: "covered", productName: "Butter", risk: "COVERED", available: 500, suggestedBuy: 0 }),
+        demandRow({ productId: "unknown", productName: "Flour", risk: "UNKNOWN", available: null, suggestedBuy: null }),
+        demandRow({ productId: "short-high", productName: "Cheese", suggestedBuy: 50 }),
+      ]),
+    );
+    await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await demandTableReady();
+
+    expect(screen.getByRole("button", { name: "All (4)" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Short (2)" }));
+    const table = within(document.querySelector("table")!);
+    expect(table.getAllByRole("rowheader").map((header) => header.textContent)).toEqual([
+      expect.stringContaining("Cheese"),
+      expect.stringContaining("Yogurt"),
+    ]);
+    expect(table.queryByRole("rowheader", { name: /Flour/ })).not.toBeInTheDocument();
+    expect(table.queryByRole("button", { name: /^Covered:/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open all" }));
+    expect(screen.getByRole("button", { name: "All (4)" })).toHaveAttribute("aria-pressed", "true");
+    expect(table.getByRole("button", { name: "Covered: 1 products" })).toHaveAttribute("aria-expanded", "true");
+    for (const body of productSections()) {
+      const [, ...days] = [...body.querySelectorAll<HTMLElement>(":scope > tr")];
+      for (const day of days) expect(day).toBeVisible();
+    }
+
+    await user.click(screen.getByRole("button", { name: "Close all" }));
+    for (const body of productSections()) {
+      const [, ...days] = [...body.querySelectorAll<HTMLElement>(":scope > tr")];
+      for (const day of days) expect(day).not.toBeVisible();
+    }
   });
 
   it("moves to the next and previous week", async () => {
