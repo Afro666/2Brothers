@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 
 import { useApi } from "@/api";
@@ -7,7 +8,7 @@ import { useRole } from "@/lib/role";
 import type { Api } from "@/api/types";
 
 import { ApprovalTile, AuditTile, CutoffTile, StockTile } from "@/pages/home/kitchen";
-import { KitchensTile, ShortageTile } from "@/pages/home/valio";
+import { KitchensTile, ShortageTile, useSupplierDemand } from "@/pages/home/valio";
 import { DriftTile, SupplierDriftTile } from "@/pages/home/drift";
 
 function dashboardNow(search: string): Date {
@@ -23,7 +24,7 @@ export function HomePage() {
   const api = useApi();
   const { side } = useRole();
   const search = useRouterState({ select: (state) => state.location.searchStr });
-  const now = dashboardNow(search);
+  const now = useMemo(() => dashboardNow(search), [search]);
 
   return (
     <AppShell activeId="home">
@@ -62,10 +63,11 @@ function KitchenDashboard({ api, now }: { api: Api; now: Date }) {
 }
 
 function ValioDashboard({ api, now }: { api: Api; now: Date }) {
+  const supplierDemand = useSupplierDemand(api, now);
   return (
     <>
-      <ShortageTile api={api} now={now} />
-      <KitchensTile api={api} now={now} />
+      <ShortageTile state={supplierDemand} now={now} />
+      <KitchensTile state={supplierDemand} />
       <SupplierDriftTile api={api} />
     </>
   );

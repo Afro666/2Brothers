@@ -48,6 +48,7 @@ describe("createHttpApi", () => {
         "getApproval",
         "getForecastAccuracy",
         "getOrder",
+        "getPermissions",
         "listAddableProducts",
         "listApprovals",
         "listAudit",

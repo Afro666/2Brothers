@@ -116,7 +116,8 @@ async def describe(app: FastAPI, request: Request) -> dict:
                        for hid, method, path in HUMAN_ONLY if (method, path) in routes],
         "scopes": {scope: SCOPE_TEXT.get(scope, "") for scope in tokens.SCOPES},
         "openapi": base + app.openapi_url if app.openapi_url else None,
-        "docs": base + app.docs_url if app.docs_url else None,
+        # The app serves its own Swagger page at /docs (#278), so look for the route, not docs_url.
+        "docs": base + "/docs" if ("GET", "/docs") in routes else None,
         "mcp": base + app.state.mcp.settings.streamable_http_path if mcp else None,
         "mcp_tools": sorted(mcp),
         "token_route": K + "/tokens" if ("POST", K + "/tokens") in routes else None,

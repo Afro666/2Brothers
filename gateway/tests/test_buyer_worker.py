@@ -63,3 +63,19 @@ def test_success_without_proposal_id_requires_reconciliation(worker):
     worker(lambda req: httpx.Response(200, json={'status': 'ok'}))
     err = _call()
     assert (err.status, err.code) == (503, 'BUYER_RECONCILIATION_REQUIRED')
+
+
+def test_event_flag_reaches_the_worker(worker):
+    """#530: an event request keeps its flag on the worker path."""
+    seen = {}
+
+    def handler(request):
+        import json
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={'proposal_id': 'p1'})
+    worker(handler)
+    asyncio.run(buyer_worker.run_buyer('k1', {**BODY, 'event': True}))
+    assert seen['event'] is True
+    seen.clear()
+    asyncio.run(buyer_worker.run_buyer('k1', BODY))
+    assert 'event' not in seen

@@ -183,6 +183,18 @@ The first approver comes from the server `.env`: `DEMO_USER_EMAIL`, `DEMO_USER_P
 Set `GATEWAY_REQUIRE_LOGIN=true` to switch off the shared human token: then only a signed-in
 person can approve (the open demo stops being open). The Buyer agent token is not affected.
 
+## Conformance kit (#286)
+
+Any agent builder can check a running gateway's trust rules with an agent-level token:
+
+    python -m gateway.conformance --base-url https://<host>/gateway --token <token> [--markdown | --json]
+
+Twelve live checks (no order is placed, no approval is opened): no token no access, the
+gateway sizes the order from the stored need and ignores a quantity from the model,
+`place_order` without a human approval is refused, an agent token cannot approve, reject
+or create tokens, no cancel or edit route exists, a kitchen token cannot read another
+kitchen, the MCP server exposes no approve tool. Exit code 1 on any FAIL. The offline
+golden scenarios S01-S13 are `python -m gateway.scenarios`.
 ## Standing-order drift (#377)
 
 `gateway/drift_routes.py` serves the two contract routes from `store.drift`:
@@ -199,6 +211,19 @@ person can approve (the open demo stops being open). The Buyer agent token is no
 The aggregation needs Atlas or MongoDB 7; the tests replace it
 (`gateway/tests/test_drift_routes.py`).
 
+## Earned auto-approve (#299)
+
+Off by default. `GET /v1/kitchens/{k}/auto-approve` shows the setting and the learning
+progress (weeks, human decisions, edit rate). `PUT` with `{"enabled": true, "limit_eur": "500"}`
+works only for an approver and only after the learning period: 4 weeks, 20 human decisions,
+at most 10% of approved proposals edited (409 `LEARNING_PERIOD` before that; limit at most
+2,000 EUR). Then a routine proposal is approved without waiting: total under the limit, no
+warning, confirmed stock on every line, nothing excluded or short, and every product already
+on 3 human-approved, unedited orders. Substitutes, unknown stock, allergen or cut-off issues,
+recalls, events and new products always wait for a person. The order is recorded as
+`auto-approve (rule set by <person>)`, the audit entry `auto_approved` carries the evidence,
+and the same live re-check applies (a moved price still refuses). Auto-approvals never count
+as learning. `{"enabled": false}` switches it off at once.
 ## Onboarding lookup (#375)
 
 `POST /v1/onboarding/lookup` with `{"email": ...}` or `{"website": ...}` (a person's
@@ -255,3 +280,40 @@ a line:
 - Approve is still one human yes and one order; the order stores `blocks`. A line with
   unknown stock still returns 409 `STOCK_UNKNOWN`, so a block of a manual supplier cannot
   be placed until a supplier confirmation exists.
+
+## Recall list and "check now" (#358)
+
+`gateway/recalls_view.py` serves `GET /v1/kitchens/{k}/recalls` (`kitchen:read`) and
+`POST /v1/kitchens/{k}/recalls/check` (`kitchen:write`: a person who is not a viewer; body
+`idempotency_key`). Both answer `{"last_check": ..., "alerts": [...]}`; the shape is in
+`docs/contract.md`, "Recall alerts (Context.dev)", the alert fields in `docs/recall-contract.md`.
+
+- Views only: the match is `monitor.recalls.scan`, the hold and the replacement proposal are
+  `monitor.proposals.apply_notices`, the alerts are the rows of `store.recalls`.
+- A check makes one Context.dev call (the Ruokavirasto list, one attempt,
+  `RECALL_CHECK_TIMEOUT_S`, default 45 s). No key, slow, down or a wrong answer: it uses the
+  recording `monitor/fixtures/ruokavirasto.json` and says `source: "recording"` with the
+  reason in `live_error`. The notice pages always come from the recording; a live list
+  counts the notices it has not read (`notices_unread`).
+- The `recall_check` audit entry is also the idempotency record: a repeat key scrapes and
+  applies nothing. A check never orders, approves or cancels.
+- Demo: `python -m demo.recall_demo` makes the open coffee proposal the check blocks.
+
+## Kitchen planning routes (#74)
+
+`gateway/kitchen_routes.py`, all under `/v1/kitchens/{k}`:
+
+| Route | Who | What |
+|---|---|---|
+| `GET/POST /suppliers`, `GET/PUT/DELETE /suppliers/{id}` | read / write | Suppliers and their user-set terms (null = unknown) |
+| `GET/POST /recipes`, `GET/PUT/DELETE /recipes/{id}` | read / write | Ingredients with `qty_per_portion`, `unit`, `yield_pct` |
+| `GET/POST /products`, `GET/PUT/DELETE /products/{id}` | read / write | The kitchen's own products |
+| `GET/PUT /menu-plans/{YYYY-Www}` | read / write | `days: [{date, meal, recipe_id, covers}]`; an empty week returns `days: []` |
+| `POST /stock-counts`, `GET /stock` | write / read | A null count is "not counted", never zero; replay by `idempotency_key` |
+| `GET /demand?from=&to=` | read | Per product and day: `gross_need` (covers x recipe / yield), `net_need` (null when stock is unknown), `why`, `source` (`menu_plan`, else the stored forecast: `history`), plus `problems` |
+| `GET/PUT /settings` | read / approver | Engine settings; decimals as strings |
+| `GET/PUT /sharing` | read / approver | `{supplier_id, share_forecast}`; each change is an audit entry |
+
+"write" = a signed-in person who is not a viewer, or an API token with the new scope
+`kitchen:write` (a POS or stock system). The Buyer agent token cannot write. `on_order` is
+0 with `on_order_known: false` until open orders are converted to kitchen units.

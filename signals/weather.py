@@ -143,8 +143,10 @@ def main():
             "forecast_days": sum(r["kind"] == "forecast" for r in rows),
             "from": rows[0]["date"], "to": rows[-1]["date"], "stored": args.store,
             "output": str(args.out)}))
-    except Exception:
-        parser.exit(1, "Signal collection failed; check weather availability and local storage configuration.\n")
+    except Exception as exc:
+        # Only WeatherError text is sanitized; other messages may hold a connection string.
+        detail = f"{type(exc).__name__}: {exc}" if isinstance(exc, WeatherError) else type(exc).__name__
+        parser.exit(1, f"Signal collection failed ({detail}).\n")
 
 
 if __name__ == "__main__":

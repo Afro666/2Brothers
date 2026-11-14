@@ -268,8 +268,11 @@ class Gateway:
         search = self._search
         if search is None:
             from store.search import search_products as search
-        rows = search(self.db, parsed.query, {}, 8, kitchen_id=kitchen_id)
-        ids = [r["product_id"] for r in rows][:8]
+        from gateway.candidates import SEARCH_LIMIT, pick_candidates
+        rows = search(self.db, parsed.query, {}, SEARCH_LIMIT, kitchen_id=kitchen_id)
+        # Keep the hits that can answer the request: the text search alone ranks chocolate
+        # and bread mix above the milk for "lactose free milk".
+        ids = pick_candidates(rows, parsed.as_need().get("unit") or "")
         if not ids:
             raise GatewayError(422, "NO_PRODUCTS_FOUND", f"no catalog product matches {parsed.query!r}")
         return {**body, "product_ids": ids, **{k: v for k, v in parsed.as_need().items() if k != "query"},
@@ -326,7 +329,24 @@ class Gateway:
                     verdict=sim["mandate"]["verdict"])
         self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], summary=self._summary(request, sim)["text"])
-        return self._proposal_out(doc)
+        self._maybe_auto_approve(kitchen_id, doc, sim, request)
+        return self._proposal_out(self.db.proposals.find_one({"_id": doc["_id"]}) or doc)
+
+    def _maybe_auto_approve(self, kitchen_id: str, doc: dict, sim: dict, request: dict) -> None:
+        """Earned auto-approve (#299): off unless an approver switched it on after the learning
+        period. Any doubt, any error: the proposal simply waits for a person."""
+        try:
+            from gateway import autoapprove
+            ok, _, evidence = autoapprove.decide(self.db, kitchen_id, sim, request, self.now())
+            if not ok:
+                return
+            by = f"auto-approve (rule set by {evidence['rule_set_by']})"
+            self._audit(kitchen_id, "auto_approved", by, proposal_id=doc["_id"],
+                        expected_total=sim["expected_total"], evidence=evidence)
+            self.approve(kitchen_id, doc["_id"], {"expected_total": sim["expected_total"],
+                                                  "idempotency_key": "auto:" + doc["_id"]}, human=by)
+        except Exception:
+            return
 
     def _proposal_out(self, doc: dict) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
@@ -542,8 +562,52 @@ class Gateway:
         need = {"_id": uuid4().hex, "kitchen_id": kitchen_id, "quantity": str(body["quantity"]),
                 "unit": body["unit"], "requested_date": body["requested_date"],
                 "text": body.get("text") or "", "created_by": actor, "created_at": self.now()}
+        if body.get("event") is True:
+            need["event"] = True      # set by the trusted app, never by the model (#530)
         self.db.needs.insert_one(need)
         return {"need_id": need["_id"], **{k: need[k] for k in ("quantity", "unit", "requested_date", "text")}}
+
+    def tool_search(self, kitchen_id: str, query: str, filters: dict, limit: int,
+                    need_id: str | None = None) -> dict:
+        """Catalog search for the Buyer. With the stored need it becomes a shortlist the
+        Buyer can order from: only products sold in the need's measure (a request in litres
+        never gets chocolate), and products that can still arrive on the requested date
+        first. One availability call for the shortlist only, never for the whole catalog."""
+        search = self._search
+        if search is None:
+            from store.search import search_products as search
+        need = self.db.needs.find_one({"_id": need_id, "kitchen_id": kitchen_id}) if need_id else None
+        if need_id and need is None:
+            raise GatewayError(422, "INVALID_NEED", "unknown need_id")
+        if need is None:
+            return {"products": search(self.db, query, filters, limit)}
+        rows = search(self.db, query, filters, 50)
+        measure = need["unit"]
+        same = [r for r in rows if (r.get("net_content") or {}).get("unit") == measure]
+        filtered = bool(same) and measure in ("L", "KG")
+        if filtered:
+            rows = same
+        rows = rows[:max(limit, 20)]
+        arrival: dict[str, bool | None] = {}
+        try:
+            ids = [r["product_id"] for r in rows if str(r.get("supplier_id") or "sup-valio") == VALIO]
+            if ids:
+                requested = date.fromisoformat(need["requested_date"])
+                for product in self.valio.availability(ids, need["requested_date"])["products"]:
+                    lines = product.get("scheduleLines") or []
+                    day = lines[0].get("availableDate") if lines else None
+                    ok = (bool(lines) and product.get("cutoff_passed") is False and not product.get("salesBlock")
+                          and day is not None and date.fromisoformat(day) <= requested)
+                    arrival[product["productId"]] = ok
+        except Exception:
+            arrival = {}     # no live answer: the offer step still checks every product
+        for r in rows:
+            r["can_arrive"] = arrival.get(r["product_id"])
+        rows.sort(key=lambda r: 0 if r["can_arrive"] else (1 if r["can_arrive"] is None else 2))
+        return {"products": rows[:limit], "requested_date": need["requested_date"],
+                "measure": measure if filtered else None,
+                "note": "can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
+                        "prefer products with can_arrive true"}
 
     def tool_get_offer(self, kitchen_id: str, body: dict) -> dict:
         need = self.db.needs.find_one({"_id": body.get("need_id"), "kitchen_id": kitchen_id})
@@ -556,6 +620,8 @@ class Gateway:
             raise GatewayError(422, "INVALID_REQUEST", "requested_date must match the need")
         request = {"product_ids": ids, "quantity": need["quantity"], "unit": need["unit"],
                    "requested_date": need["requested_date"], "text": need["text"], "need_id": need["_id"]}
+        if need.get("event"):
+            request["event"] = True
         return offer_out(self._quote(kitchen_id, request))
 
     def _kitchen_offer(self, kitchen_id: str, offer_id: str | None) -> dict:

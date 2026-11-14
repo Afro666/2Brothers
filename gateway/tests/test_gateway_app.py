@@ -333,6 +333,30 @@ def test_parser_is_not_used_after_an_ambiguous_buyer_failure(monkeypatch):
     assert r.status_code == 200 and r.json()["request"]["made_by"] == "parser"
 
 
+def test_the_parser_prices_products_that_fit_the_asked_measure_not_the_top_text_hits(monkeypatch):
+    """Live case 2026-11-14: "lactose free milk" ranked chocolate (kg) above the milk (L),
+    the parser took the top 8, and the proposal came back REJECTED with no lines."""
+    seen = {}
+
+    def search(db, query, filters, limit, kitchen_id=None):
+        seen["limit"] = limit
+        return [{"product_id": "466215", "net_content": {"value": 0.15, "unit": "KG"}, "category": "52201"},
+                {"product_id": "462775", "net_content": {"value": 1.0, "unit": "L"}, "category": "10400"}]
+
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    db = mongomock.MongoClient(tz_aware=True)["test"]
+    for pid, raw in RAW.items():
+        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
+    fake = FakeValio()
+    gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: NOW), now=lambda: NOW,
+                 search=search)
+    r = TestClient(create_app(gw)).post(K + "/proposals", headers=AGENT,
+                                        json={"text": "60 l milk by Monday", "idempotency_key": "fit1"})
+    assert r.status_code == 200
+    assert r.json()["request"]["product_ids"] == ["462775"]      # the chocolate is not priced
+    assert seen["limit"] == 50                                     # a wider look than the top 8
+
+
 def test_a_structured_body_cannot_claim_the_parser_made_it(env):
     """made_by and query are set by the gateway, never by the client."""
     client, _, _ = env
@@ -377,6 +401,21 @@ def test_lost_attempt_response_retains_claim_for_reconciliation(env, monkeypatch
     body['idempotency_key'] = 'different-key'
     assert client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body).status_code == 409
     assert db.orders.count_documents({}) == 1
+
+
+def test_an_event_need_marks_every_offer_line_event_line(env):
+    """#530: the trusted need carries the event flag; offers quoted for it get EVENT_LINE."""
+    client, _, _ = env
+    need = client.post(K + "/needs", headers=AGENT, json={
+        "quantity": "60", "unit": "L", "requested_date": "2026-11-16", "event": True}).json()
+    offer = client.post("/tools/get_offer", headers=AGENT,
+                        json={"need_id": need["need_id"], "product_ids": ["462775"]}).json()
+    assert offer["lines"] and all("EVENT_LINE" in ln["reason_codes"] for ln in offer["lines"])
+    plain = client.post(K + "/needs", headers=AGENT, json={
+        "quantity": "60", "unit": "L", "requested_date": "2026-11-16"}).json()
+    offer = client.post("/tools/get_offer", headers=AGENT,
+                        json={"need_id": plain["need_id"], "product_ids": ["462775"]}).json()
+    assert not any("EVENT_LINE" in ln["reason_codes"] for ln in offer["lines"])
 
 
 def test_offer_lines_carry_delivery_date_and_cut_off(env):

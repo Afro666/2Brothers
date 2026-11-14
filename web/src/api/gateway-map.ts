@@ -6,11 +6,13 @@ import type {
   ApprovalRequest,
   AuditEvent,
   AuditKind,
+  BuyerPermissions,
   MovState,
   Offer,
   Order,
   OrderLine,
   OrderStatus,
+  PermissionRow,
   Product,
 } from "@/types";
 
@@ -285,6 +287,33 @@ export function mapAudit(events: Json[], orderId?: string): AuditEvent[] {
     ),
   ]);
   return events.filter((event) => ids.has(event.order_id) || ids.has(event.proposal_id)).map(mapAuditEvent);
+}
+
+const AUDIT_KINDS = new Set<string>([
+  "request",
+  "search",
+  "offer",
+  "simulate",
+  "mandate_check",
+  "approval",
+  "order",
+  "stock",
+  "forecast_share",
+  "settings",
+  "other",
+] satisfies AuditKind[]);
+
+/** `GET /permissions` (gateway/permissions.py). A kind the UI does not know (e.g. `token_created`) shows as "other". */
+export function mapPermissions(body: unknown): BuyerPermissions {
+  const group = (key: keyof BuyerPermissions): PermissionRow[] =>
+    rows(body, key).map((row) => ({
+      action: text(row.action, "a permission action"),
+      auditKind: (typeof row.audit_kind === "string" && AUDIT_KINDS.has(row.audit_kind)
+        ? row.audit_kind
+        : "other") as AuditKind,
+      ...(typeof row.rule === "string" ? { rule: row.rule } : {}),
+    }));
+  return { alone: group("alone"), person: group("person"), never: group("never") };
 }
 
 /** `GET /proposals/{id}/addable`. A row the gateway marks not addable (no price) is left out. */

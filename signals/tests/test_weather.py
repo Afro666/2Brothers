@@ -2,13 +2,16 @@ from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 import io
 import json
+from contextlib import redirect_stderr
 from pathlib import Path
 import unittest
+from unittest import mock
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 
 import mongomock
 
+from signals import weather
 from signals.weather import Location, WeatherError, collect, fetch_daily, normalize, request_url
 from store.signals import list_daily, save_daily
 
@@ -91,6 +94,22 @@ class WeatherTests(unittest.TestCase):
 
 
 class StorageTests(unittest.TestCase):
+    def test_cli_failure_names_weather_error(self):
+        err = io.StringIO()
+        with mock.patch.object(weather, "collect", side_effect=WeatherError("Open-Meteo HTTP 503")), \
+                mock.patch("sys.argv", ["weather"]), redirect_stderr(err), self.assertRaises(SystemExit) as ctx:
+            weather.main()
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("Signal collection failed (WeatherError: Open-Meteo HTTP 503).", err.getvalue())
+
+    def test_cli_failure_hides_other_exception_text(self):
+        err = io.StringIO()
+        with mock.patch.object(weather, "collect", side_effect=ValueError("mongodb+srv://u:secret@x")), \
+                mock.patch("sys.argv", ["weather"]), redirect_stderr(err), self.assertRaises(SystemExit):
+            weather.main()
+        self.assertIn("Signal collection failed (ValueError).", err.getvalue())
+        self.assertNotIn("secret", err.getvalue())
+
     def test_idempotent_snapshots_and_kitchen_isolation(self):
         db = mongomock.MongoClient().signals_test
         rows = normalize(fixture(), LOCATION, AS_OF, fetched_at=FETCHED)

@@ -10,6 +10,8 @@ async def run_buyer(kitchen_id, body):
     if not url or not token:
         raise GatewayError(503, 'BUYER_UNAVAILABLE', 'Buyer worker is not configured')
     payload = {k: body[k] for k in ('text', 'requested_date', 'idempotency_key') if k in body}
+    if body.get('event') is True:
+        payload['event'] = True     # one-off demand (S05): the need keeps it, every line gets EVENT_LINE (#530)
     payload['kitchen_id'] = kitchen_id
     try:
         async with httpx.AsyncClient(timeout=165, follow_redirects=False, trust_env=False) as client:

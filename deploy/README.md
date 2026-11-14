@@ -81,3 +81,17 @@ not the human token or upstream Valio key. No worker port is published.
   server. Merges still pass; their deploy run says "on hold" and changes nothing. `rm
   /opt/2brothers.hold` to resume; the next merge, or "Run workflow" on the deploy action, deploys
   the newest commit.
+
+## Recall check (Context.dev)
+
+- `CONTEXT_DEV_API_KEY` in the server `.env` is optional. With it, "Check recalls now"
+  (`POST /v1/kitchens/{k}/recalls/check`) scrapes the Ruokavirasto list live, one call per
+  check. Without it, or when Context.dev is slow or down, the check uses the recording in
+  the image and the screen says "recording". `RECALL_CHECK_TIMEOUT_S` (default 45, at most
+  120) bounds the call; a live list scrape took 30 seconds on 2026-11-14.
+- The demo needs an open proposal with the recalled coffee (461332) before the check. On
+  the server:
+  `docker compose --env-file /opt/2brothers/.env -f /opt/2brothers/deploy/compose.yaml exec gateway python -m demo.recall_demo`
+  It makes a READY proposal through the gateway and orders nothing. Run it before the first
+  check: after a check has recorded the recall, new quotes leave the coffee out and the
+  command says so.
