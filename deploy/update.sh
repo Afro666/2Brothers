@@ -76,11 +76,18 @@ web_running() {
 	docker compose --env-file /opt/2brothers/.env -f deploy/compose.yaml ps --status running --services 2>/dev/null |
 		grep -qx web
 }
+# Why the check failed, in the job log: the container state and its last lines (a Caddy
+# error), or compose's own error if it rejects a flag. Never fails itself.
+web_why() {
+	docker compose --env-file /opt/2brothers/.env -f deploy/compose.yaml ps -a web >&2 || true
+	docker compose --env-file /opt/2brothers/.env -f deploy/compose.yaml logs --tail 20 web >&2 || true
+}
 tries=0
 until web_running; do
 	tries=$((tries + 1))
 	if [ "$tries" -ge 15 ]; then
 		echo "the web container is not running after the deploy" >&2
+		web_why
 		exit 1
 	fi
 	sleep 2
@@ -88,6 +95,7 @@ done
 sleep 5
 if ! web_running; then
 	echo "the web container stopped right after the deploy (check the Caddyfile and SITE_ADDRESS)" >&2
+	web_why
 	exit 1
 fi
 # Outside the checkout, so git clean leaves it.
