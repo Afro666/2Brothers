@@ -20,7 +20,7 @@ export function PhotoMark() {
   return (
     <p className="mt-1 flex w-56 max-w-full items-start gap-1 text-xs font-medium whitespace-normal text-warning" data-testid="photo-mark">
       <ScanEye className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-      <span><NemotronMark side="after" />{t("read from the photo by {model}, check and save", { model: SHELF_MODEL_NAME })}</span>
+      <span><NemotronMark />{t("read from the photo by {model}, check and save", { model: SHELF_MODEL_NAME })}</span>
     </p>
   );
 }
