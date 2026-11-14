@@ -475,6 +475,7 @@ export default {
   "order by": "tilaa viimeistään",
   "order by {date}": "tilaa viimeistään {date}",
   demo: "demo",
+  "Demo data: {facts}": "Demotietoa: {facts}",
   "1 day": "1 päivä",
   "{percent} delivered": "{percent} toimitettu",
   "arrives {date}": "saapuu {date}",

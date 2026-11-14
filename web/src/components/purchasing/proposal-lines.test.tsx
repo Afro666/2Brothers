@@ -16,6 +16,11 @@ function rowOf(name: string) {
   return screen.getByText(name, { selector: "div" }).closest('[role="row"]') as HTMLElement;
 }
 
+/** The Delivery column's cell (the sixth; the Stock cell repeats it for phones). */
+function deliveryCell(row: HTMLElement) {
+  return within(row).getAllByRole("cell")[5];
+}
+
 describe("ProposalLines: the lines of a proposal as a table", () => {
   it("has one column per fact, one row per product, names with brand and code", () => {
     render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
@@ -70,16 +75,20 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
     const milkRow = rowOf(milk.product.names.en);
     expect(within(milkRow).getAllByText(/2 days/).length).toBeGreaterThan(0);
     expect(within(milkRow).getAllByText(/97 % delivered/).length).toBeGreaterThan(0);
-    // The cut-off and the lead time are demo values; the reliability is Valio's.
-    const milkDemo = milkRow.querySelectorAll("[data-demo]");
-    expect(milkDemo.length).toBeGreaterThan(0);
-    for (const note of milkDemo) expect(note).toHaveTextContent("(demo)");
-    expect(within(milkRow).getAllByTitle("Delivery reliability")[0].querySelector("[data-demo]")).toBeNull();
-    expect(within(milkRow).getAllByTitle("Lead time")[0].querySelector("[data-demo]")).not.toBeNull();
+    // The cut-off and the lead time are demo values; the reliability is Valio's. Two demo
+    // values in one Delivery cell still give one "(demo)", which names both.
+    const milkCell = deliveryCell(milkRow);
+    const milkDemo = milkCell.querySelectorAll("[data-demo]");
+    expect(milkDemo).toHaveLength(1);
+    expect(milkCell.textContent?.match(/\(demo\)/g)).toHaveLength(1);
+    expect(milkDemo[0]).toHaveAttribute("title", "Demo data: Order cut-off, Lead time");
+    // At the end of the cell, after the last value.
+    expect(milkDemo[0].previousElementSibling).toHaveAttribute("title", "Delivery reliability");
     const creamRow = rowOf(cream.product.names.en);
     expect(within(creamRow).getAllByText(/^1 day/).length).toBeGreaterThan(0);
-    expect(within(creamRow).getAllByTitle("Lead time")[0].querySelector("[data-demo]")).toBeNull();
-    expect(within(creamRow).getAllByTitle("Delivery reliability")[0].querySelector("[data-demo]")).not.toBeNull();
+    const creamDemo = deliveryCell(creamRow).querySelectorAll("[data-demo]");
+    expect(creamDemo).toHaveLength(1);
+    expect(creamDemo[0]).toHaveAttribute("title", "Demo data: Delivery reliability");
     // No facts, no note and no invented figure.
     const cheeseRow = rowOf(byId("404318").product.names.en);
     expect(cheeseRow.querySelector("[data-demo]")).toBeNull();

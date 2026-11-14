@@ -250,6 +250,9 @@ describe("OptionCompare", () => {
     expect(fact("A", "Order cut-off")).toHaveTextContent(/^order by Sun,? 15 Nov,? 17:00 \(demo\)$/);
     expect(fact("A", "Lead time")).toHaveTextContent(/^2 days$/);
     expect(fact("A", "Delivery reliability")).toHaveTextContent(/^90 % \(demo\)$/);
+    // One note per fact, and its title says which value is the demo's.
+    expect(fact("A", "Order cut-off").querySelectorAll("[data-demo]")).toHaveLength(1);
+    expect(fact("A", "Order cut-off").querySelector("[data-demo]")).toHaveAttribute("title", "Demo data: Order cut-off");
   });
 
   it("shows the milk story: price, total, labels, the engine's sentence and the API's recommendation", async () => {

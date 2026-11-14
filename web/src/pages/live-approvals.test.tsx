@@ -262,8 +262,9 @@ it("shows each line's name with its kind picture and brand logo, and the code wh
   const lines = screen.getAllByTestId("proposal-line");
   expect(lines).toHaveLength(2);
   expect(lines[0]).toHaveTextContent("51 ST · Valio Eila lactose-free milk 1 L (462775) · Measured stock");
-  // The brand logo replaces the kind tile once the logo list answers.
+  // The brand logo joins the kind tile as a badge once the logo list answers.
   await waitFor(() => expect(lines[0].querySelector('[data-logo="Valio"]')).not.toBeNull());
+  expect(lines[0].querySelector('[data-kind="milk and cream"]')).not.toBeNull();
   // No name: the code stays, and a neutral picture, never an invented kind or brand.
   expect(lines[1]).toHaveTextContent("949 ST · 463335 · Not confirmed");
   expect(lines[1].querySelector("[data-logo]")).toBeNull();
