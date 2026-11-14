@@ -52,6 +52,11 @@ a fifth replan error. Engine sizing never establishes allergen safety.
 
 ## Human recovery (#459)
 
+> **Proposed, not served yet.** The gateway does not serve the dismiss route
+> (`POST /v1/kitchens/{kitchen_id}/recalls/{event_id}/dismiss`) yet, and it does
+> not yet reject `BLOCKED_BY_RECALL` proposals. Both are tracked in #459. Remove
+> this note when #459 merges.
+
 The existing `POST /v1/kitchens/{kitchen_id}/proposals/{proposal_id}/reject`
 also accepts `BLOCKED_BY_RECALL`. It closes that basket and its pending approval,
 without dismissing the recall for future quotes. Approval and rejection compete
