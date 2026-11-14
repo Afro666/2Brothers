@@ -208,7 +208,7 @@ export function TrustPage() {
                             </Badge>
                           ) : null}
                         </div>
-                        <p className="text-sm break-words">{plainCode(row.event.summary, t)}</p>
+                        <p className="text-sm break-words">{t(plainCode(row.event.summary, t))}</p>
                         <p className="font-mono text-xs text-muted-foreground">
                           {t("hash {hash} · previous {previous}", {
                             hash: short(row.hash),

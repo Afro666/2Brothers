@@ -1,7 +1,9 @@
 import { screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { mapAudit } from "@/api/gateway-map";
 import { createMockApi } from "@/api/mock";
+import { updateLanguage } from "@/lib/i18n";
 import type { Api } from "@/api/types";
 import type { Supplier } from "@/types";
 import { renderApp } from "@/test/render";
@@ -162,6 +164,34 @@ describe("HomePage", () => {
     expect(await screen.findByText("Kitchen brief read")).toBeInTheDocument();
     expect(screen.getByText("Proposal explanation failed")).toBeInTheDocument();
     expect(screen.queryByText(/kitchen_brief_read|proposal_explanation_failed/)).not.toBeInTheDocument();
+  });
+
+  describe("Latest steps from the gateway's own events (#1776)", () => {
+    const raw = [
+      { event_id: "e-1", kind: "approval_token_created", actor: "operator-cli", at: "2026-11-14T14:57:50+00:00" },
+      { event_id: "e-2", kind: "proposal_changed", actor: "token:testing", at: "2026-11-14T15:00:00+00:00" },
+    ];
+    afterEach(() => updateLanguage("en", false));
+
+    it("shows a plain label, never the raw event name", async () => {
+      const api = createMockApi();
+      api.listAudit = async () => mapAudit(raw);
+      renderApp(`/?now=${DEMO_NOW}`, api);
+
+      expect(await screen.findByText("Personal approval token created")).toBeInTheDocument();
+      expect(screen.getByText("Proposal changed")).toBeInTheDocument();
+      expect(screen.queryByText(/approval_token_created|proposal_changed/)).not.toBeInTheDocument();
+    });
+
+    it("shows the label in Finnish when the page is in Finnish", async () => {
+      updateLanguage("fi", false);
+      const api = createMockApi();
+      api.listAudit = async () => mapAudit(raw);
+      renderApp(`/?now=${DEMO_NOW}`, api);
+
+      expect(await screen.findByText("Henkilökohtainen hyväksyntätunniste luotu")).toBeInTheDocument();
+      expect(screen.getByText("Ehdotusta muutettu")).toBeInTheDocument();
+    });
   });
 });
 
