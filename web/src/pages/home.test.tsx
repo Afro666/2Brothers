@@ -79,6 +79,9 @@ describe("HomePage", () => {
 
     expect(await screen.findByText("No forecasts for this week yet; showing next week.")).toBeInTheDocument();
     expect(screen.getByText("Shortage risk, week 47 · Mon 16 Nov–Sun 22 Nov")).toBeInTheDocument();
+    expect(screen.getByText("1", { selector: ".text-3xl" })).toBeInTheDocument();
+    // One request for this week, one for the fallback week: both tiles share the data.
+    expect(calls).toBe(2);
   });
 
   it("shows demanded products with no stock row as not counted", async () => {
