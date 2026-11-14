@@ -15,6 +15,7 @@ from __future__ import annotations
 import hmac
 import os
 import time
+from datetime import datetime
 from decimal import InvalidOperation
 from typing import Any, Literal
 
@@ -23,6 +24,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from gateway.service import Gateway, GatewayError
+from gateway.valio_client import ValioBusy
 from gateway.request_docs import (CreateNeedRequest, GetOfferRequest, PlaceOrderRequest,
                                   RequestApprovalRequest, SearchProductsRequest,
                                   SimulateOrderRequest, document_body)
@@ -178,6 +180,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         return JSONResponse(status_code=exc.status,
                             content={"error": {"code": exc.code, "message": exc.message, **exc.extra}})
 
+    @app.exception_handler(ValioBusy)   # #1237: Valio rests after a 429, or our queue is too long
+    async def _supplier_busy(_: Request, exc: ValioBusy) -> JSONResponse:
+        return JSONResponse(status_code=503, headers={"Retry-After": str(exc.retry_after)},
+                            content={"error": {"code": "SUPPLIER_BUSY", "message": str(exc),
+                                               "retry_after": exc.retry_after}})
+
     @app.exception_handler(ValueError)
     async def _invalid(_: Request, exc: ValueError) -> JSONResponse:
         return JSONResponse(status_code=422, content={"error": {"code": "INVALID_REQUEST", "message": str(exc)[:200]}})
@@ -297,7 +305,17 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
 
     @app.get("/health")
     def health() -> dict:
-        return {"status": "ok"}
+        """Public and cheap (#1188): never calls Valio, never opens the database. Mode and a
+        yes/no from the last call the gateway made; no host, key or upstream text."""
+        built = gateway if gateway is not None else state.get("gw")
+        valio = getattr(built, "valio", None)
+        if valio is None:       # no request served yet: the server builds a real client on the first one
+            return {"status": "ok", "valio_api": "live", "valio_reachable": None, "valio_checked_at": None}
+        at = getattr(valio, "last_checked_at", None)
+        reachable = getattr(valio, "last_reachable", None)
+        return {"status": "ok", "valio_api": "live" if getattr(valio, "live", False) is True else "mock",
+                "valio_reachable": reachable if isinstance(reachable, bool) else None,
+                "valio_checked_at": at.isoformat() if isinstance(at, datetime) else None}
 
     # ---- kitchen side -------------------------------------------------------------
     k = "/v1/kitchens/{kitchen_id}"
@@ -337,6 +355,16 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     def list_proposals(kitchen_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
         return {"proposals": gw().list_proposals(kitchen_id)}
+
+    @app.get(k + "/catalog/products")
+    def catalog_products(kitchen_id: str, ids: str = "", who: Principal = Depends(principal)):
+        """Product rows by code, in the order asked (#304): for screens that hold codes."""
+        who.need("kitchen:read", kitchen_id)
+        codes = [c.strip() for c in ids.split(",") if c.strip()]
+        if not 1 <= len(codes) <= 200:
+            raise GatewayError(422, "INVALID_REQUEST", "ids is 1 to 200 product codes, comma-separated")
+        from store.products import get_products
+        return {"products": get_products(gw().db, codes, kitchen_id)}
 
     @app.get(k + "/label-checks")
     def label_checks(kitchen_id: str, who: Principal = Depends(principal)):
