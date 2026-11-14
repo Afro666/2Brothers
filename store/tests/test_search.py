@@ -8,7 +8,8 @@ except ImportError:  # the `test` extra is not installed
     mongomock = None
 
 from store.search import (ALL_WORDS_BOOST, FOOD_BOOST, HOME_BOOST, SIZE_BOOST, TIE_ROOM, _reasons,
-                          allergen_codes, build_hybrid_pipeline, build_pipeline, food_word_query,
+                          allergen_codes, build_hybrid_pipeline, build_pipeline, food_head,
+                          food_word_query,
                           home_category, parse_query,
                           plant_drink,
                           search_products)
@@ -334,6 +335,40 @@ class SearchQueryTests(unittest.TestCase):
             search_products(db, "almond milk", hybrid=True, embedder=embedder)
         self.assertEqual(order[:3], ["almond milk", "milk", "embed"])
         self.assertIn("_non_food", order[3])  # the fused rows were asked food first
+
+    def test_the_last_words_home_and_finnish_compounds_when_the_words_have_no_home(self):
+        # #1828: "laktoositon maito" is in two milks and two condensed milks; the other
+        # lactose-free milks are "kevytmaito", "täysmaito", "maitojuoma".
+        class Products:
+            def __init__(self, homes):
+                self.homes = homes
+
+            def aggregate(self, pipeline):
+                word = pipeline[0]["$searchMeta"]["facet"]["operator"]["compound"]["must"][0]["text"]["query"]
+                home = self.homes.get(word)
+                return [{"facet": {"category": {"buckets": [{"_id": home, "count": 9}] if home else []}}}]
+
+        db = type("Db", (), {"products": Products({"maito": "10400", "milk": "10400", "jug": "20033"})})()
+        self.assertEqual(food_head(db, "laktoositon maito", None), (True, "10400"))
+        self.assertEqual(food_head(db, "almond milk", "63001"), (True, "10400"))      # a non-food home is none
+        self.assertEqual(food_head(db, "lactose free milk", "10400"), (True, None))  # its own home: as before
+        self.assertEqual(food_head(db, "maito", "10400"), (True, None))              # one word: as before
+        self.assertEqual(food_head(db, "milk jug", "20033"), (False, None))
+        plain = build_pipeline("laktoositon maito", food_first=True)[0]["$search"]["compound"]["should"]
+        head = build_pipeline("laktoositon maito", food_first=True, head_home="10400")[0]["$search"]["compound"]["should"]
+        self.assertNotIn("wildcard", str(plain))
+        either = head[0]["compound"]["must"][0]["compound"]
+        self.assertEqual(either["minimumShouldMatch"], 1)
+        inside = either["should"][1]["compound"]["must"]
+        self.assertEqual(inside[0], {"wildcard": {"query": "*maito*", "path": ["names.fi", "names.sv"],
+                                                  "allowAnalyzedField": True}})
+        self.assertEqual((inside[1]["text"]["query"], inside[1]["text"]["matchCriteria"]), ("laktoositon", "all"))
+        self.assertEqual(len(head[0]["compound"]["mustNot"]), 8)  # still no full match for non-food
+        home = head[-1]["compound"]
+        self.assertEqual(home["filter"][1], {"equals": {"path": "category", "value": "10400"}})
+        self.assertEqual(home["score"], {"constant": {"value": HOME_BOOST}})
+        # A sign that means something to a wildcard is never put into one.
+        self.assertNotIn("wildcard", str(build_pipeline("laktoositon ma*to", food_first=True, head_home="10400")))
 
     def test_rows_never_carry_the_raw_record(self):
         pipeline = build_pipeline("milk", limit=5)

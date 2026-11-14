@@ -227,6 +227,11 @@ search_products(db, "", {"require_labels": ["EU_ORGANIC_FARMING"], "temperature"
   comes after every food row that was read (#1658: the only name with "almond milk" is
   a hand wash). "milk jug", "hand wash" and "coffee cup" are not such queries. The
   hybrid search follows the same rule: of the fused rows, the food ones come first (#1692).
+- When the words as asked have no food home but the last word has one, the last word's
+  home comes first, and a name also holds every word when the last word is inside a
+  longer Finnish or Swedish word (#1828: "laktoositon maito" also finds "kevytmaito"
+  and "maitojuoma", and milk comes before condensed milk). English queries with a home
+  of their own ("lactose free milk") are built as before.
 - A plant milk is also searched in the catalog's words (#1699): "almond milk" finds
   "Alpro Almond drink", "kauramaito" finds "kaurajuoma", and those names come first.
   The word pairs are a short measured table (`PLANT_DRINKS`: almond, oat, soy, rice in
