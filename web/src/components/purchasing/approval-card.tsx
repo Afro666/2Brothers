@@ -44,6 +44,39 @@ export interface ApprovalDecision {
   expectedTotalInclVat: number;
 }
 
+function requestDescription(request: ApprovalRequest, t: ReturnType<typeof useT>): string {
+  const oneLine = request.lineCount === 1;
+  const values = {
+    count: request.lineCount,
+    date: formatDate(request.deliveryDate),
+    name: request.requestedBy ?? "",
+    created: request.createdAt == null ? "" : t(formatDateTime(request.createdAt)),
+  };
+  if (request.requestedBy != null && request.createdAt != null) {
+    return t(
+      oneLine
+        ? "{count} line · delivery {date} · asked by {name}, {created}"
+        : "{count} lines · delivery {date} · asked by {name}, {created}",
+      values,
+    );
+  }
+  if (request.requestedBy != null) {
+    return t(
+      oneLine
+        ? "{count} line · delivery {date} · asked by {name}"
+        : "{count} lines · delivery {date} · asked by {name}",
+      values,
+    );
+  }
+  if (request.createdAt != null) {
+    return t(
+      oneLine ? "{count} line · delivery {date} · {created}" : "{count} lines · delivery {date} · {created}",
+      values,
+    );
+  }
+  return t(oneLine ? "{count} line · delivery {date}" : "{count} lines · delivery {date}", values);
+}
+
 /**
  * One order outside the mandate, waiting for a human. Approve names the
  * exact total on the button and again in the confirmation, because that
@@ -179,19 +212,7 @@ export function ApprovalCard({
       <CardHeader className="px-0">
         <CardTitle className="text-[19px] leading-[25px] font-[650]">{request.summary}</CardTitle>
         <CardDescription className="font-mono text-xs leading-4 font-[450]">
-          {request.lineCount === 1
-            ? t("{count} line · delivery {date} · asked by {name}, {created}", {
-                count: request.lineCount,
-                date: formatDate(request.deliveryDate),
-                name: request.requestedBy,
-                created: t(formatDateTime(request.createdAt)),
-              })
-            : t("{count} lines · delivery {date} · asked by {name}, {created}", {
-                count: request.lineCount,
-                date: formatDate(request.deliveryDate),
-                name: request.requestedBy,
-                created: t(formatDateTime(request.createdAt)),
-              })}
+          {requestDescription(request, t)}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-0">
@@ -217,8 +238,8 @@ export function ApprovalCard({
           <ul className="space-y-2">
             {request.reasons.map((r) => (
               <li key={r.rule} className="border-l-[3px] border-warning py-1 pl-3 text-sm">
-                <div className="font-semibold">{r.rule}</div>
-                <div className="text-foreground">{r.detail}</div>
+                <div className="font-semibold">{t(r.rule)}</div>
+                <div className="text-foreground">{t(r.detail)}</div>
               </li>
             ))}
             {request.suppliersToConfirm.map((supplier) => (

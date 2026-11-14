@@ -43,7 +43,11 @@ describe("mapApproval", () => {
       totalInclVat: 91.2,
       reasons: [
         { rule: "10 L of the request cannot be covered for this date.", detail: "" },
-        { rule: "OVER_BUDGET_WARNING", detail: "A warning. It does not block the order.", warning: true },
+        {
+          rule: "The total is above your kitchen's budget warning.",
+          detail: "A warning only. It does not block the order.",
+          warning: true,
+        },
       ],
       suppliersToConfirm: [],
       status: "PENDING",
@@ -100,8 +104,32 @@ describe("mapApproval", () => {
   it("keeps who and when unknown without a creation event, and always gives a reason", () => {
     const bare = { ...proposal, request: { ...proposal.request, text: "" }, mandate: { verdict: "NEEDS_APPROVAL" } };
     const approval = mapApproval(bare);
-    expect(approval).toMatchObject({ requestedBy: "unknown", createdAt: null, summary: "50 L" });
+    expect(approval).toMatchObject({ requestedBy: null, createdAt: null, summary: "50 L" });
     expect(approval.reasons).toEqual([expect.objectContaining({ rule: "A person approves every order" })]);
+  });
+
+  it("explains why confirmed stock has a high certainty premium", () => {
+    const withWarning = {
+      ...proposal,
+      mandate: { verdict: "NEEDS_APPROVAL", warnings: ["CERTAINTY_PREMIUM_HIGH"] },
+    };
+    expect(mapApproval(withWarning).reasons).toContainEqual({
+      rule: "Confirmed stock costs more than your kitchen's allowed premium over the cheapest option, but it is needed to fill the order.",
+      detail: "A warning only. It does not block the order.",
+      warning: true,
+    });
+  });
+
+  it("keeps an unknown warning code as its rule", () => {
+    const withWarning = {
+      ...proposal,
+      mandate: { verdict: "NEEDS_APPROVAL", warnings: ["NEW_GATEWAY_WARNING"] },
+    };
+    expect(mapApproval(withWarning).reasons).toContainEqual({
+      rule: "NEW_GATEWAY_WARNING",
+      detail: "A warning. It does not block the order.",
+      warning: true,
+    });
   });
 
   it("lists ALLERGEN_DATA_MISSING under what to check, from a line or the mandate", () => {
