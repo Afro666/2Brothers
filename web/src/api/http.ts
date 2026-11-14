@@ -17,6 +17,7 @@ import { createTokensHttp } from "@/api/http-tokens";
 import { createApprovalTokensHttp } from "@/api/http-approval-tokens";
 import { createDeveloperHttp } from "@/api/http-developer";
 import { createEventsHttp } from "@/api/http-events";
+import { createExplanationHttp } from "@/api/http-explanation";
 import {
   type Json,
   mapAddable,
@@ -246,6 +247,7 @@ export function createHttpApi(baseUrl: string): Api {
           onStatus?.(connected);
         },
       ),
+    ...createExplanationHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));

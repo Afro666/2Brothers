@@ -6,6 +6,7 @@ import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OptionCompare } from "@/components/purchasing/option-compare";
 import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
+import { ProposalExplanationBlock, useCardExplanation } from "@/components/purchasing/proposal-explanation";
 import { RecallLines, recallHold } from "@/components/purchasing/recall-lines";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -140,6 +141,12 @@ export function ApprovalCard({
   const [showOrder, setShowOrder] = useState(false);
   const [showDetails, setShowDetails] = useState(!folded);
   const [search, setSearch] = useState("");
+  // The checked Nemotron explanation (#1173): asked after the card is drawn, never awaited.
+  const explanation = useCardExplanation(
+    request.id,
+    request.status === "PENDING",
+    `${request.orderId}\u0000${request.totalExVat}\u0000${request.totalInclVat}`,
+  );
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   useEffect(() => {
@@ -249,6 +256,10 @@ export function ApprovalCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-0">
+        <ProposalExplanationBlock
+          explanation={explanation}
+          openDetails={folded && !showDetails ? () => setShowDetails(true) : undefined}
+        />
         <dl className="space-y-3 border-t pt-3">
           <div className="flex items-baseline justify-between gap-4">
             <dt className="text-sm text-muted-foreground">{t("Total ex VAT")}</dt>

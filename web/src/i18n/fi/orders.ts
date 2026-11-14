@@ -452,4 +452,7 @@ export default {
   "No signed receipt (this order is from before receipts, or signing was not possible)": "Ei allekirjoitettua kuittia (tilaus on ajalta ennen kuitteja, tai allekirjoitus ei onnistunut)",
   "Products that were left out": "Pois jätetyt tuotteet",
   "The kitchen’s allergen rule refused this request before any agent ran.": "Keittiön allergeenisääntö hylkäsi tämän pyynnön ennen kuin yksikään agentti käynnistyi.",
+  "Short explanation": "Lyhyt selitys",
+  "Written by {model} from the checked decision record": "Kirjoittanut {model} tarkistetun päätöstietueen pohjalta",
+  "Open the full decision record": "Avaa koko päätöstietue",
 } satisfies Record<string, string>;
