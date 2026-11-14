@@ -490,6 +490,9 @@ Product row (the catalog row from the shared repository, without the raw record)
 | `reliability` | number or null | Delivered versus ordered, 0 to 1. |
 | `carbon_kg_co2e_per_kg` | number or null | Product-group average, not this product's own figure. |
 | `substitutions` | string[] | Product codes Valio suggests. A kitchen's allergen rule still wins. |
+| `vat_code` | string or null | `STANDARD`, `MEDIUM`, `LOW` or `NOT_APPLICABLE`. See "VAT per product". Null: unknown. |
+| `vat_rate` | decimal string or null | VAT in percent for that code (`"13.5"`). Null: unknown, never 0. |
+| `vat_source` | string or null | `"Valio product data, vatCode"`, `"entered"` (an own product) or null. |
 
 The contract is snake_case. The web client maps these rows to its own camelCase
 types in `web/src/api/`.
@@ -675,6 +678,11 @@ agent. A token never approves.
 Token row: `token_id`, `name`, `scopes`, `prefix` (the first 8 characters, for
 display), `created_at`, `created_by`, `last_used_at` (or null), `revoked_at` (or null).
 
+`created_by` on a token row and on a webhook row is a person's name or email. A caller that
+is not a signed-in session (the open demo's shared human token) gets it only when it is the
+caller's own name; otherwise the text `a signed-in person` (#1577). A signed-in person of
+the kitchen gets the stored value. The same holds for the list and the delete answers.
+
 - `token` (`tkb_...`) is in the create answer only. It is shown once; the gateway
   keeps only its SHA-256.
 - `scopes` holds one or more of `kitchen:read`, `kitchen:propose` and `kitchen:write`
@@ -776,6 +784,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | GET | `/products`, `/products/{id}` | `kitchen:read` | Own products (not in a supplier catalog). Shape below. |
 | POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Create, change or delete an own product. |
 | GET | `/catalog/products?ids=` | `kitchen:read` | Product rows by code, for screens that hold product codes (recipes, orders). `ids` is 1 to 200 codes, comma-separated. Returns `{"products": [...]}` in the order asked, each in the product row shape of `search_products` (no `score`, no `match_reasons`). Covers the supplier catalogs and this kitchen's own products, never another kitchen's. A code that is not found is left out; it is not an error. Fewer than 1 or more than 200 codes is 422 `INVALID_REQUEST`. |
+| GET | `/catalog/products/{product_id}?date=` | `kitchen:read` | One product's page: what it is, allergens, nutrition, storage, origin, VAT, the live Valio price and stock, recall status, every supplier that offers it and this kitchen's own figures for it. Each part names its source. 404 `PRODUCT_NOT_FOUND` for a code that is not in the catalogs or this kitchen's own products. Shape under "Product page" (#1603). |
 | GET | `/recipes`, `/recipes/{id}` | `kitchen:read` | Recipe = products x quantity per portion, with yield; allergens rolled up. |
 | POST, PUT, DELETE | `/recipes`, `/recipes/{id}` | `kitchen:write` | Create, change or delete a recipe. |
 | GET | `/menu-plans/{week}` | `kitchen:read` | The week's menu plan (shape below). |
@@ -795,7 +804,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". |
 | POST | `/proposals/{id}/change` | `kitchen:propose` (a person or an agent) | Set a line's quantity (0 removes it) or add a product from the addable list. Re-quotes live; approves and sends nothing. Returns the proposal in the `GET /proposals/{id}` shape with a new `offer_id` and `expected_total`. Body and errors under "Changing a proposal". MCP tool `change_proposal`. |
-| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. `receipt` is the signed order receipt or null ("Signed order receipt"). |
+| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. `receipt` is the signed order receipt or null ("Signed order receipt"). Each order also has `total_ex_vat`, `vat`, `total_incl_vat`, `vat_unknown` and `delivery_fee`, and each line `vat_rate` and `vat_source` ("VAT per product"). |
 | GET | `/orders/{id}/resolution` | `kitchen:approve` (human) | What our store knows about an order whose send result is unknown. Shape under "Resolving an unknown send". |
 | POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
@@ -1073,6 +1082,136 @@ a name, the kind picture and the brand logo ("Product pictures" below) instead o
   but ..."`) starts with the name when it is known, the code after it in brackets:
   `"Arla milk 1 L (463203): confirmed in stock, but ..."`. `excluded[].reason` itself is
   unchanged. Names and reasons are not part of `offer_hash`.
+
+### VAT per product (#1603)
+
+Every product row has `vat_code`, `vat_rate` and `vat_source`. For a Valio product they come
+from the catalog field `synkkaData.vatCode` (`vat_source: "Valio product data, vatCode"`):
+
+| `vatCode` in the catalog | `vat_code` | `vat_rate` | Products (of 17,546) |
+|---|---|---|---|
+| `STANDARD` | `STANDARD` | `"25.5"` | 2,593 |
+| `MEDIUM`, `MEDIUM MEDIUM` | `MEDIUM` | `"13.5"` | 11,878 |
+| `LOW` | `LOW` | `"10"` | 1 |
+| `NOT_APPLICABLE` | `NOT_APPLICABLE` | `"0"` | 1 |
+| missing, empty, or two different codes (`STANDARD MEDIUM`) | null | null | 3,073 |
+
+- Finnish rates in 2026: general 25.5 %; reduced 13.5 % from 1 Jan 2026 (Law 1358/2025, was
+  14 %) for all foodstuffs, so fish and vegetables have the same rate; 10 % for books, medicine
+  and similar. A rate change is one line in `store/products.py` (`VAT_RATES`).
+- Unknown is null, never a guess and never 0: most fresh vegetables have no `vatCode` in the
+  catalog, so their VAT is unknown until the live price says it.
+- An own product has the `vat_rate` the kitchen entered (`vat_source: "entered"`), else null.
+- The rows of a catalog loaded before #1603 get the fields from their stored record with
+  `python -m store.vat --apply` (idempotent; without `--apply` it only counts).
+
+**Lines.** Every proposal line (`lines`, `blocks[].lines`, options, `partial_fill` lines) and
+every order line has `vat_rate` (decimal string or null) and `vat_source`:
+
+| `vat_source` | Where the rate came from |
+|---|---|
+| `valio_price` | The live Valio price answer, `tax.taxRate`. It wins when it is there. |
+| `catalog` | The product row's `vat_rate` (a Valio price without `tax.taxRate`, or an order line stored before #1603). |
+| `entered` | The own product's entered `vat_rate`. |
+| null | Unknown: `vat_rate` is null. |
+
+Before #1603 a Valio price without `tax.taxRate` counted as 0 % and a manual supplier's
+unknown VAT counted as 0 in the top-level `vat`. Both now stay unknown.
+
+**Totals.** A proposal, each of its `blocks`, and an order have:
+
+| Field | Rule |
+|---|---|
+| `total_ex_vat` | The sum of the line totals. No delivery fee. |
+| `vat` | The sum of line total x `vat_rate` / 100, rounded to cents. Null when any line's rate is unknown. |
+| `total_incl_vat` | `total_ex_vat` + `vat`. Null when any line's rate is unknown: never equal to `total_ex_vat` because a rate is missing. |
+| `vat_unknown` | The `product_id`s of the lines whose rate is unknown. `[]` when every rate is known. |
+| `delivery_fee` | As before. On an order: the sum of its supplier blocks' fees, null when one is unknown or the order stored none. |
+| `expected_total` | Unchanged: the exact figure a person approves, `total_ex_vat` + the known VAT + the known delivery fees. When `vat_unknown` is not empty it is not a total incl VAT, and a screen does not call it one. |
+
+- An order's rates are the rates stored on its lines when it was placed. An order stored before
+  #1603 has none: its lines take the product row's rate at read time (`vat_source: "catalog"`).
+- A screen shows "incl VAT: unknown" with the names of the `vat_unknown` lines when
+  `total_incl_vat` is null, and the approve button keeps `expected_total`.
+
+### Product page (#1603)
+
+`GET /v1/kitchens/{kitchen_id}/catalog/products/{product_id}?date=YYYY-MM-DD` (`kitchen:read`).
+`date` is the delivery date the live price and stock are for; without it, tomorrow in Helsinki.
+A code that is not a catalog product or this kitchen's own product is 404 `PRODUCT_NOT_FOUND`;
+another kitchen's own product is the same 404. A bad `date` is 422 `INVALID_REQUEST`. Reads
+only; one query per collection, plus one Valio price and one availability call (cached as for
+the Buyer). A Valio error never fails the page: `live.error` says it.
+
+```json
+{
+  "product_id": "461903",
+  "product": {"product_id": "461903", "names": {"en": "Salmon fillet A, ASC", "fi": "..."}, "...": "the product row"},
+  "about": {"marketing_text": {"en": "..."}, "key_ingredients": {"en": "..."},
+            "ingredients": [{"en": "Salmon", "fi": "Lohi"}], "storage_instructions": {"en": "..."},
+            "preparation_instructions": null, "usage_instructions": null, "producer": "Kalavapriikki Oy",
+            "source": "Valio product data"},
+  "allergens": {"known": true, "contains": [{"code": "AF", "name": "fish"}], "may_contain": [],
+                "free_from": [], "undeclared": [], "no_declarable_allergens": false,
+                "source": "Valio product data, allergen classification"},
+  "nutrition": {"basis": "g", "per": "100", "values": {"kcal": "208", "fat_g": "13"},
+                "source": "Valio product data, nutritionalContent"},
+  "storage": {"temperature": "chilled", "min_temperature_c": 0, "max_temperature_c": 2,
+              "source": "Valio product data"},
+  "origin": {"country": "no", "source": "Valio product data, countryOfOrigin"},
+  "vat": {"code": "MEDIUM", "rate": "13.5", "source": "Valio product data, vatCode"},
+  "units": {"sales_unit": "KG", "base_unit": "KG", "lot_size": null,
+            "units": [{"unit": "KG", "size_in_base_units": 1.0, "gtin": "..."}],
+            "net_content": {"value": 1.0, "unit": "KG"}, "net_content_source": "base_unit",
+            "source": "Valio product data"},
+  "live": {"date": "2026-11-16", "price_ex_vat": "24.85", "price_incl_vat": "28.20", "per": "KG",
+           "tax_rate": "13.5", "comparison_price": "24.85", "comparison_unit": "KG",
+           "stock": {"available": "120", "unknown": false, "available_date": "2026-11-16",
+                     "orderable": true, "cutoff_passed": false, "closing_time": "2026-11-15T13:00:00+02:00"},
+           "error": null, "source": "Valio price and availability API"},
+  "recall": {"status": "CLEAR", "alerts": [], "source": "this kitchen's recall alerts"},
+  "suppliers": [
+    {"supplier_id": "sup-valio", "name": "Valio Aimo", "adapter": "valio_api", "product_id": "461903",
+     "product_name": "Salmon fillet A, ASC", "price_ex_vat": "24.85", "per": "KG",
+     "price_source": "Valio price API", "vat_rate": "13.5", "stock_known": true,
+     "net_content": {"value": 1.0, "unit": "KG"}, "lead_time_days": 1, "lead_time_source": "supplier_terms",
+     "order_days": ["MON", "TUE", "WED", "THU", "FRI"], "cutoff_time": "17:00",
+     "free_delivery_threshold_eur": "300.00", "delivery_fee_eur": "25.00", "terms_source": "supplier_terms"}
+  ],
+  "kitchen": {
+    "orders": [{"order_id": "...", "created_at": "...", "quantity": "10", "unit": "KG", "total": "248.50"}],
+    "proposals_waiting": [{"proposal_id": "...", "created_at": "...", "quantity": "10", "unit": "KG", "total": "248.50"}],
+    "stock": {"on_hand": "3.2", "unit": "KG", "counted_at": "..."},
+    "recipes": [{"recipe_id": "env-salmon_soup", "name": "Salmon soup", "qty_per_portion": "0.08", "unit": "KG"}],
+    "demand": {"from": "2026-11-15", "to": "2026-11-28", "unit": "KG", "gross_need": "14.2", "days": 9,
+               "source": "menu plan and forecast"}
+  }
+}
+```
+
+- `product` is the row of `GET /catalog/products?ids=` for this code.
+- `about`: the catalog's texts per language (`en`, `fi`, `sv`, those present), each null when the
+  catalog has none. An own product has `about: null`.
+- `allergens` is the product row's allergen data with a `name` per known code. `known: false`
+  means unknown: empty lists then never mean free from.
+- `nutrition` is per 100 g or 100 ml from the label (`engine/nutrition.py`); null when the label
+  has no usable table. A nutrient the label leaves out is absent, not 0.
+- `live` is null for an own product (a price list has no live price). `stock.available` is null
+  and `stock.unknown` true when Valio reports 999999 or more ("unknown", docs/decisions.md);
+  no schedule line is `available: "0"`, not available. `error` is `SUPPLIER_BUSY` or
+  `VALIO_UNAVAILABLE` when Valio did not answer; every other `live` field is then null.
+- `recall.status` is `BLOCKED_BY_RECALL` when an alert of this kitchen that is not dismissed
+  matches the product (`exact` or `possible`), else `CLEAR`.
+- `suppliers`: Valio first for a catalog product (with the live price when there is one), then
+  each of this kitchen's own products whose `catalog_product_id` is this code, cheapest first by
+  price per `net_content` unit. For an own product page: its own supplier, then the catalog
+  product it names and the other own products that name the same one. A manual supplier has
+  `stock_known: false`: a person may still approve it (docs/decisions.md). The lead time comes
+  as on a proposal line: the demo value, then the supplier's terms; `lead_time_source` says which.
+- `kitchen.orders`: the last 5 orders with this product, newest first; `proposals_waiting`: the
+  `READY` proposals with it; `stock`: the latest count or null; `recipes`: the recipes that use
+  it; `demand`: the menu plan and forecast need for the next 14 days (`GET /demand`), null when
+  there is none.
 
 ### Creating a proposal
 
@@ -2930,6 +3069,13 @@ strings in the stated unit.
   change of `unit_price_eur` without `price_source` sets it back to `entered`.
 - `allergen_data` is `ENTERED` or `UNKNOWN`. An empty `allergens` list with `UNKNOWN`
   means unknown, never "free from".
+- Optional, null when not given (#1603, #1604):
+  - `vat_rate`: decimal string, VAT in percent, 0 to 100 (`"13.5"`). Null: unknown, never 0.
+  - `category`: the 5-character catalog category of the same kind of product (`"18701"`), so the
+    Buyer's kind filter keeps it next to catalog products of that kind. Null: no category.
+  - `catalog_product_id`: the supplier catalog product this is the same product as. The product
+    page of that catalog product lists this one under `suppliers`. It changes no price, no search
+    and no plan.
 - Codes are the GS1 allergen codes the Valio catalog uses; `level` is `CONTAINS` or
   `MAY_CONTAIN`.
 
@@ -3603,9 +3749,10 @@ route errors, never an invented empty brief.
 
 **Implemented in stages.** Served so far: change reasons, context and outcomes (#1302),
 delivery results and the one-tap `/received` (#1304), and `GET`/`PUT /learned` with
-correction ratios applied to plan proposals (#1305 phase 2a). In this stage a
-`DECLINED_PRODUCT` fact and a late supplier (`SUPPLIER_LATE` with `on_time_rate` under
-0.7) only add a warning to the plan's `problems`: a declined recipe ingredient is never
+correction ratios applied to plan proposals (#1305 phase 2a), and a declined product
+left out of a plan proposal when no recipe needs it (#1307, "Declined products in a plan
+proposal" below). In this stage a late supplier (`SUPPLIER_LATE` with `on_time_rate` under
+0.7) only adds a warning to the plan's `problems`: a declined recipe ingredient is never
 left out silently, and learned lead times do not change safety stock yet.
 Learning adds no model-controlled write endpoint and never changes a typed request quantity.
 
@@ -3855,6 +4002,39 @@ alone, with Finnish number formatting normalized. An invalid sentence is omitted
 leaving the plain learned evidence. A not-applicable model suggestion is only text
 for human review; it does not skip an engine adjustment or persist a switch. Prompt memory is
 capped at 12 entries and approximately 600 tokens.
+
+#### Declined products in a plan proposal (#1307)
+
+Only a plan proposal (`request.made_by: "menu_plan"`: the menu-plan window and "Propose
+order for this week") reads an active `DECLINED_PRODUCT` fact. A typed, structured or
+list request that names the product still gets it.
+
+- **No recipe needs it in the window** (its need comes only from the history forecast):
+  the product gets no line. It is listed in the proposal's `excluded` and in
+  `mandate.reasons`, never dropped silently:
+
+  ```json
+  {"product_id": "462775", "product_name": "Milk 1 L",
+   "reason": "LEARNED_DECLINED: not proposed: you removed it 3 times (last on 2026-11-09). Switch this learned fact off to get it back.",
+   "fact_id": "lf_01JYK8M4N3M4K7W8N0E4Q2F6C5",
+   "evidence": {"rows": 3, "from": "2026-10-26", "to": "2026-11-09", "last": "2026-11-09"},
+   "quantity": "20", "unit": "L"}
+  ```
+
+  `fact_id`, `evidence`, `quantity` and `unit` are present only on a learned entry; every
+  other `excluded` entry keeps its shape. `quantity` and `unit` are the need that was left
+  out. The same entries are stored as `request.learned_excluded`.
+- **A recipe of a planned day needs it**: a recipe names one product, so nothing else
+  covers the ingredient. The line stays and `request.problems` gets the warning sentence,
+  as before.
+- **Every need of the plan is declined**: `422 NOTHING_NEEDED`, with one sentence per
+  left-out product in `problems`. No empty proposal is stored.
+- **Undo**: `PUT /learned/{fact_id}` with `{"active": false}`; the next plan proposal has
+  the product again. Adding the product to a proposal by hand also resets the history.
+  An existing proposal is not re-quoted.
+- **Audit**: each left-out product is one entry of `learned_fact_applied`, with `from_qty`
+  the need, `to_qty` `"0"` and the unit. A plan proposal with a left-out product is never
+  auto-approved.
 
 ### Disable, privacy and audit
 
