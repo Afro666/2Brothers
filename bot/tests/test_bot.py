@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 
 from bot import render
-from bot.app import NOT_LINKED, Bot, due_slot, parse_brief_times
+from bot.app import MAX_ADDS, NOT_LINKED, Bot, due_slot, parse_brief_times
 from bot.clients import GatewayError, SpeechError, TelegramError
 from bot.links import Links
 
@@ -673,6 +673,13 @@ def test_nothing_to_add_and_a_refused_add_are_said(bot):
 def test_add_works_after_a_restart_of_the_bot(bot):
     press(bot, f"d:{PID}:0:469549b")                                             # no list in memory
     assert ("addable", PID) in bot.gw.calls and ("add", "469549b", "12") in bot.gw.calls
+
+
+def test_the_addable_lists_in_memory_are_capped(bot):
+    for n in range(MAX_ADDS + 30):
+        bot._addable(f"p{n}")
+    assert len(bot._adds) == MAX_ADDS
+    assert "p0" not in bot._adds and f"p{MAX_ADDS + 29}" in bot._adds      # the oldest went first
 
 
 # ---- found in the first live test, 2026-11-14 ---------------------------------------------
