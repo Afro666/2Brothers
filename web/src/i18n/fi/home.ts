@@ -1,4 +1,12 @@
 export default {
+  "Who decides what": "Kuka päättää mistä",
+  "Buyer agent": "Ostaja-agentti",
+  "chooses the products": "valitsee tuotteet",
+  "sets the quantities": "laskee määrät",
+  "fixed rules, no model": "kiinteät säännöt, ei mallia",
+  "You": "Sinä",
+  "approve the exact total": "hyväksyt tarkan summan",
+  "nothing is sent before that": "mitään ei lähetetä ennen sitä",
   "What needs you today.": "Nämä tarvitsevat sinua tänään.",
   "Where demand may outrun supply.": "Kun kysyntä voi ylittää saatavuuden.",
   "Waiting for your approval": "Odottaa hyväksyntääsi",

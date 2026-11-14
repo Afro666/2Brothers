@@ -15,12 +15,15 @@ export function Tile({
   href,
   linkLabel,
   emphasis = false,
+  footer,
 }: {
   title: string;
   children: ReactNode;
   href: string;
   linkLabel: string;
   emphasis?: boolean;
+  /** Shown under a tear line, above the link (the hero docket's "who decides what"). */
+  footer?: ReactNode;
 }) {
   return (
     <Card className={emphasis ? "docket" : undefined}>
@@ -29,6 +32,7 @@ export function Tile({
       </CardHeader>
       <CardContent className="space-y-4">
         {children}
+        {footer ? <div className="border-t border-dashed border-input pt-4">{footer}</div> : null}
         <Link
           to={href}
           className={

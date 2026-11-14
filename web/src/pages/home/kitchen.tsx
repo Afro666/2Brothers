@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import type { Api } from "@/api/types";
 import type { ApprovalRequest, AuditEvent, DemandLine, StockItem, Supplier } from "@/types";
 
+import { DecisionStrip } from "@/components/purchasing/decision-strip";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
@@ -24,7 +25,13 @@ export function ApprovalTile({ api }: { api: Api }) {
   const t = useT();
   const state = useAsync(() => api.listApprovals(), [api]);
   return (
-    <Tile title={t("Waiting for your approval")} href="/approvals" linkLabel={t("Review orders to approve")} emphasis>
+    <Tile
+      title={t("Waiting for your approval")}
+      href="/approvals"
+      linkLabel={t("Review orders to approve")}
+      emphasis
+      footer={<DecisionStrip />}
+    >
       <TileState
         status={state.status}
         error={state.error}

@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 
 import { AppShell, NAV_ITEMS } from "@/components/purchasing/app-shell";
+import { DecisionStrip } from "@/components/purchasing/decision-strip";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
@@ -179,6 +180,10 @@ export function KitPage() {
               <MandateSummary mandate={mandate} />
             </CardContent>
           </Card>
+        </Section>
+
+        <Section id="decision" title="DecisionStrip" usedIn="Home: under the approval docket">
+          <DecisionStrip />
         </Section>
 
         <Section id="states" title="Shared states" usedIn="Every screen while data loads, is empty, or fails">
