@@ -1,10 +1,11 @@
 """Kitchen planning routes (#74): the Planner, Products, Suppliers and Stock pages for real."""
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal as D
 
 from engine.menu_demand import gross_needs, net_needs, weeks_between
 from gateway import users
+from gateway.kitchen_routes import demand_rows
 from gateway.tests.test_gateway_app import AGENT, HUMAN, K, env  # noqa: F401 (fixture)
 
 SOUP = {"recipe_id": "soup", "name": "Carrot soup", "ingredients": [
@@ -143,3 +144,17 @@ def test_approved_orders_count_as_on_order_until_their_delivery_day(env):
     items = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}
     assert items["463335"]["on_order"] is None and items["463335"]["position"] is None
     assert items["463335"]["on_order_known"] is False
+
+
+def test_demand_day_bounds_follow_the_kitchen_clock_not_utc(env):
+    """#705: a forecast stored at 00:30 local (UTC+2) belongs to that local day, not the day before."""
+    _, _, db = env
+    local = timezone(timedelta(hours=2))
+    for ts, pid in ((datetime(2026, 11, 16, 0, 30, tzinfo=local), "460708"),     # 15th 22:30 UTC
+                    (datetime(2026, 11, 16, 23, 30, tzinfo=local), "469549"),    # 16th 21:30 UTC
+                    (datetime(2026, 11, 17, 0, 30, tzinfo=local), "462775")):    # the next local day
+        db.forecasts.insert_one({"ts": ts, "meta": {"kitchen_id": "k-edge", "product_id": pid},
+                                 "need": 3.0, "unit": "KG"})
+    rows, _ = demand_rows(db, "k-edge", date(2026, 11, 16), date(2026, 11, 16), date(2026, 11, 14), local)
+    assert sorted((r["product_id"], r["date"]) for r in rows) == [("460708", "2026-11-16"),
+                                                                  ("469549", "2026-11-16")]
