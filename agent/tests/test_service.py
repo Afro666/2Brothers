@@ -119,7 +119,10 @@ def test_internal_worker_requires_agent_token_and_fixed_kitchen(monkeypatch):
 def test_public_free_text_route_hands_off_to_worker(monkeypatch):
     monkeypatch.setenv('GATEWAY_AGENT_TOKEN', 'internal-test-token')
     called = AsyncMock(return_value={'proposal_id': 'p', 'status': 'READY'})
-    client = TestClient(gateway_app(buyer_worker=called))
+    # Auth now consults the gateway's session repository before the injected
+    # worker. Keep this test independent of a developer's .env / live database.
+    gateway = Gateway(mongomock.MongoClient(tz_aware=True).test, None)
+    client = TestClient(gateway_app(gateway, buyer_worker=called))
     body = {'text': '51 L milk', 'requested_date': '2026-11-16', 'idempotency_key': 'k'}
     result = client.post('/v1/kitchens/demo-kitchen/proposals', headers={'Authorization': 'Bearer internal-test-token'}, json=body)
     assert result.status_code == 200 and result.json()['status'] == 'READY'
