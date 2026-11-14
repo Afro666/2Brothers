@@ -38,14 +38,14 @@ function gatewayDemoAccounts(): DemoAccount[] {
 export function SignInPage() {
   const t = useT();
   const api = useApi();
-  const { status, signIn } = useSession();
+  const { status, session, signIn } = useSession();
   const accounts = useMemo(() => (api.live ? gatewayDemoAccounts() : MOCK_DEMO_ACCOUNTS), [api]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (status === "signed-in") return <Navigate to="/" replace />;
+  if (status === "signed-in" && session?.email) return <Navigate to="/" replace />;
 
   async function authenticate(loginEmail: string, loginPassword: string) {
     setBusy(true);

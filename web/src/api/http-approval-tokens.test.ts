@@ -76,4 +76,27 @@ describe("Personal approval tokens over HTTP", () => {
       await expect(operation(createHttpApi("/api"))).rejects.toMatchObject({ status, code });
     }
   });
+
+  it.each([403, 500])("create failed with gateway %i: rejects instead of returning a mock token", async (status) => {
+    const request = vi.fn(async () =>
+      new Response(JSON.stringify({ error: { code: "CREATE_FAILED", message: "create failed" } }), { status }),
+    );
+    vi.stubGlobal("fetch", request);
+
+    await expect(createHttpApi("/api").createApprovalToken({ hours: 8 })).rejects.toMatchObject({
+      status,
+      code: "CREATE_FAILED",
+    });
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it("create failed with 200 and no token: rejects instead of returning a mock token", async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify(ROW)));
+    vi.stubGlobal("fetch", request);
+
+    await expect(createHttpApi("/api").createApprovalToken({ hours: 8 })).rejects.toMatchObject({
+      code: "INVALID_RESPONSE",
+    });
+    expect(request).toHaveBeenCalledOnce();
+  });
 });
