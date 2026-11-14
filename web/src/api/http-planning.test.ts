@@ -509,6 +509,26 @@ describe("planning methods of createHttpApi", () => {
     expect(calls[2].headers).toMatchObject({ "X-User": "human" });
   });
 
+  it("never saves an untouched engine default, even when the default moved since the form loaded", async () => {
+    const page = await (async () => {
+      gateway({ [`GET ${K}/settings`]: () => settingsRow });
+      return createHttpApi("/api").getKitchenSettings();
+    })();
+    expect(page.engineDefaults).toEqual(expect.arrayContaining(["serviceLevelPercent.B", "budgetWarningPerWeekExVat"]));
+    for (const defaults of [{ ...settingsRow.defaults, budget_warning_week_eur: "7000", service_level: { B: "0.96" } }, undefined]) {
+      const calls = gateway({
+        [`GET ${K}/settings`]: () => ({ ...settingsRow, defaults }),
+        [`PUT ${K}/settings`]: () => ({ ...settingsRow, defaults: undefined, service_level: { A: "0.98" } }),
+      });
+      await createHttpApi("/api").saveKitchenSettings(
+        { ...page, serviceLevelPercent: { ...page.serviceLevelPercent, A: 98 } },
+        "human",
+      );
+      // Only the edited level: not the week budget or level B the form showed from the old defaults.
+      expect(calls.find((call) => call.route === `PUT ${K}/settings`)?.body).toEqual({ service_level: { A: "0.98" } });
+    }
+  });
+
   it("sends no settings request when nothing changed", async () => {
     const calls = gateway({ [`GET ${K}/settings`]: () => settingsRow });
     const api = createHttpApi("/api");

@@ -1,6 +1,6 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import { mapKitchenSettings } from "@/api/map-planning";
@@ -51,9 +51,20 @@ describe("Ordering engine settings", () => {
     expect(screen.getAllByText("Engine default")).toHaveLength(7);
 
     const b = screen.getByLabelText("B — Regular");
+    expect(b).toHaveAccessibleDescription("Engine default");
+    expect(screen.getByLabelText("A — Menu-critical")).not.toHaveAccessibleDescription("Engine default");
     await user.clear(b);
     await user.type(b, "96");
     expect(screen.getAllByText("Engine default")).toHaveLength(6);
+    expect(b).not.toHaveAccessibleDescription("Engine default");
+
+    // The save names the defaults still untouched, so the adapter leaves them to the engine.
+    const save = vi.spyOn(api, "saveKitchenSettings");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    const sent = save.mock.calls[0][0].engineDefaults;
+    expect(sent).toContain("serviceLevelPercent.C");
+    expect(sent).not.toContain("serviceLevelPercent.B");
   });
 
   it("saves a service level and writes an audit event", async () => {

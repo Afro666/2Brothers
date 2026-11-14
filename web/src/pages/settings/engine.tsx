@@ -27,6 +27,14 @@ export const DEMAND_CLASSES: { key: DemandClass; name: string; description: stri
 ];
 const clone = (settings: KitchenSettings): KitchenSettings => structuredClone(settings);
 
+/** The form's value for an `engineDefaults` field name, e.g. `serviceLevelPercent.B` or `maxDaysOfCover.dry`. */
+function fieldValue(settings: KitchenSettings, field: string): unknown {
+  const [group, key] = field.split(".");
+  if (group === "serviceLevelPercent") return settings.serviceLevelPercent[key as DemandClass];
+  if (group === "maxDaysOfCover") return settings.maxDaysOfCover.find((rule) => rule.category === key)?.maxDays;
+  return settings[group as keyof KitchenSettings];
+}
+
 function parseNumber(value: string): number {
   return value === "" ? Number.NaN : Number(value);
 }
@@ -61,7 +69,11 @@ export function EngineSection() {
     setSaving(true);
     setSaveError(null);
     try {
-      const settings = await api.saveKitchenSettings(clone(draft), actor);
+      // Names the defaults still untouched, so the save leaves them to the engine.
+      const next = original?.engineDefaults
+        ? { ...clone(draft), engineDefaults: original.engineDefaults.filter(isDefault) }
+        : clone(draft);
+      const settings = await api.saveKitchenSettings(next, actor);
       setDraft(clone(settings));
       setOriginal(clone(settings));
       toast.success(t("Settings saved"), { testId: "settings-saved-toast" });
@@ -77,10 +89,21 @@ export function EngineSection() {
     setSaveError(null);
   }
 
-  /** Beside a field that still shows the engine's default (the gateway's `defaults`), not a value the kitchen set. */
-  const engineDefault = (field: string, same: boolean) =>
-    same && original?.engineDefaults?.includes(field) ? (
-      <span className="text-xs text-muted-foreground">{t("Engine default")}</span>
+  /** The field still shows the engine's default the gateway sent (`defaults`), not a value the kitchen set. */
+  function isDefault(field: string): boolean {
+    return (
+      draft !== null &&
+      original?.engineDefaults?.includes(field) === true &&
+      Object.is(fieldValue(draft, field), fieldValue(original, field))
+    );
+  }
+  const defaultId = (field: string) => `engine-default-${field.replace(/[^\w-]/g, "-")}`;
+  const describedBy = (field: string) => (isDefault(field) ? defaultId(field) : undefined);
+  const engineDefault = (field: string) =>
+    isDefault(field) ? (
+      <span id={defaultId(field)} className="text-xs text-muted-foreground">
+        {t("Engine default")}
+      </span>
     ) : null;
 
   const allergenCodes = draft ?[...new Set([...Object.keys(ALLERGENS), ...draft.excludedAllergens])].sort() : [];
@@ -117,14 +140,12 @@ export function EngineSection() {
                     <Label htmlFor={`service-${key}`}>
                       {key} — {t(description)}
                     </Label>
-                    {engineDefault(
-                      `serviceLevelPercent.${key}`,
-                      Object.is(draft.serviceLevelPercent[key], original?.serviceLevelPercent[key]),
-                    )}
+                    {engineDefault(`serviceLevelPercent.${key}`)}
                   </div>
                   <div className="relative">
                     <Input
                       id={`service-${key}`}
+                      aria-describedby={describedBy(`serviceLevelPercent.${key}`)}
                       type="number"
                       min="50"
                       max="99.9"
@@ -183,14 +204,11 @@ export function EngineSection() {
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <Label htmlFor={`cover-days-${index}`}>{t("Days")}</Label>
-                      {engineDefault(
-                        `maxDaysOfCover.${rule.category}`,
-                        original?.maxDaysOfCover[index]?.category === rule.category &&
-                          Object.is(original.maxDaysOfCover[index].maxDays, rule.maxDays),
-                      )}
+                      {engineDefault(`maxDaysOfCover.${rule.category}`)}
                     </div>
                     <Input
                       id={`cover-days-${index}`}
+                      aria-describedby={describedBy(`maxDaysOfCover.${rule.category}`)}
                       type="number"
                       min="1"
                       step="1"
@@ -244,10 +262,11 @@ export function EngineSection() {
             <CardContent className="max-w-xs">
               <div className="flex flex-wrap items-center gap-2">
                 <Label htmlFor="stock-out-cap">{t("Maximum scaling factor")}</Label>
-                {engineDefault("stockOutDemandCap", Object.is(draft.stockOutDemandCap, original?.stockOutDemandCap))}
+                {engineDefault("stockOutDemandCap")}
               </div>
               <Input
                 id="stock-out-cap"
+                aria-describedby={describedBy("stockOutDemandCap")}
                 className="mt-1.5"
                 type="number"
                 min="1"
@@ -271,13 +290,11 @@ export function EngineSection() {
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Label htmlFor="budget-order">{t("Per order (ex VAT, €)")}</Label>
-                  {engineDefault(
-                    "budgetWarningPerOrderExVat",
-                    draft.budgetWarningPerOrderExVat === original?.budgetWarningPerOrderExVat,
-                  )}
+                  {engineDefault("budgetWarningPerOrderExVat")}
                 </div>
                 <Input
                   id="budget-order"
+                  aria-describedby={describedBy("budgetWarningPerOrderExVat")}
                   type="number"
                   min="0"
                   step="0.01"
@@ -292,13 +309,11 @@ export function EngineSection() {
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Label htmlFor="budget-week">{t("Per week (ex VAT, €)")}</Label>
-                  {engineDefault(
-                    "budgetWarningPerWeekExVat",
-                    draft.budgetWarningPerWeekExVat === original?.budgetWarningPerWeekExVat,
-                  )}
+                  {engineDefault("budgetWarningPerWeekExVat")}
                 </div>
                 <Input
                   id="budget-week"
+                  aria-describedby={describedBy("budgetWarningPerWeekExVat")}
                   type="number"
                   min="0"
                   step="0.01"

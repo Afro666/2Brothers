@@ -482,6 +482,9 @@ export function mapKitchenSettings(body: unknown): KitchenSettings {
  */
 export function settingsBody(before: KitchenSettings, after: KitchenSettings): Json {
   const body: Json = {};
+  // A field the form still shows with the engine's default is never sent: the default may have
+  // moved since the form loaded, and an untouched default must not become the kitchen's own value.
+  const untouched = new Set(after.engineDefaults ?? []);
   const changedNumber = (was: number, now: number, label: string): boolean => {
     if (Object.is(was, now)) return false;
     if (!Number.isFinite(now)) throw new ApiError("INVALID", `${label} must be a number.`);
@@ -491,6 +494,7 @@ export function settingsBody(before: KitchenSettings, after: KitchenSettings): J
   const levels: Json = {};
   for (const demandClass of DEMAND_CLASSES) {
     const now = after.serviceLevelPercent[demandClass];
+    if (untouched.has(`serviceLevelPercent.${demandClass}`)) continue;
     if (changedNumber(before.serviceLevelPercent[demandClass], now, `Service level ${demandClass}`)) {
       levels[demandClass] = decimalString(now / 100);
     }
@@ -507,16 +511,21 @@ export function settingsBody(before: KitchenSettings, after: KitchenSettings): J
     );
   }
   const cover: Json = {};
-  for (const [category, days] of now) if (was.get(category) !== days) cover[category] = days;
+  for (const [category, days] of now) {
+    if (!untouched.has(`maxDaysOfCover.${category}`) && was.get(category) !== days) cover[category] = days;
+  }
   if (Object.keys(cover).length > 0) body.max_cover_days = cover;
 
-  if (changedNumber(before.stockOutDemandCap, after.stockOutDemandCap, "Stock-out demand cap")) {
+  if (
+    !untouched.has("stockOutDemandCap") &&
+    changedNumber(before.stockOutDemandCap, after.stockOutDemandCap, "Stock-out demand cap")
+  ) {
     body.stockout_cap = decimalString(after.stockOutDemandCap);
   }
-  if (before.budgetWarningPerOrderExVat !== after.budgetWarningPerOrderExVat) {
+  if (!untouched.has("budgetWarningPerOrderExVat") && before.budgetWarningPerOrderExVat !== after.budgetWarningPerOrderExVat) {
     body.budget_warning_order_eur = optionalDecimal(after.budgetWarningPerOrderExVat, "Per-order budget warning");
   }
-  if (before.budgetWarningPerWeekExVat !== after.budgetWarningPerWeekExVat) {
+  if (!untouched.has("budgetWarningPerWeekExVat") && before.budgetWarningPerWeekExVat !== after.budgetWarningPerWeekExVat) {
     body.budget_warning_week_eur = optionalDecimal(after.budgetWarningPerWeekExVat, "Weekly budget warning");
   }
   const codes = (settings: KitchenSettings) => [...new Set(settings.excludedAllergens)].sort().join(",");
