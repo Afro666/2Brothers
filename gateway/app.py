@@ -13,6 +13,7 @@ Run: `two-brothers-gateway` (uvicorn on 0.0.0.0:8000). Never logs keys or bodies
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 import time
 from datetime import datetime
@@ -427,7 +428,9 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
             try:
                 return enrich(gw(), kitchen_id, proposal, explanation_language, background_tasks,
                               who.name, explanation_worker)
-            except Exception:
+            except Exception as exc:
+                logging.getLogger(__name__).warning('explanation enrich failed proposal_id=%s error=%s',
+                                                    proposal_id, type(exc).__name__)
                 return {**proposal, 'explanation': None}
         return proposal
 

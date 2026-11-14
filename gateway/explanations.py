@@ -1,6 +1,7 @@
 """Optional, asynchronous proposal detail enrichment; never on an approval/write path."""
 import asyncio
 from datetime import datetime, timezone
+import logging
 import os
 import time
 
@@ -77,9 +78,10 @@ async def generate(gateway, kitchen, ident, payload, lease, actor, worker):
             count = len(raw['sentences'])
             result = {'text': text, 'language': payload['language'], 'model': MODEL, 'checked': True,
                 'source_hash': payload['source_hash'], 'duration_ms': round((time.monotonic()-started)*1000)}
-    except Exception:
+    except Exception as exc:
         # Failure is optional UI enrichment, never an HTTP/card/approval failure.
-        pass
+        logging.getLogger(__name__).warning('explanation generate failed proposal_id=%s code=%s error=%s',
+                                            ident, code, type(exc).__name__)
     finally:
         try:
             await asyncio.to_thread(explanations.finish, gateway.db, lease, result, datetime.now(timezone.utc))
