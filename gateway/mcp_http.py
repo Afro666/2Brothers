@@ -3,7 +3,7 @@
     claude mcp add --transport http kitchen-buyer https://<host>/mcp \
         --header "Authorization: Bearer $GATEWAY_AGENT_TOKEN"
 
-The same seven tools as the stdio server (gateway/mcp_server.py), with the same
+The same eight tools as the stdio server (gateway/mcp_server.py), with the same
 descriptions and guards; approve, reject and cancel are never exposed. Only the
 agent token may use /mcp: a human token is refused, because the Buyer is an agent
 and a person approves in the inbox, not through MCP. Each tool call goes through the

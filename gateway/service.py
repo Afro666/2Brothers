@@ -384,7 +384,9 @@ class Gateway:
         for n in needs:
             if n["product_id"] in blocked or n["product_id"] in refused:
                 continue
-            by_measure.setdefault(n["unit"] if n["unit"] in ("L", "KG") else "ST", []).append(n)
+            # A changed proposal (#303) names each quantity in the product's own sales unit.
+            measure = n["unit"] if n.get("sales_unit") or n["unit"] in ("L", "KG") else "ST"
+            by_measure.setdefault(measure, []).append(n)
         for measure, group in by_measure.items():
             offers, skip, t, s, w = self._offers(kitchen_id, [n["product_id"] for n in group], measure, requested)
             skipped += skip
@@ -395,8 +397,9 @@ class Gateway:
                 mine = [o for o in offers if o.product_id == n["product_id"]]
                 if not mine:
                     continue
-                plan = plan_request(Decimal(str(n["quantity"])), measure, mine, requested, None)
-                lines += list(plan.lines)
+                plan = plan_request(Decimal(str(n["quantity"])), measure, mine, requested, None,
+                                    event=bool(request.get("event")))
+                lines += [_set_by(ln, n, mine[0].pack.lot_size) for ln in plan.lines]
                 excluded += list(plan.excluded)
                 codes += [c for c in plan.reason_codes if c not in codes]
                 if plan.shortfall > 0:
@@ -1320,6 +1323,21 @@ class Gateway:
             return entry["server"].get("at") or (stored.isoformat() if hasattr(stored, "isoformat") else stored)
         return [{"seq": e["seq"], **e["event"], "at": at(e)}
                 for e in audit.list_events(self.db, kitchen_id=kitchen_id)]
+
+
+def _set_by(line, need: dict, lot: Decimal):
+    """A line whose quantity a person or an agent set (#303) says so in its `why`, and to
+    what the engine rounded it. Built from the stored request only, so a re-quote at
+    approve gives the same line."""
+    if not need.get("set_by"):
+        return line
+    from dataclasses import replace
+    asked = Decimal(str(need["quantity"]))
+    note = f"Quantity set by {need['set_by']}"
+    if "LOT_SIZE_ROUNDED" in line.reason_codes and line.quantity != asked:
+        note += (f": {asked.normalize():f} {line.unit} asked, rounded up to {line.quantity.normalize():f} "
+                 f"{line.unit} (sold in steps of {lot.normalize():f})")
+    return replace(line, why=f"{note}. {line.why}")
 
 
 def _qty(x) -> str | None:

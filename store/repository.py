@@ -180,6 +180,9 @@ def menu_days(week: str, days: list) -> list[dict]:
     return checked
 
 
+PRICE_SOURCES = ("entered", "price_list_photo")
+
+
 def own_product_row(data: dict, product_id: str) -> dict:
     """The contract's own-product body -> a `products` row (the common shape)."""
     _require(data, "kitchen_id", "name", "supplier_id", "unit")
@@ -202,6 +205,11 @@ def own_product_row(data: dict, product_id: str) -> dict:
     name = str(data["name"]).strip()
     # Decimal128 explicitly: a caller may pass a database without the store codec.
     price = _decimal(data.get("unit_price_eur"), "unit_price_eur")
+    # Where the price came from (#1174): typed in, or read from a price-list photo and
+    # checked by a person. It never changes how the price is used.
+    source = data.get("price_source") or "entered"
+    if source not in PRICE_SOURCES:
+        raise ValueError(f"price_source must be one of {', '.join(PRICE_SOURCES)}")
     return {
         "_id": product_id, "source": "own", "kitchen_id": data["kitchen_id"],
         "supplier_id": data["supplier_id"],
@@ -221,6 +229,7 @@ def own_product_row(data: dict, product_id: str) -> dict:
         "temperature": None, "reliability": None, "carbon_kg_co2e_per_kg": None,
         "substitutions": [],
         "unit_price_eur": price if price is None else Decimal128(price),
+        "price_source": source,
     }
 
 
@@ -237,6 +246,7 @@ def own_product_out(row: dict | None) -> dict | None:
         "base_unit": content["unit"] if content else None,
         "pack_size_in_base_units": Decimal(str(content["value"])) if content else None,
         "unit_price_eur": price.to_decimal() if isinstance(price, Decimal128) else price,
+        "price_source": row.get("price_source") or "entered",
         "allergens": ([{"code": code, "level": "CONTAINS"} for code in allergens["contains"]]
                       + [{"code": code, "level": "MAY_CONTAIN"} for code in allergens["may_contain"]]),
         "allergen_data": "ENTERED" if row["allergen_data_known"] else "UNKNOWN",

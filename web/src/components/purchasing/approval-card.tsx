@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OptionCompare } from "@/components/purchasing/option-compare";
 import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { RecallLines, recallHold } from "@/components/purchasing/recall-lines";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,6 +100,7 @@ export function ApprovalCard({
   editCount = 0,
   approvalBlockedReason,
   recalls = [],
+  folded = false,
 }: {
   request: ApprovalRequest;
   order?: Order;
@@ -112,6 +114,8 @@ export function ApprovalCard({
   approvalBlockedReason?: string;
   /** Recall alerts on this order; a blocked line still on it holds the approval. */
   recalls?: RecallAlert[];
+  /** A decided card starts folded: title, totals and status show, the details open on a tap (#1142). */
+  folded?: boolean;
 }) {
   const t = useT();
   const [open, setOpen] = useState<"approve" | "reject" | null>(null);
@@ -120,6 +124,7 @@ export function ApprovalCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOrder, setShowOrder] = useState(false);
+  const [showDetails, setShowDetails] = useState(!folded);
   const [search, setSearch] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -228,6 +233,18 @@ export function ApprovalCard({
             </dd>
           </div>
         </dl>
+        {folded ? (
+          <Button
+            type="button"
+            variant="outline"
+            aria-expanded={showDetails}
+            onClick={() => setShowDetails((shown) => !shown)}
+          >
+            {showDetails ? t("Hide details") : t("Show details")}
+          </Button>
+        ) : null}
+        {showDetails ? (
+          <>
         {editCount > 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("Changed by you: {count} edits. The Buyer learns from these.", { count: editCount })}
@@ -282,8 +299,11 @@ export function ApprovalCard({
                   <ul className="divide-y">
                     {order.lines.map((line) => (
                       <li key={line.product.id} className="space-y-3 py-3">
-                        <div>
+                        <div className="flex items-center gap-2">
+                          <ProductThumb size="sm" en={line.product.names.en} fi={line.product.names.fi} />
                           <div className="font-medium">{line.product.names.en}</div>
+                        </div>
+                        <div>
                           <div className="text-xs text-muted-foreground">
                             {line.product.id} · {line.product.salesUnit}
                           </div>
@@ -405,6 +425,8 @@ export function ApprovalCard({
               </div>
             ) : null}
           </section>
+        ) : null}
+          </>
         ) : null}
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-2 border-t border-dashed border-input px-0 pt-4 [.border-t]:pt-4 sm:flex-row sm:justify-end">

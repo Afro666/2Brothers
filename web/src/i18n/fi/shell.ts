@@ -13,6 +13,8 @@ export default {
   "Suppliers": "Toimittajat",
   "Reports": "Raportit",
   "Forecast vs actual": "Ennuste ja toteuma",
+  "Showing the newest {count} steps, oldest first.": "Näytetään uusimmat {count} vaihetta, vanhin ensin.",
+  "Show more ({count} earlier steps)": "Näytä lisää ({count} aiempaa vaihetta)",
   "Activity log": "Toimintaloki",
   "Tamper check": "Muutostarkistus",
   "Settings": "Asetukset",

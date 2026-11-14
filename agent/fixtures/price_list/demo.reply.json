@@ -1,0 +1,55 @@
+{
+ "model": "nemotron-3.5-super-vl",
+ "currency": "EUR",
+ "vat": "sis. alv 14 %",
+ "rows": [
+  {
+   "name": "Rye sourdough loaf 800 g",
+   "price": "4,40 €",
+   "price_unit": "kpl",
+   "pack": "800 g"
+  },
+  {
+   "name": "Cinnamon bun",
+   "price": "2,10 €",
+   "price_unit": "kpl",
+   "pack": "unknown"
+  },
+  {
+   "name": "Karelian pie",
+   "price": "0,85 €",
+   "price_unit": "kpl",
+   "pack": "unknown"
+  },
+  {
+   "name": "Baguette",
+   "price": "2,30 €",
+   "price_unit": "kpl",
+   "pack": "250 g"
+  },
+  {
+   "name": "Oat bread",
+   "price": "3,60 €",
+   "price_unit": "kpl",
+   "pack": "500 g"
+  },
+  {
+   "name": "Butter croissant",
+   "price": "1,90 €",
+   "price_unit": "kpl",
+   "pack": "unknown"
+  },
+  {
+   "name": "Seed rolls",
+   "price": "0,95",
+   "price_unit": "unknown",
+   "pack": "unknown"
+  },
+  {
+   "name": "Rye flour bulk",
+   "price": "2,80 €",
+   "price_unit": "kg",
+   "pack": "unknown"
+  }
+ ]
+}

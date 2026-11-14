@@ -1,0 +1,33 @@
+{
+ "model": "nemotron-3.5-super-vl",
+ "lines": [
+  {
+   "row": 0,
+   "product_id": "462775",
+   "text": "Demand 2400 L, available 1700 L, suggested buy 700 L.",
+   "numbers": [
+    "2400",
+    "1700",
+    "700"
+   ]
+  },
+  {
+   "row": 1,
+   "product_id": "462921",
+   "text": "Demand 1250 L, available 1012.4 L, suggested buy 238 L.",
+   "numbers": [
+    "1250",
+    "1012.4",
+    "238"
+   ]
+  },
+  {
+   "row": 2,
+   "product_id": "463335",
+   "text": "Available amount unknown for 3 kitchens; check with producer or warehouse.",
+   "numbers": [
+    "3"
+   ]
+  }
+ ]
+}
