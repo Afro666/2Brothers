@@ -167,7 +167,7 @@ def register(app, gw, principal, body) -> None:
                 raise ValueError("from must be on or before to, at most 62 days apart")
             return start, end
         start, end = guarded(window)
-        rows, problems = demand_rows(gw().db, kitchen_id, start, end)
+        rows, problems = demand_rows(gw().db, kitchen_id, start, end, tz=gw().now().tzinfo)
         return {"from": start.isoformat(), "to": end.isoformat(), "rows": _json(rows), "problems": problems}
 
     # ---- settings and sharing: an approver only -----------------------------------------
@@ -217,10 +217,12 @@ def _stock_items(db, kitchen_id: str) -> list[dict]:
     return items
 
 
-def demand_rows(db, kitchen_id: str, start: date, end: date) -> tuple[list[dict], list[str]]:
+def demand_rows(db, kitchen_id: str, start: date, end: date, tz=None) -> tuple[list[dict], list[str]]:
     """Per product and day: gross and net need from the menu plan; days without a plan use
-    the stored forecast. Shared by GET /demand and the "propose an order for this plan" path."""
+    the stored forecast. Shared by GET /demand and the "propose an order for this plan" path.
+    `tz` sets the day bounds (the gateway clock's tzinfo; UTC if not given)."""
     from datetime import timezone
+    tz = tz or timezone.utc
 
     from engine.menu_demand import gross_needs, net_needs, weeks_between
     from store.repository import Repository
@@ -233,10 +235,11 @@ def demand_rows(db, kitchen_id: str, start: date, end: date) -> tuple[list[dict]
     for row in rows:
         row["source"] = "menu_plan"
     planned_days = {row["date"] for row in rows}
-    lo = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
-    hi = datetime.combine(end, datetime.max.time(), tzinfo=timezone.utc)
+    lo = datetime.combine(start, datetime.min.time(), tzinfo=tz)
+    hi = datetime.combine(end, datetime.max.time(), tzinfo=tz)
     for f in db.forecasts.find({"meta.kitchen_id": kitchen_id, "ts": {"$gte": lo, "$lte": hi}}):
-        day = f["ts"].date().isoformat()
+        ts = f["ts"] if f["ts"].tzinfo else f["ts"].replace(tzinfo=timezone.utc)  # Mongo gives naive UTC
+        day = ts.astimezone(tz).date().isoformat()
         if day not in planned_days:
             rows.append({"product_id": f["meta"]["product_id"], "date": day, "unit": f["unit"],
                          "covers": None, "gross_need": Decimal(str(f["need"])),

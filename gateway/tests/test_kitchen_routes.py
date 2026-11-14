@@ -100,3 +100,20 @@ def test_settings_and_sharing_are_an_approvers_and_audited(env):
     events = client.get(K + "/audit", headers=AGENT).json()["events"]
     assert "settings_changed" in [e.get("kind") for e in events]
     assert "share_granted" in [e.get("type") for e in events]
+
+
+def test_demand_forecast_near_local_midnight_uses_the_gateway_clock_tz():
+    """A forecast stored at 00:30 local (UTC+2) on the first day of the window is that day's (#705)."""
+    from datetime import datetime, timedelta, timezone
+
+    import mongomock
+
+    from gateway.kitchen_routes import demand_rows
+    db = mongomock.MongoClient(tz_aware=True)["test"]
+    local = timezone(timedelta(hours=2))
+    db.forecasts.insert_one({"meta": {"kitchen_id": "k1", "product_id": "462775"}, "unit": "L", "need": "4",
+                             "ts": datetime(2026, 11, 16, 0, 30, tzinfo=local)})   # 2026-11-15 22:30 UTC
+    rows, _ = demand_rows(db, "k1", date(2026, 11, 16), date(2026, 11, 16), tz=local)
+    assert [(r["product_id"], r["date"], r["source"]) for r in rows] == [("462775", "2026-11-16", "history")]
+    rows, _ = demand_rows(db, "k1", date(2026, 11, 15), date(2026, 11, 15), tz=local)
+    assert rows == []
