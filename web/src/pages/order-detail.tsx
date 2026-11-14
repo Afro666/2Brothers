@@ -80,6 +80,9 @@ function SignedReceipt({ receipt }: { receipt: OrderReceipt | null }) {
                   ? t("Nothing sent to the supplier yet")
                   : receipt.supplierOutcome ?? t("unknown")}
               </dd>
+              {receipt.supplierNote ? (
+                <dd className="mt-1 break-words text-xs text-muted-foreground">{receipt.supplierNote}</dd>
+              ) : null}
             </div>
           </dl>
           <Button type="button" variant="outline" size="sm" onClick={() => void copyReceipt(receipt.jws)}>

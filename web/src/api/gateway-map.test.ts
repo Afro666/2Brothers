@@ -434,11 +434,12 @@ describe("mapOrder", () => {
       signedAt: new Date(1_763_107_200_000).toISOString(),
       total: 91.2,
       supplierOutcome: null,
+      supplierNote: null,
     });
     expect(mapOrder(null, { ...placedOrder, receipt: null }).receipt).toBeNull();
     expect(mapOrder(null, placedOrder).receipt).toBeNull();
     expect(mapOrder(null, { ...placedOrder, receipt: "not-a-jws" }).receipt).toEqual({
-      jws: "not-a-jws", approvedBy: null, signedAt: null, total: null, supplierOutcome: null,
+      jws: "not-a-jws", approvedBy: null, signedAt: null, total: null, supplierOutcome: null, supplierNote: null,
     });
     expect(mapOrder(proposal, null).receipt).toBeUndefined();
   });
