@@ -524,7 +524,7 @@ class Gateway:
                 if stored["request"].get("text") != body["text"]:
                     raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
                 return self._proposal_out(stored)
-            body = read or self._from_text(kitchen_id, body)
+            body = read or self._from_text(kitchen_id, body, _form_day(body))
             parsed = True
         else:
             parsed = False
@@ -1169,6 +1169,15 @@ def _blocks_out(sim: dict, lines: list[dict]) -> list[dict]:
         return {ln["product_id"] for ln in block["lines"]}
     return [{**block, "lines": [ln for ln in lines if ln["product_id"] in ids(block)]}
             for block in sim.get("blocks") or []]
+
+
+def _form_day(body: dict) -> date | None:
+    """The delivery day sent next to a free text (the date picked in a form), or None when
+    it is missing or not a date. The parser uses it only when the text names no day."""
+    try:
+        return date.fromisoformat(body["requested_date"]) if body.get("requested_date") else None
+    except (TypeError, ValueError):
+        return None
 
 
 def offer_out(offer: dict) -> dict:
