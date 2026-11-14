@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agent.shelf import (FIXTURES, SHELF_SCHEMA, RecordedModel, count_rows, main, match_product,
+from agent.shelf import (FIXTURES, SHELF_SCHEMA, RecordedModel, confirm_all, count_rows, main, match_product,
                          read_shelf, stock_count_body)
 from agent.vision import VisionError
 
@@ -56,6 +56,19 @@ def test_stock_count_body_sends_only_what_a_person_confirmed():
     assert all(c["unit"] == "L" for c in body["counts"]) and body["source"] == "manual"
     with pytest.raises(ValueError):
         stock_count_body(rows, PRODUCTS, {}, datetime(2026, 11, 14), "naive")
+
+
+def test_two_rows_for_one_product_add_up_or_stay_unknown():
+    two = {"items": [{"label": "Valio Eila 3% 1L", "count": "6", "confidence": "high"},
+                     {"label": "Valio Eila 3% 1 L", "count": "3", "confidence": "medium"}]}
+    rows = count_rows(two, PRODUCTS)
+    assert [r["product_id"] for r in rows] == ["463335", "463335"]
+    body = stock_count_body(rows, PRODUCTS, confirm_all(rows), AT, "shelf-two")
+    assert body["counts"] == [{"product_id": "463335", "on_hand": "9", "unit": "L"}]
+    mixed = {"items": two["items"] + [{"label": "Valio Eila 3% 1 L", "count": "unknown", "confidence": "high"}]}
+    rows = count_rows(mixed, PRODUCTS)
+    body = stock_count_body(rows, PRODUCTS, confirm_all(rows), AT, "shelf-mixed")
+    assert body["counts"] == [{"product_id": "463335", "on_hand": None, "unit": "L"}]
 
 
 def test_reply_outside_schema_is_refused():

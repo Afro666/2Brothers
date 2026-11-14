@@ -111,7 +111,11 @@ recorded alerts with the proposals that carry them and the last check.
 `python -m monitor.proposals` and gives the same answer as the list. It takes
 no alert in its body, so the rule above holds: no caller can inject a recall.
 A check makes at most one Context.dev call and says in `last_check.source`
-whether the list was scraped `live` or came from the `recording`. The full
+whether the list was scraped `live` or came from the `recording`. One check
+runs at a time per kitchen, and a check asked for within 60 seconds of the
+kitchen's newest one reads that one instead of scraping again: its answer has
+`"reused": true` (#652); a check that cannot start in time answers 429
+`RECALL_CHECK_BUSY`. The full
 shape of both answers is in [contract.md](contract.md), "Recall alerts
 (Context.dev)". The error code for a held proposal is `BLOCKED_BY_RECALL`
 everywhere; no route uses another name for it.

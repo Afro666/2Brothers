@@ -264,6 +264,9 @@ class Gateway:
         return fat_levels_differ([fat_per_100g(d.get("raw")) for d in docs])
 
     def _quote(self, kitchen_id: str, request: dict) -> dict:
+        if request.get("needs"):
+            sim = self._basket(kitchen_id, request)
+            return self._save_offer(kitchen_id, request, sim)
         requested = date.fromisoformat(request["requested_date"])
         measure = request["unit"]
         need = Decimal(str(request["quantity"]))
@@ -287,6 +290,63 @@ class Gateway:
             sim["mandate"]["reason_codes"].append("ALLERGEN_RULE")
         if self._mixed_fat(plan) and "SUBSTITUTE_FAT_LEVEL" not in sim["mandate"]["reason_codes"]:
             sim["mandate"]["reason_codes"].append("SUBSTITUTE_FAT_LEVEL")   # S01: a person picks
+        return self._save_offer(kitchen_id, request, sim)
+
+    def _basket(self, kitchen_id: str, request: dict) -> dict:
+        """One simulation for several needs (an order for a menu plan, #74): each product is
+        sized by the engine for its own need, in its own measure; then one total, one set of
+        supplier blocks, one approval."""
+        from engine.offers import RequestPlan
+        requested = date.fromisoformat(request["requested_date"])
+        needs = request["needs"]
+        ids = [n["product_id"] for n in needs]
+        blocked = recalls.blocked_ids(self.db, kitchen_id)
+        refused = self._allergen_refusals(kitchen_id, ids)
+        params = self._params(kitchen_id)
+        lines, excluded, codes, short = [], [], [], []
+        skipped = [(p, "BLOCKED_BY_RECALL") for p in ids if p in blocked]
+        skipped += [(p, f"ALLERGEN_RULE: the kitchen excludes {', '.join(hits)}") for p, hits in refused.items()]
+        tax, supplier_of, when = {}, {}, {}
+        by_measure: dict[str, list[dict]] = {}
+        for n in needs:
+            if n["product_id"] in blocked or n["product_id"] in refused:
+                continue
+            by_measure.setdefault(n["unit"] if n["unit"] in ("L", "KG") else "ST", []).append(n)
+        for measure, group in by_measure.items():
+            offers, skip, t, s, w = self._offers(kitchen_id, [n["product_id"] for n in group], measure, requested)
+            skipped += skip
+            tax.update(t)
+            supplier_of.update(s)
+            when.update(w)
+            for n in group:
+                mine = [o for o in offers if o.product_id == n["product_id"]]
+                if not mine:
+                    continue
+                plan = plan_request(Decimal(str(n["quantity"])), measure, mine, requested, None)
+                lines += list(plan.lines)
+                excluded += list(plan.excluded)
+                codes += [c for c in plan.reason_codes if c not in codes]
+                if plan.shortfall > 0:
+                    short.append((n["product_id"], plan.shortfall, n["unit"]))
+        total = sum((ln.total for ln in lines), Decimal("0.00"))
+        warnings = ()
+        if params.budget_warning_order_eur is not None and total > params.budget_warning_order_eur:
+            warnings = ("OVER_BUDGET_WARNING",)
+        plan = RequestPlan(Decimal(len(needs)), "products", tuple(lines), total, Decimal(0),
+                           tuple(excluded), tuple(codes), warnings)
+        tiers = {sid: (self._supplier(kitchen_id, sid).get("terms") or {}).get("discount_tiers") or []
+                 for sid in set(supplier_of.values())}
+        plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
+        sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
+        sim["shortfalls"] = [{"product_id": p, "shortfall": f"{q.normalize():f}", "unit": u} for p, q, u in short]
+        for p, q, u in short:
+            sim["mandate"]["reasons"].append(f"{p}: {q.normalize():f} {u} of the plan's need cannot be covered for this date.")
+        for code in (["PARTIAL_STOCK"] if short else []) + (["ALLERGEN_RULE"] if refused else []):
+            if code not in sim["mandate"]["reason_codes"]:
+                sim["mandate"]["reason_codes"].append(code)
+        return sim
+
+    def _save_offer(self, kitchen_id: str, request: dict, sim: dict) -> dict:
         now = self.now()
         offer_id = uuid4().hex
         signed = {}
@@ -328,7 +388,51 @@ class Gateway:
         return {**body, "product_ids": ids, **{k: v for k, v in parsed.as_need().items() if k != "query"},
                 "made_by": "parser", "query": parsed.query}
 
+    def _from_plan(self, kitchen_id: str, body: dict) -> dict:
+        """`from` and `to` and no products: an order for what the menu plan needs in that
+        window (net of stock). Unknown stock is not treated as zero stock silently: the full
+        need is proposed and the line says the count is missing."""
+        from gateway.kitchen_routes import demand_rows
+        try:
+            start, end = date.fromisoformat(str(body["from"])), date.fromisoformat(str(body["to"]))
+        except ValueError:
+            raise GatewayError(422, "INVALID_REQUEST", "from and to must be YYYY-MM-DD") from None
+        if end < start or (end - start).days > 31:
+            raise GatewayError(422, "INVALID_REQUEST", "from must be on or before to, at most 31 days apart")
+        rows, problems = demand_rows(self.db, kitchen_id, start, end)
+        total: dict[tuple[str, str], Decimal] = {}
+        uncounted: set[str] = set()
+        for row in rows:
+            need = row["net_need"]
+            if need is None:
+                need = row["gross_need"]
+                uncounted.add(row["product_id"])
+            key = (row["product_id"], row["unit"])
+            total[key] = total.get(key, Decimal(0)) + need
+        needs = [{"product_id": pid, "quantity": f"{q.normalize():f}", "unit": unit,
+                  "stock_counted": pid not in uncounted}
+                 for (pid, unit), q in sorted(total.items()) if q > 0]
+        if not needs:
+            raise GatewayError(422, "NOTHING_NEEDED", "the plan needs nothing beyond the stock in this window",
+                               problems=problems)
+        return {"product_ids": [n["product_id"] for n in needs], "quantity": str(len(needs)), "unit": "products",
+                "requested_date": str(body.get("requested_date") or body["from"]), "needs": needs,
+                "text": body.get("text") or f"Order for the menu plan {start.isoformat()} to {end.isoformat()}",
+                "window": {"from": start.isoformat(), "to": end.isoformat()}, "problems": problems,
+                "idempotency_key": body.get("idempotency_key")}
+
     def create_proposal(self, kitchen_id: str, body: dict, actor: str) -> dict:
+        planned = False
+        if body.get("from") and body.get("to") and not body.get("product_ids") and not body.get("text"):
+            if not body.get("idempotency_key"):
+                raise GatewayError(422, "INVALID_REQUEST", "idempotency_key is required")
+            stored = self.db.proposals.find_one({"kitchen_id": kitchen_id, "idempotency_key": body["idempotency_key"]})
+            if stored:
+                if (stored["request"].get("window") or {}) != {"from": str(body["from"]), "to": str(body["to"])}:
+                    raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
+                return self._proposal_out(stored)
+            body = self._from_plan(kitchen_id, body)
+            planned = True
         if body.get("text") and not body.get("product_ids"):
             if not body.get("idempotency_key"):
                 raise GatewayError(422, "INVALID_REQUEST", "idempotency_key is required")
@@ -347,7 +451,9 @@ class Gateway:
         request = {k: body[k] for k in ("product_ids", "quantity", "unit", "requested_date")}
         request["text"] = body.get("text") or ""
         # Set by the gateway, never by the client: a structured body cannot claim the parser.
-        request["made_by"] = "parser" if parsed else "structured"
+        request["made_by"] = "menu_plan" if planned else ("parser" if parsed else "structured")
+        if planned:
+            request.update({key: body[key] for key in ("needs", "window", "problems")})
         if parsed and body.get("query"):
             request["query"] = body["query"]
         if body.get("event"):
@@ -872,7 +978,11 @@ class Gateway:
         return {"kitchen_id": kitchen_id, "band_from": kitchen_band, "lines": lines}
 
     def audit_log(self, kitchen_id: str) -> list[dict]:
-        return [{"seq": e["seq"], **e["event"], "at": e["server"].get("at")}
+        def at(entry: dict) -> str | None:
+            # Older agent events were stored without a server time: use when they were stored.
+            stored = entry.get("stored_at")
+            return entry["server"].get("at") or (stored.isoformat() if hasattr(stored, "isoformat") else stored)
+        return [{"seq": e["seq"], **e["event"], "at": at(e)}
                 for e in audit.list_events(self.db, kitchen_id=kitchen_id)]
 
 

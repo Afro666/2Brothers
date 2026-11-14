@@ -34,7 +34,7 @@ def test_markdown_table_and_exit_code(capsys):
 # PARTIAL starts emitting its codes), update this table in the same PR.
 EXPECTED_STATUS = {
     "S01": "PASS",
-    "S02": "PARTIAL",
+    "S02": "PASS",
     "S03": "PASS",
     "S04": "PASS",
     "S05": "PASS",

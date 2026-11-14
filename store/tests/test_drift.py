@@ -32,6 +32,12 @@ class FlagTests(unittest.TestCase):
         self.assertIn("12.0 ST per 100 guests", warning["why"])
         self.assertIn("+20%", warning["why"])
 
+    def test_small_rates_keep_two_decimals_so_the_change_is_visible(self):
+        """Live on 2026-11-14: 0.15 against 0.09 read "0.1 ... 0.1 ... (+63%)"."""
+        warning = drift.flag(row(0.15, 0.092))
+        self.assertIn("0.15 ST per 100 guests last week, 0.09 on average", warning["why"])
+        self.assertIn("+63%", warning["why"])
+
     def test_cost_creep_when_the_amount_is_flat(self):
         warning = drift.flag(row(10.0, 10.0, spend_per_100="13.00", baseline_spend="10.00"))
         self.assertEqual(warning["kind"], "cost_creep")

@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiProvider } from "@/api";
+import { PendingApprovalsProvider } from "@/lib/pending-approvals";
 import { ThemeProvider } from "@/lib/theme";
 import { createAppRouter } from "@/router";
 
@@ -19,10 +20,12 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <ApiProvider>
-        <TooltipProvider>
-          <RouterProvider router={router} />
-          <Toaster />
-        </TooltipProvider>
+        <PendingApprovalsProvider>
+          <TooltipProvider>
+            <RouterProvider router={router} />
+            <Toaster />
+          </TooltipProvider>
+        </PendingApprovalsProvider>
       </ApiProvider>
     </ThemeProvider>
   </StrictMode>,

@@ -24,7 +24,8 @@ async def run_buyer(kitchen_id, body):
         error = data.get('error', {}) if isinstance(data, dict) else {}
         allowed = {'NEED_DETAILS', 'NEED_DATE', 'INVALID_REQUEST', 'INVALID_QUANTITY', 'INVALID_DATE',
                    'MISSING_IDEMPOTENCY_KEY', 'IDEMPOTENCY_KEY_REUSED', 'BUYER_TIMEOUT',
-                   'BUYER_INCOMPLETE', 'BUYER_UNAVAILABLE', 'BUYER_RECONCILIATION_REQUIRED', 'KITCHEN_SCOPE'}
+                   'BUYER_INCOMPLETE', 'BUYER_UNAVAILABLE', 'BUYER_RECONCILIATION_REQUIRED', 'KITCHEN_SCOPE',
+                   'KITCHEN_POLICY_INVALID'}
         code = error.get('code')
         raise GatewayError(response.status_code if response.status_code in (400, 403, 409, 422, 503, 504) else 503,
                            code if isinstance(code, str) and code in allowed else 'BUYER_UNAVAILABLE',

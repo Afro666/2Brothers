@@ -206,8 +206,9 @@ def plan_request(need: Decimal, measure: str, offers: list[Offer], requested: da
         else:
             usable.append(o)
 
-    def build(confirmed_first: bool) -> RequestPlan:
-        lines, shortfall, codes = _fill(need, measure, usable, confirmed_first=confirmed_first)
+    def build(confirmed_first: bool, pool: list[Offer] | None = None) -> RequestPlan:
+        lines, shortfall, codes = _fill(need, measure, usable if pool is None else pool,
+                                        confirmed_first=confirmed_first)
         if event:
             lines = [replace(ln, reason_codes=(*ln.reason_codes, "EVENT_LINE")) for ln in lines]
         if any("cut-off has passed" in r for _, r in excluded):
@@ -225,6 +226,17 @@ def plan_request(need: Decimal, measure: str, offers: list[Offer], requested: da
                            tuple(c for c in order if c in codes), warnings)
 
     plan = build(confirmed_first=True)
+    # Confirmed stock at a price far above the cheapest is left out of the main plan
+    # (engine/premium.py), unless that would make the order short.
+    from engine.premium import DEFAULT_MAX, over_premium
+    dear = over_premium(usable, measure, params.certainty_premium_max if params else DEFAULT_MAX)
+    if dear:
+        lean = build(confirmed_first=True, pool=[o for o in usable if o.product_id not in dear])
+        if lean.shortfall <= plan.shortfall:
+            plan = replace(lean, excluded=(*lean.excluded, *dear.items()))
+            offers = [o for o in offers if o.product_id not in dear]   # the partial fill follows
+        else:
+            plan = replace(plan, warnings=(*plan.warnings, "CERTAINTY_PREMIUM_HIGH"))
     alt = build(confirmed_first=False)
     if alt.lines and alt.shortfall <= plan.shortfall and alt.total < plan.total and alt.lines != plan.lines:
         plan = RequestPlan(**{**plan.__dict__, "alternative": alt})

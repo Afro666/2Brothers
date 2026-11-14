@@ -147,17 +147,8 @@ def register(app, gw, principal, body) -> None:
         return {"stock_count_id": count_id, "stored": stored}
 
     def stock_items(kitchen_id: str) -> list[dict]:
-        from store.history import current_stock
-        items = []
-        for row in current_stock(gw().db, kitchen_id):
-            on_hand = row.get("on_hand")
-            on_hand = None if on_hand is None else Decimal(str(on_hand))
-            # Open orders are in supplier units; they are not converted to kitchen units yet,
-            # so `on_order` is 0 and `on_order_known` says so (never a silent zero).
-            items.append({"product_id": row["product_id"], "unit": row["unit"], "on_hand": on_hand,
-                          "counted_at": row.get("counted_at"), "on_order": Decimal(0),
-                          "on_order_known": False, "position": on_hand, "next_delivery_date": None})
-        return items
+        return _stock_items(gw().db, kitchen_id)
+
 
     @app.get(k + "/stock")
     def stock(kitchen_id: str, who=Depends(principal)):
@@ -167,7 +158,6 @@ def register(app, gw, principal, body) -> None:
     # ---- future demand ------------------------------------------------------------------
     @app.get(k + "/demand")
     def demand(kitchen_id: str, request: Request, who=Depends(principal)):
-        from engine.menu_demand import gross_needs, net_needs, weeks_between
         reader(who, kitchen_id)
         q = request.query_params
 
@@ -177,27 +167,8 @@ def register(app, gw, principal, body) -> None:
                 raise ValueError("from must be on or before to, at most 62 days apart")
             return start, end
         start, end = guarded(window)
-        r = repo()
-        recipes = {x["recipe_id"]: x for x in r.recipes.list(kitchen_id)}
-        entries = [day for week in weeks_between(start, end)
-                   for day in (r.menu_plans.get(kitchen_id, week) or {}).get("days", [])
-                   if start.isoformat() <= day["date"] <= end.isoformat()]
-        rows, problems = gross_needs(entries, recipes)
-        for row in rows:
-            row["source"] = "menu_plan"
-        planned_days = {row["date"] for row in rows}
-        # Days without a menu plan: the stored forecast (history-based), if there is one.
-        lo = datetime.combine(start, datetime.min.time(), tzinfo=gw().now().tzinfo)
-        hi = datetime.combine(end, datetime.max.time(), tzinfo=gw().now().tzinfo)
-        for f in gw().db.forecasts.find({"meta.kitchen_id": kitchen_id, "ts": {"$gte": lo, "$lte": hi}}):
-            day = f["ts"].date().isoformat()
-            if day not in planned_days:
-                rows.append({"product_id": f["meta"]["product_id"], "date": day, "unit": f["unit"],
-                             "covers": None, "gross_need": Decimal(str(f["need"])),
-                             "why": f.get("why") or "forecast from history", "source": "history"})
-        stock = {item["product_id"]: item["position"] for item in stock_items(kitchen_id)}
-        return {"from": start.isoformat(), "to": end.isoformat(),
-                "rows": _json(net_needs(rows, stock)), "problems": problems}
+        rows, problems = demand_rows(gw().db, kitchen_id, start, end)
+        return {"from": start.isoformat(), "to": end.isoformat(), "rows": _json(rows), "problems": problems}
 
     # ---- settings and sharing: an approver only -----------------------------------------
     @app.get(k + "/settings")
@@ -230,3 +201,45 @@ def register(app, gw, principal, body) -> None:
             raise GatewayError(422, "INVALID_REQUEST", "supplier_id and share_forecast (true or false) are required")
         guarded(lambda: set_sharing(gw().db, kitchen_id, str(data["supplier_id"]), data["share_forecast"], person))
         return {"sharing": _json(list_sharing(gw().db, kitchen_id))}
+
+
+def _stock_items(db, kitchen_id: str) -> list[dict]:
+    from store.history import current_stock
+    items = []
+    for row in current_stock(db, kitchen_id):
+        on_hand = row.get("on_hand")
+        on_hand = None if on_hand is None else Decimal(str(on_hand))
+        # Open orders are in supplier units; they are not converted to kitchen units yet,
+        # so `on_order` is 0 and `on_order_known` says so (never a silent zero).
+        items.append({"product_id": row["product_id"], "unit": row["unit"], "on_hand": on_hand,
+                      "counted_at": row.get("counted_at"), "on_order": Decimal(0),
+                      "on_order_known": False, "position": on_hand, "next_delivery_date": None})
+    return items
+
+
+def demand_rows(db, kitchen_id: str, start: date, end: date) -> tuple[list[dict], list[str]]:
+    """Per product and day: gross and net need from the menu plan; days without a plan use
+    the stored forecast. Shared by GET /demand and the "propose an order for this plan" path."""
+    from datetime import timezone
+
+    from engine.menu_demand import gross_needs, net_needs, weeks_between
+    from store.repository import Repository
+    r = Repository(db)
+    recipes = {x["recipe_id"]: x for x in r.recipes.list(kitchen_id)}
+    entries = [day for week in weeks_between(start, end)
+               for day in (r.menu_plans.get(kitchen_id, week) or {}).get("days", [])
+               if start.isoformat() <= day["date"] <= end.isoformat()]
+    rows, problems = gross_needs(entries, recipes)
+    for row in rows:
+        row["source"] = "menu_plan"
+    planned_days = {row["date"] for row in rows}
+    lo = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
+    hi = datetime.combine(end, datetime.max.time(), tzinfo=timezone.utc)
+    for f in db.forecasts.find({"meta.kitchen_id": kitchen_id, "ts": {"$gte": lo, "$lte": hi}}):
+        day = f["ts"].date().isoformat()
+        if day not in planned_days:
+            rows.append({"product_id": f["meta"]["product_id"], "date": day, "unit": f["unit"],
+                         "covers": None, "gross_need": Decimal(str(f["need"])),
+                         "why": f.get("why") or "forecast from history", "source": "history"})
+    stock = {item["product_id"]: item["position"] for item in _stock_items(db, kitchen_id)}
+    return net_needs(rows, stock), problems

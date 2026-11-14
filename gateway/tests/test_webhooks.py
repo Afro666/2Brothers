@@ -81,11 +81,23 @@ def test_only_subscribed_events_are_sent(env, receiver):
     assert receiver.events() == ["order.placed", "proposal.rejected"]
 
 
+def test_a_second_reject_sends_no_second_rejected_event(env, receiver):
+    client, _, _ = env
+    make(client, ["proposal.rejected"])
+    p = milk(client)
+    url = f"{K}/proposals/{p['proposal_id']}/reject"
+    assert client.post(url, headers=HUMAN, json={"reason": "too much"}).status_code == 200
+    assert client.post(url, headers=HUMAN, json={"reason": "too much"}).status_code == 200
+    assert receiver.events() == ["proposal.rejected"]
+
+
 def test_approve_sends_approved_and_placed_and_a_moved_price_sends_total_mismatch(env, receiver):
     client, fake, _ = env
     make(client, list(webhooks.EVENTS))
     p = milk(client)
-    fake.bump("462775", 9.99)
+    # 3.57 is 2.55 times the cheapest milk: inside the certainty premium limit (engine/premium.py),
+    # so the basket keeps its product and only the total moves.
+    fake.bump("462775", 3.57)
     assert approve(client, p).status_code == 409
     assert receiver.events() == ["proposal.ready", "total_mismatch"]
     fresh = client.get(f"{K}/proposals/{p['proposal_id']}", headers=HUMAN).json()

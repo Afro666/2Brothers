@@ -57,7 +57,15 @@ const catalogRoute = createRoute({
 const stockRoute = createRoute({ getParentRoute: () => rootRoute, path: "/stock", component: StockPage });
 const suppliersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/suppliers", component: SuppliersPage });
 const productsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/products", component: ProductsPage });
-const plannerRoute = createRoute({ getParentRoute: () => rootRoute, path: "/planner", component: PlannerPage });
+const plannerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/planner",
+  // Keep `week` only when it is an ISO week such as 2026-W47; otherwise the planner opens on next week.
+  validateSearch: (search: Record<string, unknown>): { week?: string } => ({
+    week: typeof search.week === "string" && /^\d{4}-W\d{2}$/.test(search.week) ? search.week : undefined,
+  }),
+  component: PlannerPage,
+});
 const demandRoute = createRoute({ getParentRoute: () => rootRoute, path: "/demand", component: DemandPage });
 const forecastRoute = createRoute({ getParentRoute: () => rootRoute, path: "/forecast", component: ForecastPage });
 const settingsRoute = createRoute({

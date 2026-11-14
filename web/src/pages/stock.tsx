@@ -81,6 +81,21 @@ function OnHand({ item, className }: { item: StockItem; className?: string }) {
   );
 }
 
+function OnOrder({ item }: { item: StockItem }) {
+  if (item.onOrder == null) {
+    return (
+      <span className="font-medium text-warning" title="Open orders are not counted in kitchen units yet">
+        unknown
+      </span>
+    );
+  }
+  return (
+    <>
+      {formatNumber(item.onOrder)} {item.unit}
+    </>
+  );
+}
+
 export function StockPage() {
   const api = useApi();
   const { role } = useRole();
@@ -185,7 +200,7 @@ export function StockPage() {
                               <OnHand item={item} />
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatNumber(item.onOrder)} {item.unit}
+                              <OnOrder item={item} />
                             </TableCell>
                             <TableCell>{formatDate(item.lastDelivery)}</TableCell>
                             <TableCell>{formatDateTime(item.countedAt)}</TableCell>
@@ -259,7 +274,7 @@ export function StockPage() {
                           </dd>
                           <dt className="text-muted-foreground">On order</dt>
                           <dd className="text-right tabular-nums">
-                            {formatNumber(item.onOrder)} {item.unit}
+                            <OnOrder item={item} />
                           </dd>
                           <dt className="text-muted-foreground">Last delivery</dt>
                           <dd className="text-right">{formatDate(item.lastDelivery)}</dd>
