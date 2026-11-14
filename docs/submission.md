@@ -4,6 +4,81 @@ Text for the Junction 2026 form, one section per track. Every claim names its so
 path in this repo or a live URL. Checked against `main` on 2026-11-14. A line marked
 **Not built** is not in the product today.
 
+## Form text, ready to paste (#1775)
+
+Copy each block as it is. Every sentence was checked on 2026-11-14 at about 21:50 UTC
+against the code on `main` and against GET calls on the live site; the sources are under
+the blocks. Do not add these claims by hand, because they are not true:
+
+- "Context.dev reads supplier price pages." It does not. Context.dev reads the food recall
+  list, one manufacturer page, a producer register and brand data. The price list of
+  another supplier is read by Nemotron from a photo (`agent/price_list.py`).
+- "It compares your suppliers" as a claim about real suppliers. Valio Aimo is the one real
+  supplier. The five other suppliers of the demo kitchen are demo suppliers, and their
+  names say "(demo)" (`GET /api/v1/kitchens/demo-kitchen/suppliers`).
+- "The order goes to Valio." No order reaches Valio (see the description).
+
+**Punchline** (one line)
+
+```
+Trusted Kitchen Buyer makes Valio Aimo readable for any purchasing agent: an agent looks up product, price and availability and gets a signed offer, and a person approves every order.
+```
+
+**Description** (three paragraphs)
+
+```
+Valio Aimo's Trusted Trade Agents challenge asks how an outside purchasing agent can find products, get a fixed price and place an order, with the right human approval. Trusted Kitchen Buyer is that interface. Any agent with a kitchen token can use it over REST or MCP: search Valio's catalog, read the live price and availability from Valio's challenge API, and get an offer that the gateway signs. Anyone can check the signature with one public key.
+
+A chef can also write one sentence, for example "1,000 L lactose-free milk by Monday". Our Buyer agent (NVIDIA Nemotron 3.5 Super VL) picks the products. Plain code sets every quantity, price and total. When Valio confirms only a part of the stock, the proposal says so and gives options: order the confirmed part now, or the whole basket. A person approves the exact total. An agent token cannot approve. Every step is in a hash-chained audit log in MongoDB Atlas.
+
+No order reaches Valio, because Valio's mock API has no order route. The gateway records the approved order with a signed receipt that says NOT_SENT. Valio Aimo is the only real supplier. The other suppliers in the demo kitchen are demo suppliers; a kitchen can add its own products from them, also from a photo of a price list.
+```
+
+**Best Use of Nemotron** (the short explanation the form asks for)
+
+```
+Model: NVIDIA Nemotron 3.5 Super VL (nemotron-3.5-super-vl) on Verda's shared inference endpoint. We did not train or fine-tune it.
+
+What it does: it is the Buyer. For each request, code searches the catalog and gets a live offer. Then one Nemotron call picks up to three products from that shortlist and gives a short reason. Code does every tool step after that: a fresh offer for the picked products, the check against the guards, and the request for a person's approval. The same model also reads photos (a menu, a shelf, a delivery note, a supplier's price list) and picks the substitute in the offer from Valio's selling agent.
+
+Why it matters: a chef writes a sentence, not product codes. A wrong model answer cannot become a wrong order, because the model sets no quantity, no price and no total, it has no approve tool, and a person approves every order. Each proposal has a panel "What Nemotron did" that shows the model call and the code steps.
+
+How we improved its outputs: we measured, then changed. The model replies in a strict JSON schema, and a reply outside the schema is refused. Thinking is off for the pick, with one call and no retry. The prompt ranks the rules in a fixed order (product kind, diet, arrival, confirmed stock, price). Code checks the reply after the model: a pick outside the shortlist is refused, and so is a reason with a number that is not in the data. If the model does not answer in time, a plain parser makes the proposal and the card says so.
+```
+
+**Best Use of MongoDB Atlas** (one sentence)
+
+```
+All data is in MongoDB Atlas: Atlas Search and Atlas Vector Search over Valio's catalog (17,546 product vectors), time-series collections for stock, deliveries and forecasts, change streams for the live inbox, and an insert-only, hash-chained audit log that the Trust page checks.
+```
+
+**Still to do by hand in the form**
+
+- [ ] Demo link: `https://31-22-104-201.sslip.io`
+- [ ] Video link: paste it after the recording is uploaded.
+- [ ] Table number: read it from the table at the venue.
+- [ ] Side challenges: tick two only, **Best Use of Nemotron** and **Best Use of MongoDB
+      Atlas** (#1388). Leave Context.dev, Codex and the others unticked.
+- [ ] Main challenge: Valio Aimo, Trusted Trade Agents.
+
+**Sources for the blocks**
+
+| Claim | Source |
+|---|---|
+| Any agent, REST or MCP, with a kitchen token | `/llms.txt` on the live site ("Token", "The flow: 5 steps") |
+| An agent token cannot approve | `/llms.txt`: 403 `HUMAN_SESSION_REQUIRED` on approve and reject |
+| Signed offer and receipt, one public key | `gateway/signing.py`, `/api/.well-known/jwks.json` (answers 200) |
+| The receipt says `NOT_SENT` | The receipt of the EUR 2,099.41 order of 14 Nov 07:14 UTC in `GET /api/v1/kitchens/demo-kitchen/orders` |
+| Partial stock gives options | A waiting 1,000 L milk proposal in `GET .../proposals`: 698 L confirmed, 302 L not confirmed, three options |
+| One Nemotron call per Buyer request, tool steps by code | `agent/service.py:65` (default `single_pick`), `deploy/compose.yaml:86`, `agent/single_pick.py`; the `model_trace` of a live proposal: 1 model call, thinking off, every tool step `by: code` |
+| A tool loop exists as an option, not as the live default | `NEMOTRON_BUYER_STRATEGY=loop` (`agent/service.py:66`) |
+| A repeated request reuses the pick for ten minutes (the panel then shows no model call) | `agent/README.md` "One model pick per request" |
+| Strict JSON schema, the ranked prompt, the checks after the model | `agent/single_pick.py:20-58`, `:121-147`, `:261` |
+| Parser fallback, and the card says so | `agent/README.md` "One model pick per request", `web/src/components/purchasing/model-trace-panel.tsx:105` |
+| Photo readers and the selling agent | `agent/menu_photo.py`, `agent/shelf_service.py`, `agent/receiving.py`, `agent/price_list.py`, `agent/seller.py`; a live offer with `made_by: nemotron-3.5-super-vl` in `GET .../supplier-offers` |
+| Atlas features and the 17,546 vectors | `GET /api/v1/kitchens/demo-kitchen/atlas`; `GET .../audit/verify` answers `ok: true` |
+| What Context.dev reads | `monitor/recalls.py`, `monitor/enrichment.py`, `monitor/labels.py`, `gateway/onboarding.py`, `gateway/brand_logos.py` |
+
 ## What it is
 
 - Trusted Kitchen Buyer: a purchasing agent that Valio Aimo can give to its kitchen customers.

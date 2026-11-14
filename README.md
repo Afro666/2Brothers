@@ -2,16 +2,22 @@
 
 Junction 2026, team 2Brothers (Aron, Tymon, Maciek). Challenge: **Valio Aimo, Trusted Trade Agents**.
 
-A purchasing agent that a wholesaler gives to its kitchen customers. The kitchen says what it
-needs, or plans its menus. The agent (the **Buyer**) finds products, checks live prices, stock
-and order deadlines, and proposes an order. A person approves it. Every step is in an audit log.
-With the kitchen's consent, the wholesaler sees the forecast demand of all its customers before
-the orders come in.
+Trusted Kitchen Buyer makes Valio Aimo readable for any purchasing agent: an agent looks up
+product, price and availability and gets a signed offer, and a person approves every order.
+
+The kitchen says what it needs, or plans its menus. Our own agent (the **Buyer**) finds
+products, checks live prices, stock and order deadlines, and proposes an order. A person
+approves it. Every step is in an audit log. With the kitchen's consent, the wholesaler sees the
+forecast demand of all its customers before the orders come in.
+
+No order reaches Valio: Valio's mock API has no order route. The gateway records the approved
+order with a signed receipt that says `NOT_SENT`.
 
 - **Live demo:** https://31-22-104-201.sslip.io (no password; anyone with the link is the demo person)
 - **For an outside agent:** [`docs/byoa.md`](docs/byoa.md) (curl and MCP), `/llms.txt`, `/gateway/docs`
 - **Why it is built this way:** [`docs/choices.md`](docs/choices.md)
-- **Three-minute demo script:** [`docs/demo.md`](docs/demo.md)
+- **Demo script:** [`docs/demo.md`](docs/demo.md)
+- **Form text and the evidence per track:** [`docs/submission.md`](docs/submission.md)
 
 ## The flow
 
@@ -19,8 +25,9 @@ the orders come in.
 |---|---|---|
 | 1. Request | "1,000 L lactose-free milk by Monday", or "propose an order for this week's menu plan" | web, REST, MCP |
 | 2. Lookup | Catalog search, then live Valio price and stock for the shortlist only | `gateway/`, `store/` |
-| 3. Order at a fixed price | The engine sizes every line; the offer is a signed snapshot, valid 15 minutes | `engine/`, `gateway/signing.py` |
+| 3. Order at a fixed price | The Buyer (one Nemotron call) picks the products; the engine sizes every line; the offer is a signed snapshot, valid 15 minutes. When Valio confirms only a part of the stock, the proposal gives options: the confirmed part now, or the whole basket | `agent/single_pick.py`, `engine/`, `gateway/signing.py` |
 | 4. Approval | A person approves the total they saw; the gateway re-checks live and refuses if anything moved | `gateway/service.py` |
+| 5. Receipt | The gateway records the order with a signed receipt. It says `NOT_SENT`: nothing goes to Valio | `gateway/signing.py` |
 
 ## What we can show, not only say
 
@@ -31,7 +38,7 @@ Each of these is a command or a page, not a slide.
 | The model never invents a quantity | The Buyer's tools take product codes only; the gateway sizes lines from the stored need. `python -m gateway.conformance --base-url https://31-22-104-201.sslip.io/gateway --token <token>` asks for 99,999 and gets the need's quantity (check C04). |
 | An agent cannot approve, cancel or act for another kitchen | The same kit, checks C06 to C10; the table is at Settings > Permissions and every "never" row has a test (`gateway/tests/test_permissions.py`). |
 | Price and stock claims are verifiable | Every offer is signed (EdDSA). Public key: `/gateway/.well-known/jwks.json`. `python -m gateway.verify_offer --base-url ... --offer offer.json` fails on a changed line or price. |
-| An order has a signed receipt | Every placed order carries `receipt`, signed with the same key: the order, the offer hash the person approved, the exact total, the lines, who approved, and that nothing was sent to the supplier. `python -m gateway.verify_offer --base-url ... --receipt order.json` fails on any change. |
+| An order has a signed receipt | An order that a person approved carries `receipt`, signed with the same key when the signing key is available: the order, the offer hash the person approved, the exact total, the lines, who approved, and `supplier_outcome: NOT_SENT` (nothing was sent to the supplier). The seeded delivery-demo order (EUR 178.09) has no receipt, because no person approved it. `python -m gateway.verify_offer --base-url ... --receipt order.json` fails on any change. |
 | A "yes" covers exactly one order | The approved order stores the offer hash; placing another offer is `APPROVAL_MISMATCH`; a moved price is `TOTAL_MISMATCH`; a repeated send returns the first order. |
 | Unknown is never zero | Valio's "stock unknown" value, an empty stock count and missing allergen data are shown as unknown and never as stock, zero or "free from" (`docs/scenarios.md`, S01, S04, S09). |
 | The forecast is true | Reports > Forecast vs actual: 10 weeks of predictions made the Monday before, against what happened. Our engine misses 4.5% a week, a weekday average 6.7% (all 20 demo kitchens: 4.7% against 11.4%). |
@@ -41,8 +48,10 @@ Each of these is a command or a page, not a slide.
 ## Two sides
 
 - **The kitchen** has suppliers with its own terms, own products, recipes with yield, menu plans,
-  stock counts, and settings for how the engine sizes orders. Valio is one supplier; a second
-  supplier with a manual price list works too. It decides which supplier may see its forecast,
+  stock counts, and settings for how the engine sizes orders. Valio Aimo is the one real
+  supplier. The five other suppliers of the demo kitchen are demo suppliers (their names say
+  "(demo)"); a kitchen adds its own products from such a supplier by hand or from a photo of a
+  price list. It decides which supplier may see its forecast,
   and every change of that consent is in the audit log.
 - **The wholesaler** sees, per product and day, the forecast demand of the kitchens that agreed,
   against its own availability: what will run short, and what to buy.
@@ -50,10 +59,14 @@ Each of these is a command or a page, not a slide.
 ## What is real and what is not
 
 - **Real:** Valio's challenge APIs for price and availability, and Valio's catalog (17,546
-  products) in MongoDB Atlas; the Buyer is NVIDIA Nemotron 3.5 Super VL on Verda, with a
-  deterministic parser as the stated fallback; food recalls come from Context.dev.
+  products) in MongoDB Atlas; the Buyer is NVIDIA Nemotron 3.5 Super VL on Verda. On the live
+  site one model call per request picks the products and code does the tool steps
+  (`NEMOTRON_BUYER_STRATEGY=single_pick`, `deploy/compose.yaml`; a tool loop is the other
+  setting). A deterministic parser is the stated fallback. Context.dev reads the food recall
+  list, one manufacturer page, a producer register and brand data; it reads no price pages.
 - **Ours, because Valio's challenge has no order endpoint:** placing the order, approval and
-  audit. An approved order is "placed in our gateway"; a supplier confirmation is the next step.
+  audit. An approved order is recorded in our gateway with a signed receipt that says
+  `NOT_SENT`; no order reaches Valio. A supplier confirmation is the next step.
 - **Synthetic:** the kitchens' history (20 kitchens, August to November, built from real Valio
   products and prices) and the demo kitchen's supplier terms. The pages say "Sample data" where
   a screen is not on live data yet.
