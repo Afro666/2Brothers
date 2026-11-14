@@ -92,6 +92,30 @@ describe("StockPage: count from a photo", () => {
     expect(screen.getByRole("status")).toHaveTextContent("1 count filled in below; 2 to count by hand.");
   });
 
+  it("keeps the mark on counts from an earlier photo when a second photo is read", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const fixture = await api.readShelfPhoto(PHOTO, "human");
+    const answers: ShelfPhotoRead[] = [
+      { ...fixture, rows: [fixture.rows[0]] },
+      { ...fixture, rows: [fixture.rows[1]] },
+    ];
+    api.readShelfPhoto = async () => answers.shift() ?? fixture;
+    renderApp("/stock", api);
+    await choosePhoto(user);
+    await waitFor(() => expect(count("Arla lactose-free milk")).toHaveValue("7"));
+    expect(screen.getAllByText(MARK)).toHaveLength(2);
+
+    await user.upload(screen.getByLabelText("Choose a photo of the shelf"), PHOTO);
+    await waitFor(() => expect(count("Valio Eila 3 % milk")).toHaveValue("6"));
+    expect(count("Arla lactose-free milk")).toHaveValue("7");
+    expect(screen.getAllByText(MARK)).toHaveLength(4); // both photos' rows, table and phone list
+
+    await user.clear(count("Arla lactose-free milk"));
+    await user.type(count("Arla lactose-free milk"), "8");
+    expect(screen.getAllByText(MARK)).toHaveLength(2);
+  });
+
   it("stores the counts only when the person presses Save count", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
