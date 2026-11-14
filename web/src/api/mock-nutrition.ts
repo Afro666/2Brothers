@@ -2,7 +2,7 @@ import { ApiError, type Api, type KitchenNutrition, type NutrientValues, type Nu
 import { isoWeekOf, shiftWeek } from "@/lib/week";
 import type { Recipe } from "@/types";
 
-type NutritionApi = Pick<Api, "getRecipeNutrition" | "getNutrition">;
+type NutritionApi = Pick<Api, "getRecipeNutrition" | "getRecipesNutrition" | "getNutrition">;
 
 const NOTHING: NutrientValues = {
   kcal: null,
@@ -58,6 +58,14 @@ export function createNutritionMock(planning: Pick<Api, "listRecipes" | "getMenu
       const recipe = (await planning.listRecipes()).find((candidate) => candidate.id === recipeId);
       if (!recipe) throw new ApiError("NOT_FOUND", "no such recipe", {}, 404);
       return portionOf(recipe);
+    },
+
+    // One call for all recipes, answered from the single read of the same Api object, so a test
+    // that changes getRecipeNutrition changes the batch too.
+    async getRecipesNutrition(this: Pick<Api, "getRecipeNutrition">, ids?: string[]) {
+      const known = (await planning.listRecipes()).map((recipe) => recipe.id);
+      const wanted = ids === undefined ? known : ids.filter((id) => known.includes(id));
+      return Promise.all(wanted.map((id) => this.getRecipeNutrition(id)));
     },
 
     async getNutrition(from, to): Promise<KitchenNutrition> {

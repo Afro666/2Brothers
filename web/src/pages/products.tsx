@@ -31,7 +31,7 @@ import type {
 import { KitchenWords } from "@/pages/products/kitchen-words";
 import { ProductPicker, type PickerProduct } from "@/pages/products/product-picker";
 import { recipeAllergens } from "@/pages/products/recipe-allergens";
-import { RecipeNutritionLine } from "@/pages/products/recipe-nutrition";
+import { RecipeNutritionLine, useRecipesNutrition } from "@/pages/products/recipe-nutrition";
 import { catalogProductIdsInRecipes } from "@/pages/products/recipe-products";
 import { useT } from "@/lib/i18n";
 
@@ -163,6 +163,7 @@ function ProductsPageContent() {
   const products = state.status === "ready" ? state.data.ownProducts : [];
   const suppliers = state.status === "ready" ? state.data.suppliers : [];
   const recipes = state.status === "ready" ? state.data.recipes : [];
+  const nutritionOf = useRecipesNutrition(recipes, tab === "recipes");
   const catalog = state.status === "ready" ? state.data.catalog : [];
   const productLookup = useMemo(
     () =>
@@ -411,7 +412,7 @@ function ProductsPageContent() {
                             <p className="text-sm text-muted-foreground">
                               {recipe.items.length === 1 ? t("{count} item", { count: recipe.items.length }) : t("{count} items", { count: recipe.items.length })}
                             </p>
-                            <RecipeNutritionLine recipe={recipe} />
+                            <RecipeNutritionLine nutrition={nutritionOf(recipe)} />
                           </div>
                           <div className="flex flex-wrap gap-1">
                             <AllergenList allergens={summary.allergens} />

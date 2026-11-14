@@ -1,8 +1,11 @@
-import { mapNutrition, mapRecipeNutrition } from "@/api/map-nutrition";
+import { mapNutrition, mapRecipeNutrition, mapRecipesNutrition } from "@/api/map-nutrition";
 import { linkWordBody, mapKitchenWords } from "@/api/map-words";
 import type { Api } from "@/api/types";
 
-type NutritionApi = Pick<Api, "getRecipeNutrition" | "getNutrition" | "getKitchenWords" | "linkWord" | "forgetWord">;
+type NutritionApi = Pick<
+  Api,
+  "getRecipeNutrition" | "getRecipesNutrition" | "getNutrition" | "getKitchenWords" | "linkWord" | "forgetWord"
+>;
 
 /** One JSON call to the gateway: `gatewayRequest` of api/http.ts with its base URL filled in. */
 type GatewayCall = (path: string, init?: RequestInit) => Promise<unknown>;
@@ -18,6 +21,10 @@ export function createNutritionHttp(call: GatewayCall, kitchen: string): Nutriti
   return {
     async getRecipeNutrition(recipeId) {
       return mapRecipeNutrition(await call(`${kitchen}/recipes/${encodeURIComponent(recipeId)}/nutrition`));
+    },
+    async getRecipesNutrition(ids) {
+      const query = ids === undefined ? "" : `?ids=${encodeURIComponent(ids.join(","))}`;
+      return mapRecipesNutrition(await call(`${kitchen}/recipes/nutrition${query}`));
     },
     async getNutrition(from, to) {
       return mapNutrition(

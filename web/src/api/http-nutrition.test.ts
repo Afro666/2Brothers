@@ -51,9 +51,9 @@ const windowAnswer = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("nutrition and words on the real gateway", () => {
-  it("marks the five methods as live", () => {
+  it("marks the six methods as live", () => {
     const live = createHttpApi("/api").live!;
-    for (const method of ["getRecipeNutrition", "getNutrition", "getKitchenWords", "linkWord", "forgetWord"] as const) {
+    for (const method of ["getRecipeNutrition", "getRecipesNutrition", "getNutrition", "getKitchenWords", "linkWord", "forgetWord"] as const) {
       expect(live.has(method), method).toBe(true);
     }
   });
@@ -64,6 +64,25 @@ describe("nutrition and words on the real gateway", () => {
     expect(nutrition.perPortion).toMatchObject({ kcal: 320, proteinG: 9.5, fatG: null });
     expect(nutrition.complete).toBe(true);
     expect(calls.map((call) => call.route)).toEqual([`GET ${K}/recipes/rec%2F1/nutrition`]);
+  });
+
+  it("reads every recipe's nutrition in one call, or the ids asked", async () => {
+    const other = { ...recipeAnswer, recipe_id: "rec-2", name: "Salmon soup", per_portion: { kcal: "540" } };
+    const calls = gateway({
+      [`GET ${K}/recipes/nutrition`]: () => ({ recipes: [recipeAnswer, other] }),
+      [`GET ${K}/recipes/nutrition?ids=rec-2%2Crec%2F1`]: () => ({ recipes: [other] }),
+    });
+    const api = createHttpApi("/api");
+    const rows = await api.getRecipesNutrition();
+    expect(rows.map((row) => [row.recipeId, row.perPortion.kcal])).toEqual([
+      ["rec/1", 320],
+      ["rec-2", 540],
+    ]);
+    expect((await api.getRecipesNutrition(["rec-2", "rec/1"])).map((row) => row.recipeId)).toEqual(["rec-2"]);
+    expect(calls.map((call) => call.route)).toEqual([
+      `GET ${K}/recipes/nutrition`,
+      `GET ${K}/recipes/nutrition?ids=rec-2%2Crec%2F1`,
+    ]);
   });
 
   it("reads the nutrition of a window", async () => {
@@ -125,6 +144,14 @@ describe("nutrition on the mock", () => {
       expect(nutrition.knownIngredients + nutrition.unknown.length).toBe(recipe.items.length);
       expect(nutrition.complete).toBe(nutrition.unknown.length === 0);
     }
+  });
+
+  it("answers the batch with the same rows as one recipe at a time", async () => {
+    const api = createMockApi();
+    const recipes = await api.listRecipes();
+    const rows = await api.getRecipesNutrition();
+    expect(rows).toEqual(await Promise.all(recipes.map((recipe) => api.getRecipeNutrition(recipe.id))));
+    expect(await api.getRecipesNutrition([recipes[1].id, "nope"])).toEqual([await api.getRecipeNutrition(recipes[1].id)]);
   });
 
   it("knows nothing about a recipe a person added, and refuses an unknown id", async () => {
