@@ -49,6 +49,7 @@ def test_standing_order_that_no_longer_matches_usage_drifts():
     assert "STANDING_ORDER_DRIFT" in line.reason_codes
     assert line.numbers["standing_order"] == D(200)
     assert "Standing order 200 ST no longer matches usage" in line.why
+    assert "propose_standing_order" in line.numbers and "a person changes it" in line.why
 
 
 def test_standing_order_close_to_the_need_is_fine():
