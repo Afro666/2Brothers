@@ -132,34 +132,27 @@ function finishedWithStartedDetails(started: AuditEvent, finished: AuditEvent): 
   };
 }
 
-function outcomeOf(events: AuditEvent[]): AuditOutcome {
+function outcomeOf(events: AuditEvent[]): { outcome: AuditOutcome; event: AuditEvent | null } {
   const summaries = events.map((event) => event.summary.toLowerCase());
-  if (events.some((event) => event.kind === "order") && summaries.some((summary) => summary.includes("placed"))) {
-    return "order placed";
-  }
-  if (summaries.some((summary) => summary.includes("reject") || summary.includes("declined"))) return "rejected";
-  if (events.some((event) => event.kind === "refused")) return "refused";
-  if (
-    events.some(
-      (event, index) =>
-        (event.actor === "chef" || event.actor === "human") && summaries[index].includes("approved"),
-    )
-  ) {
-    return "approved";
-  }
-  if (
-    events.some(
-      (event, index) =>
-        !summaries[index].includes("it failed") &&
-        (event.summary === "Approval requested" ||
-          event.summary === "Buyer asked for approval" ||
-          summaries[index].includes("needs approval") ||
-          summaries[index].includes("waiting for approval")),
-    )
-  ) {
-    return "waiting for approval";
-  }
-  return "none";
+  const placed = events.find((event, index) => event.kind === "order" && summaries[index].includes("placed"));
+  if (placed) return { outcome: "order placed", event: placed };
+  const rejected = events.find((_, index) => summaries[index].includes("reject") || summaries[index].includes("declined"));
+  if (rejected) return { outcome: "rejected", event: rejected };
+  const refused = events.find((event) => event.kind === "refused");
+  if (refused) return { outcome: "refused", event: refused };
+  const approved = events.find(
+    (event, index) => (event.actor === "chef" || event.actor === "human") && summaries[index].includes("approved"),
+  );
+  if (approved) return { outcome: "approved", event: approved };
+  const waiting = events.find(
+    (event, index) =>
+      !summaries[index].includes("it failed") &&
+      (event.summary === "Approval requested" ||
+        event.summary === "Buyer asked for approval" ||
+        summaries[index].includes("needs approval") ||
+        summaries[index].includes("waiting for approval")),
+  );
+  return waiting ? { outcome: "waiting for approval", event: waiting } : { outcome: "none", event: null };
 }
 
 function expectedTotal(events: AuditEvent[]): string | null {
@@ -188,8 +181,9 @@ export function shortTitle(summary: string): string {
 function makeGroup(events: AuditEvent[], index: number): AuditStepGroup & { index: number } {
   const titleEvent = events.find((event) => event.summary === "Decision summary") ?? null;
   const rows = oldestFirst(collapseToolCalls(events).filter((event) => event.id !== titleEvent?.id));
-  let at: string | null = null;
-  for (const event of events) if (timestamp(event) != null) at = event.at;
+  const { outcome, event: outcomeEvent } = outcomeOf(events);
+  let at = outcomeEvent && timestamp(outcomeEvent) != null ? outcomeEvent.at : null;
+  if (!outcomeEvent) for (const event of events) if (timestamp(event) != null) at = event.at;
   const decider = [...events].reverse().find(
     (event) =>
       (event.actor === "chef" || event.actor === "human") &&
@@ -200,7 +194,7 @@ function makeGroup(events: AuditEvent[], index: number): AuditStepGroup & { inde
     id: events[0].id,
     title: titleEvent?.reason ? shortTitle(titleEvent.reason) : events[0].summary,
     titleEvent,
-    outcome: outcomeOf(events),
+    outcome,
     decidedBy: decider?.actorName ?? null,
     total: expectedTotal(events),
     at,
@@ -308,8 +302,10 @@ function AuditStepRow({
       </span>
       <div className="col-span-2 min-w-0 sm:col-span-1">
         <p className="label-caps">
-          {kindLabel}
-          {showOrder && event.orderId ? <span className="font-mono"> · {event.orderId}</span> : null}
+          {event.kind === "other" ? null : kindLabel}
+          {showOrder && event.orderId ? (
+            <span className="font-mono">{event.kind === "other" ? null : " · "}{event.orderId}</span>
+          ) : null}
         </p>
         {event.summary !== groupTitle ? <p className="mt-0.5 text-sm font-semibold break-words">{summary}</p> : null}
         {event.actorName ? (
@@ -357,14 +353,15 @@ function AuditGroupCard({ group }: { group: AuditStepGroup }) {
           <h2 id={headingId} className="text-base font-semibold break-words">
             {t(plainCode(group.title, t))}
           </h2>
-          {group.titleEvent?.reason && group.titleEvent.reason !== group.title ? (
-            // The whole decision summary, in the agent's words: the heading holds only what was asked.
-            <p className="mt-1 text-sm break-words text-muted-foreground">{group.titleEvent.reason}</p>
-          ) : null}
-          {group.titleEvent?.details ? (
+          {group.titleEvent && (group.titleEvent.reason || group.titleEvent.details) ? (
             <details className="mt-1 text-xs text-muted-foreground">
               <summary className="w-fit cursor-pointer">{t("Details")}</summary>
-              <pre className="mt-1 font-mono break-words whitespace-pre-wrap">{group.titleEvent.details}</pre>
+              {group.titleEvent.reason ? (
+                <p className="mt-1 text-sm break-words whitespace-pre-wrap">{group.titleEvent.reason}</p>
+              ) : null}
+              {group.titleEvent.details ? (
+                <pre className="mt-1 font-mono break-words whitespace-pre-wrap">{group.titleEvent.details}</pre>
+              ) : null}
             </details>
           ) : null}
         </div>

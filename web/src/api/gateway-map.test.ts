@@ -672,9 +672,9 @@ describe("mapAudit", () => {
         orderId: undefined,
         kind: "refused",
         actor: "system",
-        summary: "Refused: the gateway said no (403)",
+        summary: "Request refused by the gateway",
         reason: "",
-        details: "code: SCOPE_MISSING; method: POST; path: /kitchens/k-1/orders",
+        details: "status: 403; code: SCOPE_MISSING; method: POST; path: /kitchens/k-1/orders",
         groupIds: [],
       },
     ]);
@@ -702,6 +702,58 @@ describe("mapAudit", () => {
     const [step] = mapAudit([{ event_id: "lookup", kind: "order_lookup", at: null }]);
     expect(step.summary).toBe("Order status checked");
     expect(translate("fi", step.summary)).toBe("Tilauksen tila tarkistettu");
+  });
+
+  it("gives known audit steps Finnish names", () => {
+    const summaries: Record<string, [string, string]> = {
+      stock_photo_read: ["Shelf photo read by Nemotron VL", "Hyllykuva luettu Nemotron VL:llä"],
+      audit_demo_tamper: ["Tamper demo: a line was changed", "Muutosdemo: riviä muutettiin"],
+      audit_demo_restore: ["Tamper demo: the line was restored", "Muutosdemo: rivi palautettiin"],
+      option_chosen: ["A person chose an option", "Henkilö valitsi vaihtoehdon"],
+      order_lookup: ["Order status checked", "Tilauksen tila tarkistettu"],
+      order_resolved: ["A person resolved an unknown send", "Henkilö selvitti tuntemattoman lähetystuloksen"],
+      recall_check: ["Recall check", "Takaisinvedot tarkistettu"],
+      demo_inbox_cleared: ["Inbox cleared", "Postilaatikko tyhjennetty"],
+      signed_in: ["Signed in", "Kirjauduttu sisään"],
+      password_changed: ["Password changed", "Salasana vaihdettu"],
+      kitchen_brief_read: ["Kitchen brief read", "Keittiön ohjeet luettu"],
+      delivery_note_read: ["Delivery note read", "Lähetyslista luettu"],
+      proposal_created: ["Proposal created", "Ehdotus luotu"],
+      proposal_changed: ["Proposal changed", "Ehdotusta muutettiin"],
+      proposal_explanation_failed: ["Proposal explanation failed", "Ehdotuksen selitys epäonnistui"],
+      approval_token_created: ["Approval token created", "Hyväksyntätunnus luotu"],
+      approval_requested: ["Approval requested", "Hyväksyntä pyydetty"],
+      decision_summary: ["Decision summary", "Päätöksen yhteenveto"],
+      total_mismatch: ["The total moved before placing: nothing was sent", "Summa muuttui ennen tilaamista: mitään ei lähetetty"],
+      order_placed: ["Order placed", "Tilaus tehty"],
+      proposal_rejected: ["Proposal rejected", "Ehdotus hylätty"],
+      refused: ["Request refused by the gateway", "Yhdyskäytävä hylkäsi pyynnön"],
+      supplier_offer_received: ["Offer received from the supplier's selling agent", "Tarjous vastaanotettu toimittajan myyntiagentilta"],
+      supplier_offer_accepted: ["Supplier offer accepted: a proposal was made from it", "Toimittajan tarjous hyväksytty: siitä tehtiin ehdotus"],
+      supplier_offer_declined: ["Supplier offer declined", "Toimittajan tarjous hylätty"],
+    };
+    for (const [kind, [english, finnish]] of Object.entries(summaries)) {
+      const [step] = mapAudit([{ event_id: kind, kind }]);
+      expect(step.summary).toBe(english);
+      expect(translate("fi", step.summary)).toBe(finnish);
+    }
+
+    const tools: Record<string, [string, string, string, string]> = {
+      search_products: ["Buyer is searching the catalog", "Ostaja etsii tuoteluettelosta", "Buyer searched the catalog", "Ostaja etsi tuoteluettelosta"],
+      get_offer: ["Buyer is asking for an offer", "Ostaja pyytää tarjousta", "Buyer got the offer", "Ostaja sai tarjouksen"],
+      simulate_order: ["Buyer is simulating the order", "Ostaja simuloi tilausta", "Buyer simulated the order", "Ostaja simuloi tilauksen"],
+      request_approval: ["Buyer is asking for approval", "Ostaja pyytää hyväksyntää", "Buyer asked for approval", "Ostaja pyysi hyväksyntää"],
+      place_order: ["Buyer is placing the order", "Ostaja tekee tilausta", "Buyer placed the order", "Ostaja teki tilauksen"],
+      get_order_status: ["Buyer is checking the order status", "Ostaja tarkistaa tilauksen tilan", "Buyer checked the order status", "Ostaja tarkisti tilauksen tilan"],
+    };
+    for (const [tool, [started, startedFi, done, doneFi]] of Object.entries(tools)) {
+      const [start, finish] = mapAudit([
+        { event_id: `${tool}-start`, type: "tool_call_started", tool, arguments: {} },
+        { event_id: `${tool}-finish`, type: "tool_call_finished", tool, arguments: {}, result: {} },
+      ]);
+      expect([start.summary, translate("fi", start.summary)]).toEqual([started, startedFi]);
+      expect([finish.summary, translate("fi", finish.summary)]).toEqual([done, doneFi]);
+    }
   });
 
   it("gives an order its own steps and those of the proposal that placed it", () => {

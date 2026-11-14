@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { mapAudit } from "@/api/gateway-map";
@@ -150,13 +151,56 @@ describe("AuditTimeline", () => {
     expect(groups.flatMap((group) => group.rows).some((event) => event.summary === "Buyer is searching the catalog")).toBe(true);
   });
 
-  it("shows what was asked as the heading and the whole summary under it", () => {
+  it("shows what was asked as the heading and the whole summary only in Details", async () => {
     const events = mapAudit(sample);
     render(<AuditTimeline events={events} groups={groupSteps(events)} />);
     expect(screen.getByRole("heading", { name: "200 liters lactose-free milk by Monday" })).toBeInTheDocument();
-    expect(screen.getByText(/^Asked: "200 liters lactose-free milk by Monday" \(200 L for 2026-11-16\)\./)).toHaveTextContent(
-      "Checked 3 products.",
-    );
+    const summary = screen.getByText(/^Asked: "200 liters lactose-free milk by Monday" \(200 L for 2026-11-16\)\./);
+    expect(summary).toHaveTextContent("Checked 3 products.");
+    expect(summary).not.toBeVisible();
+    const header = screen.getByRole("heading", { name: "200 liters lactose-free milk by Monday" }).closest("header")!;
+    await userEvent.click(within(header).getByText("Details"));
+    expect(summary).toBeVisible();
+  });
+
+  it("uses the order-placed step's time, not a later order lookup", () => {
+    const events = mapAudit([
+      ...sample,
+      { event_id: "lookup", kind: "order_lookup", proposal_id: proposalId, order_id: "order-1", at: "2026-11-14T21:29:00+00:00" },
+    ]);
+    const [group] = groupSteps(events);
+    expect(group.at).toBe("2026-11-14T13:32:03+00:00");
+    render(<AuditTimeline events={events} groups={[group]} />);
+    expect(document.querySelector("section > header time")).toHaveAttribute("datetime", group.at);
+  });
+
+  it("gives common steps a kind and omits the Other chip", () => {
+    const events = mapAudit([
+      { event_id: "brief", kind: "kitchen_brief_read" },
+      { event_id: "delivery", kind: "delivery_note_read" },
+      { event_id: "token", kind: "approval_token_created" },
+      { event_id: "explanation", kind: "proposal_explanation_failed" },
+      { event_id: "recall", kind: "recall_check" },
+      { event_id: "inbox", kind: "demo_inbox_cleared" },
+      { event_id: "refusal", kind: "refused", code: "SCOPE_MISSING" },
+    ]);
+    render(<AuditTimeline events={events} />);
+    for (const [summary, kind] of [
+      ["Kitchen brief read", "request"],
+      ["Delivery note read", "order"],
+      ["Approval token created", "settings"],
+      ["Proposal explanation failed", "request"],
+    ]) {
+      const row = screen.getByText(summary).closest("li")!;
+      expect(row).toHaveAttribute("data-kind", kind);
+      expect(within(row).queryByText("Other")).not.toBeInTheDocument();
+    }
+    for (const summary of ["Recall check", "Inbox cleared"]) {
+      expect(within(screen.getByText(summary).closest("li")!).queryByText("Other")).not.toBeInTheDocument();
+    }
+    const refusal = screen.getByText("Request refused by the gateway").closest("li")!;
+    expect(screen.getByText("Request refused by the gateway")).not.toHaveTextContent("403");
+    expect(within(refusal).getByText(/status: 403/)).not.toBeVisible();
   });
 
   it("titles a block with what was asked, not with the whole decision summary", () => {
