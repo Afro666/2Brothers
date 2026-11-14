@@ -63,23 +63,28 @@ class ReviewSecurityTests(unittest.TestCase):
             self.assertFalse((folder / 'prompt.txt').exists())
             self.assertIn('eligible=false', (folder / 'output').read_text())
 
-    def test_quota_failure_does_not_leak_credentials_or_claim_success(self):
+    def test_cli_failures_do_not_leak_credentials_or_claim_success(self):
         key = 'sk-test-private-ci-credential'
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'OPENAI_API_KEY': key}, clear=True):
-            folder = Path(tmp)
-            (folder / 'facts.json').write_text(json.dumps({'pr': '1', 'head': 'abc'}))
-            (folder / 'prompt.txt').write_text('diff', encoding='utf-8')
-            def cli(cmd, **kwargs):
-                if 'login' in cmd:
-                    return subprocess.CompletedProcess(cmd, 0)
-                return subprocess.CompletedProcess(cmd, 1, stderr='Quota exceeded '+key+' sk-masked...fragment')
-            capture = io.StringIO()
-            with patch.object(subprocess, 'run', side_effect=cli), contextlib.redirect_stdout(capture):
-                review.review(folder)
-            body = (folder / 'comment.md').read_text(encoding='utf-8')
-            self.assertIn('No model review ran', body)
-            self.assertNotIn(key, body + capture.getvalue())
-            self.assertNotIn('sk-masked', capture.getvalue())
+        fragment = 'sk-proj-abc***xyz'
+        cases = [('CLI error', 'Unavailable: Codex CLI failed. No model review result is claimed.'),
+                 ('Quota exceeded', 'No model review ran')]
+        for error, expected in cases:
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'OPENAI_API_KEY': key}, clear=True):
+                folder = Path(tmp)
+                (folder / 'facts.json').write_text(json.dumps({'pr': '1', 'head': 'abc'}))
+                (folder / 'prompt.txt').write_text('diff', encoding='utf-8')
+                def cli(cmd, **kwargs):
+                    if 'login' in cmd:
+                        return subprocess.CompletedProcess(cmd, 0)
+                    return subprocess.CompletedProcess(cmd, 1, stderr=f'{error} {key} {fragment}')
+                capture = io.StringIO()
+                with patch.object(subprocess, 'run', side_effect=cli), contextlib.redirect_stdout(capture):
+                    review.review(folder)
+                body = (folder / 'comment.md').read_text(encoding='utf-8')
+                self.assertIn(expected, body)
+                self.assertNotIn(key, body + capture.getvalue())
+                self.assertNotIn(fragment, body + capture.getvalue())
+                self.assertIn('[REDACTED]', capture.getvalue())
 
 
 if __name__ == '__main__':
