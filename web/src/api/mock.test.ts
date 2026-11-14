@@ -166,6 +166,25 @@ describe("mock API proposal changes", () => {
     expect(result.approval).toMatchObject({ totalExVat: 1845, totalInclVat: 2094.08, lineCount: 1 });
   });
 
+  it("refuses to approve a line above measured supplier stock", async () => {
+    const api = createMockApi();
+    const [line] = (await api.getOrder(approval.orderId)).lines;
+    expect(line.offer.availableAmount).toBe(51);
+    const { approval: changed } = await api.changeProposal(
+      approval.orderId,
+      { type: "SET_QUANTITY", productId: line.product.id, quantity: 60 },
+      "human",
+    );
+    await expect(
+      api.approve(
+        { approvalId: approval.id, expectedTotalExVat: changed.totalExVat, expectedTotalInclVat: changed.totalInclVat },
+        "human",
+      ),
+    ).rejects.toMatchObject({ code: "PARTIAL_STOCK" });
+    expect((await api.getApproval(approval.id)).status).toBe("PENDING");
+    expect((await api.getOrder(approval.orderId)).status).toBe("NEEDS_APPROVAL");
+  });
+
   it("only allows proposal changes while its approval is pending", async () => {
     const api = createMockApi();
     await api.approve(DECISION, "human");
