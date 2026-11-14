@@ -92,4 +92,12 @@ export default {
   "One line is already changed. Restore it first.": "Yhtä riviä on jo muutettu. Palauta se ensin.",
   "The audit log has no line to change yet.": "Toimintolokissa ei vielä ole muutettavaa riviä.",
   "The break is in another kitchen's entry (the demo), not in yours": "Katkos on toisen keittiön lokimerkinnässä (demo), ei omassasi",
+  "Heart Symbol": "Sydänmerkki",
+  "Hyvää Suomesta (Produced in Finland)": "Hyvää Suomesta (Tuotettu Suomessa)",
+  "Test row": "Testirivi",
+  "Unsupported label register": "Merkinnälle ei ole julkista rekisteriä",
+  "Exact producer name in recorded register; SKU certification is unverified": "Tuottajan tarkka nimi löytyy tallennetusta rekisteristä; yksittäisen tuotteen sertifiointia ei ole varmistettu",
+  "Exact producer name not found in the complete recorded register; no claim about SKU certification": "Tuottajan tarkkaa nimeä ei löydy koko tallennetusta rekisteristä; yksittäisen tuotteen sertifioinnista ei väitetä mitään",
+  "not checked": "ei tarkistettu",
+  "Not checked: {count} labels with no public register": "Ei tarkistettu: {count} merkintää ilman julkista rekisteriä",
 } satisfies Record<string, string>;
