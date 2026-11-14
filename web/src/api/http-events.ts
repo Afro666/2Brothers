@@ -118,9 +118,14 @@ export function createEventsHttp(
         }
       };
       const signedIn = () => {
-        if (!refused) return;
+        // 503 is for good; otherwise re-make the stream with the new session.
+        if (stopped || (unavailable && !refused)) return;
         refused = false;
         unavailable = false;
+        if (retry !== undefined) clearTimeout(retry);
+        retry = undefined;
+        controller?.abort();
+        controller = null;
         open();
       };
       document.addEventListener("visibilitychange", visibility);
