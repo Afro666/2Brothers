@@ -17,14 +17,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EU_ALLERGENS } from "@/lib/allergens";
+import { useT } from "@/lib/i18n";
 import type { ProductLabel } from "@/types";
 
-const ALLERGENS = [...EU_ALLERGENS, { code: "ML", name: "Lactose" }] as const;
+export const ALLERGENS = [...EU_ALLERGENS, { code: "ML", name: "Lactose" }] as const;
 
 const LABEL_OPTIONS = Object.keys(LABEL_META) as ProductLabel[];
 const TEMPERATURES: ProductTemperature[] = ["ambient", "chilled", "frozen"];
 
-const TEMPERATURE_LABELS: Record<ProductTemperature, string> = {
+export const TEMPERATURE_LABELS: Record<ProductTemperature, string> = {
   ambient: "Ambient",
   chilled: "Chilled",
   frozen: "Frozen",
@@ -103,6 +104,7 @@ function toggle<T>(values: T[], value: T): T[] {
 type Update = (change: (current: CatalogSearch) => CatalogSearch) => void;
 
 export function CatalogPage() {
+  const t = useT();
   const api = useApi();
   const search = parseSearch(useSearch({ from: "/catalog" }));
   const navigate = useNavigate();
@@ -175,33 +177,33 @@ export function CatalogPage() {
     <AppShell activeId="catalog">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Products</h1>
+          <h1 className="text-2xl font-semibold">{t("Products")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Search what suppliers sell. A product with no allergen data is unknown, not safe.
+            {t("Search what suppliers sell. A product with no allergen data is unknown, not safe.")}
           </p>
         </header>
 
         <form role="search" onSubmit={submit} className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="grid flex-1 gap-1 text-sm font-medium" htmlFor="catalog-query">
-              Search the catalog
+              {t("Search the catalog")}
               <Input
                 id="catalog-query"
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Product name"
+                placeholder={t("Product name")}
               />
             </label>
             <div className="flex items-end">
               <Button type="submit" className="w-full sm:w-auto">
-                Search
+                {t("Search")}
               </Button>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* Only when the gateway answers the search: the mock is not Atlas. */}
-            {api.live?.has("searchProducts") ? <Badge variant="secondary">Atlas Search</Badge> : null}
+            {api.live?.has("searchProducts") ? <Badge variant="secondary">{t("Atlas Search")}</Badge> : null}
             <Button
               type="button"
               variant="outline"
@@ -211,7 +213,7 @@ export function CatalogPage() {
                 update((current) => ({ ...current, q: "milk", exclude: ["AM"] }));
               }}
             >
-              Example: milk without the milk allergen
+              {t("Example: milk without the milk allergen")}
             </Button>
           </div>
 
@@ -223,7 +225,7 @@ export function CatalogPage() {
               onClick={() => setFiltersOpen((open) => !open)}
               className="flex w-full justify-between px-0 text-sm font-medium md:hidden"
             >
-              Filters
+              {t("Filters")}
               <ChevronDown
                 className={`size-4 text-muted-foreground transition-transform ${filtersOpen ? "rotate-180" : ""}`}
                 aria-hidden
@@ -235,17 +237,17 @@ export function CatalogPage() {
           </div>
         </form>
 
-        {currentResult.status === "loading" ? <LoadingState label="Searching the catalog" /> : null}
+        {currentResult.status === "loading" ? <LoadingState label={t("Searching the catalog")} /> : null}
         {currentResult.status === "error" ? (
           <ErrorState
-            message={currentResult.error?.message ?? "Search failed"}
+            message={currentResult.error?.message ?? t("Search failed")}
             onRetry={() => setReloadVersion((version) => version + 1)}
           />
         ) : null}
         {currentResult.status === "ready" && results.length === 0 ? (
-          <EmptyState title="No products match this search">
+          <EmptyState title={t("No products match this search")}>
             <Button className="mt-3" variant="outline" onClick={clearFilters}>
-              Clear filters
+              {t("Clear filters")}
             </Button>
           </EmptyState>
         ) : null}
@@ -253,11 +255,13 @@ export function CatalogPage() {
           <div className="space-y-3">
             <div className="space-y-1" aria-live="polite">
               <p className="text-sm text-muted-foreground">
-                {results.length} {results.length === 1 ? "product" : "products"}
+                {results.length === 1 ? t("{count} product", { count: results.length }) : t("{count} products", { count: results.length })}
               </p>
               {withoutData > 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  {withoutData} {withoutData === 1 ? "has" : "have"} no allergen data: unknown, not safe
+                  {withoutData === 1
+                    ? t("{count} has no allergen data: unknown, not safe", { count: withoutData })
+                    : t("{count} have no allergen data: unknown, not safe", { count: withoutData })}
                 </p>
               ) : null}
             </div>
@@ -306,9 +310,10 @@ function CheckRow({
 }
 
 function Filters({ search, update }: { search: CatalogSearch; update: Update }) {
+  const t = useT();
   return (
     <div className="grid gap-6 sm:grid-cols-3">
-      <FilterGroup title="Exclude allergens">
+      <FilterGroup title={t("Exclude allergens")}>
         {ALLERGENS.map((allergen) => (
           <CheckRow
             key={allergen.code}
@@ -316,7 +321,7 @@ function Filters({ search, update }: { search: CatalogSearch; update: Update }) 
             checked={search.exclude.includes(allergen.code)}
             onChange={() => update((current) => ({ ...current, exclude: toggle(current.exclude, allergen.code) }))}
           >
-            {allergen.name}
+            {t(allergen.name)}
             <span className="ml-1 text-xs text-muted-foreground">({allergen.code})</span>
           </CheckRow>
         ))}
@@ -326,12 +331,12 @@ function Filters({ search, update }: { search: CatalogSearch; update: Update }) 
             checked={search.strict}
             onChange={() => update((current) => ({ ...current, strict: !current.strict }))}
           >
-            Also hide products with no allergen data
+            {t("Also hide products with no allergen data")}
           </CheckRow>
         </div>
       </FilterGroup>
 
-      <FilterGroup title="Require labels">
+      <FilterGroup title={t("Require labels")}>
         {LABEL_OPTIONS.map((label) => (
           <CheckRow
             key={label}
@@ -339,14 +344,14 @@ function Filters({ search, update }: { search: CatalogSearch; update: Update }) 
             checked={search.labels.includes(label)}
             onChange={() => update((current) => ({ ...current, labels: toggle(current.labels, label) }))}
           >
-            {LABEL_META[label].text}
+            {t(LABEL_META[label].text)}
           </CheckRow>
         ))}
       </FilterGroup>
 
       <div className="space-y-2">
         <Label htmlFor="catalog-temperature" className="font-medium">
-          Temperature
+          {t("Temperature")}
         </Label>
         <Select
           value={search.temp ?? "any"}
@@ -358,10 +363,10 @@ function Filters({ search, update }: { search: CatalogSearch; update: Update }) 
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="any">Any</SelectItem>
+            <SelectItem value="any">{t("Any")}</SelectItem>
             {TEMPERATURES.map((temperature) => (
               <SelectItem key={temperature} value={temperature}>
-                {TEMPERATURE_LABELS[temperature]}
+                {t(TEMPERATURE_LABELS[temperature])}
               </SelectItem>
             ))}
           </SelectContent>

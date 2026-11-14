@@ -28,9 +28,10 @@ import { formatEur, formatNumber } from "@/lib/format";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
+import { useT } from "@/lib/i18n";
 import type { SharingConsent, Supplier, SupplierAdapter } from "@/types";
 
-const ADAPTER_LABEL: Record<SupplierAdapter, string> = {
+export const ADAPTER_LABEL: Record<SupplierAdapter, string> = {
   valio_api: "Live API",
   manual: "Manual entry",
   csv: "CSV price list",
@@ -38,7 +39,7 @@ const ADAPTER_LABEL: Record<SupplierAdapter, string> = {
 
 const ADAPTERS: SupplierAdapter[] = ["valio_api", "manual", "csv"];
 
-const DAY_LABEL: Record<number, string> = {
+export const DAY_LABEL: Record<number, string> = {
   1: "Mon",
   2: "Tue",
   3: "Wed",
@@ -133,7 +134,8 @@ function messageOf(error: unknown): string {
 }
 
 function NotSet() {
-  return <span className="text-muted-foreground">not set</span>;
+  const t = useT();
+  return <span className="text-muted-foreground">{t("not set")}</span>;
 }
 
 function eur(value: number | null) {
@@ -141,32 +143,35 @@ function eur(value: number | null) {
 }
 
 function Terms({ supplier }: { supplier: Supplier }) {
+  const t = useT();
   const days = supplier.orderDays;
   return (
     <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
       <div>
-        <dt className="text-xs text-muted-foreground">Free delivery from</dt>
+        <dt className="text-xs text-muted-foreground">{t("Free delivery from")}</dt>
         <dd>{eur(supplier.freeDeliveryThresholdEur)}</dd>
       </div>
       <div>
-        <dt className="text-xs text-muted-foreground">Delivery fee</dt>
+        <dt className="text-xs text-muted-foreground">{t("Delivery fee")}</dt>
         <dd>{eur(supplier.deliveryFeeEur)}</dd>
       </div>
       <div>
-        <dt className="text-xs text-muted-foreground">Order days</dt>
-        <dd>{days && days.length > 0 ? days.map((day) => DAY_LABEL[day] ?? String(day)).join(", ") : <NotSet />}</dd>
+        <dt className="text-xs text-muted-foreground">{t("Order days")}</dt>
+        <dd>{days && days.length > 0 ? days.map((day) => t(DAY_LABEL[day] ?? String(day))).join(", ") : <NotSet />}</dd>
       </div>
       <div>
-        <dt className="text-xs text-muted-foreground">Order cut-off</dt>
+        <dt className="text-xs text-muted-foreground">{t("Order cut-off")}</dt>
         <dd>{supplier.cutoffTime ?? <NotSet />}</dd>
       </div>
       <div>
-        <dt className="text-xs text-muted-foreground">Lead time</dt>
+        <dt className="text-xs text-muted-foreground">{t("Lead time")}</dt>
         <dd>
           {supplier.leadTimeDays == null ? (
             <NotSet />
           ) : (
-            `${formatNumber(supplier.leadTimeDays)} ${supplier.leadTimeDays === 1 ? "day" : "days"}`
+            supplier.leadTimeDays === 1
+              ? t("{count} day", { count: formatNumber(supplier.leadTimeDays) })
+              : t("{count} days", { count: formatNumber(supplier.leadTimeDays) })
           )}
         </dd>
       </div>
@@ -183,6 +188,7 @@ function SupplierForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT();
   const api = useApi();
   const [form, setForm] = useState<FormState>(() => formFromSupplier(supplier));
   const [error, setError] = useState<string | null>(null);
@@ -209,7 +215,7 @@ function SupplierForm({
     setError(null);
     try {
       await api.saveSupplier(draftFromForm(form, supplier, parsed));
-      toast.success("Supplier saved");
+      toast.success(t("Supplier saved"));
       onSaved();
       onClose();
     } catch (e) {
@@ -227,7 +233,7 @@ function SupplierForm({
       ) : null}
       <DialogBody className="space-y-4">
         <div className="grid gap-2">
-          <Label htmlFor={fieldId("name")}>Name</Label>
+          <Label htmlFor={fieldId("name")}>{t("Name")}</Label>
           <Input
             id={fieldId("name")}
             value={form.name}
@@ -236,7 +242,7 @@ function SupplierForm({
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor={fieldId("adapter")}>How orders reach them</Label>
+          <Label htmlFor={fieldId("adapter")}>{t("How orders reach them")}</Label>
           <Select
             value={form.adapter}
             onValueChange={(value) => setForm({ ...form, adapter: value as SupplierAdapter })}
@@ -247,7 +253,7 @@ function SupplierForm({
             <SelectContent>
               {ADAPTERS.map((adapter) => (
                 <SelectItem key={adapter} value={adapter}>
-                  {ADAPTER_LABEL[adapter]}
+                  {t(ADAPTER_LABEL[adapter])}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -255,43 +261,43 @@ function SupplierForm({
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor={fieldId("free-delivery")}>Free delivery from (EUR)</Label>
+            <Label htmlFor={fieldId("free-delivery")}>{t("Free delivery from (EUR)")}</Label>
             <Input
               id={fieldId("free-delivery")}
               type="text"
               inputMode="decimal"
               min="0"
               step="0.01"
-              placeholder="Not set"
+              placeholder={t("Not set")}
               value={form.freeDelivery}
               onChange={(e) => setForm({ ...form, freeDelivery: e.target.value })}
             />
             {parsed.freeDelivery.error ? (
               <p role="alert" className="text-sm text-destructive">
-                {parsed.freeDelivery.error}
+                {t(parsed.freeDelivery.error)}
               </p>
             ) : null}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor={fieldId("delivery-fee")}>Delivery fee (EUR)</Label>
+            <Label htmlFor={fieldId("delivery-fee")}>{t("Delivery fee (EUR)")}</Label>
             <Input
               id={fieldId("delivery-fee")}
               type="text"
               inputMode="decimal"
               min="0"
               step="0.01"
-              placeholder="Not set"
+              placeholder={t("Not set")}
               value={form.deliveryFee}
               onChange={(e) => setForm({ ...form, deliveryFee: e.target.value })}
             />
             {parsed.deliveryFee.error ? (
               <p role="alert" className="text-sm text-destructive">
-                {parsed.deliveryFee.error}
+                {t(parsed.deliveryFee.error)}
               </p>
             ) : null}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor={fieldId("cutoff")}>Order cut-off</Label>
+            <Label htmlFor={fieldId("cutoff")}>{t("Order cut-off")}</Label>
             <Input
               id={fieldId("cutoff")}
               type="text"
@@ -301,31 +307,31 @@ function SupplierForm({
             />
             {parsed.cutoff.error ? (
               <p role="alert" className="text-sm text-destructive">
-                {parsed.cutoff.error}
+                {t(parsed.cutoff.error)}
               </p>
             ) : null}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor={fieldId("lead-time")}>Lead time (days)</Label>
+            <Label htmlFor={fieldId("lead-time")}>{t("Lead time (days)")}</Label>
             <Input
               id={fieldId("lead-time")}
               type="text"
               inputMode="numeric"
               min="0"
               step="1"
-              placeholder="Not set"
+              placeholder={t("Not set")}
               value={form.leadTime}
               onChange={(e) => setForm({ ...form, leadTime: e.target.value })}
             />
             {parsed.leadTime.error ? (
               <p role="alert" className="text-sm text-destructive">
-                {parsed.leadTime.error}
+                {t(parsed.leadTime.error)}
               </p>
             ) : null}
           </div>
         </div>
         <fieldset className="grid gap-2">
-          <legend className="mb-2 text-sm font-medium">Order days</legend>
+          <legend className="mb-2 text-sm font-medium">{t("Order days")}</legend>
           <div className="flex flex-wrap gap-3">
             {DAYS.map((day) => {
               const id = fieldId(`day-${day}`);
@@ -336,23 +342,23 @@ function SupplierForm({
                     checked={form.orderDays.includes(day)}
                     onCheckedChange={(checked) => toggleDay(day, checked === true)}
                   />
-                  <Label htmlFor={id}>{DAY_LABEL[day]}</Label>
+                  <Label htmlFor={id}>{t(DAY_LABEL[day])}</Label>
                 </div>
               );
             })}
           </div>
           {form.orderDays.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No days ticked: order days are not set.</p>
+            <p className="text-xs text-muted-foreground">{t("No days ticked: order days are not set.")}</p>
           ) : null}
         </fieldset>
       </DialogBody>
       <DialogFooter>
         <Button disabled={busy} onClick={() => void save()}>
-          Save supplier
+          {t("Save supplier")}
         </Button>
         <DialogClose asChild>
           <Button variant="outline" disabled={busy}>
-            Cancel
+            {t("Cancel")}
           </Button>
         </DialogClose>
       </DialogFooter>
@@ -375,6 +381,7 @@ function SupplierCard({
   onDelete: () => void;
   onShare: (shared: boolean) => Promise<void>;
 }) {
+  const t = useT();
   const shareId = useId();
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -398,7 +405,7 @@ function SupplierCard({
           <h3 className="text-base font-semibold">{supplier.name}</h3>
         </CardTitle>
         <CardAction>
-          <Badge variant="secondary">{ADAPTER_LABEL[supplier.adapter]}</Badge>
+          <Badge variant="secondary">{t(ADAPTER_LABEL[supplier.adapter])}</Badge>
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -413,11 +420,10 @@ function SupplierCard({
             />
             <div className="grid gap-1">
               <Label htmlFor={shareId} className="leading-snug">
-                Share our forecast with {supplier.name}
+                {t("Share our forecast with {supplier}", { supplier: supplier.name })}
               </Label>
               <p className="text-xs text-muted-foreground">
-                They see our kitchen's name and what we expect to need, never our menus or prices. Every change is in
-                the audit log.
+                {t("They see our kitchen's name and what we expect to need, never our menus or prices. Every change is in the audit log.")}
               </p>
             </div>
           </div>
@@ -430,10 +436,10 @@ function SupplierCard({
       </CardContent>
       <CardFooter className="gap-2 border-t">
         <Button variant="outline" size="sm" onClick={onEdit}>
-          Edit
+          {t("Edit")}
         </Button>
         <Button variant="ghost" size="sm" className="text-danger hover:text-danger" onClick={onDelete}>
-          Delete
+          {t("Delete")}
         </Button>
       </CardFooter>
     </Card>
@@ -441,6 +447,7 @@ function SupplierCard({
 }
 
 export function SuppliersPage() {
+  const t = useT();
   const api = useApi();
   const { role } = useRole();
   const actor = auditActorForRole(role);
@@ -494,7 +501,15 @@ export function SuppliersPage() {
       const data = await api.setSharing(supplierId, shared, actor);
       setSharing({ status: "ready", data });
       const supplier = suppliers.data.find((item) => item.id === supplierId);
-      toast.success(`Forecast sharing turned ${shared ? "on" : "off"}${supplier ? ` for ${supplier.name}` : ""}`);
+      toast.success(
+        supplier
+          ? shared
+            ? t("Forecast sharing turned on for {supplier}", { supplier: supplier.name })
+            : t("Forecast sharing turned off for {supplier}", { supplier: supplier.name })
+          : shared
+            ? t("Forecast sharing turned on")
+            : t("Forecast sharing turned off"),
+      );
     } finally {
       setSharingPending(false);
     }
@@ -515,7 +530,7 @@ export function SuppliersPage() {
     setDeleteError(null);
     try {
       await api.deleteSupplier(deleting.id);
-      toast.success("Supplier deleted");
+      toast.success(t("Supplier deleted"));
       setDeleting(null);
       suppliers.reload();
     } catch (e) {
@@ -530,12 +545,12 @@ export function SuppliersPage() {
     <AppShell activeId="suppliers">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Suppliers</h1>
+          <h1 className="text-2xl font-semibold">{t("Suppliers")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Who you buy from, and each supplier's terms. Terms are yours to set; nothing is assumed.
+            {t("Who you buy from, and each supplier's terms. Terms are yours to set; nothing is assumed.")}
           </p>
         </header>
-        {suppliers.status === "loading" ? <LoadingState label="Loading suppliers" /> : null}
+        {suppliers.status === "loading" ? <LoadingState label={t("Loading suppliers")} /> : null}
         {suppliers.status === "error" ? (
           <ErrorState message={suppliers.error.message} onRetry={suppliers.reload} />
         ) : null}
@@ -543,17 +558,17 @@ export function SuppliersPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm tabular-nums text-muted-foreground" aria-live="polite">
-                {suppliers.data.length} {suppliers.data.length === 1 ? "supplier" : "suppliers"}
+                {suppliers.data.length === 1 ? t("{count} supplier", { count: suppliers.data.length }) : t("{count} suppliers", { count: suppliers.data.length })}
               </p>
-              <Button onClick={openAdd}>Add supplier</Button>
+              <Button onClick={openAdd}>{t("Add supplier")}</Button>
             </div>
             {sharing.status === "error" ? (
               <ErrorState message={sharing.message} onRetry={() => setSharingVersion((version) => version + 1)} />
             ) : null}
             {suppliers.data.length === 0 ? (
-              <EmptyState title="No suppliers yet">
+              <EmptyState title={t("No suppliers yet")}>
                 <Button className="mt-3" onClick={openAdd}>
-                  Add supplier
+                  {t("Add supplier")}
                 </Button>
               </EmptyState>
             ) : (
@@ -591,10 +606,10 @@ export function SuppliersPage() {
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>
-                {formDialog?.mode === "edit" ? `Edit ${formDialog.supplier.name}` : "Add supplier"}
+                {formDialog?.mode === "edit" ? t("Edit {name}", { name: formDialog.supplier.name }) : t("Add supplier")}
               </DialogTitle>
               <DialogDescription>
-                Leave a field empty when the term is not known. Empty terms show as not set, never as zero.
+                {t("Leave a field empty when the term is not known. Empty terms show as not set, never as zero.")}
               </DialogDescription>
             </DialogHeader>
             <SupplierForm
@@ -611,18 +626,18 @@ export function SuppliersPage() {
         <Dialog open={deleting !== null} onOpenChange={(open) => (open ? undefined : setDeleting(null))}>
           <DialogContent className="max-w-md" aria-labelledby={titleId}>
             <DialogHeader>
-              <DialogTitle id={titleId}>Delete {deleting?.name}?</DialogTitle>
+              <DialogTitle id={titleId}>{t("Delete {name}?", { name: deleting?.name ?? "" })}</DialogTitle>
               <DialogDescription>
-                The supplier is removed from this list. A supplier that still supplies your products cannot be deleted.
+                {t("The supplier is removed from this list. A supplier that still supplies your products cannot be deleted.")}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button variant="destructive" disabled={deleteBusy} onClick={() => void confirmDelete()}>
-                Delete supplier
+                {t("Delete supplier")}
               </Button>
               <DialogClose asChild>
                 <Button variant="outline" disabled={deleteBusy}>
-                  Cancel
+                  {t("Cancel")}
                 </Button>
               </DialogClose>
             </DialogFooter>

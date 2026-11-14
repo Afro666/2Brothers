@@ -4,14 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatEur, formatPack, isLater, isPassed } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import type { OfferTier, SubstituteOption } from "@/types";
 
-const TIER_LABEL: Record<OfferTier, string> = { good: "Good", better: "Better", best: "Best" };
+export const TIER_LABEL: Record<OfferTier, string> = { good: "Good", better: "Better", best: "Best" };
 const TIER_ORDER: OfferTier[] = ["good", "better", "best"];
 
 const DIRECTION_ICON = { plus: ArrowUp, minus: ArrowDown, neutral: Minus } as const;
 const DIRECTION_CLASS = { plus: "text-success", minus: "text-danger", neutral: "text-muted-foreground" } as const;
-const DIRECTION_SR = { plus: "Better: ", minus: "Worse: ", neutral: "" } as const;
+export const DIRECTION_SR = { plus: "Better: ", minus: "Worse: ", neutral: "" } as const;
 
 /**
  * Good / better / best substitutes side by side. The facts row is the same
@@ -27,6 +28,7 @@ export function OfferCompare({
   now: Date;
   onChoose?: (option: SubstituteOption) => void;
 }) {
+  const t = useT();
   const sorted = [...options].sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -36,15 +38,15 @@ export function OfferCompare({
         const late = isLater(offer.availableDate, offer.requestedDate);
         const facts: [string, string, boolean?][] = [
           [
-            `Price per ${offer.comparisonUnit ?? product.baseUnit}`,
-            offer.comparisonPrice == null ? "unknown" : formatEur(offer.comparisonPrice),
+            t("Price per {unit}", { unit: offer.comparisonUnit ?? product.baseUnit }),
+            offer.comparisonPrice == null ? t("unknown") : formatEur(offer.comparisonPrice),
           ],
-          ["Fat", product.fatPercent == null ? "unknown" : `${product.fatPercent} %`],
-          ["Pack", formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit)],
-          ["Organic", product.labels.includes("EU_ORGANIC_FARMING") ? "yes" : "no"],
+          [t("Fat"), product.fatPercent == null ? t("unknown") : `${product.fatPercent} %`],
+          [t("Pack"), formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit)],
+          [t("Organic"), product.labels.includes("EU_ORGANIC_FARMING") ? t("yes") : t("no")],
           [
-            "Delivery",
-            closed ? `misses ${formatDate(offer.requestedDate)} (order cut-off passed)` : formatDate(offer.availableDate),
+            t("Delivery"),
+            closed ? t("misses {date} (order cut-off passed)", { date: formatDate(offer.requestedDate) }) : formatDate(offer.availableDate),
             closed || late,
           ],
         ];
@@ -60,12 +62,12 @@ export function OfferCompare({
                     o.recommended && "border-primary bg-primary text-primary-foreground",
                   )}
                 >
-                  {closed ? "Misses the date" : TIER_LABEL[o.tier]}
+                  {closed ? t("Misses the date") : t(TIER_LABEL[o.tier])}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
                 {product.id}
-                {o.recommended ? " · the agent's pick" : null}
+                {o.recommended ? t(" · the agent's pick") : null}
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -73,19 +75,19 @@ export function OfferCompare({
                 {facts.map(([k, v, bad]) => (
                   <div key={k} className="contents">
                     <dt className="text-muted-foreground">{k}</dt>
-                    <dd className={cn(bad && "font-medium text-danger", v === "unknown" && "text-warning")}>{v}</dd>
+                    <dd className={cn(bad && "font-medium text-danger", v === t("unknown") && "text-warning")}>{v}</dd>
                   </div>
                 ))}
               </dl>
               <ul className="space-y-1 text-sm">
-                {o.tradeOffs.map((t) => {
-                  const Icon = DIRECTION_ICON[t.direction];
+                {o.tradeOffs.map((tradeOff) => {
+                  const Icon = DIRECTION_ICON[tradeOff.direction];
                   return (
-                    <li key={t.text} className="flex items-start gap-1.5">
-                      <Icon className={cn("mt-0.5 size-4 shrink-0", DIRECTION_CLASS[t.direction])} aria-hidden />
+                    <li key={tradeOff.text} className="flex items-start gap-1.5">
+                      <Icon className={cn("mt-0.5 size-4 shrink-0", DIRECTION_CLASS[tradeOff.direction])} aria-hidden />
                       <span>
-                        <span className="sr-only">{DIRECTION_SR[t.direction]}</span>
-                        {t.text}
+                        <span className="sr-only">{t(DIRECTION_SR[tradeOff.direction])}</span>
+                        {tradeOff.text}
                       </span>
                     </li>
                   );
@@ -100,7 +102,7 @@ export function OfferCompare({
                   disabled={closed || offer.salesBlock}
                   onClick={() => onChoose(o)}
                 >
-                  {closed ? "Cannot make this delivery" : `Use ${TIER_LABEL[o.tier].toLowerCase()}`}
+                  {closed ? t("Cannot make this delivery") : t("Use {tier}", { tier: t(TIER_LABEL[o.tier]).toLowerCase() })}
                 </Button>
               </CardFooter>
             ) : null}

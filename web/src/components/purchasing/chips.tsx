@@ -2,6 +2,7 @@ import { CircleQuestionMark, Heart, Leaf, Star, TriangleExclamationPoint } from 
 
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
+import { useT } from "@/lib/i18n";
 import type { Allergen, ProductLabel } from "@/types";
 
 const CHIP = "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap";
@@ -11,6 +12,7 @@ const CHIP = "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 tex
  * The words are in the chip too, so the difference never rests on colour.
  */
 export function AllergenChip({ allergen }: { allergen: Allergen }) {
+  const t = useT();
   const contains = allergen.presence === "CONTAINS";
   return (
     <span
@@ -18,7 +20,7 @@ export function AllergenChip({ allergen }: { allergen: Allergen }) {
       className={cn(CHIP, contains ? TONE_CLASSES.danger : cn(TONE_CLASSES.warning, "border-dashed"))}
     >
       {contains ? <TriangleExclamationPoint className="size-3" aria-hidden /> : null}
-      <span className="uppercase">{contains ? "Contains" : "May contain"}</span>
+      <span className="uppercase">{contains ? t("Contains") : t("May contain")}</span>
       <span>{allergen.name}</span>
     </span>
   );
@@ -26,17 +28,19 @@ export function AllergenChip({ allergen }: { allergen: Allergen }) {
 
 /** Missing allergen data: unknown, never "allergen-free". Styled as a risk. */
 export function AllergenUnknownChip() {
+  const t = useT();
   return (
     <span className={cn(CHIP, TONE_CLASSES.danger, "border-dashed")}>
       <CircleQuestionMark className="size-3" aria-hidden />
-      Allergen data missing: unknown
+      {t("Allergen data missing: unknown")}
     </span>
   );
 }
 
 export function AllergenList({ allergens }: { allergens: Allergen[] | null }) {
+  const t = useT();
   if (allergens == null) return <AllergenUnknownChip />;
-  if (allergens.length === 0) return <span className="text-xs text-muted-foreground">No allergens declared</span>;
+  if (allergens.length === 0) return <span className="text-xs text-muted-foreground">{t("No allergens declared")}</span>;
   return (
     <div className="flex flex-wrap gap-1">
       {allergens.map((a) => (
@@ -53,12 +57,13 @@ export const LABEL_META: Record<ProductLabel, { text: string; icon: typeof Leaf 
 };
 
 export function LabelChip({ label }: { label: ProductLabel }) {
+  const t = useT();
   const meta = LABEL_META[label];
   const Icon = meta.icon;
   return (
     <span className={cn(CHIP, TONE_CLASSES.success)}>
       <Icon className="size-3" aria-hidden />
-      {meta.text}
+      {t(meta.text)}
     </span>
   );
 }
