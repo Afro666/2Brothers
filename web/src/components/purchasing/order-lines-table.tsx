@@ -11,6 +11,7 @@ import {
   isStockUnconfirmed,
 } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { ProductThumb } from "./product-thumb";
 import { cn } from "@/lib/utils";
 import type { OrderLine } from "@/types";
 
@@ -105,8 +106,13 @@ export function OrderLinesTable({ lines, now }: { lines: OrderLine[]; now: Date 
             {facts.map((f) => [
               <TableRow key={`${f.code}-main`} className="border-b-0">
                 <TableCell>
-                  <div className="font-medium">{f.name}</div>
-                  <div className="text-xs text-muted-foreground">{f.code}</div>
+                  <div className="flex items-center gap-2">
+                    <ProductThumb en={f.name} size="sm" />
+                    <div>
+                      <div className="font-medium">{f.name}</div>
+                      <div className="text-xs text-muted-foreground">{f.code}</div>
+                    </div>
+                  </div>
                 </TableCell>
                 <TableCell>{f.pack ?? t("{unit} (pack size unknown)", { unit: f.salesUnit })}</TableCell>
                 <TableCell className="text-right tabular-nums">{f.quantity}</TableCell>
