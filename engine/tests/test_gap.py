@@ -1,4 +1,5 @@
 """S02: fill a short order's gap by weight, not by case count."""
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal as D
 
@@ -45,3 +46,19 @@ def test_no_gap_or_no_substitute_gives_nothing():
     assert fill_gap(full, BREAD_KG, [ROLLS], MON, P) is None
     short = plan_request(D(20), "KI", [BREAD], MON, P)
     assert fill_gap(short, BREAD_KG, [], MON, P) is None
+
+
+def test_unlinked_measures_give_nothing():
+    bread_by_kg = offer("465138", "KI", "64.27", "7.65", "KG", "2")   # 2 cases x 8.4 kg in stock
+    plan = plan_request(D(50), "KG", [bread_by_kg], MON, P)
+    assert plan.measure == "KG" and plan.shortfall > 0
+    assert BREAD_KG.sales_unit == "KI"
+    assert gap_in_measure(plan, BREAD_KG) is None
+    assert fill_gap(plan, BREAD_KG, [ROLLS], MON, P) is None
+
+
+def test_a_zero_pack_size_gives_nothing():
+    plan = plan_request(D(20), "KI", [BREAD], MON, P)
+    no_size = replace(BREAD_KG, size=D(0))
+    assert gap_in_measure(plan, no_size) is None
+    assert fill_gap(plan, no_size, [ROLLS], MON, P) is None
