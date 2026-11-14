@@ -4,12 +4,14 @@ import { createNutritionHttp } from "@/api/http-nutrition";
 import { createOffersHttp } from "@/api/http-offers";
 import { createOnboardingHttp } from "@/api/http-onboarding";
 import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
+import { createBuyingNoteHttp } from "@/api/http-buying-note";
 import { createShelfHttp } from "@/api/http-shelf";
 import { createMenuPhotoHttp } from "@/api/http-menu-photo";
 import { createDeliveryNoteHttp } from "@/api/http-delivery-note";
 import { createTrustHttp } from "@/api/http-trust";
 import { createUsageHttp } from "@/api/http-usage";
 import { createTokensHttp } from "@/api/http-tokens";
+import { createApprovalTokensHttp } from "@/api/http-approval-tokens";
 import { createDeveloperHttp } from "@/api/http-developer";
 import { createEventsHttp } from "@/api/http-events";
 import {
@@ -45,8 +47,13 @@ export const SIGNED_OUT_EVENT = "kitchen-buyer:signed-out";
 /** Sent after a successful sign-in, so the event stream that a 401/403 stopped opens again. */
 export const SIGNED_IN_EVENT = "kitchen-buyer:signed-in";
 
+/** Run before every write, so a read that starts after it never joins a request from before it.
+ * shortcut: an entry is never removed; the app makes one api per page. Remove on dispose if that changes. */
+const beforeWrite = new Set<() => void>();
+
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
+  if ((init?.method ?? "GET").toUpperCase() !== "GET") beforeWrite.forEach((drop) => drop());
   let response: Response;
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
@@ -137,9 +144,34 @@ export function createHttpApi(baseUrl: string): Api {
       canApprove: fromLogin ? role === "approver" : body.can_approve === true && body.kind === "human",
     };
   };
+  // One request in flight: the audit log is large and three places ask for it at once. No answer
+  // is kept: a call made after the request settled, after a write or after a live event asks again.
+  const shared = <T,>(load: () => Promise<T>) => {
+    let running: Promise<T> | null = null;
+    return {
+      get: () => {
+        if (running) return running;
+        const mine: Promise<T> = load().finally(() => {
+          if (running === mine) running = null;
+        });
+        return (running = mine);
+      },
+      drop: () => {
+        running = null;
+      },
+    };
+  };
   // The gateway lists at most its 100 newest proposals.
-  const proposals = async () => rows(await get(`${kitchen}/proposals`), "proposals");
-  const auditEvents = async () => rows(await get(`${kitchen}/audit`), "events");
+  const proposalsRead = shared(async () => rows(await get(`${kitchen}/proposals`), "proposals"));
+  const auditRead = shared(async () => rows(await get(`${kitchen}/audit`), "events"));
+  const proposals = () => proposalsRead.get();
+  const auditEvents = () => auditRead.get();
+  const dropReads = () => {
+    proposalsRead.drop();
+    auditRead.drop();
+  };
+  beforeWrite.add(dropReads);
+  const events = createEventsHttp(baseUrl, kitchen, () => currentSession);
   const approval = async (id: string) => {
     const [proposal, events] = await Promise.all([get(proposalPath(id)), auditEvents()]);
     return mapApproval(proposal as Json, events);
@@ -178,6 +210,7 @@ export function createHttpApi(baseUrl: string): Api {
       await post("/v1/auth/change-password", { current_password: current, new_password: next });
     },
     ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createBuyingNoteHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createNutritionHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOnboardingHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createBrandLogosHttp((path, init) => gatewayRequest(baseUrl, path, init)),
@@ -188,12 +221,30 @@ export function createHttpApi(baseUrl: string): Api {
     ...createUsageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createApprovalTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen, mock.getProducts),
-    ...createEventsHttp(baseUrl, kitchen, () => currentSession),
+    // A live event or a new connection means the lists may have changed since a request began.
+    subscribeEvents: (onEvent, onStatus) =>
+      events.subscribeEvents!(
+        (event) => {
+          dropReads();
+          onEvent(event);
+        },
+        (connected) => {
+          dropReads();
+          onStatus?.(connected);
+        },
+      ),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));
+    },
+    async countPendingApprovals() {
+      const list = await proposals();
+      return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal)).filter(
+        (approval) => approval.status === "PENDING",
+      ).length;
     },
     getApproval: approval,
     async chooseOption(approvalId, optionId, actor) {
@@ -257,6 +308,31 @@ export function createHttpApi(baseUrl: string): Api {
       return mapAddable(addable, typeof requested === "string" ? requested : "").filter(({ product }) =>
         words.every((word) => product.names.en.toLocaleLowerCase().includes(word)),
       );
+    },
+    async changeProposal(orderId, change, actor) {
+      // docs/contract.md "Changing a proposal": SET_QUANTITY and REMOVE_LINE are one `lines`
+      // entry (0 removes), ADD_LINE is one `add` entry. Quantities go as decimal strings.
+      const body: Json =
+        change.type === "ADD_LINE"
+          ? { add: [{ product_id: change.productId, quantity: String(change.quantity) }] }
+          : {
+              lines: [
+                {
+                  product_id: change.productId,
+                  quantity: change.type === "REMOVE_LINE" ? "0" : String(change.quantity),
+                },
+              ],
+            };
+      // One key per change, kept only until it is answered: a retry after a network failure
+      // repeats it, and making the same change again later is a new change.
+      const identity = `change:${orderId}:${JSON.stringify(body)}`;
+      const key = requestKeys.get(identity) ?? `web-change:${uuid()}`;
+      requestKeys.set(identity, key);
+      const answered = (await post(`${proposalPath(orderId)}/change`, { ...body, idempotency_key: key }, actor)) as Json;
+      requestKeys.delete(identity);
+      // The change is made: an unreadable audit log only loses who asked, never the new total.
+      const events = await auditEvents().catch(() => []);
+      return { order: mapOrder(answered, null), approval: mapApproval(answered, events) };
     },
     async listOrders() {
       const [placed, list] = await Promise.all([get(`${kitchen}/orders`), proposals()]);
@@ -352,11 +428,6 @@ export function createHttpApi(baseUrl: string): Api {
   return {
     ...mock,
     ...real,
-    // Never the mock for what acts on real input: it would change a sample order, not the real
-    // proposal.
-    async changeProposal() {
-      throw new ApiError("NOT_SERVED", "The gateway cannot change a proposal yet. Reject it and ask the Buyer again");
-    },
     live: new Set(Object.keys(real) as (keyof Api)[]),
   };
 }

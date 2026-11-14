@@ -90,7 +90,9 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
               <SelectItem value={KITCHEN}>{data.kitchen.name}</SelectItem>
               {data.products.map((product) => (
                 <SelectItem key={product.productId} value={product.productId ?? KITCHEN}>
-                  {product.name}
+                  {/* The trigger copies this content, so the chosen product shows its picture too. */}
+                  <ProductThumb en={product.name} size="sm" className="size-6" />
+                  <span className="min-w-0 truncate">{product.name}</span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -99,11 +101,14 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
       ) : null}
 
       <section aria-labelledby={`${selectId}-summary`} className="space-y-3">
-        <h2 id={`${selectId}-summary`} className="text-lg font-semibold">
-          {past === 1
-            ? t("{name}: the last week", { name: series.name })
-            : t("{name}: the last {count} weeks", { name: series.name, count: past })}
-        </h2>
+        <div className="flex items-center gap-3">
+          {series.productId ? <ProductThumb en={series.name} size="md" /> : null}
+          <h2 id={`${selectId}-summary`} className="min-w-0 text-lg font-semibold break-words">
+            {past === 1
+              ? t("{name}: the last week", { name: series.name })
+              : t("{name}: the last {count} weeks", { name: series.name, count: past })}
+          </h2>
+        </div>
         <ul className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {TILES.map((tile) => (
             <li key={tile.label} className="last:odd:col-span-2 lg:last:odd:col-span-1">

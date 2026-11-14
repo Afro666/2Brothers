@@ -54,6 +54,12 @@ fi
 git checkout --quiet --force --detach "$head"
 git clean --quiet -fd
 
+# The web shows its version and commit. The commit is the last one that changed the web (or
+# VERSION), not the head: a gateway-only commit then leaves the web image as it is.
+APP_VERSION=$(head -n 1 VERSION 2>/dev/null || true)
+WEB_GIT_SHA=$(git log -1 --format=%h -- web VERSION 2>/dev/null || true)
+export APP_VERSION WEB_GIT_SHA
+
 # compose recreates a container only when its image or settings changed, so a web-only
 # commit leaves the gateway and the buyer running.
 docker compose --env-file /opt/2brothers/.env -f deploy/compose.yaml up -d --build --remove-orphans

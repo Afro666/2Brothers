@@ -13,6 +13,9 @@ services:
         # the screens it does not serve yet stay on the mock, marked "Sample data".
         VITE_GATEWAY_URL: /api
         VITE_USE_MOCKS: "false"
+        # From deploy/update.sh: the VERSION file and the last commit that changed the web.
+        VITE_APP_VERSION: ${APP_VERSION:-}
+        VITE_GIT_SHA: ${WEB_GIT_SHA:-}
     restart: unless-stopped
     depends_on:
       - gateway
@@ -58,9 +61,12 @@ services:
       GATEWAY_REQUIRE_LOGIN: ${GATEWAY_REQUIRE_LOGIN:-false}
       DEMO_USER_EMAIL: ${DEMO_USER_EMAIL:-}
       DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
-      # Optional: the key that signs offers (#290), base64 of 32 bytes. Without it a key is
-      # created once and kept in the database.
-      GATEWAY_SIGNING_KEY: ${GATEWAY_SIGNING_KEY:-}
+      # Required (#755): the key that signs offers and receipts (#290), base64 of 32 bytes.
+      # Make one with: python -c "import base64,os;print(base64.b64encode(os.urandom(32)).decode())"
+      # The server never keeps a signing key in the database: anyone who can read the
+      # database could forge offers with it.
+      GATEWAY_SIGNING_KEY: ${GATEWAY_SIGNING_KEY:?set GATEWAY_SIGNING_KEY in .env (base64 of 32 bytes)}
+      GATEWAY_SIGNING_KEY_REQUIRED: "true"
       # Hybrid catalog search (#366): text plus meaning. Off unless SEARCH_HYBRID=true. The query
       # is embedded with MONGODB_AI_API_KEY (free tier: 3 requests a minute); on any error, limit
       # or missing key the search falls back to text and says so. Off again: SEARCH_HYBRID=false.

@@ -210,6 +210,16 @@ class Gateway:
                                "for the supplier's confirmation (call or e-mail them).")
             if b["vat"] is None:
                 reasons.append(f"VAT for {b['name']} is not known: its total is ex VAT.")
+        # Per supplier, in plain words: which products it must still confirm (Valio, 14 Nov).
+        waiting = {b["supplier_id"]: [ln.product_id for ln in b["lines"] if ln.unknown_stock] for b in blocks}
+        ids = sorted({pid for pids in waiting.values() for pid in pids})
+        names = {d["_id"]: (d.get("names") or {}).get("en") for d in
+                 self.db.products.find({"_id": {"$in": ids}}, {"names": 1})} if ids else {}
+        for b in blocks:
+            if waiting[b["supplier_id"]]:
+                who = "Valio" if b["supplier_id"] == VALIO else b["name"]
+                reasons.append(f"{who} must confirm stock for: "
+                               + ", ".join(names.get(pid) or pid for pid in waiting[b["supplier_id"]]) + ".")
         verdict = "NEEDS_APPROVAL" if plan.lines else "REFUSED"
 
         def line_out(ln) -> dict:

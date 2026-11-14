@@ -184,7 +184,7 @@ never sees these tools; called by name, they return the same 403.
 The gateway serves MCP over streamable HTTP at `/gateway/mcp` (#280): this is the remote
 endpoint, not the stdio server. The same kitchen token works when it has
 `kitchen:propose`. The tools are `search_products`, `get_offer`, `simulate_order`,
-`request_approval`, `place_order`, `get_order_status` and `get_audit_log`. There is no
+`request_approval`, `change_proposal`, `place_order`, `get_order_status` and `get_audit_log`. There is no
 approve tool for this token (only a person's own approval token lists one).
 
 Checked on the deployed site with the token from step 1 (2026-11-14):
@@ -195,7 +195,7 @@ curl -s -X POST $BASE/mcp -H "Authorization: Bearer $TOKEN" \
   -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}'
 ```
 
-It answers 200 with the seven tools above. Without a token it answers 401.
+It answered 200 with seven tools when checked; `change_proposal` came later the same day. Without a token it answers 401.
 
 ### Claude Code
 
@@ -256,6 +256,9 @@ proposal. Output on the live site, 2026-11-14 05:30 UTC:
 RESULT: an outside agent reached a waiting proposal over MCP, and could not approve it
 11. token revoked        HTTP 200
 ```
+
+Later the same day `change_proposal` was added (#303), so `tools/list` now shows 8 tools for
+this token. Still no approve tool.
 
 The agent picked three products; the engine sized one line from the stored need (40 L) and
 left the other two out. With login switched on, make the token as a signed-in person and

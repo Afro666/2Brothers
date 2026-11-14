@@ -8,8 +8,11 @@
 - Every placed order gets a signed receipt (same key): what was ordered, on which offer,
   who approved, when, and what the gateway knows about the supplier.
 
-Key: `GATEWAY_SIGNING_KEY` (base64 of a 32-byte Ed25519 seed) from the server .env. Without
-it, a key is created once and kept in the database, so offers still verify after a restart.
+Key: `GATEWAY_SIGNING_KEY` (base64 of a 32-byte Ed25519 seed) from the server .env (#755).
+The deployed gateway requires it (`GATEWAY_SIGNING_KEY_REQUIRED=true` in deploy/compose.yaml):
+a seed kept in the database could be read by anyone with database access, who could then
+forge offers. Only tests and local runs, without that flag, create a key once and keep it in
+the database, so offers still verify after a restart there.
 """
 
 from __future__ import annotations
@@ -44,6 +47,9 @@ def _private(db) -> Ed25519PrivateKey:
         seed = base64.b64decode(seed_b64)
         if len(seed) != 32:
             raise ValueError("GATEWAY_SIGNING_KEY must be base64 of 32 bytes")
+    elif os.environ.get("GATEWAY_SIGNING_KEY_REQUIRED", "").strip().lower() == "true":
+        raise RuntimeError("GATEWAY_SIGNING_KEY is required on this server; "
+                           "a signing key is never kept in the database here (#755)")
     else:
         doc = db.gateway_keys.find_one({"_id": "offer-signing"})
         if doc is None:
@@ -118,7 +124,9 @@ def sign_receipt(db, *, order_id: str, kitchen_id: str, offer_id: str, offer_has
         "iss": ISSUER, "type": RECEIPT_TYPE, "sub": order_id, "kitchen_id": kitchen_id,
         "offer_id": offer_id, "offer_hash": offer_hash, "iat": int(at.timestamp()),
         "currency": "EUR", "expected_total": expected_total,
-        "lines": [{"product_id": ln.get("product_id"), "quantity": str(ln.get("quantity")), "unit": ln.get("unit")}
+        # `stock` says which lines the supplier in `supplier_must_confirm` must still confirm.
+        "lines": [{"product_id": ln.get("product_id"), "quantity": str(ln.get("quantity")), "unit": ln.get("unit"),
+                   "stock": "unknown" if ln.get("unknown_stock") is not False else "confirmed"}
                   for ln in lines],
         "approved_by": approved_by,
         "supplier_outcome": "NOT_SENT", "supplier_note": NOT_SENT_NOTE,

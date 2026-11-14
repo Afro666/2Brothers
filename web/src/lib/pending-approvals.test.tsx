@@ -60,6 +60,49 @@ describe("Waiting-approvals count", () => {
     );
   });
 
+  it("uses countPendingApprovals when the api has it, without loading the approvals", async () => {
+    const base = createMockApi();
+    const listApprovals = vi.fn(() => base.listApprovals());
+    const countPendingApprovals = vi.fn(async () => (await waiting(base)) + 7);
+    const api = { ...base, listApprovals, countPendingApprovals };
+    function Count() {
+      const { count } = usePendingApprovals();
+      return <p>count: {String(count)}</p>;
+    }
+    render(
+      <ApiProvider api={api}>
+        <PendingApprovalsProvider>
+          <Count />
+        </PendingApprovalsProvider>
+      </ApiProvider>,
+    );
+    expect(await screen.findByText(`count: ${(await waiting(base)) + 7}`)).toBeInTheDocument();
+    expect(countPendingApprovals).toHaveBeenCalled();
+    expect(listApprovals).not.toHaveBeenCalled();
+  });
+
+  it("shows no count when countPendingApprovals fails", async () => {
+    const base = createMockApi();
+    const api = {
+      ...base,
+      countPendingApprovals: () => Promise.reject(new Error("The gateway is down.")),
+      listApprovals: vi.fn(() => base.listApprovals()),
+    };
+    function Count() {
+      const { count } = usePendingApprovals();
+      return <p>count: {String(count)}</p>;
+    }
+    render(
+      <ApiProvider api={api}>
+        <PendingApprovalsProvider>
+          <Count />
+        </PendingApprovalsProvider>
+      </ApiProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("count: null")).toBeInTheDocument());
+    expect(api.listApprovals).not.toHaveBeenCalled();
+  });
+
   it("shows no badge when the count is not known", async () => {
     const api = { ...createMockApi(), listApprovals: () => Promise.reject(new Error("The gateway is down.")) };
     renderApp("/stock", api);

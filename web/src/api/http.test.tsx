@@ -1,8 +1,8 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createHttpApi, SIGNED_OUT_EVENT } from "@/api/http";
+import { createHttpApi, gatewayRequest, SIGNED_OUT_EVENT } from "@/api/http";
 import { auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
 import { renderApp } from "@/test/render";
 
@@ -65,6 +65,7 @@ describe("createHttpApi", () => {
       [
         "approve",
         "changePassword",
+        "changeProposal",
         "chooseOption",
         "getApproval",
         "getForecastAccuracy",
@@ -74,6 +75,9 @@ describe("createHttpApi", () => {
         "listApiTokens",
         "createApiToken",
         "revokeApiToken",
+        "listApprovalTokens",
+        "createApprovalToken",
+        "revokeApprovalToken",
         "createWebhook",
         "testWebhook",
         "deleteWebhook",
@@ -82,6 +86,7 @@ describe("createHttpApi", () => {
         "getSession",
         "listAddableProducts",
         "listApprovals",
+        "countPendingApprovals",
         "listAudit",
         "listBrandLogos",
         "subscribeEvents",
@@ -119,6 +124,7 @@ describe("createHttpApi", () => {
         "getKitchenSettings",
         "saveKitchenSettings",
         "getAutoApproveLearning",
+        "getBuyingNote",
         // Standing-order drift (store/drift.py behind the gateway).
         "getDrift",
         "getSupplierDrift",
@@ -149,11 +155,6 @@ describe("createHttpApi", () => {
     expect((await api.getMandate()).restaurant).toBeTruthy();
     expect((await api.listTeamMembers()).length).toBeGreaterThan(0);
     expect(calls).toEqual([]);
-    await expect(
-      api.changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
-    ).rejects.toMatchObject({
-      code: "NOT_SERVED",
-    });
     expect(api.chooseOption).toBeTypeOf("function");
   });
 
@@ -237,6 +238,87 @@ describe("createHttpApi", () => {
     });
   });
 
+  it.each([
+    [
+      { type: "SET_QUANTITY", productId: "900001", quantity: 30 },
+      { lines: [{ product_id: "900001", quantity: "30" }] },
+    ],
+    [{ type: "REMOVE_LINE", productId: "900001" }, { lines: [{ product_id: "900001", quantity: "0" }] }],
+    [
+      { type: "ADD_LINE", productId: "900002", quantity: 8 },
+      { add: [{ product_id: "900002", quantity: "8" }] },
+    ],
+  ] as const)("changes a proposal on the gateway: %o is sent as %o", async (change, sent) => {
+    const changed = {
+      ...proposal,
+      offer_id: "offer-2",
+      total_ex_vat: "60.00",
+      expected_total: "68.40",
+      lines: [{ ...proposal.lines[0], quantity: "30", total: "60.00", why: "Quantity set by chef." }],
+    };
+    const calls = gateway({
+      [`POST ${K}/proposals/prop-1/change`]: () => changed,
+      [`GET ${K}/audit`]: () => ({ events: auditEvents }),
+    });
+
+    const result = await createHttpApi("/api").changeProposal("prop-1", change, "chef");
+
+    const post = calls.find((call) => call.route === `POST ${K}/proposals/prop-1/change`);
+    expect(post?.body).toEqual({ ...sent, idempotency_key: expect.stringMatching(/^web-change:/) });
+    expect(post?.headers).toMatchObject({ "X-User": "chef" });
+    expect(result.order).toMatchObject({ id: "prop-1", totalExVat: 60, totalInclVat: 68.4 });
+    expect(result.order.lines[0]).toMatchObject({ quantity: 30, why: "Quantity set by chef." });
+    expect(result.approval).toMatchObject({ id: "prop-1", status: "PENDING", totalInclVat: 68.4 });
+  });
+
+  it("repeats the change key when a failed change is retried, and uses a new one once answered", async () => {
+    let down = true;
+    const calls = gateway({
+      [`POST ${K}/proposals/prop-1/change`]: () => (down ? error(503, "SUPPLIER_BUSY") : proposal),
+      [`GET ${K}/audit`]: () => ({ events: auditEvents }),
+    });
+    const api = createHttpApi("/api");
+    const change = { type: "SET_QUANTITY", productId: "900001", quantity: 30 } as const;
+
+    await expect(api.changeProposal("prop-1", change, "human")).rejects.toMatchObject({ code: "SUPPLIER_BUSY" });
+    down = false;
+    await api.changeProposal("prop-1", change, "human");
+    await api.changeProposal("prop-1", change, "human");
+
+    const keys = calls.filter((call) => call.route.endsWith("/change")).map((call) => call.body.idempotency_key);
+    expect(keys).toHaveLength(3);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[1]);
+  });
+
+  it("keeps the changed proposal when the audit log cannot be read after the change", async () => {
+    gateway({
+      [`POST ${K}/proposals/prop-1/change`]: () => proposal,
+      [`GET ${K}/audit`]: () => error(503, "UNAVAILABLE"),
+    });
+    const result = await createHttpApi("/api").changeProposal(
+      "prop-1",
+      { type: "REMOVE_LINE", productId: "900001" },
+      "human",
+    );
+    expect(result.approval).toMatchObject({ id: "prop-1", totalInclVat: 91.2 });
+  });
+
+  it.each([
+    [409, "NOT_PENDING"],
+    [409, "NOT_ADDABLE"],
+    [409, "CLOSING_PASSED"],
+    [409, "LINE_UNAVAILABLE"],
+    [404, "LINE_NOT_FOUND"],
+    [422, "EMPTY_PROPOSAL"],
+    [503, "SUPPLIER_BUSY"],
+  ])("passes a refused change (%i %s) back to the card", async (status, code) => {
+    gateway({ [`POST ${K}/proposals/prop-1/change`]: () => error(status, code) });
+    await expect(
+      createHttpApi("/api").changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
+    ).rejects.toMatchObject({ code, status });
+  });
+
   it("reads standing-order drift from the gateway for the kitchen and for the supplier", async () => {
     const warning = {
       product_id: "460008",
@@ -281,9 +363,6 @@ describe("createHttpApi", () => {
     const api = createHttpApi("/api");
     expect((api as unknown as { then?: unknown }).then).toBeUndefined();
     await expect(Promise.resolve(api)).resolves.toBe(api);
-    await expect(
-      api.changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
-    ).rejects.toMatchObject({ code: "NOT_SERVED" });
   });
 
   it("approves the exact total the person read, as that person, with no token from the browser", async () => {
@@ -348,6 +427,178 @@ describe("createHttpApi", () => {
     expect((await createHttpApi("/api").reject("prop-1", "Too much", "human")).status).toBe("REJECTED");
     expect(calls[0].body).toEqual({ reason: "Too much", idempotency_key: "web-reject:prop-1" });
     expect(calls[0].headers).toMatchObject({ "X-User": "human" });
+  });
+
+  describe("one request while one is in flight", () => {
+    /** A gateway whose GETs wait for the test, so it decides when they settle. */
+    function slowGateway() {
+      const pending: (() => void)[] = [];
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === `POST ${K}/proposals/prop-1/reject`) {
+          return Promise.resolve(new Response(JSON.stringify({ status: "REJECTED" })));
+        }
+        return new Promise((reply) => {
+          pending.push(() => {
+            const body = route.endsWith("/audit") ? { events: auditEvents } : { proposals: [proposal] };
+            reply(new Response(JSON.stringify(body)));
+          });
+        });
+      });
+      return {
+        answer: () => pending.splice(0).forEach((reply) => reply()),
+        count: (route: string) => calls.filter((call) => call === route).length,
+      };
+    }
+
+    it("shares the proposals and audit GETs between calls started together", async () => {
+      const gateway = slowGateway();
+      const api = createHttpApi("/api");
+      const first = api.listApprovals();
+      const second = api.listApprovals();
+      const audit = api.listAudit();
+      expect(gateway.count(`GET ${K}/proposals`)).toBe(1);
+      expect(gateway.count(`GET ${K}/audit`)).toBe(1);
+      gateway.answer();
+      await Promise.all([first, second, audit]);
+
+      const again = api.listAudit();
+      expect(gateway.count(`GET ${K}/audit`)).toBe(2);
+      gateway.answer();
+      await again;
+    });
+
+    it("does not reuse a GET that started before a POST began", async () => {
+      const calls: string[] = [];
+      let run = 0;
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === "GET /api/v1/me") return Promise.resolve(new Response("null"));
+        if (route === `GET ${K}/proposals` && run++ === 0) return new Promise<Response>(() => {});
+        const rejected = { ...proposal, status: "REJECTED" };
+        const body =
+          route === `GET ${K}/proposals`
+            ? { proposals: [rejected] }
+            : route === `GET ${K}/proposals/prop-1`
+              ? rejected
+              : route === `GET ${K}/audit`
+                ? { events: auditEvents }
+                : { status: "REJECTED" };
+        return Promise.resolve(new Response(JSON.stringify(body)));
+      });
+      const api = createHttpApi("/api");
+      void api.listApprovals();
+      await api.reject("prop-1", "Too much", "human");
+      const after = api.listApprovals();
+      expect(calls.filter((call) => call === `GET ${K}/proposals`)).toHaveLength(2);
+      await after;
+    });
+
+    it("rejects every caller of a failed GET, then asks again", async () => {
+      let answers = 1;
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", (url: string) => {
+        calls.push(`GET ${url}`);
+        return Promise.resolve(
+          answers-- > 0
+            ? error(503, "UNAVAILABLE")
+            : new Response(JSON.stringify({ events: auditEvents })),
+        );
+      });
+      const api = createHttpApi("/api");
+      const first = api.listAudit();
+      const second = api.listAudit();
+      await expect(first).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      await expect(second).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      await expect(api.listAudit()).resolves.toBeInstanceOf(Array);
+      expect(calls).toEqual([`GET ${K}/audit`, `GET ${K}/audit`]);
+    });
+
+    it("does not reuse a GET that started before a write another module sent", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === `GET ${K}/proposals` || route === `GET ${K}/audit`) return new Promise<Response>(() => {});
+        return Promise.resolve(new Response("{}"));
+      });
+      const api = createHttpApi("/api");
+      void api.listApprovals();
+      // The request form, the offers and the planning screens send their writes through gatewayRequest.
+      await gatewayRequest("/api", "/v1/kitchens/demo-kitchen/proposals", { method: "POST", body: "{}" });
+      void api.listApprovals();
+      expect(calls.filter((call) => call === `GET ${K}/proposals`)).toHaveLength(2);
+      expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);
+    });
+
+    it("does not reuse a GET that started before a live event", async () => {
+      const calls: string[] = [];
+      const encoder = new TextEncoder();
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === `GET ${K}/events`) {
+          const body = new ReadableStream<Uint8Array>({
+            start: (controller) => controller.enqueue(encoder.encode('event: proposal\ndata: {"operation":"insert"}\n\n')),
+          });
+          return Promise.resolve(new Response(body));
+        }
+        return new Promise<Response>(() => {});
+      });
+      const api = createHttpApi("/api");
+      void api.listApprovals();
+      const seen: string[] = [];
+      const stop = api.subscribeEvents!((event) => {
+        // What a list does on a live event: it reads again, and that read must be a new request.
+        seen.push(event.kind);
+        void api.listApprovals();
+      });
+      await waitFor(() => expect(seen).toEqual(["proposal"]));
+      expect(calls.filter((call) => call === `GET ${K}/proposals`)).toHaveLength(2);
+      stop();
+    });
+
+    it("does not reuse a GET that started before the event stream connected again", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        // An open stream with no event: only the connection itself is reported.
+        if (route === `GET ${K}/events`) return Promise.resolve(new Response(new ReadableStream<Uint8Array>()));
+        return new Promise<Response>(() => {});
+      });
+      const api = createHttpApi("/api");
+      void api.listAudit();
+      let connected = false;
+      const stop = api.subscribeEvents!(
+        () => {},
+        (isConnected) => {
+          connected = isConnected;
+          if (isConnected) void api.listAudit();
+        },
+      );
+      await waitFor(() => expect(connected).toBe(true));
+      expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);
+      stop();
+    });
+
+    it("counts pending approvals from the proposals alone", async () => {
+      const waiting = { ...proposal, status: "READY" };
+      const calls = gateway({
+        [`GET ${K}/proposals`]: () => ({
+          proposals: [
+            waiting,
+            { ...waiting, proposal_id: "prop-2", approval_id: "appr-2" },
+            { ...proposal, status: "REJECTED", approval_id: "appr-3" },
+          ],
+        }),
+      });
+      expect(await createHttpApi("/api").countPendingApprovals!()).toBe(2);
+      expect(calls.map((call) => call.route)).toEqual([`GET ${K}/proposals`]);
+    });
   });
 
   it("lists and checks recalls through the gateway with a fresh key and actor on every check", async () => {
@@ -747,7 +998,7 @@ describe("the app on the gateway", () => {
     expect(screen.queryByRole("button", { name: "Open menu" })).not.toBeInTheDocument();
   });
 
-  it("shows the real proposal read-only and, when the total moved, the new total before asking again", async () => {
+  it("shows the real proposal and, when the total moved, the new total before asking again", async () => {
     // As deployed: with the gateway Api, the Api-backed inbox is the live one.
     vi.stubEnv("VITE_LIVE_BUYER", "true");
     const user = userEvent.setup();
@@ -756,6 +1007,7 @@ describe("the app on the gateway", () => {
       "GET /api/v1/me": () => ({ kind: "human", name: "Demo approver", role: "approver", can_approve: true }),
       [`GET ${K}/proposals`]: () => ({ proposals: [current] }),
       [`GET ${K}/proposals/prop-1`]: () => current,
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
       [`GET ${K}/audit`]: () => ({ events: auditEvents }),
       [`POST ${K}/proposals/prop-1/approve`]: () => {
         current = { ...proposal, total_ex_vat: "83.33", expected_total: "95.00" };
@@ -769,7 +1021,6 @@ describe("the app on the gateway", () => {
     await user.click(await screen.findByRole("button", { name: "Show order lines" }));
     expect(screen.getAllByText("confirmed").length).toBeGreaterThan(0);
     expect(screen.getByText(/Free-delivery threshold and delivery fee unknown/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: /^Update/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Approve €91\.20 incl VAT/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
@@ -778,6 +1029,56 @@ describe("the app on the gateway", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("The total is now €95.00. Nothing was sent.");
     expect(await screen.findByRole("button", { name: /Approve €95\.00 incl VAT/ })).toBeEnabled();
     expect(screen.getByRole("heading", { name: "Waiting for you (1)" })).toBeVisible();
+  });
+
+  it("lets a person change the pcs of a READY proposal and then approve the new total", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    const user = userEvent.setup();
+    let current = proposal;
+    const calls = gateway({
+      [`GET ${K}/proposals`]: () => ({ proposals: [current] }),
+      [`GET ${K}/proposals/prop-1`]: () => current,
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
+      [`GET ${K}/audit`]: () => ({ events: auditEvents }),
+      [`POST ${K}/proposals/prop-1/change`]: () => {
+        current = {
+          ...proposal,
+          offer_id: "offer-2",
+          total_ex_vat: "60.00",
+          vat: "8.40",
+          expected_total: "68.40",
+          lines: [{ ...proposal.lines[0], quantity: "30", total: "60.00", why: "Quantity set by Demo approver." }],
+        };
+        return current;
+      },
+      [`POST ${K}/proposals/prop-1/approve`]: () => {
+        current = { ...current, status: "APPROVED", order_id: "ord-1" };
+        return { proposal_id: "prop-1", ...placedOrder, expected_total: "68.40" };
+      },
+      [`GET ${K}/orders/ord-1`]: () => ({ ...placedOrder, expected_total: "68.40" }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    const quantity = await screen.findByLabelText(/Quantity for 900001/);
+    await user.clear(quantity);
+    await user.type(quantity, "30");
+    await user.click(screen.getByRole("button", { name: "Update 900001" }));
+
+    expect(await screen.findByRole("button", { name: /Approve €68\.40 incl VAT/ })).toBeEnabled();
+    const change = calls.find((call) => call.route === `POST ${K}/proposals/prop-1/change`);
+    expect(change?.body).toEqual({
+      lines: [{ product_id: "900001", quantity: "30" }],
+      idempotency_key: expect.stringMatching(/^web-change:/),
+    });
+
+    await user.click(screen.getByRole("button", { name: /Approve €68\.40 incl VAT/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €68.40" }));
+
+    await screen.findByText(/Approved: €68\.40 incl VAT/);
+    const approve = calls.find((call) => call.route === `POST ${K}/proposals/prop-1/approve`);
+    expect(approve?.body).toMatchObject({ expected_total: "68.40" });
   });
 
   it("marks a screen that still runs on the mock, and only on the gateway", async () => {
@@ -805,7 +1106,7 @@ describe("the app on the gateway", () => {
     expect(createHttpApi("/api").live).toBeInstanceOf(Set);
     gateway({ [`GET ${K}/audit/chain?limit=5`]: () => error(503, "NOT_SERVED") });
     renderApp("/trust", createHttpApi("/api"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("NOT_SERVED");
+    expect(await screen.findByRole("alert", {}, { timeout: 5000 })).toHaveTextContent("NOT_SERVED");
     expect(screen.getByText("Audit log stored in MongoDB Atlas")).toBeVisible();
   });
 

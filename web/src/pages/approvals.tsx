@@ -80,7 +80,7 @@ function ApiApprovalsPage() {
   const [allDecided, setAllDecided] = useState(false);
   const recalls = useAsync(() => loadRecalls(api), [api]);
 
-  // The gateway has no route to change a proposal yet, so its proposals are read-only.
+  // An Api that cannot change a proposal shows it read-only (the gateway serves the change, #303).
   const canEdit = !api.live || api.live.has("changeProposal");
 
   async function approve(decision: ApprovalDecision): Promise<void> {
@@ -113,10 +113,15 @@ function ApiApprovalsPage() {
   }
 
   async function change(orderId: string, proposalChange: ProposalChange): Promise<void> {
-    await api.changeProposal(orderId, proposalChange, actor);
-    setEditCounts((counts) => ({ ...counts, [orderId]: (counts[orderId] ?? 0) + 1 }));
-    toast.success(t("Proposal updated. Check the new total before you approve."));
-    approvals.reload();
+    try {
+      await api.changeProposal(orderId, proposalChange, actor);
+      setEditCounts((counts) => ({ ...counts, [orderId]: (counts[orderId] ?? 0) + 1 }));
+      toast.success(t("Proposal updated. Check the new total before you approve."));
+    } finally {
+      // Also after a failure: the gateway may have saved a change whose answer was lost, and the
+      // card must show the gateway's basket and total before anyone approves.
+      approvals.reload();
+    }
   }
 
   const pending =

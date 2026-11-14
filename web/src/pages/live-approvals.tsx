@@ -76,6 +76,7 @@ interface Proposal {
     pack: string | null; origin: string | null; allergens: string | null }[];
   recall_alerts?: RecallAlert[];
   decision_summary?: { text?: string };
+  mandate?: { reasons?: unknown };
   blocks?: unknown;
   lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
 }
@@ -105,6 +106,9 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
   const { refresh: refreshWaiting } = usePendingApprovals();
   const suppliersToConfirm = mapSuppliersToConfirm(row);
   const unknown = row.lines.some(l => l.unknown_stock);
+  // The gateway's plain sentence per supplier: "<supplier> must confirm stock for: <products>." (Valio, 14 Nov)
+  const mustConfirm = (Array.isArray(row.mandate?.reasons) ? row.mandate.reasons : [])
+    .filter((r): r is string => typeof r === "string" && r.includes(" must confirm stock for: "));
   const expired = Date.parse(row.valid_until) <= Date.now();
   const pending = row.status === "READY" && !placed && !rejected;
   const rejectable = ["READY", "BLOCKED_BY_RECALL"].includes(row.status) && !placed && !rejected;
@@ -142,6 +146,7 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
     {row.recall_alerts?.map((alert, index) => <RecallNotice key={alert.event_id ?? index} alert={alert} reload={reload} />)}
     {row.replacement_proposal_id && <p><a className="underline" href={`#proposal-${row.replacement_proposal_id}`}>{t("Review replacement proposal {id}", { id: row.replacement_proposal_id })}</a>. {t("A fresh human approval is required.")}</p>}
     {row.recall_replan_error && <p>{t("No complete safe replacement is available ({code}). The original remains blocked.", { code: row.recall_replan_error })}</p>}
+    {mustConfirm.map(sentence => <p key={sentence} className="rounded-md border border-warning/40 bg-warning-surface p-3 text-sm text-warning">{sentence}</p>)}
     {suppliersToConfirm.length > 0 && <section className="space-y-2">
       <h3 className="label-caps">{t("What to check")}</h3>
       <div className="space-y-2 rounded-md border border-warning/40 bg-warning-surface p-3 text-warning">
