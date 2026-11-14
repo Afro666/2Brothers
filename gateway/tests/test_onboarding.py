@@ -405,6 +405,30 @@ def test_limit_is_per_caller_and_x_user_is_not_an_identity(env, clock, monkeypat
     assert len(upstream["calls"]) == 3
 
 
+def test_behind_the_proxy_each_forwarded_client_has_its_own_bucket(env, clock, monkeypatch):
+    _, upstream, db = env
+    monkeypatch.setenv("ONBOARDING_RATE_LIMIT", "1")
+    proxied = TestClient(create_app(Gateway(db, None)), client=("127.0.0.1", 5000))
+    for n, visitor in enumerate(("198.51.100.7", "198.51.100.8")):
+        # A client-sent entry on the left is ignored: Caddy appends the real one on the right.
+        headers = {**HUMAN, "X-Forwarded-For": f"10.0.0.{n}, {visitor}"}
+        assert proxied.post(URL, headers=headers, json={"website": f"v{n}-kitchen.fi"}).status_code == 200
+        assert proxied.post(URL, headers=headers, json={"website": f"v{n}-other.fi"}).status_code == 429
+    assert len(upstream["calls"]) == 2
+
+
+def test_a_direct_public_client_is_keyed_by_its_own_address(env, clock, monkeypatch):
+    _, upstream, db = env
+    monkeypatch.setenv("ONBOARDING_RATE_LIMIT", "1")
+    direct = TestClient(create_app(Gateway(db, None)), client=("203.0.113.5", 5000))
+    assert direct.post(URL, headers={**HUMAN, "X-Forwarded-For": "198.51.100.1"},
+                       json={"website": "a-kitchen.fi"}).status_code == 200
+    # A spoofed header from a public peer does not open a new bucket.
+    assert direct.post(URL, headers={**HUMAN, "X-Forwarded-For": "198.51.100.2"},
+                       json={"website": "b-kitchen.fi"}).status_code == 429
+    assert len(upstream["calls"]) == 1
+
+
 def test_cache_and_limit_live_in_the_process_not_in_the_database(env, clock):
     client, upstream, db = env
     for _ in range(12):

@@ -17,6 +17,7 @@ The kitchen types its work email or its website; one Context.dev call
 from __future__ import annotations
 
 import copy
+import ipaddress
 import json
 import os
 import re
@@ -263,7 +264,21 @@ def _caller(who, request: Request) -> str:
     the client address. The shared demo token's X-User is free text, so it is not an identity."""
     if who.kitchen_id is not None:
         return "user:" + who.name
-    return "address:" + (request.client.host if request.client else "unknown")
+    return "address:" + _client_address(request)
+
+
+def _client_address(request: Request) -> str:
+    """The visitor's address. Behind Caddy (a private or loopback peer) it is the rightmost
+    X-Forwarded-For entry, which Caddy writes itself; a direct client is keyed by its own address."""
+    host = request.client.host if request.client else "unknown"
+    try:
+        peer = ipaddress.ip_address(host)
+    except ValueError:
+        return host
+    forwarded = [part.strip() for part in request.headers.get("x-forwarded-for", "").split(",")]
+    if (peer.is_private or peer.is_loopback) and forwarded[-1]:
+        return forwarded[-1]
+    return host
 
 
 def mount_onboarding(app: FastAPI, principal, body) -> None:
