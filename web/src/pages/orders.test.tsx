@@ -21,12 +21,12 @@ describe("orders pages", () => {
 
     expect(
       await screen.findByText(
-        "Waiting for Töölö Bakery to confirm. Call or e-mail them: this order was sent without a stock confirmation.",
+        "Waiting for Töölö Bakery to confirm. Call or e-mail them: this order is recorded here but was not sent to them, and nobody confirmed their stock.",
       ),
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Waiting for sup-unknown to confirm. Call or e-mail them: this order was sent without a stock confirmation.",
+        "Waiting for sup-unknown to confirm. Call or e-mail them: this order is recorded here but was not sent to them, and nobody confirmed their stock.",
       ),
     ).toBeVisible();
   });
@@ -45,7 +45,7 @@ describe("orders pages", () => {
 
     expect(
       await screen.findByText(
-        "Waiting for Valio Aimo to confirm. Call or e-mail them: this order was sent without a stock confirmation.",
+        "Waiting for Valio Aimo to confirm. Call or e-mail them: this order is recorded here but was not sent to them, and nobody confirmed their stock.",
       ),
     ).toBeVisible();
     expect(screen.queryByText(/sup-valio/i)).not.toBeInTheDocument();

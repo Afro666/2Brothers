@@ -233,7 +233,7 @@ export function OrderDetailPage() {
               <div className="space-y-2 rounded-md border border-warning/40 bg-warning-surface p-4 text-warning">
                 {state.data.supplierMustConfirm.map((supplierId) => (
                   <p key={supplierId} className="text-sm font-medium">
-                    {t("Waiting for {supplier} to confirm. Call or e-mail them: this order was sent without a stock confirmation.", {
+                    {t("Waiting for {supplier} to confirm. Call or e-mail them: this order is recorded here but was not sent to them, and nobody confirmed their stock.", {
                       supplier: supplierName(supplierId, supplierNames),
                     })}
                   </p>
