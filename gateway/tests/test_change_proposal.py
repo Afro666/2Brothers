@@ -203,3 +203,37 @@ def test_the_tools_route_changes_the_same_proposal(env):
         "lines": [{"product_id": "462775", "quantity": "40"}]})
     assert r.status_code == 200, r.text
     assert qty(r.json()) == [("462775", "40")]
+
+
+def test_a_product_the_fresh_quote_cannot_order_is_refused_and_the_basket_stays(env):
+    client, fake, db = env
+    p = milk(client, quantity="1000")
+    assert qty(p) == [("462775", "51"), ("463335", "949")]
+    for data in (fake.price_data, fake.avail_data):          # Valio no longer offers 463335
+        data["products"] = [x for x in data["products"] if x["productId"] != "463335"]
+    r = change(client, p, lines=[{"product_id": "463335", "quantity": "10"}])
+    assert r.status_code == 409, r.text
+    assert r.json()["error"]["code"] in ("LINE_UNAVAILABLE", "CLOSING_PASSED")
+    got = client.get(f"{K}/proposals/{p['proposal_id']}", headers=HUMAN).json()
+    assert got["offer_id"] == p["offer_id"] and got["expected_total"] == p["expected_total"]
+    assert qty(got) == [("462775", "51"), ("463335", "949")]
+    assert events(db, "proposal_changed") == []
+
+
+def test_a_proposal_changed_between_the_read_and_the_claim_is_refused(env, monkeypatch):
+    from gateway.service import Gateway
+    client, _, db = env
+    p = milk(client, quantity="51")
+    real = Gateway._quote
+
+    def racing(self, kitchen_id, request):              # someone else changes it meanwhile
+        db.proposals.update_one({"_id": p["proposal_id"]}, {"$set": {"offer_id": "someone-else"}})
+        return real(self, kitchen_id, request)
+
+    monkeypatch.setattr(Gateway, "_quote", racing)
+    r = change(client, p, lines=[{"product_id": "462775", "quantity": "40"}])
+    assert r.status_code == 409, r.text
+    assert r.json()["error"]["code"] == "NOT_PENDING"
+    assert events(db, "proposal_changed") == []
+    doc = db.proposals.find_one({"_id": p["proposal_id"]})
+    assert doc["offer_id"] == "someone-else" and not doc.get("changes")
