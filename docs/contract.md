@@ -422,8 +422,9 @@ need (#639):
   searched with the catalog's words ("almond drink"), whatever language the text is in.
   Cow's milk is never of that kind. When no plant drink of that plant is found, the
   shortlist is `products: []` with the reason in `note`, and the parser path answers 422
-  `NO_PRODUCTS_FOUND` with the reason in the message. `get_offer` (and every quote of a
-  request with that `text`) leaves out any product that is not such a plant drink: it is
+  `NO_PRODUCTS_FOUND` with the reason in the message. `get_offer` and the parser path's
+  quote (there the text is the person's request; a body that names its own codes, such as
+  an accepted supplier offer, is quoted as asked) leave out any product that is not such a plant drink: it is
   listed under `excluded` with the reason `not the <plant> drink asked: no other kind of
   product is proposed in its place`, and that sentence is also in `mandate.reasons`.
 - When the need's unit is `L` or `KG` and at least one match is sold in that measure
