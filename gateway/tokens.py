@@ -1,7 +1,9 @@
 """API tokens per kitchen (#271): for Claude over MCP, scripts and other agents.
 
 - Shown once at creation; only the SHA-256 is stored, plus an 8-character prefix for display.
-- Scopes: `kitchen:read`, `kitchen:propose`. `kitchen:approve` can never be on a token:
+- Scopes: `kitchen:read`, `kitchen:propose`, `kitchen:write` (stock counts, menus, recipes,
+  own products, suppliers; for a POS or stock system, never the Buyer agent).
+  `kitchen:approve` can never be on a token:
   approving is a person's act in the inbox (docs/contract.md, trust rule).
 - One token = one kitchen. Revoked or unknown -> 401.
 
