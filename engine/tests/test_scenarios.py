@@ -150,6 +150,16 @@ def test_stockout_cap_is_user_set():
     assert weekly == pytest.approx(45)
 
 
+@pytest.mark.parametrize("level", [0, 1, 95, -0.5])
+def test_service_level_outside_open_unit_interval_is_rejected(level):
+    with pytest.raises(ValueError, match="class A"):
+        KitchenParams.from_dict({"service_level": {"A": level}})
+
+
+def test_service_level_inside_unit_interval_is_kept():
+    assert KitchenParams.from_dict({"service_level": {"B": 0.99}}).service_level["B"] == D("0.99")
+
+
 def test_s11_inbound_is_not_an_emergency():
     parm = pack_info(row("469648", "ST", "ST", [("KI", 12), ("ST", 1)]), measure="ST")
     item = Item("469648", parm, daily_demand=4, lead_time_days=3, review_days=1, on_hand=10,
