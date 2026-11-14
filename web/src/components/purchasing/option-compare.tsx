@@ -240,7 +240,7 @@ export function OptionCompare({
                     {option.chosen ? <span className={BADGE}>{t("Proposed now")}</span> : null}
                     {option.stockConfirmed ? null : (
                       <span className={cn(BADGE, "border-warning/40 bg-warning-surface text-warning")}>
-                        {t("Valio must confirm stock")}
+                        {t("The supplier must confirm stock")}
                       </span>
                     )}
                     <span className="price-tag min-w-0 break-words text-xs font-normal">

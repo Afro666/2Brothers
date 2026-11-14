@@ -86,7 +86,9 @@ def decision_summary(request: dict, sim: dict, names: dict | None = None) -> dic
     for supplier, lines in by_supplier.items():
         decide.append(f"{supplier} has not confirmed stock for " + ", ".join(
             f"{_name(ln['product_id'], names)} ({ln['quantity']} {ln['unit']})" for ln in lines)
-            + f": you can still approve; the order is sent and waits for {supplier} to confirm that stock.")
+            # Nothing is sent to a supplier (#1863): the order is RECORDED, supplier_outcome NOT_SENT.
+            + f": you can still approve; the order is recorded, nothing is sent to {supplier}, "
+              f"and {supplier} must still confirm that stock.")
 
     parts = [asked, searched]
     parts += ["Chosen: " + c for c in chosen] or ["Chosen: nothing."]

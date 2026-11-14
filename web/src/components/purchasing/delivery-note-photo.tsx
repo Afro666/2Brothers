@@ -153,7 +153,7 @@ export function DeliveryNotePhoto({ order }: { order: Order }) {
           </div>
         </fieldset> : null}
       </div>)}
-      <p className="text-sm text-muted-foreground">{t("Nothing has been saved. Substitute choices are not saved approvals. Check allergens before use, then count current stock separately.")}</p>
+      <p className="text-sm text-muted-foreground">{t("No stock count has been changed. Substitute choices are not saved approvals. Check allergens before use, then count current stock separately.")}</p>
       {pending ? <><p className="text-sm text-warning">{t("Answer yes or no for each substitute first.")}</p><Button disabled>{t("Update counted stock")}</Button></> :
         <Button asChild><Link to="/stock">{t("Update counted stock")}</Link></Button>}
     </div> : null}

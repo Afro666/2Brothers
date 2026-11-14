@@ -1,7 +1,7 @@
 import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { Fragment, useEffect, useId, useRef, useState } from "react";
 
-import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
+import { ModelTraceLine, ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OptionCompare } from "@/components/purchasing/option-compare";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
@@ -295,6 +295,12 @@ export function ApprovalCard({
     leftOut: checks.leftOut.length,
   });
   const suppliers = [...new Set(["Valio", ...request.suppliersToConfirm.map((supplier) => supplier.name)])];
+  // Each line is confirmed by its own supplier block (cutoffs follow the proposal's lines); a line
+  // whose block is not known says "The supplier must confirm" rather than naming another supplier.
+  const lineSupplier = (line: OrderLine): string | null => {
+    const index = lines.indexOf(line);
+    return index < 0 ? null : (request.cutoffs?.[index]?.supplierName ?? null);
+  };
   // One sentence on why: the checked Nemotron explanation (#1394) when there is one, else the
   // engine's own reason for a one-line order.
   const why = !explanation?.text && lines.length === 1 ? lines[0].why : null;
@@ -537,6 +543,7 @@ export function ApprovalCard({
               {requestDescription(request, t)}
               <span className="text-muted-foreground"> · {suppliers.join(", ")}</span>
             </CardDescription>
+            <ModelTraceLine trace={request.modelTrace} />
             <ProposalExplanationBlock
               explanation={explanation}
               openDetails={!inspecting ? () => setInspecting(true) : undefined}
@@ -667,7 +674,7 @@ export function ApprovalCard({
                   <ProposalLines
                     lines={order.lines}
                     now={clock}
-                    confirmBy="Valio"
+                    confirmBy={lineSupplier}
                     checks={checks.perLine}
                     leftOut={checks.leftOut}
                     editing={
@@ -789,7 +796,7 @@ export function ApprovalCard({
                   ))}
                 </ul>
               </section>
-              <ModelTracePanel trace={request.modelTrace} />
+              <ModelTracePanel trace={request.modelTrace} explanation={explanation} />
             </>
           ) : null}
         </div>

@@ -262,6 +262,30 @@ describe("ApprovalCard", () => {
     expect((screen.getByRole("button", { name: /^Approve/ }) as HTMLButtonElement).disabled).toBe(disabledWithoutNotice);
   });
 
+  it("names each line's own supplier on an unknown-stock chip (#1819)", async () => {
+    const order = structuredClone(confirmedOrder);
+    order.lines[0].offer.availableAmount = 999999;
+    const { rerender } = render(
+      <ApprovalCard
+        request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: "Leipomo Demo" }] }}
+        order={order}
+      />,
+    );
+    expect(screen.queryByText("Valio must confirm")).toBeNull();
+    // The compact card still says "Valio must confirm" (the gateway has no per-supplier count).
+    expect(screen.getByText("Valio must confirm 1")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
+    expect(screen.getByText("Leipomo Demo must confirm")).toBeVisible();
+    expect(screen.queryByText("Valio must confirm")).toBeNull();
+
+    rerender(<ApprovalCard request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: null }] }} order={order} />);
+    expect(screen.getByText("The supplier must confirm")).toBeVisible();
+    expect(screen.queryByText("Valio must confirm")).toBeNull();
+
+    rerender(<ApprovalCard request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: "Valio" }] }} order={order} />);
+    expect(screen.getByText("Valio must confirm")).toBeVisible();
+  });
+
   it("says the order is recorded and waits for the supplier, with no kitchen setting (Aron, 2026-11-14)", async () => {
     const request = {
       ...approval,

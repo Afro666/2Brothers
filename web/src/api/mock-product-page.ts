@@ -41,7 +41,7 @@ function valio(product: Product, price: number | null, vat: number | null, stock
     productName: product.names.en,
     priceExVat: price,
     per: product.salesUnit,
-    priceSource: price == null ? null : "Valio price API",
+    priceSource: price == null ? null : LIVE,
     vatRate: vat,
     stockKnown,
     netContent: content ? { value: content, unit: product.baseUnit } : null,
@@ -95,6 +95,7 @@ function page(product: Product, extra: Partial<ProductPage>): ProductPage {
     productId: product.id,
     product,
     about: null,
+    supplierId: null,
     allergens: {
       known,
       contains: (product.allergens ?? []).filter((a) => a.presence === "CONTAINS").map(({ code, name }) => ({ code, name })),
@@ -217,6 +218,18 @@ function pages(): Record<string, ProductPage> {
       },
     }),
     [products.arlaEsl10l.id]: page(products.arlaEsl10l, {
+      // Valio sends the producer's id and the allergen codes with their English names.
+      supplierId: "10400",
+      allergens: {
+        known: true,
+        contains: [{ code: "AM", name: "milk" }],
+        mayContain: [],
+        freeFrom: [["AC", "crustaceans"], ["AE", "eggs"], ["AF", "fish"], ["AN", "nuts"], ["AP", "peanuts"], ["AS", "sesame"], ["AU", "sulphites"], ["AW", "gluten"], ["AY", "soy"], ["BC", "celery"], ["BM", "mustard"], ["NL", "lupin"], ["UM", "molluscs"]].map(
+          ([code, name]) => ({ code, name }),
+        ),
+        noDeclarableAllergens: false,
+        source: `${CATALOG}, allergen classification`,
+      },
       vat: { code: null, rate: null, source: null },
       origin: { country: null, source: null },
       live: {
@@ -227,11 +240,12 @@ function pages(): Record<string, ProductPage> {
         taxRate: null,
         comparisonPrice: 1.49,
         comparisonUnit: "L",
-        stock: { available: null, unknown: true, availableDate: null, orderable: true, cutoffPassed: false, closingTime: null },
+        stock: { available: null, unknown: true, availableDate: null, orderable: true, cutoffPassed: true, closingTime: "2026-11-13T12:00:00+02:00" },
         error: null,
         source: LIVE,
       },
       suppliers: [valio(products.arlaEsl10l, 14.9, null, false)],
+      about: milkAbout("Novobox for kitchens: a 10 L box for tap or dispenser."),
     }),
   };
 }

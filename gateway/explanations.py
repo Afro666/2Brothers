@@ -17,6 +17,7 @@ MODEL = 'nemotron-3.5-super-vl'
 
 def source(gateway, proposal, language):
     ids = [l['product_id'] for l in proposal.get('lines', [])] + [l['product_id'] for l in proposal.get('excluded', [])]
+    ids += [l['product_id'] for l in (proposal.get('alternative') or {}).get('lines') or []]   # named in the reason (#1868)
     names = {p['product_id']: ((p.get('names') or {}).get(language) or (p.get('names') or {}).get('en'))
              for p in get_products(gateway.db, ids, proposal['kitchen_id'])}
     return context(proposal, names, language)

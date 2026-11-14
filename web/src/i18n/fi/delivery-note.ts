@@ -20,7 +20,7 @@ export default {
   "Was this substitute received for {product}?": "Vastaanotettiinko tämä korvaava tuote tuotteen {product} tilalle?",
   "Yes, received": "Kyllä, vastaanotettu",
   "No, not received": "Ei vastaanotettu",
-  "Nothing has been saved. Substitute choices are not saved approvals. Check allergens before use, then count current stock separately.": "Mitään ei ole tallennettu. Korvaavien tuotteiden valinnat eivät ole tallennettuja hyväksyntöjä. Tarkista allergeenit ennen käyttöä ja laske nykyinen varasto erikseen.",
+  "No stock count has been changed. Substitute choices are not saved approvals. Check allergens before use, then count current stock separately.": "Varastosaldoja ei ole muutettu. Korvaavien tuotteiden valinnat eivät ole tallennettuja hyväksyntöjä. Tarkista allergeenit ennen käyttöä ja laske nykyinen varasto erikseen.",
   "Answer yes or no for each substitute first.": "Vastaa ensin kyllä tai ei jokaisen korvaavan tuotteen kohdalla.",
   "Update counted stock": "Päivitä lasketut varastomäärät",
   "the supplier": "toimittaja",

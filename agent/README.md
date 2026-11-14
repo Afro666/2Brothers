@@ -207,9 +207,11 @@ Measured on 2026-11-14 with the live model, before the change to the loop's sett
 | `vl_delivery_note` | 2 photos | 2 | 2,670 | 376 | 0 | 3.1 |
 | `vl_shelf_count` | 2 photos | 2 | 4,148 | 359 | 0 | 3.1 |
 
-One Buyer request is about 4 model calls, 44,500 prompt tokens, 2,200 completion tokens
-and 6 seconds of model time. The prompt is large because every call sends the tool
-schemas and the search result again. The Buyer rows are six requests, twice each (milk,
+In that measurement, with the tool loop, one Buyer request was about 4 model calls, 44,500
+prompt tokens, 2,200 completion tokens and 6 seconds of model time. The deployed default is
+now one model call per request (`NEMOTRON_BUYER_STRATEGY=single_pick`, `agent/service.py`,
+`deploy/compose.yaml`; see "One model pick per request" below); the loop is an option. The
+loop's prompt was large because every call sent the tool schemas and the search result again. The Buyer rows are six requests, twice each (milk,
 butter, cheese, cream, yoghurt), run on a laptop: the real worker, MCP tools and gateway
 code on an in-memory database with the full Valio catalog file, the live site's catalog
 search (read only) and Valio's API. The photo rows are the four fixture photos with

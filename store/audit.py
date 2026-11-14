@@ -1,7 +1,9 @@
 """Insert-only, hash-chained audit log shared by agent, gateway and human events.
 
 There are no update or delete functions on purpose. Each entry stores the hash of
-the entry before it, so a changed or removed entry breaks every later hash.
+the entry before it, so a changed or removed entry breaks every later hash. The newest
+`seq` and `hash` are also kept in their own document (`audit_head`), so entries cut
+from the end, or a rewritten end, fail the verify too.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 
 GENESIS = "0" * 64
+HEAD = "head"  # the one document of `audit_head`
 _HASHED = ("seq", "prev_hash", "event", "server", "stored_at")
 
 
@@ -101,10 +104,29 @@ def append_event_new(db, event: dict, server: dict | None = None) -> tuple[dict,
         entry["hash"] = entry_hash(entry)
         try:
             db.audit_log.insert_one({"_id": entry["seq"], **entry})
-            return entry, True
         except DuplicateKeyError:
             continue  # another writer took this seq or this event_id: read again
+        _advance_head(db, entry)
+        return entry, True
     raise RuntimeError("audit log append kept losing the race; nothing was stored")
+
+
+def _advance_head(db, entry: dict) -> None:
+    """Move the chain head to this entry. It only moves forward."""
+    try:
+        db.audit_head.update_one(
+            {"_id": HEAD, "seq": {"$lt": entry["seq"]}},
+            {"$set": {"seq": entry["seq"], "hash": entry["hash"], "at": entry["stored_at"]}},
+            upsert=True)
+    except DuplicateKeyError:
+        pass  # the head is already at a later entry: another writer was faster
+
+
+def chain_head(db) -> dict | None:
+    """`{seq, hash, at}` of the newest entry as the head document holds it, or None for a
+    log that has had no append since the head exists. For the gateway to sign and show."""
+    head = db.audit_head.find_one({"_id": HEAD})
+    return {key: head[key] for key in ("seq", "hash", "at")} if head else None
 
 
 def list_events(db, *, kitchen_id: str | None = None, run_id: str | None = None,
@@ -133,6 +155,17 @@ def verify_entries(entries) -> dict:
 
 
 def verify_chain(db) -> dict:
-    # shortcut: entries cut from the end are not detected; anchor the latest hash
-    # outside the database (a signed daily digest) when this leaves the hackathon.
-    return verify_entries(db.audit_log.find().sort("_id", 1))
+    """Check every hash, then the end against the head document: a log that stops before
+    the head was cut (`broken_at` is the first missing `seq`), and another hash at the
+    head's `seq` is a rewritten end. A log without a head yet is checked as before.
+    """
+    # shortcut: the head is in the same database, so whoever can write there can move it
+    # too; the gateway must sign it and show it outside (contract, "Trust") to close that.
+    result = verify_entries(db.audit_log.find().sort("_id", 1))
+    head = chain_head(db)
+    if result["ok"] and head:
+        if result["length"] < head["seq"]:
+            return {"ok": False, "length": result["length"], "broken_at": result["length"] + 1}
+        if db.audit_log.find_one({"_id": head["seq"]})["hash"] != head["hash"]:
+            return {"ok": False, "length": head["seq"] - 1, "broken_at": head["seq"]}
+    return result

@@ -23,7 +23,7 @@ function deliveryCell(row: HTMLElement) {
 
 describe("ProposalLines: the lines of a proposal as a table", () => {
   it("has one column per fact, one row per product, names with brand and code", () => {
-    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
+    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy={() => null} checks={new Map()} />);
     const table = screen.getByRole("table", { name: "Order lines" });
     expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
       "Product",
@@ -49,14 +49,26 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
   });
 
   it("shows stock as a chip: confirmed amount, who must confirm, or not available", () => {
-    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
+    render(
+      <ProposalLines
+        lines={menuPlanLines}
+        now={MOCK_NOW}
+        confirmBy={(line) => (line.product.id === "404233" ? "Valio" : null)}
+        checks={new Map()}
+      />,
+    );
     expect(within(rowOf(byId("404151").product.names.en)).getByText("2,400 pieces")).toHaveAttribute("data-stock", "success");
     expect(within(rowOf(byId("404233").product.names.en)).getByText("Valio must confirm")).toHaveAttribute("data-stock", "warning");
     expect(within(rowOf(byId("405322").product.names.en)).getByText("Not available")).toHaveAttribute("data-stock", "danger");
   });
 
+  it("says only that the supplier must confirm when the line names no supplier", () => {
+    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy={() => null} checks={new Map()} />);
+    expect(within(rowOf(byId("404233").product.names.en)).getByText("The supplier must confirm")).toHaveAttribute("data-stock", "warning");
+  });
+
   it("says a passed cut-off on its row, and the order-by time otherwise", () => {
-    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
+    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy={() => null} checks={new Map()} />);
     expect(within(rowOf(byId("404933").product.names.en)).getAllByText("Cut-off passed").length).toBeGreaterThan(0);
     expect(within(rowOf(byId("404151").product.names.en)).queryByText("Cut-off passed")).toBeNull();
     const milk = byId("404151");
@@ -71,7 +83,7 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
       // A proposal stored before #1453: no delivery facts at all.
       { ...cheese, offer: { ...cheese.offer, cutoffSource: null, leadTimeDays: null, leadTimeSource: null, deliveryReliability: null, reliabilitySource: null } },
     ];
-    render(<ProposalLines lines={lines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
+    render(<ProposalLines lines={lines} now={MOCK_NOW} confirmBy={() => null} checks={new Map()} />);
     const milkRow = rowOf(milk.product.names.en);
     expect(within(milkRow).getAllByText(/2 days/).length).toBeGreaterThan(0);
     expect(within(milkRow).getAllByText(/97 % delivered/).length).toBeGreaterThan(0);
@@ -97,7 +109,7 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
 
   it("folds a long why to two lines and opens it by keyboard", async () => {
     const user = userEvent.setup();
-    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
+    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy={() => null} checks={new Map()} />);
     const milk = byId("404151");
     const toggle = screen.getByRole("button", { name: `Show all of why for ${milk.product.names.en}` });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -117,7 +129,7 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
       <ProposalLines
         lines={[line]}
         now={MOCK_NOW}
-        confirmBy="Valio"
+        confirmBy={() => null}
         checks={new Map()}
         editing={{ busy: false, value: () => typed || String(line.quantity), onType: (_l, v) => (typed = v), onUpdate, onRemove, inputId: () => "qty-x" }}
       />,
@@ -129,7 +141,7 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
       <ProposalLines
         lines={[line]}
         now={MOCK_NOW}
-        confirmBy="Valio"
+        confirmBy={() => null}
         checks={new Map()}
         editing={{ busy: false, value: () => typed, onType: (_l, v) => (typed = v), onUpdate, onRemove, inputId: () => "qty-x" }}
       />,
@@ -186,7 +198,7 @@ describe("splitChecks: What to check, per product", () => {
     try {
       render(
         <LanguageProvider>
-          <ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={perLine} leftOut={leftOut} />
+          <ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy={() => null} checks={perLine} leftOut={leftOut} />
         </LanguageProvider>,
       );
       const hasFinnish = (content: string, element: Element | null) =>
