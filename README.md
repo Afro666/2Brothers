@@ -91,3 +91,9 @@ Three people and their coding agents. One task is one issue, one branch, one PR.
 reviewed by an automatic Opus review; what it finds becomes an issue for a person or for the
 fix agent. Rules for people and agents: [`CLAUDE.md`](CLAUDE.md). Decisions with their reasons:
 [`docs/decisions.md`](docs/decisions.md). All Junction challenges we looked at: [`challenges.md`](challenges.md).
+
+## License
+
+Our code is under the [MIT License](LICENSE). Third-party material keeps its own terms:
+the NVIDIA logo (`web/src/assets/nvidia-logo.svg`, Apache 2.0 file, NVIDIA trademark),
+brand logos fetched from Context.dev, and Valio's catalog and API data.
