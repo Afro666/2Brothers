@@ -1343,6 +1343,10 @@ rule and recall holds apply) for `product_id`, the offer's `quantity` and `unit`
   on: a suggestion from a supplier always waits for a person in the inbox.
 - `proposal_status: "REJECTED"`: the supplier cannot deliver the product for that date
   after all. The offer stays `OPEN`; nothing waits in the inbox.
+- An accept after a `REJECTED` proposal asks the supplier again and builds a new proposal
+  (the stock may be back). The rejected one stays as it is. At most 5 proposals are built
+  for one offer; after that an accept answers the last one. A proposal that is not
+  `REJECTED` is never built twice: the double-click rule above holds for every attempt.
 - 404 `OFFER_NOT_FOUND`: no such offer in this kitchen. 409 `OFFER_NOT_OPEN`: the offer is
   `DECLINED` or `EXPIRED`. 403 `SHARING_REQUIRED`: the kitchen revoked its consent.
 - The supplier's `reason` is shown to the person and stops there: it is not part of the
