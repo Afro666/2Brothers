@@ -66,3 +66,5 @@ def ensure_indexes(db: Database) -> None:
     db.audit_log.create_index("event.run_id")
     db.audit_log.create_index("event.order_id")
     db.audit_log.create_index("server.kitchen_id")
+    # agent_runs.traces reads Buyer runs by kitchen and proposal on every proposal read.
+    db.agent_runs.create_index([("kitchen_id", 1), ("result.proposal_id", 1)])
