@@ -97,7 +97,7 @@ export function PermissionsSection() {
             <button
               type="button"
               role="switch"
-              aria-checked={false}
+              aria-checked={learning.status === "ready" && learning.data.enabled === true}
               aria-labelledby="auto-approve-label"
               aria-describedby="auto-approve-locked auto-approve-note"
               disabled
@@ -114,7 +114,11 @@ export function PermissionsSection() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p id="auto-approve-locked" className="text-sm font-medium">
-            Off. It unlocks after the learning period and is not available yet: a person approves every order.
+            {learning.status === "ready" && learning.data.enabled === true
+              ? `On${learning.data.setBy ? `, switched on by ${learning.data.setBy}` : ""}. Routine orders${
+                  learning.data.limitEur ? ` up to €${learning.data.limitEur}` : ""
+                } are approved without waiting; every one is in the audit log. Everything else still comes to a person.`
+              : "Off. It unlocks after the learning period and is not available yet: a person approves every order."}
           </p>
           {learning.status === "loading" ? <LoadingState label="Loading learning progress" /> : null}
           {learning.status === "error" ? (
