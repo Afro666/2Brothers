@@ -5,7 +5,8 @@
 
 `agent/model.py` records every model call on `Nemotron.meter`: calls, failed calls, prompt
 tokens, completion tokens, reasoning tokens (a part of the completion tokens) and seconds.
-A role is who asked: `buyer` (the tool loop), `vl_delivery_note`, `vl_shelf_count`.
+A role is who asked: `buyer` (the tool loop), `vl_delivery_note`, `vl_shelf_count`,
+`seller_pick` (the selling agent's pick of a substitute).
 At the end of a run the caller writes one line, `NEMOTRON_USAGE {json}`, to stderr and,
 when `NEMOTRON_USAGE_LOG` names a file, to that file too. The line holds counts only:
 no request text, no reply text, no key.

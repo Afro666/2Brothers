@@ -34,6 +34,7 @@ import re
 
 SUPPLIER = "sup-valio"
 MODEL_NAME = "nemotron-3.5-super-vl"
+ROLE = "seller_pick"         # the meter's role for the pick (agent/usage.py)
 SHORTLIST = 5
 CANDIDATES = 150           # how many products of the category are asked for live availability
 UNKNOWN_FROM = 999999      # an available amount from here up is Valio's filler, not a count
@@ -187,7 +188,7 @@ async def model_pick(model, row: dict, demand: Decimal, entries: list[dict]) -> 
     messages = _messages(row, demand, entries)
     try:
         reply = await model.complete_json(messages, SCHEMA, "substitute_pick",
-                                          max_tokens=300)
+                                          max_tokens=300, role=ROLE)
         data = json.loads(reply.get("content") or "")
     except Exception:           # no answer, a network error, not JSON: no offer
         return None
@@ -307,6 +308,8 @@ def main(argv=None) -> None:
                              kitchen=a.kitchen, days=a.days, model=model)
         finally:
             if model is not None:
+                from agent.usage import emit
+                emit(model.meter, run="seller", apply=a.apply)
                 await model.close()
 
     report = asyncio.run(go())
