@@ -137,7 +137,7 @@ class BuyerWorker:
                 await model.close()
 
 
-def create_app(worker=None, shelf=None, delivery_note=None, menu_photo=None, buying_note=None, price_list=None):
+def create_app(worker=None, shelf=None, delivery_note=None, menu_photo=None, buying_note=None, price_list=None, explanation=None):
     state = {}
     @asynccontextmanager
     async def lifespan(app):
@@ -199,6 +199,8 @@ def create_app(worker=None, shelf=None, delivery_note=None, menu_photo=None, buy
     mount_buying_note(app, WorkerError, buying_note)
     from agent.price_list_service import mount_price_list
     mount_price_list(app, WorkerError, price_list)
+    from agent.explanation_service import mount_explanation
+    mount_explanation(app, WorkerError, explanation)
     return app
 
 
