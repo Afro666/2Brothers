@@ -12,7 +12,7 @@ import type { Api } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDate, formatNumber } from "@/lib/format";
+import { formatAmount, formatDate, formatNumber } from "@/lib/format";
 import { translate, useLanguage, useT } from "@/lib/i18n";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
@@ -194,7 +194,7 @@ function ProductSummary({ group }: { group: ProductGroup }) {
         ) : null}
         {group.totalBuy != null ? (
           <span className="font-medium text-foreground tabular-nums">
-            {t("Buy {amount}", { amount: `${formatNumber(group.totalBuy)} ${group.unit}` })}
+            {t("Buy {amount}", { amount: formatAmount(group.totalBuy, group.unit) })}
           </span>
         ) : null}
         {group.unknownBuyDays > 0 ? (
@@ -250,7 +250,7 @@ function DemandRow({ row, hidden }: { row: SupplierDemandRow; hidden: boolean })
     <TableRow hidden={hidden}>
       <TableCell>{formatDate(row.date)}</TableCell>
       <TableCell className="text-right tabular-nums">
-        {formatNumber(row.forecastDemand)} {row.unit}
+        {formatAmount(row.forecastDemand, row.unit)}
       </TableCell>
       <TableCell>
         <KitchenDisclosure row={row} />
@@ -265,7 +265,7 @@ function DemandRow({ row, hidden }: { row: SupplierDemandRow; hidden: boolean })
           </span>
         ) : (
           <span className="tabular-nums">
-            {formatNumber(row.available)} {row.unit}
+            {formatAmount(row.available, row.unit)}
           </span>
         )}
       </TableCell>
@@ -278,7 +278,7 @@ function DemandRow({ row, hidden }: { row: SupplierDemandRow; hidden: boolean })
           <div className="font-medium text-warning">{t("unknown")}</div>
         ) : (
           <div className="tabular-nums">
-            {formatNumber(row.suggestedBuy)} {row.unit}
+            {formatAmount(row.suggestedBuy, row.unit)}
           </div>
         )}
       </TableCell>
@@ -317,7 +317,7 @@ function KitchenDisclosure({ row }: { row: SupplierDemandRow }) {
           <li key={kitchen.kitchenId} className="flex flex-wrap justify-between gap-x-3">
             <span>{kitchen.kitchenName}</span>
             <span className="tabular-nums">
-              {formatNumber(kitchen.demand)} {row.unit}
+              {formatAmount(kitchen.demand, row.unit)}
             </span>
           </li>
         ))}
@@ -357,7 +357,7 @@ function MobileGroup({
             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
               <dt className="text-muted-foreground">{t("Forecast demand")}</dt>
               <dd className="text-right tabular-nums">
-                {formatNumber(row.forecastDemand)} {row.unit}
+                {formatAmount(row.forecastDemand, row.unit)}
               </dd>
               <dt className="text-muted-foreground">{t("Kitchens")}</dt>
               <dd className="text-right">
@@ -368,14 +368,14 @@ function MobileGroup({
                 {row.available == null ? (
                   <span className="font-medium text-warning">{t("unknown")}</span>
                 ) : (
-                  `${formatNumber(row.available)} ${row.unit}`
+                  formatAmount(row.available, row.unit)
                 )}
               </dd>
               <dt className="text-muted-foreground">{t("Buy")}</dt>
               <dd
                 className={row.suggestedBuy == null ? "text-right font-medium text-warning" : "text-right tabular-nums"}
               >
-                {row.suggestedBuy == null ? t("unknown") : `${formatNumber(row.suggestedBuy)} ${row.unit}`}
+                {row.suggestedBuy == null ? t("unknown") : formatAmount(row.suggestedBuy, row.unit)}
               </dd>
             </dl>
           </li>

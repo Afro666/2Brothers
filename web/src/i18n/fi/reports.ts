@@ -51,6 +51,8 @@ export default {
   "{count} request, {steps} steps": "{count} pyyntö, {steps} vaihetta",
   "{count} requests, {steps} step": "{count} pyyntöä, {steps} vaihe",
   "{count} requests, {steps} steps": "{count} pyyntöä, {steps} vaihetta",
+  "{count} request, the newest 1,000 steps": "{count} pyyntö, 1 000 uusinta vaihetta",
+  "{count} requests, the newest 1,000 steps": "{count} pyyntöä, 1 000 uusinta vaihetta",
   "Showing the newest {count} requests, newest first.": "Näytetään {count} uusinta pyyntöä, uusin ensin.",
   "Show more ({count} earlier requests)": "Näytä lisää ({count} aiempaa pyyntöä)",
   "Show more ({count} earlier request)": "Näytä lisää ({count} aiempi pyyntö)",
