@@ -451,6 +451,8 @@ export interface Api {
   listRecentApiCalls(): Promise<RecentApiCall[]>;
   requestKitchenDeletion(confirmation: string, actor: AuditActor): Promise<KitchenDeletionRequest>;
   listApprovals(): Promise<ApprovalRequest[]>;
+  /** How many approvals wait for a person, without loading the audit log. */
+  countPendingApprovals?(): Promise<number>;
   getApproval(id: string): Promise<ApprovalRequest>;
   approve(decision: ApprovalDecision, actor: AuditActor): Promise<ApprovalRequest>;
   reject(approvalId: string, reason: string, actor: AuditActor): Promise<ApprovalRequest>;
