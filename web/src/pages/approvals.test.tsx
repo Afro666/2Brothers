@@ -21,7 +21,7 @@ function withConfirmedStock() {
 describe("ApprovalsPage", () => {
   it("keeps the milk proposal visible while awaiting stock confirmation", async () => {
     renderApp("/approvals", createMockApi());
-    expect(await screen.findByRole("heading", { name: "Waiting for you (3)" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Waiting for you (4)" })).toBeVisible();
     expect(await screen.findByText(/Waiting for supplier stock confirmation/)).toBeVisible();
     expect(screen.getAllByRole("button", { name: /^Approve/ }).filter((button) => button.hasAttribute("disabled"))).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Reject" })[0]).toBeEnabled();
@@ -33,14 +33,14 @@ describe("ApprovalsPage", () => {
     const api = withConfirmedStock();
     renderApp("/approvals", api);
 
-    expect(await screen.findByRole("heading", { name: "Waiting for you (3)" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Waiting for you (4)" })).toBeInTheDocument();
     expect(screen.getByText("€148.76")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Approve €148\.76 incl VAT/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
     expect(await screen.findByRole("heading", { name: "Decided" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Waiting for you (2)" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Waiting for you (3)" })).toBeInTheDocument();
     expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
     await waitFor(async () => {
       const events = await api.listAudit();
@@ -50,6 +50,25 @@ describe("ApprovalsPage", () => {
         summary: "Approved ORD-1044",
       });
     });
+  });
+
+  it("tells the person to call the supplier named by the answered order", async () => {
+    const user = userEvent.setup();
+    const api = withConfirmedStock();
+    const getOrder = api.getOrder;
+    api.getOrder = async (id) => ({
+      ...(await getOrder(id)),
+      supplierMustConfirm: id === "ORD-1044" ? ["SUP-BAKERY"] : [],
+    });
+    renderApp("/approvals", api);
+
+    await user.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
+
+    expect(await screen.findByTestId("approval-toast")).toHaveTextContent(
+      "Order placed. Call Töölö Bakery to confirm.",
+    );
   });
 
   it("keeps the approval waiting and shows the gateway error", async () => {
@@ -63,7 +82,7 @@ describe("ApprovalsPage", () => {
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The total moved.");
-    expect(screen.getByRole("heading", { name: "Waiting for you (3)" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Waiting for you (4)" })).toBeInTheDocument();
     expect(screen.queryByTestId("approval-toast")).not.toBeInTheDocument();
   });
 

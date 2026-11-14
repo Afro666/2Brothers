@@ -77,10 +77,19 @@ function ApiApprovalsPage() {
 
   async function approve(decision: ApprovalDecision): Promise<void> {
     try {
-      await api.approve(decision, actor);
-      toast.success(t("Approved: {amount} incl VAT", { amount: formatEur(decision.expectedTotalInclVat) }), {
-        testId: "approval-toast",
-      });
+      const decided = await api.approve(decision, actor);
+      const answeredOrder = await api.getOrder(decided.orderId).catch(() => null);
+      const waitingFor = answeredOrder?.supplierMustConfirm ?? [];
+      if (waitingFor.length > 0) {
+        const suppliers = await api.listSuppliers().catch(() => []);
+        const supplierNames = new Map(suppliers.map((supplier) => [supplier.id, supplier.name]));
+        const supplier = waitingFor.map((supplierId) => supplierNames.get(supplierId) ?? supplierId).join(", ");
+        toast.success(t("Order placed. Call {supplier} to confirm.", { supplier }), { testId: "approval-toast" });
+      } else {
+        toast.success(t("Approved: {amount} incl VAT", { amount: formatEur(decision.expectedTotalInclVat) }), {
+          testId: "approval-toast",
+        });
+      }
     } finally {
       // Also after a refusal: when the total moved, the card must show the new one before asking again.
       approvals.reload();

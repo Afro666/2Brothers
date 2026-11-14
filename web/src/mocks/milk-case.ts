@@ -229,6 +229,7 @@ export const orders = {
     urgency: "RUNS_OUT_BEFORE_NEXT_DELIVERY",
     deliveryDate: REQUESTED,
     lines: [lineArla],
+    supplierMustConfirm: [],
     totalExVat: 131.07,
     totalInclVat: 148.76,
     mov: { threshold: MOV_THRESHOLD, current: 131.07, deliveryFee: DELIVERY_FEE },
@@ -239,6 +240,7 @@ export const orders = {
     urgency: "UNKNOWN",
     deliveryDate: REQUESTED,
     lines: [lineEila3],
+    supplierMustConfirm: [],
     totalExVat: 1947.5,
     totalInclVat: 2210.41,
     // Same Monday delivery as ORD-1042: together they pass the threshold.
@@ -276,6 +278,7 @@ export const approval: ApprovalRequest = {
         "Valio did not measure the stock of 463335 (it returns the unknown-stock value). The delivery may arrive short.",
     },
   ],
+  suppliersToConfirm: [],
   status: "PENDING",
 };
 
@@ -291,6 +294,7 @@ export const confirmedDemoApproval: ApprovalRequest = {
   lineCount: 1, deliveryDate: REQUESTED,
   totalExVat: orders.placed.totalExVat, totalInclVat: confirmedDemoOrder.totalInclVat,
   reasons: [{ rule: "Human approval required", detail: "51 ST measured in the supplier offer. Review the exact total before placing this separate demo request." }],
+  suppliersToConfirm: [],
   status: "PENDING",
 };
 

@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { mapSuppliersToConfirm } from "@/api/gateway-map";
 import { gatewayRequest } from "@/api/http";
 import { mapMoney } from "@/api/map";
 import { AppShell } from "@/components/purchasing/app-shell";
@@ -74,6 +75,7 @@ interface Proposal {
     pack: string | null; origin: string | null; allergens: string | null }[];
   recall_alerts?: RecallAlert[];
   decision_summary?: { text?: string };
+  blocks?: unknown;
   lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
 }
 function parse(value: unknown, t: (text: string) => string): Proposal {
@@ -97,6 +99,7 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
   const [placed, setPlaced] = useState<{ id: string; total: string }>();
   const [rejected, setRejected] = useState(false);
   const { refresh: refreshWaiting } = usePendingApprovals();
+  const suppliersToConfirm = mapSuppliersToConfirm(row);
   const unknown = row.lines.some(l => l.unknown_stock);
   const expired = Date.parse(row.valid_until) <= Date.now();
   const pending = row.status === "READY" && !placed && !rejected;
@@ -137,6 +140,14 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
     {row.recall_alerts?.map((alert, index) => <RecallNotice key={alert.event_id ?? index} alert={alert} reload={reload} />)}
     {row.replacement_proposal_id && <p><a className="underline" href={`#proposal-${row.replacement_proposal_id}`}>{t("Review replacement proposal {id}", { id: row.replacement_proposal_id })}</a>. {t("A fresh human approval is required.")}</p>}
     {row.recall_replan_error && <p>{t("No complete safe replacement is available ({code}). The original remains blocked.", { code: row.recall_replan_error })}</p>}
+    {suppliersToConfirm.length > 0 && <section className="space-y-2">
+      <h3 className="label-caps">{t("What to check")}</h3>
+      <div className="space-y-2 rounded-md border border-warning/40 bg-warning-surface p-3 text-warning">
+        {suppliersToConfirm.map(supplier => <p key={supplier.supplierId} className="text-sm">
+          {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", { supplier: supplier.name })}
+        </p>)}
+      </div>
+    </section>}
     {row.product_evidence?.map(e => <div key={e.product_id} className="rounded border p-3 text-sm">
       <p>{t("Manufacturer evidence for {id} · checked {date} · {via}", { id: e.product_id, date: e.checked_at, via: e.via })}</p>
       <p>{t("Page pack:")} {e.pack ?? <span className="unknown-value">{t("unknown")}</span>} · {t("Bean/ingredient origins:")} {e.origin ?? <span className="unknown-value">{t("unknown")}</span>} · {t("Allergen statement:")} {e.allergens ?? <><span className="unknown-value">{t("unknown")}</span> — {t("use trusted catalog data")}</>}</p>

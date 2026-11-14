@@ -100,6 +100,7 @@ export const coffeeOrder: Order = {
   urgency: "CAN_WAIT",
   deliveryDate: REQUESTED,
   lines: [coffeeLine],
+  supplierMustConfirm: [],
   totalExVat: 145.3,
   totalInclVat: 164.92,
   mov: { threshold: 250, current: 145.3, deliveryFee: 29 }, // placeholders, as in the milk case
@@ -117,6 +118,7 @@ export const coffeeApproval: ApprovalRequest = {
   totalExVat: 145.3,
   totalInclVat: 164.92,
   reasons: [{ rule: "Human approval required", detail: "Every order the Buyer proposes waits for a person." }],
+  suppliersToConfirm: [],
   status: "PENDING",
 };
 

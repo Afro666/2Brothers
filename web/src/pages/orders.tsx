@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { StatusBadge } from "@/components/purchasing/status-badge";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatEur } from "@/lib/format";
 import { useT } from "@/lib/i18n";
@@ -16,6 +17,10 @@ export function OrdersPage() {
   const t = useT();
   const api = useApi();
   const state = useAsync(() => api.listOrders());
+  const suppliers = useAsync(() => api.listSuppliers(), [api]);
+  const supplierNames = new Map(
+    suppliers.status === "ready" ? suppliers.data.map((supplier) => [supplier.id, supplier.name]) : [],
+  );
 
   return (
     <AppShell activeId="orders">
@@ -46,6 +51,15 @@ export function OrdersPage() {
                         <span className="font-semibold">{order.id}</span>
                         <StatusBadge status={order.status} />
                         <UrgencyBadge urgency={order.urgency} />
+                        {order.supplierMustConfirm.map((supplierId) => (
+                          <Badge
+                            key={supplierId}
+                            variant="outline"
+                            className="border-warning/40 bg-warning-surface text-warning"
+                          >
+                            {t("Call {supplier} to confirm", { supplier: supplierNames.get(supplierId) ?? supplierId })}
+                          </Badge>
+                        ))}
                       </div>
                       <p className="text-sm tabular-nums text-muted-foreground">
                         {t("Delivery {date} · {amount} incl VAT", {
