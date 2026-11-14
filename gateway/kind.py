@@ -146,6 +146,96 @@ def _neighbours(names: list[list[str]], word: str) -> set[str] | None:
     return None
 
 
+# ---- plant drinks (#1700) --------------------------------------------------------------
+# "20 L almond milk": the product word is "milk", and the kind rule above picked the dairy
+# milk category. A plant drink is its own kind, with no fallback: the catalog's plant drinks
+# (category 10402, where Oatly, Alpro and the coconut milks are) whose name holds the plant.
+
+PLANT_DRINK_CATEGORY = "10402"
+# The plant, its words in English, Finnish and Swedish (a word, or the front of a compound),
+# and the catalog's English words for its drink. "" is any plant drink ("vegan milk").
+PLANTS = {
+    "almond": (("almond", "manteli", "mandel"), "almond drink"),
+    "oat": (("oat", "kaura", "havre"), "oat drink"),
+    "soya": (("soy", "soya", "soija", "soja"), "soya drink"),
+    "rice": (("rice", "riisi", "ris"), "rice drink"),
+    "coconut": (("coconut", "kookos", "kokos"), "coconut"),
+    "pea": (("pea", "herne", "ärt", "ärter"), "pea drink"),
+    "cashew": (("cashew", "cashewpähkinä", "cashewnöt"), "cashew drink"),
+    "hemp": (("hemp", "hamppu", "hampa"), "hemp drink"),
+    "hazelnut": (("hazelnut", "hasselpähkinä", "hasselnöt"), "hazelnut drink"),
+    "": (("plant", "vegan", "kasvi", "vegaani", "vegaaninen", "växt", "vegansk"), "drink"),
+}
+# Milk or drink in the three languages, with the Finnish case endings ("maitoa", "juomaa",
+# "maidon") and plurals: a word that starts with one of these.
+_DRINK_STEMS = ("milk", "drink", "maito", "maido", "maidon", "juom", "mjölk", "dryck")
+_PLANT_WORD = re.compile(r"[a-zåäöé]+")
+
+
+def _is_drink_word(word: str) -> bool:
+    return word.startswith(_DRINK_STEMS)
+
+
+def plant_drink(text: str) -> str | None:
+    """The plant of a plant drink the text names ("almond" for "20 L almond milk",
+    "oat" for "kauramaitoa", "" for "vegan milk"), or None when it names none: cow's milk
+    ("lactose free milk", "laktoositonta maitoa") and "milk chocolate" give None."""
+    words = _PLANT_WORD.findall((text or "")[:500].lower())
+    for i, word in enumerate(words):
+        for plant, (forms, _) in PLANTS.items():
+            for form in forms:
+                if word == form and i + 1 < len(words) and _is_drink_word(words[i + 1]):
+                    return plant
+                if len(word) > len(form) + 3 and word.startswith(form) and _is_drink_word(word[len(form):]):
+                    return plant
+    return None
+
+
+def plant_query(plant: str) -> str:
+    """The catalog's own English words for that plant drink ("almond drink")."""
+    return PLANTS[plant][1]
+
+
+def _holds_plant(row: dict, plant: str) -> bool:
+    forms = PLANTS[plant][0]
+    names = row.get("names") if isinstance(row.get("names"), dict) else {}
+    for name in names.values():
+        for word in _PLANT_WORD.findall(str(name or "").lower()):
+            if any(word == form or word.startswith(form) for form in forms):
+                return True
+    return False
+
+
+def is_plant_drink(row: dict, plant: str) -> bool:
+    """A catalog plant drink (category 10402) whose name holds that plant; a product with no
+    catalog category (a kitchen's own, another supplier's) when its name names that plant
+    drink ("House oat drink 1 l"). Cow's milk never is: it is in another category, and so is
+    an "Almond Milk" hand wash. A product with no row or no name is not (unknown is not the
+    kind asked)."""
+    if not row:
+        return False
+    category = str(row.get("category") or "")
+    if category == PLANT_DRINK_CATEGORY:
+        return plant == "" or _holds_plant(row, plant)
+    if not category:
+        names = row.get("names") if isinstance(row.get("names"), dict) else {}
+        text = " ".join(str(v or "") for v in names.values())
+        return plant_drink(text) is not None and (plant == "" or _holds_plant(row, plant))
+    return False
+
+
+def not_asked(plant: str) -> str:
+    """The reason a product that is not that plant drink is left out."""
+    drink = f"{plant} drink" if plant else "plant drink"
+    return f"not the {drink} asked: no other kind of product is proposed in its place"
+
+
+def none_found(plant: str) -> str:
+    drink = f"{plant} drink" if plant else "plant drink"
+    return (f"The catalog has no {drink} that matches. Cow's milk or another kind of "
+            f"product is not proposed in its place.")
+
+
 def kind_first(rows: list[dict], categories) -> tuple[list[dict], list[dict]]:
     """`(rows of the kind, the other rows)`, each in the order given."""
     wanted = set(categories)

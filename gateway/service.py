@@ -64,6 +64,15 @@ class GatewayError(Exception):
         self.status, self.code, self.message, self.extra = status, code, message, extra
 
 
+def _no_products(query: str) -> str:
+    """The NO_PRODUCTS_FOUND message; for a plant drink it also says that no cow's milk
+    is proposed in its place (#1700)."""
+    from gateway.kind import none_found, plant_drink
+    plant = plant_drink(query)
+    message = f"no catalog product matches {query!r}"
+    return message if plant is None else f"{message}. {none_found(plant)}"
+
+
 def _money(x: Decimal) -> str:
     return f"{x.quantize(CENT, ROUND_HALF_UP):f}"
 
@@ -386,8 +395,10 @@ class Gateway:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
         blocked = recalls.blocked_ids(self.db, kitchen_id)
         refused = self._allergen_refusals(kitchen_id, request["product_ids"])
+        other_kind = self._not_the_plant_drink(kitchen_id, request)      # #1700: never cow's milk for oat milk
         offers, skipped, tax, supplier_of, when = self._offers(
-            kitchen_id, [p for p in request["product_ids"] if p not in blocked and p not in refused],
+            kitchen_id, [p for p in request["product_ids"]
+                         if p not in blocked and p not in refused and p not in other_kind],
             measure, requested)
         if selection is not None:
             selection.update(_safe_selection_facts(offers, need, measure))
@@ -397,6 +408,7 @@ class Gateway:
         skipped.extend((p, 'BLOCKED_BY_RECALL') for p in request['product_ids'] if p in blocked)
         skipped.extend((p, f"ALLERGEN_RULE: the kitchen excludes {', '.join(hits)}")
                        for p, hits in refused.items())
+        skipped.extend((p, why) for p, why in other_kind.items() if p not in blocked and p not in refused)
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
         plan, skipped = self._fill_gap(kitchen_id, plan, skipped, requested, tax, supplier_of, when,
@@ -417,6 +429,10 @@ class Gateway:
         sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
         if refused and "ALLERGEN_RULE" not in sim["mandate"]["reason_codes"]:
             sim["mandate"]["reason_codes"].append("ALLERGEN_RULE")
+        from gateway.kind import not_asked, plant_drink
+        plant = plant_drink(request.get("text") or "")
+        if plant is not None and any(e["reason"] == not_asked(plant) for e in sim["excluded"]):
+            sim["mandate"]["reasons"].insert(0, not_asked(plant))     # #1700: said, not hidden
         if request.get("refusal"):       # the whole request is refused (#974): say it first
             sim["mandate"]["reasons"].insert(0, request["refusal"]["message"])
             # A rule refused it, not the stock (#995).
@@ -699,7 +715,7 @@ class Gateway:
         if not ids:
             memory.note_unknown(self.db, kitchen_id, query)     # remembered for a person to link or add
             item.update(result="refused", product_ids=[], problem={
-                "code": "NO_PRODUCTS_FOUND", "message": f"no catalog product matches {query!r}"})
+                "code": "NO_PRODUCTS_FOUND", "message": _no_products(query)})
             return
         item.update(result="proposed", product_ids=ids, problem=None)
 
@@ -802,8 +818,11 @@ class Gateway:
         back as they are."""
         from gateway import catalog_search
         from gateway.candidates import SEARCH_LIMIT, of_kind
-        from gateway.kind import Kinds, product_phrase
+        from gateway.kind import Kinds, plant_drink, product_phrase
         filters = dict(filters or {})
+        plant = plant_drink(text)
+        if plant is not None:
+            return self._plant_drinks(rows, plant, filters, kitchen_id)
         now = self.now()
         stale = self._kinds is None or self._kinds_at is None or now - self._kinds_at >= KINDS_TTL
         backing_off = self._kinds_failed_at is not None and now - self._kinds_failed_at < KINDS_RETRY
@@ -838,6 +857,48 @@ class Gateway:
                     seen.add(row["product_id"])
                     merged.append(row)
         return of_kind(merged, categories, unit)
+
+    def _plant_drinks(self, rows: list[dict], plant: str, filters: dict,
+                      kitchen_id: str | None) -> list[dict]:
+        """#1700: a text that names a plant drink ("20 L almond milk", "kauramaitoa") keeps
+        only the plant drinks of that plant (gateway/kind.py), never cow's milk, and has no
+        fallback: when none is found the answer is empty and the caller says so. The plant
+        drinks are searched too, with the catalog's own words ("almond drink"), so a Finnish
+        or Swedish text finds them. A failed search adds nothing; the rows are still narrowed."""
+        from gateway import catalog_search
+        from gateway.candidates import SEARCH_LIMIT
+        from gateway.kind import PLANT_DRINK_CATEGORY, is_plant_drink, plant_query
+        merged, seen = list(rows), {r.get("product_id") for r in rows}
+        if filters.get("category") in (None, PLANT_DRINK_CATEGORY):
+            try:
+                more, _ = catalog_search.search(
+                    self.db, plant_query(plant), {**filters, "category": PLANT_DRINK_CATEGORY},
+                    SEARCH_LIMIT, kitchen_id, injected=self._search, hybrid_ok=False)
+            except Exception:
+                log.warning("plant drink search failed", exc_info=True)
+                more = []
+            for row in more:
+                if row.get("product_id") not in seen:
+                    seen.add(row.get("product_id"))
+                    merged.append(row)
+        return [r for r in merged if is_plant_drink(r, plant)]
+
+    def _not_the_plant_drink(self, kitchen_id: str, request: dict) -> dict[str, str]:
+        """#1700: {product_id: reason} for the products that are not the plant drink the
+        person's text names; {} when it names none. Only where the text is the person's
+        request and the codes were picked for it: the Buyer's offer (`need_id`) and the
+        parser path. The Buyer may quote any code it found; cow's milk must never answer
+        "almond milk". A body with its own codes (a supplier offer, a client) is left as asked."""
+        from gateway.kind import is_plant_drink, not_asked, plant_drink
+        if not (request.get("need_id") or request.get("made_by") == "parser") or request.get("refusal"):
+            return {}
+        plant = plant_drink(request.get("text") or "")
+        if plant is None:
+            return {}
+        from store.products import get_products
+        ids = [str(pid) for pid in request.get("product_ids") or []]
+        rows = {r["product_id"]: r for r in get_products(self.db, ids, kitchen_id)}
+        return {pid: not_asked(plant) for pid in ids if not is_plant_drink(rows.get(pid), plant)}
 
     # ---- kitchen side ---------------------------------------------------------------
 
@@ -875,8 +936,7 @@ class Gateway:
         refusal = excluded_request(parsed.query, rows, self._allergen_rule(kitchen_id))
         if not ids and not refusal:
             memory.note_unknown(self.db, kitchen_id, parsed.query)     # remembered for a person to link or add
-            raise GatewayError(422, "NO_PRODUCTS_FOUND", f"no catalog product matches {parsed.query!r}",
-                               remembered=True)
+            raise GatewayError(422, "NO_PRODUCTS_FOUND", _no_products(parsed.query), remembered=True)
         read = {**body, "product_ids": ids, **{k: v for k, v in parsed.as_need().items() if k != "query"},
                 "made_by": "parser", "query": parsed.query}
         read.pop("refusal", None)       # set here only, never by the client
@@ -1607,6 +1667,11 @@ class Gateway:
             self.db.needs.update_one({"_id": need["_id"]}, {"$addToSet": {"meaning_ids": {"$each": sorted(shown)}}})
         elif fallback_note and not rows:
             note = fallback_note
+        if not rows:
+            from gateway.kind import none_found, plant_drink
+            plant = plant_drink(need["text"] or query)
+            if plant is not None:          # #1700: say it, never offer cow's milk instead
+                note = none_found(plant)
         return {"products": _matched_by(rows), "requested_date": need["requested_date"],
                 "measure": measure if filtered else None, "search": kind, "note": note}
 
