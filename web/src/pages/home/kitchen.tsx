@@ -4,6 +4,7 @@ import type { Api } from "@/api/types";
 import type { ApprovalRequest, AuditEvent, DemandLine, StockItem, Supplier } from "@/types";
 
 import { SampleData } from "@/components/purchasing/sample-data";
+import { useT } from "@/lib/i18n";
 import { nextCutoff } from "@/pages/home/cutoff";
 import { Tile, TileState } from "@/pages/home/tile";
 
@@ -16,9 +17,10 @@ function loadKitchenStock(api: Api, now: Date): Promise<{ stock: StockItem[]; de
 }
 
 export function ApprovalTile({ api }: { api: Api }) {
+  const t = useT();
   const state = useAsync(() => api.listApprovals(), [api]);
   return (
-    <Tile title="Waiting for your approval" href="/approvals" linkLabel="Review orders to approve" emphasis>
+    <Tile title={t("Waiting for your approval")} href="/approvals" linkLabel={t("Review orders to approve")} emphasis>
       <TileState
         status={state.status}
         error={state.error}
@@ -30,12 +32,14 @@ export function ApprovalTile({ api }: { api: Api }) {
           const pending = approvals.filter((approval) => approval.status === "PENDING");
           const oldest = [...pending].sort((a, b) => Date.parse(a.createdAt ?? "") - Date.parse(b.createdAt ?? ""))[0];
           return pending.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing is waiting.</p>
+            <p className="text-sm text-muted-foreground">{t("Nothing is waiting.")}</p>
           ) : (
             <div className="space-y-2">
               <p className="stamp text-3xl font-semibold tabular-nums">{pending.length}</p>
               <p className="text-sm">{oldest?.summary}</p>
-              <p className="text-sm font-medium tabular-nums">{formatEur(oldest?.totalInclVat ?? null)} incl VAT</p>
+              <p className="text-sm font-medium tabular-nums">
+                {t(formatEur(oldest?.totalInclVat ?? null))} {t("incl VAT")}
+              </p>
             </div>
           );
         }}
@@ -45,9 +49,10 @@ export function ApprovalTile({ api }: { api: Api }) {
 }
 
 export function CutoffTile({ api, now }: { api: Api; now: Date }) {
+  const t = useT();
   const state = useAsync(() => api.listSuppliers(), [api]);
   return (
-    <Tile title="Next order cut-offs" href="/suppliers" linkLabel="Review suppliers">
+    <Tile title={t("Next order cut-offs")} href="/suppliers" linkLabel={t("Review suppliers")}>
       <SampleData of="listSuppliers" />
       <TileState
         status={state.status}
@@ -76,7 +81,7 @@ export function CutoffTile({ api, now }: { api: Api; now: Date }) {
                       {formatDateTime(cutoff.toISOString())}
                     </time>
                   ) : (
-                    <span className="unknown-value">terms not set</span>
+                    <span className="unknown-value">{t("terms not set")}</span>
                   )}
                 </li>
               ))}
@@ -88,9 +93,10 @@ export function CutoffTile({ api, now }: { api: Api; now: Date }) {
 }
 
 export function StockTile({ api, now }: { api: Api; now: Date }) {
+  const t = useT();
   const state = useAsync(() => loadKitchenStock(api, now), [api, now.toISOString()]);
   return (
-    <Tile title="Stock to check" href="/stock" linkLabel="Count stock">
+    <Tile title={t("Stock to check")} href="/stock" linkLabel={t("Count stock")}>
       <SampleData of="getStock" />
       <TileState
         status={state.status}
@@ -115,28 +121,32 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
               item.onHand !== null && (needed.get(item.productId) ?? 0) > item.onHand + (item.onOrder ?? 0),
           );
           return unknown.length + uncounted.length + short.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Stock covers the next 7 days.</p>
+            <p className="text-sm text-muted-foreground">{t("Stock covers the next 7 days.")}</p>
           ) : (
             <ul className="divide-y text-sm">
               {unknown.map((item) => (
                 <li key={item.productId} className="flex items-start justify-between gap-3 py-2">
                   <span className="min-w-0">{item.productName}</span>
-                  <span className="unknown-value">not counted</span>
+                  <span className="unknown-value">{t("not counted")}</span>
                 </li>
               ))}
               {uncounted.map((item) => (
                 <li key={item.productId} className="flex items-start justify-between gap-3 py-2">
                   <span className="min-w-0">{item.productName}</span>
-                  <span className="unknown-value">not counted</span>
+                  <span className="unknown-value">{t("not counted")}</span>
                 </li>
               ))}
               {short.map((item) => (
                 <li key={item.productId} className="flex items-start justify-between gap-3 py-2">
                   <span className="min-w-0">{item.productName}</span>
                   <span className="text-right font-mono text-[13px] font-medium text-danger">
-                    short by{" "}
-                    {formatShortfall((needed.get(item.productId) ?? 0) - item.onHand - (item.onOrder ?? 0), item.unit)}
-                    {item.onOrder === null ? " (on order unknown)" : ""}
+                    {t("short by {amount}", {
+                      amount: formatShortfall(
+                        (needed.get(item.productId) ?? 0) - item.onHand - (item.onOrder ?? 0),
+                        item.unit,
+                      ),
+                    })}
+                    {item.onOrder === null ? t(" (on order unknown)") : ""}
                   </span>
                 </li>
               ))}
@@ -149,9 +159,10 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
 }
 
 export function AuditTile({ api }: { api: Api }) {
+  const t = useT();
   const state = useAsync(() => api.listAudit(), [api]);
   return (
-    <Tile title="Latest steps" href="/audit" linkLabel="Open activity log">
+    <Tile title={t("Latest steps")} href="/audit" linkLabel={t("Open activity log")}>
       <TileState
         status={state.status}
         error={state.error}

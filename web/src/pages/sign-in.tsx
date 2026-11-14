@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 
 function gatewayDemoAccounts(): DemoAccount[] {
@@ -35,6 +36,7 @@ function gatewayDemoAccounts(): DemoAccount[] {
 }
 
 export function SignInPage() {
+  const t = useT();
   const api = useApi();
   const { status, signIn } = useSession();
   const accounts = useMemo(() => (api.live ? gatewayDemoAccounts() : MOCK_DEMO_ACCOUNTS), [api]);
@@ -66,20 +68,20 @@ export function SignInPage() {
     <main className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle><h1 className="text-xl">Sign in to Kitchen Buyer</h1></CardTitle>
-          <CardDescription>Use your kitchen account to continue.</CardDescription>
+          <CardTitle><h1 className="text-xl">{t("Sign in to Kitchen Buyer")}</h1></CardTitle>
+          <CardDescription>{t("Use your kitchen account to continue.")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {accounts.length > 0 ? (
             <section className="space-y-3" aria-labelledby="demo-accounts-heading">
               <h2 id="demo-accounts-heading" className="text-sm font-medium">
-                Demo accounts
+                {t("Demo accounts")}
               </h2>
               <ul className="space-y-2">
                 {accounts.map((account) => (
                   <li key={account.email} className="flex items-center justify-between gap-3 rounded-md border p-3">
                     <div className="min-w-0">
-                      <div className="text-sm font-medium">{account.label}</div>
+                      <div className="text-sm font-medium">{t(account.label)}</div>
                       <div className="truncate text-xs text-muted-foreground">{account.email}</div>
                     </div>
                     <Button
@@ -89,7 +91,7 @@ export function SignInPage() {
                       disabled={busy}
                       onClick={() => void authenticate(account.email, account.password)}
                     >
-                      Sign in as {account.label}
+                      {t("Sign in as {name}", { name: t(account.label) })}
                     </Button>
                   </li>
                 ))}
@@ -103,7 +105,7 @@ export function SignInPage() {
               </Alert>
             ) : null}
             <div className="space-y-2">
-              <Label htmlFor="sign-in-email">Email</Label>
+              <Label htmlFor="sign-in-email">{t("Email")}</Label>
               <Input
                 id="sign-in-email"
                 type="email"
@@ -115,7 +117,7 @@ export function SignInPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="sign-in-password">Password</Label>
+              <Label htmlFor="sign-in-password">{t("Password")}</Label>
               <Input
                 id="sign-in-password"
                 type="password"
@@ -127,7 +129,7 @@ export function SignInPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? "Signing in…" : "Sign in"}
+              {busy ? t("Signing in…") : t("Sign in")}
             </Button>
           </form>
         </CardContent>

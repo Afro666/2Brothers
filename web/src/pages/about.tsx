@@ -3,8 +3,9 @@ import { Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { ModelUsageCard } from "@/components/purchasing/model-usage-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useT } from "@/lib/i18n";
 
-const STEPS = [
+export const STEPS = [
   {
     title: "Request",
     text: "The chef says what the kitchen needs, for example “1,000 L of lactose-free milk by Monday”. The planner also works out the need from the menu, the covers and the stock.",
@@ -23,7 +24,7 @@ const STEPS = [
   },
 ];
 
-const RULES = [
+export const RULES = [
   {
     title: "A person approves every order",
     text: "The agent proposes. It never approves, however small the order is.",
@@ -44,34 +45,32 @@ const RULES = [
 
 /** One page for a first-time visitor: what this is, how an order moves, and the rules it keeps. */
 export function AboutPage() {
+  const t = useT();
   return (
     <AppShell activeId="about">
       <div className="mx-auto max-w-3xl space-y-8">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">About Kitchen Buyer</h1>
+          <h1 className="text-2xl font-semibold">{t("About Kitchen Buyer")}</h1>
           <p className="max-w-prose text-muted-foreground">
-            A purchasing agent that Valio Aimo gives to its kitchen customers. It works out what a kitchen needs and
-            proposes the order. A person approves it.
+            {t("A purchasing agent that Valio Aimo gives to its kitchen customers. It works out what a kitchen needs and proposes the order. A person approves it.")}
           </p>
         </header>
 
         <section aria-labelledby="about-problem" className="space-y-2">
           <h2 id="about-problem" className="text-lg font-semibold">
-            The problem
+            {t("The problem")}
           </h2>
           <p className="max-w-prose text-sm">
-            A professional kitchen orders food several times a week. Someone counts the stock, reads the menu, works out
-            the quantities and sends the order before the supplier’s cut-off. It takes time, and a wrong number means
-            waste or a missing ingredient.
+            {t("A professional kitchen orders food several times a week. Someone counts the stock, reads the menu, works out the quantities and sends the order before the supplier’s cut-off. It takes time, and a wrong number means waste or a missing ingredient.")}
           </p>
           <p className="max-w-prose text-sm">
-            The wholesaler sees the demand only when the orders arrive. That is too late to prevent a shortage.
+            {t("The wholesaler sees the demand only when the orders arrive. That is too late to prevent a shortage.")}
           </p>
         </section>
 
         <section aria-labelledby="about-flow" className="space-y-3">
           <h2 id="about-flow" className="text-lg font-semibold">
-            How an order moves
+            {t("How an order moves")}
           </h2>
           <ol className="grid gap-3 sm:grid-cols-2">
             {STEPS.map((step, index) => (
@@ -85,10 +84,10 @@ export function AboutPage() {
                       >
                         {index + 1}
                       </span>
-                      <h3>{step.title}</h3>
+                      <h3>{t(step.title)}</h3>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">{step.text}</CardContent>
+                  <CardContent className="text-sm text-muted-foreground">{t(step.text)}</CardContent>
                 </Card>
               </li>
             ))}
@@ -101,18 +100,17 @@ export function AboutPage() {
 
         <section aria-labelledby="about-sides" className="space-y-3">
           <h2 id="about-sides" className="text-lg font-semibold">
-            Two sides
+            {t("Two sides")}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle>
-                  <h3>The kitchen</h3>
+                  <h3>{t("The kitchen")}</h3>
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                Asks for products, approves orders, counts stock and plans the menu for the week. Valio Aimo is one
-                supplier; the kitchen can add its own suppliers and products.
+                {t("Asks for products, approves orders, counts stock and plans the menu for the week. Valio Aimo is one supplier; the kitchen can add its own suppliers and products.")}
               </CardContent>
             </Card>
             <Card>
@@ -122,41 +120,40 @@ export function AboutPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                Sees what the kitchens that share their forecast expect to need, per product and day, against what is
-                available. A shortage shows before the orders arrive.
+                {t("Sees what the kitchens that share their forecast expect to need, per product and day, against what is available. A shortage shows before the orders arrive.")}
               </CardContent>
             </Card>
           </div>
-          <p className="text-sm text-muted-foreground">Switch sides with “Your role” in the menu.</p>
+          <p className="text-sm text-muted-foreground">{t("Switch sides with “Your role” in the menu.")}</p>
         </section>
 
         <section aria-labelledby="about-rules" className="space-y-3">
           <h2 id="about-rules" className="text-lg font-semibold">
-            Trust rules
+            {t("Trust rules")}
           </h2>
           <ul className="space-y-3">
             {RULES.map((rule) => (
               <li key={rule.title} className="rounded-lg border px-4 py-3">
-                <h3 className="font-medium">{rule.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{rule.text}</p>
+                <h3 className="font-medium">{t(rule.title)}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{t(rule.text)}</p>
               </li>
             ))}
           </ul>
           <p className="text-sm">
             <Link to="/audit" className="font-medium text-primary underline underline-offset-4">
-              Open the activity log
+              {t("Open the activity log")}
             </Link>
           </p>
           <p className="text-sm">
             <a href="/api/docs" className="font-medium text-primary underline underline-offset-4">
-              API docs (OpenAPI)
+              {t("API docs (OpenAPI)")}
             </a>
             {" · "}
             <a
               href="https://github.com/Afro666/2Brothers/blob/main/docs/choices.md"
               className="font-medium text-primary underline underline-offset-4"
             >
-              Why it is built this way
+              {t("Why it is built this way")}
             </a>
           </p>
         </section>
