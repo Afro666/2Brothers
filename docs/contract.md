@@ -727,14 +727,14 @@ stock is confirmed for the requested date. Otherwise it is the engine's answer t
 ```json
 {
   "need": "1000", "measure": "L", "remaining": "949",
-  "reason_codes": ["PARTIAL_STOCK"],
+  "reason_codes": ["PARTIAL_STOCK", "PACK_SIZE_DERIVED"],
   "why": "Order 51 L now for 2026-11-16: 51 ST of Arla 1 L fat free, all the stock Valio confirms for that date, EUR 131.07 ex VAT. Hold the remaining 949 L until Valio confirms stock: no offer shows confirmed stock for a later delivery date.",
   "now": {
     "kind": "NOW", "quantity": "51", "measure": "L", "deliver_on": "2026-11-16",
     "total_ex_vat": "131.07",
     "why": "Order 51 L now for 2026-11-16: 51 ST of Arla 1 L fat free, all the stock Valio confirms for that date, EUR 131.07 ex VAT.",
     "lines": [{"product_id": "462775", "quantity": "51", "unit": "ST", "unit_price": "2.57",
-               "total": "131.07", "why": "...", "unknown_stock": false, "reason_codes": ["PARTIAL_STOCK"]}]
+               "total": "131.07", "why": "...", "unknown_stock": false, "reason_codes": ["PARTIAL_STOCK", "PACK_SIZE_DERIVED"]}]
   },
   "rest": [{
     "kind": "HOLD", "quantity": "949", "measure": "L", "deliver_on": null, "total_ex_vat": null,
