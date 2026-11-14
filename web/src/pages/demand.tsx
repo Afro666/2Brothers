@@ -1,5 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useId, useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from "react";
 
 import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
@@ -287,7 +288,8 @@ function DemandRow({ row, hidden }: { row: SupplierDemandRow; hidden: boolean })
   );
 }
 
-function KitchenDisclosure({ row }: { row: SupplierDemandRow }) {
+/** `touch` gives the button a 44 px tap height, for the phone list. */
+function KitchenDisclosure({ row, touch = false }: { row: SupplierDemandRow; touch?: boolean }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
   // The table and the phone list are both in the DOM, so each instance needs its own id.
@@ -299,9 +301,9 @@ function KitchenDisclosure({ row }: { row: SupplierDemandRow }) {
   return (
     <div className="space-y-2 whitespace-normal">
       <Button
-        variant="ghost"
+        variant={touch ? "outline" : "ghost"}
         size="sm"
-        className="h-auto min-h-8 px-2 py-1"
+        className={touch ? "h-auto min-h-11 px-3 py-1" : "h-auto min-h-8 px-2 py-1"}
         aria-expanded={expanded}
         aria-controls={listId}
         onClick={() => setExpanded((value) => !value)}
@@ -327,62 +329,155 @@ function KitchenDisclosure({ row }: { row: SupplierDemandRow }) {
   );
 }
 
+function UnknownBuyDays({ group }: { group: ProductGroup }) {
+  const t = useT();
+  return (
+    <span className="text-warning">
+      {t("+ days with an unknown amount: {count}", { count: formatNumber(group.unknownBuyDays) })}
+    </span>
+  );
+}
+
+/** A phone shows this many products, then a "Show more" button for the next ones. */
+export const PHONE_PRODUCT_LIMIT = 10;
+
+/** One product on a phone: its name, its risk and what to buy; the code, the kitchens and the days open on a tap. */
 function MobileGroup({
   group,
   open,
   onToggle,
+  buttonRef,
 }: {
   group: ProductGroup;
   open: boolean;
   onToggle: () => void;
+  buttonRef?: Ref<HTMLButtonElement>;
 }) {
   const t = useT();
   return (
-    <li className="space-y-3 py-4">
+    <li data-phone-product={group.productId} className="py-1">
       <Button
+        ref={buttonRef}
         type="button"
         variant="ghost"
-        className="h-auto w-full justify-start px-2 py-1 text-left whitespace-normal"
+        className="h-auto min-h-11 w-full justify-start gap-3 px-1 py-2 text-left font-normal whitespace-normal"
         aria-expanded={open}
         onClick={onToggle}
       >
-        <ProductSummary group={group} />
+        <ProductThumb en={group.productName} size="sm" />
+        <span className="block min-w-0 flex-1 space-y-1">
+          <span className="block font-medium break-words">{group.productName}</span>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+            <RiskBadge risk={group.worst} />
+            {group.totalBuy != null ? (
+              <span className="font-semibold tabular-nums">
+                {t("Buy {amount}", { amount: formatAmount(group.totalBuy, group.unit) })}
+              </span>
+            ) : null}
+            {/* A sum that leaves days out says so next to it. */}
+            {group.totalBuy != null && group.unknownBuyDays > 0 ? <UnknownBuyDays group={group} /> : null}
+          </span>
+        </span>
+        <ChevronDown
+          className={`size-4 text-muted-foreground transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
       </Button>
-      <ul className="space-y-3" hidden={!open}>
-        {group.rows.map((row) => (
-          <li key={row.date} className="rounded-md border p-3 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span>{formatDate(row.date)}</span>
-              <RiskBadge risk={row.risk} />
-            </div>
-            <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-              <dt className="text-muted-foreground">{t("Forecast demand")}</dt>
-              <dd className="text-right tabular-nums">
-                {formatAmount(row.forecastDemand, row.unit)}
-              </dd>
-              <dt className="text-muted-foreground">{t("Kitchens")}</dt>
-              <dd className="text-right">
-                <KitchenDisclosure row={row} />
-              </dd>
-              <dt className="text-muted-foreground">{t("Available")}</dt>
-              <dd className="text-right tabular-nums">
-                {row.available == null ? (
-                  <span className="font-medium text-warning">{t("unknown")}</span>
-                ) : (
-                  formatAmount(row.available, row.unit)
-                )}
-              </dd>
-              <dt className="text-muted-foreground">{t("Buy")}</dt>
-              <dd
-                className={row.suggestedBuy == null ? "text-right font-medium text-warning" : "text-right tabular-nums"}
-              >
-                {row.suggestedBuy == null ? t("unknown") : formatAmount(row.suggestedBuy, row.unit)}
-              </dd>
-            </dl>
-          </li>
-        ))}
-      </ul>
+      <div data-phone-details hidden={!open} className="ml-4 space-y-1 border-l pb-2 pl-3 text-sm">
+        <p className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+          <span>{group.productId}</span>
+          {group.shortDays > 0 ? (
+            <span className="font-medium text-foreground">
+              {t("Short on {count} of {days} days", {
+                count: formatNumber(group.shortDays),
+                days: formatNumber(group.rows.length),
+              })}
+            </span>
+          ) : null}
+          {group.unknownBuyDays > 0 ? <UnknownBuyDays group={group} /> : null}
+          <span className="tabular-nums">{t("kitchens: up to {count}", { count: formatNumber(group.maxKitchens) })}</span>
+        </p>
+        <ul className="divide-y">
+          {group.rows.map((row) => (
+            <li key={row.date} data-phone-day={row.date} className="space-y-1 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium">{formatDate(row.date)}</span>
+                <RiskBadge risk={row.risk} />
+              </div>
+              <dl className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                <div className="flex gap-1">
+                  <dt className="text-muted-foreground">{t("Forecast demand")}</dt>
+                  <dd className="tabular-nums">{formatAmount(row.forecastDemand, row.unit)}</dd>
+                </div>
+                <div className="flex gap-1">
+                  <dt className="text-muted-foreground">{t("Available")}</dt>
+                  <dd className={row.available == null ? "font-medium text-warning" : "tabular-nums"}>
+                    {row.available == null ? t("unknown") : formatAmount(row.available, row.unit)}
+                  </dd>
+                </div>
+                <div className="flex gap-1">
+                  <dt className="text-muted-foreground">{t("Buy")}</dt>
+                  <dd className={row.suggestedBuy == null ? "font-medium text-warning" : "font-medium tabular-nums"}>
+                    {row.suggestedBuy == null ? t("unknown") : formatAmount(row.suggestedBuy, row.unit)}
+                  </dd>
+                </div>
+              </dl>
+              <KitchenDisclosure row={row} touch />
+            </li>
+          ))}
+        </ul>
+      </div>
     </li>
+  );
+}
+
+/** The first products of a phone list, and a button that shows the next ones. */
+function MobileGroups({
+  groups,
+  openProducts,
+  onToggle,
+}: {
+  groups: ProductGroup[];
+  openProducts: Set<string>;
+  onToggle: (productId: string) => void;
+}) {
+  const t = useT();
+  const [limit, setLimit] = useState(PHONE_PRODUCT_LIMIT);
+  // The first product that "Show more" added: focus moves there, where reading goes on.
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const firstNew = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusIndex != null) firstNew.current?.focus();
+  }, [focusIndex]);
+  const rest = groups.length - limit;
+
+  return (
+    <>
+      {groups.slice(0, limit).map((group, index) => (
+        <MobileGroup
+          key={group.productId}
+          group={group}
+          open={openProducts.has(group.productId)}
+          onToggle={() => onToggle(group.productId)}
+          buttonRef={index === focusIndex ? firstNew : undefined}
+        />
+      ))}
+      {rest > 0 ? (
+        <li className="py-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 w-full"
+            onClick={() => {
+              setFocusIndex(limit);
+              setLimit(limit + PHONE_PRODUCT_LIMIT);
+            }}
+          >
+            {t("Show {count} more", { count: formatNumber(Math.min(rest, PHONE_PRODUCT_LIMIT)) })}
+          </Button>
+        </li>
+      ) : null}
+    </>
   );
 }
 
@@ -441,6 +536,7 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
               key={option.id}
               type="button"
               size="sm"
+              className="h-11 md:h-8"
               variant={filter === option.id ? "default" : "outline"}
               aria-pressed={filter === option.id}
               onClick={() => chooseFilter(option.id)}
@@ -450,16 +546,16 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
           ))}
         </div>
         <div className="flex gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={openAll}>
+          <Button type="button" size="sm" variant="outline" className="h-11 md:h-8" onClick={openAll}>
             {t("Open all")}
           </Button>
-          <Button type="button" size="sm" variant="outline" onClick={closeAll}>
+          <Button type="button" size="sm" variant="outline" className="h-11 md:h-8" onClick={closeAll}>
             {t("Close all")}
           </Button>
         </div>
       </div>
-      <Card>
-        <CardContent>
+      <Card className="py-2 md:py-6">
+        <CardContent className="px-3 md:px-6">
           <div className="hidden md:block">
             <Table>
               <TableHeader>
@@ -519,38 +615,25 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
                 : null}
             </Table>
           </div>
-          <ul className="divide-y md:hidden">
+          <ul className="divide-y md:hidden" data-phone-list>
             {filterIsEmpty ? (
               <li className="py-4 text-center text-sm text-muted-foreground">{t("No products in this filter")}</li>
             ) : null}
-            {directGroups.map((group) => (
-              <MobileGroup
-                key={group.productId}
-                group={group}
-                open={openProducts.has(group.productId)}
-                onToggle={() => toggleProduct(group.productId)}
-              />
-            ))}
+            {/* A new filter starts again at the first ten. */}
+            <MobileGroups key={filter} groups={directGroups} openProducts={openProducts} onToggle={toggleProduct} />
             {showCovered && coveredGroups.length > 0 ? (
-              <li className="py-2">
+              <li className="py-1">
                 <Button
                   type="button"
                   variant="ghost"
-                  className="h-auto w-full justify-start px-2 py-1 text-left"
+                  className="h-auto min-h-11 w-full justify-start px-1 py-1 text-left"
                   aria-expanded={coveredOpen}
                   onClick={() => setCoveredOpen((open) => !open)}
                 >
                   {t("Covered products: {count}", { count: formatNumber(coveredGroups.length) })}
                 </Button>
                 <ul className="divide-y" hidden={!coveredOpen}>
-                  {coveredGroups.map((group) => (
-                    <MobileGroup
-                      key={group.productId}
-                      group={group}
-                      open={openProducts.has(group.productId)}
-                      onToggle={() => toggleProduct(group.productId)}
-                    />
-                  ))}
+                  <MobileGroups groups={coveredGroups} openProducts={openProducts} onToggle={toggleProduct} />
                 </ul>
               </li>
             ) : null}
@@ -608,16 +691,16 @@ export function DemandPage() {
         </header>
         {weekIsValid ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => showWeek(shiftWeek(week, -1))}>
+            <Button variant="outline" className="h-11 md:h-9" onClick={() => showWeek(shiftWeek(week, -1))}>
               {t("Previous week")}
             </Button>
-            <h2 className="px-2 text-center text-lg font-semibold">
+            <h2 className="order-first w-full text-lg font-semibold md:order-none md:w-auto md:px-2 md:text-center">
               {t("Week {number}, {range}", {
                 number: Number(week.slice(6)),
                 range: weekRangeLabel(week),
               })}
             </h2>
-            <Button variant="outline" onClick={() => showWeek(shiftWeek(week, 1))}>
+            <Button variant="outline" className="h-11 md:h-9" onClick={() => showWeek(shiftWeek(week, 1))}>
               {t("Next week")}
             </Button>
           </div>
