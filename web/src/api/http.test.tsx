@@ -1128,7 +1128,7 @@ describe("createHttpApi", () => {
     ]);
   });
 
-  it("asks the Buyer once per request: the key survives a failure", async () => {
+  it("reuses the Buyer request key after a failure and replaces it after an answer", async () => {
     let attempts = 0;
     const calls = gateway({
       ...inbox(),
@@ -1144,10 +1144,12 @@ describe("createHttpApi", () => {
       approval: { id: "prop-1" },
       substitutes: [],
     });
+    await api.submitChefRequest(request);
     const posts = calls.filter((call) => call.route.startsWith("POST"));
     expect(posts[0].body).toMatchObject({ text: "50 L oat drink by Friday", requested_date: "2026-11-20" });
     expect(posts[0].body.idempotency_key).toBeTruthy();
     expect(posts[1].body.idempotency_key).toBe(posts[0].body.idempotency_key);
+    expect(posts[2].body.idempotency_key).not.toBe(posts[0].body.idempotency_key);
   });
 });
 

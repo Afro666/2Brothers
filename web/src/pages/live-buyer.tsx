@@ -10,7 +10,6 @@ import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { formatEur } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { randomHex } from "@/lib/random-id";
@@ -98,7 +97,10 @@ function productNames(row: Proposal) {
     const match = /^\S+ \S+ of ([^\s,]+) (.+?), EUR /.exec(sentence);
     if (match) names.set(match[1], match[2]);
   }
-  for (const line of Array.isArray(row.lines) ? row.lines : []) {
+  for (const line of [
+    ...(Array.isArray(row.lines) ? row.lines : []),
+    ...(row.substitute_options ?? []).flatMap((option) => option.lines),
+  ]) {
     const name = text(line?.product_name);
     if (name) names.set(line.product_id, name);
   }
@@ -290,7 +292,6 @@ export function LiveBuyerRequests() {
   const keys = useRef(new Map<string, string>());
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<Proposal | null>(null);
-  const [preferred, setPreferred] = useState<string | null>(null);
   const names = result ? productNames(result) : new Map<string, string>();
   const product = (id: string) => (names.has(id) ? `${names.get(id)} (${id})` : id);
 
@@ -304,7 +305,6 @@ export function LiveBuyerRequests() {
     }
     setPending(true);
     setResult(null);
-    setPreferred(null);
     try {
       const kitchen = import.meta.env.VITE_GATEWAY_KITCHEN_ID || "demo-kitchen";
       const response = await gatewayRequest("/api", `/v1/kitchens/${encodeURIComponent(kitchen)}/proposals`, {
@@ -312,7 +312,9 @@ export function LiveBuyerRequests() {
         credentials: "same-origin",
         body: JSON.stringify({ text: request.text.trim(), requested_date: request.deliveryDate, idempotency_key: key }),
       });
-      setResult(proposal(response, t));
+      const answer = proposal(response, t);
+      keys.current.delete(identity);
+      setResult(answer);
     } finally {
       setPending(false);
     }
@@ -407,23 +409,8 @@ export function LiveBuyerRequests() {
                       </p>
                       {option.stock_confirmed ? null : <p><span className="unknown-value">{t("Stock not confirmed")}</span></p>}
                       {option.allergen_data_known ? null : <p><span className="unknown-value">{t("Allergen data unknown")}</span></p>}
-                      <Button
-                        variant="outline"
-                        className="w-full aria-pressed:border-primary aria-pressed:bg-accent sm:w-auto"
-                        aria-pressed={preferred === option.tier}
-                        onClick={() => setPreferred(option.tier)}
-                      >
-                        {t("Prefer {tier}", { tier: option.tier })}
-                      </Button>
                     </div>
                   ))}
-                  {preferred ? (
-                    <p role="status">
-                      {t("Preferred: {tier}. This preference has not changed or approved an order. Re-simulate the chosen basket before human approval.", {
-                        tier: preferred,
-                      })}
-                    </p>
-                  ) : null}
                 </section>
               ) : null}
             </CardContent>
