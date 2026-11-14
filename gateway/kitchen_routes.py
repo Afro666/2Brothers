@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+import hashlib
+import json
 
 from fastapi import Depends, Request
 
@@ -62,6 +64,37 @@ def register(app, gw, principal, body) -> None:
         except (ValueError, TypeError, KeyError) as exc:
             raise GatewayError(422, "INVALID_REQUEST", str(exc)[:300]) from None
 
+    def once(kitchen_id: str, name: str, data: dict, make):
+        """Run `make()` (returns the wire row) at most once per kitchen, collection and
+        `idempotency_key` (#754). The same key with the same body answers the stored row;
+        with another body it is 409 IDEMPOTENCY_KEY_REUSED. No key: no replay guard.
+        The key row is claimed first, so two retries at once cannot both create."""
+        from pymongo.errors import DuplicateKeyError
+        key = data.pop("idempotency_key", None)
+        if key is None:
+            return make(), False
+        if not isinstance(key, str) or not key.strip():
+            raise GatewayError(422, "INVALID_REQUEST", "idempotency_key must be a non-empty string")
+        keys = gw().db.kitchen_write_keys
+        doc_id = f"{kitchen_id}:{name}:{key}"
+        digest = hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
+        try:
+            keys.insert_one({"_id": doc_id, "body_sha256": digest, "row": None})
+        except DuplicateKeyError:
+            done = keys.find_one({"_id": doc_id}) or {}
+            if done.get("body_sha256") != digest:
+                raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request") from None
+            if done.get("row") is None:
+                raise GatewayError(409, "IDEMPOTENCY_IN_PROGRESS", "this write is being stored now; try again") from None
+            return done["row"], True
+        try:
+            row = make()
+        except BaseException:
+            keys.delete_one({"_id": doc_id, "row": None})
+            raise
+        keys.update_one({"_id": doc_id}, {"$set": {"row": row}})
+        return row, False
+
     # ---- generic CRUD for suppliers, recipes and own products --------------------------
     def crud(path: str, name: str, collection):
         @app.get(k + path, name=f"list_{name}")
@@ -81,10 +114,11 @@ def register(app, gw, principal, body) -> None:
         async def create(kitchen_id: str, request: Request, who=Depends(principal)):
             actor = writer(who, kitchen_id)
             data = await body(request)
-            data.pop("idempotency_key", None)
-            item = guarded(lambda: collection().create(kitchen_id, data))
-            gw()._audit(kitchen_id, f"{name}_created", actor, name=item.get("name"))
-            return _json(item)
+            item, replayed = once(kitchen_id, name, data,
+                                  lambda: _json(guarded(lambda: collection().create(kitchen_id, data))))
+            if not replayed:
+                gw()._audit(kitchen_id, f"{name}_created", actor, name=item.get("name"))
+            return item
 
         @app.put(k + path + "/{item_id}", name=f"update_{name}")
         async def update(kitchen_id: str, item_id: str, request: Request, who=Depends(principal)):

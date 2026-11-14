@@ -166,3 +166,44 @@ def test_on_order_is_unknown_when_net_content_unit_differs_from_the_kitchen_unit
     db.products.update_one({"_id": "462775"}, {"$unset": {"net_content": ""}})
     item = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}["462775"]
     assert item["on_order"] is None and item["on_order_known"] is False
+
+
+def _replays_once(client, db, path, coll, query, first, other):
+    """The same key and body answer the first row and store one; another body is 409 (#754)."""
+    one = client.post(K + path, headers=HUMAN, json=first)
+    assert one.status_code == 200, one.text
+    two = client.post(K + path, headers=HUMAN, json=first)
+    assert two.status_code == 200 and two.json() == one.json()
+    assert db[coll].count_documents(query) == 1
+    clash = client.post(K + path, headers=HUMAN, json=other)
+    assert clash.status_code == 409 and clash.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+    assert db[coll].count_documents(query) == 1
+
+
+def test_supplier_post_replays_by_idempotency_key(env):
+    client, _, db = env
+    body = {"name": "Bakery", "adapter": "manual", "idempotency_key": "s1"}
+    _replays_once(client, db, "/suppliers", "suppliers", {"name": "Bakery"}, body, {**body, "name": "Dairy"})
+
+
+def test_recipe_post_replays_by_idempotency_key(env):
+    client, _, db = env
+    body = {"name": "Carrot soup", "ingredients": SOUP["ingredients"], "idempotency_key": "r1"}
+    _replays_once(client, db, "/recipes", "recipes", {"name": "Carrot soup"}, body, {**body, "name": "Leek soup"})
+
+
+def test_own_product_post_replays_by_idempotency_key(env):
+    client, _, db = env
+    body = {"name": "Sourdough", "supplier_id": "sup-bakery", "unit": "PCS", "idempotency_key": "p1"}
+    _replays_once(client, db, "/products", "products", {"source": "own", "names.en": "Sourdough"}, body, {**body, "name": "Rye"})
+
+
+def test_menu_plan_put_repeated_keeps_one_row(env):
+    client, _, db = env
+    client.post(K + "/recipes", headers=HUMAN, json=SOUP)
+    plan = {"idempotency_key": "m1",
+            "days": [{"date": "2026-11-16", "meal": "lunch", "recipe_id": "soup", "covers": 100}]}
+    one = client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan)
+    two = client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan)
+    assert one.status_code == two.status_code == 200 and one.json() == two.json()
+    assert db.menu_plans.count_documents({}) == 1
