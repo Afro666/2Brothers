@@ -355,6 +355,8 @@ export function createHttpApi(baseUrl: string): Api {
                 {
                   product_id: change.productId,
                   quantity: change.type === "REMOVE_LINE" ? "0" : String(change.quantity),
+                  ...(change.reason ? { reason: change.reason } : {}),
+                  ...(change.reason === "OTHER" && change.note ? { note: change.note } : {}),
                 },
               ],
             };

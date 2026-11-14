@@ -37,7 +37,15 @@ import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
 import { ApiError } from "@/api/types";
-import type { AddableProduct, ApprovalRequest, Order, OrderLine, ProposalChange, RecallAlert } from "@/types";
+import type {
+  AddableProduct,
+  ApprovalRequest,
+  Order,
+  OrderLine,
+  ProposalChange,
+  ProposalChangeReason,
+  RecallAlert,
+} from "@/types";
 
 /** What the gateway gets on approve: the exact totals the human read. */
 export interface ApprovalDecision {
@@ -133,6 +141,21 @@ const CHANGE_ERRORS: Record<string, string> = {
   ROLE_REQUIRED: "Your role cannot change proposals. Ask a chef or approver to make this change.",
 };
 
+const CHANGE_REASONS: readonly { value: ProposalChangeReason; label: string }[] = [
+  { value: "TOO_MUCH", label: "Too much" },
+  { value: "TOO_LITTLE", label: "Too little" },
+  { value: "IN_STOCK", label: "Still in stock" },
+  { value: "MENU_CHANGED", label: "Menu changed" },
+  { value: "BUDGET", label: "Budget" },
+  { value: "OTHER", label: "Other" },
+];
+
+interface LineChangeState {
+  reason?: ProposalChangeReason;
+  note: string;
+  removing: boolean;
+}
+
 /**
  * One order outside the mandate, waiting for a human. Compact by default: what it is,
  * when it comes, the total, a few status chips and Approve / Reject, so a buyer decides
@@ -191,6 +214,7 @@ export function ApprovalCard({
     `${request.approvalRef}\u0000${order?.lines.map((line) => `${line.product.id}:${line.quantity}`).join(",")}\u0000${request.totalExVat}\u0000${request.totalInclVat}`,
   );
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [lineChanges, setLineChanges] = useState<Record<string, LineChangeState>>({});
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), ADD_SEARCH_DEBOUNCE_MS);
@@ -276,6 +300,7 @@ export function ApprovalCard({
         delete next[change.productId];
         return next;
       });
+      resetLineChange(change.productId);
       addables.reload();
     } catch (e) {
       setChangeError(
@@ -298,6 +323,85 @@ export function ApprovalCard({
 
   function quantityValue(line: OrderLine) {
     return quantities[line.product.id] ?? String(line.quantity);
+  }
+
+  function resetLineChange(productId: string) {
+    setLineChanges((current) => {
+      if (!current[productId]) return current;
+      const next = { ...current };
+      delete next[productId];
+      return next;
+    });
+  }
+
+  /** The reason the person tapped, never the suggestion; a note only with OTHER (#1301). */
+  function selectedChange(productId: string) {
+    const lineChange = lineChanges[productId];
+    if (!lineChange?.reason) return {};
+    return {
+      reason: lineChange.reason,
+      ...(lineChange.reason === "OTHER" && lineChange.note ? { note: lineChange.note } : {}),
+    };
+  }
+
+  /** Under a line with a typed new quantity, or a Remove waiting for its confirm: the chips (#1301). */
+  function lineBelow(line: OrderLine) {
+    const quantity = Number(quantityValue(line));
+    const quantityChanged =
+      quantityValue(line).trim() !== "" && Number.isInteger(quantity) && quantity >= 1 && quantity !== line.quantity;
+    const lineChange = lineChanges[line.product.id];
+    const removing = lineChange?.removing ?? false;
+    if (!removing && !quantityChanged) return null;
+    return (
+      <div className="space-y-2">
+        <ChangeReasonChips
+          productName={line.product.names.en}
+          disabled={busy}
+          reason={lineChange?.reason}
+          note={lineChange?.note ?? ""}
+          suggested={removing || quantity < line.quantity ? "TOO_MUCH" : "TOO_LITTLE"}
+          onReason={(reason) =>
+            setLineChanges((current) => {
+              const existing = current[line.product.id] ?? { note: "", removing };
+              return {
+                ...current,
+                [line.product.id]: { ...existing, reason: existing.reason === reason ? undefined : reason },
+              };
+            })
+          }
+          onNote={(note) =>
+            setLineChanges((current) => ({
+              ...current,
+              [line.product.id]: { ...(current[line.product.id] ?? { removing }), note },
+            }))
+          }
+        />
+        {removing ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="destructive"
+              className="min-h-11"
+              disabled={busy}
+              onClick={() =>
+                void changeProposal({ type: "REMOVE_LINE", productId: line.product.id, ...selectedChange(line.product.id) })
+              }
+            >
+              {t("Remove line")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={busy}
+              onClick={() => resetLineChange(line.product.id)}
+            >
+              {t("Keep line")}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   // The status changes only after the gateway confirms. If the call fails
@@ -451,16 +555,23 @@ export function ApprovalCard({
                         ? {
                             busy,
                             value: quantityValue,
-                            onType: (line, value) =>
-                              setQuantities((current) => ({ ...current, [line.product.id]: value })),
+                            onType: (line, value) => {
+                              setQuantities((current) => ({ ...current, [line.product.id]: value }));
+                              resetLineChange(line.product.id);
+                            },
                             onUpdate: (line) =>
                               void changeProposal({
                                 type: "SET_QUANTITY",
                                 productId: line.product.id,
                                 quantity: Number(quantityValue(line)),
+                                ...selectedChange(line.product.id),
                               }),
-                            onRemove: (line) => void changeProposal({ type: "REMOVE_LINE", productId: line.product.id }),
+                            // Remove asks first: the chips and Remove line / Keep line show under the line.
+                            onRemove: (line) =>
+                              setLineChanges((current) => ({ ...current, [line.product.id]: { note: "", removing: true } })),
                             inputId: (line) => `qty-${request.id}-${line.product.id}`,
+                            removing: (line) => lineChanges[line.product.id]?.removing ?? false,
+                            below: lineBelow,
                           }
                         : undefined
                     }
@@ -704,6 +815,70 @@ export function ApprovalCard({
         </DialogContent>
       </Dialog>
     </Card>
+  );
+}
+
+function ChangeReasonChips({
+  productName,
+  disabled,
+  reason,
+  note,
+  suggested,
+  onReason,
+  onNote,
+}: {
+  productName: string;
+  disabled: boolean;
+  reason?: ProposalChangeReason;
+  note: string;
+  suggested: ProposalChangeReason | null;
+  onReason: (reason: ProposalChangeReason) => void;
+  onNote: (note: string) => void;
+}) {
+  const t = useT();
+  const noteId = useId();
+  const counterId = useId();
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t("Reason for changing {product}", { product: productName })}>
+        {CHANGE_REASONS.map((option) => {
+          const selected = reason === option.value;
+          const showSuggestion = reason == null && suggested === option.value;
+          return (
+            <Button
+              key={option.value}
+              type="button"
+              variant={selected ? "default" : "outline"}
+              className={cn("min-h-11 rounded-full px-3", showSuggestion && "border-dashed")}
+              aria-pressed={selected}
+              aria-label={showSuggestion ? `${t(option.label)} · ${t("suggested")}` : undefined}
+              disabled={disabled}
+              onClick={() => onReason(option.value)}
+            >
+              {t(option.label)}
+              {showSuggestion ? <span className="font-normal"> · {t("suggested")}</span> : null}
+            </Button>
+          );
+        })}
+      </div>
+      {reason === "OTHER" ? (
+        <div className="space-y-1">
+          <Label htmlFor={noteId}>{t("Note (optional)")}</Label>
+          <Textarea
+            id={noteId}
+            rows={2}
+            maxLength={200}
+            value={note}
+            disabled={disabled}
+            aria-describedby={counterId}
+            onChange={(event) => onNote(event.target.value)}
+          />
+          <p id={counterId} className="text-xs text-muted-foreground">
+            {t("{count}/200 characters", { count: note.length })}
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

@@ -366,6 +366,7 @@ describe("ApprovalsPage", () => {
       expect(screen.queryByRole("button", { name: "Add Arla 1 L lactose free fat free UHT milk drink" })).toBeNull(),
     );
     await user.click(screen.getByRole("button", { name: "Remove Arla 1 L lactose free fat free UHT milk drink" }));
+    await user.click(screen.getByRole("button", { name: "Remove line" }));
     expect(
       await screen.findByRole("button", { name: "Add Arla 1 L lactose free fat free UHT milk drink" }),
     ).toBeInTheDocument();
@@ -387,6 +388,7 @@ describe("ApprovalsPage", () => {
     expect(screen.getAllByRole("button", { name: /^Approve/ })[1]).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
+    await user.click(screen.getByRole("button", { name: "Remove line" }));
     await waitFor(() => expect(screen.queryByText(/wait for the supplier's stock confirmation/)).toBeNull());
     expect(screen.getAllByRole("button", { name: /^Approve/ })[1]).toBeEnabled();
   });
@@ -402,6 +404,7 @@ describe("ApprovalsPage", () => {
     await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
     const before = listed.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
+    await user.click(screen.getByRole("button", { name: "Remove line" }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("the change may or may not be saved");
     expect(alert).not.toHaveTextContent("unchanged");
@@ -416,7 +419,8 @@ describe("ApprovalsPage", () => {
     api.changeProposal = change;
     renderApp("/approvals", api);
     await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
-    const remove = screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" });
+    await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
+    const remove = screen.getByRole("button", { name: "Remove line" });
     fireEvent.click(remove);
     fireEvent.click(remove);
     expect(change).toHaveBeenCalledTimes(1);
@@ -429,6 +433,7 @@ describe("ApprovalsPage", () => {
     renderApp("/approvals", createMockApi());
     await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
+    await user.click(screen.getByRole("button", { name: "Remove line" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Could not change this proposal. Every line would be removed: reject the proposal instead. The proposal is unchanged.",
     );
