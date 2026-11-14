@@ -16,7 +16,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatEur, formatNumber } from "@/lib/format";
+import { formatEur, formatNumber, formatPack, peopleUnit } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
 import type {
   Allergen,
@@ -52,6 +52,15 @@ export const ALLERGENS = [
 
 function productName(product: Product | OwnProduct): string {
   return "names" in product ? product.names.en : product.name;
+}
+
+/** "1 piece = 0.8 kg": the pack size in its measure; without the measure the pack size is unknown, not a bare number. */
+export function packLabel(product: Pick<OwnProduct, "unit" | "packSize" | "packMeasure">): string {
+  if (product.packSize == null) return peopleUnit(product.unit, 1);
+  if (!product.packMeasure) return formatPack(product.unit, null, "");
+  // Sold by the kg or l itself: the pack is just that amount.
+  if (product.unit.toUpperCase() === product.packMeasure) return `${formatNumber(product.packSize)} ${peopleUnit(product.packMeasure, product.packSize)}`;
+  return formatPack(product.unit, product.packSize, product.packMeasure);
 }
 
 /** A recipe row in the editor: the quantity as typed, and a key that survives removing a row above it. */
@@ -114,9 +123,7 @@ function ProductsTable({
               <div className="min-w-0">
                 <p className="font-medium break-words">{product.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {product.unit}
-                  {product.packSize == null ? "" : ` · ${t("pack {size}", { size: formatNumber(product.packSize) })}`} ·{" "}
-                  {product.priceEur == null ? t("not set") : formatEur(product.priceEur)}
+                  {[packLabel(product), product.priceEur == null ? t("not set") : formatEur(product.priceEur)].join(" · ")}
                 </p>
               </div>
             </div>
@@ -128,7 +135,7 @@ function ProductsTable({
               <Button variant="outline" aria-label={t("Edit {name}", { name: product.name })} onClick={() => onEdit(product)}>
                 {t("Edit")}
               </Button>
-              <Button variant="destructive" aria-label={t("Delete {name}", { name: product.name })} onClick={() => onDelete(product)}>
+              <Button variant="outline" aria-label={t("Delete {name}", { name: product.name })} onClick={() => onDelete(product)}>
                 {t("Delete")}
               </Button>
             </div>
@@ -363,9 +370,11 @@ function ProductsPageContent() {
     <AppShell activeId="products">
       <div className="mx-auto max-w-5xl space-y-6">
         <header>
-          <h1 className="text-2xl font-semibold">{t("Recipes")}</h1>
+          <h1 className="text-2xl font-semibold">{tab === "recipes" ? t("Recipes") : t("Own supplier products")}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {t("Your recipes and the products you make in-house, with their purchasing data.")}
+            {tab === "recipes"
+              ? t("Your recipes, with their allergens and purchasing data.")
+              : t("Products the kitchen buys from its own suppliers and makes in-house, with their purchasing data.")}
           </p>
         </header>
         {state.status === "loading" ? <LoadingState label={t("Loading products and recipes")} /> : null}
@@ -373,7 +382,7 @@ function ProductsPageContent() {
         {state.status === "ready" ? (
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList>
-              <TabsTrigger value="products">{t("Products")}</TabsTrigger>
+              <TabsTrigger value="products">{t("Own supplier products")}</TabsTrigger>
               <TabsTrigger value="recipes">{t("Recipes")}</TabsTrigger>
             </TabsList>
             <TabsContent value="products" className="space-y-4">
@@ -427,7 +436,7 @@ function ProductsPageContent() {
                               {t("Edit")}
                             </Button>
                             <Button
-                              variant="destructive"
+                              variant="outline"
                               aria-label={t("Delete {name}", { name: recipe.name })}
                               onClick={() => {
                                 setDeletingRecipe(recipe);

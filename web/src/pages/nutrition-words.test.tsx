@@ -255,7 +255,7 @@ describe("the kitchen's words on the products tab", () => {
     await user.click(screen.getByRole("button", { name: "Remove the name “blue milk”" }));
     expect(await screen.findByText("“blue milk” removed")).toBeInTheDocument();
     expect(
-      await screen.findByText("No own names yet. Link a word above, and a request that uses it goes to that product."),
+      await screen.findByText("No own names yet. They appear here when you link a word of a request to a product."),
     ).toBeInTheDocument();
   });
 

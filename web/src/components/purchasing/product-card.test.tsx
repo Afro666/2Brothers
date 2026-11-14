@@ -60,7 +60,7 @@ describe("ProductCard catalog facts", () => {
     );
     expect(screen.getByRole("link", { name: products.arlaUht1l.names.fi })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: products.arlaUht1l.names.en })).not.toBeInTheDocument();
-    expect(screen.getByText("Kananmunat")).toBeInTheDocument();
+    expect(screen.getByText("Kananmuna")).toBeInTheDocument();
     expect(screen.getByText("Jäähdytetty, +2–+6 °C")).toBeInTheDocument();
     expect(screen.queryByText(/Chilled/)).not.toBeInTheDocument();
   });

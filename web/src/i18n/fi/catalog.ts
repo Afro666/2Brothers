@@ -95,6 +95,7 @@ export default {
   "Walnuts": "Saksanpähkinät",
   "Pistachio nuts": "Pistaasipähkinät",
   "Brazil nuts": "Parapähkinät",
+  "Oats": "Kaura",
   "Fish": "Kala",
   "Tree nuts": "Pähkinät",
   "Peanuts": "Maapähkinät",
