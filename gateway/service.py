@@ -374,7 +374,9 @@ class Gateway:
                         seen=str(seen), now=fresh["simulation"]["expected_total"])
             raise GatewayError(409, "TOTAL_MISMATCH", "the price or stock moved; look at the new total",
                                expected_total=fresh["simulation"]["expected_total"])
-        sim = stored["simulation"]
+        # Unchanged basket: place it on the live quote just made, not on the
+        # stored one, which may have expired.
+        sim = fresh["simulation"]
         # A person's consent is not supplier stock confirmation. Keep unknown
         # lines visible in proposals, but never record a placed order for them.
         if any(line.get("unknown_stock") is not False for line in sim["lines"]):
@@ -382,12 +384,13 @@ class Gateway:
         # Atomic commit point shared with the recall monitor. A notice arriving
         # during the live quote can still claim APPROVING and prevent this order.
         committed = self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
-            'status': 'APPROVING', 'approving_key': key}, {'$set': {'status': 'COMMITTING'}})
+            'status': 'APPROVING', 'approving_key': key}, {'$set': {'status': 'COMMITTING', 'offer_id': fresh['offer_id']},
+                           '$addToSet': {'past_offer_ids': stored['offer_id']}})
         if not committed.modified_count:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
-        payload = {"offer_id": stored["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}
+        payload = {"offer_id": fresh["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}
         order, created = orders.record_attempt(
-            self.db, kitchen_id=kitchen_id, idempotency_key=key, offer_id=stored["offer_id"],
+            self.db, kitchen_id=kitchen_id, idempotency_key=key, offer_id=fresh["offer_id"],
             expected_total=Decimal128(sim["expected_total"]),   # exact decimal in any Mongo
             lines=[{k: v for k, v in ln.items() if k != "why"} for ln in sim["lines"]],
             payload_hash=_hash(payload), proposal_id=proposal_id, supplier_id=VALIO, approved_by=human)
@@ -484,7 +487,8 @@ class Gateway:
         if not isinstance(key, str) or not key.strip():
             raise GatewayError(422, "MISSING_IDEMPOTENCY_KEY", "idempotency_key is required")
         offer = self._kitchen_offer(kitchen_id, body.get("offer_id"))
-        existing = self.db.proposals.find_one({"kitchen_id": kitchen_id, "offer_id": offer["offer_id"]})
+        existing = self.db.proposals.find_one({"kitchen_id": kitchen_id, "$or": [
+            {"offer_id": offer["offer_id"]}, {"past_offer_ids": offer["offer_id"]}]})
         if existing:
             if existing["idempotency_key"] != key:
                 raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "this offer already has an approval request")
@@ -516,7 +520,9 @@ class Gateway:
         if not isinstance(key, str) or not key.strip():
             raise GatewayError(422, "MISSING_IDEMPOTENCY_KEY", "idempotency_key is required")
         offer = self._kitchen_offer(kitchen_id, body.get("offer_id"))
-        doc = self.db.proposals.find_one({"kitchen_id": kitchen_id, "offer_id": offer["offer_id"]})
+        # The approval may have placed the order on a fresh re-quote of this offer.
+        doc = self.db.proposals.find_one({"kitchen_id": kitchen_id, "$or": [
+            {"offer_id": offer["offer_id"]}, {"past_offer_ids": offer["offer_id"]}]})
         if doc is None or doc["status"] != "APPROVED" or not doc.get("order_id"):
             raise GatewayError(403, "NEEDS_APPROVAL", "a person must approve this order in the approval inbox")
         order = orders.get_order(self.db, doc["order_id"])
