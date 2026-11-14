@@ -155,7 +155,8 @@ creates them, or call `history.ensure_history_collections(db)` once per database
 ```python
 from store import trust
 
-trust.verify(db, "demo-kitchen")    # {"ok": True, "length": 412, "broken_at": None, "kitchen_entries": 57}
+trust.verify(db, "demo-kitchen")    # {"ok": True, "length": 412, "broken_at": None,
+                                    #  "broken_kitchen_id": None, "kitchen_entries": 57}
 trust.tamper(db, "demo-kitchen")    # {"seq": 412, "tampered": True}; verify now reports broken_at: 412
 trust.restore(db, "demo-kitchen")   # the exact row is back and the chain verifies again
 
@@ -168,7 +169,10 @@ events.close()                      # when the client goes away
 
 `tamper` is a demo: it runs only for `demo-kitchen` while its `kitchens` row says
 `synthetic: true`, edits one audit row, and keeps the original in `audit_tamper_demo`
-until `restore`. Every other kitchen gets `PermissionError`. `store.audit` still has no
+until `restore`. Every other kitchen gets `PermissionError`. The chain is one for all
+kitchens, so every kitchen's `verify` shows the break while it lasts, with
+`broken_kitchen_id: "demo-kitchen"`; a tamper left for 10 minutes restores itself on the
+next `verify` or `tamper`. `store.audit` still has no
 update and no delete. `watch_kitchen` covers `proposals`, `approvals` and `audit_log`
 and carries only that kitchen's rows; on the free tier an insert arrived in
 about 0.03 s (five tries).

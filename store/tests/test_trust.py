@@ -28,7 +28,8 @@ class TamperDemoTests(unittest.TestCase):
 
     def test_verify_reports_the_chain_and_this_kitchens_share(self):
         self.assertEqual(trust.verify(self.db, "demo-kitchen"),
-                         {"ok": True, "length": 3, "broken_at": None, "kitchen_entries": 2})
+                         {"ok": True, "length": 3, "broken_at": None, "broken_kitchen_id": None,
+                          "kitchen_entries": 2})
         self.assertEqual(trust.verify(self.db, "real-kitchen")["kitchen_entries"], 1)
 
     def test_tamper_breaks_the_chain_and_restore_mends_it_exactly(self):
@@ -38,6 +39,10 @@ class TamperDemoTests(unittest.TestCase):
         self.assertEqual((broken["ok"], broken["broken_at"]), (False, 3))
         with self.assertRaises(ValueError):  # one tampered row at a time
             trust.tamper(self.db, "demo-kitchen")
+        # The chain is shared, so another kitchen sees the break, and whose row it is.
+        other = trust.verify(self.db, "real-kitchen")
+        self.assertEqual((other["ok"], other["broken_at"], other["broken_kitchen_id"]),
+                         (False, 3, "demo-kitchen"))
         self.assertEqual(trust.restore(self.db, "demo-kitchen"), {"seq": 3, "restored": True})
         self.assertEqual(list(self.db.audit_log.find().sort("_id", 1)), before)
         self.assertTrue(trust.verify(self.db, "demo-kitchen")["ok"])
@@ -54,6 +59,27 @@ class TamperDemoTests(unittest.TestCase):
         with self.assertRaises(PermissionError):  # a real kitchen that happens to have the name
             trust.tamper(self.db, "demo-kitchen")
         self.assertTrue(trust.verify(self.db, "demo-kitchen")["ok"])
+
+    def test_a_forgotten_tamper_restores_itself(self):
+        from datetime import datetime, timedelta, timezone
+        trust.tamper(self.db, "demo-kitchen")
+        self.assertFalse(trust.verify(self.db, "real-kitchen")["ok"])  # fresh: still broken
+        old = datetime.now(timezone.utc) - trust.TAMPER_TTL - timedelta(seconds=1)
+        self.db.audit_tamper_demo.update_one({"_id": "demo-kitchen"}, {"$set": {"tampered_at": old}})
+        healed = trust.verify(self.db, "real-kitchen")
+        self.assertEqual((healed["ok"], healed["broken_kitchen_id"]), (True, None))
+        self.assertIsNone(self.db.audit_tamper_demo.find_one({}))
+        trust.tamper(self.db, "demo-kitchen")
+        self.db.audit_tamper_demo.update_one({"_id": "demo-kitchen"}, {"$set": {"tampered_at": old}})
+        self.assertEqual(trust.tamper(self.db, "demo-kitchen")["tampered"], True)  # heals, then tampers
+        trust.restore(self.db, "demo-kitchen")
+        self.assertTrue(trust.verify(self.db, "demo-kitchen")["ok"])
+
+    def test_a_removed_row_is_a_break_nobody_can_attribute(self):
+        self.db.audit_log.delete_one({"_id": 2})
+        result = trust.verify(self.db, "demo-kitchen")
+        self.assertEqual((result["ok"], result["broken_at"], result["broken_kitchen_id"]),
+                         (False, 3, None))
 
     def test_nothing_to_tamper_is_an_error_not_a_silent_success(self):
         self.db.audit_log.delete_many({"server.kitchen_id": "demo-kitchen"})
