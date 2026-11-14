@@ -9,10 +9,16 @@ interface AccuracyRow {
   actual: number;
   wape: number;
   bias: number;
-  under: number;
-  over: number;
+  /** null when the products have two or more units (#1618): then `by_unit` has the sums. */
+  under: number | null;
+  over: number | null;
   /** Product-weeks compared. 0 means nothing was compared. */
   series: number;
+  by_unit?: { unit: string | null; under: number; over: number }[];
+  under_eur?: string | null;
+  over_eur?: string | null;
+  /** Product-weeks without a price: their short and waste are not in the euros. */
+  unpriced_series?: number;
 }
 interface MethodBody {
   total: AccuracyRow;
@@ -27,13 +33,22 @@ function method(accuracy: unknown, name: string): MethodBody {
   return body as MethodBody;
 }
 
+type Figure = "predicted" | "actual" | "wape" | "bias" | "under" | "over";
+
 /** With nothing compared the route still sends zeros: those are unknown, not zero. */
-function known(row: AccuracyRow | undefined, field: keyof AccuracyRow): number | null {
-  return row && row.series > 0 && Number.isFinite(row[field]) ? row[field] : null;
+function known(row: AccuracyRow | undefined, field: Figure): number | null {
+  const value = row?.[field];
+  return row && row.series > 0 && typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** A euro total counts only priced products, so it is shown only when none is left out. */
+function euros(row: AccuracyRow, field: "under_eur" | "over_eur"): number | null {
+  const value = row[field];
+  return row.series > 0 && row.unpriced_series === 0 && value != null ? mapMoney(value, field) : null;
 }
 
 function score(row: AccuracyRow): ForecastScore {
-  return {
+  const out: ForecastScore = {
     wape: known(row, "wape"),
     bias: known(row, "bias"),
     short: known(row, "under"),
@@ -41,6 +56,13 @@ function score(row: AccuracyRow): ForecastScore {
     // The route gives the quantities short and over, not days.
     stockOutDays: null,
   };
+  if (row.series > 0 && Array.isArray(row.by_unit) && row.by_unit.length > 1) {
+    // Two or more units: never one sum over kg, l and pieces (#1618).
+    out.byUnit = row.by_unit.map((unit) => ({ unit: unit.unit, short: unit.under, waste: unit.over }));
+    out.shortEur = euros(row, "under_eur");
+    out.wasteEur = euros(row, "over_eur");
+  }
+  return out;
 }
 
 /**

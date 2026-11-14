@@ -168,8 +168,47 @@ describe("mock API planning data", () => {
       // The salmon has no price in the sample data.
       shortfallCount: 1,
     });
-    // A proposal only: nothing is approved or placed by it.
-    expect(await api.listApprovals()).toEqual(approvals);
+    // A proposal only: it waits in the inbox, nothing is approved or placed by it (#800).
+    const after = await api.listApprovals();
+    expect(after.slice(0, approvals.length)).toEqual(approvals);
+    expect(after).toHaveLength(approvals.length + 1);
+  });
+
+  it("lists the READY proposal in the approvals inbox with its order (#800)", async () => {
+    const api = createMockApi();
+    const proposal = await api.proposeOrderForPlan("2026-11-16", "2026-11-22", "2026-11-18");
+
+    const added = (await api.listApprovals()).find((row) => row.id === `APR-${proposal.id}`);
+    expect(added).toMatchObject({
+      status: "PENDING",
+      lineCount: 4,
+      totalInclVat: 719.6,
+      deliveryDate: "2026-11-18",
+      summary: "Menu plan 2026-11-16 to 2026-11-22: 4 lines",
+    });
+    const order = await api.getOrder(added!.orderId);
+    expect(order.status).toBe("NEEDS_APPROVAL");
+    expect(order.lines).toHaveLength(4);
+    expect(order.totalInclVat).toBe(719.6);
+    expect(order.lines.map((line) => line.quantity).every((quantity) => Number.isInteger(quantity))).toBe(true);
+  });
+
+  it("approves the mock proposal at its own totals (#800)", async () => {
+    const api = createMockApi();
+    const proposal = await api.proposeOrderForPlan("2026-11-16", "2026-11-22", "2026-11-18");
+    const approval = await api.getApproval(`APR-${proposal.id}`);
+
+    const decided = await api.approve(
+      {
+        approvalId: approval.id,
+        approvalRef: approval.approvalRef,
+        expectedTotalExVat: approval.totalExVat,
+        expectedTotalInclVat: approval.totalInclVat,
+      },
+      "chef",
+    );
+    expect(decided.status).toBe("APPROVED");
+    expect((await api.getOrder(approval.orderId)).status).toBe("PLACED");
   });
 
   it("answers NOTHING_NEEDED for a week with no menu entries, or when stock covers the plan", async () => {

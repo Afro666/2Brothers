@@ -36,7 +36,15 @@ from signals.covers import CoverSignals
 START = date(2026, 8, 17)
 DEMO_ID = "demo-kitchen"
 VALIO = "sup-valio"
-MEAL = "lunch"
+# The meal of each menu entry (#1618), one of store.repository.MEALS: porridge and the buffet
+# are breakfast; a hotel's rotating main is its dinner; everything else is lunch.
+BREAKFAST_RECIPES = frozenset({"oat_porridge", "breakfast_buffet"})
+
+
+def meal_of(recipe: str, kitchen_type) -> str:
+    if recipe in BREAKFAST_RECIPES:
+        return "breakfast"
+    return "dinner" if kitchen_type.name == "hotel" else "lunch"
 
 
 # The demo kitchen's suppliers and own products. Terms are placeholders a user would set
@@ -140,7 +148,7 @@ def build(seed: int, today: date, future_weeks: int, kitchens: int = 20,
                     covers = round(plan(day))
                     for recipe, share in k.menu(day):
                         y, w, _ = day.isocalendar()
-                        weeks[f"{y}-W{w:02d}"].append({"date": day.isoformat(), "meal": MEAL,
+                        weeks[f"{y}-W{w:02d}"].append({"date": day.isoformat(), "meal": meal_of(recipe, k.type),
                                                        "recipe_id": f"env-{recipe}",
                                                        "covers": max(round(covers * share), 0)})
                 if day < today:

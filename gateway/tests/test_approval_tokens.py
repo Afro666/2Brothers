@@ -1,7 +1,8 @@
 """Personal approval tokens (decision 2026-11-14): a person approves from their own chat.
 
-Agent and kitchen tokens still never approve; the open demo cannot create one; the token
-never proposes; every use is audited with via: personal_token.
+Agent and kitchen tokens still never approve; the open demo creates only `open-demo` tokens
+in its own kitchen (decision 2026-11-14 18:08 UTC, #1446); the token never proposes; every
+use is audited with via: personal_token.
 """
 
 import json
@@ -76,23 +77,140 @@ def test_hours_default_8_max_24(env):
     assert client.post(K + "/approval-tokens", json={"hours": 24}).status_code == 200
 
 
-def test_the_open_demo_principal_cannot_create_one(env):
+def open_demo_token(client, hours=None):
+    r = client.post(K + "/approval-tokens", headers=HUMAN, json={"hours": hours} if hours else {})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    return out, {"Authorization": "Bearer " + out["token"]}
+
+
+def test_the_open_demo_creates_an_open_demo_token_that_approves_only_in_its_kitchen(env):
+    client, _, db = env
+    out, tka = open_demo_token(client)
+    assert out["person"] == "open-demo" and out["created_by"] == "open-demo"
+    assert out["kitchen_id"] == "demo-kitchen" and out["token"].startswith("tka_")
+    assert "aron" not in json.dumps({k: v for k, v in out.items() if k != "token"})   # not the X-User name
+    hours = approval_tokens._parse(out["expires_at"]) - approval_tokens._parse(out["created_at"])
+    assert hours == timedelta(hours=8)                                  # the same expiry as an account's
+    created = db.audit_log.find_one({"event.kind": "approval_token_created"})["event"]
+    assert created["actor"] == "open-demo" and created["token_id"] == out["token_id"]
+    me = client.get("/v1/me", headers=tka).json()
+    assert me["kind"] == "personal" and me["name"] == "open-demo" and me["can_approve"] is True
+    assert client.post(K + "/proposals", headers=tka, json={}).status_code == 403   # never proposes
+    other = client.get("/v1/kitchens/other-kitchen/proposals", headers=tka)
+    assert other.status_code == 403 and other.json()["error"]["code"] == "KITCHEN_SCOPE"
+    p = milk(client)
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=tka, json=approve_body(p))
+    assert r.status_code == 200, r.text
+    placed = db.audit_log.find_one({"event.kind": "order_placed"})["event"]
+    assert placed["actor"] == "open-demo"
+    assert placed["via"] == "personal_token" and placed["token_id"] == out["token_id"]
+    assert out["token"] not in json.dumps([e["event"] for e in db.audit_log.find()], default=str)
+
+
+def test_each_open_demo_token_is_its_own_in_the_audit(env):
+    client, _, db = env
+    first, tk1 = open_demo_token(client)
+    second, tk2 = open_demo_token(client)
+    assert first["token_id"] != second["token_id"]
+    p = milk(client)
+    assert client.post(f"{K}/proposals/{p['proposal_id']}/reject", headers=tk2,
+                       json={"reason": "judge 2", "idempotency_key": "r"}).status_code == 200
+    event = db.audit_log.find_one({"event.kind": "proposal_rejected"})["event"]
+    assert event["actor"] == "open-demo" and event["token_id"] == second["token_id"]
+
+
+def test_the_open_demo_creates_tokens_only_in_its_own_kitchen(env, monkeypatch):
     client, _, _ = env
-    r = client.post(K + "/approval-tokens", headers=HUMAN, json={})
-    assert r.status_code == 403 and r.json()["error"]["code"] == "PERSONAL_TOKEN_NEEDS_SIGN_IN"
+    r = client.post("/v1/kitchens/other-kitchen/approval-tokens", headers=HUMAN, json={})
+    assert r.status_code == 403 and r.json()["error"]["code"] == "KITCHEN_SCOPE"
+    monkeypatch.setenv("GATEWAY_KITCHEN_ID", "other-kitchen")
+    assert client.post("/v1/kitchens/other-kitchen/approval-tokens", headers=HUMAN, json={}).status_code == 200
+    assert client.post(K + "/approval-tokens", headers=HUMAN, json={}).status_code == 403
 
 
-def test_the_open_demo_cannot_list_or_revoke_and_sees_no_email(env):
-    """Live check 14 Nov: the open demo listed every token with the person's email, and anyone
-    could revoke it. Only the signed-in owner lists or revokes their own tokens."""
+def test_the_open_demo_sees_only_open_demo_tokens_never_another_persons_and_no_email(env):
+    """Live check 14 Nov (#1575): the open demo listed every token with the person's email,
+    and anyone could revoke it. The open demo lists and revokes only `open-demo` tokens."""
     client, _, db = env
     out, _ = personal(client, db)
+    demo, _ = open_demo_token(client)
     listed = client.get(K + "/approval-tokens", headers=HUMAN)
-    assert listed.status_code == 403 and listed.json()["error"]["code"] == "PERSONAL_TOKEN_NEEDS_SIGN_IN"
-    assert "aron@example.com" not in listed.text
+    assert listed.status_code == 200
+    assert [t["token_id"] for t in listed.json()["tokens"]] == [demo["token_id"]]
+    assert "aron@example.com" not in listed.text and out["token_id"] not in listed.text
+    assert demo["token"] not in listed.text                             # never the full token again
     gone = client.delete(f"{K}/approval-tokens/{out['token_id']}", headers=HUMAN)
-    assert gone.status_code == 403
+    assert gone.status_code == 404 and gone.json()["error"]["code"] == "TOKEN_NOT_FOUND"
+    assert "aron@example.com" not in gone.text
     assert db.approval_tokens.find_one({"_id": out["token_id"]})["revoked_at"] is None
+    sign_in(client, "aron@example.com")                                 # and a person never sees open-demo's
+    assert [t["token_id"] for t in client.get(K + "/approval-tokens").json()["tokens"]] == [out["token_id"]]
+    r = client.delete(f"{K}/approval-tokens/{demo['token_id']}")
+    assert r.status_code == 404 and r.json()["error"]["code"] == "TOKEN_NOT_FOUND"
+
+
+def test_the_open_demo_cannot_revoke_a_real_persons_token(env):
+    client, _, db = env
+    out, tka = personal(client, db)
+    r = client.delete(f"{K}/approval-tokens/{out['token_id']}", headers=HUMAN)
+    assert r.status_code == 404 and r.json()["error"]["code"] == "TOKEN_NOT_FOUND"
+    assert db.approval_tokens.find_one({"_id": out["token_id"]})["revoked_at"] is None
+    assert client.get(K + "/proposals", headers=tka).status_code == 200    # aron's still works
+    assert not db.audit_log.find_one({"event.kind": "approval_token_revoked"})
+
+
+def test_the_open_demo_lists_and_revokes_its_own_tokens(env):
+    client, _, db = env
+    demo, tka = open_demo_token(client)
+    r = client.delete(f"{K}/approval-tokens/{demo['token_id']}", headers=HUMAN)
+    assert r.status_code == 200 and r.json()["revoked_at"] is not None
+    assert client.get(K + "/proposals", headers=tka).status_code == 401
+    row = client.get(K + "/approval-tokens", headers=HUMAN).json()["tokens"][0]
+    assert row["token_id"] == demo["token_id"] and row["revoked_at"] is not None
+    revoked = db.audit_log.find_one({"event.kind": "approval_token_revoked"})["event"]
+    assert revoked["actor"] == "open-demo" and revoked["token_id"] == demo["token_id"]
+
+
+def test_open_demo_tokens_are_capped_the_oldest_revoked_first(env, monkeypatch):
+    client, _, db = env
+    monkeypatch.setattr(approval_tokens, "OPEN_DEMO_CAP", 2)
+    out, _ = personal(client, db)                                       # a person's token is never capped
+    made = []
+    for i in range(3):                                                  # the test clock stands still
+        made.append(open_demo_token(client))
+        db.approval_tokens.update_one({"_id": made[-1][0]["token_id"]},
+                                      {"$set": {"created_at": NOW + timedelta(seconds=i)}})
+    (first, tk1), (second, _), (third, tk3) = made
+    active = [t["token_id"] for t in client.get(K + "/approval-tokens", headers=HUMAN).json()["tokens"]
+              if t["revoked_at"] is None]
+    assert active == [third["token_id"], second["token_id"]]
+    assert client.get(K + "/proposals", headers=tk1).status_code == 401
+    assert client.get(K + "/proposals", headers=tk3).status_code == 200
+    capped = db.audit_log.find_one({"event.kind": "approval_token_revoked"})["event"]
+    assert capped["token_id"] == first["token_id"] and capped["reason"] == "open_demo_cap"
+    assert db.approval_tokens.find_one({"_id": out["token_id"]})["revoked_at"] is None
+
+
+def test_open_demo_off_needs_a_signed_in_account_and_stops_open_demo_tokens(env, monkeypatch):
+    client, _, db = env
+    _, tka = open_demo_token(client)
+    out, tk_person = personal(client, db)
+    monkeypatch.setattr(approval_tokens, "open_demo_on", lambda: False)    # shared token still resolves
+    for method, path in (("POST", K + "/approval-tokens"), ("GET", K + "/approval-tokens"),
+                         ("DELETE", f"{K}/approval-tokens/{out['token_id']}")):
+        r = client.request(method, path, headers=HUMAN, json={} if method == "POST" else None)
+        assert r.status_code == 403 and r.json()["error"]["code"] == "PERSONAL_TOKEN_NEEDS_SIGN_IN", path
+    assert client.get(K + "/proposals", headers=tka).status_code == 401
+    monkeypatch.undo()
+    monkeypatch.setenv("GATEWAY_HUMAN_TOKEN", "human-test-token")
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    monkeypatch.setenv("GATEWAY_REQUIRE_LOGIN", "true")                    # the real switch
+    assert client.post(K + "/approval-tokens", headers=HUMAN, json={}).status_code == 401
+    assert client.get(K + "/proposals", headers=tka).status_code == 401
+    assert client.get(K + "/proposals", headers=tk_person).status_code == 200
+    sign_in(client, "aron@example.com")
+    assert client.post(K + "/approval-tokens", json={}).status_code == 200
 
 
 def test_another_approver_neither_sees_nor_revokes_my_token(env):

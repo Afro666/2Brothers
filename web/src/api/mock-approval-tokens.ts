@@ -2,31 +2,29 @@ import type { Api, ApprovalToken } from "@/api/types";
 import { ApiError } from "@/api/types";
 
 const HOUR_MS = 3_600_000;
+/** The person of a token the open demo creates; no account has it. */
+export const OPEN_DEMO_PERSON = "open-demo";
 
 /**
  * A per-Api in-memory store of personal approval tokens, with the gateway's rules:
  * hours 1 to 24, a name of 1 to 80 characters, the secret only in the create answer.
- * `person` is the signed-in account's email, or null in the open demo (403, as on the gateway).
+ * `person` is the signed-in account's email, or null in the open demo: its tokens belong to the
+ * shared `open-demo` person, as on the gateway (docs/contract.md, "Personal approval tokens", #1446).
+ * Each caller lists and revokes only its own person's tokens.
  */
 export function createApprovalTokensMock(
   person: () => Promise<string | null> = async () => "buyer@demo.kitchen",
 ): Pick<Api, "listApprovalTokens" | "createApprovalToken" | "revokeApprovalToken"> {
   const tokens: ApprovalToken[] = [];
   let sequence = 0;
+  const owner = async () => (await person()) ?? OPEN_DEMO_PERSON;
   return {
     async listApprovalTokens() {
-      return structuredClone(tokens);
+      const email = await owner();
+      return structuredClone(tokens.filter((token) => token.person === email));
     },
     async createApprovalToken({ hours, name = "chat" }) {
-      const email = await person();
-      if (!email) {
-        throw new ApiError(
-          "PERSONAL_TOKEN_NEEDS_SIGN_IN",
-          "a personal approval token needs a real signed-in account",
-          {},
-          403,
-        );
-      }
+      const email = await owner();
       if (!Number.isInteger(hours) || hours < 1 || hours > 24) {
         throw new ApiError("INVALID_REQUEST", "hours: an integer from 1 to 24", {}, 422);
       }
@@ -52,7 +50,8 @@ export function createApprovalTokensMock(
       return { ...structuredClone(row), token };
     },
     async revokeApprovalToken(id) {
-      const row = tokens.find((token) => token.id === id);
+      const email = await owner();
+      const row = tokens.find((token) => token.id === id && token.person === email);
       if (!row) throw new ApiError("TOKEN_NOT_FOUND", "no such approval token in this kitchen", {}, 404);
       if (row.revokedAt === null) row.revokedAt = new Date().toISOString();
       return structuredClone(row);

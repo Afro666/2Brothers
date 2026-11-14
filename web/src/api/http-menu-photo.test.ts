@@ -97,6 +97,15 @@ describe("Plan from a menu photo on the real gateway", () => {
     });
   });
 
+  it("sends the default covers only when the person gave them", async () => {
+    const calls = gateway(() => ANSWER);
+    const api = createHttpApi("/api");
+    await api.readMenuPhoto(new Blob(["x"]), { from: "2026-11-16", to: "2026-11-22", covers: 90 }, "chef");
+    await api.readMenuPhoto(new Blob(["x"]), { from: "2026-11-16", to: "2026-11-22" }, "chef");
+    expect(calls[0].body?.covers).toBe(90);
+    expect(calls[1].body).not.toHaveProperty("covers");
+  });
+
   it("never gives a not-known dish a recipe or a place in the proposal", () => {
     const read = mapMenuPhoto({ ...ANSWER, dishes: [{ ...UNKNOWN, recipe_id: "env-burger", in_proposal: true }] });
     expect(read.dishes[0]).toMatchObject({ recipeId: null, recipeName: null, inProposal: false });

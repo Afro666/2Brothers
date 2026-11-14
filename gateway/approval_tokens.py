@@ -6,12 +6,17 @@
 - Short-lived: 8 hours by default, at most 24. Revocable. Expired or revoked -> 401.
 - Shown once at creation; only the SHA-256 is stored, plus an 8-character prefix for display.
 - Agent and kitchen API tokens (gateway/tokens.py) still never approve.
+- The open demo (decision 2026-11-14 18:08 UTC, #1446): while it is on, its shared approver
+  may create one for the open demo's kitchen. Its person is `open-demo`, never an account's
+  email; the open demo lists and revokes only `open-demo` tokens; at most OPEN_DEMO_CAP are
+  active, the oldest is revoked first. Open demo off: an `open-demo` token stops working.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import hashlib
+import os
 import secrets
 from uuid import uuid4
 
@@ -21,6 +26,18 @@ VIA = "personal_token"
 DEFAULT_HOURS, MAX_HOURS = 8, 24
 CLI = "operator-cli"
 TOUCH_EVERY = timedelta(minutes=1)
+OPEN_DEMO = "open-demo"          # the person of an open-demo token; no account has it (no "@")
+OPEN_DEMO_CAP = 50               # active open-demo tokens per kitchen; the oldest is revoked first
+CAP_REASON = "open_demo_cap"
+
+
+def open_demo_on() -> bool:
+    """The open demo is on while the shared human token works (gateway/app.py _env_principal)."""
+    return os.environ.get("GATEWAY_REQUIRE_LOGIN", "").lower() != "true"
+
+
+def open_demo_kitchen() -> str:
+    return os.environ.get("GATEWAY_KITCHEN_ID", "demo-kitchen")
 
 
 class ApprovalTokenError(ValueError):
@@ -61,31 +78,62 @@ def hours_of(value) -> int:
     return value
 
 
+def _open_demo_user(kitchen_id: str) -> dict | None:
+    """The open demo's stand-in account for an `open-demo` token, or None when the open demo
+    is off or the kitchen is not the open demo's."""
+    if not open_demo_on() or kitchen_id != open_demo_kitchen():
+        return None
+    return {"_id": OPEN_DEMO, "role": "approver", "kitchen_id": kitchen_id}
+
+
 def create(db, person: str, kitchen_id: str, created_by: str, *, hours=None, name=None,
            now: datetime | None = None) -> dict:
     """A new token for `person` in `kitchen_id`. The account must exist and be an approver of
-    that kitchen (or of every kitchen). The answer holds `token`: the only time it leaves."""
+    that kitchen (or of every kitchen); or `person` is OPEN_DEMO, for the open demo's kitchen
+    while it is on (the caller checks it is the open demo). The answer holds `token`: the
+    only time it leaves. An open-demo create beyond OPEN_DEMO_CAP revokes the oldest active
+    ones first; the answer lists them in `capped` (token ids) for the audit."""
     hours = hours_of(hours)
     name = "chat" if name is None else name
     if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
         raise ApprovalTokenError(422, "INVALID_REQUEST", "name: 1 to 80 characters")
     email = (person or "").strip().lower()
-    user = db.users.find_one({"_id": email}) if email else None
-    if user is None:
-        raise ApprovalTokenError(404, "UNKNOWN_PERSON", "no account with this email")
-    if user["role"] != "approver":
-        raise ApprovalTokenError(403, "ROLE_REQUIRED", "only an approver can have an approval token")
-    if user["kitchen_id"] is not None and user["kitchen_id"] != kitchen_id:
-        raise ApprovalTokenError(403, "KITCHEN_SCOPE", "this person belongs to another kitchen")
-    token = PREFIX + secrets.token_urlsafe(32)
     now = now or datetime.now(timezone.utc)
+    capped: list[str] = []
+    if email == OPEN_DEMO:
+        if _open_demo_user(kitchen_id) is None:
+            raise ApprovalTokenError(403, "KITCHEN_SCOPE", "the open demo makes tokens for its own kitchen only")
+        capped = _cap_open_demo(db, kitchen_id, now)
+    else:
+        user = db.users.find_one({"_id": email}) if email else None
+        if user is None:
+            raise ApprovalTokenError(404, "UNKNOWN_PERSON", "no account with this email")
+        if user["role"] != "approver":
+            raise ApprovalTokenError(403, "ROLE_REQUIRED", "only an approver can have an approval token")
+        if user["kitchen_id"] is not None and user["kitchen_id"] != kitchen_id:
+            raise ApprovalTokenError(403, "KITCHEN_SCOPE", "this person belongs to another kitchen")
+    token = PREFIX + secrets.token_urlsafe(32)
     doc = {"_id": uuid4().hex, "kind": KIND, "name": name.strip(), "person": email,
            "kitchen_id": kitchen_id, "hash": _hash(token), "prefix": token[:8],
            "created_at": now, "created_by": created_by, "expires_at": now + timedelta(hours=hours),
            "last_used_at": None, "revoked_at": None}
     db.approval_tokens.create_index("hash", unique=True)
     db.approval_tokens.insert_one(doc)
-    return {**_out(doc), "token": token}
+    out = {**_out(doc), "token": token}
+    if capped:
+        out["capped"] = capped
+    return out
+
+
+def _cap_open_demo(db, kitchen_id: str, now: datetime) -> list[str]:
+    """Revoke the oldest active open-demo tokens so one more stays within OPEN_DEMO_CAP."""
+    active = [d for d in db.approval_tokens.find({"kitchen_id": kitchen_id, "person": OPEN_DEMO,
+                                                  "revoked_at": None}).sort("created_at", 1)
+              if _aware(d["expires_at"]) > now]
+    over = active[:max(0, len(active) - OPEN_DEMO_CAP + 1)]
+    for d in over:
+        db.approval_tokens.update_one({"_id": d["_id"], "revoked_at": None}, {"$set": {"revoked_at": now}})
+    return [d["_id"] for d in over]
 
 
 def list_tokens(db, kitchen_id: str | None = None, person: str | None = None) -> list[dict]:
@@ -123,7 +171,10 @@ def verify(db, token: str, now: datetime | None = None) -> tuple[dict, dict] | N
     now = now or datetime.now(timezone.utc)
     if _aware(doc["expires_at"]) <= now:
         return None
-    user = db.users.find_one({"_id": doc["person"]})
+    if doc["person"] == OPEN_DEMO:
+        user = _open_demo_user(doc["kitchen_id"])      # open demo off: the token stops working
+    else:
+        user = db.users.find_one({"_id": doc["person"]})
     if user is None:
         return None
     if user.get("kitchen_id") is not None and user["kitchen_id"] != doc["kitchen_id"]:

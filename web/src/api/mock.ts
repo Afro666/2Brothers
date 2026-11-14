@@ -12,6 +12,7 @@ import { forecastAccuracyMock } from "@/api/mock-forecast";
 import { createRecallMock } from "@/api/mock-recalls";
 import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
 import { menuPlanApproval, menuPlanOrder } from "@/mocks/menu-plan-case";
+import { planProposalCase } from "@/mocks/plan-proposal";
 import { sampleReceipt } from "@/mocks/receipt";
 import { listBrandLogosMock } from "@/api/mock-brand-logos";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
@@ -289,7 +290,12 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     };
   }
 
-  const planning = createPlanningMock(recordAudit);
+  // A READY menu-plan proposal lands in the inbox, as on the gateway (#800).
+  const planning = createPlanningMock(recordAudit, (planned) => {
+    const { order, approval } = planProposalCase(planned);
+    demoOrders.set(order.id, order);
+    approvals.set(approval.id, approval);
+  });
   const getProducts: Api["getProducts"] = async (ids) => {
     const wanted = new Set(ids);
     return (Object.values(products) as Product[]).filter((product) => wanted.has(product.id));
