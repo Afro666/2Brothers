@@ -1,6 +1,7 @@
 import { Check, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 
+import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OptionCompare } from "@/components/purchasing/option-compare";
 import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
@@ -99,7 +100,6 @@ export function ApprovalCard({
   listAddableProducts,
   editCount = 0,
   approvalBlockedReason,
-  approveUnconfirmedManual = false,
   recalls = [],
   folded = false,
 }: {
@@ -113,7 +113,6 @@ export function ApprovalCard({
   listAddableProducts?: (query: string) => Promise<AddableProduct[]>;
   editCount?: number;
   approvalBlockedReason?: string;
-  approveUnconfirmedManual?: boolean;
   /** Recall alerts on this order; a blocked line still on it holds the approval. */
   recalls?: RecallAlert[];
   /** A decided card starts folded: title, totals and status show, the details open on a tap (#1142). */
@@ -143,13 +142,15 @@ export function ApprovalCard({
   // A proposal held by a recall cannot be approved, but it can be rejected to close it.
   const held = status === "BLOCKED_BY_RECALL";
   const canDecide = pending || (held && onReject != null);
+  // What holds the approval: a recall, or lines we cannot show.
   const stockMessage =
     recallHold(recalls, order, t) ??
-    (!order || order.lines.length === 0
-      ? t("Order details are unavailable. Reload them before approving.")
-      : order.lines.some((line) => isStockUnconfirmed(line.offer))
-        ? t("Waiting for supplier stock confirmation. You can review or reject this proposal; approval is available once stock is confirmed.")
-        : null);
+    (!order || order.lines.length === 0 ? t("Order details are unavailable. Reload them before approving.") : null);
+  // Unconfirmed supplier stock does not hold it (Aron, 2026-11-14): the order is sent and waits.
+  const waitingNotice =
+    order?.lines.some((line) => isStockUnconfirmed(line.offer))
+      ? t("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")
+      : null;
   const editing = pending && onChangeProposal != null && listAddableProducts != null;
 
   async function changeProposal(change: ProposalChange) {
@@ -245,6 +246,7 @@ export function ApprovalCard({
         ) : null}
         {showDetails ? (
           <>
+        <ModelTracePanel trace={request.modelTrace} />
         {editCount > 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("Changed by you: {count} edits. The Buyer learns from these.", { count: editCount })}
@@ -264,18 +266,16 @@ export function ApprovalCard({
                 key={supplier.supplierId}
                 className="rounded-r-md border-l-[3px] border-warning bg-warning-surface px-3 py-2 text-sm text-warning"
               >
-                {approveUnconfirmedManual
-                  ? t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", {
-                      supplier: supplier.name,
-                    })
-                  : t("{supplier} must confirm stock before this order can be approved.", { supplier: supplier.name })}
+                {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", {
+                  supplier: supplier.name,
+                })}
               </li>
             ))}
           </ul>
         </section>
         <RecallLines alerts={recalls} />
-        {pending && stockMessage ? (
-          <p className="hatch text-sm text-warning">{stockMessage}</p>
+        {pending && (stockMessage ?? waitingNotice) ? (
+          <p className="hatch text-sm text-warning">{stockMessage ?? waitingNotice}</p>
         ) : null}
         {pending && request.options?.length ? (
           <OptionCompare
@@ -302,7 +302,7 @@ export function ApprovalCard({
                     {order.lines.map((line) => (
                       <li key={line.product.id} className="space-y-3 py-3">
                         <div className="flex items-center gap-2">
-                          <ProductThumb size="sm" en={line.product.names.en} fi={line.product.names.fi} />
+                          <ProductThumb size="sm" en={line.product.names.en} fi={line.product.names.fi} brand={line.product.brand} />
                           <div className="font-medium">{line.product.names.en}</div>
                         </div>
                         <div>

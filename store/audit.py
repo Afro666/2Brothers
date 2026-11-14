@@ -104,7 +104,7 @@ def append_event(db, event: dict, server: dict | None = None) -> dict:
 
 def list_events(db, *, kitchen_id: str | None = None, run_id: str | None = None,
                 order_id: str | None = None, limit: int = 1000) -> list[dict]:
-    """Entries in chain order, optionally for one kitchen, agent run or order."""
+    """The newest `limit` entries in chain order, optionally for one kitchen, agent run or order."""
     query = {}
     if kitchen_id is not None:
         query["server.kitchen_id"] = kitchen_id
@@ -112,7 +112,8 @@ def list_events(db, *, kitchen_id: str | None = None, run_id: str | None = None,
         query["event.run_id"] = run_id
     if order_id is not None:
         query["event.order_id"] = order_id
-    return [_out(doc) for doc in db.audit_log.find(query).sort("_id", 1).limit(limit)]
+    # Newest first for the limit: the oldest `limit` would freeze a long log at its start (#1266).
+    return [_out(doc) for doc in db.audit_log.find(query).sort("_id", -1).limit(limit)][::-1]
 
 
 def verify_entries(entries) -> dict:

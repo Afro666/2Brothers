@@ -72,7 +72,7 @@ def test_real_buyer_worker_creates_ready_proposal_and_durable_audit_once(monkeyp
     async def run():
         db, gateway = environment(monkeypatch)
         model = ScriptedBuyer()
-        worker = BuyerWorker(db, gateway, model_factory=lambda: model, now=lambda: NOW)
+        worker = BuyerWorker(db, gateway, strategy="loop", model_factory=lambda: model, now=lambda: NOW)
         body = {'text': '51 L milk', 'requested_date': '2026-11-16', 'idempotency_key': 'request-1'}
         try:
             proposal = await worker.run('demo-kitchen', body)
@@ -96,7 +96,7 @@ def test_invalid_allergen_code_fails_closed_before_any_buyer_run(monkeypatch):
         db, gateway = environment(monkeypatch)
         db.kitchen_settings.insert_one({'_id': 'demo-kitchen', 'excluded_allergens': ['not-an-allergen']})
         factory = AsyncMock(side_effect=AssertionError('model must not start'))
-        worker = BuyerWorker(db, gateway, model_factory=factory, now=lambda: NOW)
+        worker = BuyerWorker(db, gateway, strategy="loop", model_factory=factory, now=lambda: NOW)
         body = {'text': '51 L milk', 'requested_date': '2026-11-16', 'idempotency_key': 'bad-policy'}
         try:
             with pytest.raises(WorkerError) as caught:
@@ -117,7 +117,7 @@ def test_timeout_never_restarts_an_ambiguous_run(monkeypatch):
             await asyncio.sleep(10)
     async def run():
         db, gateway = environment(monkeypatch)
-        worker = BuyerWorker(db, gateway, model_factory=Slow, timeout=0.02)
+        worker = BuyerWorker(db, gateway, strategy="loop", model_factory=Slow, timeout=0.02)
         body = {'text': '51 L milk', 'requested_date': '2026-11-16', 'idempotency_key': 'timeout'}
         try:
             with pytest.raises(WorkerError) as caught:
@@ -173,7 +173,7 @@ def test_a_run_that_wrote_nothing_is_started_once_more(monkeypatch):
     async def run():
         db, gateway = environment(monkeypatch)
         model = GivesUpOnce()
-        worker = BuyerWorker(db, gateway, model_factory=lambda: model, now=lambda: NOW)
+        worker = BuyerWorker(db, gateway, strategy="loop", model_factory=lambda: model, now=lambda: NOW)
         try:
             proposal = await worker.run('demo-kitchen', {'text': '51 L milk', 'requested_date': '2026-11-16',
                                                          'idempotency_key': 'request-retry'})
@@ -195,7 +195,7 @@ def test_two_failed_runs_are_still_a_safe_fallback(monkeypatch):
     async def run():
         db, gateway = environment(monkeypatch)
         model = NeverFinishes()
-        worker = BuyerWorker(db, gateway, model_factory=lambda: model, now=lambda: NOW)
+        worker = BuyerWorker(db, gateway, strategy="loop", model_factory=lambda: model, now=lambda: NOW)
         try:
             with pytest.raises(WorkerError) as caught:
                 await worker.run('demo-kitchen', {'text': '51 L milk', 'requested_date': '2026-11-16',

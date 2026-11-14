@@ -8,6 +8,7 @@ import { AllergenList, AllergenUnknownChip } from "@/components/purchasing/chips
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -108,13 +109,16 @@ function ProductsTable({
       {products.map((product) => (
         <Card key={product.id}>
           <CardContent className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
-            <div>
-              <p className="font-medium">{product.name}</p>
-              <p className="text-sm text-muted-foreground">
-                {product.unit}
-                {product.packSize == null ? "" : ` · ${t("pack {size}", { size: formatNumber(product.packSize) })}`} ·{" "}
-                {product.priceEur == null ? t("not set") : formatEur(product.priceEur)}
-              </p>
+            <div className="flex min-w-0 items-start gap-3">
+              <ProductThumb en={product.name} size="md" />
+              <div className="min-w-0">
+                <p className="font-medium break-words">{product.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {product.unit}
+                  {product.packSize == null ? "" : ` · ${t("pack {size}", { size: formatNumber(product.packSize) })}`} ·{" "}
+                  {product.priceEur == null ? t("not set") : formatEur(product.priceEur)}
+                </p>
+              </div>
             </div>
             <div className="space-y-1 text-sm">
               <p>{supplierNames.get(product.supplierId) ?? t("Supplier not found")}</p>

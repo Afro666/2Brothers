@@ -105,7 +105,7 @@ def test_tier_without_product_id_applies_to_every_product(env):
     assert "Discount tier" not in propose(client, key="m2")["lines"][0]["why"]   # the Valio line: not its tier
 
 
-def test_manual_supplier_lines_are_unknown_stock_and_cannot_be_placed(env):
+def test_manual_supplier_lines_are_unknown_stock_and_the_order_waits_for_the_supplier(env):
     client, _, db = env
     bakery(db, BAKERY_DAYS, adapter="manual")
     p = propose(client)
@@ -114,11 +114,15 @@ def test_manual_supplier_lines_are_unknown_stock_and_cannot_be_placed(env):
     assert "Leipomo Demo does not report its stock" in line["why"]
     assert any("Leipomo Demo is a price list the kitchen entered" in r for r in p["mandate"]["reasons"])
     assert not any("Valio does not report" in r for r in p["mandate"]["reasons"])   # the Valio line is confirmed
-    # One human yes for the whole proposal; the same guard as before refuses unconfirmed stock.
+    # One human yes for the whole proposal sends it (Aron, 2026-11-14), with no kitchen switch:
+    # the order names every supplier whose stock nobody confirmed yet.
     r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
                     json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
-    assert r.status_code == 409 and r.json()["error"]["code"] == "STOCK_UNKNOWN", r.text
-    assert db.orders.count_documents({}) == 0
+    assert r.status_code == 200, r.text
+    unknown = {ln["product_id"] for ln in p["lines"] if ln["unknown_stock"]}
+    assert "sup-bakery" in r.json()["supplier_must_confirm"]
+    assert all(ln["unknown_stock"] for ln in r.json()["lines"] if ln["product_id"] in unknown)
+    assert db.orders.count_documents({}) == 1
 
 
 def test_order_stores_the_supplier_blocks(env):
@@ -204,15 +208,24 @@ def test_switch_on_a_manual_block_can_be_approved_and_waits_for_the_supplier(env
     assert [e["supplier_must_confirm"] for e in placed] == [["sup-bakery"]]     # #884
 
 
-def test_switch_on_still_refuses_unknown_valio_stock(env):
+def test_unknown_valio_stock_is_placed_and_waits_for_valio(env):
+    """Aron, 2026-11-14: Valio lines too. The switch is off (its default) and no longer needed."""
     client, _, db = env
     bakery(db, BAKERY_DAYS, adapter="manual")
-    client.put(K + "/settings", headers=HUMAN, json={"approve_unconfirmed_manual": True})
     p = propose(client, quantity="100", ids=("463335",))     # Valio's own line with unknown stock
     assert p["lines"] and all(ln["unknown_stock"] for ln in p["lines"])
     r = approve(client, p, "a2")
-    assert r.status_code == 409 and r.json()["error"]["code"] == "STOCK_UNKNOWN"
-    assert db.orders.count_documents({}) == 0
+    assert r.status_code == 200, r.text
+    assert r.json()["supplier_must_confirm"] == ["sup-valio"]
+    assert all(ln["unknown_stock"] for ln in db.orders.find_one({})["lines"])
+
+
+def test_switch_off_a_manual_block_still_says_you_may_approve(env):
+    client, _, db = env
+    bakery(db, BAKERY_DAYS, adapter="manual")
+    p = propose(client, ids=("462775", OAT))
+    assert any("You may approve it" in r for r in p["mandate"]["reasons"])
+    assert approve(client, p, "a3").status_code == 200
 
 
 def test_the_switch_must_be_a_boolean(env):

@@ -52,6 +52,7 @@ describe("mapApproval", () => {
       suppliersToConfirm: [],
       status: "PENDING",
       options: [],
+      modelTrace: null, // no model_trace on this proposal (#1197)
     });
   });
 

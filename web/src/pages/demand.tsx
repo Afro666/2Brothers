@@ -5,6 +5,7 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { RiskBadge } from "@/components/purchasing/risk-badge";
 import { useApi } from "@/api";
 import type { Api } from "@/api/types";
@@ -112,13 +113,18 @@ function ProductSection({ group }: { group: ProductGroup }) {
     <TableBody data-product-section={group.productId}>
       <TableRow className="border-b-0 bg-muted/40 hover:bg-muted/40">
         <TableHead scope="rowgroup" colSpan={6} className="py-2 align-top font-normal whitespace-normal">
-          <div className="font-medium">{group.productName}</div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{group.productId}</span>
-            <span aria-hidden>·</span>
-            <span>{t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })}</span>
-            <span aria-hidden>·</span>
-            <span>{t("{count} days", { count: group.rows.length })}</span>
+          <div className="flex items-start gap-2">
+            <ProductThumb en={group.productName} size="sm" />
+            <div className="min-w-0">
+              <div className="font-medium break-words">{group.productName}</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>{group.productId}</span>
+                <span aria-hidden>·</span>
+                <span>{t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })}</span>
+                <span aria-hidden>·</span>
+                <span>{t("{count} days", { count: group.rows.length })}</span>
+              </div>
+            </div>
           </div>
         </TableHead>
       </TableRow>
@@ -215,11 +221,14 @@ function MobileGroup({ group }: { group: ProductGroup }) {
   const t = useT();
   return (
     <li className="space-y-3 py-4">
-      <div>
-        <div className="font-medium">{group.productName}</div>
-        <div className="text-xs text-muted-foreground">
-          {group.productId} · {t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })} ·{" "}
-          {t("{count} days", { count: group.rows.length })}
+      <div className="flex items-start gap-2">
+        <ProductThumb en={group.productName} size="sm" />
+        <div className="min-w-0">
+          <div className="font-medium break-words">{group.productName}</div>
+          <div className="text-xs text-muted-foreground">
+            {group.productId} · {t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })} ·{" "}
+            {t("{count} days", { count: group.rows.length })}
+          </div>
         </div>
       </div>
       <ul className="space-y-3">

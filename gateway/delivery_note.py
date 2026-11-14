@@ -9,6 +9,7 @@ The call is made once and never retried.
 """
 from __future__ import annotations
 
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 import os
 import time
 
@@ -78,6 +79,79 @@ def _answer(data) -> dict:
             "complete": complete, "lines": data["lines"], "not_ordered": others}
 
 
+CENT = Decimal("0.01")
+QTY = Decimal("0.001")
+SHORTFALL = ("SHORT", "MISSING")
+
+
+def _dec(value) -> Decimal | None:
+    """A finite Decimal from the stored order or the worker's answer; None when it is not one."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    return number if number.is_finite() else None
+
+
+def _text(x: Decimal) -> str:
+    return format(x.quantize(QTY, ROUND_HALF_UP).normalize(), "f")
+
+
+def _supplier_name(order: dict) -> str | None:
+    blocks = order.get("blocks") or []
+    if len(blocks) == 1 and isinstance(blocks[0], dict) and isinstance(blocks[0].get("name"), str):
+        return blocks[0]["name"] or None
+    return None
+
+
+def claim(order: dict, lines: list) -> tuple[list, dict]:
+    """The value of every short or missing line at the stored order's own price, and one
+    total (#1198, docs/contract.md). Plain code: the model gives no price and no value.
+    The worker answers one line per order line, in the order's order; a line whose product
+    is not the stored line's gets no price."""
+    stored = order.get("lines") or []
+    out, total, qty, units = [], Decimal(0), Decimal(0), set()
+    counted = not_valued = 0
+    qty_known = True
+    for i, ln in enumerate(lines):
+        row = stored[i] if i < len(stored) and isinstance(stored[i], dict) else {}
+        if str(row.get("product_id")) != str(ln.get("product_id")):
+            row = {}
+        order_qty, price, unit = _dec(row.get("quantity")), _dec(row.get("unit_price")), row.get("unit")
+        ordered, missing = _dec(ln.get("ordered")), _dec(ln.get("missing"))
+        in_order_unit = (missing * order_qty / ordered
+                         if missing is not None and order_qty is not None and ordered and ordered > 0 else None)
+        value = None
+        if ln["status"] == "RECEIVED":
+            value = Decimal("0.00")
+        elif ln["status"] in SHORTFALL and in_order_unit is not None and price is not None:
+            value = (in_order_unit * price).quantize(CENT, ROUND_HALF_UP)
+        if ln["status"] in SHORTFALL:
+            counted += 1
+            if value is None:
+                not_valued += 1
+            else:
+                total += value
+            if in_order_unit is None or not unit:
+                qty_known = False
+            else:
+                qty += in_order_unit
+                units.add(unit)
+        elif ln["status"] == "UNKNOWN":
+            not_valued += 1
+        out.append({**ln, "order_quantity": None if order_qty is None else _text(order_qty),
+                    "order_unit": unit if isinstance(unit, str) and unit else None,
+                    "missing_order_qty": None if in_order_unit is None else _text(in_order_unit),
+                    "unit_price": None if price is None else f"{price:f}",     # as stored: the value uses it
+                    "claim_eur": None if value is None else f"{value:f}"})
+    one_unit = counted > 0 and qty_known and len(units) == 1
+    return out, {"currency": "EUR", "total_eur": f"{total.quantize(CENT, ROUND_HALF_UP):f}", "lines": counted,
+                 "quantity": _text(qty) if one_unit else None, "unit": next(iter(units)) if one_unit else None,
+                 "not_valued": not_valued, "supplier_name": _supplier_name(order)}
+
+
 def mount_delivery_note(app, gw, principal, worker=None) -> None:
     busy: set[str] = set()      # one model read per kitchen at a time, like the shelf photo (#839)
 
@@ -107,5 +181,9 @@ def mount_delivery_note(app, gw, principal, worker=None) -> None:
             counts[ln["status"]] = counts.get(ln["status"], 0) + 1
         # Who, which order, how many lines per status, how long. Never the image or the note's text.
         gw()._audit(kitchen_id, "delivery_note_read", who.name, order_id=order_id, model=MODEL_NAME,
-                    statuses=counts, complete=answer["complete"], duration_ms=duration_ms)
-        return {"model": MODEL_NAME, "duration_ms": duration_ms, "saved": False, "order_id": order_id, **answer}
+                    statuses=counts, complete=answer["complete"],
+                    needs_approval=sum(1 for ln in answer["not_ordered"] if ln["needs_approval"]),
+                    duration_ms=duration_ms)
+        lines, total = claim(order, answer["lines"])
+        return {"model": MODEL_NAME, "duration_ms": duration_ms, "saved": False, "order_id": order_id,
+                **answer, "lines": lines, "claim": total}

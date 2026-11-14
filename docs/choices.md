@@ -30,8 +30,9 @@ in [`contract.md`](contract.md); who decided what, and when, is in
 - The approval names the exact total the person saw (`expected_total`). If the price or
   stock moved since then, the gateway refuses with `TOTAL_MISMATCH` and sends nothing.
   The person sees the new figure and decides again.
-- Stock that the supplier does not confirm blocks the approval (`STOCK_UNKNOWN`), and a
-  recalled product blocks it (`BLOCKED_BY_RECALL`).
+- Stock that the supplier does not confirm does not block a person's approval
+  (2026-11-14): the order is sent and waits for the supplier (`supplier_must_confirm`).
+  It blocks auto-approve. A recalled product blocks the approval (`BLOCKED_BY_RECALL`).
 - Every order needs a person, unless the kitchen has earned auto-approve and switched it
   on for small routine orders; it is off by default. A budget limit is a warning on the
   approval, never a reason to skip it.

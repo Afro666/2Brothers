@@ -109,8 +109,11 @@ export function codeLabel(code: string): CodeLabel {
  * plain words and, when known, the product name for its id. Other sentences stay as they are.
  */
 export function plainReason(reason: string, names?: ReadonlyMap<string, string>): string {
-  const match = /^([^:]+): ([A-Z][A-Z0-9_]+): (.*)$/s.exec(reason);
+  // "<id>: <CODE>: <rest>", or "<id>: <CODE>" alone ("461332: BLOCKED_BY_RECALL").
+  const match = /^([^:]+): ([A-Z][A-Z0-9_]+)(?:: (.*))?$/s.exec(reason);
   if (!match || !CODE.test(match[2])) return reason;
   const [, product, code, rest] = match;
-  return `${names?.get(product) ?? product}: ${codeLabel(code).title}: ${rest}`;
+  const label = codeLabel(code);
+  const name = names?.get(product) ?? product;
+  return rest === undefined ? `${name}: ${label.title}. ${label.detail}` : `${name}: ${label.title}: ${rest}`;
 }
