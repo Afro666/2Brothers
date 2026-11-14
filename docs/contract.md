@@ -2232,10 +2232,10 @@ A person can always type the count by hand; no error blocks `POST /stock-counts`
 
 ### Check a delivery from a photo of its note (#362)
 
-**Persistence transition (#1300/#1304):** the served response below remains
-`saved:false` until #1304 lands. Its successor persists only structured delivery
-observations (not stock) and returns `saved:true` after a durable save, as specified
-in [Outcomes and delivery observations](#outcomes-and-delivery-observations).
+**Persisted since #1304:** after a successful check the gateway stores only the
+structured delivery observation (not stock) and answers `saved:true` once it is durably
+saved, as specified in
+[Outcomes and delivery observations](#outcomes-and-delivery-observations).
 Photos, note text and lot numbers remain transient in both versions.
 
 
@@ -2263,7 +2263,7 @@ Answer:
 {
   "model": "nemotron-3.5-super-vl",
   "duration_ms": 5120,
-  "saved": false,
+  "saved": true,
   "order_id": "6f1c...",
   "note": {"order_ref": "ORD-DEMO-0001", "delivery_date": "2026-11-16"},
   "complete": false,
