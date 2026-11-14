@@ -39,7 +39,8 @@ async function loadData(api: ReturnType<typeof useApi>) {
     api.listOwnProducts(),
     api.listSuppliers(),
     api.listRecipes(),
-    api.searchProducts(""),
+    // The catalog only feeds the recipe allergen lookup; if it fails, recipes show unknown allergens.
+    api.searchProducts("").catch((): Product[] => []),
   ]);
   return { ownProducts, suppliers, recipes, catalog };
 }

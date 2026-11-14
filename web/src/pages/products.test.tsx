@@ -100,6 +100,17 @@ describe("ProductsPage", () => {
     expect(salmon).toHaveTextContent("Gluten cereals");
   });
 
+  it("still shows own products and marks recipes unknown when the catalog lookup fails", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    api.searchProducts = () => Promise.reject(new Error("NOT_SERVED"));
+    renderApp("/products", api);
+    expect(await screen.findByText("Rye bread loaf")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Recipes" }));
+    const salmon = (await screen.findByText("Salmon soup")).closest("[data-slot='card-content']");
+    expect(salmon).toHaveTextContent("Allergen data missing: unknown");
+  });
+
   it("shows the API in-use message when rye bread is deleted", async () => {
     const user = userEvent.setup();
     renderApp("/products", createMockApi());
