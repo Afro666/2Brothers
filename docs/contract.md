@@ -374,6 +374,8 @@ IDs) apply here too. Base path: `/v1`.
 | POST | `/audit/demo-tamper` | `kitchen:approve` (human) | Demo only: edit one audit row of the synthetic demo kitchen, so `/audit/verify` shows the break. 403 `DEMO_ONLY` for any other kitchen. |
 | POST | `/audit/demo-restore` | `kitchen:approve` (human) | Demo only: put the tampered row back exactly as it was. |
 | GET | `/events` | `kitchen:read` | Server-sent events: this kitchen's new and changed proposals, approvals and audit entries, as they happen. Shape below. |
+| GET | `/recalls` | `kitchen:read` | This kitchen's open `recall.alert`s and the last check. Shape below. Proposed, like the next row; the gateway does not serve them yet (#358). |
+| POST | `/recalls/check` | `kitchen:write` | Run the recall monitor now: Context.dev scrape of the Ruokavirasto list, matched to stock, recipes and open proposals. Body: `idempotency_key`. |
 
 Proposal `status`: `PENDING`, `READY`, `APPROVED`, `REJECTED`, `EXPIRED`. An approved
 proposal places one order per supplier block, through the same `place_order` guards.
@@ -855,6 +857,81 @@ Rules:
   `source.endpoint` until the person edits it.
 - The web client maps `logo_url` to `logoUrl`, `kitchen_type` to `kitchenType`,
   `opening_hours` to `openingHours` and `postal_code` to `postalCode`.
+
+### Recall alerts (Context.dev)
+
+The recall monitor (`monitor/recalls.py`) scrapes the Ruokavirasto recall list with
+Context.dev `POST /v1/web/scrape` and writes one `recall.alert` per notice, kitchen and
+product. These two routes show the alerts in the approval inbox and let a person run a
+check now. The gateway serves the routes (Aron); the monitor and the re-plan are #358
+(Maciek).
+
+`GET /v1/kitchens/{kitchen_id}/recalls` and `POST .../recalls/check` both answer:
+
+```json
+{
+  "last_check": {
+    "checked_at": "2026-11-14T00:30:00+02:00",
+    "source": "recording",
+    "fetched_at": "2026-11-13T22:17:51+00:00",
+    "via": "/v1/web/scrape",
+    "notices_scanned": 38
+  },
+  "alerts": [
+    {
+      "event_id": "recall-3f1c9a0b5e7d2c4a8b6e1f0d",
+      "type": "recall.alert",
+      "kitchen_id": "K10",
+      "product_id": "461332",
+      "product_name": "Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg",
+      "match": "possible",
+      "why": "same brand Kulta Katriina, shared word(s) kahvi, perinteinen",
+      "where": ["in stock: 5.673 KG", "in recipes: breakfast_buffet", "on the open purchase proposal"],
+      "recall": {
+        "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suodatinkahvissa-vierasesineriski/",
+        "date": "2026-03-06", "title": "Suodatinkahvissa vierasesineriski",
+        "reason": "...", "action": "...",
+        "recalled_product": "Kulta Katriina Perinteinen suodatinkahvi", "brand": "Kulta Katriina",
+        "gtin": null, "package_size": "500 g",
+        "lot": "23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027"
+      },
+      "next_step": "Do not use it until checked. Check your packs: ...",
+      "proposal_id": "prop-7c2e",
+      "line_status": "BLOCKED_BY_RECALL",
+      "replacement_line": {"product_id": "475842", "product_name": "12 x Löfbergs Crescendo Ground Coffee 500g Rainforest Alliance",
+                           "quantity": "2", "unit": "KI"},
+      "replacement_proposal": [{"product_id": "475842", "name": "...", "brand": "Löfbergs"}],
+      "detected_at": "2026-11-14T00:30:00+02:00"
+    }
+  ]
+}
+```
+
+- The alert fields are the monitor's `recall.alert` as it is (monitor/README.md), plus three
+  fields the re-plan adds: `proposal_id`, `line_status` and `replacement_line`.
+- `last_check` is `null` when no check has run for this kitchen. Then the screens say "not
+  checked yet", never "no recalls". An empty `alerts` list with a `last_check` means the
+  check found nothing on this kitchen's stock, recipes or open proposals.
+- `source`: `live` when the scrape ran now; `recording` when Context.dev was slow or down
+  and the last saved scrape was used. `fetched_at` says how old the scrape is. The screens
+  show which one, so a recording is never shown as live.
+- `proposal_id` is the open proposal the alert hits, else `null`. `line_status` is
+  `BLOCKED_BY_RECALL` for an `exact` or `possible` match on a proposal line, `WARNING` for a
+  `review` match (shown, never blocking on its own).
+- `replacement_line` is the line the Buyer re-planned in place of the blocked one, sized by
+  the engine (`quantity` a decimal string in `unit`); `null` while it has not. A proposal
+  that still holds a `BLOCKED_BY_RECALL` line cannot be approved: approve answers 409
+  `RECALL_BLOCKED`. After the re-plan the proposal has a new `expected_total`, and a person
+  approves that exact figure as usual. `replacement_proposal` stays ideas for the chef;
+  nothing is ordered from an alert.
+- `POST /recalls/check` with a repeat `idempotency_key` returns the stored result. A new
+  check that finds an alert already known (same `event_id`) does not re-plan again.
+- Every check and every re-plan is an audit entry (`store.audit`).
+- `CONTEXT_DEV_API_KEY` stays on the gateway and the monitor; the browser never calls
+  Context.dev. A check that cannot scrape and has no recording answers 502
+  `RECALL_CHECK_UNAVAILABLE`; the screens then show recalls as unknown.
+- The web client maps snake_case to camelCase, `proposal_id` to `orderId`, `replacement_proposal`
+  to `replacementIdeas` and `quantity` to a number.
 
 ## Daily weather and holiday signals
 
