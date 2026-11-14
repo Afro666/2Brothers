@@ -7,7 +7,7 @@ note is shown. One failed line drops the whole note, and the page shows the tabl
 """
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 import hashlib
 import json
 import os
@@ -33,16 +33,56 @@ MODEL_FIELDS = ("product_id", "product_name", "date", "unit", "demand", "kitchen
 VALUES = ("demand", "available", "shortage", "suggested_buy", "kitchens")
 
 
+def _text(amount: Decimal) -> str:
+    text = format(amount, "f") if amount else "0"
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
 def presentation_row(row: dict) -> dict:
-    """Round note facts only; the worker and checker receive this same copy."""
+    """Round note facts only; the worker and checker receive this same copy.
+
+    A SHORT row's figures are derived from each other (#1767), so the line adds up as printed:
+    demand and the gap round up to the unit's step (a real gap is never 0), the buy is that
+    gap, and available is demand minus the gap. Each figure stays within one step of its source."""
     out = {k: row.get(k) for k in MODEL_FIELDS}
-    quantum = {"PCS": "1", "ST": "1", "KG": "0.1", "L": "0.1"}.get(row.get("unit"))
-    if quantum is not None:
+    step = {"PCS": "1", "ST": "1", "KG": "0.1", "L": "0.1"}.get(row.get("unit"))
+
+    def rounded(key: str, rounding: str) -> Decimal:
+        amount = Decimal(out[key])
+        return amount if step is None else amount.quantize(Decimal(step), rounding=rounding)
+
+    if row.get("risk") == "SHORT" and None not in (out["demand"], out["shortage"]):
+        demand = rounded("demand", ROUND_CEILING)
+        gap = min(rounded("shortage", ROUND_CEILING), demand)
+        out.update(demand=_text(demand), available=_text(demand - gap), shortage=_text(gap),
+                   suggested_buy=_text(gap))
+    elif step is not None:
         for key in ("demand", "available", "shortage", "suggested_buy"):
             if out[key] is not None:
-                rounded = Decimal(out[key]).quantize(Decimal(quantum), rounding=ROUND_HALF_UP)
-                text = format(rounded, "f") if rounded else "0"
-                out[key] = text.rstrip("0").rstrip(".") if "." in text else text
+                out[key] = _text(rounded(key, ROUND_HALF_UP))
+    return out
+
+
+def by_product(rows: list[dict]) -> list[dict]:
+    """One row per product, its days summed before any rounding (#1767): the SHORT days of a
+    product that has any, else its UNKNOWN days. `date` is the first of those days."""
+    groups: dict[str, list[dict]] = {}
+    for row in sorted(rows, key=lambda r: r["date"]):
+        if row["risk"] in ("SHORT", "UNKNOWN"):
+            groups.setdefault(row["product_id"], []).append(row)
+    out = []
+    for days in groups.values():
+        if any(r["risk"] == "SHORT" for r in days):
+            days = [r for r in days if r["risk"] == "SHORT"]
+        if len(days) == 1:
+            out.append(days[0])
+            continue
+        known = days[0]["risk"] == "SHORT"
+        total = {k: str(sum(Decimal(r[k]) for r in days)) if known or k == "demand" else None
+                 for k in ("demand", "available", "shortage", "suggested_buy")}
+        people = {k.get("kitchen_id") for r in days for k in r.get("by_kitchen") or []}
+        kitchens = len(people) if all(r.get("by_kitchen") for r in days) else max(r["kitchens"] for r in days)
+        out.append({**days[0], **total, "kitchens": kitchens})
     return out
 
 
@@ -54,6 +94,7 @@ def error(code: str) -> GatewayError:
 def pick(rows: list[dict]) -> list[dict]:
     """SHORT rows by the largest shortage, then UNKNOWN rows by the largest demand; at most 8.
     The model sees only the documented fields: never by_kitchen or a kitchen name."""
+    rows = by_product(rows)
     short = sorted((r for r in rows if r["risk"] == "SHORT"),
                    key=lambda r: (-Decimal(r["shortage"]), r["date"], r["product_id"]))
     unknown = sorted((r for r in rows if r["risk"] == "UNKNOWN"),

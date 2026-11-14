@@ -76,8 +76,8 @@ def test_pick_orders_short_by_shortage_then_unknown_and_drops_kitchen_detail():
 
 
 @pytest.mark.parametrize("unit, expected", [
-    ("PCS", ["6024", "230", "5795"]),
-    ("ST", ["6024", "230", "5795"]),
+    ("PCS", ["6025", "230", "5795"]),      # 6024, 230, 5795 did not add up (#1767)
+    ("ST", ["6025", "230", "5795"]),
     ("KG", ["6024.1", "229.5", "5794.6"]),
     ("L", ["6024.1", "229.5", "5794.6"]),
 ])
@@ -107,9 +107,53 @@ def test_note_rounding_preserves_unknowns_kitchen_count_and_original_priority():
     larger = {**short, "product_id": "z", "shortage": "10.04"}
     rows = pick([unknown, short, larger])
     assert [r["product_id"] for r in rows] == ["z", "a", unknown["product_id"]]
-    assert rows[0]["shortage"] == rows[1]["shortage"] == "10"
+    assert rows[0]["shortage"] == rows[1]["shortage"] == "10.1"       # a gap rounds up (#1730)
     assert rows[2]["demand"] == "381" and rows[2]["kitchens"] == 3
     assert all(rows[2][k] is None for k in ("available", "shortage", "suggested_buy"))
+
+
+@pytest.mark.parametrize("unit, demand, available, shortage", [
+    ("PCS", "6024.083", "229.5", "5794.583"), ("ST", "12.5", "3.5", "9"), ("PCS", "5.04", "5", "0.04"),
+    ("KG", "6024.083", "229.5", "5794.583"), ("L", "1250", "1012.44", "237.56"), ("KG", "0.44", "0.4", "0.04"),
+    ("BOX", "10.25", "4.125", "6.125"),
+])
+def test_the_printed_figures_of_a_short_row_add_up(unit, demand, available, shortage):
+    """#1767: "Demand 6024, available 230, buy 5795" was each figure rounded on its own."""
+    whole = str(Decimal(shortage).to_integral_value(rounding="ROUND_CEILING"))
+    row = pick([{**ROWS[0], "unit": unit, "demand": demand, "available": available,
+                 "shortage": shortage, "suggested_buy": whole}])[0]
+    assert Decimal(row["demand"]) - Decimal(row["available"]) == Decimal(row["suggested_buy"])
+    assert row["shortage"] == row["suggested_buy"] and Decimal(row["suggested_buy"]) > 0
+    assert Decimal(row["available"]) >= 0
+    assert abs(Decimal(row["demand"]) - Decimal(demand)) < 1 and abs(Decimal(row["available"]) - Decimal(available)) < 1
+
+
+def test_one_product_on_many_days_is_one_row_with_the_days_summed():
+    """#1767: rye bread stood in the note seven times, once per day."""
+    days = [{**ROWS[0], "product_id": "rye", "unit": "PCS", "date": f"2026-11-{16 + i}", "demand": "100.3",
+             "available": "40.1", "shortage": "60.2", "suggested_buy": "61", "kitchens": 2,
+             "by_kitchen": [{"kitchen_id": "K1", "demand": "50"}, {"kitchen_id": f"K{2 + i % 2}", "demand": "50.3"}]}
+            for i in range(7)]
+    before = copy.deepcopy(days)
+    other = {**ROWS[1], "date": "2026-11-18"}
+    unknown = [{**ROWS[2], "date": f"2026-11-{17 + i}", "kitchens": 3} for i in range(2)]
+    rows = pick([*reversed(days), other, *unknown])
+    assert [r["product_id"] for r in rows] == ["rye", other["product_id"], ROWS[2]["product_id"]]
+    assert [r["row"] for r in rows] == [0, 1, 2]
+    rye = rows[0]
+    assert rye["date"] == "2026-11-16" and rye["risk"] == "SHORT" and rye["kitchens"] == 3
+    assert (rye["demand"], rye["available"], rye["shortage"], rye["suggested_buy"]) == ("703", "281", "422", "422")
+    assert rows[2]["demand"] == "761" and rows[2]["kitchens"] == 3 and rows[2]["date"] == "2026-11-17"
+    assert days == before and "by_kitchen" not in json.dumps(rows)
+
+
+def test_a_product_with_short_and_unknown_days_is_one_short_row_of_its_short_days():
+    short = {**ROWS[0], "unit": "L", "date": "2026-11-17"}
+    unknown = {**short, "date": "2026-11-16", "available": None, "shortage": None, "suggested_buy": None,
+               "risk": "UNKNOWN"}
+    rows = pick([unknown, short])
+    assert len(rows) == 1 and rows[0]["risk"] == "SHORT" and rows[0]["date"] == "2026-11-17"
+    assert (rows[0]["demand"], rows[0]["available"], rows[0]["suggested_buy"]) == ("2400", "1700", "700")
 
 
 def test_a_correct_number_moved_to_another_product_drops_the_note():
