@@ -204,6 +204,9 @@ def load(db, data: dict) -> dict:
         from demo.delivery_order import place
         place(db)
         counts["delivery_order"] = 1
+        # Demo lead time, cut-off and reliability, shown only where real data is missing (#1453).
+        from demo.delivery_terms import load as load_delivery_terms
+        counts["demo_delivery"] = load_delivery_terms(db)
     counts["sharing"] = len(seed_sharing(db, ids, VALIO))
     from store.buyer_context import seed_demo_policy
     if DEMO_ID in ids:

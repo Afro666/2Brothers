@@ -250,6 +250,16 @@ the order of EUR 178.09 with eggs, cherry tomato and milk drink. Open `/orders/<
 The order has no proposal, so it has no delivery day: the stock screens never count it as
 on order. It is marked `approved_by: demo-seed`.
 
+**Cut-off, lead time and delivery reliability (#1453).** The approvals screen shows a
+cut-off and a reliability per line. Where Valio and the supplier terms give none, demo
+values fill in, marked "(demo)": invented, never Valio's numbers. The seed writes them; to
+write only them (safe to run again):
+
+    docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m demo.delivery_terms --apply
+
+Without `--apply` it prints the counts and writes nothing. Only proposals made after it
+show the values.
+
 **Which photo.** `agent/fixtures/receiving/demo-note.png` (drawn by
 `agent/fixtures/receiving/make_demo_note.py`; it says "SYNTHETIC TEST NOTE" on it). Copy it
 to the phone or laptop before the demo. `demo-note.reply.json` is the answer a correct reader

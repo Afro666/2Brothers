@@ -27,8 +27,9 @@ from engine.packs import PackDataError
 from gateway import options
 from gateway.decision import decision_summary
 from gateway.partial_fill import partial_out
-from gateway.suppliers import VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers
-from store import audit, orders, recalls, supplier_offers
+from gateway.suppliers import (UNKNOWN_FACTS, VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers,
+                               delivery_facts)
+from store import audit, demo_delivery, orders, recalls, supplier_offers
 from store.audit import canonical
 from store.history import current_stock
 
@@ -64,7 +65,7 @@ def _text(value) -> str | None:
     return None if value is None else str(value)
 
 
-_LINE_NUMBERS = ("reliability", "carbon_kg_co2e_per_kg")
+_LINE_NUMBERS = ("reliability", "carbon_kg_co2e_per_kg", "delivery_reliability")
 
 
 def _line_out(line: dict) -> dict:
@@ -151,7 +152,9 @@ class Gateway:
             adapter = (ValioAdapter(self.db, self.valio) if supplier_id == VALIO
                        else ManualAdapter(self.db, kitchen_id, supplier, self.now))
             found, left_out, rates = adapter.offers(ids, measure, requested)
-            when.update(adapter.when)
+            # Display-only cut-off, lead time and reliability, with their source (#1453).
+            when.update(delivery_facts(adapter.when, found, supplier.get("terms") or {},
+                                       demo_delivery.lookup(self.db, kitchen_id, supplier_id, ids), requested))
             offers.extend(found)
             skipped.extend(left_out)
             tax.update(rates)
@@ -179,7 +182,7 @@ class Gateway:
     def _simulate(self, kitchen_id: str, plan: RequestPlan, tax: dict, skipped: list,
                   supplier_of: dict[str, str] | None = None, when: dict | None = None) -> dict:
         supplier_of, when = supplier_of or {}, when or {}
-        unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None}
+        unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None, **UNKNOWN_FACTS}
         by_supplier: dict[str, list] = {}
         for ln in plan.lines:
             by_supplier.setdefault(supplier_of.get(ln.product_id, VALIO), []).append(ln)

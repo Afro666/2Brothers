@@ -113,6 +113,63 @@ def manual_delivery(terms: dict, requested: date, now: datetime) -> tuple[bool |
     return None, None
 
 
+VALIO_SOURCE, TERMS_SOURCE, DEMO_SOURCE = "valio", "supplier_terms", "demo"
+UNKNOWN_FACTS = {"cutoff_at": None, "cutoff_source": None, "lead_time_days": None,
+                 "lead_time_source": None, "delivery_reliability": None, "reliability_source": None}
+
+
+def latest_cutoff(order_days, clock: str, lead: int, delivery: date) -> datetime | None:
+    """The last order moment (kitchen time) that still delivers by `delivery` with `lead` days."""
+    for back in range(7):
+        day = delivery - timedelta(days=int(lead) + back)
+        if WEEKDAYS[day.weekday()] in order_days:
+            return datetime.combine(day, time.fromisoformat(clock), KITCHEN_TZ)
+    return None
+
+
+def _first(*pairs):
+    """The first `(value, source)` whose value is known; `(None, None)` when none is."""
+    return next(((v, s) for v, s in pairs if v is not None), (None, None))
+
+
+def delivery_facts(when: dict[str, dict], offers: list[Offer], terms: dict, demo: dict,
+                   requested: date) -> dict[str, dict]:
+    """Per product: `when` plus the cut-off, lead time and reliability a line shows (#1453).
+
+    Display only: the engine never reads them. Real data wins: Valio's `closing_time` and CSV
+    reliability, then the supplier's user-set terms, then the demo kitchen's demo values
+    (store/demo_delivery.py), which are marked `demo` and are never Valio's numbers.
+    """
+    supplier, products = demo.get("supplier") or {}, demo.get("products") or {}
+    reliability = {o.product_id: o.reliability for o in offers}
+    out = {}
+    for pid, facts in when.items():
+        own = products.get(pid) or {}
+        lead, lead_source = _first((own.get("lead_time_days"), DEMO_SOURCE),
+                                   (terms.get("lead_time_days"), TERMS_SOURCE),
+                                   (supplier.get("lead_time_days"), DEMO_SOURCE))
+        days, days_source = _first((terms.get("order_days") or None, TERMS_SOURCE),
+                                   (supplier.get("order_days") or None, DEMO_SOURCE))
+        clock, clock_source = _first((terms.get("cutoff_time"), TERMS_SOURCE),
+                                     (supplier.get("cutoff_time"), DEMO_SOURCE))
+        cutoff, cutoff_source = facts.get("closing_time"), VALIO_SOURCE if facts.get("closing_time") else None
+        if cutoff is None and None not in (lead, days, clock):
+            available = facts.get("available_date")
+            delivery = max(requested, date.fromisoformat(available)) if available else requested
+            moment = latest_cutoff(days, clock, lead, delivery)
+            if moment is not None:
+                cutoff = moment.isoformat()
+                cutoff_source = (DEMO_SOURCE if DEMO_SOURCE in (lead_source, days_source, clock_source)
+                                 else TERMS_SOURCE)
+        rel, rel_source = _first((reliability.get(pid), VALIO_SOURCE), (own.get("reliability"), DEMO_SOURCE),
+                                 (supplier.get("reliability"), DEMO_SOURCE))
+        out[pid] = {**facts, "cutoff_at": cutoff, "cutoff_source": cutoff_source,
+                    "lead_time_days": None if lead is None else int(lead), "lead_time_source": lead_source,
+                    # Text: the store refuses a binary float in an offer (#570); answers give a number.
+                    "delivery_reliability": None if rel is None else str(rel), "reliability_source": rel_source}
+    return out
+
+
 class ManualAdapter:
     """A `manual` or `csv` supplier: the kitchen's own products are its price list."""
 
