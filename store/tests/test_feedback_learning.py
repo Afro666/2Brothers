@@ -82,6 +82,14 @@ class LearningTests(unittest.TestCase):
         self.assertEqual(new["outcome"]["next_count"], "0")   # a measured zero is not unknown
         self.assertIsNone(new["outcome"]["ran_out"])
 
+    def test_a_rejection_without_a_reason_is_stored_with_a_null_reason(self):
+        for reason in (None, ""):
+            feedback.record_feedback(self.db, K, f"p-{reason!r}", [{"kind": "rejected", "reason": reason,
+                                                                   "total": "9.99"}], "chef-1")
+        rows = feedback.list_feedback(self.db, K)
+        self.assertEqual([(row["kind"], row["reason"], row["total"]) for row in rows],
+                         [("rejected", None, Decimal("9.99"))] * 2)
+
     def test_changes_for_is_oldest_first_filters_and_keeps_decision_totals(self):
         feedback.record_feedback(self.db, K, "p-1", [change()], "chef-1")
         feedback.record_feedback(self.db, K, "p-2", [change("fb-other", reason="OTHER",

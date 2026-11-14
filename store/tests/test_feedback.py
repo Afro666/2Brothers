@@ -77,7 +77,7 @@ class Scenarios:
         for bad in ({"kind": "edited"}, {"kind": "qty_changed", "product_id": "900001"},
                     {"kind": "qty_changed", "product_id": "900001", "from_qty": "4", "to_qty": "4"},
                     {"kind": "qty_changed", "product_id": "900001", "from_qty": 4.0, "to_qty": "5"},
-                    {"kind": "line_removed"}, {"kind": "rejected"},
+                    {"kind": "line_removed"},
                     {"kind": "line_added", "product_id": "900001", "unit": "litres"}):
             with self.assertRaises((ValueError, TypeError), msg=bad):
                 feedback.record_feedback(self.db, self.k(9), "p", [{"kind": "approved"}, bad], "chef-1")

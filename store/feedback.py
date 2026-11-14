@@ -37,7 +37,7 @@ def _row(change: dict) -> dict:
     reason = change.get("reason")
     note = change.get("note")
     if kind == "rejected" and not reason:
-        raise ValueError("rejected needs a reason")
+        reason = None   # a rejection without a reason is still a decision to learn from
     if kind in CHANGE_KINDS and reason is not None and reason not in REASONS:
         raise ValueError(f"reason must be one of {REASONS}")
     if note is not None:
