@@ -36,3 +36,33 @@ def test_search_with_need_keeps_the_measure_and_puts_deliverable_first(env):
         assert bad.status_code == 422
     finally:
         Gateway.tool_search = original
+
+
+def test_unknown_cutoff_gives_can_arrive_null_between_true_and_false(env):
+    """Valio gave no closingTime (cutoff_passed None): unknown, not undeliverable (#641)."""
+    client, _, _ = env
+    from gateway.service import Gateway
+    from gateway.valio_client import ValioClient
+    original, original_availability = Gateway.tool_search, ValioClient.availability
+
+    def with_catalog(self, *args, **kwargs):
+        self._search = lambda db, query, filters, limit, kitchen_id=None: [dict(r) for r in CATALOG][:limit]
+        return original(self, *args, **kwargs)
+
+    def no_closing_time(self, *args, **kwargs):
+        out = original_availability(self, *args, **kwargs)
+        for product in out["products"]:
+            if product["productId"] == "463335":
+                product["cutoff_passed"] = None
+        return out
+
+    Gateway.tool_search, ValioClient.availability = with_catalog, no_closing_time
+    try:
+        need = client.post(K + "/needs", headers=AGENT, json={
+            "quantity": "20", "unit": "L", "requested_date": "2026-11-16"}).json()
+        found = client.post("/tools/search_products", headers=AGENT, json={
+            "query": "lactose-free milk", "filters": {}, "need_id": need["need_id"]}).json()
+        assert [(p["product_id"], p["can_arrive"]) for p in found["products"]] == [
+            ("462775", True), ("463335", None), ("462921", False)]
+    finally:
+        Gateway.tool_search, ValioClient.availability = original, original_availability
