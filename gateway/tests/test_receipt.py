@@ -102,9 +102,18 @@ def test_a_signing_failure_is_logged_and_the_order_is_still_placed(env, monkeypa
     with caplog.at_level("WARNING", logger="gateway.service"):
         _, order = placed(client)      # still 200
     assert order["receipt"] is None and order["outcome"] == "CONFIRMED"
-    assert "receipt signing failed: ValueError" in caplog.text
+    # the type and the order id (#1560), never the message: it could hold key material
+    assert f"receipt signing failed: ValueError (order {order['order_id']})" in caplog.text
     assert "secret-seed" not in caplog.text
     assert db.orders.find_one({}).get("receipt") is None
+
+
+def test_an_order_a_person_approved_is_not_placed_by_a_seed(env):
+    client, _, _ = env
+    _, order = placed(client)
+    one = client.get(f"{K}/orders/{order['order_id']}", headers=HUMAN).json()
+    listed = client.get(K + "/orders", headers=HUMAN).json()["orders"][0]
+    assert order["placed_by"] is None and one["placed_by"] is None and listed["placed_by"] is None
 
 
 def test_an_order_from_before_receipts_answers_null(env):

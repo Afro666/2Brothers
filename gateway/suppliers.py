@@ -87,10 +87,25 @@ class ValioAdapter:
                 carbon=doc.get("carbon_kg_co2e_per_kg"),       # product-group average
                 labels=tuple(doc.get("labels") or ()),
             ))
-            tax[pid] = _dec((price.get("tax") or {}).get("taxRate")) or Decimal(0)
+            # VAT (#1603): Valio's live tax rate wins; without it the catalog's vatCode rate;
+            # else unknown (None). Never 0 % for a rate nobody gave.
+            tax[pid], vat_source = vat_rate(price, doc)
             self.when[pid] = {"available_date": available_date, "cutoff_passed": stock.get("cutoff_passed"),
-                              "closing_time": stock.get("closingTime")}
+                              "closing_time": stock.get("closingTime"), "vat_source": vat_source}
         return offers, skipped, tax
+
+
+def vat_rate(price: dict, row: dict | None) -> tuple[Decimal | None, str | None]:
+    """`(rate in percent, vat_source)` of one Valio line (#1603): `valio_price` (the live
+    `tax.taxRate`), `catalog` (the product row's `vat_rate`) or `(None, None)`."""
+    live = (price.get("tax") or {}).get("taxRate")
+    if live is not None:
+        try:
+            return Decimal(str(live)), "valio_price"
+        except ArithmeticError:
+            pass
+    stored = (row or {}).get("vat_rate")
+    return (Decimal(str(stored)), "catalog") if stored is not None else (None, None)
 
 
 def manual_delivery(terms: dict, requested: date, now: datetime) -> tuple[bool | None, date | None]:
@@ -207,9 +222,11 @@ class ManualAdapter:
                                 cutoff_passed, delivery,
                                 allergen_data_known=not allergen_codes(row),
                                 labels=tuple(row.get("labels") or ()), stock_source=name))
-            tax[pid] = None                            # no VAT rate on an own product
+            rate = _dec(row.get("vat_rate"))           # entered by the kitchen, else unknown (#1603)
+            tax[pid] = rate
             self.when[pid] = {"available_date": delivery.isoformat() if delivery else None,
-                              "cutoff_passed": cutoff_passed, "closing_time": None}
+                              "cutoff_passed": cutoff_passed, "closing_time": None,
+                              "vat_source": None if rate is None else "entered"}
         return offers, skipped, tax
 
 

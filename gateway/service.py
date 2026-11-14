@@ -24,7 +24,7 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
                     pad_to_free_delivery, plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
-from gateway import options, product_names
+from gateway import options, product_names, seeded
 from gateway.decision import FOUND_BY_MEANING, decision_summary
 from gateway.partial_fill import partial_out
 from gateway.suppliers import (UNKNOWN_FACTS, VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers,
@@ -56,6 +56,10 @@ class GatewayError(Exception):
 
 def _money(x: Decimal) -> str:
     return f"{x.quantize(CENT, ROUND_HALF_UP):f}"
+
+
+def _round(x: Decimal) -> Decimal:
+    return x.quantize(CENT, ROUND_HALF_UP)
 
 
 def _dec(value) -> Decimal | None:
@@ -193,22 +197,26 @@ class Gateway:
         threshold = _dec(terms.get("free_delivery_threshold_eur"))
         fee_value = _dec(terms.get("delivery_fee_eur"))
         net = sum((ln.total for ln in lines), Decimal(0))
-        rates = [tax.get(ln.product_id, Decimal(0)) for ln in lines]
-        vat = None if any(rate is None for rate in rates) else sum(
-            (ln.total * rate / 100 for ln, rate in zip(lines, rates)), Decimal(0))
+        # VAT per line (#1603): a line without a known rate makes the block's VAT unknown; the
+        # known part still counts in `expected` (the figure a person approves), never as incl VAT.
+        rates = [tax.get(ln.product_id) for ln in lines]
+        known_vat = sum((ln.total * rate / 100 for ln, rate in zip(lines, rates) if rate is not None), Decimal(0))
+        unknown_vat = [ln.product_id for ln, rate in zip(lines, rates) if rate is None]
+        vat = None if unknown_vat else known_vat
         if threshold is None or fee_value is None:
             mov_gap = fee = None          # unknown terms: never shown as zero
         else:
             mov_gap = max(threshold - net, Decimal(0))
             fee = fee_value if mov_gap > 0 else Decimal(0)
         return {"supplier_id": supplier["supplier_id"], "name": supplier.get("name"),
-                "net": net, "vat": vat, "mov_gap": mov_gap, "fee": fee,
-                "expected": net + (vat or Decimal(0)) + (fee or Decimal(0)), "lines": lines}
+                "net": net, "vat": vat, "vat_unknown": unknown_vat, "mov_gap": mov_gap, "fee": fee,
+                "expected": net + known_vat + (fee or Decimal(0)), "lines": lines}
 
     def _simulate(self, kitchen_id: str, plan: RequestPlan, tax: dict, skipped: list,
                   supplier_of: dict[str, str] | None = None, when: dict | None = None) -> dict:
         supplier_of, when = supplier_of or {}, when or {}
-        unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None, **UNKNOWN_FACTS}
+        unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None, "vat_source": None,
+                   **UNKNOWN_FACTS}
         by_supplier: dict[str, list] = {}
         for ln in plan.lines:
             by_supplier.setdefault(supplier_of.get(ln.product_id, VALIO), []).append(ln)
@@ -223,7 +231,8 @@ class Gateway:
         else:
             mov_gap = fee = Decimal(0)
         net = plan.total
-        vat = sum((b["vat"] or Decimal(0) for b in blocks), Decimal(0))
+        vat_unknown = [pid for b in blocks for pid in b["vat_unknown"]]
+        vat = None if vat_unknown else sum((b["vat"] for b in blocks), Decimal(0))
         expected = sum((b["expected"] for b in blocks), Decimal(0))
         excluded = [*plan.excluded, *skipped]
         reasons = [f"{pid}: {why}" for pid, why in excluded]
@@ -232,13 +241,17 @@ class Gateway:
         if any(ln.unknown_stock and supplier_of.get(ln.product_id, VALIO) == VALIO for ln in plan.lines):
             reasons.append("Some lines have stock Valio does not report: not confirmed until Valio confirms."
                            " You may approve it; the order then waits for Valio's confirmation.")
+        vat_names = {d["_id"]: (d.get("names") or {}).get("en") for d in
+                     self.db.products.find({"_id": {"$in": vat_unknown}}, {"names": 1})} if vat_unknown else {}
         for b in blocks:
             if b["supplier_id"] != VALIO:
                 reasons.append(f"{b['name']} is a price list the kitchen entered: its stock is not known "
                                "until the supplier confirms. You may approve it; the order then waits "
                                "for the supplier's confirmation (call or e-mail them).")
             if b["vat"] is None:
-                reasons.append(f"VAT for {b['name']} is not known: its total is ex VAT.")
+                reasons.append(f"VAT for {b['name']} is not known for: "
+                               + ", ".join(vat_names.get(pid) or pid for pid in b["vat_unknown"])
+                               + ". The total incl VAT is unknown; the total to approve has no VAT for these lines.")
         # Per supplier, in plain words: which products it must still confirm (Valio, 14 Nov).
         waiting = {b["supplier_id"]: [ln.product_id for ln in b["lines"] if ln.unknown_stock] for b in blocks}
         ids = sorted({pid for pids in waiting.values() for pid in pids})
@@ -259,14 +272,20 @@ class Gateway:
                     # Stored as text: the store refuses a binary float in an offer (#570).
                     # _line_out turns both back into numbers for every answer.
                     "reliability": _text(ln.reliability), "carbon_kg_co2e_per_kg": _text(ln.carbon),
-                    "labels": list(ln.labels), **when.get(ln.product_id, unknown)}
+                    "labels": list(ln.labels), "vat_rate": rate_text(tax.get(ln.product_id)),
+                    **unknown, **when.get(ln.product_id, {})}
+
+        def rate_text(rate: Decimal | None) -> str | None:
+            return None if rate is None else f"{rate.normalize():f}"
 
         def money(x: Decimal | None) -> str | None:
             return None if x is None else _money(x)
 
         return {
             "currency": "EUR",
-            "total_ex_vat": _money(net), "vat": _money(vat),
+            "total_ex_vat": _money(net), "vat": money(vat),
+            "total_incl_vat": None if vat is None else _money(_round(net) + _round(vat)),
+            "vat_unknown": vat_unknown,
             "delivery_fee": money(fee), "mov_gap": money(mov_gap),
             "expected_total": _money(expected),
             "shortfall": f"{plan.shortfall.normalize():f}", "measure": plan.measure,
@@ -276,6 +295,8 @@ class Gateway:
             "blocks": [{"supplier_id": b["supplier_id"], "name": b["name"],
                         "lines": [line_out(ln) for ln in b["lines"]],
                         "total_ex_vat": _money(b["net"]), "vat": money(b["vat"]),
+                        "total_incl_vat": None if b["vat"] is None else _money(_round(b["net"]) + _round(b["vat"])),
+                        "vat_unknown": b["vat_unknown"],
                         "mov_gap": money(b["mov_gap"]), "delivery_fee": money(b["fee"]),
                         "expected_total": _money(b["expected"])} for b in blocks],
             "excluded": [{"product_id": pid, "reason": why} for pid, why in excluded],
@@ -1367,28 +1388,47 @@ class Gateway:
                 expected_total=_money(Decimal(str(order["expected_total"]))), lines=order["lines"],
                 approved_by=order["approved_by"],
                 supplier_must_confirm=order.get("supplier_must_confirm") or [], at=self.now())}
-        except Exception as exc:  # log the type only: never the key or the seed
-            log.warning("receipt signing failed: %s", type(exc).__name__)
+        except Exception as exc:  # the type and the order id only: never the message, the key or the seed
+            log.warning("receipt signing failed: %s (order %s)", type(exc).__name__, order.get("order_id"))
             return {}
 
-    def _order_out(self, order: dict, found: dict | None = None) -> dict:
+    def _order_out(self, order: dict, found: dict | None = None, rates: dict | None = None) -> dict:
         """`found`: product_names.labels for these lines; read here when not given (#1130:
-        names are computed at read time, so an order stored before them has them too)."""
+        names are computed at read time, so an order stored before them has them too).
+        `rates`: the product rows' VAT for lines stored without a rate (#1603), same rule."""
         if found is None:
             found = product_names.labels(self.db, [ln.get("product_id") for ln in order["lines"]],
                                          order.get("kitchen_id"))
+        if rates is None:
+            rates = self._catalog_rates([order])
+        lines = [_order_line_vat(ln, rates) for ln in order["lines"]]
         return {"order_id": order["order_id"], "outcome": order["outcome"], "status": order["status"],
                 "receipt": order.get("receipt"),     # signed order receipt (#290); null when not signed
+                # #1560: "demo-seed" when a seed placed it (no person approved it, so no receipt)
+                "placed_by": seeded.placed_by(order),
                 # #631: suppliers whose stock nobody confirmed yet; a person calls them
                 "supplier_must_confirm": list(order.get("supplier_must_confirm") or []),
                 "expected_total": _money(Decimal(str(order["expected_total"]))),
-                "lines": [product_names.named(_line_out(ln), found) for ln in order["lines"]], "created_at": order["created_at"].isoformat()
+                **_order_totals(lines, order.get("blocks") or []),
+                "lines": [product_names.named(_line_out(ln), found) for ln in lines], "created_at": order["created_at"].isoformat()
                 if hasattr(order["created_at"], "isoformat") else order["created_at"]}
+
+    def _catalog_rates(self, rows: list[dict]) -> dict[str, tuple]:
+        """{product_id: (vat_rate, source)} for order lines stored without a rate, in one query."""
+        ids = sorted({str(ln.get("product_id")) for o in rows for ln in o["lines"]
+                      if "vat_rate" not in ln and ln.get("product_id")})
+        if not ids:
+            return {}
+        kitchens = sorted({o.get("kitchen_id") for o in rows if o.get("kitchen_id")})
+        query = {"_id": {"$in": ids}, "$or": [{"kitchen_id": {"$exists": False}}, {"kitchen_id": {"$in": kitchens}}]}
+        return {d["_id"]: (d.get("vat_rate"), "catalog" if d.get("vat_rate") is not None else None)
+                for d in self.db.products.find(query, {"vat_rate": 1})}
 
     def list_orders(self, kitchen_id: str) -> list[dict]:
         rows = list(orders.list_orders(self.db, kitchen_id))
         found = product_names.labels(self.db, [ln.get("product_id") for o in rows for ln in o["lines"]], kitchen_id)
-        return [self._order_out(o, found) for o in rows]
+        rates = self._catalog_rates(rows)
+        return [self._order_out(o, found, rates) for o in rows]
 
     def get_order(self, kitchen_id: str, order_id: str) -> dict:
         order = orders.get_order(self.db, order_id)
@@ -1835,6 +1875,31 @@ def _addable_out(r: AddableRow) -> dict:
             "unit_price": None if r.unit_price is None else _money(r.unit_price),
             "addable": r.addable, "timing": r.timing.name, "days_of_stock": _qty(r.days_of_stock),
             "reason_codes": list(r.reason_codes), "why": r.why}
+
+
+def _order_line_vat(line: dict, rates: dict) -> dict:
+    """An order line with `vat_rate` and `vat_source`: the rate stored when it was placed, or
+    for an order stored before #1603 the product row's rate (`catalog`), else unknown."""
+    if "vat_rate" in line:
+        return {**line, "vat_source": line.get("vat_source") if line.get("vat_rate") is not None else None}
+    rate, source = rates.get(str(line.get("product_id")), (None, None))
+    return {**line, "vat_rate": rate, "vat_source": source}
+
+
+def _order_totals(lines: list[dict], blocks: list[dict]) -> dict:
+    """`total_ex_vat`, `vat`, `total_incl_vat`, `vat_unknown`, `delivery_fee` of a stored order
+    (#1603). One line with an unknown rate makes `vat` and `total_incl_vat` null; a fee nobody
+    stored is null, never 0."""
+    net = sum((Decimal(str(ln["total"])) for ln in lines if ln.get("total") is not None), Decimal(0))
+    unknown = [ln["product_id"] for ln in lines if ln.get("vat_rate") is None]
+    vat = None if unknown else _round(sum((Decimal(str(ln["total"])) * Decimal(str(ln["vat_rate"])) / 100
+                                           for ln in lines if ln.get("total") is not None), Decimal(0)))
+    fees = [b.get("delivery_fee") for b in blocks]
+    fee = (None if not fees or any(f is None for f in fees)
+           else sum((Decimal(str(f)) for f in fees), Decimal(0)))
+    return {"total_ex_vat": _money(net), "vat": None if vat is None else _money(vat),
+            "total_incl_vat": None if vat is None else _money(_round(net) + vat),
+            "vat_unknown": unknown, "delivery_fee": None if fee is None else _money(fee)}
 
 
 def _blocks_out(sim: dict, lines: list[dict]) -> list[dict]:

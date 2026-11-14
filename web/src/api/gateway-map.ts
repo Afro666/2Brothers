@@ -235,6 +235,7 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     mov: proposal ? mapMov(proposal) : null,
     supplierOrderRef: placed ? resolutionRecord(placed.resolution)?.supplierOrderRef ?? null : null,
     ...(placed ? { receipt: mapReceipt(placed.receipt) } : {}),
+    ...(placed?.placed_by === "demo-seed" ? { placedBy: "demo-seed" as const } : {}),
   };
 }
 

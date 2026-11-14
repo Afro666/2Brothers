@@ -68,7 +68,7 @@ export function OrdersPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <StatusBadge status={order.status} />
+                        <StatusBadge status={order.status} notSent={order.receipt?.supplierOutcome === "NOT_SENT"} />
                         {placedStatuses.has(order.status) ? null : <UrgencyBadge urgency={order.urgency} />}
                         {order.supplierMustConfirm.map((supplierId) => (
                           <Badge
