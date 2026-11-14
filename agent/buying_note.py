@@ -22,8 +22,11 @@ LANGUAGES = {'en': 'English', 'fi': 'Finnish'}
 
 SYSTEM = (
     "You write a short buying note for a food wholesaler's planner. You get rows: one product "
-    "on one delivery day, with the forecast demand of the kitchens that share their forecast, "
+    "each, summed over the delivery days of the window from the first day named (the row's "
+    "`date`), with the forecast demand of the kitchens that share their forecast, "
     "the supplier's available amount, the shortage and the suggested buy.\n"
+    "- A row's numbers may cover several days: write them as \"from that day\" or \"this week\", "
+    "never as the figure for one day.\n"
     "Write one line per row, most urgent first, at most one sentence of 20 words each.\n"
     "Rules:\n"
     "- Use only numbers that appear in that row's fields, written with digits, exactly as given. "
