@@ -148,6 +148,13 @@
     text-transform: uppercase;
     color: var(--muted-foreground);
   }
+
+  .page-title {
+    font-size: 28px;
+    line-height: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
   .stamp {
     font-family: var(--font-stamp);
     font-stretch: 75%;
