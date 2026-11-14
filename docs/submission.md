@@ -258,6 +258,40 @@ The first offer now has three products every time (before: 1 to 5), and repeated
 one request give the same products much more often. So thinking is on where the model
 decides numbers (the benchmark) and off where the engine does (the product).
 
+**It learns from the kitchen, without fine-tuning.** We have only API access to Nemotron,
+so nothing is trained. The tool learns from the reasons people give when they change a
+plan proposal: *too much*, *too little*, *still in stock*, *menu changed*.
+
+- **Plain code computes the facts:**
+  - a correction ratio per product, measured against the engine's unlearned forecast
+  - products the kitchen keeps removing
+  - suppliers that deliver late or short
+
+  See `engine/learning.py` and `GET /v1/kitchens/{k}/learned`.
+- **Nemotron gets them as a kitchen memory in its prompt** (`agent/memory.py`):
+  - in the proposal explanation, a learned line becomes one fixed sentence it must copy
+  - in the Buyer's pick, the facts help it choose between products, never a quantity
+
+  Every number it repeats is checked against its fact.
+- **Visible and reversible:** a learned quantity shows on the plan line with its evidence,
+  is audited, is never auto-approved, and an approver switches it off with one call.
+
+Measured in Kitchen Week (`env/README.md`, "Learning from the kitchen's changes"; held-out
+seeds 4–5, all four kitchen types, a synthetic chef with hidden habits). The table shows
+weeks 3–4 of 4.
+
+| Nemotron Buyer | Chef corrections a week | With a reason | Score | Habit stock-out days |
+|---|---:|---:|---:|---:|
+| without the kitchen memory | 9.94 | 7.37 | 2,812 | 0.62 |
+| **with the kitchen memory** | **5.88 (−41%)** | **3.25 (−56%)** | 2,843 | 0.69 |
+
+So with what the kitchen taught the tool, Nemotron's orders need about half as many human
+corrections, with score level and no rise in stock-outs beyond noise. The memory costs
+about 7% more tokens (1.22M tokens for the whole run). An earlier round (#365) showed the
+opposite for rules Nemotron wrote about itself, which made it worse. So the design gives
+it computed facts, not its own rules. The chef is synthetic and each cell is 8
+kitchen-weeks; the README states both.
+
 **Not built:** fine-tuning. The gate decided no-go: no GPU budget and no validated
 recipe, so we claim no adapter gain (`docs/fine-tuning-gate.md`). Nemotron embeddings:
 Verda serves no embedding model (#1199). A test of the photo readers on real phone photos:
