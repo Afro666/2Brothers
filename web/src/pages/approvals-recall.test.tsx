@@ -152,6 +152,7 @@ describe("ApprovalsPage recalls", () => {
     expect(within(item).getByText("No open order holds it. New orders leave it out.")).toBeInTheDocument();
     expect(item).toHaveTextContent("Do not use it until checked.");
     expect(screen.queryByRole("heading", { name: /Held by a recall/ })).not.toBeInTheDocument();
+    expect(panel).toHaveClass("bg-danger-surface");
   });
 
   it("lists no product in the panel when the alert is on a held order", async () => {
@@ -188,6 +189,8 @@ describe("ApprovalsPage recalls", () => {
     expect(within(items[0]).queryByText(/New orders leave it out/)).not.toBeInTheDocument();
     expect(within(items[0]).queryByRole("link")).not.toBeInTheDocument();
     expect(items[0]).toHaveTextContent("Suodatinkahvissa vierasesineriski");
+    expect(panel).toHaveClass("bg-warning-surface");
+    expect(panel).not.toHaveClass("bg-danger-surface");
   });
 
   it("refuses direct approval of a held order while allowing its rejection", async () => {
