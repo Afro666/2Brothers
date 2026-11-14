@@ -104,7 +104,24 @@ def _next_weekday(today: date, weekday: int) -> date:
     return today + timedelta(days=days or 7)       # "by Monday" on a Monday means next Monday
 
 
-def parse_request(text: str, today: date) -> ParsedRequest:
+def product_words(text: str) -> str:
+    """The product words of a request, as `parse_request` finds them, for a text that may
+    name no quantity or no day (the Buyer's stored need, #974). It never raises."""
+    low = (text or "")[:500].lower()
+    m = _QTY.search(low)
+    rest = low[:m.start()] + " " + low[m.end():] if m else low
+    for pattern in (_ISO, _DMY, _DMON):
+        d = pattern.search(rest)
+        if d:
+            rest = rest[:d.start()] + " " + rest[d.end():]
+            break
+    kept = [FI_STEMS.get(w, w) for w in re.findall(r"[a-zåäö%-]+", rest)
+            if w not in WEEKDAYS and w not in RELATIVE and w not in FILLER]
+    return " ".join(" ".join(kept).replace("-", " ").split())
+
+
+def parse_request(text: str, today: date, default_day: date | None = None) -> ParsedRequest:
+    """`default_day`: the delivery day when the text names none (the day picked in a form)."""
     if not text or not text.strip():
         raise ParseError("the request is empty")
     if len(text) > 500:
@@ -151,6 +168,7 @@ def parse_request(text: str, today: date) -> ParsedRequest:
         if w in WEEKDAYS or w in RELATIVE or w in FILLER:
             continue
         kept.append(FI_STEMS.get(w, w))
+    when = when or default_day
     if when is None:
         raise ParseError("no delivery day (for example 'by Monday', 'maanantaiksi' or '16.11.')")
     if when < today:

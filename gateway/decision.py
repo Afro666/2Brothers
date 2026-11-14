@@ -60,7 +60,10 @@ def decision_summary(request: dict, sim: dict, names: dict | None = None) -> dic
     if verdict == "NEEDS_APPROVAL":
         decide.append(f"Nothing is ordered until a person approves the total of EUR {sim['expected_total']}.")
     elif verdict == "REFUSED":
-        decide.append("Nothing can be ordered: no line passed the checks.")
+        # A request the kitchen's allergen rule refuses as a whole says so in its own words (#974).
+        refusal = (request.get("refusal") or {}).get("message")
+        decide.append(f"Nothing can be ordered. {refusal}" if refusal
+                      else "Nothing can be ordered: no line passed the checks.")
     unknown = [ln for ln in sim.get("lines") or [] if ln.get("unknown_stock") is not False]
     by_supplier: dict[str, list] = {}
     for ln in unknown:

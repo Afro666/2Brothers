@@ -251,17 +251,9 @@ class Gateway:
         """S03: the kitchen's allergen rule always wins, on every path (REST, MCP, any agent).
         A product whose known allergens include an excluded code is left out. A misspelt
         rule fails closed: no offer at all, never a silently wider one."""
-        from store.buyer_context import excluded_allergens
-        from store.allergen_groups import excluded_allergen_codes
-        values = excluded_allergens(self.db, kitchen_id)
-        if not values:
+        rule = self._allergen_rule(kitchen_id)
+        if not rule:
             return {}
-        try:
-            # A group code (AW, AN) means its whole group: the same helper as the Buyer agent.
-            rule = tuple(excluded_allergen_codes(values))
-        except ValueError:
-            raise GatewayError(409, "KITCHEN_POLICY_INVALID",
-                               "the kitchen's allergen rule names an unknown allergen; fix it in settings") from None
         from store.products import get_products
         refused = {}
         for row in get_products(self.db, product_ids, kitchen_id=kitchen_id):
@@ -269,6 +261,33 @@ class Gateway:
             if hits:
                 refused[row["product_id"]] = hits
         return refused
+
+    def _allergen_rule(self, kitchen_id: str) -> tuple[str, ...]:
+        """The GS1 codes the kitchen excludes, groups expanded; empty when it has no rule."""
+        from store.buyer_context import excluded_allergens
+        from store.allergen_groups import excluded_allergen_codes
+        values = excluded_allergens(self.db, kitchen_id)
+        if not values:
+            return ()
+        try:
+            # A group code (AW, AN) means its whole group: the same helper as the Buyer agent.
+            return tuple(excluded_allergen_codes(values))
+        except ValueError:
+            raise GatewayError(409, "KITCHEN_POLICY_INVALID",
+                               "the kitchen's allergen rule names an unknown allergen; fix it in settings") from None
+
+    def _excluded_request(self, kitchen_id: str, query: str) -> dict | None:
+        """#974: the refusal when the kitchen's allergen rule removes the products that best
+        match the person's own product words (gateway/refusal.py), else None. One catalog
+        search with no allergen filter, and only for a kitchen that has a rule."""
+        rule = self._allergen_rule(kitchen_id)
+        if not rule or not query:
+            return None
+        from gateway import catalog_search
+        from gateway.candidates import SEARCH_LIMIT
+        from gateway.refusal import excluded_request
+        rows, _ = catalog_search.search(self.db, query, {}, SEARCH_LIMIT, kitchen_id, injected=self._search)
+        return excluded_request(query, rows, rule)
 
     def _mixed_fat(self, plan: RequestPlan) -> bool:
         """S01: the lines of one plan have different fat levels (fat-free and 3 % milk)."""
@@ -304,6 +323,8 @@ class Gateway:
         sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
         if refused and "ALLERGEN_RULE" not in sim["mandate"]["reason_codes"]:
             sim["mandate"]["reason_codes"].append("ALLERGEN_RULE")
+        if request.get("refusal"):       # the whole request is refused (#974): say it first
+            sim["mandate"]["reasons"].insert(0, request["refusal"]["message"])
         if self._mixed_fat(plan) and "SUBSTITUTE_FAT_LEVEL" not in sim["mandate"]["reason_codes"]:
             sim["mandate"]["reason_codes"].append("SUBSTITUTE_FAT_LEVEL")   # S01: a person picks
         return self._save_offer(kitchen_id, request, sim)
@@ -383,13 +404,17 @@ class Gateway:
 
     # ---- kitchen side ---------------------------------------------------------------
 
-    def _from_text(self, kitchen_id: str, body: dict) -> dict:
+    def _from_text(self, kitchen_id: str, body: dict, default_day: date | None = None) -> dict:
         """Free text and no product list: the deterministic parser (#276), the fallback
         when the Nemotron Buyer is not running. It reads, searches and stops; the engine
-        still sizes every line and a person still approves."""
+        still sizes every line and a person still approves.
+
+        When the kitchen's allergen rule removes the products that best match the request,
+        the answer carries `refusal` and only those refused products: the proposal is then
+        REJECTED with that reason, never another kind of product (#974)."""
         from gateway.parse import ParseError, parse_request
         try:
-            parsed = parse_request(body["text"], self.now().date())
+            parsed = parse_request(body["text"], self.now().date(), default_day)
         except ParseError as exc:
             raise GatewayError(422, "CANNOT_READ_REQUEST", str(exc)) from None
         from gateway import catalog_search
@@ -399,10 +424,48 @@ class Gateway:
         # Keep the hits that can answer the request: the text search alone ranks chocolate
         # and bread mix above the milk for "lactose free milk".
         ids = pick_candidates(rows, parsed.as_need().get("unit") or "")
-        if not ids:
+        from gateway.refusal import excluded_request
+        refusal = excluded_request(parsed.query, rows, self._allergen_rule(kitchen_id))
+        if not ids and not refusal:
             raise GatewayError(422, "NO_PRODUCTS_FOUND", f"no catalog product matches {parsed.query!r}")
-        return {**body, "product_ids": ids, **{k: v for k, v in parsed.as_need().items() if k != "query"},
+        read = {**body, "product_ids": ids, **{k: v for k, v in parsed.as_need().items() if k != "query"},
                 "made_by": "parser", "query": parsed.query}
+        read.pop("refusal", None)       # set here only, never by the client
+        if refusal:
+            read["product_ids"] = refusal.pop("product_ids")
+            read["refusal"] = refusal
+        return read
+
+    def refuse_excluded(self, kitchen_id: str, body: dict, actor: str) -> dict | None:
+        """Before the Buyer runs (#974): a free-text request whose best matches the kitchen's
+        allergen rule removes ends here, as a REJECTED proposal that names the allergen. The
+        Buyer would only see what is left (plain butter for "peanut butter") and propose it.
+        None: the request goes on to the Buyer as before. The delivery day may come from
+        the body (`requested_date`), as it does for the Buyer."""
+        text, key = body.get("text"), body.get("idempotency_key")
+        if not isinstance(text, str) or not isinstance(key, str) or not key.strip():
+            return None
+        stored = self.db.proposals.find_one({"kitchen_id": kitchen_id, "idempotency_key": key})
+        if stored is not None:
+            if not stored["request"].get("refusal"):
+                return None             # a Buyer or parser proposal: its own replay rules apply
+            if stored["request"].get("text") != text:
+                raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
+            return self._proposal_out(stored)
+        if not self._allergen_rule(kitchen_id):
+            return None
+        try:
+            day = date.fromisoformat(body["requested_date"]) if body.get("requested_date") else None
+            read = self._from_text(kitchen_id, body, day)
+        except (TypeError, ValueError):
+            return None                 # not a date: the Buyer path says so
+        except GatewayError as exc:
+            if exc.code in ("CANNOT_READ_REQUEST", "NO_PRODUCTS_FOUND"):
+                return None             # the parser cannot read it; the Buyer may
+            raise
+        if not read.get("refusal"):
+            return None
+        return self.create_proposal(kitchen_id, body, actor, read=read)
 
     def _from_plan(self, kitchen_id: str, body: dict) -> dict:
         """`from` and `to` and no products: an order for what the menu plan needs in that
@@ -437,9 +500,11 @@ class Gateway:
                 "window": {"from": start.isoformat(), "to": end.isoformat()}, "problems": problems,
                 "idempotency_key": body.get("idempotency_key")}
 
-    def create_proposal(self, kitchen_id: str, body: dict, actor: str, *, auto_approve: bool = True) -> dict:
+    def create_proposal(self, kitchen_id: str, body: dict, actor: str, *, auto_approve: bool = True,
+                        read: dict | None = None) -> dict:
         """`auto_approve=False`: this proposal always waits for a person, whatever the kitchen's
-        auto-approve rule says (a proposal made from a supplier's offer, #374)."""
+        auto-approve rule says (a proposal made from a supplier's offer, #374).
+        `read`: what `_from_text` already made of this free text (`refuse_excluded`)."""
         planned = False
         if body.get("from") and body.get("to") and not body.get("product_ids") and not body.get("text"):
             if not body.get("idempotency_key"):
@@ -459,7 +524,7 @@ class Gateway:
                 if stored["request"].get("text") != body["text"]:
                     raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
                 return self._proposal_out(stored)
-            body = self._from_text(kitchen_id, body)
+            body = read or self._from_text(kitchen_id, body)
             parsed = True
         else:
             parsed = False
@@ -474,6 +539,8 @@ class Gateway:
             request.update({key: body[key] for key in ("needs", "window", "problems")})
         if parsed and body.get("query"):
             request["query"] = body["query"]
+        if parsed and body.get("refusal"):
+            request["refusal"] = body["refusal"]      # from _from_text only (#974)
         if body.get("event"):
             request["event"] = True       # one-off demand (S05): EVENT_LINE, kept out of the forecast
         key = body["idempotency_key"]
@@ -491,7 +558,7 @@ class Gateway:
         try:
             self.db.proposals.insert_one(doc)
         except DuplicateKeyError:
-            return self.create_proposal(kitchen_id, body, actor, auto_approve=auto_approve)
+            return self.create_proposal(kitchen_id, body, actor, auto_approve=auto_approve, read=read)
         if sim["lines"]:
             approval, _ = orders.request_approval(
                 self.db, kitchen_id=kitchen_id, idempotency_key=f"proposal:{doc['_id']}",
@@ -801,6 +868,12 @@ class Gateway:
                 "text": body.get("text") or "", "created_by": actor, "created_at": self.now()}
         if body.get("event") is True:
             need["event"] = True      # set by the trusted app, never by the model (#530)
+        from gateway.parse import product_words
+        # The person's own words, not a model's query: when the kitchen's allergen rule removes
+        # what they name, this need can never be searched or quoted into another product (#974).
+        refusal = self._excluded_request(kitchen_id, product_words(need["text"]))
+        if refusal:
+            need["refusal"] = refusal
         self.db.needs.insert_one(need)
         return {"need_id": need["_id"], **{k: need[k] for k in ("quantity", "unit", "requested_date", "text")}}
 
@@ -817,6 +890,10 @@ class Gateway:
         if need is None:
             rows, kind = catalog_search.search(self.db, query, filters, limit, injected=self._search)
             return {"products": rows, "search": kind}
+        if need.get("refusal"):
+            # Nothing to pick from, whatever the query: "butter" must not answer "peanut butter".
+            return {"products": [], "requested_date": need["requested_date"], "measure": None,
+                    "search": "text", "note": need["refusal"]["message"]}
         # Text search, or text plus meaning when SEARCH_HYBRID is on (gateway/catalog_search.py).
         rows, kind = catalog_search.search(self.db, query, filters, 50, injected=self._search)
         measure = need["unit"]
@@ -862,6 +939,10 @@ class Gateway:
                    "requested_date": need["requested_date"], "text": need["text"], "need_id": need["_id"]}
         if need.get("event"):
             request["event"] = True
+        if need.get("refusal"):
+            # Quote the refused products the person named, not the ones the caller picked.
+            request["product_ids"] = need["refusal"]["product_ids"]
+            request["refusal"] = {k: v for k, v in need["refusal"].items() if k != "product_ids"}
         return offer_out(self._quote(kitchen_id, request))
 
     def _kitchen_offer(self, kitchen_id: str, offer_id: str | None) -> dict:
