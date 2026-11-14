@@ -462,7 +462,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
           throw new ApiError("NOT_FOUND", `Product ${change.productId} is not on the order.`);
         }
         lines = lines.filter((line) => line.product.id !== change.productId);
-        if (lines.length === 0) throw new ApiError("INVALID", "An order needs at least one line; reject it instead.");
+        if (lines.length === 0) throw new ApiError("EMPTY_PROPOSAL", "An order needs at least one line; reject it instead.");
         kind = "LINE_REMOVED";
         summary = `Removed ${change.productId}`;
       } else {

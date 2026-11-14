@@ -417,6 +417,7 @@ describe("ApprovalCard", () => {
     ["CLOSING_PASSED", "The order cut-off for this line has passed."],
     ["LINE_UNAVAILABLE", "This product cannot be ordered now."],
     ["EMPTY_PROPOSAL", "Every line would be removed: reject the proposal instead."],
+    ["PROPOSAL_NOT_FOUND", "This proposal could not be found in this kitchen."],
     ["ROLE_REQUIRED", "Your role cannot change proposals."],
   ])("explains a refused %s change next to the controls without changing the basket", async (code, message) => {
     const user = userEvent.setup();
