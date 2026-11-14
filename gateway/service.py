@@ -19,7 +19,8 @@ from uuid import uuid4
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 
-from engine import AddableRow, Candidate, Item, KitchenParams, Offer, pack_info, plan_request, rank_addable
+from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, allergen_codes, pack_info,
+                    plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from gateway.decision import decision_summary
@@ -111,6 +112,7 @@ class Gateway:
                 stock.get("cutoff_passed"),
                 date.fromisoformat(available_date) if available_date else None,
                 bool(stock.get("salesBlock") or line.get("salesBlock")),
+                not allergen_codes(doc),          # unknown allergen data is never safe (S02, S04)
             ))
             tax[pid] = _dec((price.get("tax") or {}).get("taxRate")) or Decimal(0)
         return offers, skipped, tax
@@ -162,7 +164,8 @@ class Gateway:
         if need <= 0:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
         offers, skipped, tax = self._offers(list(request["product_ids"]), measure, requested)
-        plan = plan_request(need, measure, offers, requested, self._params(kitchen_id))
+        plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
+                            event=bool(request.get("event")))
         sim = self._simulate(kitchen_id, plan, tax, skipped)
         now = self.now()
         offer = orders.save_offer(self.db, {
@@ -179,6 +182,8 @@ class Gateway:
                 raise GatewayError(422, "INVALID_REQUEST", f"{field} is required")
         request = {k: body[k] for k in ("product_ids", "quantity", "unit", "requested_date")}
         request["text"] = body.get("text") or ""
+        if body.get("event"):
+            request["event"] = True       # one-off demand (S05): EVENT_LINE, kept out of the forecast
         key = body["idempotency_key"]
         stored = self.db.proposals.find_one({"kitchen_id": kitchen_id, "idempotency_key": key})
         if stored:
