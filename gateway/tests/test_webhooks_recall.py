@@ -96,6 +96,20 @@ def test_failed_delivery_is_retried_by_the_next_check(env, receiver):
     assert len(sent(receiver, "FOUND")) == 4
 
 
+def test_malformed_stored_alert_does_not_fail_the_check(env, receiver):
+    client, db, _ = stock_only(env)
+    make(client)
+    db.recall_alerts.insert_one({"_id": "recall-old", "kitchen_id": "hotel", "product_id": "999",
+                                 "where": ["in stock: 2 KG"], "detected_at": "2020-01-01T00:00:00"})
+    response = check(client)
+    assert response.status_code == 200, response.text
+    by_id = {d["data"]["recall_event_id"]: d["data"] for d in sent(receiver, "FOUND")}
+    assert len(by_id) == 2
+    assert by_id["recall-old"]["notice_url"] is None
+    [good] = [k for k in by_id if k != "recall-old"]
+    assert by_id[good]["notice_url"]
+
+
 def test_blocked_proposal_alert_names_its_case(env, receiver):
     client, _, _, proposal = env
     make(client)
