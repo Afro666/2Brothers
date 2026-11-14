@@ -34,6 +34,12 @@ export function mapKitchenWords(body: unknown): KitchenWords {
       times: count(row.times, "an unknown phrase's count"),
       firstAsked: optionalText(row.first_asked),
       lastAsked: optionalText(row.last_asked),
+      suggestions: Array.isArray(row.suggestions)
+        ? row.suggestions
+            .filter((s): s is Record<string, unknown> => typeof s === "object" && s !== null && typeof s.product_id === "string")
+            .map((s) => ({ productId: s.product_id as string, productName: optionalText(s.product_name) ?? (s.product_id as string) }))
+        : null,
+      suggestedBy: row.suggested_by === "meaning" || row.suggested_by === "words" ? row.suggested_by : null,
     })),
   };
 }
