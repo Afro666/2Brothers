@@ -28,7 +28,7 @@ from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 EVENTS = ("proposal.ready", "proposal.approved", "proposal.rejected", "order.placed",
-          "total_mismatch", "recall.alert", "agent.refused", "delivery.checked")
+          "total_mismatch", "recall.alert", "agent.refused", "delivery.checked", "supplier.offer")
 PING = "ping"                      # sent by POST .../test only; not a subscription
 # Audit kind (Gateway._audit) -> the events a developer sees.
 KIND_EVENTS = {
@@ -40,7 +40,13 @@ KIND_EVENTS = {
     "recall_proposal_blocked": ("recall.alert",),
     "refused": ("agent.refused",),
     "delivery_note_read": ("delivery.checked",),
+    "supplier_offer_received": ("supplier.offer",),
+    "supplier_offer_accepted": ("supplier.offer",),
+    "supplier_offer_declined": ("supplier.offer",),
 }
+_OFFER_FIELDS = ("offer_id", "supplier_id", "product_id", "replaces_product_id", "requested_date",
+                 "quantity", "unit")
+_OFFER_KINDS = ("supplier_offer_received", "supplier_offer_accepted", "supplier_offer_declined")
 MAX_HOOKS = 10
 MAX_ATTEMPTS = 3
 BACKOFF = (0.5, 2.0)               # seconds before attempt 2 and attempt 3
@@ -256,9 +262,42 @@ def deliver(db, kitchen_id: str, event: str, payload: dict, send: Send | None = 
     return out
 
 
+_THREADS: list[threading.Thread] = []
+_THREADS_LOCK = threading.Lock()
+MAX_WAITING_THREADS = 64
+
+
 def run_async(job: Callable[[], None]) -> None:
     """Deliveries run beside the request, never inside it."""
-    threading.Thread(target=job, name="webhook-delivery", daemon=True).start()
+    thread = threading.Thread(target=job, name="webhook-delivery", daemon=True)
+    thread.start()
+    with _THREADS_LOCK:
+        _THREADS[:] = [started for started in _THREADS if started.is_alive()]
+        _THREADS.append(thread)
+        del _THREADS[:-MAX_WAITING_THREADS]
+
+
+def wait_for_deliveries(timeout: float = 10) -> None:
+    """Join the deliveries started so far. A one-off command that sends offers exits after
+    this; the gateway never waits for a receiver."""
+    with _THREADS_LOCK:
+        threads = list(_THREADS)
+    deadline = time.monotonic() + max(0, timeout)
+    for thread in threads:
+        thread.join(max(0, deadline - time.monotonic()))
+    with _THREADS_LOCK:
+        _THREADS[:] = [started for started in _THREADS if started.is_alive()]
+
+
+def _event_payload(kind: str, data: dict) -> dict:
+    """The documented `data` for an event, and nothing else."""
+    if kind not in _OFFER_KINDS:
+        return dict(data)
+    payload = {"step": kind[len("supplier_offer_"):].upper(),
+               **{key: data.get(key) for key in _OFFER_FIELDS}}
+    if payload["step"] == "ACCEPTED":
+        payload["proposal_id"] = data.get("proposal_id")
+    return payload
 
 
 def _refused_payload(data: dict, actor: str) -> dict:
@@ -274,6 +313,7 @@ def _checked_payload(data: dict, actor: str) -> dict:
 
 
 _PAYLOADS = {"refused": _refused_payload, "delivery_note_read": _checked_payload}
+_PAYLOADS.update({kind: (lambda d, a, kind=kind: _event_payload(kind, d)) for kind in _OFFER_KINDS})
 
 
 def _first_refusal(kitchen_id: str, hook_id: str, actor: str, code, now: float) -> bool:
