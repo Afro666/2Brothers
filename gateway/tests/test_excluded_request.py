@@ -154,6 +154,10 @@ def refused(p):
     assert p["request"]["product_ids"] == ["472710", "473868", "467313", "465025"]
     assert {e["product_id"] for e in p["excluded"]} == {"472710", "473868", "467313", "465025"}
     assert p["request"]["refusal"]["message"] in p["decision_summary"]["text"]
+    # #995: nothing is ordered, so no charge, no delivery fee and no stock warning.
+    assert p["expected_total"] == "0.00" and p["delivery_fee"] == "0.00"
+    assert "PARTIAL_STOCK" not in p["mandate"]["reason_codes"]
+    assert "Total EUR" not in p["decision_summary"]["text"]
     return p
 
 

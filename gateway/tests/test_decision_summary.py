@@ -122,3 +122,14 @@ def test_valio_only_wording_is_unchanged():
     assert s["searched"] == "Checked 1 product(s) with Valio prices and stock for 2026-11-16: 7."
     assert s["decide"][-1] == ("Valio has not confirmed stock for 7 (5 ST): the order cannot be placed "
                                "until Valio confirms that stock.")
+
+
+def test_no_lines_means_no_total_sentence():
+    # #995: a refusal must not read like a charge (no "Total EUR 25.00 ... delivery").
+    sim = {"lines": [], "excluded": [], "shortfall": "15", "measure": "KG", "expected_total": "0.00",
+           "total_ex_vat": "0.00", "vat": "0.00", "delivery_fee": "0.00",
+           "mandate": {"verdict": "REFUSED"}, "alternative": None}
+    s = decision_summary({"product_ids": [], "quantity": "15", "unit": "KG",
+                          "requested_date": "2026-11-16"}, sim)
+    assert s["totals"] == "Nothing is ordered, so there is no total."
+    assert "Total EUR" not in s["text"] and "delivery" not in s["text"]
