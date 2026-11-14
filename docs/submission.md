@@ -48,7 +48,17 @@ Live site: <https://31-22-104-201.sslip.io>. For agents:
   `carbon_kg_co2e_per_kg` from Valio's datasets (`gateway/service.py`).
 - Substitution and exceptions: up to three engine-priced substitute baskets, each needs the
   chef's approval (`agent/substitutes.py`, `agent/README.md`). Partial fill: order the
-  confirmed stock now, plan the rest (`engine/partial.py`).
+  confirmed stock now, plan the rest (`engine/partial.py`). On the live site the 1,000 L
+  milk request shows this as option A, "Order the confirmed 698 L now. The other 302 L is
+  held until the supplier confirms stock"; a person chooses it and approves its exact total
+  (`gateway/options.py`, `docs/demo.md`).
+- Proactive selling agent: Valio's own agent reads the predicted shortages of the kitchens
+  that share their forecast, and offers a kitchen a substitute that can arrive. The offer is
+  a suggestion: no price and no quantity come from the supplier, and a person turns it into
+  a normal proposal (`agent/seller.py`, `gateway/supplier_offers.py`, `docs/contract.md`
+  "Supplier offers"). Run once on the live site on 2026-11-14.
+- Stock from a photo: Nemotron VL reads a shelf photo into counts that a person checks and
+  saves (`gateway/stock_photo.py`).
 - Traceability: insert-only audit log with a hash chain (`store/audit.py:129`). Recall
   notices are matched by EAN, brand and lot (`monitor/README.md`).
 
@@ -109,7 +119,10 @@ completion tokens, of which 1,720 reasoning). One photo read is one call of abou
 2,100 prompt tokens and 190 completion tokens. The benchmark used about 130,000 tokens per
 kitchen week with thinking on, over 12 weeks (`env/README.md`, the "tokens/episode"
 column). Measuring the live loop on 2026-11-14 took 184 Buyer requests: 832 model calls
-and 9.57 million tokens (`agent/README.md` "Buyer loop settings").
+and 9.57 million tokens (`agent/README.md` "Buyer loop settings"). The site shows the
+kitchen's own count on the About page, from
+`GET /v1/kitchens/{kitchen_id}/model-usage` (`gateway/model_usage.py`,
+`store/agent_runs.py`).
 
 **Why it matters.** A chef writes a sentence, not product codes. The model turns it into
 catalog products and a reason a person can read. A wrong model answer cannot become a
@@ -176,10 +189,18 @@ Why it matters: an order must not be sent twice, money must not round, and a per
 be able to check that nobody changed the log. The catalog and its indexes take about
 121 MB of the free tier's 512 MB (`store/README.md`).
 
-**In progress, not on `main`:** Atlas Vector Search with hybrid search (draft PR #405,
-issue #366).
-**Not built:** a gateway route for the change stream and for the tamper check. Both are
-in `store/trust.py` with tests; no gateway module calls them yet.
+**Atlas Vector Search.** The index `products_vector` (1,024 dimensions, cosine) and the
+hybrid search with `$rankFusion` are on `main` (`store/search.py`, `store/embeddings.py`,
+`store/vector_index.json`). The vectors come from MongoDB's own embedding API (model
+`voyage-4`); they are computed once and travel as a file (`python -m store.embeddings
+--export-from ... --out ...`, then `--import-from`). The gateway uses hybrid search only
+with `SEARCH_HYBRID=true` and falls back to the text search on any failure; the tool
+answer says which one ran (`gateway/catalog_search.py`). It is off by default.
+
+**Also served by the gateway:** the tamper check and the change stream. `GET
+/v1/kitchens/{k}/audit/verify` walks the hash chain, and the Trust page runs a tamper test
+on the live log: change one line, "Chain broken at line N", restore, "Chain OK"
+(`gateway/trust_routes.py`, `store/trust.py`).
 
 ## Context.dev: Fully Structured Web
 
@@ -203,13 +224,16 @@ one live scrape of the list and says whether the answer is `live` or the `record
 The recorded run (2026-11-13, 38 notices) matches a coffee recall to product 461332 in
 three demo kitchens (`monitor/README.md`).
 
-**Not built:** the deployed web inbox does not show the recall yet. The components exist
-(`web/src/components/purchasing/recall-panel.tsx`), but the web app does not call the
-gateway's recall routes in gateway mode (#655). Today the hold is visible in the API
-answers only. The onboarding page does not call the lookup route yet (#452). In a gateway
-check the notice pages come from the recording; only the list is scraped live. On
-2026-11-14 the live site had run no check and had no alerts
-(<https://31-22-104-201.sslip.io/api/v1/kitchens/demo-kitchen/recalls>).
+**In the web app.** The approvals inbox has a recall panel with "Check recalls now"; a
+held proposal sits in its own group with the notice and a link to its replacement
+(`web/src/components/purchasing/recall-panel.tsx`, the routes in `gateway/recalls_view.py`).
+The onboarding page calls the brand lookup and fills the form
+(`web/src/api/http-onboarding.ts`). Both are limited on the open demo site: 10 lookups a
+minute and a 60 second recall cooldown (`gateway/limits.py`).
+
+**Limits to know.** The server needs `CONTEXT_DEV_API_KEY`; without it the onboarding
+lookup answers 502 and the recall check answers from the recording and says so. In a
+gateway check the notice pages come from the recording; only the list is scraped live.
 
 ## OpenAI: Best Use of Codex
 
@@ -246,18 +270,15 @@ sped the work up, so we state none here. No CI step runs Codex (#361).
 ## Open items before submission
 
 - [ ] Paste each section into the Junction form (#369).
-- [ ] Record the 3-minute demo and the fallback video (#295).
-- [ ] Codex: write `docs/codex.md` with metrics and the 90-second recording (#360). The
-      Codex section has no speed-up number without it.
-- [ ] Context.dev: on the server, run `python -m demo.recall_demo` and one recall check
-      before the recording, so a held proposal exists (`deploy/README.md`).
-- [ ] Context.dev: wire the recall routes into the web inbox (#655, #557). Without it the
-      Context.dev data does not show in the web demo, and the sponsor asks for that.
-- [ ] Context.dev: wire the onboarding lookup (#452). Limit credit spend on the open demo
-      (#604, #652).
-- [ ] Nemotron: improvement round on the benchmark (#365; the token meter is built). Store a
-      delivery-note result through the gateway (#362) and add the shelf photo button (#373).
-- [ ] MongoDB: merge Atlas Vector Search (draft PR #405, #366), or keep it out of the form.
-- [ ] Valio: emit the two missing reason codes so S01 and S02 pass (`docs/scenarios.md`).
-- [ ] Run `python -m gateway.conformance` against the live gateway and add its table here
-      (C12 can crash on an SSE answer: #653).
+- [ ] Record the 3-minute demo. The fallback video: `python -m demo.record_demo --approve` (#295).
+- [ ] Server keys: `CONTEXT_DEV_API_KEY` (onboarding lookup, live recall check),
+      `MONGODB_AI_API_KEY` (hybrid search), `GATEWAY_SIGNING_KEY` (#755).
+- [ ] Context.dev: on the server, run `python -m demo.recall_demo` before the recording, so
+      a proposal with the recalled coffee exists (`deploy/README.md`).
+- [ ] MongoDB: import the product vectors on the server and decide on `SEARCH_HYBRID`
+      (#366). Until then the form says "vector search is built and off by default".
+- [ ] Codex: Maciek's three prompts, time estimates and the 90-second recording (#360).
+- [ ] Nemotron: the improvement round on the benchmark (#365). Store a delivery-note result
+      through the gateway (#362).
+- [ ] Valio: the selling agent needs one fresh offer before the demo
+      (`python -m agent.seller --apply --limit 1 --kitchen demo-kitchen` on the server).
