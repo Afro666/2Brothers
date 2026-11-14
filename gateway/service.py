@@ -1630,7 +1630,7 @@ class Gateway:
         # query: "50 kg cheese" gets cheese, never a cheese sauce (gateway/kind.py). After
         # a hybrid search too: its first hit for "cheese" was a cheddar cheese sauce.
         # A need stored with no text (an outside client): the query is all there is.
-        rows = self._of_kind(rows, query, filters, need["text"] or query, measure)
+        rows = self._of_kind(rows, query, filters, need["text"] or query, measure, kitchen_id)
         same = [r for r in rows if (r.get("net_content") or {}).get("unit") == measure]
         filtered = bool(same) and measure in ("L", "KG")
         if filtered:
