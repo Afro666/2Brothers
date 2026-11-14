@@ -675,6 +675,11 @@ agent. A token never approves.
 Token row: `token_id`, `name`, `scopes`, `prefix` (the first 8 characters, for
 display), `created_at`, `created_by`, `last_used_at` (or null), `revoked_at` (or null).
 
+`created_by` on a token row and on a webhook row is a person's name or email. A caller that
+is not a signed-in session (the open demo's shared human token) gets it only when it is the
+caller's own name; otherwise the text `a signed-in person` (#1577). A signed-in person of
+the kitchen gets the stored value. The same holds for the list and the delete answers.
+
 - `token` (`tkb_...`) is in the create answer only. It is shown once; the gateway
   keeps only its SHA-256.
 - `scopes` holds one or more of `kitchen:read`, `kitchen:propose` and `kitchen:write`
