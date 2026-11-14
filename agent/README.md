@@ -1,5 +1,30 @@
 # Nemotron buyer (#22)
 
+## Live model health and explicit endpoint selection (#1135)
+
+`python -m agent.ping` makes one real chat request (16-token limit, thinking off,
+20-second total deadline, no retries). It prints one JSON line with status, model,
+endpoint host, latency and usage, or a safe error class/HTTP status. It never prints
+the key, a URL query or the model's reply. A reachable `/models` route is not enough
+to prove generation works; that route is absent on some dedicated containers.
+
+On the server: `docker compose --env-file .env -f deploy/compose.yaml exec -T buyer python -m agent.ping`.
+For a faster probe add `--timeout 5`. Exit code is zero only for a nonempty generation.
+
+The default `NEMOTRON_PROVIDER=verda` retains the shared dedicated Verda endpoint
+and `VERDA_INFERENCE_KEY`. An explicitly configured second route is
+`NEMOTRON_PROVIDER=nvidia`: NVIDIA's `https://integrate.api.nvidia.com/v1`, model
+`nvidia/nemotron-3.5-super-vl-120b-a12b`, authenticated with `NVIDIA_API_KEY`.
+Provision that key privately first, then changing the provider is one env-value
+switch and a buyer container recreation. This is **not an automatic fallback**;
+the NVIDIA route is not claimed tested until a key and a successful probe exist.
+See [NVIDIA's model page](https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b).
+
+`NEMOTRON_BASE_URL` and `NEMOTRON_MODEL` can override the selected preset for an
+operator-supplied compatible endpoint. URLs cannot contain credentials, queries
+or fragments, and public endpoints must use HTTPS. The gateway's existing parser
+circuit breaker is unchanged: a parser reply never claims Nemotron produced it.
+
 ## Substitute choices (#281)
 
 `SubstitutePlanner` runs after a partial-stock, unknown-stock or passed-cutoff
