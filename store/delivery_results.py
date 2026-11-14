@@ -12,6 +12,7 @@ from copy import deepcopy
 from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
+from time import monotonic, sleep
 from uuid import uuid4
 
 from pymongo.errors import DuplicateKeyError
@@ -134,6 +135,7 @@ def _observation(*, kitchen_id: str, order_id: str, supplier_id, requested_date,
 def _public(doc: dict) -> dict:
     out = deepcopy(doc)
     out.pop("_id", None)
+    out.pop("_operation_id", None)
     return out
 
 
@@ -149,21 +151,54 @@ def _current(db, kitchen_id: str, order_id: str) -> dict | None:
                                 sort=[("revision", -1)])
 
 
+APPEND_TRIES = 5
+
+
+def _move_current(db, kitchen_id: str, order_id: str, result_id: str,
+                  revision: int) -> None:
+    """Move the selector forward only, so a slower older save cannot move it back."""
+    try:
+        db[CURRENT].update_one(
+            {"kitchen_id": kitchen_id, "order_id": order_id,
+             "revision": {"$lt": revision}},
+            {"$set": {"result_id": result_id, "revision": revision}}, upsert=True)
+    except DuplicateKeyError:
+        pass  # the selector already points at this or a newer revision
+
+
 def _append(db, observation: dict) -> dict:
-    """Write one immutable revision, then move the kitchen+order selector to it."""
-    current = _current(db, observation["kitchen_id"], observation["order_id"])
-    if current is None:
-        result_id, revision = "dr-" + uuid4().hex, 1
-    else:
+    """Write one immutable revision, then move the kitchen+order selector to it.
+
+    Two saves at once can read the same revision; the loser's insert hits the unique _id,
+    so it reads the current revision again and takes the next one.
+    """
+    kitchen_id, order_id = observation["kitchen_id"], observation["order_id"]
+    for _ in range(APPEND_TRIES):
+        current = _current(db, kitchen_id, order_id)
+        if current is None:
+            # Claim the selector at revision 0, so racing first saves share one result_id.
+            try:
+                db[CURRENT].insert_one({"kitchen_id": kitchen_id, "order_id": order_id,
+                                        "result_id": "dr-" + uuid4().hex, "revision": 0})
+            except DuplicateKeyError:
+                pass
+            current = _current(db, kitchen_id, order_id)
         result_id, revision = current["result_id"], int(current["revision"]) + 1
-    row = {"_id": f"{result_id}:{revision}", **observation,
-           "result_id": result_id, "revision": revision}
-    db[RESULTS].insert_one(row)
-    db[CURRENT].replace_one(
-        {"kitchen_id": observation["kitchen_id"], "order_id": observation["order_id"]},
-        {"kitchen_id": observation["kitchen_id"], "order_id": observation["order_id"],
-         "result_id": result_id, "revision": revision}, upsert=True)
-    return _public(row)
+        row = {"_id": f"{result_id}:{revision}", **observation,
+               "result_id": result_id, "revision": revision}
+        try:
+            db[RESULTS].insert_one(row)
+        except DuplicateKeyError:
+            # The winner may not have moved the selector yet: move it to the newest row.
+            latest = db[RESULTS].find_one({"result_id": result_id},
+                                          sort=[("revision", -1)])
+            if latest is not None:
+                _move_current(db, kitchen_id, order_id, result_id,
+                              int(latest["revision"]))
+            continue
+        _move_current(db, kitchen_id, order_id, result_id, revision)
+        return _public(row)
+    raise RuntimeError("too many concurrent delivery saves for this order")
 
 
 def save_observation(db, *, kitchen_id: str, order_id: str, supplier_id,
@@ -195,37 +230,66 @@ def save_received(db, *, kitchen_id: str, order_id: str, idempotency_key: str,
     if day is None:
         raise ValueError("delivery_date must be an ISO date")
     payload_hash = _payload_hash(order_id, day, idempotency_key)
-    seen = db[KEYS].find_one({"kitchen_id": kitchen_id,
-                              "idempotency_key": idempotency_key})
+    key_filter = {"kitchen_id": kitchen_id, "idempotency_key": idempotency_key}
+    seen = db[KEYS].find_one(key_filter)
     if seen is not None:
-        if seen.get("payload_hash") != payload_hash:
-            raise IdempotencyConflict(idempotency_key)
-        stored = _row(db, seen["result_id"], seen["revision"])
-        if stored is None:
-            raise RuntimeError("the saved received result is missing")
-        return _public(stored), False
+        return _replay(db, key_filter, seen, payload_hash), False
 
     observation = _observation(kitchen_id=kitchen_id, order_id=order_id,
                                supplier_id=supplier_id, requested_date=requested_date,
                                ordered_at=ordered_at, delivery_date=day,
                                checked_by=checked_by, checked_at=checked_at,
                                source="manual_complete", lines=lines, not_ordered=[])
-    result = _append(db, observation)
-    key_doc = {"kitchen_id": kitchen_id, "idempotency_key": idempotency_key,
-               "payload_hash": payload_hash, "result_id": result["result_id"],
-               "revision": result["revision"]}
+    # A private durable identity lets retries find a committed append even if finalization fails.
+    operation_id = uuid4().hex
     try:
-        db[KEYS].insert_one(key_doc)
+        db[KEYS].insert_one({**key_filter, "order_id": order_id, "operation_id": operation_id,
+                            "payload_hash": payload_hash, "pending": True})
     except DuplicateKeyError:
-        winner = db[KEYS].find_one({"kitchen_id": kitchen_id,
-                                    "idempotency_key": idempotency_key})
-        if winner is None or winner.get("payload_hash") != payload_hash:
-            raise IdempotencyConflict(idempotency_key) from None
-        stored = _row(db, winner["result_id"], winner["revision"])
-        if stored is None:
-            raise RuntimeError("the saved received result is missing") from None
-        return _public(stored), False
+        winner = db[KEYS].find_one(key_filter)
+        if winner is None:
+            raise RuntimeError("the received key reservation is missing") from None
+        return _replay(db, key_filter, winner, payload_hash), False
+    observation["_operation_id"] = operation_id
+    # Keep an ambiguous reservation: deleting it could allow a duplicate late write.
+    result = _append(db, observation)
+    db[KEYS].update_one({**key_filter, "operation_id": operation_id, "pending": True},
+                       {"$set": {"result_id": result["result_id"], "revision": result["revision"]},
+                        "$unset": {"pending": ""}})
     return result, True
+
+
+REPLAY_WAIT_S, REPLAY_POLL_S = 2.0, 0.05
+
+
+def _replay(db, key_filter: dict, seen: dict, payload_hash: str) -> dict:
+    """The stored result for a used key; waits briefly while the first save finishes."""
+    if seen.get("payload_hash") != payload_hash:
+        raise IdempotencyConflict(key_filter["idempotency_key"])
+    deadline = monotonic() + REPLAY_WAIT_S
+    while seen.get("pending"):
+        operation_id, order_id = seen.get("operation_id"), seen.get("order_id")
+        stored = None
+        if operation_id is not None and order_id is not None:
+            stored = db[RESULTS].find_one({"kitchen_id": key_filter["kitchen_id"],
+                "order_id": order_id, "_operation_id": operation_id})
+        if stored is not None:
+            _move_current(db, key_filter["kitchen_id"], order_id,
+                          stored["result_id"], int(stored["revision"]))
+            db[KEYS].update_one({**key_filter, "operation_id": operation_id, "pending": True},
+                {"$set": {"result_id": stored["result_id"], "revision": stored["revision"]},
+                 "$unset": {"pending": ""}})
+            return _public(stored)
+        if monotonic() >= deadline:
+            raise RuntimeError("the received result is still being saved")
+        sleep(REPLAY_POLL_S)
+        seen = db[KEYS].find_one(key_filter)
+        if seen is None:
+            raise RuntimeError("the first received save failed")
+    stored = _row(db, seen["result_id"], seen["revision"])
+    if stored is None:
+        raise RuntimeError("the saved received result is missing")
+    return _public(stored)
 
 
 def _since_value(value) -> str | None:
