@@ -239,6 +239,8 @@ export default {
   "Proposal ready for human review": "Ehdotus valmiina ihmisen tarkistukseen",
   "Proposal updated. Check the new total before you approve.": "Ehdotus päivitetty. Tarkista uusi summa ennen hyväksyntää.",
   "Proposal {id}": "Ehdotus {id}",
+  "Proposal {id} has already been decided.": "Ehdotuksesta {id} on jo päätetty.",
+  "Proposal {id} was not found.": "Ehdotusta {id} ei löytynyt.",
   "Proposed by the Buyer agent": "Ostaja-agentin ehdottama",
   "Proposed by the Buyer agent ({model})": "Ostaja-agentin ehdottama ({model})",
   "Proposed by the gateway’s request parser, not the Buyer model": "Ehdotuksen teki yhdyskäytävän pyyntöjäsennin, ei Ostaja-malli",

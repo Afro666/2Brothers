@@ -4,7 +4,8 @@ import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { RecallPanel, type RecallStatus } from "@/components/purchasing/recall-panel";
-import { useState } from "react";
+import { useSearch } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -18,6 +19,7 @@ import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import { LiveConnectionLabel, useLiveEvents } from "@/lib/live-events";
 import { useSession } from "@/lib/session";
+import { getTelegramWebApp } from "@/lib/telegram";
 import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
 import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
 import { LiveApprovalsPage } from "@/pages/live-approvals";
@@ -70,6 +72,7 @@ const DECIDED_SHOWN = 5;
 function ApiApprovalsPage() {
   const t = useT();
   const api = useApi();
+  const { proposal } = useSearch({ from: "/approvals" });
   const { role } = useRole();
   const { session } = useSession();
   const actor = auditActorForRole(role);
@@ -79,6 +82,8 @@ function ApiApprovalsPage() {
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
   const [allDecided, setAllDecided] = useState(false);
   const recalls = useAsync(() => loadRecalls(api), [api]);
+  const closeTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(closeTimer.current), []);
 
   // An Api that cannot change a proposal shows it read-only (the gateway serves the change, #303).
   const canEdit = !api.live || api.live.has("changeProposal");
@@ -98,6 +103,9 @@ function ApiApprovalsPage() {
           testId: "approval-toast",
         });
       }
+      const telegram = getTelegramWebApp();
+      // Inside Telegram the Mini App closes after the person has seen the result.
+      if (telegram) closeTimer.current = window.setTimeout(() => telegram.close(), 2000);
     } finally {
       // Also after a refusal: when the total moved, the card must show the new one before asking again.
       approvals.reload();
@@ -149,6 +157,31 @@ function ApiApprovalsPage() {
   // An order a recall hits comes first, so nobody scrolls past it.
   const hit = (row: ApprovalWithOrder) => Number(recallsFor(row.approval.orderId).length > 0);
   const recallFirst = [...pending].sort((a, b) => hit(b) - hit(a));
+  const linked =
+    proposal && approvals.status === "ready"
+      ? approvals.data.find(({ approval }) => approval.id === proposal)
+      : undefined;
+  const linkedPending = linked?.approval.status === "PENDING" ? linked : undefined;
+  const linkedFirst = linkedPending
+    ? [linkedPending, ...recallFirst.filter(({ approval }) => approval.id !== linkedPending.approval.id)]
+    : recallFirst;
+  const linkedOrderId = linkedPending?.approval.orderId;
+  useEffect(() => {
+    if (!linkedOrderId) return;
+    const card = document.getElementById(`proposal-${linkedOrderId}`);
+    card?.scrollIntoView({ block: "start" });
+    card?.focus({ preventScroll: true });
+  }, [linkedOrderId]);
+  const linkedDecided =
+    linked && linked.approval.status !== "PENDING" && linked.approval.status !== "BLOCKED_BY_RECALL";
+  const linkedMessage =
+    proposal && approvals.status === "ready"
+      ? linkedDecided
+        ? t("Proposal {id} has already been decided.", { id: proposal })
+        : !linked
+          ? t("Proposal {id} was not found.", { id: proposal })
+          : undefined
+      : undefined;
   const recallStatus: RecallStatus =
     recalls.status === "loading"
       ? { kind: "loading" }
@@ -196,6 +229,11 @@ function ApiApprovalsPage() {
           </p>
         </header>
         <RecallPanel status={recallStatus} onCheck={checkRecalls} />
+        {linkedMessage ? (
+          <p role="status" className="hatch px-3 py-2 text-sm break-words">
+            {linkedMessage}
+          </p>
+        ) : null}
         {approvals.status === "loading" ? <LoadingState label={t("Loading approvals")} /> : null}
         {approvals.status === "error" ? (
           <ErrorState message={approvals.error.message} onRetry={approvals.reload} />
@@ -213,7 +251,7 @@ function ApiApprovalsPage() {
               </h2>
               {pending.length > 0 ? (
                 <div className="space-y-4">
-                  {recallFirst.map(({ approval, order }) => (
+                  {linkedFirst.map(({ approval, order }) => (
                     <ApprovalCard
                       key={approval.id}
                       request={approval}
