@@ -14,6 +14,9 @@ import { useT } from "@/lib/i18n";
 import type { AuditEvent, AuditKind } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
 
+/** Steps shown at first and added per "Show more": a phone stays short (#1142). */
+export const AUDIT_PAGE = 50;
+
 export function AuditPage() {
   const t = useT();
   const api = useApi();
@@ -36,6 +39,12 @@ export function AuditPage() {
       (kind === "all" || event.kind === kind) &&
       (actor === "all" || event.actor === actor),
   );
+  // The newest steps, still in time order; "Show more" adds earlier ones. Same stable sort as the timeline.
+  const [shown, setShown] = useState(AUDIT_PAGE);
+  useEffect(() => setShown(AUDIT_PAGE), [order, kind, actor]);
+  const inOrder = [...filtered].sort((a, b) => (a.at && b.at ? new Date(a.at).getTime() - new Date(b.at).getTime() : 0));
+  const visible = inOrder.slice(Math.max(0, inOrder.length - shown));
+  const earlier = inOrder.length - visible.length;
   function clearFilters() {
     setOrder("all");
     setKind("all");
@@ -119,7 +128,20 @@ export function AuditPage() {
                 </Button>
               </EmptyState>
             ) : (
-              <AuditTimeline events={filtered} />
+              <div className="space-y-3">
+                {earlier > 0 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-muted-foreground">
+                      {t("Showing the newest {count} steps, oldest first.", { count: visible.length })}
+                    </p>
+                    {/* Earlier steps go above the ones shown, so the button sits where they appear. */}
+                    <Button variant="outline" onClick={() => setShown((value) => value + AUDIT_PAGE)}>
+                      {t("Show more ({count} earlier steps)", { count: earlier })}
+                    </Button>
+                  </div>
+                ) : null}
+                <AuditTimeline events={visible} />
+              </div>
             )}
           </div>
         ) : null}

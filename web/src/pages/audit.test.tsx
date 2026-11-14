@@ -121,4 +121,28 @@ describe("audit page", () => {
     await act(() => router.navigate({ to: "/audit", search: { kind: "bogus" } as never }));
     await waitFor(() => expect(kind).toHaveTextContent("All kinds"));
   });
+  it("shows the newest 50 steps and adds earlier ones with Show more (#1142)", async () => {
+    const api = createMockApi();
+    api.listAudit = async () =>
+      Array.from({ length: 120 }, (_, i) => ({
+        id: `ev-${i}`,
+        at: new Date(Date.UTC(2026, 10, 14, 0, i)).toISOString(),
+        kind: "other" as const,
+        actor: "system" as const,
+        summary: `Step number ${i}`,
+        reason: "",
+      }));
+    renderApp("/audit", api);
+
+    expect(await screen.findByText("Step number 119")).toBeInTheDocument();
+    expect(screen.getByText("Step number 70")).toBeInTheDocument();
+    expect(screen.queryByText("Step number 69")).not.toBeInTheDocument();
+    expect(screen.getByText("120 steps")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Show more (70 earlier steps)" }));
+    expect(screen.getByText("Step number 20")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show more (20 earlier steps)" }));
+    expect(screen.getByText("Step number 0")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show more/ })).not.toBeInTheDocument();
+  });
 });

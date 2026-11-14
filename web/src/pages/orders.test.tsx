@@ -84,11 +84,23 @@ describe("orders pages", () => {
     expect(within(block).getByText("Approved by").nextElementSibling).toHaveTextContent("aron");
     expect(within(block).getByText("Signed total").nextElementSibling).toHaveTextContent("148.76");
     expect(within(block).getByText("Signed at").nextElementSibling).not.toHaveTextContent("unknown");
+    expect(within(block).getByText("Supplier").nextElementSibling).toHaveTextContent("Nothing sent to the supplier yet");
 
     await user.click(within(block).getByRole("button", { name: "Copy receipt" }));
     expect(writeText).toHaveBeenCalledWith(receipt!.jws);
     // The sample is shaped like the gateway's: the real mapper reads the same claims back.
     expect(mapReceipt(receipt!.jws)).toEqual(receipt);
+  });
+
+  it("maps the supplier outcome claim and leaves it null when absent", async () => {
+    const { receipt } = await createMockApi().getOrder("ORD-1042");
+    expect(mapReceipt(receipt!.jws)?.supplierOutcome).toBe("NOT_SENT");
+
+    const [header, payload, signature] = receipt!.jws.split(".");
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    delete claims.supplier_outcome;
+    const withoutClaim = [header, btoa(JSON.stringify(claims)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""), signature].join(".");
+    expect(mapReceipt(withoutClaim)?.supplierOutcome).toBeNull();
   });
 
   it("says when a placed order has no signed receipt", async () => {

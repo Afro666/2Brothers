@@ -1,5 +1,5 @@
 import { Send } from "lucide-react";
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,13 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/lib/i18n";
 import type { ChefRequest } from "@/types";
-
-/** Examples a person can tap to fill the box (#1142). A tap only fills the text; it never sends. */
-export const REQUEST_EXAMPLES = [
-  "1,000 L lactose-free milk by Monday",
-  "50 kg cheese by Monday",
-  "15 kg peanut butter",
-] as const;
 
 /**
  * The chef says what they need in their own words. Covers and date are
@@ -27,6 +20,7 @@ export function ChefRequestBox({
   onSubmit?: (request: ChefRequest) => void | Promise<void>;
 }) {
   const t = useT();
+  const textRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(initial?.text ?? "");
   const [covers, setCovers] = useState(initial?.covers == null ? "" : String(initial.covers));
   const [date, setDate] = useState(initial?.deliveryDate ?? "");
@@ -37,6 +31,11 @@ export function ChefRequestBox({
   const coversId = useId();
   const dateId = useId();
   const canSend = text.trim().length > 0 && date !== "";
+  const examples = [
+    "1,000 L lactose-free milk by Monday",
+    "100 L cream for Thursday",
+    "400 pcs single-serve fruit yoghurt for Friday",
+  ];
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -79,6 +78,7 @@ export function ChefRequestBox({
       <div className="space-y-2">
         <Label htmlFor={textId} className="label-caps text-[11px] leading-4 font-semibold">{t("What do you need?")}</Label>
         <Textarea
+          ref={textRef}
           id={textId}
           className="text-[17px] md:text-[17px]"
           value={text}
@@ -86,17 +86,21 @@ export function ChefRequestBox({
           placeholder={t("1,000 L lactose-free milk by Monday")}
           rows={3}
         />
-        <div role="group" aria-label={t("Examples")} className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">{t("Try:")}</span>
-          {REQUEST_EXAMPLES.map((example) => (
-            <button
+        <div role="group" aria-label={t("Examples")} className="flex flex-wrap gap-2">
+          {examples.map((example) => (
+            <Button
               key={example}
               type="button"
-              className="min-h-9 rounded-full border border-input bg-card px-3 py-1 text-sm hover:bg-muted"
-              onClick={() => setText(t(example))}
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => {
+                setText(example);
+                textRef.current?.focus();
+              }}
             >
               {t(example)}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
