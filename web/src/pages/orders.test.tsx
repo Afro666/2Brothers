@@ -174,7 +174,7 @@ describe("orders pages", () => {
     }
   });
 
-  it("keeps the gateway's note for a supplier outcome the web does not know (#1803)", async () => {
+  it("keeps any other supplier note as the gateway sent it, also in Finnish (#1803)", async () => {
     const api = createMockApi();
     const order = await api.getOrder("ORD-1042");
     vi.spyOn(api, "getOrder").mockResolvedValue({
