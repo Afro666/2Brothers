@@ -25,6 +25,7 @@ import uuid
 from typing import Callable
 
 from bson.decimal128 import Decimal128
+from pymongo.errors import DuplicateKeyError
 
 from store.search import allergen_codes
 
@@ -318,7 +319,10 @@ class _Collection:
         doc_id = str(data.get(self._id_key) or uuid.uuid4().hex[:12])
         doc = {"_id": f"{kitchen_id}:{doc_id}", "kitchen_id": kitchen_id, self._id_key: doc_id,
                **self._fields(data)}
-        self._coll.insert_one(_to_store(doc))
+        try:
+            self._coll.insert_one(_to_store(doc))
+        except DuplicateKeyError:
+            raise ValueError(f"{self._id_key} {doc_id} already exists") from None
         return self._out(doc)
 
     def get(self, kitchen_id: str, doc_id: str) -> dict | None:
@@ -406,7 +410,10 @@ class _OwnProducts:
     def create(self, kitchen_id: str, data: dict) -> dict:
         row = own_product_row({**data, "kitchen_id": kitchen_id},
                               data.get("product_id") or f"own-{uuid.uuid4().hex[:12]}")
-        self._coll.insert_one(row)
+        try:
+            self._coll.insert_one(row)
+        except DuplicateKeyError:
+            raise ValueError(f"product_id {row['_id']} already exists") from None
         return own_product_out(row)
 
     def get(self, kitchen_id: str, product_id: str) -> dict | None:
