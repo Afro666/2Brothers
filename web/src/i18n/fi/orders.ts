@@ -609,6 +609,7 @@ export default {
   "Lines incl VAT": "Rivit sis. alv",
   "Total to approve {amount}": "Hyväksyttävä summa {amount}",
   "The total to approve includes delivery or other charges the gateway does not itemise.": "Hyväksyttävä summa sisältää toimitus- tai muita maksuja, joita yhdyskäytävä ei erittele.",
+  "Reason: {reason}": "Syy: {reason}",
   "Delivery fee {amount} (free from {threshold} ex VAT)": "Toimitusmaksu {amount} (ilmainen, kun summa on vähintään {threshold} ilman alv)",
   "Nothing could be ordered": "Mitään ei voitu tilata",
   "Nothing could be ordered. Left out: {count}": "Mitään ei voitu tilata. Jätetty pois: {count}",
