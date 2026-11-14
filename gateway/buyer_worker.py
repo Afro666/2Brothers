@@ -57,6 +57,27 @@ def buyer_payload(kitchen_id, body):
     return payload
 
 
+SPLIT_SECONDS = 40     # one /split call (#1375); the worker gives up after 35 s
+
+
+async def run_split(kitchen_id, text):
+    """Nemotron's split of a text with several products: the `needs` list of the worker's
+    answer, unchecked (gateway/split.py checks it). None when the worker is not configured.
+    Any failure raises; the caller then splits with plain code."""
+    url = os.environ.get('BUYER_WORKER_URL', '')
+    token = os.environ.get('GATEWAY_AGENT_TOKEN', '')
+    if not url or not token:
+        return None
+    async with httpx.AsyncClient(timeout=SPLIT_SECONDS, follow_redirects=False, trust_env=False) as client:
+        response = await client.post(url.rstrip('/') + '/split', json={'text': text, 'kitchen_id': kitchen_id},
+                                     headers={'Authorization': 'Bearer ' + token})
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict) or not isinstance(data.get('needs'), list):
+        raise ValueError('split answer has no needs')
+    return data['needs']
+
+
 async def run_buyer(kitchen_id, body):
     url = os.environ.get('BUYER_WORKER_URL', '')
     token = os.environ.get('GATEWAY_AGENT_TOKEN', '')

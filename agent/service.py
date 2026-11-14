@@ -249,6 +249,9 @@ def create_app(worker=None, shelf=None, delivery_note=None, menu_photo=None, buy
     mount_explanation(app, WorkerError, explanation)
     from agent.label_service import mount_label_photo
     mount_label_photo(app, WorkerError, label_photo)
+    # Several products in one request (#1375): POST /split, one model call, checked by the gateway.
+    from agent.split_service import mount_split
+    mount_split(app, WorkerError)
     return app
 
 
