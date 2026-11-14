@@ -128,7 +128,8 @@ export function RecallPanel({
     tone = "danger";
     headline = plural(affecting, t);
   } else if (unheld.length > 0) {
-    tone = "danger";
+    // A review match only "may be about" the product and blocks nothing: no red banner for it alone.
+    tone = unheld.every((alert) => alert.match === "review") ? "warning" : "danger";
     headline = unheld.length === 1
       ? t("1 recall matches a product in your kitchen")
       : t("{count} recalls match products in your kitchen", { count: unheld.length });
