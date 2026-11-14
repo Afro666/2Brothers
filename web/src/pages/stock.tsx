@@ -96,10 +96,15 @@ export function StockPage() {
   const canSave = pending.length > 0 && invalidCount === 0 && !saving;
 
   function updateDraft(productId: string, change: Partial<RowDraft>) {
-    setDrafts((current) => ({
-      ...current,
-      [productId]: { ...draftFor(current, productId), ...change },
-    }));
+    setDrafts((current) => {
+      const next = { ...draftFor(current, productId), ...change };
+      if (next.value.trim() === "" && !next.notCounted) {
+        // An emptied row goes back to untouched, so it does not block Save for the others.
+        const { [productId]: _cleared, ...rest } = current;
+        return rest;
+      }
+      return { ...current, [productId]: next };
+    });
     setSaveError(null);
   }
 
