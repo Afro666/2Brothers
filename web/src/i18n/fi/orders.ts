@@ -54,7 +54,7 @@ export default {
   "Approved: {amount} incl VAT": "Hyväksytty: {amount} sis. alv",
   "Order placed. Call {supplier} to confirm.": "Tilaus tehty. Soita toimittajalle {supplier} ja pyydä vahvistusta.",
   "Call {supplier} to confirm": "Soita toimittajalle {supplier} ja pyydä vahvistusta",
-  "Waiting for {supplier} to confirm. Call or e-mail them: this order was sent without a stock confirmation.": "Odotetaan toimittajan {supplier} vahvistusta. Soita tai lähetä sähköpostia: tämä tilaus lähetettiin ilman varastovahvistusta.",
+  "Waiting for {supplier} to confirm. Call or e-mail them: this order is recorded here but was not sent to them, and nobody confirmed their stock.": "Odotetaan toimittajan {supplier} vahvistusta. Soita tai lähetä sähköpostia: tämä tilaus on kirjattu tänne, mutta sitä ei lähetetty heille, eikä kukaan ole vahvistanut heidän varastoaan.",
   "Approved: {exVat} ex VAT, {inclVat} incl VAT. The order may now be sent.": "Hyväksytty: {exVat} ilman alv, {inclVat} sis. alv. Tilauksen voi nyt lähettää.",
   "Ask the Buyer for a proposal using live supplier prices and availability. A person approves before anything is placed.": "Pyydä Ostajalta ehdotus ajantasaisilla toimittajahinnoilla ja saatavuudella. Ihminen hyväksyy ennen tilaamista.",
   "Ask the agent": "Pyydä agenttia",
