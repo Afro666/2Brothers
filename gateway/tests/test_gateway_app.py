@@ -508,3 +508,28 @@ def test_agent_audit_events_carry_a_time(env):
                              "server": {"kitchen_id": "demo-kitchen"}})     # an event stored before this fix
     events = client.get(K + "/audit", headers=AGENT).json()["events"]
     assert all(e["at"] for e in events) and len(events) == 2
+
+
+def test_a_token_refusal_is_in_the_audit_log(env):
+    """#548: a caller that skips the Buyer and hits the gateway with the agent token still
+    leaves evidence: each 403 is an audit event `refused` with its code."""
+    from store.audit import list_events
+    client, _, db = env
+    p = milk(client)
+    client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=AGENT,
+                json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
+    client.post("/tools/place_order", headers=AGENT, json={
+        "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"})
+    refused = [e["event"] for e in list_events(db, kitchen_id="demo-kitchen") if e["event"]["kind"] == "refused"]
+    assert {e["code"] for e in refused} == {"HUMAN_SESSION_REQUIRED", "NEEDS_APPROVAL"}
+    assert all(e["actor"] == "buyer-agent" for e in refused)
+
+
+def test_a_persons_refusal_is_not_audited(env):
+    from gateway import users
+    from store.audit import list_events
+    client, _, db = env
+    users.create_user(db, "view@example.com", "viewer pass 12", name="V", role="viewer", kitchen_id="demo-kitchen")
+    client.post("/v1/auth/login", json={"email": "view@example.com", "password": "viewer pass 12"})
+    assert client.post(K + "/recipes", json={"name": "x"}).status_code == 403
+    assert not [e for e in list_events(db, kitchen_id="demo-kitchen") if e["event"]["kind"] == "refused"]
