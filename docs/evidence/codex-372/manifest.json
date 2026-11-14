@@ -35,5 +35,6 @@
   "operator_inclusive_wall_seconds": 408.6,
   "live_runs": 1,
   "approvals": 0,
-  "orders": 0
+  "orders": 0,
+  "client_sha256_lf": "577f7c252de41edd1868a5ef9ac25bd125fef7fd8a621a2dd6fc8983119be565"
 }

@@ -220,11 +220,14 @@ it here; we did not see the session.
   Code. The review bot is Claude Opus (`ai-review.yml`). The fix bot is Claude (`ai-fix.yml`).
 - Maciek uses both agents. 15 of his 57 PRs, with all of `env/`, came from Claude Code.
 - No CI step runs Codex. Using `codex exec` as a second reviewer is an open idea (#361).
-- Codex has not built a Buyer client from the public docs alone. That is an open idea (#372).
+- Codex generated a Buyer client from public docs alone in the recorded [#372 experiment](evidence/codex-372/README.md).
+  An operator reviewed and executed it once: a live PENDING proposal, with no approval/order.
+  The successful generation took 70.7 seconds; all setup/retries/review took 6 min 49 s.
 - We did not measure time saved. Open-to-merge time measures the review, not the coding.
 - The repo has Codex CLI profiles for Kimi and DeepSeek on Verda (`CLAUDE.md`, "Multi-model
   coding"). The repo cannot show which model wrote which PR.
-- There is no screen recording yet.
+- The [#372 generation recording](evidence/codex-372/generation.mp4) is available.
+  It records generation, not the separate operator-executed proposal write.
 
 ## For Maciek to fill in
 
