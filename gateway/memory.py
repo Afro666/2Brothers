@@ -94,12 +94,13 @@ SUGGESTIONS = 3
 NEW_SUGGESTIONS_PER_CALL = 3      # free embedding tier: 3 query embeddings a minute
 
 
-def suggest(db, kitchen_id: str, phrase: str, *, injected=None) -> tuple[list[dict], str]:
+def suggest(db, kitchen_id: str, phrase: str, *, injected=None) -> tuple[list[dict] | None, str]:
     """The nearest catalog products for words that matched nothing, and how they were found:
     "meaning" (vector search over the 17,546 product vectors) or "words" (text search, when
     the embedding service is not there or over its limit). Only a suggestion: a person links
     one, or none. It can never change an order, so it may use meaning even while the order
-    search runs on words only (SEARCH_HYBRID off)."""
+    search runs on words only (SEARCH_HYBRID off). None when the search failed (Mongo or
+    Atlas Search briefly away), so the caller stores nothing and tries again later."""
     rows, how = [], "words"
     try:
         if injected is not None:
@@ -115,8 +116,8 @@ def suggest(db, kitchen_id: str, phrase: str, *, injected=None) -> tuple[list[di
                 return [], "words"
             except Exception:              # no key, limit, timeout, no index: words instead
                 rows = search_products(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id)
-    except Exception:
-        return [], "words"
+    except Exception:                      # the search itself failed: not "nothing found"
+        return None, "words"
     ids = [str(r["product_id"]) for r in rows[:SUGGESTIONS] if r.get("product_id")]
     names = {d["_id"]: (d.get("names") or {}).get("en")
              for d in db.products.find({"_id": {"$in": ids}}, {"names": 1})} if ids else {}
@@ -133,9 +134,11 @@ def list_unknown(db, kitchen_id: str, *, injected=None, with_suggestions: bool =
             if "suggestions" in r or fresh >= NEW_SUGGESTIONS_PER_CALL:
                 continue
             found, how = suggest(db, kitchen_id, r["phrase"], injected=injected)
+            fresh += 1
+            if found is None:              # search failed: leave the row unsuggested, retry next call
+                continue
             db.unknown_items.update_one({"_id": r["_id"]}, {"$set": {"suggestions": found, "suggested_by": how}})
             r["suggestions"], r["suggested_by"] = found, how
-            fresh += 1
     out = []
     for r in rows:
         item = {"phrase": r["phrase"], "times": r.get("times", 1),
