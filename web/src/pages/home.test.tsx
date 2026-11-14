@@ -185,6 +185,8 @@ describe("nextCutoff", () => {
     expect(screen.getByText("Item E")).toBeInTheDocument();
     expect(screen.queryByText("Item F")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "+2 more" })).toHaveAttribute("href", "/stock");
+    // A thumb hits it on a phone: the link is at least 44 px high.
+    expect(screen.getByRole("link", { name: "+2 more" })).toHaveClass("min-h-11");
     expect(screen.getByText(/A purchasing agent for professional kitchens/)).toBeInTheDocument();
   });
 });
