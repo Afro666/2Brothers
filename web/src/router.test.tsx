@@ -27,7 +27,7 @@ describe("application routes", () => {
     ["/catalog", "Products"],
     ["/stock", "Stock count"],
     ["/suppliers", "Suppliers"],
-    ["/products", "Recipes"],
+    ["/products", "Own supplier products"],
     ["/planner", "Menu plan"],
     ["/demand", "Demand"],
     ["/forecast", "Forecast vs actual"],
