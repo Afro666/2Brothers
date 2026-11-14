@@ -66,16 +66,16 @@ def emit(meter, **facts) -> None:
     """Write the run's usage line. Never raises: a meter must not break a run."""
     if not isinstance(meter, Meter) or not meter.roles:
         return
-    line = MARK + json.dumps({"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                              **facts, "roles": meter.roles})
     try:
+        line = MARK + json.dumps({"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                  **facts, "roles": meter.roles}, default=str)
         print(line, file=sys.stderr, flush=True)
         path = os.environ.get("NEMOTRON_USAGE_LOG")
         if path:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             with open(path, "a", encoding="utf-8", newline="\n") as stream:
                 stream.write(line + "\n")
-    except (OSError, ValueError):
+    except (OSError, ValueError, TypeError):
         pass
 
 
