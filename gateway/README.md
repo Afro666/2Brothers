@@ -138,3 +138,24 @@ Roles: `approver` approves, rejects and manages tokens; `chef` asks; `viewer` re
 The first approver comes from the server `.env`: `DEMO_USER_EMAIL`, `DEMO_USER_PASSWORD`.
 Set `GATEWAY_REQUIRE_LOGIN=true` to switch off the shared human token: then only a signed-in
 person can approve (the open demo stops being open). The Buyer agent token is not affected.
+
+## Onboarding lookup (#375)
+
+`POST /v1/onboarding/lookup` with `{"email": ...}` or `{"website": ...}` (a person's
+session only; 403 `HUMAN_SESSION_REQUIRED` for the agent and API tokens). `gateway/onboarding.py`
+makes one Context.dev call, `POST /v1/brand/retrieve` (`by_email` / `by_domain`), and
+returns `domain`, `found` and `name`, `logo_url`, `colors`, `address`, `kitchen_type`,
+`opening_hours`, each as `{value, source}`. An unknown field is `null`, never a guess.
+
+- `CONTEXT_DEV_API_KEY` comes from the server environment and is sent only as the bearer
+  header to Context.dev. It is never logged or returned. Without it: 502.
+- The gateway never fetches the address the person typed: it checks that it is an email
+  or a public domain name and passes only that to Context.dev.
+- 422 `FREE_EMAIL` (free or disposable mailbox), 422 `INVALID_QUERY`, 502
+  `LOOKUP_UNAVAILABLE` (down, slow, out of credits, no key), 200 `found: false` when
+  Context.dev does not know the domain. Nothing is saved, nothing is cached.
+- `opening_hours` is always `null` for now: the optional scrape call is not made.
+- Each lookup costs Context.dev credits (10 for the recorded call).
+
+Tests replace the HTTP call and use one recorded, trimmed answer
+(`gateway/tests/fixtures/context_brand_retrieve.json`): `gateway/tests/test_onboarding.py`.

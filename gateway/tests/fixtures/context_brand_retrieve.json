@@ -1,0 +1,132 @@
+{
+  "status": "ok",
+  "brand": {
+    "domain": "scandichotels.com",
+    "title": "Scandic Hotels",
+    "description": "Scandic Hotels is the largest hotel chain in the Nordics, operating 280 hotels across the Nordic countries, Germany and Poland. The company provides modern accommodation for leisure and business travelers, offering a range of services including meeting and conference venues, on‑site restaurants, breakfast buffets, spa packages and coworking spaces. Through its Scandic Friends loyalty program guests earn points for free nights and enjoy discounts. Scandic emphasizes sustainability, aiming to reduce waste and promote eco‑friendly practices across its properties. It also runs budget‑focused Scandic Go hotels and premium Signature by Scandic venues. The brand targets families, students, seniors and corporate clients, delivering affordable, high‑quality hospitality with a focus on wellbeing and environmental responsibility.",
+    "slogan": "Your friend in town",
+    "colors": [
+      {
+        "hex": "#d02f32",
+        "name": "Persian Red",
+        "source": "logo"
+      },
+      {
+        "hex": "#e48c94",
+        "name": "Poudretteite Pink",
+        "source": "logo"
+      },
+      {
+        "hex": "#040404",
+        "name": "Armor Wash",
+        "source": "logo"
+      }
+    ],
+    "logos": [
+      {
+        "url": "https://media.brand.dev/88e73623-d68f-47ec-ad51-595628effab3.svg",
+        "mode": "light",
+        "colors": [
+          {
+            "hex": "#cc0c24",
+            "name": "Pedestrian Red"
+          }
+        ],
+        "resolution": {
+          "width": 85,
+          "height": 19,
+          "aspect_ratio": 4.47
+        },
+        "type": "logo"
+      },
+      {
+        "url": "https://media.brand.dev/c6823526-97bd-48d9-a380-2efad06e7e1c.svg",
+        "mode": "light",
+        "colors": [
+          {
+            "hex": "#040404",
+            "name": "Armor Wash"
+          }
+        ],
+        "resolution": {
+          "width": 103,
+          "height": 22,
+          "aspect_ratio": 4.68
+        },
+        "type": "logo"
+      },
+      {
+        "url": "https://media.brand.dev/29a58972-9408-4f1a-b0ce-d5e88e2ccad1.png",
+        "mode": "has_opaque_background",
+        "colors": [
+          {
+            "hex": "#d02f32",
+            "name": "Persian Red"
+          },
+          {
+            "hex": "#e48c94",
+            "name": "Poudretteite Pink"
+          }
+        ],
+        "resolution": {
+          "width": 144,
+          "height": 144,
+          "aspect_ratio": 1
+        },
+        "type": "icon"
+      }
+    ],
+    "backdrops": [
+      {
+        "url": "https://media.brand.dev/e3319e75-19ec-4344-841a-c6f6fb9ddd12.png",
+        "colors": [
+          {
+            "hex": "#e68824",
+            "name": "Sumac dyed"
+          },
+          {
+            "hex": "#3c3532",
+            "name": "Kilimanjaro"
+          }
+        ],
+        "resolution": {
+          "width": 960,
+          "height": 541,
+          "aspect_ratio": 1.77
+        }
+      }
+    ],
+    "address": {
+      "street": "Sveavägen 167",
+      "city": "Stockholm",
+      "country": "Sweden",
+      "country_code": "SE",
+      "postal_code": "102 33"
+    },
+    "socials": [
+      {
+        "type": "instagram",
+        "url": "https://instagram.com/scandichotels"
+      }
+    ],
+    "is_nsfw": false,
+    "industries": {
+      "eic": [
+        {
+          "industry": "Hospitality & Tourism",
+          "subindustry": "Hotels & Accommodation"
+        }
+      ]
+    },
+    "links": {
+      "terms": null,
+      "blog": null,
+      "careers": "https://www.scandichotels.com/en/careers",
+      "privacy": "https://www.scandichotels.com/en/customer-service/policies/privacy",
+      "contact": null,
+      "pricing": null
+    },
+    "primary_language": "english"
+  },
+  "code": 200
+}

@@ -364,6 +364,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
             raise GatewayError(409, "IDEMPOTENCY_CONFLICT", "event_id reused with other content") from None
         return {"event_id": entry["event"]["event_id"], "stored": True}
 
+    # Onboarding lookup (#375): Context.dev brand lookup for the sign-up form.
+    from gateway.onboarding import mount_onboarding
+    mount_onboarding(app, principal, body)
+
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp
     mount_mcp(app)
