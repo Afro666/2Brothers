@@ -650,6 +650,8 @@ class Gateway:
             request["query"] = body["query"]
         if parsed and body.get("refusal"):
             request["refusal"] = body["refusal"]      # from _from_text only (#974)
+        if parsed and body.get("buyer_down") is True:
+            request["buyer_down"] = True              # the app route only: the model timed out
         if body.get("event"):
             request["event"] = True       # one-off demand (S05): EVENT_LINE, kept out of the forecast
         key = body["idempotency_key"]

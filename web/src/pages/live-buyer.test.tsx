@@ -204,6 +204,25 @@ describe("live Buyer request page", () => {
     expect(screen.getByText("No reasons given.")).toBeVisible();
   });
 
+  it("says plainly when the parser answered because the Buyer model was not answering", async () => {
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...ready,
+            buyer_model: undefined,
+            request: { made_by: "parser", buyer_down: true },
+            mandate: { verdict: "NEEDS_APPROVAL", reasons: [] },
+          }),
+        ),
+    );
+    await fill();
+    expect(
+      await screen.findByText("The Buyer model was not answering, so the gateway’s request parser made this proposal"),
+    ).toBeVisible();
+  });
+
   it("explains why a rejected proposal has no orderable lines", async () => {
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify(rejected)));
     await fill();

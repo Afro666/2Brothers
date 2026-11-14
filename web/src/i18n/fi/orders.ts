@@ -148,6 +148,7 @@ export default {
   "Loading resolution details": "Ladataan selvityksen tietoja",
   "Loading the counts…": "Ladataan lukuja…",
   "Lot": "Erä",
+  "The Buyer model was not answering, so the gateway’s request parser made this proposal": "Ostaja-malli ei vastannut, joten yhdyskäytävän pyyntöjäsennin teki tämän ehdotuksen",
   "Made by the fallback parser because the Buyer agent was not available": "Varajäsennin teki ehdotuksen, koska Ostaja-agentti ei ollut käytettävissä",
   "Manufacturer evidence for {id} · checked {date} · {via}": "Valmistajan tiedot tuotteesta {id} · tarkistettu {date} · {via}",
   "Manufacturer source": "Valmistajan lähde",

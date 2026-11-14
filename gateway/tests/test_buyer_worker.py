@@ -131,3 +131,18 @@ def test_a_text_the_gateway_cannot_date_goes_to_the_worker_unchanged(worker, mon
     assert sent['requested_date'] == '2026-11-17'
     sent = _sent(worker, {'idempotency_key': 'k-1', 'requested_date': '2026-11-17', 'text': 12345}, monkeypatch)
     assert sent['requested_date'] == '2026-11-17'
+
+
+def test_breaker_opens_for_two_minutes_then_lets_one_try_through():
+    clock = [1000.0]
+    b = buyer_worker.Breaker(now=lambda: clock[0])
+    assert not b.is_open()
+    b.trip()
+    assert b.is_open()
+    clock[0] += buyer_worker.BREAKER_SECONDS - 1
+    assert b.is_open()
+    clock[0] += 1
+    assert not b.is_open()          # the window is over: the next request asks the model again
+    b.trip()
+    b.reset()                       # the model answered: normal at once
+    assert not b.is_open()

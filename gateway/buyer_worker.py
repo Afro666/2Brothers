@@ -1,11 +1,39 @@
 """Authenticated internal worker handoff for free-text proposal requests."""
 from datetime import date, datetime
 import os
+import time
 from zoneinfo import ZoneInfo
 
 import httpx
 from gateway.parse import ParseError, named_day
 from gateway.service import GatewayError
+
+
+BREAKER_SECONDS = 120
+
+
+def _clock() -> float:
+    return time.monotonic()
+
+
+class Breaker:
+    """After one BUYER_TIMEOUT, typed requests skip the model for BREAKER_SECONDS and the
+    parser answers at once (live 2026-11-14: Nemotron did not answer, each request waited
+    about 150 s). The first request after the window asks the model again; an answer closes
+    it. No restart, no flag: when the model is back, nothing changes."""
+
+    def __init__(self, now=None):
+        self._now = now or (lambda: _clock())
+        self._open_until = 0.0
+
+    def is_open(self) -> bool:
+        return self._now() < self._open_until
+
+    def trip(self) -> None:
+        self._open_until = self._now() + BREAKER_SECONDS
+
+    def reset(self) -> None:
+        self._open_until = 0.0
 
 
 def _today() -> date:
