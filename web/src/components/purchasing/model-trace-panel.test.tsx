@@ -83,6 +83,33 @@ describe("ModelTracePanel", () => {
     expect(screen.queryByTestId("nemotron-mark")).not.toBeInTheDocument();
   });
 
+  it("shows a reused Buyer pick as reused, not as a rule pick (#1884)", async () => {
+    const steps = [
+      { by: "code", attempt: 1, tool: "search_products", count: 4 },
+      { by: "code", attempt: 1, tool: "pick", products: 1, code: "CACHED_PICK" },
+    ];
+    show({ ...BUYER, calls: 0, seconds: 0, steps });
+    await userEvent.click(screen.getByText("0 model calls (pick reused)"));
+    const items = screen.getAllByRole("listitem").map((item) => item.textContent);
+    expect(items[1]).toBe("Code: Reused Nemotron’s pick for the same request from a few minutes ago");
+    expect(screen.queryByText(/The rule picked the first product/)).not.toBeInTheDocument();
+  });
+
+  it("speaks Finnish for a reused pick (#1884)", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    show({ ...BUYER, calls: 0, seconds: 0, steps: [{ by: "code", attempt: 1, tool: "pick", code: "CACHED_PICK" }] });
+    await userEvent.click(screen.getByText("0 mallikutsua (valinta käytetty uudelleen)"));
+    expect(screen.getByRole("listitem")).toHaveTextContent(
+      "Koodi: Käytti uudelleen Nemotronin valintaa samaan pyyntöön muutaman minuutin takaa",
+    );
+  });
+
+  it("still shows a real rule pick as the rule's pick", async () => {
+    show({ ...BUYER, steps: [{ by: "code", attempt: 1, tool: "pick", code: "FULL_COVERAGE_GUARD" }] });
+    await userEvent.click(screen.getByText("4 model calls, 6.2 s, thinking off"));
+    expect(screen.getByRole("listitem")).toHaveTextContent("Code: The rule picked the first product");
+  });
+
   it("names one call in the singular, thinking on, a restart and cut steps", async () => {
     show({
       ...BUYER, calls: 1, thinking: true, attempts: 2, truncated: true,
