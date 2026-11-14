@@ -1287,9 +1287,18 @@ The answer is the stored offer:
   "created_at": "2026-11-14T05:10:00+00:00",
   "proposal_id": null,
   "decided_by": null,
-  "decided_at": null
+  "decided_at": null,
+  "allergen_data_known": true
 }
 ```
+
+**Allergen data.** A product that declares an allergen the kitchen excludes is always
+refused. A product without allergen data is refused too, with one exception: the product it
+replaces has no allergen data either. The catalog declares no allergens for fresh
+vegetables and potatoes, so without this a cucumber could never replace a cucumber. Such an
+offer carries `allergen_data_known: false`, the kitchen's tile says "The catalog has no
+allergen data for this product. Check the label before you approve.", and the proposal it
+becomes carries `ALLERGEN_DATA_MISSING` like any other proposal for that product.
 
 `status` is `OPEN`, `ACCEPTED`, `DECLINED` or `EXPIRED`. An open offer whose
 `requested_date` is before today reads as `EXPIRED`; nothing runs in the background.
@@ -1305,7 +1314,7 @@ audit log.
 | 403 | `SHARING_REQUIRED` | The kitchen does not share its forecast with this supplier, or does not exist. |
 | 404 | `PRODUCT_NOT_FOUND` | `product_id` is not a catalog product of the supplier. Only Valio (`sup-valio`) has a catalog today; a kitchen's own product is never offered. |
 | 422 | `NO_SHORTAGE` | The supplier's shortage view has no `SHORT` row for `replaces_product_id` on that date with this kitchen in it. A supplier cannot push a product without a shortage behind it. |
-| 422 | `ALLERGEN_RULE` | The kitchen's allergen rule refuses the product, or the product's allergen data is not known. The answer does not name the kitchen's allergens. A kitchen rule that names an unknown allergen is 409 `KITCHEN_POLICY_INVALID`: no offer until the kitchen fixes it. |
+| 422 | `ALLERGEN_RULE` | The kitchen's allergen rule refuses the product, or the product's allergen data is not known while the product it replaces has allergen data (see "Allergen data" below). The answer does not name the kitchen's allergens. A kitchen rule that names an unknown allergen is 409 `KITCHEN_POLICY_INVALID`: no offer until the kitchen fixes it. |
 | 409 | `OFFER_LIMIT` | The kitchen already has 3 open offers from this supplier. |
 
 One offer per supplier, kitchen, offered product and date: a later one (another key)
@@ -1346,9 +1355,11 @@ offer, `status: "DECLINED"`. Declining a declined offer answers the same; an `AC
 `EXPIRED` offer is 409 `OFFER_NOT_OPEN`.
 
 **Served** (`gateway/supplier_offers.py`, `store/supplier_offers.py`). Valio's selling agent
-is `agent/seller.py`: code builds a shortlist of at most 5 substitutes (same category and
-measure, confirmed stock for the kitchen's need, can arrive, passes the kitchen's allergen
-rule with known allergen data, not short itself), Nemotron 3.5 Super VL picks one entry and
+is `agent/seller.py`: code builds a shortlist of at most 5 substitutes from the whole
+catalog category of the short product (same measure, a confirmed stock count that covers the
+kitchen's need, can arrive, passes the allergen rule above, not short itself; products named
+like the short one first; Valio's filler amounts such as 999999 or 666666666 are not a
+count), Nemotron 3.5 Super VL picks one entry and
 writes the reason, and a pick outside the shortlist means no offer. It runs on the server
 inside the gateway image (`python -m agent.seller --dry-run`, then `--apply`), not over HTTP.
 

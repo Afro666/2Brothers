@@ -1,0 +1,748 @@
+[
+ {
+  "id": "460137",
+  "category": "17402",
+  "vendorName": "OY VAASAN VIHANNES - VASA GRÖNSAKER",
+  "countryOfOrigin": "fi",
+  "baseUnit": "KG",
+  "salesUnit": "KG",
+  "allowedLotSize": 0.01,
+  "units": [
+   {
+    "unitId": "KG",
+    "gtin": "2300121800000",
+    "sizeInBaseUnits": 1.0
+   },
+   {
+    "unitId": "KI",
+    "gtin": "2050000049347",
+    "sizeInBaseUnits": 5.0
+   }
+  ],
+  "temperatureCondition": 5,
+  "synkkaData": {
+   "names": [
+    {
+     "value": "CUCUMBER 1CL FINLAND NAKED",
+     "language": "en"
+    }
+   ],
+   "brand": null,
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": []
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": []
+    }
+   ],
+   "unitConversions": []
+  }
+ },
+ {
+  "id": "460012",
+  "category": "17402",
+  "vendorName": "OY VAASAN VIHANNES - VASA GRÖNSAKER",
+  "countryOfOrigin": "fi",
+  "baseUnit": "KG",
+  "salesUnit": "KG",
+  "allowedLotSize": 0.01,
+  "units": [
+   {
+    "unitId": "KG",
+    "gtin": "2300121300000",
+    "sizeInBaseUnits": 1.0
+   }
+  ],
+  "temperatureCondition": 5,
+  "synkkaData": {
+   "names": [
+    {
+     "value": "PICKLED CUCUMBER FI",
+     "language": "en"
+    }
+   ],
+   "brand": null,
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": []
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": []
+    }
+   ],
+   "unitConversions": []
+  }
+ },
+ {
+  "id": "460150",
+  "category": "17402",
+  "vendorName": "OY VAASAN VIHANNES - VASA GRÖNSAKER",
+  "countryOfOrigin": "fi",
+  "baseUnit": "KG",
+  "salesUnit": "KG",
+  "allowedLotSize": 0.01,
+  "units": [
+   {
+    "unitId": "KG",
+    "gtin": "2300121500000",
+    "sizeInBaseUnits": 1.0
+   },
+   {
+    "unitId": "KI",
+    "sizeInBaseUnits": 5.0
+   }
+  ],
+  "temperatureCondition": 5,
+  "synkkaData": {
+   "names": [
+    {
+     "value": "COURGETTE FI",
+     "language": "en"
+    }
+   ],
+   "brand": null,
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": []
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": []
+    }
+   ],
+   "unitConversions": []
+  }
+ },
+ {
+  "id": "460074",
+  "category": "17402",
+  "vendorName": "RINNEKARI HANNU",
+  "countryOfOrigin": "fi",
+  "baseUnit": "KG",
+  "salesUnit": "KG",
+  "allowedLotSize": 0.01,
+  "units": [
+   {
+    "unitId": "KG",
+    "gtin": "2300122500000",
+    "sizeInBaseUnits": 1.0
+   },
+   {
+    "unitId": "KI",
+    "sizeInBaseUnits": 5.0
+   }
+  ],
+  "temperatureCondition": 4,
+  "synkkaData": {
+   "names": [
+    {
+     "value": "COURGETTE YELLOW FI",
+     "language": "en"
+    }
+   ],
+   "brand": null,
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": []
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": []
+    }
+   ],
+   "unitConversions": []
+  }
+ },
+ {
+  "id": "460478",
+  "category": "17421",
+  "vendorName": "VEIKKO LAINE OY",
+  "countryOfOrigin": "fi",
+  "baseUnit": "ST",
+  "salesUnit": "ST",
+  "allowedLotSize": 0.01,
+  "units": [
+   {
+    "unitId": "KI",
+    "gtin": "6405409196837",
+    "sizeInBaseUnits": 15.0
+   },
+   {
+    "unitId": "ST",
+    "gtin": "6415350003139",
+    "sizeInBaseUnits": 1.0
+   }
+  ],
+  "temperatureCondition": 3,
+  "synkkaData": {
+   "names": [
+    {
+     "value": "POTATO WASHED 1KG",
+     "language": "en"
+    }
+   ],
+   "brand": null,
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": []
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": []
+    }
+   ],
+   "unitConversions": []
+  }
+ },
+ {
+  "id": "460643",
+  "category": "17421",
+  "vendorName": "VELJEKSET KITOLA OY",
+  "countryOfOrigin": "fi",
+  "baseUnit": "KG",
+  "salesUnit": "KG",
+  "allowedLotSize": 0.01,
+  "units": [
+   {
+    "unitId": "KG",
+    "gtin": "2300211000000",
+    "sizeInBaseUnits": 1.0
+   },
+   {
+    "unitId": "KI",
+    "gtin": "2050000054501",
+    "sizeInBaseUnits": 10.0
+   }
+  ],
+  "temperatureCondition": 3,
+  "synkkaData": {
+   "names": [
+    {
+     "value": "POTATO ROSAMUNDA WASHED",
+     "language": "en"
+    }
+   ],
+   "brand": null,
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": []
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": []
+    }
+   ],
+   "unitConversions": []
+  }
+ },
+ {
+  "id": "460603",
+  "category": "17421",
+  "vendorName": "SWEET CARROTS SC OY",
+  "countryOfOrigin": "fr",
+  "baseUnit": "KG",
+  "salesUnit": "SK",
+  "allowedLotSize": 0.01,
+  "units": [
+   {
+    "unitId": "SK",
+    "gtin": "6430011790098",
+    "sizeInBaseUnits": 5.0
+   },
+   {
+    "unitId": "KG",
+    "gtin": "2300211600000",
+    "sizeInBaseUnits": 1.0
+   }
+  ],
+  "temperatureCondition": 4,
+  "substitutions": [
+   {
+    "product": "460603",
+    "substituteProduct": "470961"
+   },
+   {
+    "product": "460603",
+    "substituteProduct": "460541"
+   }
+  ],
+  "synkkaData": {
+   "names": [
+    {
+     "value": "POTATO PRESSURE-WASHED 5KG 20-35MM",
+     "language": "en"
+    }
+   ],
+   "brand": null,
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": []
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": []
+    }
+   ],
+   "unitConversions": []
+  }
+ },
+ {
+  "id": "460541",
+  "category": "17421",
+  "vendorName": "PIETILÄN PERUNA OY",
+  "countryOfOrigin": "fi",
+  "baseUnit": "KG",
+  "salesUnit": "KI",
+  "allowedLotSize": 0.01,
+  "units": [
+   {
+    "unitId": "KG",
+    "gtin": "2300213100000",
+    "sizeInBaseUnits": 1.0
+   },
+   {
+    "unitId": "KI",
+    "gtin": "6430053130074",
+    "sizeInBaseUnits": 15.0
+   }
+  ],
+  "temperatureCondition": 4,
+  "substitutions": [
+   {
+    "product": "460541",
+    "substituteProduct": "460603"
+   },
+   {
+    "product": "460541",
+    "substituteProduct": "470961"
+   }
+  ],
+  "synkkaData": {
+   "names": [
+    {
+     "value": "PP BUTTON POTATO WASHED 30-35MM",
+     "language": "en"
+    }
+   ],
+   "brand": null,
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": []
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": []
+    }
+   ],
+   "unitConversions": []
+  }
+ },
+ {
+  "id": "461903",
+  "category": "18701",
+  "vendorName": "KALAVAPRIIKKI OY TUORE",
+  "countryOfOrigin": "no",
+  "baseUnit": "KG",
+  "salesUnit": "KG",
+  "allowedLotSize": 10.0,
+  "units": [
+   {
+    "unitId": "KG",
+    "gtin": "2300629100000",
+    "sizeInBaseUnits": 1.0
+   },
+   {
+    "unitId": "KI",
+    "gtin": "2372171500000",
+    "sizeInBaseUnits": 10.0
+   }
+  ],
+  "temperatureCondition": 1,
+  "synkkaData": {
+   "names": [
+    {
+     "value": "Kalavapriikki salmon fillet A, ASC, apx. 10 kg",
+     "language": "en"
+    }
+   ],
+   "brand": "Kalavapriikki",
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": [
+      {
+       "id": "AF",
+       "unit": "CONTAINS"
+      }
+     ]
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": []
+    }
+   ],
+   "unitConversions": [
+    {
+     "synkkaPackagingType": "BASE_UNIT_OR_EACH",
+     "width": {
+      "unit": "MMT",
+      "value": 385.0
+     },
+     "length": {
+      "unit": "MMT",
+      "value": 575.0
+     },
+     "height": {
+      "unit": "MMT",
+      "value": 120.0
+     },
+     "volume": {
+      "unit": "KGM",
+      "value": 10.0
+     },
+     "netWeight": {
+      "unit": "GRM",
+      "value": 10000.0
+     },
+     "grossWeight": {
+      "unit": "GRM",
+      "value": 13566.0
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "461787",
+  "category": "18701",
+  "vendorName": "KALAMAKASIINI OY",
+  "countryOfOrigin": "zy",
+  "baseUnit": "KG",
+  "salesUnit": "KG",
+  "allowedLotSize": 5.0,
+  "units": [
+   {
+    "unitId": "KG",
+    "gtin": "2300608100000",
+    "sizeInBaseUnits": 1.0
+   },
+   {
+    "unitId": "KI",
+    "gtin": "2394172900000",
+    "sizeInBaseUnits": 5.0
+   }
+  ],
+  "temperatureCondition": 1,
+  "synkkaData": {
+   "names": [
+    {
+     "value": "Mackerell whole fresh 200-400g",
+     "language": "en"
+    }
+   ],
+   "brand": "Makrilli kokon tuore 200-400g, 5kg",
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": [
+      {
+       "id": "AF",
+       "unit": "CONTAINS"
+      }
+     ]
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": [
+      {
+       "id": "AC",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AE",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AM",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AN",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AP",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AS",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AU",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AW",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AY",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "BC",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "BM",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "NL",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "UM",
+       "unit": "FREE_FROM"
+      }
+     ]
+    }
+   ],
+   "unitConversions": [
+    {
+     "synkkaPackagingType": "BASE_UNIT_OR_EACH",
+     "width": {
+      "unit": "MMT",
+      "value": 295.0
+     },
+     "length": {
+      "unit": "MMT",
+      "value": 392.0
+     },
+     "height": {
+      "unit": "MMT",
+      "value": 58.0
+     },
+     "volume": {
+      "unit": "GRM",
+      "value": 5000.0
+     },
+     "netWeight": {
+      "unit": "GRM",
+      "value": 5000.0
+     },
+     "grossWeight": {
+      "unit": "GRM",
+      "value": 5150.0
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "461872",
+  "category": "18701",
+  "vendorName": "KALAMAKASIINI OY",
+  "countryOfOrigin": "zy",
+  "baseUnit": "KG",
+  "salesUnit": "KG",
+  "allowedLotSize": 5.0,
+  "units": [
+   {
+    "unitId": "KG",
+    "gtin": "2300642900000",
+    "sizeInBaseUnits": 1.0
+   },
+   {
+    "unitId": "KI",
+    "gtin": "2394180000000",
+    "sizeInBaseUnits": 5.0
+   }
+  ],
+  "temperatureCondition": 1,
+  "synkkaData": {
+   "names": [
+    {
+     "value": "Flounderfillet fresh 5kg MSC",
+     "language": "en"
+    }
+   ],
+   "brand": "Punakampelafile tuore 5kg MSC",
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": [
+      {
+       "id": "AF",
+       "unit": "CONTAINS"
+      }
+     ]
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": [
+      {
+       "id": "AC",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AE",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AM",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AN",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AP",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AS",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AU",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AW",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "AY",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "BC",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "BM",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "NL",
+       "unit": "FREE_FROM"
+      },
+      {
+       "id": "UM",
+       "unit": "FREE_FROM"
+      }
+     ]
+    }
+   ],
+   "unitConversions": [
+    {
+     "synkkaPackagingType": "BASE_UNIT_OR_EACH",
+     "width": {
+      "unit": "MMT",
+      "value": 300.0
+     },
+     "length": {
+      "unit": "MMT",
+      "value": 398.0
+     },
+     "height": {
+      "unit": "MMT",
+      "value": 168.0
+     },
+     "volume": {
+      "unit": "GRM",
+      "value": 5000.0
+     },
+     "netWeight": {
+      "unit": "GRM",
+      "value": 5000.0
+     },
+     "grossWeight": {
+      "unit": "GRM",
+      "value": 6078.0
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "461879",
+  "category": "18701",
+  "vendorName": "KALAMAKASIINI OY",
+  "countryOfOrigin": "zy",
+  "baseUnit": "KG",
+  "salesUnit": "KG",
+  "allowedLotSize": 5.0,
+  "units": [
+   {
+    "unitId": "KG",
+    "gtin": "2300643300000",
+    "sizeInBaseUnits": 1.0
+   },
+   {
+    "unitId": "KI",
+    "gtin": "2394182500000",
+    "sizeInBaseUnits": 5.0
+   }
+  ],
+  "temperatureCondition": 1,
+  "synkkaData": {
+   "names": [
+    {
+     "value": "MSC COD FILLET 200-400G SF BENFRI",
+     "language": "en"
+    }
+   ],
+   "brand": null,
+   "classifications": [
+    {
+     "type": "ENUM",
+     "name": "allergen",
+     "values": []
+    },
+    {
+     "type": "ENUM",
+     "name": "nonAllergen",
+     "values": []
+    }
+   ],
+   "unitConversions": []
+  }
+ }
+]

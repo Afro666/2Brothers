@@ -94,6 +94,11 @@ export function SupplierOfferTile({ api }: { api: Api }) {
             {madeByLabel(offer.madeBy)})
           </figcaption>
         </figure>
+        {!offer.allergenDataKnown && (
+          <p className="break-words text-sm font-medium">
+            The catalog has no allergen data for this product. Check the label before you approve.
+          </p>
+        )}
         <p className="text-sm text-muted-foreground">
           This is a suggestion, not an order. A proposal still waits for your approval, with the live price.
         </p>

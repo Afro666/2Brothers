@@ -13,7 +13,8 @@ Who decides what:
 - Code reads the supplier's shortage view (only kitchens that share their forecast) and
   builds the shortlist: at most 5 catalog products of the same category and measure, that
   can arrive for the date with confirmed stock for this kitchen's need, that pass the
-  kitchen's allergen rule with known allergen data, and that are not short themselves.
+  kitchen's allergen rule, and that are not short themselves. Allergen data must be known,
+  unless the short product has none either (fresh vegetables): then the offer is marked.
 - Nemotron 3.5 Super VL picks one entry of the shortlist and writes the reason. It sees
   catalog fields and the shortage numbers, never a kitchen's name or text. A pick outside
   the shortlist, or no valid answer, means no offer.
@@ -29,11 +30,13 @@ import asyncio
 from datetime import date, timedelta
 from decimal import Decimal
 import json
+import re
 
 SUPPLIER = "sup-valio"
 MODEL_NAME = "nemotron-3.5-super-vl"
 SHORTLIST = 5
-CANDIDATES = 20            # how many search hits are asked for live availability
+CANDIDATES = 150           # how many products of the category are asked for live availability
+UNKNOWN_FROM = 999999      # an available amount from here up is Valio's filler, not a count
 DAYS = 7
 MAX_PAIRS = 60             # kitchen and product pairs looked at in one run (each costs a search)
 MEASURES = ("L", "KG")     # the engine sizes a request in litres or kilograms
@@ -57,14 +60,43 @@ def short_rows(gw, supplier_id: str, start: date, end: date) -> tuple[list[dict]
     return short, not_ok
 
 
+def _words(name: str) -> set[str]:
+    return set(re.findall(r"[a-z\u00e5\u00e4\u00f6]{3,}", (name or "").lower()))
+
+
+def _name(row: dict) -> str:
+    names = row.get("names") or {}
+    return names.get("en") or names.get("fi") or row["product_id"]
+
+
+def _allergens_ok(policy, row: dict, short_known: bool) -> bool:
+    """The kitchen's rule, as the gateway applies it to an offer (gateway/supplier_offers.py):
+    known allergen data that passes; or, when the short product has no allergen data either,
+    a product without allergen data that declares nothing the kitchen excludes."""
+    if policy.allowed(row, substitute=True):
+        return True
+    if short_known or row.get("allergen_data_known") is True:
+        return False
+    allergens = row.get("allergens")
+    if not isinstance(allergens, dict):
+        return False
+    levels = [allergens.get(key) for key in ("contains", "may_contain", "undeclared")]
+    if any(not isinstance(level, list) for level in levels):
+        return False
+    return not set(policy.excluded).intersection(v for level in levels for v in level)
+
+
 def shortlist(gw, row: dict, kitchen_id: str, demand: Decimal, not_ok: set) -> list[dict]:
-    """At most SHORTLIST substitutes for this kitchen, best search match first. Code only."""
+    """At most SHORTLIST substitutes for this kitchen. Code only.
+
+    The whole catalog category of the short product is read from the store (the text search
+    returns 50 hits and ranks by words, so it missed whole categories live). Products named
+    like the short one come first (another cucumber before a courgette)."""
     from agent.substitutes import AllergenPolicy
-    from gateway import catalog_search
     from gateway.supplier_routes import _per_sales_unit
     from store import recalls
     from store.buyer_context import excluded_allergens
-    from store.products import get_products
+    from store.products import category_products, get_products
     short = next(iter(get_products(gw.db, [row["product_id"]])), None)
     if not short or not short.get("category"):
         return []
@@ -72,25 +104,20 @@ def shortlist(gw, row: dict, kitchen_id: str, demand: Decimal, not_ok: set) -> l
         policy = AllergenPolicy(tuple(excluded_allergens(gw.db, kitchen_id) or ()))
     except ValueError:
         return []
-    query = (short.get("names") or {}).get("en") or (short.get("names") or {}).get("fi") or ""
-    # Products named like the short one first (another cucumber), then the rest of its category.
-    hits = []
-    for text in ([query[:200]] if query else []) + [""]:
-        found, _ = catalog_search.search(gw.db, text, {"category": short["category"]}, 50,
-                                         injected=gw._search)
-        hits += found
     blocked = recalls.blocked_ids(gw.db, kitchen_id)
-    rows = {r["product_id"]: r for r in get_products(gw.db, [h["product_id"] for h in hits])}
-    usable = [r for r in rows.values()
+    short_known = short.get("allergen_data_known") is True
+    wanted = _words(_name(short))
+    usable = [r for r in category_products(gw.db, short["category"])
               if r["product_id"] != row["product_id"] and r.get("source", "valio") != "own"
-              and r.get("category") == short["category"]
               and (r.get("net_content") or {}).get("unit") == row["unit"]
               and r["product_id"] not in blocked and (r["product_id"], row["date"]) not in not_ok
-              and policy.allowed(r, substitute=True)][:CANDIDATES]
-    if not usable:
-        return []
-    live = {p["productId"]: p for p in
-            gw.valio.availability([r["product_id"] for r in usable], row["date"])["products"]}
+              and _allergens_ok(policy, r, short_known)]
+    usable.sort(key=lambda r: (-len(wanted & _words(_name(r))), r["product_id"]))
+    usable = usable[:CANDIDATES]
+    live: dict[str, dict] = {}
+    for at in range(0, len(usable), 50):
+        ids = [r["product_id"] for r in usable[at:at + 50]]
+        live.update({p["productId"]: p for p in gw.valio.availability(ids, row["date"])["products"]})
     day = date.fromisoformat(row["date"])
     out = []
     for r in usable:
@@ -101,14 +128,18 @@ def shortlist(gw, row: dict, kitchen_id: str, demand: Decimal, not_ok: set) -> l
             continue
         line = lines[0]
         amount, arrives = line.get("availableAmount"), line.get("availableDate")
-        if line.get("salesBlock") or amount is None or not arrives or date.fromisoformat(arrives) > day:
+        # Valio writes "plenty" as a large filler number (999999, 666666666, 1999999999):
+        # that is not a confirmed amount.
+        if line.get("salesBlock") or amount is None or amount >= UNKNOWN_FROM or not arrives:
+            continue
+        if date.fromisoformat(arrives) > day:
             continue
         have = Decimal(str(amount)) * per
         if have < demand:               # confirmed stock must cover this kitchen's need
             continue
-        names = r.get("names") or {}
-        out.append({"product_id": r["product_id"], "name": names.get("en") or names.get("fi") or r["product_id"],
+        out.append({"product_id": r["product_id"], "name": _name(r),
                     "brand": r.get("brand"), "pack": r.get("net_content"), "lactose_free": r.get("lactose_free"),
+                    "allergen_data_known": r.get("allergen_data_known") is True,
                     "available": f"{have.normalize():f}", "unit": row["unit"]})
         if len(out) == SHORTLIST:
             break

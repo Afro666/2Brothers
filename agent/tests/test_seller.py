@@ -1,8 +1,11 @@
 """Valio's selling agent (#374): code builds the shortlist, the model only picks inside it."""
 
 import asyncio
-from datetime import date
+from datetime import date, datetime, timezone
 import json
+from pathlib import Path
+
+from bson.decimal128 import Decimal128
 
 import pytest
 
@@ -29,11 +32,7 @@ class FakeModel:
 
 @pytest.fixture()
 def w(monkeypatch):
-    world = World(monkeypatch)
-    world.db.products.update_one({"_id": SHORT}, {"$set": {"category": "milk", "source": "valio"}})
-    world.gw._search = lambda db, query, filters, limit, kitchen_id=None: [
-        {"product_id": pid} for pid in (SHORT, *SUBS)]
-    return world
+    return World(monkeypatch)
 
 
 def go(w, **kwargs):
@@ -100,16 +99,79 @@ def test_shortlist_keeps_only_what_this_kitchen_may_get_and_what_can_arrive(w):
     assert other[0]["shortlist"] == [f"{SUBS[0]} oat drink {SUBS[0]}"]
 
 
-def test_shortlist_also_looks_at_the_rest_of_the_category(w):
-    """A substitute that shares no word with the short product (zucchini for cucumber)."""
-    asked = []
+def test_shortlist_reads_the_whole_category_and_puts_like_named_products_first(w):
+    """No text search: it returned 50 hits by words and missed whole categories live."""
+    w.gw._search = lambda *a, **k: pytest.fail("the shortlist must not depend on the text search")
+    w.db.products.update_one({"_id": SUBS[2]}, {"$set": {"names": {"en": "lactose free milk 1 l"}}})
+    w.db.products.update_one({"_id": SUBS[3]}, {"$set": {"category": "juice"}})          # another category
+    w.db.products.insert_one({"_id": "own-milk", "source": "own", "kitchen_id": "K1", "category": "milk",
+                              "names": {"en": "milk from the farm"}, "net_content": {"value": 1.0, "unit": "L"},
+                              "allergen_data_known": True,
+                              "allergens": {"contains": [], "may_contain": [], "undeclared": []}})
+    assert [s.split()[0] for s in go(w)[0]["shortlist"]] == [SUBS[2], SUBS[0], SUBS[1]]
 
-    def search(db, query, filters, limit, kitchen_id=None):
-        asked.append((query, filters))
-        return [] if query else [{"product_id": pid} for pid in SUBS[:2]]
-    w.gw._search = search
-    assert len(go(w)[0]["shortlist"]) == 2
-    assert asked == [("milk 462775", {"category": "milk"}), ("", {"category": "milk"})]
+
+def test_valios_filler_amounts_are_not_confirmed_stock(w):
+    for p in w.fake.avail_data["products"]:
+        if p["productId"] == SUBS[0]:
+            p["scheduleLines"][0]["availableAmount"] = 666666666.0
+        if p["productId"] == SUBS[1]:
+            p["scheduleLines"][0]["availableAmount"] = 1999999999.0
+        if p["productId"] == SUBS[2]:
+            del p["scheduleLines"][0]["availableDate"]
+    assert [s.split()[0] for s in go(w)[0]["shortlist"]] == [SUBS[3]]
+
+
+REAL = json.loads((Path(__file__).parent / "fixtures" / "seller_catalog.json").read_text(encoding="utf-8"))
+# What Valio answered for these products on 2026-11-14 (amounts, missing lines, filler numbers).
+REAL_STOCK = {"460137": 0.0, "460478": 0.0, "461903": 0.0,                 # the three short products
+              "460012": 43.0, "460150": 1976.0, "460074": None,            # the cucumber category
+              "460643": 121.0, "460603": 1999999999.0, "460541": 666666666.0,   # potatoes
+              "461787": 300.0, "461872": 300.0, "461879": 300.0}            # fish
+NEEDS = {"460478": "17.466", "461903": "12.226", "460137": "6.333"}        # the demo kitchen forecast, KG
+
+
+@pytest.fixture()
+def real(monkeypatch):
+    """Cucumber, washed potato and salmon fillet with the catalog rows they have in real life:
+    vegetables and potatoes carry no allergen data, the fish does."""
+    from store.products import flatten
+    world = World(monkeypatch)
+    template = next(p for p in world.fake.avail_data["products"] if p["productId"] == SHORT)
+    for raw in REAL:
+        row = flatten(raw)
+        world.db.products.replace_one({"_id": row["_id"]}, row, upsert=True)
+        amount = REAL_STOCK[row["_id"]]
+        lines = [] if amount is None else [{**template["scheduleLines"][0], "availableAmount": amount,
+                                            "salesUnit": row["sales_unit"]}]
+        world.fake.avail_data["products"].append({**template, "productId": row["_id"], "scheduleLines": lines})
+    for p in world.fake.avail_data["products"]:
+        if p["productId"] == "461872":
+            p["closingTime"] = "2026-11-12T15:00:00+0200"                  # its cut-off passed
+    world.db.forecasts.delete_many({})
+    day = datetime(2026, 11, 16, tzinfo=timezone.utc)
+    for pid, need in NEEDS.items():
+        world.db.forecasts.insert_one({"ts": day, "meta": {"kitchen_id": "K1", "product_id": pid},
+                                       "need": Decimal128(need), "unit": "KG"})
+    world.db.kitchen_settings.insert_one({"_id": "K1", "excluded_allergens": ["AP", "AN", "AS"]})   # the demo mandate
+    return world
+
+
+def test_real_catalog_rows_cucumber_potato_and_salmon_each_get_a_substitute(real):
+    report = asyncio.run(seller.run(real.gw, today=TODAY, apply=True, kitchen="K1", limit=3))
+    by_short = {r["short_product_id"]: r for r in report}
+    # Another potato with a real count; the two "plenty" filler amounts are not confirmed stock.
+    assert by_short["460478"]["shortlist"] == ["460643 POTATO ROSAMUNDA WASHED"]
+    # Fish has allergen data: only fish with allergen data, and not the one whose cut-off passed.
+    assert by_short["461903"]["shortlist"] == ["461787 Mackerell whole fresh 200-400g"]
+    # The namesake of the cucumber first, then the rest of the category; no stock line, no entry.
+    assert by_short["460137"]["shortlist"] == ["460012 PICKLED CUCUMBER FI", "460150 COURGETTE FI"]
+    assert [r["result"] for r in report] == ["OPEN", "OPEN", "OPEN"]
+    stored = {d["replaces_product_id"]: d for d in real.db.supplier_offers.find({})}
+    assert (stored["460137"]["product_id"], stored["460137"]["quantity"]) == ("460012", "6.333")
+    assert stored["460137"]["allergen_data_known"] is False        # marked: a person checks the label
+    assert stored["460478"]["allergen_data_known"] is False
+    assert stored["461903"]["allergen_data_known"] is True
 
 
 def test_a_misspelt_allergen_rule_means_no_offer(w):

@@ -192,3 +192,13 @@ def get_products(db, product_ids: list[str], kitchen_id: str | None = None) -> l
             found[product_id]["product_id"] = found[product_id].pop("_id")
             rows.append(found[product_id])
     return rows
+
+
+def category_products(db, category: str, limit: int = 500) -> list[dict]:
+    """Catalog rows of one category, by product code. Never a kitchen's own product."""
+    rows = []
+    for doc in db.products.find({"category": str(category), "kitchen_id": {"$exists": False}},
+                                {"raw": 0, "embedding": 0}).sort("_id", 1).limit(limit):
+        doc["product_id"] = doc.pop("_id")
+        rows.append(doc)
+    return rows

@@ -55,7 +55,9 @@ def _out(doc: dict, today: date) -> dict:
             **{key: doc.get(key) for key in (
                 "supplier_id", "supplier_name", "kitchen_id", "product_id", "product_name",
                 "replaces_product_id", "replaces_product_name", "requested_date", "quantity", "unit",
-                "reason", "made_by", "created_at", "proposal_id", "decided_by", "decided_at")}}
+                "reason", "made_by", "created_at", "proposal_id", "decided_by", "decided_at")},
+            # false: the catalog declares no allergens for the offered product (see `_allergens_ok`)
+            "allergen_data_known": doc.get("allergen_data_known") is True}
 
 
 def _name(row: dict | None, fallback: str) -> str:
@@ -110,6 +112,19 @@ def _kitchen_demand(gw, supplier_id: str, kitchen_id: str, product_id: str, day:
     return None
 
 
+def _allergens_ok(gw, kitchen_id: str, product: dict, replaced: dict | None) -> bool:
+    """The kitchen's allergen rule always wins: a declared hit is refused. A product without
+    allergen data is refused too, with one exception: the product it replaces has no allergen
+    data either (fresh vegetables, potatoes). Then the offer is no worse than what the kitchen
+    already buys; the offer says `allergen_data_known: false` and the proposal it becomes
+    carries ALLERGEN_DATA_MISSING, so a person checks the label."""
+    if gw._allergen_refusals(kitchen_id, [product["product_id"]]):
+        return False
+    if product.get("allergen_data_known") is True:
+        return True
+    return replaced is not None and replaced.get("allergen_data_known") is not True
+
+
 def create(gw, supplier_id: str, body: dict, sender: str) -> dict:
     """Store one offer for one kitchen. Refusals in the contract's order; a refusal stores
     nothing and writes nothing in a kitchen's audit log."""
@@ -141,7 +156,7 @@ def create(gw, supplier_id: str, body: dict, sender: str) -> dict:
     if demand is None:
         raise GatewayError(422, "NO_SHORTAGE", "no predicted shortage of replaces_product_id for this "
                                                "kitchen on this date")
-    if gw._allergen_refusals(kitchen_id, [product_id]) or product.get("allergen_data_known") is not True:
+    if not _allergens_ok(gw, kitchen_id, product, rows.get(fields["replaces_product_id"])):
         raise GatewayError(422, "ALLERGEN_RULE", "the kitchen's allergen rule refuses this product, "
                                                  "or its allergen data is not known")
     if offers.count_open(gw.db, supplier_id, kitchen_id, today.isoformat()) >= OPEN_LIMIT:
@@ -152,6 +167,7 @@ def create(gw, supplier_id: str, body: dict, sender: str) -> dict:
         **fields, "product_name": _name(product, product_id),
         "replaces_product_name": _name(rows.get(fields["replaces_product_id"]), fields["replaces_product_id"]),
         "quantity": demand[0], "unit": demand[1], "status": offers.OPEN,
+        "allergen_data_known": product.get("allergen_data_known") is True,
         "idempotency_key": key, "payload_hash": payload_hash, "sent_by": sender,
         "created_at": gw.now().isoformat(), "proposal_id": None, "decided_by": None, "decided_at": None})
     _audit_received(gw, doc)

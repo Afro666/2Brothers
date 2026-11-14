@@ -32,6 +32,10 @@ class World:
             self.db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
         self.fake = FakeValio()
         seed(self.db)
+        # The short milk has allergen data, so a substitute needs it too.
+        self.db.products.update_one({"_id": SHORT}, {"$set": {
+            "source": "valio", "category": "milk", "allergen_data_known": True,
+            "allergens": {"contains": ["AM"], "may_contain": [], "undeclared": []}}})
         for pid in SUBS:                # substitutes: in stock, allergen data known
             self.db.products.insert_one({
                 "_id": pid, "source": "valio", "names": {"en": f"oat drink {pid}"}, "category": "milk",
@@ -122,6 +126,23 @@ def test_refusals_store_nothing_and_write_no_audit_line(w):
     assert code(w.offer(made_by=None)) == (422, "INVALID_REQUEST")
     assert code(w.offer(idempotency_key="")) == (422, "INVALID_REQUEST")
     assert w.db.supplier_offers.count_documents({}) == 0 and w.kinds() == []
+
+
+def test_unknown_allergen_data_passes_only_when_the_short_product_has_none_either(w):
+    """Fresh vegetables carry no allergen data in the catalog: a cucumber may replace a
+    cucumber, and the offer says so. A declared hit is refused all the same."""
+    w.db.products.update_one({"_id": SHORT}, {"$set": {"allergen_data_known": False}})
+    w.db.products.insert_one({"_id": "480002", "source": "valio", "names": {"en": "courgette"},
+                              "allergen_data_known": False,
+                              "allergens": {"contains": [], "may_contain": [], "undeclared": []}})
+    w.db.products.insert_one({"_id": "480003", "source": "valio", "names": {"en": "nut mix"},
+                              "allergen_data_known": False,
+                              "allergens": {"contains": [], "may_contain": ["SA"], "undeclared": []}})
+    w.db.kitchen_settings.insert_one({"_id": "K1", "excluded_allergens": ["AN"]})
+    assert code(w.offer(product_id="480003")) == (422, "ALLERGEN_RULE")
+    offer = w.offer(product_id="480002").json()
+    assert offer["status"] == "OPEN" and offer["allergen_data_known"] is False
+    assert w.offer(key="o2", product_id=SUBS[0]).json()["allergen_data_known"] is True
 
 
 def test_a_misspelt_allergen_rule_fails_closed(w):
