@@ -39,6 +39,7 @@ TOLERANCE = Decimal("0.005")
 COMMIT_STALE = timedelta(seconds=60)   # older COMMITTING with no attempt row is stuck (#715)
 log = logging.getLogger(__name__)
 OFFER_TTL = timedelta(minutes=15)   # Aron, 2026-11-14 (#19 answer F)
+KIND_SEARCHES = 3                   # extra catalog searches for a request's kind, one per category
 
 
 class GatewayError(Exception):
@@ -79,6 +80,7 @@ class Gateway:
                  search: Callable | None = None):
         self.db, self.valio, self.now = db, valio, now
         self._search = search          # catalog search; default: store.search (Atlas Search)
+        self._kinds = None             # gateway/kind.py, read from the catalog on first use
         db.proposals.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
         db.orders.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
         db.approvals.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
@@ -405,6 +407,41 @@ class Gateway:
             "simulation": sim, "fetched_at": now, **signed})
         return offer
 
+    def _of_kind(self, rows: list[dict], query: str, filters: dict | None, text: str, unit: str,
+                 kitchen_id: str | None = None) -> list[dict]:
+        """The search hits narrowed to the kind of product `text` names (gateway/kind.py,
+        gateway/candidates.py `of_kind`). The word search returns 50 hits and "cheese" is in
+        439 names, so the best hits of each category of that kind (three at most) are
+        searched too. It only narrows what a search found, and it never fails a search:
+        when the kind cannot be read, the rows come back as they are."""
+        from gateway import catalog_search
+        from gateway.candidates import SEARCH_LIMIT, of_kind
+        from gateway.kind import Kinds
+        filters = dict(filters or {})
+        try:
+            if self._kinds is None:
+                self._kinds = Kinds.from_db(self.db)
+            categories = self._kinds.categories(text)
+        except Exception:
+            log.warning("kind of a request could not be read", exc_info=True)
+            return rows
+        if not categories or filters.get("category") is not None:
+            return rows
+        merged, seen = list(rows), {r["product_id"] for r in rows}
+        for category in categories[:KIND_SEARCHES]:
+            try:
+                more, _ = catalog_search.search(self.db, query, {**filters, "category": category},
+                                                SEARCH_LIMIT, kitchen_id, injected=self._search)
+            except Exception:
+                log.warning("kind search failed: category=%s", category, exc_info=True)
+                continue
+            for row in more:
+                # An injected search may not know the filter: take only what was asked.
+                if row["product_id"] not in seen and str(row.get("category")) == category:
+                    seen.add(row["product_id"])
+                    merged.append(row)
+        return of_kind(merged, categories, unit)
+
     # ---- kitchen side ---------------------------------------------------------------
 
     def _from_text(self, kitchen_id: str, body: dict, default_day: date | None = None) -> dict:
@@ -425,8 +462,9 @@ class Gateway:
         rows, _ = catalog_search.search(self.db, parsed.query, {}, SEARCH_LIMIT, kitchen_id,
                                         injected=self._search)
         # Keep the hits that can answer the request: the text search alone ranks chocolate
-        # and bread mix above the milk for "lactose free milk".
-        ids = pick_candidates(rows, parsed.as_need().get("unit") or "")
+        # and bread mix above the milk for "lactose free milk", and a cheese sauce above cheese.
+        unit = parsed.as_need().get("unit") or ""
+        ids = pick_candidates(self._of_kind(rows, parsed.query, {}, parsed.query, unit, kitchen_id), unit)
         from gateway.refusal import excluded_request
         refusal = excluded_request(parsed.query, rows, self._allergen_rule(kitchen_id))
         if not ids and not refusal:
@@ -917,6 +955,11 @@ class Gateway:
         # Text search, or text plus meaning when SEARCH_HYBRID is on (gateway/catalog_search.py).
         rows, kind = catalog_search.search(self.db, query, filters, 50, injected=self._search)
         measure = need["unit"]
+        if kind == "text":
+            # The kind of product the person named, from their own words, not the model's
+            # query: "50 kg cheese" gets cheese, never a cheese sauce (gateway/kind.py).
+            # A need stored with no text (an outside client): the query is all there is.
+            rows = self._of_kind(rows, query, filters, need["text"] or query, measure)
         same = [r for r in rows if (r.get("net_content") or {}).get("unit") == measure]
         filtered = bool(same) and measure in ("L", "KG")
         if filtered:

@@ -69,6 +69,7 @@ def _catalog_quote(gw, kitchen_id: str, request: dict) -> dict | None:
         return None
     from gateway import catalog_search
     rows, _ = catalog_search.search(gw.db, query, {}, SEARCH_LIMIT, kitchen_id, injected=gw._search)
+    rows = gw._of_kind(rows, query, {}, query, request["unit"], kitchen_id)
     ids = list(dict.fromkeys([*request["product_ids"], *pick_candidates(rows, request["unit"])]))
     if set(ids) == set(request["product_ids"]):
         return None      # the catalog adds nothing to the basket already quoted
