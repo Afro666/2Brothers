@@ -22,10 +22,14 @@ import re
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from gateway import approval_tokens, tokens
+from gateway import approval_tokens, signing, tokens
 
 CARD_PATH = "/.well-known/agent-card.json"
 LLMS_PATH = "/llms.txt"
+JWKS_PATH = "/.well-known/jwks.json"      # served by gateway/app.py, no token
+ORDER_PATH = "/v1/kitchens/{kitchen_id}/orders/{order_id}"
+TOKENS_PAGE = "/settings/tokens"          # web/src/pages/settings/sections.ts: "API & MCP tokens"
+VERIFY = "python -m gateway.verify_offer"  # gateway/verify_offer.py, run from a clone of the source
 REPO = "https://github.com/Afro666/2Brothers"
 CONTRACT = REPO + "/blob/main/docs/contract.md"
 BYOA = REPO + "/blob/main/docs/byoa.md"
@@ -145,6 +149,11 @@ async def describe(app: FastAPI, request: Request) -> dict:
         "mcp": base + app.state.mcp.settings.streamable_http_path if mcp else None,
         "mcp_tools": sorted(mcp),
         "token_route": K + "/tokens" if ("POST", K + "/tokens") in routes else None,
+        # The open demo: the shared session works with no sign-in, so any visitor is its approver.
+        "open_demo_kitchen": approval_tokens.open_demo_kitchen() if approval_tokens.open_demo_on() else None,
+        # Signed offers and receipts (#290, gateway/signing.py): listed only when the key is served.
+        "jwks": base + JWKS_PATH if ("GET", JWKS_PATH) in routes else None,
+        "order": base + ORDER_PATH if ("GET", ORDER_PATH) in routes else None,
         "person_approval": {
             "token_prefix": approval_tokens.PREFIX, "create": approval_route,
             "hours_default": approval_tokens.DEFAULT_HOURS, "hours_max": approval_tokens.MAX_HOURS,
@@ -196,7 +205,18 @@ def agent_card(d: dict) -> dict:
         "skills": d["skills"],
         "humanOnly": [{**h, "reason": HUMAN_ONLY_REASON} for h in d["human_only"]],
         "personApproval": d["person_approval"],
+        "signedAnswers": {
+            "format": "compact JWS", "alg": "EdDSA", "issuer": signing.ISSUER, "jwks": d["jwks"],
+            "offer_field": "signature", "receipt_field": "receipt",
+            "note": ("Every offer and every order receipt is signed. An offer's signature covers its lines, "
+                     "prices, stock states, total and offer_hash, and ends at exp. A receipt says what a "
+                     "person approved and that the gateway recorded it; its supplier_outcome is NOT_SENT: "
+                     "nothing is sent to the supplier."),
+            "verify": (f"{VERIFY} --base-url {d['base']} --offer offer.json (or --receipt order.json), "
+                       "from a clone of the source; exit code 1 when a check fails. No token is needed."),
+        } if d["jwks"] else None,
         "links": {"openapi": d["openapi"], "docs": d["docs"], "mcp": d["mcp"], "permissions": d["permissions"],
+                  "jwks": d["jwks"],
                   "llms_txt": d["base"] + LLMS_PATH, "agent_card": d["base"] + CARD_PATH,
                   "contract": CONTRACT, "how_to": BYOA, "source": REPO},
     }
@@ -234,6 +254,12 @@ def llms_txt(d: dict) -> str:
             f"- A signed-in person creates the token: `POST {d['token_route']}` with "
             "`{\"name\": \"my-agent\", \"scopes\": [\"kitchen:read\", \"kitchen:propose\"]}`. "
             "The token is shown once. An agent cannot create a token for itself.")
+        if d["site"] != base:
+            lines.append(
+                f"- To get one: a person opens {d['site']}{TOKENS_PAGE} (Settings, \"API & MCP tokens\"), "
+                "names the token, picks the scopes and copies it for the agent."
+                + (" This site is an open demo: there is no sign-in, so any visitor can create a token "
+                   f"there for the kitchen `{d['open_demo_kitchen']}`." if d["open_demo_kitchen"] else ""))
     lines += [
         f"- Check a token: `GET {base}/v1/me`.",
         "",
@@ -273,6 +299,28 @@ def llms_txt(d: dict) -> str:
     ]
     if "place_order" in by_id:
         lines.append(f"- {call('place_order')} only returns an order a person already approved; before that it is 403 `NEEDS_APPROVAL`.")
+    if d["jwks"]:
+        lines += [
+            "", "## Signed offers and receipts", "",
+            "- Every offer is signed. The `signature` field of a `get_offer`, `simulate_order` or proposal "
+            "answer is a compact JWS (EdDSA, Ed25519). It covers each line (product, quantity, unit, price, "
+            "stock `confirmed` or `unknown`), `expected_total`, the read time `iat`, the end time `exp` and `offer_hash`.",
+            "- Every recorded order has a signed receipt. The `receipt` field of an order answer"
+            + (f" (`GET {d['order']}`, scope `kitchen:read`)" if d["order"] else "")
+            + " is a compact JWS from the same key: the lines, the total, the offer, who approved and when. "
+            "Its `supplier_outcome` is `NOT_SENT`: the gateway records the order and sends nothing to the supplier.",
+            f"- Public key (JWKS, no token): `GET {d['jwks']}`.",
+            "- Verify one in 4 steps: (1) fetch the JWKS; (2) take the key whose `kid` equals the `kid` in the "
+            "JWS header; (3) check the EdDSA signature and that `iss` is "
+            f"`{signing.ISSUER}`; an offer after `exp` has expired, a receipt has no `exp`; "
+            "(4) compare the signed lines and total with the JSON you were shown. Any JWT library that "
+            "supports EdDSA does steps 2 and 3.",
+            "- Or run the repo's script from a clone of the source (no token needed). Save the answer as a "
+            f"JSON file, then: `{VERIFY} --base-url {base} --offer offer.json` for an offer or a proposal, "
+            f"`{VERIFY} --base-url {base} --receipt order.json` for an order. "
+            "It prints the signed claims; exit code 1 when a check fails.",
+            "- The person who approves says yes to one `offer_hash`; the gateway refuses to place any other offer.",
+        ]
     pa = d["person_approval"]
     if pa:
         lines += ["", "## A person approving from their own chat", "",
