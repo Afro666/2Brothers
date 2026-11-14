@@ -248,6 +248,8 @@ describe("DemandPage", () => {
       lines: [
         { productId: "462775", productName: "Arla lactose-free milk", date: "2026-11-16", risk: "SHORT",
           text: "Forecast 2400 L from 6 kitchens: buy 700 L more." },
+        { productId: "462775", productName: "Arla lactose-free milk", date: "2026-11-17", risk: "SHORT",
+          text: "Forecast 2500 L from 6 kitchens: buy 800 L more." },
         { productId: "462921", productName: "Wheat flour 2 kg", date: "2026-11-17", risk: "UNKNOWN",
           text: "Availability unknown for 3 kitchens: ask the mill." },
       ],
@@ -255,13 +257,15 @@ describe("DemandPage", () => {
     renderApp("/demand?week=2026-W47", api);
 
     const box = await screen.findByRole("region", { name: "Buying note" });
-    const items = within(box).getAllByRole("listitem");
-    expect(items).toHaveLength(2);
-    expect(items[0]).toHaveTextContent("Arla lactose-free milk");
-    expect(items[0]).toHaveTextContent("Mon 16 Nov");
-    expect(items[0]).toHaveTextContent("Forecast 2400 L from 6 kitchens: buy 700 L more.");
-    expect(items[0]).toHaveAttribute("data-note-risk", "SHORT");
-    expect(items[1]).toHaveAttribute("data-note-risk", "UNKNOWN");
+    // Two days of one product are grouped under its name, said once.
+    expect(within(box).getAllByText("Arla lactose-free milk")).toHaveLength(1);
+    const lines = box.querySelectorAll("[data-note-risk]");
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toHaveTextContent("Mon 16 Nov");
+    expect(lines[0]).toHaveTextContent("Forecast 2400 L from 6 kitchens: buy 700 L more.");
+    expect(lines[0]).toHaveAttribute("data-note-risk", "SHORT");
+    expect(lines[1]).toHaveTextContent("Tue 17 Nov");
+    expect(lines[2]).toHaveAttribute("data-note-risk", "UNKNOWN");
     expect(box).toHaveTextContent(
       "Written by nemotron-3.5-super-vl. Every number is checked against its row in the table.",
     );
