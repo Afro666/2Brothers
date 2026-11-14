@@ -14,7 +14,7 @@ def test_matrix_is_served_and_has_the_three_groups(env):
 
 
 def test_every_never_row_has_a_proof_below():
-    proven = {"approve", "place_unapproved", "cancel", "change_quantity", "other_kitchen"}
+    proven = {"approve", "propose_and_approve", "place_unapproved", "cancel", "change_quantity", "other_kitchen"}
     assert {row["id"] for row in permissions.NEVER} == proven
 
 
@@ -29,6 +29,30 @@ def test_never_approve_or_reject(env):
             assert r.status_code == 403 and r.json()["error"]["code"] == "HUMAN_SESSION_REQUIRED"
     r = client.post(K + "/tokens", headers=HUMAN, json={"name": "t2", "scopes": ["kitchen:approve"]})
     assert r.status_code == 422
+
+
+def test_never_propose_and_approve_with_one_credential(env):
+    """A personal approval token approves but never proposes; agent and kitchen tokens propose
+    but never approve (decision 2026-11-14)."""
+    from gateway import users
+    client, _, db = env
+    users.create_user(db, "boss@example.com", "correct horse 42", name="Boss", role="approver",
+                      kitchen_id="demo-kitchen")
+    client.post("/v1/auth/login", json={"email": "boss@example.com", "password": "correct horse 42"})
+    tka = {"Authorization": "Bearer " + client.post(K + "/approval-tokens", json={}).json()["token"]}
+    client.cookies.clear()
+    p = milk(client)
+    for path, body in ((K + "/proposals", {"product_ids": ["462775"], "quantity": "5", "unit": "L",
+                                           "requested_date": "2026-11-16", "idempotency_key": "x"}),
+                       ("/tools/request_approval", {"offer_id": p["offer_id"], "idempotency_key": "y"})):
+        r = client.post(path, headers=tka, json=body)
+        assert r.status_code == 403 and r.json()["error"]["code"] == "SCOPE_REQUIRED"
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=AGENT,
+                    json={"expected_total": p["expected_total"], "idempotency_key": "a"})
+    assert r.status_code == 403 and r.json()["error"]["code"] == "HUMAN_SESSION_REQUIRED"
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=tka,
+                    json={"expected_total": p["expected_total"], "idempotency_key": "a"})
+    assert r.status_code == 200
 
 
 def test_never_place_an_unapproved_order(env):

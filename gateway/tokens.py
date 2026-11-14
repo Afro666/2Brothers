@@ -4,6 +4,13 @@
 - Scopes: `kitchen:read`, `kitchen:propose`. `kitchen:approve` can never be on a token:
   approving is a person's act in the inbox (docs/contract.md, trust rule).
 - One token = one kitchen. Revoked or unknown -> 401.
+
+A personal approval token (`tka_`, gateway/approval_tokens.py) is another kind: it stands
+for one person and only approves and rejects. Its operator commands live here:
+
+    python -m gateway.tokens add-approver --email <existing approver email> [--hours 8] [--kitchen <id>]
+    python -m gateway.tokens list-approvers [--kitchen <id>]
+    python -m gateway.tokens remove-approver --token-id <id>
 """
 
 from __future__ import annotations
@@ -85,3 +92,72 @@ def verify(db, token: str, now: datetime | None = None) -> dict | None:
     if last is None or now - last > TOUCH_EVERY:
         db.api_tokens.update_one({"_id": doc["_id"]}, {"$set": {"last_used_at": now}})
     return doc
+
+
+# ---- command line: personal approval tokens for the stage (decision 2026-11-14) ----------
+
+def main(argv=None) -> int:
+    """The token value is printed once, to this terminal only; the database keeps its hash."""
+    import argparse
+
+    from gateway import approval_tokens as at
+
+    parser = argparse.ArgumentParser(description="Personal approval tokens: one person approves from chat.")
+    sub = parser.add_subparsers(dest="command", required=True)
+    add = sub.add_parser("add-approver", help="a token for an existing approver; printed once")
+    add.add_argument("--email", required=True)
+    add.add_argument("--hours", type=int, default=at.DEFAULT_HOURS, help=f"1 to {at.MAX_HOURS}, default {at.DEFAULT_HOURS}")
+    add.add_argument("--kitchen", default=None, help="needed only for an all-kitchens account")
+    add.add_argument("--name", default="chat")
+    lister = sub.add_parser("list-approvers", help="the approval tokens, never their values")
+    lister.add_argument("--kitchen", default=None)
+    remove = sub.add_parser("remove-approver", help="revoke one approval token now")
+    remove.add_argument("--token-id", required=True)
+    args = parser.parse_args(argv)
+
+    from store.db import get_db
+    from store import audit
+    db = get_db()
+    now = datetime.now(timezone.utc)
+
+    def record(kitchen_id: str, kind: str, **data) -> None:
+        audit.append_event(db, {"event_id": uuid4().hex, "kind": kind, "actor": at.CLI, **data},
+                           {"kitchen_id": kitchen_id, "at": now.isoformat()})
+
+    if args.command == "list-approvers":
+        for row in at.list_tokens(db, args.kitchen):
+            state = "revoked" if row["revoked_at"] else ("expired" if at._parse(row["expires_at"]) <= now else "active")
+            print(row["token_id"], row["prefix"] + "...", row["person"], row["kitchen_id"], state,
+                  "expires", row["expires_at"])
+        return 0
+    if args.command == "remove-approver":
+        out = at.revoke(db, None, args.token_id, now)
+        if out is None:
+            print("no such approval token")
+            return 1
+        record(out["kitchen_id"], "approval_token_revoked", token_id=out["token_id"], person=out["person"])
+        print("revoked", out["token_id"], out["person"])
+        return 0
+    email = args.email.strip().lower()
+    user = db.users.find_one({"_id": email})
+    kitchen_id = args.kitchen or (user or {}).get("kitchen_id")
+    if user is not None and kitchen_id is None:
+        print("this account is for every kitchen: give --kitchen")
+        return 1
+    try:
+        out = at.create(db, email, kitchen_id or "", at.CLI, hours=args.hours, name=args.name, now=now)
+    except at.ApprovalTokenError as exc:
+        print(str(exc))
+        return 1
+    record(out["kitchen_id"], "approval_token_created", token_id=out["token_id"], person=out["person"],
+           expires_at=out["expires_at"])
+    print("approval token for", out["person"], "in", out["kitchen_id"], "until", out["expires_at"],
+          "(id", out["token_id"] + ")")
+    print("shown once, keep it out of logs and chats:")
+    print(out["token"])
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())
