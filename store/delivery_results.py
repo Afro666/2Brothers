@@ -12,7 +12,6 @@ from copy import deepcopy
 from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
-from time import monotonic, sleep
 from uuid import uuid4
 
 from pymongo.errors import DuplicateKeyError
@@ -36,6 +35,8 @@ def _ensure_indexes(db) -> None:
     db[CURRENT].create_index([("kitchen_id", 1), ("order_id", 1)], unique=True)
     db[KEYS].create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
     db[RESULTS].create_index([("kitchen_id", 1), ("order_id", 1), ("revision", -1)])
+    # Photos omit this field; only received operations need an exactly-once fence.
+    db[RESULTS].create_index("_operation_id", unique=True, sparse=True)
 
 
 def _date(value) -> str | None:
@@ -166,6 +167,19 @@ def _move_current(db, kitchen_id: str, order_id: str, result_id: str,
         pass  # the selector already points at this or a newer revision
 
 
+def _operation_row(db, observation: dict) -> dict | None:
+    if not observation.get("_operation_id"):
+        return None
+    return db[RESULTS].find_one({"kitchen_id": observation["kitchen_id"],
+        "order_id": observation["order_id"], "_operation_id": observation["_operation_id"]})
+
+
+def _recover_operation(db, row: dict) -> dict:
+    _move_current(db, row["kitchen_id"], row["order_id"],
+                  row["result_id"], int(row["revision"]))
+    return _public(row)
+
+
 def _append(db, observation: dict) -> dict:
     """Write one immutable revision, then move the kitchen+order selector to it.
 
@@ -173,6 +187,9 @@ def _append(db, observation: dict) -> dict:
     so it reads the current revision again and takes the next one.
     """
     kitchen_id, order_id = observation["kitchen_id"], observation["order_id"]
+    existing = _operation_row(db, observation)
+    if existing is not None:
+        return _recover_operation(db, existing)
     for _ in range(APPEND_TRIES):
         current = _current(db, kitchen_id, order_id)
         if current is None:
@@ -189,6 +206,9 @@ def _append(db, observation: dict) -> dict:
         try:
             db[RESULTS].insert_one(row)
         except DuplicateKeyError:
+            existing = _operation_row(db, observation)
+            if existing is not None:
+                return _recover_operation(db, existing)
             # The winner may not have moved the selector yet: move it to the newest row.
             latest = db[RESULTS].find_one({"result_id": result_id},
                                           sort=[("revision", -1)])
@@ -242,50 +262,49 @@ def save_received(db, *, kitchen_id: str, order_id: str, idempotency_key: str,
                                source="manual_complete", lines=lines, not_ordered=[])
     # A private durable identity lets retries find a committed append even if finalization fails.
     operation_id = uuid4().hex
+    observation["_operation_id"] = operation_id
     try:
         db[KEYS].insert_one({**key_filter, "order_id": order_id, "operation_id": operation_id,
-                            "payload_hash": payload_hash, "pending": True})
+                            "payload_hash": payload_hash, "pending": True,
+                            "observation": observation})
     except DuplicateKeyError:
         winner = db[KEYS].find_one(key_filter)
         if winner is None:
             raise RuntimeError("the received key reservation is missing") from None
         return _replay(db, key_filter, winner, payload_hash), False
-    observation["_operation_id"] = operation_id
     # Keep an ambiguous reservation: deleting it could allow a duplicate late write.
     result = _append(db, observation)
     db[KEYS].update_one({**key_filter, "operation_id": operation_id, "pending": True},
                        {"$set": {"result_id": result["result_id"], "revision": result["revision"]},
-                        "$unset": {"pending": ""}})
+                        "$unset": {"pending": "", "observation": ""}})
     return result, True
 
 
-REPLAY_WAIT_S, REPLAY_POLL_S = 2.0, 0.05
-
-
 def _replay(db, key_filter: dict, seen: dict, payload_hash: str) -> dict:
-    """The stored result for a used key; waits briefly while the first save finishes."""
+    """Resume the reserved observation, or return the key's exact stored result."""
     if seen.get("payload_hash") != payload_hash:
         raise IdempotencyConflict(key_filter["idempotency_key"])
-    deadline = monotonic() + REPLAY_WAIT_S
-    while seen.get("pending"):
+    if seen.get("pending"):
         operation_id, order_id = seen.get("operation_id"), seen.get("order_id")
         stored = None
         if operation_id is not None and order_id is not None:
             stored = db[RESULTS].find_one({"kitchen_id": key_filter["kitchen_id"],
                 "order_id": order_id, "_operation_id": operation_id})
         if stored is not None:
-            _move_current(db, key_filter["kitchen_id"], order_id,
-                          stored["result_id"], int(stored["revision"]))
-            db[KEYS].update_one({**key_filter, "operation_id": operation_id, "pending": True},
-                {"$set": {"result_id": stored["result_id"], "revision": stored["revision"]},
-                 "$unset": {"pending": ""}})
-            return _public(stored)
-        if monotonic() >= deadline:
-            raise RuntimeError("the received result is still being saved")
-        sleep(REPLAY_POLL_S)
-        seen = db[KEYS].find_one(key_filter)
-        if seen is None:
-            raise RuntimeError("the first received save failed")
+            result = _recover_operation(db, stored)
+        else:
+            observation = seen.get("observation")
+            if (not isinstance(observation, dict) or not operation_id
+                    or observation.get("_operation_id") != operation_id
+                    or observation.get("kitchen_id") != key_filter["kitchen_id"]
+                    or observation.get("order_id") != order_id):
+                raise RuntimeError("the pending received key has no valid stored snapshot")
+            # The unique operation index fences both retries and a still-running writer.
+            result = _append(db, observation)
+        db[KEYS].update_one({**key_filter, "operation_id": operation_id, "pending": True},
+            {"$set": {"result_id": result["result_id"], "revision": result["revision"]},
+             "$unset": {"pending": "", "observation": ""}})
+        return result
     stored = _row(db, seen["result_id"], seen["revision"])
     if stored is None:
         raise RuntimeError("the saved received result is missing")
