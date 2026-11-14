@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatEur } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { supplierName } from "@/lib/supplier-name";
 import { useAsync } from "@/lib/use-async";
 
 export function OrdersPage() {
@@ -57,7 +58,7 @@ export function OrdersPage() {
                             variant="outline"
                             className="border-warning/40 bg-warning-surface text-warning"
                           >
-                            {t("Call {supplier} to confirm", { supplier: supplierNames.get(supplierId) ?? supplierId })}
+                            {t("Call {supplier} to confirm", { supplier: supplierName(supplierNames, supplierId) })}
                           </Badge>
                         ))}
                       </div>

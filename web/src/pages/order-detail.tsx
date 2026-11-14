@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, formatDateTime, formatEur } from "@/lib/format";
 import { getLanguage, translate, useT } from "@/lib/i18n";
+import { supplierName } from "@/lib/supplier-name";
 import { useAsync } from "@/lib/use-async";
 import type { OrderReceipt } from "@/types";
 
@@ -124,7 +125,7 @@ export function OrderDetailPage() {
                 {state.data.supplierMustConfirm.map((supplierId) => (
                   <p key={supplierId} className="text-sm font-medium">
                     {t("Waiting for {supplier} to confirm. Call or e-mail them: this order was sent without a stock confirmation.", {
-                      supplier: supplierNames.get(supplierId) ?? supplierId,
+                      supplier: supplierName(supplierNames, supplierId),
                     })}
                   </p>
                 ))}

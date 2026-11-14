@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,6 +27,28 @@ describe("orders pages", () => {
     expect(
       screen.getByText(
         "Waiting for sup-unknown to confirm. Call or e-mail them: this order was sent without a stock confirmation.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("names sup-valio Valio Aimo when the suppliers list has no row for it", async () => {
+    const api = createMockApi();
+    api.listSuppliers = async () => [];
+    const getOrder = api.getOrder;
+    const listOrders = api.listOrders;
+    api.getOrder = async (id) => ({ ...(await getOrder(id)), supplierMustConfirm: ["sup-valio"] });
+    api.listOrders = async () =>
+      (await listOrders()).map((order) => (order.id === "ORD-1047" ? { ...order, supplierMustConfirm: ["SUP-VALIO"] } : order));
+
+    renderApp("/orders", api);
+    const row = await screen.findByRole("link", { name: /ORD-1047/ });
+    expect(await within(row).findByText("Call Valio Aimo to confirm")).toBeVisible();
+    cleanup();
+
+    renderApp("/orders/ORD-1047", api);
+    expect(
+      await screen.findByText(
+        "Waiting for Valio Aimo to confirm. Call or e-mail them: this order was sent without a stock confirmation.",
       ),
     ).toBeVisible();
   });
