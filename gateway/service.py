@@ -279,6 +279,7 @@ class Gateway:
                 **offer["simulation"],
                 "decision_summary": self._summary(doc["request"], offer["simulation"])}
         result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
+        result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []))
         blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
         result['lines'] = [{**line, **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
                            for line in result['lines']]
@@ -403,19 +404,37 @@ class Gateway:
     def reject(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None) -> dict:
         if not human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can reject an order")
-        doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id})
+        reason = body.get('reason', '')
+        if not isinstance(reason, str) or len(reason.strip()) > 500:
+            raise GatewayError(422, 'INVALID_REQUEST', 'reason must be a string of at most 500 characters')
+        doc = recalls.reject_basket(self.db, kitchen_id, proposal_id, human=human,
+                                    reason=reason.strip(), at=self.now().isoformat())
         if doc is None:
             raise GatewayError(404, "PROPOSAL_NOT_FOUND", "no such proposal")
-        if doc["status"] == "REJECTED":
-            return {"proposal_id": proposal_id, "status": "REJECTED"}
-        if doc["status"] != "READY":
+        if doc["status"] != "REJECTED":
             raise GatewayError(409, "NOT_PENDING", f"proposal is {doc['status']}")
-        reason = (body.get("reason") or "").strip()
-        if doc.get("approval_id"):
-            orders.decide_approval(self.db, doc["approval_id"], status="REJECTED", decided_by=human, reason=reason)
-        self.db.proposals.update_one({"_id": proposal_id}, {"$set": {"status": "REJECTED", "reject_reason": reason}})
-        self._audit(kitchen_id, "proposal_rejected", human, proposal_id=proposal_id, reason=reason)
+        audit.append_event(self.db, {'event_id': 'proposal-rejected:' + _hash([kitchen_id, proposal_id]),
+            'kind': 'proposal_rejected', 'actor': doc.get('rejected_by', human),
+            'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')},
+            {'kitchen_id': kitchen_id, 'at': doc.get('rejected_at', self.now().isoformat())})
         return {"proposal_id": proposal_id, "status": "REJECTED"}
+
+    def dismiss_recall(self, kitchen_id: str, event_id: str, body: dict, *, human: str | None) -> dict:
+        if not human:
+            raise GatewayError(403, 'HUMAN_SESSION_REQUIRED', 'only a person can dismiss a recall after checking packs')
+        reason = body.get('reason')
+        if not isinstance(reason, str) or not 10 <= len(reason.strip()) <= 500:
+            raise GatewayError(422, 'INVALID_REQUEST', 'a pack-check reason of 10 to 500 characters is required')
+        row = recalls.dismiss(self.db, kitchen_id, event_id, human=human, reason=reason.strip(), at=self.now().isoformat())
+        if row is None:
+            raise GatewayError(404, 'RECALL_NOT_FOUND', 'no such recall in this kitchen')
+        result = {'event_id': row['_id'], **{key: row[key] for key in
+                  ('status', 'dismissed_by', 'dismissed_at', 'dismiss_reason')}}
+        audit.append_event(self.db, {'event_id': 'recall-dismissed:' + _hash([kitchen_id, event_id]),
+            'kind': 'recall_dismissed', 'actor': row['dismissed_by'], 'recall_event_id': event_id,
+            **{key: value for key, value in result.items() if key != 'event_id'}},
+            {'kitchen_id': kitchen_id, 'at': row['dismissed_at']})
+        return result
 
     @staticmethod
     def _order_out(order: dict) -> dict:
