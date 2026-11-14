@@ -66,7 +66,10 @@ async function loadData(api: ReturnType<typeof useApi>) {
     api.listRecipes(),
   ]);
   // The catalog search returns only a page, so recipes load their products by id instead.
-  const catalog = await api.getProducts(catalogProductIdsInRecipes(recipes, ownProducts));
+  // A failing catalog lookup must not hide own products and suppliers: recipes then show unknown allergens.
+  const catalog = await api
+    .getProducts(catalogProductIdsInRecipes(recipes, ownProducts))
+    .catch((): Awaited<ReturnType<typeof api.getProducts>> => []);
   return { ownProducts, suppliers, recipes, catalog };
 }
 
