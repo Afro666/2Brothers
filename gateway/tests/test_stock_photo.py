@@ -231,3 +231,35 @@ def test_end_to_end_gateway_to_worker_with_the_recorded_nemotron_reply(monkeypat
 
 def test_gateway_error_type_is_used():
     assert isinstance(stock_photo._error("VISION_TIMEOUT"), GatewayError)
+
+
+def test_a_second_photo_while_one_is_read_is_429_busy(monkeypatch):
+    """#839: one model read per kitchen at a time; the next one is free again after."""
+    import asyncio
+
+    release = asyncio.Event()
+
+    class Slow(FakeWorker):
+        async def __call__(self, kitchen_id, image_base64):
+            self.calls.append(kitchen_id)
+            await release.wait()
+            return self.answer
+    worker = Slow()
+    _, db = make(monkeypatch, worker)
+    app = create_app(Gateway(db, None, now=lambda: NOW), shelf_worker=worker)
+
+    async def run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            first = asyncio.create_task(client.post(URL, headers=HUMAN, json=BODY))
+            while not worker.calls:
+                await asyncio.sleep(0)
+            second = await client.post(URL, headers=HUMAN, json=BODY)
+            release.set()
+            done = await first
+            third = await client.post(URL, headers=HUMAN, json=BODY)
+            return done, second, third
+    done, second, third = asyncio.run(run())
+    assert done.status_code == 200 and third.status_code == 200
+    assert error_of(second) == (429, "STOCK_PHOTO_BUSY")
+    assert len(worker.calls) == 2                                  # the busy call never reached the model

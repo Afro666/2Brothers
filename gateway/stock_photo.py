@@ -124,11 +124,18 @@ async def _image(request: Request) -> str:
 
 
 def mount_stock_photo(app, gw, principal, shelf_worker=None) -> None:
+    # #839: one model read per kitchen at a time. A double tap or a retry loop must not pile
+    # up 60-second Nemotron VL calls on the shared credits. One event loop: check-and-add is atomic.
+    busy: set[str] = set()
+
     @app.post("/v1/kitchens/{kitchen_id}/stock/photo")
     async def stock_photo(kitchen_id: str, request: Request, who=Depends(principal)):
         # kitchen:write: a person who is not a viewer, or a kitchen token. Never the Buyer.
         who.need("kitchen:write", kitchen_id)
         encoded = await _image(request)
+        if kitchen_id in busy:
+            raise GatewayError(429, "STOCK_PHOTO_BUSY", "a shelf photo for this kitchen is being read; wait for it")
+        busy.add(kitchen_id)
         started = time.monotonic()
         try:
             rows = _rows(await (shelf_worker or read_shelf_photo)(kitchen_id, encoded))
@@ -136,6 +143,8 @@ def mount_stock_photo(app, gw, principal, shelf_worker=None) -> None:
             gw()._audit(kitchen_id, "stock_photo_failed", who.name, code=exc.code, model=MODEL_NAME,
                         duration_ms=round((time.monotonic() - started) * 1000))
             raise
+        finally:
+            busy.discard(kitchen_id)
         duration_ms = round((time.monotonic() - started) * 1000)
         # Who, how many rows, how long. Never the image, never the labels the model read.
         gw()._audit(kitchen_id, "stock_photo_read", who.name, model=MODEL_NAME, rows=len(rows),
