@@ -133,8 +133,8 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 | MCP tool | Method and path | Request / query fields | Success response fields |
 |---|---|---|---|
 | `search_products` | POST `/tools/search_products` | `query: string`, `filters: object`, `limit: integer`, `need_id: string` (optional; see below) | `products: object[]`; with `need_id` also `requested_date`, `measure`, `note` |
-| `get_offer` | POST `/tools/get_offer` | `product_ids: string[]`, `requested_date: YYYY-MM-DD`, `need_id: string` | `offer_id`, `valid_until`, `lines: object[]` |
-| `simulate_order` | POST `/tools/simulate_order` | `offer_id: string` | `offer_id`, `expected_total`, `currency`, `mandate: object`, `lines: object[]` |
+| `get_offer` | POST `/tools/get_offer` | `product_ids: string[]`, `requested_date: YYYY-MM-DD`, `need_id: string` | `offer_id`, `valid_until`, `lines: object[]`, `signature`, `offer_hash` |
+| `simulate_order` | POST `/tools/simulate_order` | `offer_id: string` | `offer_id`, `expected_total`, `currency`, `mandate: object`, `lines: object[]`, `signature`, `offer_hash` |
 | `place_order` | POST `/tools/place_order` | `offer_id`, `expected_total: decimal string`, `idempotency_key: string` | `order_id`, `outcome`, `status` |
 | `request_approval` | POST `/tools/request_approval` | `offer_id: string`, `idempotency_key: string` | `approval_id`, `status: PENDING` |
 | `get_order_status` | GET `/tools/get_order_status` | `order_id: string` | `order_id`, `status`, `outcome` |
@@ -347,12 +347,14 @@ What the shared repository keeps, and what list and detail routes return. Money
 and quantities are decimal strings on the wire.
 
 - **Order:** `order_id`, `kitchen_id`, `offer_id`, `idempotency_key`, `expected_total`,
-  `lines`, `payload_hash`, `status`, `outcome`, `created_at`, `updated_at`. The row is
-  written before any send, with `status` and `outcome` null; both are set when the
-  attempt ends.
+  `lines`, `payload_hash`, `offer_hash` ("Signed offers"), `approved_by` (a person, or
+  `"auto-approve (rule set by <person>)"`), `status`, `outcome`, `created_at`,
+  `updated_at`. The row is written before any send, with `status` and `outcome` null;
+  both are set when the attempt ends.
 - **Approval:** `approval_id`, `kitchen_id`, `offer_id`, `idempotency_key`, `status`
   (`PENDING`, `APPROVED`, `REJECTED`), `reasons` (string[]), `requested_at`,
-  `decided_by`, `decided_at`, and `reason` on a rejection. Decided once, by a human.
+  `decided_by`, `decided_at`, and `reason` on a rejection. Decided once, by a human, or
+  by the kitchen's earned auto-approve rule ("Earned auto-approve").
 - **Audit entry:** `seq` (1, 2, 3 ...), `prev_hash`, `hash`, `stored_at`, `event` (what
   the client sent: `event_id`, `run_id`, `type`, `tool`, `arguments`, `result`, and
   `order_id` when the event belongs to an order) and `server` (what the gateway adds:
@@ -458,8 +460,9 @@ display), `created_at`, `created_by`, `last_used_at` (or null), `revoked_at` (or
 
 - `token` (`tkb_...`) is in the create answer only. It is shown once; the gateway
   keeps only its SHA-256.
-- `scopes` holds one or more of `kitchen:read` and `kitchen:propose`. `kitchen:approve`
-  or another scope is 422 `INVALID_REQUEST`.
+- `scopes` holds one or more of `kitchen:read`, `kitchen:propose` and `kitchen:write`
+  (stock counts, menus, recipes, own products, suppliers: a POS or inventory feed).
+  `kitchen:approve` or another scope is 422 `INVALID_REQUEST`.
 - A token acts only for its own kitchen, with only its own scopes. It also works on
   `/tools/*` and on `/mcp` (with `kitchen:propose`).
 - Create and revoke are audit entries (`token_created`, `token_revoked`).
@@ -471,19 +474,20 @@ display), `created_at`, `created_by`, `last_used_at` (or null), `revoked_at` (or
 | 403 | `HUMAN_SESSION_REQUIRED` | The caller is not a person (a token or the agent). |
 | 403 | `ROLE_REQUIRED` | The person is not an `approver`. |
 | 403 | `SCOPE_REQUIRED` | A token calls a route without the scope it needs. |
-| 403 | `KITCHEN_SCOPE` | A token calls a route of another kitchen. |
+| 403 | `KITCHEN_SCOPE` | A token calls a route of another kitchen, or a signed-in person calls the token routes of a kitchen that is not theirs. |
 | 404 | `TOKEN_NOT_FOUND` | No such token in this kitchen. |
 | 422 | `INVALID_REQUEST` | A name or scope rule above is broken. |
 
-Known gap: the three token routes do not check yet that the signed-in person belongs to
-`kitchen_id`. Every other kitchen route does (403 `KITCHEN_SCOPE`).
+The three token routes check the kitchen first (#591): a session belongs to one kitchen,
+so a person cannot create, list or revoke the tokens of another kitchen (403
+`KITCHEN_SCOPE`). The shared human token has no kitchen, so it is not bound.
 
 ### Kitchen side: `/v1/kitchens/{kitchen_id}/...`
 
 | Method | Path | Scope | What |
 |---|---|---|---|
-| POST | `/stock-counts` | `kitchen:write` | Push a stock count (POS, inventory, manual). `null` means unknown, never zero. |
-| GET | `/stock` | `kitchen:read` | Current stock and position (on hand + on order). |
+| POST | `/stock-counts` | `kitchen:write` | Push a stock count (POS, inventory, manual). `null` means unknown, never zero. A repeat `idempotency_key` returns the stored answer. |
+| GET | `/stock` | `kitchen:read` | Current stock and position (on hand + on order). Shape under "Body shapes: stock and demand". |
 | GET | `/products`, `/products/{id}` | `kitchen:read` | Own products (not in a supplier catalog). Shape below. |
 | POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Create, change or delete an own product. |
 | GET | `/catalog/products?ids=` | `kitchen:read` | Product rows by code, for screens that hold product codes (recipes, orders). `ids` is 1 to 200 codes, comma-separated. Returns `{"products": [...]}` in the order asked, each in the product row shape of `search_products` (no `score`, no `match_reasons`). Covers the supplier catalogs and this kitchen's own products, never another kitchen's. A code that is not found is left out; it is not an error. Proposed; the gateway does not serve it yet. |
@@ -491,7 +495,7 @@ Known gap: the three token routes do not check yet that the signed-in person bel
 | POST, PUT, DELETE | `/recipes`, `/recipes/{id}` | `kitchen:write` | Create, change or delete a recipe. |
 | GET | `/menu-plans/{week}` | `kitchen:read` | The week's menu plan (shape below). |
 | PUT | `/menu-plans/{week}` | `kitchen:write` | Menus per day: recipe + expected covers. `week` is ISO `YYYY-Www`. |
-| GET | `/demand?from=&to=` | `kitchen:read` | Future need per product and day, from the menu plan and history. |
+| GET | `/demand?from=&to=` | `kitchen:read` | Future need per product and day, from the menu plan and history. At most 62 days. Shape under "Body shapes: stock and demand". |
 | GET | `/forecast?from=&to=` | `kitchen:read` | The engine's forecast per product and day. Shape under "Forecasts". |
 | GET | `/forecast-accuracy?from=&to=` | `kitchen:read` | Past forecasts against what the kitchen really needed, per week. Shape under "Forecasts". |
 | GET | `/suppliers`, `/suppliers/{id}` | `kitchen:read` | Suppliers and their terms: free-delivery threshold, fee, order days, cut-off, lead time, discount tiers. User-set; demo values are placeholders. |
@@ -508,9 +512,11 @@ Known gap: the three token routes do not check yet that the signed-in person bel
 | GET | `/orders/{id}/resolution` | `kitchen:approve` (human) | What our store knows about an order whose send result is unknown. Shape under "Resolving an unknown send". |
 | POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
-| PUT | `/sharing` | `kitchen:write` | Consent: which suppliers may see this kitchen's forecast. Every change is an audit entry. |
+| PUT | `/sharing` | human, role `approver` | Consent for one supplier: body `supplier_id`, `share_forecast` (boolean). Answer: the whole list, as `GET`. Every change is an audit entry. |
 | GET | `/settings` | `kitchen:read` | Kitchen settings: how the engine sizes orders and what the Buyer may propose. Shape below. |
-| PUT | `/settings` | `kitchen:write` (human) | Change settings. Only the fields in the body change. Every change is an audit entry. Proposed; the gateway does not serve these two routes yet. |
+| PUT | `/settings` | human, role `approver` | Change settings. Only the fields in the body change. Every change is an audit entry. |
+| GET | `/auto-approve` | `kitchen:read` | Earned auto-approve: the setting and the learning progress. Shape under "Earned auto-approve". |
+| PUT | `/auto-approve` | human, role `approver` | Switch auto-approve on (with a limit) or off. 409 `LEARNING_PERIOD` before the learning period is done. |
 | GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
 | GET | `/drift` | `kitchen:read` | Standing-order drift for the last full week: products whose order per 100 guests (`portion_creep`) or spend per 100 guests (`cost_creep`) is 15% or more above the 4 weeks before. Shape below. Served (`gateway/drift_routes.py` over `store.drift.standing_order_drift`). |
 | GET | `/audit/verify` | `kitchen:read` | Check the audit hash chain now. Shape below. Proposed, like the next three rows; the gateway does not serve them yet. |
@@ -527,6 +533,25 @@ Known gap: the three token routes do not check yet that the signed-in person bel
 | DELETE | `/webhooks/{id}` | human, role `approver` | Remove the webhook and its delivery log. |
 | POST | `/webhooks/{id}/test` | human, role `approver` | Send one signed `ping` now, one attempt. Answer: the delivery row. |
 | GET | `/webhooks/{id}/deliveries` | human, role `approver` | `{"deliveries": [...]}`: the last 50 deliveries, newest first. |
+
+**Planning routes (#642).** `gateway/kitchen_routes.py` serves suppliers, recipes, own
+products, menu plans, stock counts, stock, demand, settings and sharing.
+
+- `kitchen:write` means a signed-in person who is not a `viewer` (403 `ROLE_REQUIRED`
+  for a viewer), or a kitchen API token with `kitchen:write` (403 `SCOPE_REQUIRED`
+  without it). The Buyer agent token cannot write.
+- `PUT /settings` and `PUT /sharing` need an approver: 403 `HUMAN_SESSION_REQUIRED` for
+  a token or the agent, 403 `ROLE_REQUIRED` for a chef or a viewer.
+- Lists answer `{"suppliers": [...]}`, `{"recipes": [...]}` and `{"products": [...]}`.
+  Create and change answer the row. Delete answers `{"deleted": true}`. An unknown id is
+  404 `NOT_FOUND`. A store rule that is broken is 422 `INVALID_REQUEST` with the reason.
+- `GET /menu-plans/{week}` of a week without a plan answers `days: []`.
+- Every write is an audit entry: `suppliers_created`, `suppliers_changed`,
+  `suppliers_deleted` (the same for `recipes_` and `products_`), `menu_plan_changed`,
+  `stock_counted`, `settings_changed`, `share_granted`, `share_revoked`.
+- Gap: only `POST /stock-counts` replays a repeat `idempotency_key`. The supplier,
+  recipe, product and menu-plan writes ignore the key, so a repeated create makes a
+  second row.
 
 Proposal `status`, as the gateway returns it (#529):
 
@@ -945,6 +970,79 @@ A part:
   Its totals are ex VAT; a figure a person approves still comes from a simulation.
 - The `LATER` part uses the first schedule line the supplier returns for each product.
 
+### Earned auto-approve (#618)
+
+Off by default. A kitchen can switch it on only after the gateway has learned from its
+own human decisions. `gateway/autoapprove.py` holds every rule.
+
+`GET /v1/kitchens/{kitchen_id}/auto-approve` (`kitchen:read`):
+
+```json
+{
+  "enabled": false, "limit_eur": null, "set_by": null, "set_at": null,
+  "learning": {"weeks": 2, "weeks_needed": 4, "decisions": 11, "decisions_needed": 20,
+               "edit_rate": 0.05, "max_edit_rate": 0.1, "learning_done": false},
+  "never": ["ALLERGEN_DATA_MISSING", "ALLERGEN_RULE", "BLOCKED_BY_RECALL", "..."],
+  "max_limit_eur": "2000"
+}
+```
+
+- `learning_done` is true when all three hold: at least 4 weeks since the first human
+  decision, at least 20 human decisions (approve or reject), and at most 10% of the
+  approved proposals edited before approval. Auto-approvals never count.
+- `never`: the reason codes that always send a proposal to a person.
+
+`PUT /v1/kitchens/{kitchen_id}/auto-approve` with `{"enabled": true, "limit_eur": "500"}`
+or `{"enabled": false}`. Human session, role `approver`. No `idempotency_key`. The
+answer is the `GET` shape. Switching off is at once and keeps the last limit.
+
+| Status | Code | When |
+|---|---|---|
+| 403 | `HUMAN_SESSION_REQUIRED` | The caller is a token or the agent. |
+| 403 | `ROLE_REQUIRED` | The person is not an `approver`. |
+| 409 | `LEARNING_PERIOD` | `enabled: true` before `learning_done`. |
+| 422 | `INVALID_REQUEST` | `enabled` is not a boolean; `limit_eur` is not a number, is 0 or less, or is above 2000. |
+
+Each change writes an audit entry `auto_approve_changed` (`enabled`, `limit_eur`).
+
+When it is on, `POST /proposals` approves a new proposal without waiting only when all
+of these hold: the total is at or under the limit; no warning; no reason code from
+`never`; nothing excluded; every line has confirmed stock; nothing short; not an event
+and not a recall replacement; every product was already on at least 3 human-approved
+orders of this kitchen whose lines were not edited. Any doubt or error: the proposal
+waits for a person (`READY`).
+
+- The approval runs the normal approve path, with the same live re-check (a moved price
+  still refuses with `TOTAL_MISMATCH`; the proposal then stays `READY`).
+- `order.approved_by` and the approval's `decided_by` are
+  `"auto-approve (rule set by <person>)"`, the approver who switched it on.
+- The audit entry `auto_approved` comes first, with `proposal_id`, `expected_total` and
+  `evidence` (`limit_eur`, `rule_set_by` and the `learning` fields).
+- Proposals the Buyer opens through `/tools/request_approval` are never auto-approved.
+
+### Signed offers (#676)
+
+Every offer and proposal carries `signature` and `offer_hash`: `get_offer`,
+`simulate_order`, `GET /proposals`, `GET /proposals/{id}` and `POST /proposals`. Both are null
+when signing failed; signing never fails a quote.
+
+- `signature` is a compact JWS, algorithm `EdDSA` (Ed25519), header `kid`. Claims:
+  `iss` (`trusted-kitchen-buyer`), `sub` (the `offer_id`), `kitchen_id`,
+  `requested_date`, `iat` (as-of), `exp` (valid until), `source`, `currency` (`EUR`),
+  `expected_total`, `lines` (`product_id`, `quantity`, `unit`, `unit_price`,
+  `stock: "confirmed" | "unknown"`) and `offer_hash`.
+- `offer_hash` is the SHA-256 hex of the delivery date, the total and each line
+  (product, quantity, unit, unit price), with numbers in one spelling (`1.40` = `1.4`).
+- `GET /.well-known/jwks.json` (no token) returns the public key:
+  `{"keys": [{"kty": "OKP", "crv": "Ed25519", "x": "...", "kid": "...", "use": "sig", "alg": "EdDSA"}]}`.
+  `python -m gateway.verify_offer --base-url <gateway> --offer offer.json` checks one
+  offer; a changed line, price or total, another key or an expired offer fails.
+- The key is `GATEWAY_SIGNING_KEY` (base64 of a 32-byte seed) from the server
+  environment. Without it, the gateway creates one key and keeps it in the database.
+- An approved order stores the `offer_hash` of the offer the person approved.
+  `place_order` for an offer whose `offer_hash` differs is 409 `APPROVAL_MISMATCH`.
+  An order without a stored `offer_hash` (older, or signing failed) skips this check.
+
 ### Supplier side
 
 **We call them (adapter contract).** Each supplier is one adapter with the same five
@@ -958,8 +1056,8 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 |---|---|---|---|
 | GET | `/orders` | `supplier:read-orders` | Orders that kitchens approved for this supplier. |
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
-| GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. |
-| GET | `/demand/shortage-risk` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability. |
+| GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. Served (#662). |
+| GET | `/demand/shortage-risk?from=&to=` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability, or the availability is unknown. Served (#662). |
 | GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Today only a person's session passes: no token can hold `supplier:demand` yet. |
 | POST | `/offers` | `supplier:read-orders` | Proactive offer to a kitchen (substitute, promotion). It shows up as a suggestion, never as an order. |
 
@@ -967,7 +1065,7 @@ A supplier only sees demand from kitchens whose `/sharing` consent names it.
 
 ### Body shapes: stock and demand
 
-Proposed for the routes above. Quantities are decimal strings in the stated `unit`.
+Served (#642, #662). Quantities are decimal strings in the stated `unit`.
 `null` means unknown, never zero.
 
 **Units.** There are two unit lists, both upper-case, and a field uses exactly one:
@@ -1008,7 +1106,8 @@ Response: `{"stock_count_id": "...", "stored": 2}`.
 | `product_id`, `unit` | string | |
 | `on_hand` | decimal string or null | The last count; null when never counted or counted as unknown. |
 | `counted_at` | timestamp or null | |
-| `on_order` | decimal string | Approved orders not yet delivered. |
+| `on_order` | decimal string | Approved orders not yet delivered. Today always `"0"`: open orders are in supplier units and not converted yet. |
+| `on_order_known` | boolean | `false` while `on_order` is not converted (today always). Never read `on_order` as a real zero when this is `false`. |
 | `position` | decimal string or null | `on_hand` + `on_order`; null when `on_hand` is null. |
 | `next_delivery_date` | date or null | |
 
@@ -1020,25 +1119,36 @@ per product and day:
 | `product_id`, `date`, `unit` | string | |
 | `covers` | integer or null | Expected guests that day. |
 | `gross_need` | decimal string | Covers x recipe quantity. |
-| `net_need` | decimal string or null | `gross_need` minus stock and stock on order; null when the stock is unknown. |
-| `source` | `"menu_plan"` or `"history"` | Where the forecast comes from. |
+| `net_need` | decimal string or null | `gross_need` minus the stock `position`; null when the stock is unknown. |
+| `why` | string | How the need was computed, for example `"180 x 0.1 KG (Carrot soup, 85% yield)"`, or `"forecast from history"`. |
+| `source` | `"menu_plan"` or `"history"` | Where the forecast comes from. A day without a menu plan uses the stored forecast. |
 
-`GET /v1/suppliers/{supplier_id}/demand?from=&to=&product=` returns `from`, `to` and
-`rows`, one per product and delivery day, across kitchens that consented:
+The answer also has `problems`: short strings for menu-plan entries that could not be
+counted (a recipe that does not exist, an entry without covers). A window longer than
+62 days, or `to` before `from`, is 422 `INVALID_REQUEST`.
+
+`GET /v1/suppliers/{supplier_id}/demand?from=&to=&product=` returns `supplier_id`,
+`from`, `to`, `kitchens_sharing` (how many kitchens have active consent for this
+supplier) and `rows`, one per product and delivery day, across kitchens that consented.
+The window is at most 14 days (422 `INVALID_REQUEST` otherwise):
 
 | Field | Type | Notes |
 |---|---|---|
 | `product_id`, `date`, `unit` | string | |
-| `demand` | decimal string | Sum of the kitchens' `net_need`. |
+| `product_name` | string or null | The English catalog name; null when the catalog has none. |
+| `demand` | decimal string | Sum of the kitchens' stored forecast need. |
 | `kitchens` | integer | How many consenting kitchens the sum covers. |
 | `by_kitchen` | `{kitchen_id, kitchen_name, demand}[]` | One entry per consenting kitchen with demand that day; `demand` above is their sum. A kitchen without active consent appears nowhere: not in the sum, not in this list. |
-| `available` | decimal string or null | The supplier's stated availability; null when unknown. |
+| `available` | decimal string or null | The supplier's live availability, in kitchen units; null when unknown (a stock sentinel, a sales block, no live answer, or no unit conversion). |
 | `shortage` | decimal string or null | `demand` minus `available` when positive; null when `available` is null. |
 | `risk` | `"OK"`, `"SHORT"` or `"UNKNOWN"` | `UNKNOWN` when `available` is null. |
-| `suggested_buy` | decimal string or null | What the supplier should buy to cover the shortage. |
+| `suggested_buy` | decimal string or null | `shortage` rounded up to a whole unit; null when `shortage` is null. |
 
-`GET /v1/suppliers/{supplier_id}/demand/shortage-risk` returns the same rows, only
-those whose `risk` is not `OK`.
+`GET /v1/suppliers/{supplier_id}/demand/shortage-risk` returns the same answer, with
+only the rows whose `risk` is not `OK` (so `SHORT` and `UNKNOWN`).
+
+Both routes: a kitchen token and the Buyer agent token get 403 `SCOPE_REQUIRED` (no
+token can hold `supplier:demand` yet). A signed-in person passes the scope check.
 
 ### Trust: audit verification and the live event stream
 
@@ -1089,6 +1199,18 @@ data: {"operation": "insert", "document": {"proposal_id": "...", "status": "READ
 - Nothing is replayed after a reconnect: the client loads the lists again, then listens.
 - The browser's `EventSource` cannot send an `Authorization` header; the web client
   reads the stream with `fetch`.
+
+**Conformance kit (#609).** `python -m gateway.conformance --base-url <gateway> --token
+<token> [--kitchen demo-kitchen] [--markdown | --json]` checks a running gateway's trust
+rules with an agent-level token. It places no order and opens no approval. Twelve checks,
+C01 to C12: `/health` answers; no token is 401; `GET /permissions` is served; the
+gateway sizes the order from the stored need and ignores a model quantity;
+`simulate_order` returns the offer's total with a verdict; `place_order` without a human
+approval is 403 `NEEDS_APPROVAL`; the token cannot approve or reject (403) or create
+tokens (403); no cancel or edit route exists for an order (404 or 405); a kitchen token
+reading another kitchen is 403 `KITCHEN_SCOPE` (skipped for a server agent token); an
+unknown offer is 404 `OFFER_NOT_FOUND`; the MCP tool list has no approve, reject or
+cancel tool. A check is PASS, FAIL or SKIP; any FAIL gives exit code 1.
 
 ### Standing-order drift
 
@@ -1258,8 +1380,10 @@ strings in the stated unit.
 
 ### Consent record (forecast sharing)
 
-One record per kitchen and supplier. `GET /sharing` returns the list; `PUT /sharing`
-replaces it.
+One record per kitchen and supplier. `GET /sharing` returns `{"sharing": [...]}`.
+`PUT /sharing` with `{supplier_id, share_forecast}` grants or revokes one supplier and
+returns the whole list. A missing `supplier_id` or a `share_forecast` that is not a
+boolean is 422 `INVALID_REQUEST`.
 
 ```json
 {
@@ -1323,9 +1447,9 @@ standing order; to drop one product, send the map without it. Each value must be
 positive decimal string; 0, a negative number or another type is a 422. The answer is
 the full settings as `GET` returns them.
 
-- Only a human user session may change settings; an API key or the Buyer's token gets
-  403 `HUMAN_SESSION_REQUIRED`. The settings decide what the Buyer may propose, so the
-  Buyer cannot relax them.
+- Only a human user session of an approver may change settings; an API key or the
+  Buyer's token gets 403 `HUMAN_SESSION_REQUIRED`, a chef or viewer 403 `ROLE_REQUIRED`.
+  The settings decide what the Buyer may propose, so the Buyer cannot relax them.
 - Each change writes one audit entry `settings_changed` with the user and, per changed
   field, the value before and after.
 - The web client maps its own names to these: `serviceLevelPercent` (percent) to
@@ -1545,8 +1669,8 @@ What the view adds to an alert:
 - Body: `{"idempotency_key": "<1 to 200 characters>"}`. A missing or wrong key is 422
   `INVALID_REQUEST`.
 - Scope `kitchen:write`. A signed-in person who is not a `viewer` has it (403
-  `ROLE_REQUIRED` for a viewer). No kitchen token and no agent token holds
-  `kitchen:write` today (403 `SCOPE_REQUIRED`).
+  `ROLE_REQUIRED` for a viewer). A kitchen API token has it only when it was created
+  with `kitchen:write`; the agent token never has it (403 `SCOPE_REQUIRED`).
 - A repeat `idempotency_key` scrapes nothing and applies nothing: it answers the stored
   `last_check` of that check with the alerts as they are now.
 - Cooldown (#652): a new `idempotency_key` sent while this kitchen's newest check is
@@ -1666,8 +1790,9 @@ Refusals before any send are errors, not outcomes: `TOTAL_MISMATCH` (409: re-sim
 and ask the human again), `STOCK_UNKNOWN` (409: the supplier has not confirmed the stock
 of a line; nothing is recorded and the proposal stays `READY`), `BLOCKED_BY_RECALL`
 (409: a recall holds the proposal; look at its replacement proposal), `NOT_PENDING`
-(409: the proposal is not `READY`), `HUMAN_SESSION_REQUIRED` (403), `ROLE_REQUIRED`
-(403), `IDEMPOTENCY_KEY_REUSED` (409). No adapter retries a POST automatically.
+(409: the proposal is not `READY`), `APPROVAL_MISMATCH` (409: `place_order` names an
+offer other than the one the person approved), `HUMAN_SESSION_REQUIRED` (403),
+`ROLE_REQUIRED` (403), `IDEMPOTENCY_KEY_REUSED` (409). No adapter retries a POST automatically.
 
 The way out of `UNCONFIRMED` and `SENT_READ_FAILED` is "Resolving an unknown send": a
 person records `placed` or `not_sent`. Its refusals are `ORDER_NOT_RESOLVABLE` (409) and
