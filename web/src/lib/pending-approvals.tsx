@@ -32,10 +32,13 @@ export function PendingApprovalsProvider({
   const [version, setVersion] = useState(0);
   useEffect(() => {
     let active = true;
-    api
-      .listApprovals()
-      .then((approvals) => {
-        if (active) setCount(approvals.filter((approval) => approval.status === "PENDING").length);
+    (api.countPendingApprovals
+      ? api.countPendingApprovals()
+      : api.listApprovals().then(
+          (approvals) => approvals.filter((approval) => approval.status === "PENDING").length,
+        ))
+      .then((count) => {
+        if (active) setCount(count);
       })
       .catch(() => {
         // Unknown is not zero: no badge until the next successful load.
