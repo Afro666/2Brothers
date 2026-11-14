@@ -797,6 +797,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         return {"event_id": entry["event"]["event_id"], "stored": True}
 
     # Standing-order drift (#377): kitchen and supplier views.
+    from gateway.product_page import mount_product_page   # one product's page (#1603)
+    mount_product_page(app, gw, principal)
     from gateway.drift_routes import mount_drift
     mount_drift(app, gw, principal)
     from gateway.supplier_routes import mount_supplier   # the wholesaler's demand view (#33)
