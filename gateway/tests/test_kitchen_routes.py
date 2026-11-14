@@ -219,3 +219,21 @@ def test_a_repeated_idempotency_key_replays_planning_writes(env):
     assert kinds.count("menu_plan_changed") == 1 and kinds.count("suppliers_created") == 2
     blank = client.post(K + "/suppliers", headers=HUMAN, json={"name": "x", "adapter": "manual", "idempotency_key": ""})
     assert blank.status_code == 422
+
+
+def test_demand_forecast_window_uses_the_callers_local_day_bounds():
+    """#705: a forecast stored at 00:30 local (UTC+2) falls inside that local day's window."""
+    from datetime import datetime, timedelta, timezone
+
+    import mongomock
+
+    from gateway.kitchen_routes import demand_rows
+    db = mongomock.MongoClient().db
+    local = timezone(timedelta(hours=2))
+    db.forecasts.insert_one({"ts": datetime(2026, 11, 16, 0, 30, tzinfo=local), "need": 3.0, "unit": "KG",
+                             "meta": {"kitchen_id": "k-tz", "product_id": "460708"}})
+    day = date(2026, 11, 16)
+    rows, _ = demand_rows(db, "k-tz", day, day, day, local)
+    assert [r["product_id"] for r in rows if r["source"] == "history"] == ["460708"]
+    rows, _ = demand_rows(db, "k-tz", day, day, day, timezone.utc)
+    assert not [r for r in rows if r["source"] == "history"]

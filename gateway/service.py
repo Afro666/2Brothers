@@ -415,7 +415,7 @@ class Gateway:
             raise GatewayError(422, "INVALID_REQUEST", "from and to must be YYYY-MM-DD") from None
         if end < start or (end - start).days > 31:
             raise GatewayError(422, "INVALID_REQUEST", "from must be on or before to, at most 31 days apart")
-        rows, problems = demand_rows(self.db, kitchen_id, start, end, self.now().date())
+        rows, problems = demand_rows(self.db, kitchen_id, start, end, self.now().date(), self.now().tzinfo)
         total: dict[tuple[str, str], Decimal] = {}
         uncounted: set[str] = set()
         for row in rows:
