@@ -542,6 +542,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | POST | `/recalls/{event_id}/dismiss` | `kitchen:approve` (human) | A person dismisses one alert after checking the packs. Body: `reason`. Shape in [recall-contract.md](recall-contract.md). |
 | GET | `/label-checks` | `kitchen:read` | Recorded Hyvää Suomesta producer checks for catalog products 462535, 462576 and 462775, plus one synthetic `negative_control`. Answer: `{"checks": [...], "negative_control": {...}}`. Shape in [product-evidence-contract.md](product-evidence-contract.md). |
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
+| GET | `/model-usage` | `kitchen:read` | How much the Buyer agent used its model for this kitchen: runs, model calls, tokens, seconds. Shape under "Model usage". |
 | GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
 | POST, GET | `/webhooks` | human, role `approver` | Register a webhook (body `url`, `events`) or list them. Shape under "Webhooks". |
 | DELETE | `/webhooks/{id}` | human, role `approver` | Remove the webhook and its delivery log. |
@@ -737,6 +738,19 @@ reference, the outcome before.
    kitchen_id}` to `BUYER_WORKER_URL/run` with the agent token, plus `event: true` when
    the request was an event. The worker keeps `event` on the need it stores, so every
    line gets `EVENT_LINE`. Its answer is returned as it is.
+   That answer is the proposal in the `GET /proposals/{id}` shape, plus three fields
+   that only this answer has (a later `GET /proposals/{id}` does not have them):
+   - `buyer_run_id`: the Buyer run that made the proposal; its audit steps carry it.
+   - `buyer_model`: the model the Buyer ran on, `"nemotron-3.5-super-vl"`.
+   - `buyer_usage`: what the model used for this request, from the endpoint's own
+     counts (`agent/usage.py`): `{"calls": 7, "failed": 0, "prompt_tokens": 41250,
+     "completion_tokens": 1830, "reasoning_tokens": 0, "seconds": 38.412}`. Integers,
+     but `seconds` is a number with at most 3 decimals. `reasoning_tokens` is a part
+     of `completion_tokens`. A run that was started again counts both attempts. The
+     field is missing when the model client has no meter.
+
+   A replay with the same key returns the same answer, with the same three fields.
+   The sum over a kitchen's runs is under "Model usage".
 2. The deterministic parser (`gateway/parse.py`), only when the worker is not
    configured, or when its error carries `fallback_safe: true`. Any other worker error is
    returned as it is: the worker may already have made a proposal, so the gateway never
@@ -1565,6 +1579,38 @@ tokens (403); no cancel or edit route exists for an order (404 or 405); a kitche
 reading another kitchen is 403 `KITCHEN_SCOPE` (skipped for a server agent token); an
 unknown offer is 404 `OFFER_NOT_FOUND`; the MCP tool list has no approve, reject or
 cancel tool. A check is PASS, FAIL or SKIP; any FAIL gives exit code 1.
+
+### Model usage (#365)
+
+`GET /v1/kitchens/{kitchen_id}/model-usage` (`kitchen:read`) sums the `buyer_usage` of
+this kitchen's Buyer runs (`db.agent_runs`, one row per free-text `POST /proposals` that
+reached the Buyer worker):
+
+```json
+{"model": "nemotron-3.5-super-vl", "since": "2026-11-14T18:02:11+00:00",
+ "runs": 14, "finished_runs": 11, "runs_without_usage": 5,
+ "model_calls": 63, "prompt_tokens": 371250, "completion_tokens": 16470,
+ "reasoning_tokens": 0, "model_seconds": "345.7",
+ "last_run_at": "2026-11-14T22:40:03+00:00"}
+```
+
+- `runs`: every Buyer run of the kitchen. `finished_runs`: the runs that ended with a
+  proposal (state `READY`).
+- `runs_without_usage`: the runs that carry no `buyer_usage`: a run from before the
+  meter, a run that did not end with a proposal, a run that is not finished yet. The
+  five sums below count only the other runs, so `runs - runs_without_usage` is the
+  number of runs behind them.
+- `model_calls`, `prompt_tokens`, `completion_tokens`, `reasoning_tokens`: integers.
+  `reasoning_tokens` is a part of `completion_tokens`. A count that is missing or is not
+  a whole number of 0 or more adds 0.
+- `model_seconds`: a decimal string with one decimal, the time the model calls took.
+- `since` and `last_run_at`: when the oldest counted run started and when the newest
+  counted run finished, UTC. Both `null` when no run is counted.
+- A kitchen with no runs gets the same shape: every count `0`, `model_seconds` `"0.0"`,
+  both times `null`. Never a 404.
+- `model` is the Buyer's model name, the same value as `buyer_model` on a proposal answer.
+- Counts only: no request text, no reply text, no key.
+- Where it shows: the About page.
 
 ### Standing-order drift
 
