@@ -137,6 +137,36 @@ describe("ForecastPage", () => {
     expect(screen.queryByRole("combobox", { name: "Show" })).not.toBeInTheDocument();
   });
 
+  it("calls a past week with no stock count unknown, and starts the forecast band at the first week ahead", async () => {
+    const scored = (week: string) => ({ week, predicted: 100, actual: 100, wape: 0.05, bias: 0, under: 2, over: 2, series: 3 });
+    const blank = { predicted: 0, actual: 0, wape: 0, bias: 0, under: 0, over: 0, series: 0 };
+    const weeks = [scored("2026-W43"), { week: "2026-W44", ...blank }, scored("2026-W45")];
+    const accuracy = {
+      methods: {
+        engine: { total: scored("total"), weeks },
+        "weekday-average": { total: scored("total"), weeks },
+      },
+    };
+    renderApp(
+      "/forecast",
+      apiWith(async () => mapForecastAccuracy(accuracy, { lines: [{ date: "2026-11-10", need: "50" }] })),
+    );
+
+    const chart = await screen.findByRole("img", { name: "Needed and predicted per week" });
+    expect(chart).toHaveAccessibleDescription(/^3 past weeks .* 1 future weeks with the forecast only\./);
+    expect(chart.querySelector('rect[x="75%"]')).toHaveAttribute("width", "25%");
+
+    const rows = weekRows();
+    expect(rows.map((row) => row.dataset.week)).toEqual(["2026-W43", "2026-W44", "2026-W45", "2026-W46"]);
+    const gap = within(rows[1])
+      .getAllByRole("cell")
+      .map((cell) => cell.textContent);
+    expect(gap[0]).not.toContain("Forecast only");
+    expect(gap.slice(1)).toEqual(["unknown", "unknown", "unknown", "unknown", "unknown"]);
+    expect(rows[3]).toHaveTextContent("Forecast only");
+    expect(within(rows[3]).getAllByRole("cell")[1]).toHaveTextContent("not yet");
+  });
+
   it("says so when the kitchen has no forecast history", async () => {
     const nothing = { total: { predicted: 0, actual: 0, wape: 0, bias: 0, under: 0, over: 0, series: 0 }, weeks: [] };
     renderApp(

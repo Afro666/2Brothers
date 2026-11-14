@@ -33,16 +33,19 @@ def _dec(value) -> Decimal | None:
 
 
 class SupplierAdapter(Protocol):
+    when: dict[str, dict]
+
     def offers(self, product_ids: list[str], measure: str,
                requested_date: date) -> tuple[list[Offer], Skipped, Tax]:
-        """Offers the engine can plan with, the products left out (with a reason), VAT rates."""
+        """Offers the engine can plan with, the products left out (with a reason), VAT rates.
+        After the call, `when` holds per product the delivery facts a line shows (#531)."""
 
 
 class ValioAdapter:
     """Live Valio price and availability, converted for the engine."""
 
     def __init__(self, db, valio):
-        self.db, self.valio = db, valio
+        self.db, self.valio, self.when = db, valio, {}
 
     def offers(self, product_ids: list[str], measure: str,
                requested_date: date) -> tuple[list[Offer], Skipped, Tax]:
@@ -85,6 +88,8 @@ class ValioAdapter:
                 labels=tuple(doc.get("labels") or ()),
             ))
             tax[pid] = _dec((price.get("tax") or {}).get("taxRate")) or Decimal(0)
+            self.when[pid] = {"available_date": available_date, "cutoff_passed": stock.get("cutoff_passed"),
+                              "closing_time": stock.get("closingTime")}
         return offers, skipped, tax
 
 
@@ -113,6 +118,7 @@ class ManualAdapter:
 
     def __init__(self, db, kitchen_id: str, supplier: dict, now: Callable[[], datetime]):
         self.db, self.kitchen_id, self.supplier, self.now = db, kitchen_id, supplier, now
+        self.when: dict[str, dict] = {}
 
     def offers(self, product_ids: list[str], measure: str,
                requested_date: date) -> tuple[list[Offer], Skipped, Tax]:
@@ -143,6 +149,8 @@ class ManualAdapter:
                                 allergen_data_known=not allergen_codes(row),
                                 labels=tuple(row.get("labels") or ()), stock_source=name))
             tax[pid] = None                            # no VAT rate on an own product
+            self.when[pid] = {"available_date": delivery.isoformat() if delivery else None,
+                              "cutoff_passed": cutoff_passed, "closing_time": None}
         return offers, skipped, tax
 
 

@@ -67,7 +67,8 @@ Ports 22, 80 and 443 must be open.
   `docker compose --env-file <your .env> -f deploy/compose.yaml up --build` (it needs the values above).
 The internal Nemotron `buyer` worker (#279) uses the same application image with
 the `two-brothers-buyer-worker` entrypoint. Set `VERDA_INFERENCE_KEY` in the server
-`.env` before deploying this service. It receives the agent token and Mongo URI,
+`.env` for this service. The key is optional for compose: without it web and gateway
+still deploy, and the buyer returns 503 `BUYER_UNAVAILABLE` until the key is set. It receives the agent token and Mongo URI,
 not the human token or upstream Valio key. No worker port is published.
 `BUYER_WORKER_URL` on the gateway routes free-text proposal requests to it.
 

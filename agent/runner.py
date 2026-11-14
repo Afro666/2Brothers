@@ -43,6 +43,8 @@ class PolicyReason(str, Enum):
     UNKNOWN_ID = "UNKNOWN_ID"
     OFFER_INVALID = "OFFER_INVALID"
     RUN_MISMATCH = "RUN_MISMATCH"
+    TOOL_NOT_ALLOWED = "TOOL_NOT_ALLOWED"
+    HUMAN_APPROVAL_REQUIRED = "HUMAN_APPROVAL_REQUIRED"
     POLICY_VIOLATION = "POLICY_VIOLATION"
 
 
@@ -136,7 +138,7 @@ class Buyer:
 
     def authorize(self, name, args, schemas):
         if name not in TOOLS or name not in schemas:
-            raise PolicyError("Tool is not allowed")
+            raise PolicyError("Tool is not allowed", PolicyReason.TOOL_NOT_ALLOWED)
         if name == "place_order" and isinstance(args, dict):
             # The runner owns the idempotency key; ignore any model-sent value.
             args.pop("idempotency_key", None)
@@ -232,7 +234,8 @@ class Buyer:
             if not isinstance(decided, datetime) or decided.tzinfo is None or decided > self.now():
                 raise ValueError()
         except Exception:
-            raise PolicyError("Recorded human approval is required for this offer") from None
+            raise PolicyError("Recorded human approval is required for this offer",
+                              PolicyReason.HUMAN_APPROVAL_REQUIRED) from None
 
     def final(self, status, reason, **extra):
         if self.substitute_options:

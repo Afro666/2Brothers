@@ -27,6 +27,19 @@ class Nemotron:
         body = {"model": "nemotron-3.5-super-vl", "messages": messages,
                 "tools": tools, "tool_choice": "auto", "temperature": 0,
                 "max_tokens": 2048}
+        return await self._post(body)
+
+    async def complete_json(self, messages, schema, name, *, max_tokens=2048):
+        """One structured reply: the server constrains the output to `schema` (strict).
+        Thinking is off; the caller still validates the parsed object."""
+        body = {"model": "nemotron-3.5-super-vl", "messages": messages, "temperature": 0,
+                "max_tokens": max_tokens,
+                "response_format": {"type": "json_schema",
+                                    "json_schema": {"name": name, "schema": schema, "strict": True}},
+                "chat_template_kwargs": {"enable_thinking": False}}
+        return await self._post(body)
+
+    async def _post(self, body):
         for attempt in range(3):
             try:
                 response = await self.http.post("chat/completions", json=body)

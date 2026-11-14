@@ -377,3 +377,13 @@ def test_lost_attempt_response_retains_claim_for_reconciliation(env, monkeypatch
     body['idempotency_key'] = 'different-key'
     assert client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body).status_code == 409
     assert db.orders.count_documents({}) == 1
+
+
+def test_offer_lines_carry_delivery_date_and_cut_off(env):
+    """#531: each line says when it arrives and whether its order cut-off has passed (S01)."""
+    client, _, _ = env
+    line = milk(client, quantity="1000")["lines"][0]
+    assert line["product_id"] == "462775"
+    assert line["available_date"] == "2026-11-16"
+    assert line["cutoff_passed"] is False
+    assert line["closing_time"].startswith("2026-11-15T")
