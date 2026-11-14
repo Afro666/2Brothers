@@ -184,18 +184,19 @@ function Decision({ row }: { row: Proposal }) {
 
 function Refusal({ row, message }: { row: Proposal; message: string }) {
   // The per-product lines are shown once, folded: the plain sentence is what a person reads.
+  const t = useT();
   const leftOut = texts(row.decision_summary?.left_out);
   const products = leftOut?.length ? leftOut : (texts(row.mandate?.reasons) ?? []).slice(1);
   return (
     <>
-      <section className="hatch space-y-3 break-words" role="status" aria-label="Nothing can be ordered">
-        <h2 className="label-caps">Nothing can be ordered</h2>
+      <section className="hatch space-y-3 break-words" role="status" aria-label={t("Nothing can be ordered")}>
+        <h2 className="label-caps">{t("Nothing can be ordered")}</h2>
         <p className="max-w-[68ch] text-lg font-semibold leading-7">
-          {message || <span className="unknown-value">unknown</span>}
+          {message || <span className="unknown-value">{t("unknown")}</span>}
         </p>
         {products.length ? (
           <details className="text-sm">
-            <summary className="cursor-pointer font-medium">Products that were left out</summary>
+            <summary className="cursor-pointer font-medium">{t("Products that were left out")}</summary>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {products.map((reason, index) => (
                 <li key={index}>{reason}</li>
@@ -204,15 +205,15 @@ function Refusal({ row, message }: { row: Proposal; message: string }) {
           </details>
         ) : null}
       </section>
-      <section className="space-y-2" aria-label="What the guards said">
-        <h2 className="label-caps">What the guards said</h2>
+      <section className="space-y-2" aria-label={t("What the guards said")}>
+        <h2 className="label-caps">{t("What the guards said")}</h2>
         <p className="text-sm">
-          Verdict:{" "}
-          <Badge variant="destructive" className="stamp rounded-sm border-2 border-danger bg-transparent text-danger">Refused</Badge>
+          {t("Verdict:")}{" "}
+          <Badge variant="destructive" className="stamp rounded-sm border-2 border-danger bg-transparent text-danger">{t("Refused")}</Badge>
         </p>
-        <p className="text-sm">The kitchen’s allergen rule refused this request before any agent ran.</p>
+        <p className="text-sm">{t("The kitchen’s allergen rule refused this request before any agent ran.")}</p>
       </section>
-      <p className="border-t border-dashed border-input pt-3 text-sm">No order has been placed.</p>
+      <p className="border-t border-dashed border-input pt-3 text-sm">{t("No order has been placed.")}</p>
     </>
   );
 }
