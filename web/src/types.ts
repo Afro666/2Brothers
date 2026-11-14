@@ -518,6 +518,21 @@ export interface SharingConsent {
   shared: boolean;
 }
 
+/** One checked line of the supplier planner's buying note (#1176). */
+export interface BuyingNoteLine {
+  productId: string;
+  productName: string;
+  date: string;
+  risk: ShortageRisk;
+  text: string;
+}
+
+/** The buying note the gateway writes from the shortage-risk rows; null when it was dropped. */
+export interface BuyingNote {
+  model: string;
+  lines: BuyingNoteLine[];
+}
+
 export type DemandClass = "A" | "B" | "C";
 
 export interface CoverRule {

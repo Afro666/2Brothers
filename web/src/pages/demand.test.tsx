@@ -234,4 +234,51 @@ describe("DemandPage", () => {
     const link = within(alert).getByRole("link", { name: /^Go to next week, Week \d+/ });
     expect(link).toHaveAttribute("href", "/demand");
   });
+
+  it("shows no buying note box without a note", async () => {
+    renderApp("/demand?week=2026-W47", createMockApi());
+    await demandTableReady();
+    expect(screen.queryByRole("heading", { name: "Buying note" })).not.toBeInTheDocument();
+  });
+
+  it("shows the buying note lines under a Written by note", async () => {
+    const api: Api = createMockApi();
+    api.getBuyingNote = async () => ({
+      model: "nemotron-3.5-super-vl",
+      lines: [
+        { productId: "462775", productName: "Arla lactose-free milk", date: "2026-11-16", risk: "SHORT",
+          text: "Forecast 2400 L from 6 kitchens: buy 700 L more." },
+        { productId: "462921", productName: "Wheat flour 2 kg", date: "2026-11-17", risk: "UNKNOWN",
+          text: "Availability unknown for 3 kitchens: ask the mill." },
+      ],
+    });
+    renderApp("/demand?week=2026-W47", api);
+
+    const box = await screen.findByRole("region", { name: "Buying note" });
+    const items = within(box).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent("Arla lactose-free milk");
+    expect(items[0]).toHaveTextContent("Mon 16 Nov");
+    expect(items[0]).toHaveTextContent("Forecast 2400 L from 6 kitchens: buy 700 L more.");
+    expect(items[0]).toHaveAttribute("data-note-risk", "SHORT");
+    expect(items[1]).toHaveAttribute("data-note-risk", "UNKNOWN");
+    expect(box).toHaveTextContent(
+      "Written by nemotron-3.5-super-vl. Every number is checked against its row in the table.",
+    );
+  });
+
+  it("renders the table before a slow note arrives", async () => {
+    const api: Api = createMockApi();
+    let resolve: ((note: Awaited<ReturnType<Api["getBuyingNote"]>>) => void) | undefined;
+    api.getBuyingNote = () => new Promise((done) => { resolve = done; });
+    renderApp("/demand?week=2026-W47", api);
+
+    await demandTableReady();
+    expect(screen.queryByRole("heading", { name: "Buying note" })).not.toBeInTheDocument();
+    resolve?.({
+      model: "nemotron-3.5-super-vl",
+      lines: [{ productId: "462775", productName: "Arla lactose-free milk", date: "2026-11-16", risk: "SHORT", text: "Buy more." }],
+    });
+    expect(await screen.findByRole("heading", { name: "Buying note" })).toBeInTheDocument();
+  });
 });

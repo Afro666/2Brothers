@@ -28,6 +28,7 @@ import type {
   ForecastAccuracy,
   DriftReport,
   BuyerPermissions,
+  BuyingNote,
   AutoApproveLearning,
   RecallList,
   KitchenBrandLookup,
@@ -499,6 +500,11 @@ export interface Api {
   getSharing(): Promise<SharingConsent[]>;
   setSharing(supplierId: string, shared: boolean, actor: AuditActor): Promise<SharingConsent[]>;
   getSupplierDemand(from: string, to: string): Promise<SupplierDemandRow[]>;
+  /**
+   * Nemotron 3.5 Super VL's short buying note over the same window as the demand table.
+   * Null when there is nothing to say, the note was dropped, or the gateway failed.
+   */
+  getBuyingNote(from: string, to: string, language: "en" | "fi"): Promise<BuyingNote | null>;
   getKitchenSettings(): Promise<KitchenSettings>;
   saveKitchenSettings(settings: KitchenSettings, actor: AuditActor): Promise<KitchenSettings>;
   /** Predicted against actual for the last 12 full weeks, and the forecast for this week and the 3 after. */
