@@ -236,13 +236,19 @@ def _check(gw: Gateway, kitchen_id: str, event_id: str, actor: str) -> dict:
     view = recall_view(gw, kitchen_id)
     for alert in view["alerts"]:
         found = _found(alert)
-        if found is None:
+        alert_id = alert.get("event_id")
+        if found is None or not alert_id:
             continue
-        webhooks.dispatch(gw.db, kitchen_id, "recall_found", {
-            "case": "FOUND", "recall_event_id": alert["event_id"], "product_id": alert["product_id"],
-            "product_name": alert["product_name"], "match": alert["match"], "found": found,
-            "notice_url": alert["recall"]["url"], "next_step": alert["next_step"]},
-            once_key=alert["event_id"])
+        recall = alert.get("recall")
+        try:    # a malformed stored alert or a webhook problem never fails the check
+            webhooks.dispatch(gw.db, kitchen_id, "recall_found", {
+                "case": "FOUND", "recall_event_id": alert_id, "product_id": alert.get("product_id"),
+                "product_name": alert.get("product_name"), "match": alert.get("match"), "found": found,
+                "notice_url": recall.get("url") if isinstance(recall, dict) else None,
+                "next_step": alert.get("next_step")},
+                once_key=alert_id)
+        except Exception:   # noqa: BLE001
+            continue
     event = {"event_id": event_id, "kind": "recall_check", "actor": actor, **facts,
              "alerts": [alert["event_id"] for alert in view["alerts"]],
              "proposals_held": sorted({row["proposal_id"] for alert in view["alerts"]
