@@ -12,6 +12,17 @@ beforeEach(() => vi.stubEnv("VITE_LIVE_BUYER", "true"));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const json = (body: unknown) => new Response(JSON.stringify(body));
 
+it("shows a recall hold, lot and pending replacement without an approval action on the original", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [{ ...row, status: "BLOCKED_BY_RECALL",
+    replacement_proposal_id: "replacement1", recall_alerts: [{ product_id: "462775", match: "possible",
+      recall: { url: "https://www.ruokavirasto.fi/notice", title: "Recorded recall", lot: "Lot 2027" } }] }] })));
+  renderApp("/approvals");
+  expect(await screen.findByText(/BLOCKED_BY_RECALL: 462775/)).toHaveTextContent("Lot 2027");
+  expect(screen.getByRole("link", { name: "Official recall notice" })).toHaveAttribute("href", "https://www.ruokavirasto.fi/notice");
+  expect(screen.getByRole("link", { name: /Review replacement/ })).toHaveAttribute("href", "#proposal-replacement1");
+  expect(screen.queryByRole("button", { name: /Approve .*149/ })).toBeNull();
+});
+
 it("loads real proposals and requires explicit confirmation before recording one exact order", async () => {
   const fetch = vi.fn().mockResolvedValueOnce(json({ proposals: [row] })).mockResolvedValueOnce(json({ order_id: "order1", expected_total: "149.02" }));
   vi.stubGlobal("fetch", fetch);
