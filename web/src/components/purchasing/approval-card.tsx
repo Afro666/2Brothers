@@ -302,7 +302,7 @@ export function ApprovalCard({
                     {order.lines.map((line) => (
                       <li key={line.product.id} className="space-y-3 py-3">
                         <div className="flex items-center gap-2">
-                          <ProductThumb size="sm" en={line.product.names.en} fi={line.product.names.fi} />
+                          <ProductThumb size="sm" en={line.product.names.en} fi={line.product.names.fi} brand={line.product.brand} />
                           <div className="font-medium">{line.product.names.en}</div>
                         </div>
                         <div>
