@@ -58,12 +58,18 @@ def test_approve_is_scoped_to_the_card_of_the_request_it_sent():
     with pytest.raises(RuntimeError, match="200 L milk"):
         decide(_Fake(log))     # no card for this request: nothing is clicked
     assert log == [("locator", '[data-slot="card"]'), ("text", "200 L milk", True), ("filter",),
+                   ("role", "button", "Choose option"), ("role", "button", "Option A"),
                    ("role", "button", "Choose option"), ("role", "button", "Approve")]
 
 
 class _Button:
-    def __init__(self, name, clicks, enabled=True):
+    def __init__(self, name, clicks, enabled=True, expanded=None, reveals=None):
         self.name, self.clicks, self.enabled = name, clicks, enabled
+        self.expanded, self.reveals = expanded, reveals      # a folded option header and what it shows
+
+    def get_attribute(self, name):
+        assert name == "aria-expanded"
+        return self.expanded
 
     def is_enabled(self):
         return self.enabled
@@ -73,6 +79,10 @@ class _Button:
 
     def click(self):
         self.clicks.append(self.name)
+        if self.reveals:
+            group, button = self.reveals
+            group.append(button)
+            self.expanded = "true"
 
 
 class _Group:
@@ -119,6 +129,25 @@ class _Page:
 
     def wait_for_timeout(self, ms):
         pass
+
+
+def test_a_folded_option_a_is_opened_to_reach_choose_option():
+    """The inbox folds the options (seen live on 2026-11-14): "Choose option A" is not on the
+    page until "Option A" is opened, and the plain Approve is disabled."""
+    clicks, buttons = [], []
+    choose = _Button("Choose option A: approve", clicks)
+    buttons += [_Button("Option A: 698 ST 463380", clicks, expanded="false", reveals=(buttons, choose)),
+                _Button("Option B: 698 ST + 302 ST", clicks, expanded="false"),
+                _Button("Approve", clicks, enabled=False)]
+    _decide()(_Page(buttons, clicks))
+    assert clicks == ["Option A: 698 ST 463380", "Choose option A: approve", "Yes, approve"]
+
+
+def test_an_open_option_a_is_not_folded_again():
+    clicks = []
+    buttons = [_Button("Option A: 100 ST", clicks, expanded="true"), _Button("Approve", clicks)]
+    _decide()(_Page(buttons, clicks))
+    assert clicks == ["Approve", "Yes, approve"]
 
 
 def _decide():
