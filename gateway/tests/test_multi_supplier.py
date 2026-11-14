@@ -181,3 +181,38 @@ def test_manual_delivery_rule():
     assert manual_delivery({**terms, "order_days": []}, MON, at(11)) == (None, None)
     assert manual_delivery({**terms, "lead_time_days": None}, MON, at(11)) == (None, None)
     assert manual_delivery({**terms, "cutoff_time": None}, MON, at(11)) == (None, None)
+
+
+def approve(client, p, key):
+    return client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                       json={"expected_total": p["expected_total"], "idempotency_key": key})
+
+
+def test_switch_on_a_manual_block_can_be_approved_and_waits_for_the_supplier(env):
+    """#631, off by default: with the kitchen's switch on, Valio (confirmed) + the bakery
+    (stock unknown) can be approved; the order names the supplier that must confirm."""
+    client, _, db = env
+    bakery(db, BAKERY_DAYS, adapter="manual")
+    assert client.put(K + "/settings", headers=HUMAN, json={"approve_unconfirmed_manual": True}).status_code == 200
+    p = propose(client, ids=("462775", OAT))
+    assert any("You may approve it" in r for r in p["mandate"]["reasons"])
+    r = approve(client, p, "a1")
+    assert r.status_code == 200, r.text
+    assert r.json()["supplier_must_confirm"] == ["sup-bakery"]
+    assert db.orders.find_one({})["supplier_must_confirm"] == ["sup-bakery"]
+
+
+def test_switch_on_still_refuses_unknown_valio_stock(env):
+    client, _, db = env
+    bakery(db, BAKERY_DAYS, adapter="manual")
+    client.put(K + "/settings", headers=HUMAN, json={"approve_unconfirmed_manual": True})
+    p = propose(client, quantity="100", ids=("463335",))     # Valio's own line with unknown stock
+    assert p["lines"] and all(ln["unknown_stock"] for ln in p["lines"])
+    r = approve(client, p, "a2")
+    assert r.status_code == 409 and r.json()["error"]["code"] == "STOCK_UNKNOWN"
+    assert db.orders.count_documents({}) == 0
+
+
+def test_the_switch_must_be_a_boolean(env):
+    client, _, _ = env
+    assert client.put(K + "/settings", headers=HUMAN, json={"approve_unconfirmed_manual": "yes"}).status_code == 422

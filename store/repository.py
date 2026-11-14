@@ -40,7 +40,7 @@ DEMAND_CLASSES = ("A", "B", "C")
 COVER_CATEGORIES = ("fresh_dairy", "vegetables", "meat", "fish", "frozen", "dry", "other")
 BUDGET_WARNINGS = ("budget_warning_order_eur", "budget_warning_week_eur")
 SETTINGS = ("service_level", "max_cover_days", "stockout_cap", *BUDGET_WARNINGS,
-            "excluded_allergens", "standing_orders")
+            "excluded_allergens", "standing_orders", "approve_unconfirmed_manual")
 _CLOCK = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 _WEEK = re.compile(r"\d{4}-W(0[1-9]|[1-4]\d|5[0-3])")
 _PRODUCT_CODE = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -287,6 +287,12 @@ def settings_fields(data: dict) -> dict:
         except ValueError:
             raise ValueError(message) from None
         out["excluded_allergens"] = codes
+    if "approve_unconfirmed_manual" in data:
+        # #631, off by default: a person may approve a manual/csv supplier's block whose stock
+        # is unknown; the order then waits for that supplier's confirmation. Valio stock stays strict.
+        if not isinstance(data["approve_unconfirmed_manual"], bool):
+            raise ValueError("approve_unconfirmed_manual must be true or false")
+        out["approve_unconfirmed_manual"] = data["approve_unconfirmed_manual"]
     if "standing_orders" in data:
         # Per product: the standing order per delivery, in sales units (#380, S08). The
         # whole map is replaced, never merged (contract #414): {} clears them all.
