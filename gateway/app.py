@@ -16,7 +16,8 @@ from decimal import InvalidOperation
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from gateway.service import Gateway, GatewayError
 
@@ -70,7 +71,21 @@ def _env_principal(request: Request, token: str) -> Principal:
 
 
 def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
-    app = FastAPI(title="Trusted Kitchen Buyer gateway", version="0.1.0")
+    app = FastAPI(
+        title="Trusted Kitchen Buyer gateway", version="0.1.0",
+        description=("REST and MCP gateway between a kitchen's Buyer agent and its suppliers. "
+                     "The engine sizes every quantity, a person approves every order, every step is audited. "
+                     "Why it is built this way: docs/choices.md. Field-level rules: docs/contract.md."),
+        # Behind Caddy the gateway lives under /api (people) and /gateway (agents with a bearer token).
+        servers=[{"url": "/api", "description": "demo site, as a person"},
+                 {"url": "/gateway", "description": "agents, with a bearer token"},
+                 {"url": "/", "description": "local run"}],
+        docs_url=None, redoc_url=None)
+
+    @app.get("/docs", include_in_schema=False)
+    async def _docs() -> HTMLResponse:
+        # A relative spec URL, so /api/docs loads /api/openapi.json and not the web app's /openapi.json (#278).
+        return get_swagger_ui_html(openapi_url="openapi.json", title="Trusted Kitchen Buyer gateway - API")
     state: dict[str, Gateway] = {}
 
     def gw() -> Gateway:
@@ -235,6 +250,11 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         who.need("kitchen:read", kitchen_id)
         return gw().reject(kitchen_id, proposal_id, await body(request), human=who.human)
 
+    @app.post(k + "/recalls/{event_id}/dismiss")
+    async def dismiss_recall(kitchen_id: str, event_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need('kitchen:read', kitchen_id)
+        return gw().dismiss_recall(kitchen_id, event_id, await body(request), human=who.human)
+
     @app.post(k + "/needs")
     async def create_need(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose", kitchen_id)
@@ -249,6 +269,19 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     def get_order(kitchen_id: str, order_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
         return gw().get_order(kitchen_id, order_id)
+
+    # ---- unknown send (#291): a person records what happened; never a resend -------
+    @app.get(k + "/orders/{order_id}/resolution")
+    def order_resolution(kitchen_id: str, order_id: str, who: Principal = Depends(principal)):
+        from gateway import resolve
+        who.need("kitchen:read", kitchen_id)
+        return resolve.lookup(gw(), kitchen_id, order_id, human=who.human)
+
+    @app.post(k + "/orders/{order_id}/resolve")
+    async def resolve_order(kitchen_id: str, order_id: str, request: Request, who: Principal = Depends(principal)):
+        from gateway import resolve
+        who.need("kitchen:read", kitchen_id)
+        return resolve.resolve(gw(), kitchen_id, order_id, await body(request), human=who.human)
 
     @app.get(k + "/forecast-accuracy")
     def forecast_accuracy(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
@@ -266,6 +299,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
             raise GatewayError(422, "INVALID_REQUEST", "from and to (YYYY-MM-DD) are required")
         return gw().forecast(kitchen_id, q["from"], q["to"])
 
+    @app.get(k + "/permissions")
+    def permissions_matrix(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
+        from gateway import permissions
+        return permissions.matrix()
+
     @app.get(k + "/audit")
     def audit(kitchen_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
@@ -274,6 +313,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     # ---- API tokens (#271): a person creates and revokes them; tokens never approve ----
     @app.post(k + "/tokens")
     async def create_token(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can create a token")
@@ -288,6 +328,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.get(k + "/tokens")
     def list_tokens(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can list tokens")
@@ -295,6 +336,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.delete(k + "/tokens/{token_id}")
     def revoke_token(kitchen_id: str, token_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can revoke a token")
@@ -303,6 +345,68 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
             raise GatewayError(404, "TOKEN_NOT_FOUND", "no such token")
         gw()._audit(kitchen_id, "token_revoked", who.human, token_id=token_id)
         return out
+
+    # ---- Webhooks (#277): an approver registers them; the secret is shown once ---------
+    def hook_admin(who: Principal, kitchen_id: str) -> str:
+        who.need("kitchen:read", kitchen_id)        # a session is bound to its kitchen
+        if not who.human:
+            raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can manage webhooks")
+        return who.human
+
+    def hook_or_404(kitchen_id: str, webhook_id: str) -> dict:
+        from gateway import webhooks
+        hook = webhooks.get(gw().db, kitchen_id, webhook_id)
+        if hook is None:
+            raise GatewayError(404, "WEBHOOK_NOT_FOUND", "no such webhook")
+        return hook
+
+    @app.post(k + "/webhooks")
+    async def create_webhook(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        from gateway import webhooks
+        person = hook_admin(who, kitchen_id)
+        data = await body(request)
+        try:
+            out = webhooks.register(gw().db, kitchen_id, data.get("url"), data.get("events"), person)
+        except webhooks.WebhookError as exc:
+            raise GatewayError(422, "INVALID_REQUEST", str(exc)) from None
+        gw()._audit(kitchen_id, "webhook_created", person, webhook_id=out["webhook_id"],
+                    url=out["url"], events=out["events"])
+        return out
+
+    @app.get(k + "/webhooks")
+    def list_webhooks(kitchen_id: str, who: Principal = Depends(principal)):
+        from gateway import webhooks
+        hook_admin(who, kitchen_id)
+        return {"webhooks": webhooks.list_hooks(gw().db, kitchen_id), "events": list(webhooks.EVENTS)}
+
+    @app.delete(k + "/webhooks/{webhook_id}")
+    def delete_webhook(kitchen_id: str, webhook_id: str, who: Principal = Depends(principal)):
+        from gateway import webhooks
+        person = hook_admin(who, kitchen_id)
+        out = webhooks.delete(gw().db, kitchen_id, webhook_id)
+        if out is None:
+            raise GatewayError(404, "WEBHOOK_NOT_FOUND", "no such webhook")
+        gw()._audit(kitchen_id, "webhook_deleted", person, webhook_id=webhook_id)
+        return {**out, "deleted": True}
+
+    @app.post(k + "/webhooks/{webhook_id}/test")
+    def test_webhook(kitchen_id: str, webhook_id: str, who: Principal = Depends(principal)):
+        """One signed `ping`, one attempt, so the person sees the result at once."""
+        from gateway import webhooks
+        hook_admin(who, kitchen_id)
+        hook_or_404(kitchen_id, webhook_id)
+        rows = webhooks.deliver(gw().db, kitchen_id, webhooks.PING, {"webhook_id": webhook_id},
+                                hook_id=webhook_id, attempts=1)
+        if not rows:
+            raise GatewayError(502, "WEBHOOK_TEST_FAILED", "the ping could not be sent")
+        return rows[0]
+
+    @app.get(k + "/webhooks/{webhook_id}/deliveries")
+    def webhook_deliveries(kitchen_id: str, webhook_id: str, who: Principal = Depends(principal)):
+        from gateway import webhooks
+        hook_admin(who, kitchen_id)
+        hook_or_404(kitchen_id, webhook_id)
+        return {"deliveries": webhooks.deliveries(gw().db, kitchen_id, webhook_id)}
 
     # ---- Buyer agent tools (one kitchen per agent token in the demo) ----------------
     def kitchen(who: Principal | None = None) -> str:
@@ -314,12 +418,14 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     @app.post("/tools/search_products")
     async def search(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:read")
-        from store.search import search_products
         data = await body(request)
         limit = data.get("limit", 20)
         if not isinstance(limit, int) or not 1 <= limit <= 50:
             raise GatewayError(422, "INVALID_REQUEST", "limit: 1 to 50")
-        return {"products": search_products(gw().db, data.get("query") or "", data.get("filters") or {}, limit)}
+        need_id = data.get("need_id")
+        if need_id is not None and not isinstance(need_id, str):
+            raise GatewayError(422, "INVALID_REQUEST", "need_id must be a string")
+        return gw().tool_search(kitchen(who), data.get("query") or "", data.get("filters") or {}, limit, need_id)
 
     @app.post("/tools/get_offer")
     async def get_offer(request: Request, who: Principal = Depends(principal)):
@@ -364,9 +470,20 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
             raise GatewayError(409, "IDEMPOTENCY_CONFLICT", "event_id reused with other content") from None
         return {"event_id": entry["event"]["event_id"], "stored": True}
 
+    # Standing-order drift (#377): kitchen and supplier views.
+    from gateway.drift_routes import mount_drift
+    mount_drift(app, gw, principal)
+
+    # Onboarding lookup (#375): Context.dev brand lookup for the sign-up form.
+    from gateway.onboarding import mount_onboarding
+    mount_onboarding(app, principal, body)
+
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp
     mount_mcp(app)
+    # Agent discovery (#293): /.well-known/agent-card.json and /llms.txt, built from this app.
+    from gateway.discovery import mount_discovery
+    mount_discovery(app)
     return app
 
 

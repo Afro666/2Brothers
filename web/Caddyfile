@@ -53,6 +53,15 @@
 		}
 	}
 
+	# Agent discovery (#293): the gateway writes both files from its own routes.
+	# Public, read-only, no token; the same files are at /gateway/llms.txt.
+	handle /llms.txt {
+		reverse_proxy gateway:8000
+	}
+	handle /.well-known/agent-card.json {
+		reverse_proxy gateway:8000
+	}
+
 	handle {
 		root * /srv
 		# The web app routes in the browser: unknown paths get index.html.

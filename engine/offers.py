@@ -14,9 +14,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
+from typing import TYPE_CHECKING
 
 from engine.packs import PackInfo, to_sales_units
 from engine.params import KitchenParams
+
+if TYPE_CHECKING:
+    from engine.partial import PartialFill   # partial.py imports this module
 
 CENT = Decimal("0.01")
 
@@ -35,6 +39,7 @@ class Offer:
     carbon: float | None = None         # kg CO2e per kg, product-group average; None = unknown
     labels: tuple[str, ...] = ()
     allergen_data_known: bool | None = True   # False or None: ALLERGEN_DATA_MISSING (S02)
+    stock_source: str = "Valio"         # who would report the stock (a manual supplier: its name)
 
     @property
     def price_per_measure(self) -> Decimal:
@@ -67,6 +72,7 @@ class RequestPlan:
     reason_codes: tuple[str, ...]
     warnings: tuple[str, ...] = ()
     alternative: "RequestPlan | None" = field(default=None)
+    partial: "PartialFill | None" = field(default=None)   # engine/partial.py (#288)
 
 
 def _n(x: Decimal) -> str:
@@ -174,7 +180,7 @@ def _fill(need: Decimal, measure: str, usable: list[Offer], *, confirmed_first: 
         why = (f"{_n(qty)} {o.pack.sales_unit} of {o.name} = {_n(qty * o.pack.size)} {measure}: "
                f"{'price' if o.product_id in notes else 'cheapest'} per {measure} "
                f"({_n(o.price_per_measure.quantize(CENT))} EUR), "
-               "but Valio does not report its stock, so it is not confirmed"
+               f"but {o.stock_source} does not report its stock, so it is not confirmed"
                + (f"; {notes[o.product_id]}" if o.product_id in notes else "") + ".")
         lines.append(_line(o, qty, line_codes, why))
         codes.update(line_codes)
@@ -222,4 +228,8 @@ def plan_request(need: Decimal, measure: str, offers: list[Offer], requested: da
     alt = build(confirmed_first=False)
     if alt.lines and alt.shortfall <= plan.shortfall and alt.total < plan.total and alt.lines != plan.lines:
         plan = RequestPlan(**{**plan.__dict__, "alternative": alt})
+    from engine.partial import partial_fill   # imported here: partial.py imports this module
+    part = partial_fill(need, measure, offers, requested, event=event)
+    if part is not None:
+        plan = replace(plan, partial=part)
     return plan

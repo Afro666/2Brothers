@@ -392,3 +392,22 @@ def test_an_event_need_marks_every_offer_line_event_line(env):
     offer = client.post("/tools/get_offer", headers=AGENT,
                         json={"need_id": plain["need_id"], "product_ids": ["462775"]}).json()
     assert not any("EVENT_LINE" in ln["reason_codes"] for ln in offer["lines"])
+
+
+def test_offer_lines_carry_delivery_date_and_cut_off(env):
+    """#531: each line says when it arrives and whether its order cut-off has passed (S01)."""
+    client, _, _ = env
+    line = milk(client, quantity="1000")["lines"][0]
+    assert line["product_id"] == "462775"
+    assert line["available_date"] == "2026-11-16"
+    assert line["cutoff_passed"] is False
+    assert line["closing_time"].startswith("2026-11-15T")
+
+
+def test_api_docs_load_the_spec_relative_to_their_own_path(env):
+    """#278: behind Caddy the docs live at /api/docs, so the spec URL must be relative."""
+    client, _, _ = env
+    page = client.get("/docs")
+    assert page.status_code == 200 and "url: 'openapi.json'" in page.text
+    spec = client.get("/openapi.json").json()
+    assert spec["servers"][0]["url"] == "/api" and "docs/choices.md" in spec["info"]["description"]

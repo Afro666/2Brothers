@@ -19,22 +19,22 @@ from uuid import uuid4
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 
-from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, allergen_codes, pack_info,
+from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, pack_info,
                     pad_to_free_delivery, plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from gateway.decision import decision_summary
+from gateway.partial_fill import partial_out
+from gateway.suppliers import VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers
 from store import audit, orders, recalls
 from store.audit import canonical
 from store.history import current_stock
-from store.products import get_product
 
 DEMAND_DAYS = 28                    # usage history behind the daily demand of addable rows
 REVIEW_DAYS = 3.0                   # days to the delivery after next, until order days are wired
 CENT = Decimal("0.01")
 TOLERANCE = Decimal("0.005")
 OFFER_TTL = timedelta(minutes=15)   # Aron, 2026-11-14 (#19 answer F)
-VALIO = "sup-valio"
 
 
 class GatewayError(Exception):
@@ -51,6 +51,19 @@ def _money(x: Decimal) -> str:
 
 def _dec(value) -> Decimal | None:
     return None if value is None else Decimal(str(value))
+
+
+def _text(value) -> str | None:
+    return None if value is None else str(value)
+
+
+_LINE_NUMBERS = ("reliability", "carbon_kg_co2e_per_kg")
+
+
+def _line_out(line: dict) -> dict:
+    """A stored offer or order line as the API answers it: the two dataset values are numbers
+    (docs/contract.md), kept as text in Mongo because the store refuses a binary float (#570)."""
+    return {**line, **{key: float(line[key]) for key in _LINE_NUMBERS if line.get(key) is not None}}
 
 
 def _hash(payload: dict) -> str:
@@ -71,6 +84,11 @@ class Gateway:
     def _audit(self, kitchen_id: str, kind: str, actor: str, **data) -> None:
         event = {"event_id": uuid4().hex, "kind": kind, "actor": actor, **data}
         audit.append_event(self.db, event, {"kitchen_id": kitchen_id, "at": self.now().isoformat()})
+        try:    # webhooks (#277): after the event is stored; a receiver can never break an order
+            from gateway import webhooks
+            webhooks.dispatch(self.db, kitchen_id, kind, data)
+        except Exception:
+            pass
 
     def _params(self, kitchen_id: str) -> KitchenParams:
         doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}) or {}
@@ -93,88 +111,124 @@ class Gateway:
         doc = self.db.suppliers.find_one({"kitchen_id": kitchen_id, "adapter": "valio_api"}) or {}
         return doc.get("terms") or {}
 
-    def _offers(self, product_ids: list[str], measure: str, requested: date) -> tuple[list[Offer], list[tuple[str, str]], dict]:
-        """Live Valio offers for these products, converted for the engine."""
-        prices = {p["productId"]: p for p in self.valio.price(product_ids, requested.isoformat())["products"]}
-        avail = {p["productId"]: p for p in self.valio.availability(product_ids, requested.isoformat())["products"]}
-        offers, skipped, tax = [], [], {}
-        for pid in product_ids:
-            doc = get_product(self.db, pid, raw=True)
-            price, stock = prices.get(pid) or {}, avail.get(pid) or {}
-            if doc is None or not doc.get("raw"):
-                skipped.append((pid, "not in the catalog"))
-                continue
-            if price.get("error") or not (price.get("catalogPrice") or {}).get("value"):
-                skipped.append((pid, "no price from Valio"))
-                continue
-            lines = stock.get("scheduleLines") or []
-            if not lines:
-                skipped.append((pid, "Valio cannot deliver it on any date"))
-                continue
-            unit_price = _dec(price["catalogPrice"]["value"])
-            cmp = price.get("comparisonPrice") or {}
-            try:
-                pack = pack_info(doc["raw"], price=unit_price, comparison_price=_dec(cmp.get("value")),
-                                 comparison_unit=price.get("comparisonUnit"), measure=measure)
-            except PackDataError as exc:
-                skipped.append((pid, f"pack size unknown: {exc}"))
-                continue
-            line = lines[0]
-            available_date = line.get("availableDate")
-            offers.append(Offer(
-                pid, (doc.get("names") or {}).get("en") or doc.get("name") or pid, pack, unit_price,
-                _dec(line.get("availableAmount")),   # the client already turned sentinels into None
-                stock.get("cutoff_passed"),
-                date.fromisoformat(available_date) if available_date else None,
-                bool(stock.get("salesBlock") or line.get("salesBlock")),
-                allergen_data_known=not allergen_codes(doc),   # unknown allergen data is never safe (S02, S04)
-                reliability=doc.get("reliability"),            # Valio CSV, delivered / ordered
-                carbon=doc.get("carbon_kg_co2e_per_kg"),       # product-group average
-                labels=tuple(doc.get("labels") or ()),
-            ))
-            tax[pid] = _dec((price.get("tax") or {}).get("taxRate")) or Decimal(0)
-        return offers, skipped, tax
+    def _supplier(self, kitchen_id: str, supplier_id: str) -> dict | None:
+        """The kitchen's supplier row; Valio is the row with the `valio_api` adapter."""
+        if supplier_id == VALIO:
+            doc = self.db.suppliers.find_one({"kitchen_id": kitchen_id, "adapter": "valio_api"}) or {}
+            return {"name": "Valio Aimo", "adapter": "valio_api", **doc, "supplier_id": VALIO}
+        return self.db.suppliers.find_one({"kitchen_id": kitchen_id, "supplier_id": supplier_id})
 
-    def _simulate(self, kitchen_id: str, plan: RequestPlan, tax: dict, skipped: list) -> dict:
-        terms = self._terms(kitchen_id)
+    def _offers(self, kitchen_id: str, product_ids: list[str], measure: str,
+                requested: date) -> tuple[list[Offer], list[tuple[str, str]], dict, dict[str, str], dict]:
+        """Live offers per supplier (gateway/suppliers.py), the supplier of each product, and per
+        product the delivery facts each line shows: available_date, cutoff_passed, closing_time (#531).
+        A catalog product is Valio's; an own product belongs to its `supplier_id`."""
+        groups: dict[str, list[str]] = {}
+        for pid in product_ids:
+            row = self.db.products.find_one({"_id": pid, "source": "own", "kitchen_id": kitchen_id},
+                                            {"supplier_id": 1})
+            groups.setdefault(row["supplier_id"] if row else VALIO, []).append(pid)
+        offers, skipped, tax, supplier_of, when = [], [], {}, {}, {}
+        for supplier_id, ids in groups.items():
+            supplier = self._supplier(kitchen_id, supplier_id)
+            if supplier is None:
+                skipped.extend((pid, f"supplier {supplier_id} is not set up") for pid in ids)
+                continue
+            adapter = (ValioAdapter(self.db, self.valio) if supplier_id == VALIO
+                       else ManualAdapter(self.db, kitchen_id, supplier, self.now))
+            found, left_out, rates = adapter.offers(ids, measure, requested)
+            when.update(adapter.when)
+            offers.extend(found)
+            skipped.extend(left_out)
+            tax.update(rates)
+            supplier_of.update({pid: supplier_id for pid in ids})
+        return offers, skipped, tax, supplier_of, when
+
+    def _block(self, supplier: dict, lines: list, tax: dict) -> dict:
+        """One supplier's part of a basket: its lines and its own user-set terms."""
+        terms = supplier.get("terms") or {}
         threshold = _dec(terms.get("free_delivery_threshold_eur"))
         fee_value = _dec(terms.get("delivery_fee_eur"))
-        net = plan.total
-        vat = sum((ln.total * tax.get(ln.product_id, Decimal(0)) / 100 for ln in plan.lines), Decimal(0))
+        net = sum((ln.total for ln in lines), Decimal(0))
+        rates = [tax.get(ln.product_id, Decimal(0)) for ln in lines]
+        vat = None if any(rate is None for rate in rates) else sum(
+            (ln.total * rate / 100 for ln, rate in zip(lines, rates)), Decimal(0))
         if threshold is None or fee_value is None:
             mov_gap = fee = None          # unknown terms: never shown as zero
         else:
             mov_gap = max(threshold - net, Decimal(0))
             fee = fee_value if mov_gap > 0 else Decimal(0)
-        expected = net + vat + (fee or Decimal(0))
+        return {"supplier_id": supplier["supplier_id"], "name": supplier.get("name"),
+                "net": net, "vat": vat, "mov_gap": mov_gap, "fee": fee,
+                "expected": net + (vat or Decimal(0)) + (fee or Decimal(0)), "lines": lines}
+
+    def _simulate(self, kitchen_id: str, plan: RequestPlan, tax: dict, skipped: list,
+                  supplier_of: dict[str, str] | None = None, when: dict | None = None) -> dict:
+        supplier_of, when = supplier_of or {}, when or {}
+        unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None}
+        by_supplier: dict[str, list] = {}
+        for ln in plan.lines:
+            by_supplier.setdefault(supplier_of.get(ln.product_id, VALIO), []).append(ln)
+        blocks = [self._block(self._supplier(kitchen_id, sid), lines, tax)
+                  for sid, lines in by_supplier.items()]
+        # The top-level gap and fee are those of the only supplier; with several, read `blocks`.
+        # No line at all: Valio's terms on an empty basket, as before #73.
+        if len(blocks) > 1:
+            mov_gap = fee = None
+        else:
+            only = blocks[0] if blocks else self._block(self._supplier(kitchen_id, VALIO), [], tax)
+            mov_gap, fee = only["mov_gap"], only["fee"]
+        net = plan.total
+        vat = sum((b["vat"] or Decimal(0) for b in blocks), Decimal(0))
+        expected = sum((b["expected"] for b in blocks), Decimal(0)) if blocks else only["expected"]
         excluded = [*plan.excluded, *skipped]
         reasons = [f"{pid}: {why}" for pid, why in excluded]
         if plan.shortfall > 0:
             reasons.append(f"{plan.shortfall.normalize():f} {plan.measure} of the request cannot be covered for this date.")
-        if any(ln.unknown_stock for ln in plan.lines):
+        if any(ln.unknown_stock and supplier_of.get(ln.product_id, VALIO) == VALIO for ln in plan.lines):
             reasons.append("Some lines have stock Valio does not report: not confirmed until Valio confirms.")
+        for b in blocks:
+            if b["supplier_id"] != VALIO:
+                reasons.append(f"{b['name']} is a price list the kitchen entered: its stock is not known "
+                               "until the supplier confirms.")
+            if b["vat"] is None:
+                reasons.append(f"VAT for {b['name']} is not known: its total is ex VAT.")
         verdict = "NEEDS_APPROVAL" if plan.lines else "REFUSED"
+
+        def line_out(ln) -> dict:
+            return {"product_id": ln.product_id, "quantity": f"{ln.quantity.normalize():f}",
+                    "unit": ln.unit, "unit_price": _money(ln.unit_price), "total": _money(ln.total),
+                    "why": ln.why, "unknown_stock": ln.unknown_stock,
+                    "reason_codes": list(ln.reason_codes),
+                    # Stored as text: the store refuses a binary float in an offer (#570).
+                    # _line_out turns both back into numbers for every answer.
+                    "reliability": _text(ln.reliability), "carbon_kg_co2e_per_kg": _text(ln.carbon),
+                    "labels": list(ln.labels), **when.get(ln.product_id, unknown)}
+
+        def money(x: Decimal | None) -> str | None:
+            return None if x is None else _money(x)
+
         return {
             "currency": "EUR",
             "total_ex_vat": _money(net), "vat": _money(vat),
-            "delivery_fee": None if fee is None else _money(fee),
-            "mov_gap": None if mov_gap is None else _money(mov_gap),
+            "delivery_fee": money(fee), "mov_gap": money(mov_gap),
             "expected_total": _money(expected),
             "shortfall": f"{plan.shortfall.normalize():f}", "measure": plan.measure,
             "mandate": {"verdict": verdict, "reasons": reasons,
                         "reason_codes": list(plan.reason_codes), "warnings": list(plan.warnings)},
-            "lines": [{"product_id": ln.product_id, "quantity": f"{ln.quantity.normalize():f}",
-                       "unit": ln.unit, "unit_price": _money(ln.unit_price), "total": _money(ln.total),
-                       "why": ln.why, "unknown_stock": ln.unknown_stock,
-                       "reason_codes": list(ln.reason_codes),
-                       "reliability": ln.reliability, "carbon_kg_co2e_per_kg": ln.carbon,
-                       "labels": list(ln.labels)} for ln in plan.lines],
+            "lines": [line_out(ln) for ln in plan.lines],
+            "blocks": [{"supplier_id": b["supplier_id"], "name": b["name"],
+                        "lines": [line_out(ln) for ln in b["lines"]],
+                        "total_ex_vat": _money(b["net"]), "vat": money(b["vat"]),
+                        "mov_gap": money(b["mov_gap"]), "delivery_fee": money(b["fee"]),
+                        "expected_total": _money(b["expected"])} for b in blocks],
             "excluded": [{"product_id": pid, "reason": why} for pid, why in excluded],
             "alternative": None if plan.alternative is None else {
                 "total_ex_vat": _money(plan.alternative.total),
                 "lines": [{"product_id": ln.product_id, "quantity": f"{ln.quantity.normalize():f}",
                            "unit": ln.unit, "total": _money(ln.total), "why": ln.why}
                           for ln in plan.alternative.lines]},
+            "partial_fill": partial_out(plan.partial),   # confirmed stock now, a plan for the rest (#288)
         }
 
     def _quote(self, kitchen_id: str, request: dict) -> dict:
@@ -184,11 +238,15 @@ class Gateway:
         if need <= 0:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
         blocked = recalls.blocked_ids(self.db, kitchen_id)
-        offers, skipped, tax = self._offers([p for p in request["product_ids"] if p not in blocked], measure, requested)
+        offers, skipped, tax, supplier_of, when = self._offers(
+            kitchen_id, [p for p in request["product_ids"] if p not in blocked], measure, requested)
         skipped.extend((p, 'BLOCKED_BY_RECALL') for p in request['product_ids'] if p in blocked)
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
-        sim = self._simulate(kitchen_id, plan, tax, skipped)
+        tiers = {sid: (self._supplier(kitchen_id, sid).get("terms") or {}).get("discount_tiers") or []
+                 for sid in set(supplier_of.values())}
+        plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
+        sim = self._simulate(kitchen_id, plan, tax, skipped, supplier_of, when)
         now = self.now()
         offer = orders.save_offer(self.db, {
             "offer_id": uuid4().hex, "kitchen_id": kitchen_id, "supplier_id": VALIO,
@@ -279,9 +337,11 @@ class Gateway:
                 **offer["simulation"],
                 "decision_summary": self._summary(doc["request"], offer["simulation"])}
         result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
+        result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []))
         blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
-        result['lines'] = [{**line, **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
+        result['lines'] = [{**_line_out(line), **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
                            for line in result['lines']]
+        result['blocks'] = _blocks_out(result, result['lines'])
         from monitor.labels import checks
         from store.products import get_products
         result['label_checks'] = checks(get_products(self.db,
@@ -342,6 +402,10 @@ class Gateway:
                     self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
                         'status': 'COMMITTING', 'approving_key': key},
                         {'$set': {'status': state}, '$unset': {'approving_key': ''}})
+                elif attempt.get('proposal_id') == proposal_id and attempt['outcome'] is None:
+                    # The attempt never ended: the send result is unknown. The proposal stays
+                    # held; a person resolves the order (gateway/resolve.py, #291).
+                    orders.set_outcome(self.db, attempt['order_id'], outcome='UNCONFIRMED', status=None)
             except Exception:
                 pass  # Cannot prove absence while the database is unavailable.
             raise
@@ -381,11 +445,16 @@ class Gateway:
         if not committed.modified_count:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
         payload = {"offer_id": stored["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}
+        blocks = sim.get("blocks") or [{"supplier_id": VALIO}]   # an offer stored before #73
         order, created = orders.record_attempt(
             self.db, kitchen_id=kitchen_id, idempotency_key=key, offer_id=stored["offer_id"],
             expected_total=Decimal128(sim["expected_total"]),   # exact decimal in any Mongo
             lines=[{k: v for k, v in ln.items() if k != "why"} for ln in sim["lines"]],
-            payload_hash=_hash(payload), proposal_id=proposal_id, supplier_id=VALIO, approved_by=human)
+            payload_hash=_hash(payload), proposal_id=proposal_id, approved_by=human,
+            # One order for the proposal (#73); the supplier split is stored on it.
+            supplier_id=blocks[0]["supplier_id"] if len(blocks) == 1 else None,
+            blocks=[{k: v for k, v in b.items() if k != "lines"}
+                    | {"product_ids": [ln["product_id"] for ln in b.get("lines", [])]} for b in blocks])
         if created:
             if doc.get("approval_id"):
                 orders.decide_approval(self.db, doc["approval_id"], status="APPROVED", decided_by=human)
@@ -403,25 +472,52 @@ class Gateway:
     def reject(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None) -> dict:
         if not human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can reject an order")
-        doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id})
+        reason = body.get('reason', '')
+        if not isinstance(reason, str) or len(reason.strip()) > 500:
+            raise GatewayError(422, 'INVALID_REQUEST', 'reason must be a string of at most 500 characters')
+        doc = recalls.reject_basket(self.db, kitchen_id, proposal_id, human=human,
+                                    reason=reason.strip(), at=self.now().isoformat())
         if doc is None:
             raise GatewayError(404, "PROPOSAL_NOT_FOUND", "no such proposal")
-        if doc["status"] == "REJECTED":
-            return {"proposal_id": proposal_id, "status": "REJECTED"}
-        if doc["status"] != "READY":
+        if doc["status"] != "REJECTED":
             raise GatewayError(409, "NOT_PENDING", f"proposal is {doc['status']}")
-        reason = (body.get("reason") or "").strip()
-        if doc.get("approval_id"):
-            orders.decide_approval(self.db, doc["approval_id"], status="REJECTED", decided_by=human, reason=reason)
-        self.db.proposals.update_one({"_id": proposal_id}, {"$set": {"status": "REJECTED", "reject_reason": reason}})
-        self._audit(kitchen_id, "proposal_rejected", human, proposal_id=proposal_id, reason=reason)
+        event_id = 'proposal-rejected:' + _hash([kitchen_id, proposal_id])
+        first_time = self.db.audit_log.find_one({'event.event_id': event_id}, {'_id': 1}) is None
+        audit.append_event(self.db, {'event_id': event_id,
+            'kind': 'proposal_rejected', 'actor': doc.get('rejected_by', human),
+            'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')},
+            {'kitchen_id': kitchen_id, 'at': doc.get('rejected_at', self.now().isoformat())})
+        if first_time:   # this path writes its audit event itself, so it also tells the webhooks (#277)
+            try:
+                from gateway import webhooks
+                webhooks.dispatch(self.db, kitchen_id, 'proposal_rejected',
+                                  {'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')})
+            except Exception:
+                pass
         return {"proposal_id": proposal_id, "status": "REJECTED"}
+
+    def dismiss_recall(self, kitchen_id: str, event_id: str, body: dict, *, human: str | None) -> dict:
+        if not human:
+            raise GatewayError(403, 'HUMAN_SESSION_REQUIRED', 'only a person can dismiss a recall after checking packs')
+        reason = body.get('reason')
+        if not isinstance(reason, str) or not 10 <= len(reason.strip()) <= 500:
+            raise GatewayError(422, 'INVALID_REQUEST', 'a pack-check reason of 10 to 500 characters is required')
+        row = recalls.dismiss(self.db, kitchen_id, event_id, human=human, reason=reason.strip(), at=self.now().isoformat())
+        if row is None:
+            raise GatewayError(404, 'RECALL_NOT_FOUND', 'no such recall in this kitchen')
+        result = {'event_id': row['_id'], **{key: row[key] for key in
+                  ('status', 'dismissed_by', 'dismissed_at', 'dismiss_reason')}}
+        audit.append_event(self.db, {'event_id': 'recall-dismissed:' + _hash([kitchen_id, event_id]),
+            'kind': 'recall_dismissed', 'actor': row['dismissed_by'], 'recall_event_id': event_id,
+            **{key: value for key, value in result.items() if key != 'event_id'}},
+            {'kitchen_id': kitchen_id, 'at': row['dismissed_at']})
+        return result
 
     @staticmethod
     def _order_out(order: dict) -> dict:
         return {"order_id": order["order_id"], "outcome": order["outcome"], "status": order["status"],
                 "expected_total": _money(Decimal(str(order["expected_total"]))),
-                "lines": order["lines"], "created_at": order["created_at"].isoformat()
+                "lines": [_line_out(ln) for ln in order["lines"]], "created_at": order["created_at"].isoformat()
                 if hasattr(order["created_at"], "isoformat") else order["created_at"]}
 
     def list_orders(self, kitchen_id: str) -> list[dict]:
@@ -450,6 +546,48 @@ class Gateway:
             need["event"] = True      # set by the trusted app, never by the model (#530)
         self.db.needs.insert_one(need)
         return {"need_id": need["_id"], **{k: need[k] for k in ("quantity", "unit", "requested_date", "text")}}
+
+    def tool_search(self, kitchen_id: str, query: str, filters: dict, limit: int,
+                    need_id: str | None = None) -> dict:
+        """Catalog search for the Buyer. With the stored need it becomes a shortlist the
+        Buyer can order from: only products sold in the need's measure (a request in litres
+        never gets chocolate), and products that can still arrive on the requested date
+        first. One availability call for the shortlist only, never for the whole catalog."""
+        search = self._search
+        if search is None:
+            from store.search import search_products as search
+        need = self.db.needs.find_one({"_id": need_id, "kitchen_id": kitchen_id}) if need_id else None
+        if need_id and need is None:
+            raise GatewayError(422, "INVALID_NEED", "unknown need_id")
+        if need is None:
+            return {"products": search(self.db, query, filters, limit)}
+        rows = search(self.db, query, filters, 50)
+        measure = need["unit"]
+        same = [r for r in rows if (r.get("net_content") or {}).get("unit") == measure]
+        filtered = bool(same) and measure in ("L", "KG")
+        if filtered:
+            rows = same
+        rows = rows[:max(limit, 20)]
+        arrival: dict[str, bool | None] = {}
+        try:
+            ids = [r["product_id"] for r in rows if str(r.get("supplier_id") or "sup-valio") == VALIO]
+            if ids:
+                requested = date.fromisoformat(need["requested_date"])
+                for product in self.valio.availability(ids, need["requested_date"])["products"]:
+                    lines = product.get("scheduleLines") or []
+                    day = lines[0].get("availableDate") if lines else None
+                    ok = (bool(lines) and product.get("cutoff_passed") is False and not product.get("salesBlock")
+                          and day is not None and date.fromisoformat(day) <= requested)
+                    arrival[product["productId"]] = ok
+        except Exception:
+            arrival = {}     # no live answer: the offer step still checks every product
+        for r in rows:
+            r["can_arrive"] = arrival.get(r["product_id"])
+        rows.sort(key=lambda r: 0 if r["can_arrive"] else (1 if r["can_arrive"] is None else 2))
+        return {"products": rows[:limit], "requested_date": need["requested_date"],
+                "measure": measure if filtered else None,
+                "note": "can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
+                        "prefer products with can_arrive true"}
 
     def tool_get_offer(self, kitchen_id: str, body: dict) -> dict:
         need = self.db.needs.find_one({"_id": body.get("need_id"), "kitchen_id": kitchen_id})
@@ -629,10 +767,22 @@ class Gateway:
         lo = datetime.combine(d0, datetime.min.time(), tzinfo=timezone.utc)
         hi = datetime.combine(d1, datetime.max.time(), tzinfo=timezone.utc)
         rows = self.db.forecasts.find({"meta.kitchen_id": kitchen_id, "ts": {"$gte": lo, "$lte": hi}}).sort("ts", 1)
-        return {"kitchen_id": kitchen_id, "lines": [
-            {"product_id": r["meta"]["product_id"], "date": r["ts"].date().isoformat(),
-             "need": f"{Decimal(str(r['need'])).normalize():f}", "unit": r["unit"],
-             "made_on": r.get("made_on"), "why": r.get("why")} for r in rows]}
+        # The band (p10-p90) comes from this kitchen's own forecast errors of the last 8
+        # weeks (engine.newsvendor, #432); with too few, a normal with 15% spread.
+        from engine.newsvendor import interval
+        from store.history import forecast_vs_actual
+        today = self.now().date()
+        past = forecast_vs_actual(self.db, kitchen_id, today - timedelta(days=56), today - timedelta(days=1))
+        ratios = [actual / predicted for _, _, predicted, actual in past if predicted > 0]
+        lines = []
+        for r in rows:
+            need = float(str(r["need"]))
+            lines.append({"product_id": r["meta"]["product_id"], "date": r["ts"].date().isoformat(),
+                          "need": f"{Decimal(str(r['need'])).normalize():f}", "unit": r["unit"],
+                          "made_on": r.get("made_on"), "why": r.get("why"),
+                          **interval(need, ratios=ratios)})
+        return {"kitchen_id": kitchen_id, "band_from": "own forecast errors" if len(ratios) >= 20 else "default spread",
+                "lines": lines}
 
     def audit_log(self, kitchen_id: str) -> list[dict]:
         return [{"seq": e["seq"], **e["event"], "at": e["server"].get("at")}
@@ -652,8 +802,20 @@ def _addable_out(r: AddableRow) -> dict:
             "reason_codes": list(r.reason_codes), "why": r.why}
 
 
+def _blocks_out(sim: dict, lines: list[dict]) -> list[dict]:
+    """The supplier blocks (#73) with the lines as the API answers them: each block takes
+    its lines from `lines`, so a block line and a top-level line never differ."""
+    def ids(block: dict) -> set:
+        return {ln["product_id"] for ln in block["lines"]}
+    return [{**block, "lines": [ln for ln in lines if ln["product_id"] in ids(block)]}
+            for block in sim.get("blocks") or []]
+
+
 def offer_out(offer: dict) -> dict:
-    return {"offer_id": offer["offer_id"], "valid_until": offer["valid_until"], **offer["simulation"]}
+    sim = offer["simulation"]
+    lines = [_line_out(ln) for ln in sim["lines"]]
+    return {"offer_id": offer["offer_id"], "valid_until": offer["valid_until"], **sim,
+            "lines": lines, "blocks": _blocks_out(sim, lines)}
 
 
 __all__ = ["Gateway", "GatewayError", "offer_out", "asdict"]

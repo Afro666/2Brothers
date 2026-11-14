@@ -1,6 +1,7 @@
 """Recall evidence and proposal holds; Mongo access stays in store."""
 from store.orders import NotPending, decide_approval
 from store.products import get_products
+from pymongo import ReturnDocument
 
 
 def context(db, kitchen_id):
@@ -23,10 +24,13 @@ def remember(db, alert):
 
 def blocked_ids(db, kitchen_id):
     return {row['product_id'] for row in db.recall_alerts.find({
-        'kitchen_id': kitchen_id, 'match': {'$in': ['exact', 'possible']}})}
+        'kitchen_id': kitchen_id, 'status': {'$ne': 'dismissed'}, 'match': {'$in': ['exact', 'possible']}})}
 
 
 def hold(db, kitchen_id, proposal_id, alert):
+    current = db.recall_alerts.find_one({'_id': alert['event_id'], 'kitchen_id': kitchen_id})
+    if alert.get('status') == 'dismissed' or (current and current.get('status') == 'dismissed'):
+        return False
     query = {'_id': proposal_id, 'kitchen_id': kitchen_id}
     db.proposals.update_one(query, {'$addToSet': {'recall_alerts': alert}})
     if alert['match'] == 'review':
@@ -61,3 +65,37 @@ def reject_replacement(db, kitchen_id, proposal_id, reason):
         except NotPending:
             pass
     return row is not None
+
+
+def dismiss(db, kitchen_id, event_id, *, human, reason, at):
+    query = {'_id': event_id, 'kitchen_id': kitchen_id}
+    row = db.recall_alerts.find_one_and_update({**query, 'status': {'$ne': 'dismissed'}},
+        {'$set': {'status': 'dismissed', 'dismissed_by': human, 'dismissed_at': at,
+                  'dismiss_reason': reason}}, return_document=ReturnDocument.AFTER)
+    return row or db.recall_alerts.find_one(query)
+
+
+def visible_alerts(db, kitchen_id, alerts):
+    ids = [a['event_id'] for a in alerts]
+    saved = {row['_id']: row for row in db.recall_alerts.find({'kitchen_id': kitchen_id, '_id': {'$in': ids}})}
+    out = []
+    for alert in alerts:
+        latest = saved.get(alert['event_id'], alert)
+        out.append({**alert, 'status': latest.get('status', 'active'),
+                    **{key: latest[key] for key in ('dismissed_by', 'dismissed_at', 'dismiss_reason') if key in latest}})
+    return out
+
+
+def reject_basket(db, kitchen_id, proposal_id, *, human, reason, at):
+    query = {'_id': proposal_id, 'kitchen_id': kitchen_id}
+    row = db.proposals.find_one_and_update({**query, 'status': {'$in': ['READY', 'BLOCKED_BY_RECALL']}},
+        {'$set': {'status': 'REJECTED', 'reject_reason': reason, 'rejected_by': human, 'rejected_at': at}},
+        return_document=ReturnDocument.AFTER)
+    row = row or db.proposals.find_one(query)
+    if row and row.get('status') == 'REJECTED' and row.get('approval_id'):
+        try:
+            decide_approval(db, row['approval_id'], status='REJECTED',
+                            decided_by=row.get('rejected_by', human), reason=row.get('reject_reason', ''))
+        except NotPending:
+            pass
+    return row

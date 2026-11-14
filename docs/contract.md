@@ -142,11 +142,13 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 
 **Remote MCP (#280).** The same seven tools are also served over MCP streamable HTTP at
 `POST /mcp` (stateless, JSON responses), same names, arguments and results as above.
-Only the agent bearer token (`Authorization: Bearer <agent token>`) is accepted; any
-other caller, the human token included, gets `401 UNAUTHENTICATED` with
-`WWW-Authenticate: Bearer`. Each call runs the `/tools/*` route above with the agent
-principal, so every refusal and audit entry is the same. There is no approve, reject or
-cancel tool.
+Two bearer tokens are accepted (`Authorization: Bearer <token>`): the agent token, and a
+kitchen API token (`tkb_...`, see "Kitchen API tokens") that holds `kitchen:propose`.
+Any other caller, the human token and a session cookie included, gets
+`401 UNAUTHENTICATED` with `WWW-Authenticate: Bearer`. Each call runs the `/tools/*`
+route above with the caller's own token: the agent principal, or the kitchen token with
+its own kitchen and scopes. So every refusal and audit entry is the same. There is no
+approve, reject or cancel tool.
 
 The trusted application/engine creates `need_id` before invoking the buyer agent.
 The gateway loads quantities from that stored need; neither `get_offer` nor
@@ -154,9 +156,8 @@ The gateway loads quantities from that stored need; neither `get_offer` nor
 `product_id`, `quantity`, `unit`, `why`, `available_date`, `unknown_stock` and
 `cutoff_passed`. A line also carries `unit_price` (decimal string, per `unit`, before
 tax) and `closing_time` (the order cut-off for that line as a timestamp with an offset,
-or null when the supplier gives none). `closing_time` is proposed: the gateway does not
-send it yet, so a client treats a missing field as null. Unknown stock is never
-represented as a measured sentinel value.
+or null when the supplier gives none). Unknown stock is never represented as a measured
+sentinel value.
 
 A simulated offer line also carries three optional fields from the Valio datasets
 (see "Static datasets"). They are for display and choice; they never change a quantity.
@@ -179,11 +180,24 @@ event with `kind: "decision_summary"`, `proposal_id`, `offer_id` and `summary` (
 
 `mandate.verdict` is exactly `NEEDS_APPROVAL` or `REFUSED`. There is no `AUTO`
 verdict: the Buyer proposes and a human approves every order (decision 2026-11-13
-23:00). `REFUSED` is only for a hard rule (an allergen rule, a passed cut-off, a sales
-block, a product outside the kitchen's suppliers). `mandate.reasons` is a list of
-human-readable strings; `mandate.reason_codes` and `mandate.warnings` use the codes in
-"Reason codes" below. A warning (for example `OVER_BUDGET_WARNING`) is shown on the
-approval card; it never blocks and never approves. For example, the milk case:
+23:00). `mandate.reasons` is a list of human-readable strings; `mandate.reason_codes`
+and `mandate.warnings` use the codes in "Reason codes" below.
+
+A hard rule works per product, not on the whole mandate (#146):
+
+- A product that a hard rule stops (a passed cut-off, a sales block, no delivery date in
+  time, no stock, the wrong unit) is left out. It is not a line. It is in the
+  simulation's `excluded` list as `{product_id, reason}`, and its reason is also in
+  `mandate.reasons`. The other products stay lines.
+- `mandate.verdict` is `REFUSED` only when no line is left. Otherwise it is
+  `NEEDS_APPROVAL`, even when some products were left out.
+- Each line carries its own `reason_codes`. `mandate.reason_codes` is the set of the
+  line codes plus `CLOSING_PASSED` and `PARTIAL_STOCK` for the whole request.
+- `mandate.warnings` holds only codes of the kind "warning" in "Reason codes" (today
+  `OVER_BUDGET_WARNING`). A warning is shown on the approval card; it never blocks and
+  never approves. A warning code is never in `reason_codes`.
+
+For example, the milk case:
 
 ```json
 {
@@ -201,7 +215,8 @@ approval card; it never blocks and never approves. For example, the milk case:
   "lines": [{
     "product_id": "462775", "quantity": "51", "unit": "ST",
     "why": "51 one-litre units confirmed; the full 1,000 L request cannot be met.",
-    "available_date": "2026-11-16", "unknown_stock": false, "cutoff_passed": false
+    "available_date": "2026-11-16", "unknown_stock": false, "cutoff_passed": false,
+    "reason_codes": ["PARTIAL_STOCK"]
   }]
 }
 ```
@@ -353,6 +368,85 @@ IDs) apply here too. Base path: `/v1`.
 - Every call is in the audit log: who (user, API key or agent), what, when, and the
   figure that was shown.
 
+### Sign-in and roles (#270)
+
+A person signs in with email and password. The gateway then sets a session cookie.
+The gateway finds the caller in this order: the session cookie, then the server's
+agent or human bearer token, then a kitchen API token.
+
+| Method | Path | Body | Answer |
+|---|---|---|---|
+| POST | `/v1/auth/login` | `email`, `password` | `{email, name, role, kitchen_id}`. Sets the cookie `tkb_session`: httpOnly, SameSite=Strict, path `/`, 12 hours, Secure over HTTPS. |
+| POST | `/v1/auth/logout` | none | `{"signed_out": true}`. Ends the session and clears the cookie. Also 200 without a session. |
+| GET | `/v1/me` | | `{kind, name, role, kitchen_id, can_approve, scopes}`. `kind` is `human`, `agent` or `token`. `role` is null when `kind` is not `human`. `scopes` is null for a person, a sorted list for a token. `kitchen_id` is null for the server tokens (any kitchen). |
+| POST | `/v1/auth/change-password` | `current_password`, `new_password` | `{"changed": true}`. Needs the session cookie. Ends every other session of that person; this one stays. |
+
+These four routes take no `idempotency_key`.
+
+- Passwords: at least 10 characters. They are scrypt hashes; the gateway never stores
+  or logs one in clear.
+- An unknown email and a wrong password give the same answer. Five wrong passwords in
+  a row lock the account for five minutes. A wrong current password on
+  change-password counts too.
+- A session belongs to one kitchen. A call for another kitchen is 403 `KITCHEN_SCOPE`.
+- The first approver comes from the server `.env` (`DEMO_USER_EMAIL`,
+  `DEMO_USER_PASSWORD`).
+- `GATEWAY_REQUIRE_LOGIN=true` switches off the shared human token: then only a
+  signed-in person is a human. The agent token is not changed.
+
+| Role | Can |
+|---|---|
+| `approver` | Everything a chef can, plus approve, reject, resolve an unknown send, and manage API tokens and webhooks. |
+| `chef` | Read, and ask for proposals (`kitchen:propose`). |
+| `viewer` | Read only. |
+
+A person without the role gets 403 `ROLE_REQUIRED`. The shared human token acts as an
+`approver`.
+
+| Status | Code | When |
+|---|---|---|
+| 401 | `INVALID_LOGIN` | Wrong email or password, or a wrong current password. |
+| 401 | `UNAUTHENTICATED` | No valid session or token (change-password: no session). |
+| 403 | `ROLE_REQUIRED` | The person's role cannot do this. |
+| 422 | `WEAK_PASSWORD` | The new password is shorter than 10 characters, or the same as the current one. |
+| 429 | `ACCOUNT_LOCKED` | Too many wrong passwords; try again in a few minutes. |
+
+### Kitchen API tokens (#271)
+
+A person creates a token for one kitchen, for Claude over MCP, a script or another
+agent. A token never approves.
+
+| Method | Path | Body | Answer |
+|---|---|---|---|
+| POST | `/v1/kitchens/{kitchen_id}/tokens` | `name` (1 to 80 characters), `scopes` | The token row plus `token`. |
+| GET | `/v1/kitchens/{kitchen_id}/tokens` | | `{"tokens": [...]}`, newest first, revoked ones included. Never the secret. |
+| DELETE | `/v1/kitchens/{kitchen_id}/tokens/{token_id}` | | The token row, with `revoked_at` set. A second revoke returns the same row. |
+
+Token row: `token_id`, `name`, `scopes`, `prefix` (the first 8 characters, for
+display), `created_at`, `created_by`, `last_used_at` (or null), `revoked_at` (or null).
+
+- `token` (`tkb_...`) is in the create answer only. It is shown once; the gateway
+  keeps only its SHA-256.
+- `scopes` holds one or more of `kitchen:read` and `kitchen:propose`. `kitchen:approve`
+  or another scope is 422 `INVALID_REQUEST`.
+- A token acts only for its own kitchen, with only its own scopes. It also works on
+  `/tools/*` and on `/mcp` (with `kitchen:propose`).
+- Create and revoke are audit entries (`token_created`, `token_revoked`).
+- These routes take no `idempotency_key`.
+
+| Status | Code | When |
+|---|---|---|
+| 401 | `UNAUTHENTICATED` | A revoked or unknown token is used. |
+| 403 | `HUMAN_SESSION_REQUIRED` | The caller is not a person (a token or the agent). |
+| 403 | `ROLE_REQUIRED` | The person is not an `approver`. |
+| 403 | `SCOPE_REQUIRED` | A token calls a route without the scope it needs. |
+| 403 | `KITCHEN_SCOPE` | A token calls a route of another kitchen. |
+| 404 | `TOKEN_NOT_FOUND` | No such token in this kitchen. |
+| 422 | `INVALID_REQUEST` | A name or scope rule above is broken. |
+
+Known gap: the three token routes do not check yet that the signed-in person belongs to
+`kitchen_id`. Every other kitchen route does (403 `KITCHEN_SCOPE`).
+
 ### Kitchen side: `/v1/kitchens/{kitchen_id}/...`
 
 | Method | Path | Scope | What |
@@ -371,33 +465,172 @@ IDs) apply here too. Base path: `/v1`.
 | GET | `/forecast-accuracy?from=&to=` | `kitchen:read` | Past forecasts against what the kitchen really needed, per week. Shape under "Forecasts". |
 | GET | `/suppliers`, `/suppliers/{id}` | `kitchen:read` | Suppliers and their terms: free-delivery threshold, fee, order days, cut-off, lead time, discount tiers. User-set; demo values are placeholders. |
 | POST, PUT, DELETE | `/suppliers`, `/suppliers/{id}` | `kitchen:write` | Create, change or delete a supplier and its terms. |
-| POST | `/proposals` | `kitchen:propose` | Ask the Buyer: free text ("1,000 L milk by Monday") or a demand window `from`/`to`. Returns `proposal_id`, `status: PENDING`. Body, the free-text path and errors under "Creating a proposal". |
+| POST | `/proposals` | `kitchen:propose` | Ask the Buyer: product codes with a quantity and a date, or free text ("1,000 L milk by Monday"). Returns the proposal in the `GET /proposals/{id}` shape, `status: READY` (or `REJECTED` when no line is left). Body, the free-text path and errors under "Creating a proposal". A demand window `from`/`to` is not a body yet. |
+| GET | `/proposals` | `kitchen:read` | `{"proposals": [...]}`, newest first, at most 100, each in the `GET /proposals/{id}` shape. |
 | GET | `/proposals/{id}` | `kitchen:read` | Lines with `why`, one block per supplier, simulated totals (`expected_total`, `mov_gap`, `delivery_fee`), mandate reasons, warnings. |
 | GET | `/proposals/{id}/addable` | `kitchen:read` | What the buyer can add to this proposal, most probable first, and the lines that reach free delivery. Shape under "Addable products". |
-| POST | `/proposals/{id}/approve` | `kitchen:approve` (human) | Body: `blocks: [{supplier_id, expected_total}]` + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH`; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN`. In both cases nothing is sent. |
+| POST | `/proposals/{id}/approve` | `kitchen:approve` (human, role `approver`) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN`; a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". Proposed; the gateway does not serve it yet. |
 | GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). |
+| GET | `/orders/{id}/resolution` | `kitchen:approve` (human) | What our store knows about an order whose send result is unknown. Shape under "Resolving an unknown send". |
+| POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
 | PUT | `/sharing` | `kitchen:write` | Consent: which suppliers may see this kitchen's forecast. Every change is an audit entry. |
 | GET | `/settings` | `kitchen:read` | Kitchen settings: how the engine sizes orders and what the Buyer may propose. Shape below. |
 | PUT | `/settings` | `kitchen:write` (human) | Change settings. Only the fields in the body change. Every change is an audit entry. Proposed; the gateway does not serve these two routes yet. |
 | GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
-| GET | `/drift` | `kitchen:read` | Standing-order drift for the last full week: products whose order per 100 guests (`portion_creep`) or spend per 100 guests (`cost_creep`) is 15% or more above the 4 weeks before. Shape below. Proposed; the gateway does not serve it yet (`store.drift.standing_order_drift`). |
+| GET | `/drift` | `kitchen:read` | Standing-order drift for the last full week: products whose order per 100 guests (`portion_creep`) or spend per 100 guests (`cost_creep`) is 15% or more above the 4 weeks before. Shape below. Served (`gateway/drift_routes.py` over `store.drift.standing_order_drift`). |
 | GET | `/audit/verify` | `kitchen:read` | Check the audit hash chain now. Shape below. Proposed, like the next three rows; the gateway does not serve them yet. |
 | POST | `/audit/demo-tamper` | `kitchen:approve` (human) | Demo only: edit one audit row of the synthetic demo kitchen, so `/audit/verify` shows the break. 403 `DEMO_ONLY` for any other kitchen. |
 | POST | `/audit/demo-restore` | `kitchen:approve` (human) | Demo only: put the tampered row back exactly as it was. |
 | GET | `/events` | `kitchen:read` | Server-sent events: this kitchen's new and changed proposals, approvals and audit entries, as they happen. Shape below. |
-| GET | `/recalls` | `kitchen:read` | This kitchen's open `recall.alert`s and the last check. Shape below. Proposed, like the next row; the gateway does not serve them yet (#358). |
-| POST | `/recalls/check` | `kitchen:write` | Run the recall monitor now: Context.dev scrape of the Ruokavirasto list, matched to stock, recipes and open proposals. Body: `idempotency_key`. |
+| GET | `/recalls` | `kitchen:read` | This kitchen's recall alerts, the proposals they hold and the last check. Shape under "Recall alerts (Context.dev)". |
+| POST | `/recalls/check` | `kitchen:write` | Run the recall monitor now: one Context.dev scrape of the Ruokavirasto list (the recording when Context.dev is slow, down or has no key), applied to the open proposals. Body: `idempotency_key`. Never orders. Same answer as `GET /recalls`. |
+| POST | `/recalls/{event_id}/dismiss` | `kitchen:approve` (human) | A person dismisses one alert after checking the packs. Body: `reason`. Shape in [recall-contract.md](recall-contract.md). |
+| GET | `/label-checks` | `kitchen:read` | Recorded Hyvää Suomesta producer checks for catalog products 462535, 462576 and 462775, plus one synthetic `negative_control`. Answer: `{"checks": [...], "negative_control": {...}}`. Shape in [product-evidence-contract.md](product-evidence-contract.md). |
+| POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
 
-Proposal `status`: `PENDING`, `READY`, `APPROVED`, `REJECTED`, `EXPIRED`. An approved
-proposal places one order per supplier block, through the same `place_order` guards.
+Proposal `status`, as the gateway returns it (#529):
+
+| Status | Approvable | Meaning |
+|---|---|---|
+| `READY` | yes | A new proposal with at least one line. It waits for a person. |
+| `REJECTED` | no | A person rejected it, or it was created with no line left. |
+| `APPROVED` | no | A person approved it; `order_id` names the order. |
+| `BLOCKED_BY_RECALL` | no | A recall holds a line of it. Approve answers 409 `BLOCKED_BY_RECALL`. See [recall-contract.md](recall-contract.md). |
+| `APPROVING`, `COMMITTING` | no | For a moment, while an approve runs. It ends as `APPROVED`, or goes back to `READY` (or `BLOCKED_BY_RECALL`). |
+| `PENDING` | no | Kept for a proposal the Buyer worker is still building. The gateway does not set it yet. |
+| `EXPIRED` | no | Kept for later. The gateway does not set it yet. |
+
+A client treats an unknown status as not approvable. An approval row (`approval_id`)
+has its own status, `PENDING` until a person decides; `request_approval` returns that
+one.
+
+The approve body has one top-level `expected_total`, because one supplier places orders
+today (Valio). An approved proposal places one order. When a second supplier adapter
+places orders, the body gets `blocks: [{supplier_id, expected_total}]` again, one block
+per supplier, and each block is checked (#528).
+
+More proposal fields, defined in their own files (all optional and additive):
+
+- `recall_alerts`, `replacement_proposal_id`, `recall_replan_error`, and
+  `recall_status` on a line: [recall-contract.md](recall-contract.md).
+- `product_evidence`: dated product facts from the producer's page, for display only.
+  Null when there are none. [product-evidence-contract.md](product-evidence-contract.md).
+- `label_checks`: producer-register checks for the proposal's own lines.
+  [product-evidence-contract.md](product-evidence-contract.md).
 
 Order `status` is the supplier side of the order: `SENT`, `CONFIRMED`, `PARTIAL`,
 `REJECTED`, `UNCONFIRMED`. The order `outcome` is the gateway result from "Team gateway
 interfaces": `CONFIRMED`, `NOT_SENT`, `UNCONFIRMED`, `SENT_READ_FAILED`. An outcome of
 `NOT_SENT` means no order exists at the supplier, so it has no order `status`.
+
+### Resolving an unknown send
+
+An order with outcome `UNCONFIRMED` or `SENT_READ_FAILED` is never sent again. A
+person finds out what happened and records it. Both routes need a human session of an
+approver: an API key or an agent token gets 403 `HUMAN_SESSION_REQUIRED`, a chef or
+viewer gets 403 `ROLE_REQUIRED`.
+
+The Valio mock API has no order endpoint: orders are ours. So "look up the real state"
+means two things. The gateway returns what our own store knows. The person checks the
+supplier by their own means (phone, e-mail, the supplier's portal) and types the result.
+The gateway never asks the supplier and never guesses.
+
+An attempt whose approval call failed after the attempt row was written is stored as
+`UNCONFIRMED` (order `status` null); its proposal stays held, so no second approval can
+place a duplicate.
+
+`GET /v1/kitchens/{kitchen_id}/orders/{order_id}/resolution` returns what is known.
+Each call writes an `order_lookup` audit entry.
+
+```json
+{
+  "order_id": "9f1c...",
+  "proposal_id": "5b2e...",
+  "proposal_status": "COMMITTING",
+  "idempotency_key": "approve-7",
+  "payload_hash": "sha256 hex of {offer_id, expected_total, lines}",
+  "offer_id": "c41d...",
+  "supplier_id": "sup-valio",
+  "approved_by": "aron",
+  "outcome": "UNCONFIRMED",
+  "status": null,
+  "expected_total": "74.51",
+  "lines": [],
+  "created_at": "2026-11-14T02:10:00+00:00",
+  "updated_at": "2026-11-14T02:10:01+00:00",
+  "resolvable": true,
+  "resolution": null
+}
+```
+
+`status` is the supplier-side status when the store has one, else null. `resolvable`
+is true only while `outcome` is `UNCONFIRMED` or `SENT_READ_FAILED`. `resolution` is
+null until a person resolves the order; after that it is the object below.
+
+`POST /v1/kitchens/{kitchen_id}/orders/{order_id}/resolve`
+
+```json
+{"resolution": "placed", "supplier_order_ref": "VAL-2026-00123", "idempotency_key": "r-1"}
+```
+
+```json
+{"resolution": "not_sent", "note": "Valio sales desk: no such order", "idempotency_key": "r-2"}
+```
+
+- `resolution`: `placed` or `not_sent`. Required.
+- `supplier_order_ref`: the supplier's own order reference, 1 to 200 characters.
+  Required with `placed`; refused with `not_sent`.
+- `note`: optional free text, at most 500 characters.
+- `idempotency_key`: required, like every mutation.
+
+What each resolution does:
+
+| `resolution` | Order | Proposal | Approval |
+|---|---|---|---|
+| `placed` | `outcome: CONFIRMED`, `status: SENT`, the reference stored | `APPROVED`, linked to this order | stays `APPROVED` |
+| `not_sent` | `outcome: NOT_SENT`, `status: null` | back to `READY` (or `BLOCKED_BY_RECALL` when a recall holds a line), so a person can decide again | a new `PENDING` approval replaces the used one |
+
+Neither resolution sends anything, and neither writes a second attempt row: the stored
+order row changes in place. After `not_sent`, a new decision is a new approve call with
+a new `idempotency_key` (it passes every guard again and writes its own attempt row);
+the old key only replays the closed attempt.
+
+Response (200), also returned by a repeat:
+
+```json
+{
+  "order_id": "9f1c...",
+  "proposal_id": "5b2e...",
+  "proposal_status": "APPROVED",
+  "outcome": "CONFIRMED",
+  "status": "SENT",
+  "resolution": {
+    "resolution": "placed",
+    "supplier_order_ref": "VAL-2026-00123",
+    "note": "",
+    "resolved_by": "aron",
+    "resolved_at": "2026-11-14T02:31:00+00:00",
+    "from_outcome": "UNCONFIRMED"
+  }
+}
+```
+
+An order is resolved once. Repeating the same resolution (and the same reference)
+returns the stored result and changes nothing, with any `idempotency_key`. Each
+resolution writes one `order_resolved` audit entry: who, when, the resolution, the
+reference, the outcome before.
+
+| Error | Status | When |
+|---|---|---|
+| `HUMAN_SESSION_REQUIRED` | 403 | The caller is not a person (agent token, API key) |
+| `ROLE_REQUIRED` | 403 | The person is not an approver |
+| `ORDER_NOT_FOUND` | 404 | No such order in this kitchen |
+| `INVALID_REQUEST` | 422 | `resolution` is not `placed` or `not_sent`; `placed` without `supplier_order_ref`; `not_sent` with one; a field too long; no `idempotency_key` |
+| `ORDER_NOT_RESOLVABLE` | 409 | The order's outcome is not `UNCONFIRMED` or `SENT_READ_FAILED` and no resolution is stored. The error carries `outcome` |
+| `ALREADY_RESOLVED` | 409 | A different resolution, or another reference, is already stored. The error carries the stored `resolution` |
 
 ### Creating a proposal
 
@@ -609,6 +842,58 @@ is excluded for substitutes and for restricted kitchens. An unrestricted
 kitchen's specifically requested original may remain visible as unknown for
 chef review. Own-product lookups remain scoped to that kitchen.
 
+### Partial fill: confirmed stock now, a plan for the rest (#288)
+
+A simulation (`get_offer`, `simulate_order`) and every proposal (create and detail)
+carry `partial_fill`. It is `null` when confirmed stock covers the need, or when no
+stock is confirmed for the requested date. Otherwise it is the engine's answer to
+"what happens to the rest?":
+
+```json
+{
+  "need": "1000", "measure": "L", "remaining": "949",
+  "reason_codes": ["PARTIAL_STOCK", "PACK_SIZE_DERIVED"],
+  "why": "Order 51 L now for 2026-11-16: 51 ST of Arla 1 L fat free, all the stock Valio confirms for that date, EUR 131.07 ex VAT. Hold the remaining 949 L until Valio confirms stock: no offer shows confirmed stock for a later delivery date.",
+  "now": {
+    "kind": "NOW", "quantity": "51", "measure": "L", "deliver_on": "2026-11-16",
+    "total_ex_vat": "131.07",
+    "why": "Order 51 L now for 2026-11-16: 51 ST of Arla 1 L fat free, all the stock Valio confirms for that date, EUR 131.07 ex VAT.",
+    "lines": [{"product_id": "462775", "quantity": "51", "unit": "ST", "unit_price": "2.57",
+               "total": "131.07", "why": "...", "unknown_stock": false, "reason_codes": ["PARTIAL_STOCK", "PACK_SIZE_DERIVED"]}]
+  },
+  "rest": [{
+    "kind": "HOLD", "quantity": "949", "measure": "L", "deliver_on": null, "total_ex_vat": null,
+    "why": "Hold the remaining 949 L until Valio confirms stock: no offer shows confirmed stock for a later delivery date.",
+    "lines": []
+  }]
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `need`, `remaining` | decimal string | The request, and the request minus what `now` covers, in `measure`. |
+| `why` | string | The sentence of `now`, then of each `rest` part, in order. Shown verbatim. |
+| `reason_codes` | string[] | `PARTIAL_STOCK` always, plus the codes of the lines. |
+| `now` | part | The stock the supplier confirms for the requested date, and nothing else. |
+| `rest` | part[] | One or two parts, in order: `LATER` (if any), then `HOLD` (if any). Their quantities add up to `remaining`. |
+
+A part:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `kind` | `NOW`, `LATER`, `HOLD` | `LATER`: the earliest later delivery date on which an offer shows confirmed stock and an open cut-off. `HOLD`: no confirmed stock covers it; it waits until the supplier confirms stock. |
+| `quantity`, `measure` | decimal string, string | What this part covers (or holds), in the request's measure. |
+| `deliver_on` | date or `null` | `null` for `HOLD`: no date is known. |
+| `total_ex_vat` | decimal string or `null` | Ex VAT, without fees. `null` for `HOLD`: unknown, never zero. |
+| `why` | string | One deterministic sentence with the part's numbers. |
+| `lines` | array | `product_id`, `quantity`, `unit`, `unit_price`, `total`, `why`, `unknown_stock` (always `false`), `reason_codes`. Empty for `HOLD`. |
+
+- Unknown stock (a sentinel, missing or null) is never counted, in `now` or in `LATER`.
+- `partial_fill` is information: it has no `offer_id`, and it does not change the
+  proposal's `lines` or `expected_total`. It cannot be approved or placed as it is.
+  Its totals are ex VAT; a figure a person approves still comes from a simulation.
+- The `LATER` part uses the first schedule line the supplier returns for each product.
+
 ### Supplier side
 
 **We call them (adapter contract).** Each supplier is one adapter with the same five
@@ -624,7 +909,7 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. |
 | GET | `/demand/shortage-risk` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability. |
-| GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Proposed. |
+| GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Today only a person's session passes: no token can hold `supplier:demand` yet. |
 | POST | `/offers` | `supplier:read-orders` | Proactive offer to a kitchen (substitute, promotion). It shows up as a suggestion, never as an order. |
 
 A supplier only sees demand from kitchens whose `/sharing` consent names it.
@@ -742,7 +1027,7 @@ those whose `risk` is not `OK`.
 
 ```
 event: proposal
-data: {"operation": "insert", "document": {"proposal_id": "...", "status": "PENDING"}}
+data: {"operation": "insert", "document": {"proposal_id": "...", "status": "READY"}}
 ```
 
 - `event` is `proposal`, `approval` or `audit`. `operation` is `insert`, `update` or
@@ -769,6 +1054,11 @@ biggest change first. `week` is the Monday of the last full week. Each warning:
 - `kind`: `portion_creep` (more ordered per guest) or `cost_creep` (the same amount per
   guest costs more). A drop is not a warning.
 - Fewer than 3 weeks of history, or a week without guests, is never drift: it is left out.
+- `week` is always there, also with `"warnings": []`. A warning has `product_name` when
+  the catalog knows the product; on the supplier route also `kitchen_id` and
+  `kitchen_name` (`null` when the kitchen has no name).
+- When the database cannot run the aggregation: 503 `DRIFT_UNAVAILABLE`. The screens
+  then hide the drift tile; they never show an empty list as "no drift".
 - Rates are per 100 guests from the `covers` series; money values are numbers for display
   only, never a figure to approve (approval figures come from `simulate_order`).
 - Where it shows: a warning on the next proposal for that product, and a list on the
@@ -1022,33 +1312,45 @@ Rules:
 
 ### Recall alerts (Context.dev)
 
-The recall monitor (`monitor/recalls.py`) scrapes the Ruokavirasto recall list with
-Context.dev `POST /v1/web/scrape` and writes one `recall.alert` per notice, kitchen and
-product. These two routes show the alerts in the approval inbox and let a person run a
-check now. The gateway serves the routes (Aron); the monitor and the re-plan are #358
-(Maciek).
+The recall monitor (`monitor/recalls.py`) reads the Ruokavirasto recall list with
+Context.dev `POST /v1/web/scrape`. `monitor/proposals.py` applies the notices to the
+kitchen's open proposals: a recalled line puts the proposal on hold and the Buyer plans a
+separate replacement proposal. These two routes show that state and let a person run a
+check now. They are views: they keep no second recall store and no second matching logic.
+This is the agreed shape; the gateway change on branch `aron/358-recall-routes` serves it
+(until that is merged both routes answer 404).
 
-`GET /v1/kitchens/{kitchen_id}/recalls` and `POST .../recalls/check` both answer:
+**One source for the alert fields:** [recall-contract.md](recall-contract.md) ("Exact alert
+fields"). The same document holds the hold, the replacement proposal, the reject and the
+dismiss route. This section only adds what the two routes add.
+
+`GET /v1/kitchens/{kitchen_id}/recalls` and `POST /v1/kitchens/{kitchen_id}/recalls/check`
+both answer:
 
 ```json
 {
   "last_check": {
-    "checked_at": "2026-11-14T00:30:00+02:00",
+    "checked_at": "2026-11-14T04:30:00+00:00",
+    "checked_by": "chef@hotel.example",
     "source": "recording",
+    "live_error": "NO_KEY",
     "fetched_at": "2026-11-13T22:17:51+00:00",
-    "via": "/v1/web/scrape",
-    "notices_scanned": 38
+    "details_fetched_at": "2026-11-13T22:17:51+00:00",
+    "via": "Context.dev /v1/web/scrape (json)",
+    "notices_scanned": 38,
+    "notices_listed": null,
+    "notices_unread": null
   },
   "alerts": [
     {
       "event_id": "recall-3f1c9a0b5e7d2c4a8b6e1f0d",
       "type": "recall.alert",
-      "kitchen_id": "K10",
+      "kitchen_id": "demo-kitchen",
       "product_id": "461332",
       "product_name": "Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg",
       "match": "possible",
       "why": "same brand Kulta Katriina, shared word(s) kahvi, perinteinen",
-      "where": ["in stock: 5.673 KG", "in recipes: breakfast_buffet", "on the open purchase proposal"],
+      "where": ["on the open purchase proposal"],
       "recall": {
         "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suodatinkahvissa-vierasesineriski/",
         "date": "2026-03-06", "title": "Suodatinkahvissa vierasesineriski",
@@ -1058,42 +1360,92 @@ check now. The gateway serves the routes (Aron); the monitor and the re-plan are
         "lot": "23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027"
       },
       "next_step": "Do not use it until checked. Check your packs: ...",
-      "proposal_id": "prop-7c2e",
-      "line_status": "BLOCKED_BY_RECALL",
-      "replacement_line": {"product_id": "475842", "product_name": "12 x Löfbergs Crescendo Ground Coffee 500g Rainforest Alliance",
-                           "quantity": "2", "unit": "KI"},
-      "replacement_proposal": [{"product_id": "475842", "name": "...", "brand": "Löfbergs"}],
-      "detected_at": "2026-11-14T00:30:00+02:00"
+      "replacement_proposal": [],
+      "detected_at": "2026-11-14T04:30:00+00:00",
+      "status": "active",
+      "proposals": [
+        {
+          "proposal_id": "7c2e...",
+          "status": "BLOCKED_BY_RECALL",
+          "replacement_proposal_id": "9b41...",
+          "recall_replan_error": null,
+          "replacement": {
+            "proposal_id": "9b41...",
+            "status": "READY",
+            "expected_total": "56.75",
+            "currency": "EUR",
+            "lines": [{"product_id": "475842", "product_name": "12 x Löfbergs Crescendo Ground Coffee 500g Rainforest Alliance",
+                       "quantity": "1", "unit": "KI"}]
+          }
+        }
+      ]
     }
   ]
 }
 ```
 
-- The alert fields are the monitor's `recall.alert` as it is (monitor/README.md), plus three
-  fields the re-plan adds: `proposal_id`, `line_status` and `replacement_line`.
-- `last_check` is `null` when no check has run for this kitchen. Then the screens say "not
-  checked yet", never "no recalls". An empty `alerts` list with a `last_check` means the
-  check found nothing on this kitchen's stock, recipes or open proposals.
-- `source`: `live` when the scrape ran now; `recording` when Context.dev was slow or down
-  and the last saved scrape was used. `fetched_at` says how old the scrape is. The screens
-  show which one, so a recording is never shown as live.
-- `proposal_id` is the open proposal the alert hits, else `null`. `line_status` is
-  `BLOCKED_BY_RECALL` for an `exact` or `possible` match on a proposal line, `WARNING` for a
-  `review` match (shown, never blocking on its own).
-- `replacement_line` is the line the Buyer re-planned in place of the blocked one, sized by
-  the engine (`quantity` a decimal string in `unit`); `null` while it has not. A proposal
-  that still holds a `BLOCKED_BY_RECALL` line cannot be approved: approve answers 409
-  `RECALL_BLOCKED`. After the re-plan the proposal has a new `expected_total`, and a person
-  approves that exact figure as usual. `replacement_proposal` stays ideas for the chef;
-  nothing is ordered from an alert.
-- `POST /recalls/check` with a repeat `idempotency_key` returns the stored result. A new
-  check that finds an alert already known (same `event_id`) does not re-plan again.
-- Every check and every re-plan is an audit entry (`store.audit`).
-- `CONTEXT_DEV_API_KEY` stays on the gateway and the monitor; the browser never calls
-  Context.dev. A check that cannot scrape and has no recording answers 502
-  `RECALL_CHECK_UNAVAILABLE`; the screens then show recalls as unknown.
-- The web client maps snake_case to camelCase, `proposal_id` to `orderId`, `replacement_proposal`
-  to `replacementIdeas` and `quantity` to a number.
+What the view adds to an alert:
+
+- `status` is always there: `active` or `dismissed` (the stored alert may omit it).
+  Dismissed alerts stay in the list with `dismissed_by`, `dismissed_at`, `dismiss_reason`.
+- `proposals`: every proposal of this kitchen that carries this alert, newest first; `[]`
+  when none does. `status` is the proposal status. An `exact` or `possible` alert holds the
+  proposal (`BLOCKED_BY_RECALL`) and its line of `product_id` has
+  `recall_status: "BLOCKED_BY_RECALL"`; a `review` alert is a warning and holds nothing.
+- `replacement_proposal_id` and `recall_replan_error` are the proposal's own fields
+  (recall-contract.md). The replacement is a **separate proposal** with its own total and
+  its own pending approval. There is no inline replacement line on the held proposal.
+- `replacement`: a short copy of that replacement proposal, so the screen can show it
+  without a second call: its `status`, `expected_total` and lines (`quantity` a decimal
+  string in `unit`, sized by the engine). `null` when there is no replacement or it cannot
+  be read. A person approves it through `/proposals/{id}/approve` as usual; the held
+  proposal is closed with `/proposals/{id}/reject`.
+- `replacement_proposal` (the monitor's field) stays a list of unapproved ideas; it is not
+  the replacement proposal.
+
+`last_check`:
+
+- `null` when no check has run for this kitchen. Then the screens say "not checked yet",
+  never "no recalls". An empty `alerts` list with a `last_check` means the check found
+  nothing on this kitchen's open proposals.
+- `source`: `live` when Context.dev scraped the Ruokavirasto list during this check;
+  `recording` when it did not, and the saved scrape (`monitor/fixtures/ruokavirasto.json`)
+  was used. The screens show which one, so a recording is never shown as live.
+- `live_error`: `null` for `live`; for `recording` the reason: `NO_KEY` (the gateway has no
+  `CONTEXT_DEV_API_KEY`), `TIMEOUT`, `UPSTREAM_ERROR` or `BAD_ANSWER`.
+- `fetched_at`: when the list was scraped (`live`: during this check; `recording`: when the
+  recording was made). `details_fetched_at`: when the notice pages (product, brand, EAN,
+  lot) were scraped; a check makes one scrape, the list, so the pages always come from the
+  recording.
+- `notices_scanned`: notices matched against the open proposals. `notices_listed`: notices
+  on the live list, `null` for `recording`. `notices_unread`: notices on the live list whose
+  page is not in the recording, `null` for `recording`. They were **not** matched: when it
+  is above 0 the screens say "N new notices not read yet", never "no recalls".
+
+`POST /recalls/check`:
+
+- Body: `{"idempotency_key": "<1 to 200 characters>"}`. A missing or wrong key is 422
+  `INVALID_REQUEST`.
+- Scope `kitchen:write`. A signed-in person who is not a `viewer` has it (403
+  `ROLE_REQUIRED` for a viewer). No kitchen token and no agent token holds
+  `kitchen:write` today (403 `SCOPE_REQUIRED`).
+- A repeat `idempotency_key` scrapes nothing and applies nothing: it answers the stored
+  `last_check` of that check with the alerts as they are now.
+- One check makes at most one Context.dev call, with one attempt and a timeout (20 seconds,
+  `RECALL_CHECK_TIMEOUT_S`). It never retries and never loops.
+- It never orders, approves or cancels anything. It holds proposals and plans replacement
+  proposals exactly as `monitor.proposals` does; an alert already known (same `event_id`)
+  is not re-planned and a dismissed alert is not applied again.
+- Audit: the monitor's entries as before (`recall.alert` per notice and product,
+  `recall_proposal_blocked`, `recall_replacement_proposed`, ...) plus one `recall_check`
+  entry per check with the `last_check` fields and the alert ids.
+- When neither the scrape nor the recording can be read: 502 `RECALL_CHECK_UNAVAILABLE`.
+  The screens then show recalls as unknown.
+- `CONTEXT_DEV_API_KEY` stays on the gateway; the browser never calls Context.dev.
+
+The web client maps snake_case to camelCase. One web `RecallAlert` per alert and
+proposal: `proposals[].proposal_id` becomes `orderId`, `replacement_proposal` becomes
+`replacementIdeas`, `quantity` becomes a number.
 
 ## Daily weather and holiday signals
 
@@ -1142,27 +1494,31 @@ not evidence that those values were available to the buyer in the past.
 Engine, gateway, web and agent use exactly these strings in `mandate.reason_codes`,
 `mandate.warnings` and line reasons. Source: `docs/scenarios.md`.
 
-| Code | Meaning |
-|---|---|
-| `CLOSING_PASSED` | `closingTime` is at or before now for this delivery |
-| `STOCK_UNKNOWN` | availability is a sentinel (999999 or 9999999999), missing or null |
-| `PARTIAL_STOCK` | less is available than needed |
-| `SUBSTITUTE_NEEDS_OK` | a substitute changes the product; a human agrees |
-| `SUBSTITUTE_FAT_LEVEL` | the substitute has a different fat level |
-| `ALLERGEN_RULE` | a kitchen allergen rule refuses a product (`REFUSED` for that line) |
-| `ALLERGEN_DATA_MISSING` | no allergen data; treated as unknown |
-| `OVER_BUDGET_WARNING` | total is above the kitchen's budget warning. A warning only: a human approves every order anyway. Replaces `OVER_SPEND_LIMIT`. |
-| `LOT_SIZE_ROUNDED` | quantity rounded up to `allowedLotSize` or pack |
-| `EVENT_LINE` | one-off demand, kept out of the base forecast |
-| `MOV_PADDED` | lines pulled forward to reach free delivery |
-| `TOTAL_MISMATCH` | gateway total differs from the figure the human approved |
-| `STANDING_ORDER_DRIFT` | standing order no longer matches usage |
-| `STOCK_COUNT_MISSING` | kitchen stock count is empty |
-| `STOCKOUT_ADJUSTED` | demand scaled up for days out of stock |
-| `POSITION_OK` | on hand + on order is enough; no order now |
-| `COVER_CEILING` | more would exceed the maximum days of cover |
-| `PACK_SIZE_DERIVED` | pack size derived because the pack data is missing or wrong |
-| `UNCONFIRMED` | the send may have landed; a human checks |
+Kind says where a code goes: `reason` in `reason_codes` (of a line, the mandate or an
+engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code, and
+`outcome` as a `place_order` outcome.
+
+| Code | Kind | Meaning |
+|---|---|---|
+| `CLOSING_PASSED` | reason | `closingTime` is at or before now for this delivery. The product is left out; the code is on the mandate. |
+| `STOCK_UNKNOWN` | reason | availability is a sentinel (999999 or 9999999999), missing or null. Also a 409 error on approve. |
+| `PARTIAL_STOCK` | reason | less is available than needed |
+| `SUBSTITUTE_NEEDS_OK` | reason | a substitute changes the product; a human agrees |
+| `SUBSTITUTE_FAT_LEVEL` | reason | the substitute has a different fat level |
+| `ALLERGEN_RULE` | reason | a kitchen allergen rule refuses a product. That product is left out (per product, not the whole mandate). The gateway's proposal path does not emit it yet. |
+| `ALLERGEN_DATA_MISSING` | reason | no allergen data; treated as unknown |
+| `OVER_BUDGET_WARNING` | warning | total is above the kitchen's budget warning. A warning only: a human approves every order anyway. Replaces `OVER_SPEND_LIMIT`. |
+| `LOT_SIZE_ROUNDED` | reason | quantity rounded up to `allowedLotSize` or pack |
+| `EVENT_LINE` | reason | one-off demand, kept out of the base forecast |
+| `MOV_PADDED` | reason | lines pulled forward to reach free delivery |
+| `TOTAL_MISMATCH` | error | gateway total differs from the figure the human approved |
+| `STANDING_ORDER_DRIFT` | reason | standing order no longer matches usage |
+| `STOCK_COUNT_MISSING` | reason | kitchen stock count is empty |
+| `STOCKOUT_ADJUSTED` | reason | demand scaled up for days out of stock |
+| `POSITION_OK` | reason | on hand + on order is enough; no order now |
+| `COVER_CEILING` | reason | more would exceed the maximum days of cover |
+| `PACK_SIZE_DERIVED` | reason | pack size derived because the pack data is missing or wrong |
+| `UNCONFIRMED` | outcome | the send may have landed; a human checks |
 
 ## place_order outcomes
 
@@ -1175,5 +1531,11 @@ Engine, gateway, web and agent use exactly these strings in `mandate.reason_code
 
 Refusals before any send are errors, not outcomes: `TOTAL_MISMATCH` (409: re-simulate
 and ask the human again), `STOCK_UNKNOWN` (409: the supplier has not confirmed the stock
-of a line; nothing is recorded and the proposal stays `READY`), `HUMAN_SESSION_REQUIRED`
+of a line; nothing is recorded and the proposal stays `READY`), `BLOCKED_BY_RECALL`
+(409: a recall holds the proposal; look at its replacement proposal), `NOT_PENDING`
+(409: the proposal is not `READY`), `HUMAN_SESSION_REQUIRED` (403), `ROLE_REQUIRED`
 (403), `IDEMPOTENCY_KEY_REUSED` (409). No adapter retries a POST automatically.
+
+The way out of `UNCONFIRMED` and `SENT_READ_FAILED` is "Resolving an unknown send": a
+person records `placed` or `not_sent`. Its refusals are `ORDER_NOT_RESOLVABLE` (409) and
+`ALREADY_RESOLVED` (409).

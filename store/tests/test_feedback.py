@@ -59,6 +59,20 @@ class Scenarios:
         self.assertEqual(feedback.declined_products(self.db, self.k(1)), ["900002"])
         self.assertEqual(feedback.declined_products(self.db, self.k(2)), [])
 
+    def test_adding_a_product_back_resets_its_declines(self):
+        removal = {"kind": "line_removed", "product_id": "900002"}
+        for proposal in ("p1", "p2", "p3"):
+            feedback.record_feedback(self.db, self.k(1), proposal, [removal], "chef-1")
+        self.assertEqual(feedback.declined_products(self.db, self.k(1)), ["900002"])
+        feedback.record_feedback(self.db, self.k(1), "p4",
+                                 [{"kind": "line_added", "product_id": "900002"}], "chef-1")
+        self.assertEqual(feedback.declined_products(self.db, self.k(1)), [])
+        for proposal in ("p5", "p6"):
+            feedback.record_feedback(self.db, self.k(1), proposal, [removal], "chef-1")
+        self.assertEqual(feedback.declined_products(self.db, self.k(1)), [])
+        feedback.record_feedback(self.db, self.k(1), "p7", [removal], "chef-1")
+        self.assertEqual(feedback.declined_products(self.db, self.k(1)), ["900002"])
+
     def test_a_bad_change_stores_nothing(self):
         for bad in ({"kind": "edited"}, {"kind": "qty_changed", "product_id": "900001"},
                     {"kind": "qty_changed", "product_id": "900001", "from_qty": "4", "to_qty": "4"},

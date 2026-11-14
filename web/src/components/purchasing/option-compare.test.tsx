@@ -1,10 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import { ApprovalCard } from "@/components/purchasing/approval-card";
-import { OptionCompare } from "@/components/purchasing/option-compare";
+import { CHOOSE_TIMEOUT_MS, OptionCompare } from "@/components/purchasing/option-compare";
 import { confirmedDemoApproval, confirmedDemoOrder, milkOptions } from "@/mocks/milk-case";
 import { renderApp } from "@/test/render";
 import type { ProposalOption } from "@/types";
@@ -130,6 +130,23 @@ describe("OptionCompare", () => {
     rerender(<OptionCompare options={[{ ...choosable }]} onChoose={vi.fn()} onApprove={onApprove} />);
     await waitFor(() => expect(screen.getByRole("button", { name: /^Choose option A/ })).toBeEnabled());
     expect(onApprove).not.toHaveBeenCalled();
+  });
+
+  it("frees the buttons again when the options never update after a choice", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const onApprove = vi.fn();
+      render(<OptionCompare options={[choosable]} onChoose={() => Promise.resolve()} onApprove={onApprove} />);
+      await user.click(screen.getByRole("button", { name: /^Choose option A/ }));
+      expect(screen.getByRole("button", { name: /^Choose option A/ })).toBeDisabled();
+      await act(() => vi.advanceTimersByTimeAsync(CHOOSE_TIMEOUT_MS));
+      expect(screen.getByRole("button", { name: /^Choose option A/ })).toBeEnabled();
+      expect(screen.getByRole("alert")).toHaveTextContent("Could not load the updated options.");
+      expect(onApprove).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says so when choosing fails, and approves nothing", async () => {

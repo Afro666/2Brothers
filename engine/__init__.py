@@ -9,6 +9,7 @@ from engine.packs import PackInfo, pack_info, to_sales_units
 from engine.demand import safety_stock, stockout_adjusted
 from engine.quantity import Item, LinePlan, replenish
 from engine.offers import Offer, RequestPlan, plan_request
+from engine.partial import FillPart, PartialFill, partial_fill
 from engine.urgency import Urgency, urgency
 from engine.allergens import allergen_codes
 from engine.padding import Padding, Wanted, pad_to_free_delivery
@@ -21,4 +22,5 @@ __all__ = [
     "Item", "KitchenParams", "LinePlan", "Offer", "PackInfo", "RequestPlan", "Urgency",
     "pack_info", "plan_request", "replenish", "safety_stock", "stockout_adjusted",
     "to_sales_units", "urgency",
+    "FillPart", "PartialFill", "partial_fill",
 ]

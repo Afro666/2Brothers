@@ -134,9 +134,9 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
     "aria-current": active ? ("page" as const) : undefined,
     onClick: onNavigate,
     className: cn(
-      "flex items-center gap-2 rounded-md font-medium outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/70",
+      "flex items-center gap-2 rounded-sm border-l-2 font-medium outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/70",
       item.foot ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm",
-      active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
+      active ? "border-primary bg-accent text-foreground" : "border-transparent text-muted-foreground",
     ),
   };
   const content = (
@@ -144,7 +144,7 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
       <Icon className={item.foot ? "size-3.5" : "size-4"} aria-hidden />
       <span className="flex-1">{item.label}</span>
       {item.count ? (
-        <span className="rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">
+        <span className="rounded-sm bg-foreground px-1.5 font-mono text-[11px] text-background">
           {item.count}
         </span>
       ) : null}
@@ -201,12 +201,12 @@ function SectionTabs({ label, items, activeId }: { label: string; items: NavItem
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "-mb-px flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/70",
-                  active ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
+                  active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground",
                 )}
               >
                 {item.label}
                 {item.count ? (
-                  <span className="rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">
+                  <span className="rounded-sm bg-foreground px-1.5 font-mono text-[11px] text-background">
                     {item.count}
                   </span>
                 ) : null}
@@ -225,7 +225,7 @@ function RolePicker() {
   const id = useId();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id} className="text-xs text-muted-foreground">
+      <Label htmlFor={id} className="label-caps">
         Your role
       </Label>
       <Select value={role} onValueChange={(value) => setRole(value as Role)}>
@@ -259,7 +259,7 @@ function Brand() {
       <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
         <ChefHat className="size-5" aria-hidden />
       </span>
-      Kitchen Buyer
+      <span className="stamp text-[15px]">Kitchen Buyer</span>
       <KitchenLogo />
     </span>
   );

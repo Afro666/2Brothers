@@ -15,6 +15,7 @@ def apply_notices(gateway, kitchen_id, notices, *, live_enrichment=False):
     audit(db, alerts, now)
     # Publish all holds before quoting any replacement.
     alerts = [recalls.remember(db, alert) for alert in alerts]
+    alerts = [alert for alert in alerts if alert.get('status') != 'dismissed']
     results = []
     for proposal in proposals:
         offer = get_offer(db, proposal['offer_id'])
