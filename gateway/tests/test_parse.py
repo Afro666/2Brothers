@@ -106,6 +106,12 @@ def test_refuses_instead_of_guessing(text, why):
     ("200 L lactose-free milk", None),             # no day named: the form's date stays
     ("40 kg Edam cheese", None),
     ("monday", MON),                               # no quantity: the day is still read
+    ("20 kg sun dried tomatoes", None),            # #1016: a short weekday form in a product name is no day
+    ("20 kg sun dried tomatoes by mon", MON),      # ... and after a day word it is one
+    ("50 kg cheese for fri", date(2026, 11, 20)),
+    ("50 kg cheese next Mon", MON),
+    ("30 kg sat fat free spread", None),
+    ("20 kg tomatoes sunday", date(2026, 11, 15)), # a full name is always a day
     ("", None),
 ])
 def test_named_day_reads_the_day_a_text_names(text, when):
@@ -123,3 +129,25 @@ def test_named_day_refuses_a_date_that_does_not_exist():
     from gateway.parse import named_day
     with pytest.raises(ParseError):
         named_day("20 kg butter 31.2.", FRI)
+
+
+def test_a_short_weekday_in_a_product_name_keeps_the_form_date_and_the_word():
+    """#1016: "sun" in "sun dried tomatoes" moved the order to Sunday and left the query."""
+    from gateway.parse import product_words
+    picked = date(2026, 11, 20)
+    parsed = parse_request("20 kg sun dried tomatoes", FRI, default_day=picked)
+    assert parsed.requested_date == picked and parsed.query == "sun dried tomatoes"
+    assert product_words("20 kg sun dried tomatoes") == "sun dried tomatoes"
+    by_day = parse_request("20 kg sun dried tomatoes by sun", FRI, default_day=picked)
+    assert by_day.requested_date == date(2026, 11, 15) and by_day.query == "sun dried tomatoes"
+    assert parse_request("50 kg cheese by Monday", FRI, default_day=picked).requested_date == MON
+    with pytest.raises(ParseError, match="no delivery day"):       # no form date: never a guess
+        parse_request("20 kg sun dried tomatoes", FRI)
+
+
+def test_the_buyer_payload_keeps_the_form_date_for_a_short_weekday_in_a_name():
+    from gateway.buyer_worker import buyer_payload
+    kept = buyer_payload("k", {"text": "20 kg sun dried tomatoes", "requested_date": "2026-11-20"})
+    assert kept["requested_date"] == "2026-11-20"
+    moved = buyer_payload("k", {"text": "50 kg cheese by Monday", "requested_date": "2026-11-20"})
+    assert moved["requested_date"] != "2026-11-20"
