@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from gateway import discovery, tokens
+from gateway import discovery, signing, tokens
 from gateway.tests.test_gateway_app import HUMAN, K, env  # noqa: F401 (fixture)
 from gateway.tests.test_mcp_http import MCP_HEADERS
 
@@ -178,3 +178,43 @@ def test_person_approval_is_described_apart_from_the_agent_tools(client):
     assert "signed-in session or a personal approval token" in c["humanOnly"][0]["reason"]
     text = client.get("/llms.txt", headers=PUBLIC).text
     assert "## A person approving from their own chat" in text and "`approve_proposal`" in text
+
+
+def test_llms_txt_says_offers_and_receipts_are_signed_and_how_to_verify(client):
+    """The strongest trust claim is checkable by an outside agent with no token (#1863)."""
+    text = client.get("/llms.txt", headers=PUBLIC).text
+    jwks = BASE + "/.well-known/jwks.json"
+    assert client.get("/.well-known/jwks.json").json()["keys"][0]["alg"] == "EdDSA"     # the URL is served
+    for needle in ("## Signed offers and receipts", "`signature`", "`receipt`", "compact JWS", "EdDSA",
+                   f"`GET {jwks}`", "`kid`", f"`{signing.ISSUER}`", "`exp`", "`offer_hash`",
+                   f"python -m gateway.verify_offer --base-url {BASE} --offer offer.json",
+                   f"python -m gateway.verify_offer --base-url {BASE} --receipt order.json",
+                   "`NOT_SENT`"):
+        assert needle in text, needle
+
+
+def test_the_card_links_the_jwks_and_names_the_signature_fields(client):
+    c = card(client).json()
+    assert c["links"]["jwks"] == BASE + "/.well-known/jwks.json"
+    signed = c["signedAnswers"]
+    assert signed["jwks"] == c["links"]["jwks"] and signed["alg"] == "EdDSA" and signed["issuer"] == signing.ISSUER
+    assert signed["offer_field"] == "signature" and signed["receipt_field"] == "receipt"
+    assert "gateway.verify_offer" in signed["verify"]
+
+
+def test_no_signing_text_when_the_jwks_route_is_gone(client):
+    client.app.router.routes[:] = [r for r in client.app.router.routes
+                                   if getattr(r, "path", "") != "/.well-known/jwks.json"]
+    c = card(client).json()
+    assert c["links"]["jwks"] is None and c["signedAnswers"] is None
+    assert "jwks.json" not in client.get("/llms.txt", headers=PUBLIC).text
+
+
+def test_llms_txt_says_how_to_get_a_kitchen_token(client, monkeypatch):
+    """Open demo on (the shared session works): any visitor makes a kitchen token in Settings."""
+    text = client.get("/llms.txt", headers=PUBLIC).text
+    assert "https://kitchen.example/settings/tokens" in text and "API & MCP tokens" in text
+    assert "open demo" in text and "`demo-kitchen`" in text
+    monkeypatch.setenv("GATEWAY_REQUIRE_LOGIN", "true")
+    text = client.get("/llms.txt", headers=PUBLIC).text
+    assert "https://kitchen.example/settings/tokens" in text and "open demo" not in text.split("## The flow")[0]
