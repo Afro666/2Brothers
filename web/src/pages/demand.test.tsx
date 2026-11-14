@@ -102,7 +102,7 @@ describe("DemandPage", () => {
     expect(head).toHaveTextContent("462775");
     expect(head).toHaveTextContent("Short on 3 of 3 days");
     expect(head).toHaveTextContent(/Buy [\d,.]+ L/);
-    expect(head).toHaveTextContent("up to 4 kitchens");
+    expect(head).toHaveTextContent("kitchens: up to 4");
     expect(within(head).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
     expect(days).toHaveLength(3);
     for (const day of days) expect(day).not.toBeVisible();
@@ -124,9 +124,9 @@ describe("DemandPage", () => {
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
     await demandTableReady();
     const [head, ...days] = productSection("462921");
-    expect(head).toHaveTextContent("+ unknown on 3 days");
+    expect(head).toHaveTextContent("+ days with an unknown amount: 3");
     expect(head).not.toHaveTextContent("Buy 0 L");
-    expect(head).toHaveTextContent("up to 4 kitchens");
+    expect(head).toHaveTextContent("kitchens: up to 4");
     await openProduct("462921");
     expect(days).toHaveLength(3);
     for (const day of days) {
@@ -245,7 +245,7 @@ describe("DemandPage", () => {
     await demandTableReady();
 
     const table = within(document.querySelector("table")!);
-    const covered = table.getByRole("button", { name: "Covered: 1 products" });
+    const covered = table.getByRole("button", { name: "Covered products: 1" });
     expect(covered).toHaveAttribute("aria-expanded", "false");
     expect(productSection("butter")[0]).not.toBeVisible();
 
@@ -279,11 +279,12 @@ describe("DemandPage", () => {
       expect.stringContaining("Yogurt"),
     ]);
     expect(table.queryByRole("rowheader", { name: /Flour/ })).not.toBeInTheDocument();
-    expect(table.queryByRole("button", { name: /^Covered:/ })).not.toBeInTheDocument();
+    expect(table.queryByRole("button", { name: /^Covered products:/ })).not.toBeInTheDocument();
 
+    // Open all opens what the filter shows and leaves the filter as the person set it.
     await user.click(screen.getByRole("button", { name: "Open all" }));
-    expect(screen.getByRole("button", { name: "All (4)" })).toHaveAttribute("aria-pressed", "true");
-    expect(table.getByRole("button", { name: "Covered: 1 products" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Short (2)" })).toHaveAttribute("aria-pressed", "true");
+    expect(table.queryByRole("rowheader", { name: /Flour/ })).not.toBeInTheDocument();
     for (const body of productSections()) {
       const [, ...days] = [...body.querySelectorAll<HTMLElement>(":scope > tr")];
       for (const day of days) expect(day).toBeVisible();

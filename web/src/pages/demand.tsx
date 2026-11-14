@@ -176,14 +176,14 @@ async function loadWeek(api: Api, week: string, t: ReturnType<typeof useT>): Pro
 function ProductSummary({ group }: { group: ProductGroup }) {
   const t = useT();
   return (
-    <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+    <span className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
       <ProductThumb en={group.productName} size="sm" />
-      <div className="min-w-40 flex-1">
-        <div className="font-medium break-words">{group.productName}</div>
-        <div className="text-xs text-muted-foreground">{group.productId}</div>
-      </div>
+      <span className="block min-w-40 flex-1">
+        <span className="block font-medium break-words">{group.productName}</span>
+        <span className="block text-xs text-muted-foreground">{group.productId}</span>
+      </span>
       <RiskBadge risk={group.worst} />
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         {group.shortDays > 0 ? (
           <span className="font-medium text-foreground">
             {t("Short on {count} of {days} days", {
@@ -199,14 +199,14 @@ function ProductSummary({ group }: { group: ProductGroup }) {
         ) : null}
         {group.unknownBuyDays > 0 ? (
           <span className="text-warning">
-            {t("+ unknown on {count} days", { count: formatNumber(group.unknownBuyDays) })}
+            {t("+ days with an unknown amount: {count}", { count: formatNumber(group.unknownBuyDays) })}
           </span>
         ) : null}
         <span className="tabular-nums">
-          {t("up to {count} kitchens", { count: formatNumber(group.maxKitchens) })}
+          {t("kitchens: up to {count}", { count: formatNumber(group.maxKitchens) })}
         </span>
-      </div>
-    </div>
+      </span>
+    </span>
   );
 }
 
@@ -420,7 +420,7 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
   }
 
   function openAll() {
-    setFilter("ALL");
+    // Opens what the filter shows; the filter itself stays as the person set it.
     setCoveredOpen(true);
     setOpenProducts(new Set(groups.map((group) => group.productId)));
   }
@@ -489,7 +489,7 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
                         aria-expanded={coveredOpen}
                         onClick={() => setCoveredOpen((open) => !open)}
                       >
-                        {t("Covered: {count} products", { count: formatNumber(coveredGroups.length) })}
+                        {t("Covered products: {count}", { count: formatNumber(coveredGroups.length) })}
                       </Button>
                     </TableHead>
                   </TableRow>
@@ -526,7 +526,7 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
                   aria-expanded={coveredOpen}
                   onClick={() => setCoveredOpen((open) => !open)}
                 >
-                  {t("Covered: {count} products", { count: formatNumber(coveredGroups.length) })}
+                  {t("Covered products: {count}", { count: formatNumber(coveredGroups.length) })}
                 </Button>
                 <ul className="divide-y" hidden={!coveredOpen}>
                   {coveredGroups.map((group) => (
