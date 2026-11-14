@@ -1387,8 +1387,9 @@ exact total through the existing workflow before placement.
 the engine's `partial_fill` names a part the supplier confirms, the gateway offers that part
 as the first option: `source: "confirmed"`, its own stored and signed quote, `stock_confirmed:
 true`, `recommended: true`, and `held` for the rest. Its `why` says what is ordered now and
-what waits. It is the option a person can approve at once; the proposal's own basket cannot
-be placed while a line's stock is unconfirmed. When the proposal's own basket has no
+what waits. It is the option whose every line has confirmed stock; a person may also approve
+the proposal's own basket, and the order then waits for the supplier (`supplier_must_confirm`).
+When the proposal's own basket has no
 confirmed stock at all, the gateway looks in the catalog shortlist for the request text and
 offers confirmed stock from there; the `why` then says it was found in the catalog. A request
 without text gets no such search. The gateway answers at most three options:
@@ -1410,6 +1411,12 @@ the confirmed one first, then the Buyer's, with tiers `good`, `better`, `best` i
   `offer_id`, so a client finds the current choice by comparing the two.
 - Nothing is approved and nothing is sent. The person then approves the new
   `expected_total` through `/approve`, as for any proposal.
+- A line whose fresh stock is unknown (Valio's filler of 999999 or more, or a manual or
+  csv price list) does not refuse the choice (#1313, the approve rule of 2026-11-14): the
+  chosen basket keeps `unknown_stock: true` on that line, the mandate reasons say
+  "<supplier> must confirm stock for: <products>.", and the approval places the order with
+  `supplier_must_confirm` and `stock: unknown` on that receipt line, as for any proposal.
+  A line that is not available (empty, null or zero) is still refused: 409 `OPTION_UNAVAILABLE`.
 - Only a human session may choose: 403 `HUMAN_SESSION_REQUIRED` for an API key or the
   Buyer's token.
 
@@ -1418,9 +1425,9 @@ the confirmed one first, then the Buyer's, with tiers `good`, `better`, `best` i
 | 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
 | 404 | `OPTION_NOT_FOUND` | `offer_id` is not one of this proposal's options. |
 | 409 | `NOT_PENDING` | The proposal is no longer `READY` (approved, rejected, expired). |
-| 409 | `STOCK_UNKNOWN` | The fresh simulation cannot confirm the stock of a line (choosing an option, or an auto-approval; a person's approve does not return it since 2026-11-14). |
+| 409 | `STOCK_UNKNOWN` | Only an auto-approval of a line with unconfirmed stock. Neither a person's approve (since 2026-11-14) nor choosing an option (since #1313) returns it. |
 | 409 | `CLOSING_PASSED` | The cut-off of a line has passed. |
-| 409 | `OPTION_UNAVAILABLE` | A product of the option cannot be ordered now for another reason (a recall hold, an allergen rule, no price). |
+| 409 | `OPTION_UNAVAILABLE` | A product of the option cannot be ordered now for another reason (no available stock, a recall hold, an allergen rule, no price). |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. |
 
 After a 409 the proposal is unchanged: it keeps the basket it had.
@@ -3287,7 +3294,7 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | `SENT_READ_FAILED` | It landed; only reading the answer failed | Re-read the order status. Never resend |
 
 Refusals before any send are errors, not outcomes: `TOTAL_MISMATCH` (409: re-simulate
-and ask the human again), `STOCK_UNKNOWN` (409 only for an auto-approval or a chosen option: a person's
+and ask the human again), `STOCK_UNKNOWN` (409 only for an auto-approval: a person's
 approval of an unconfirmed line places the order with `supplier_must_confirm`), `BLOCKED_BY_RECALL`
 (409: a recall holds the proposal; look at its replacement proposal), `NOT_PENDING`
 (409: the proposal is not `READY`), `APPROVAL_MISMATCH` (409: `place_order` names an
