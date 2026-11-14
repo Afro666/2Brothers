@@ -71,7 +71,8 @@ def test_one_model_call_then_cached_ids_with_fresh_price_and_new_offer(monkeypat
             sent = json.loads(model.prompts[0][1]['content'])
             assert len(json.dumps(model.prompts[0])) < 6000
             assert set(sent['products'][0]) == {'index', 'product_id', 'name', 'pack', 'can_arrive', 'alias',
-                                               'price_per_unit', 'price_unit', 'engine_selected', 'selection'}
+                                               'price_per_unit', 'price_unit', 'engine_selected', 'selection',
+                                               'kitchen_declined'}
         finally:
             await gateway.close()
     asyncio.run(run())

@@ -117,3 +117,55 @@ def test_feedback_refresh_and_undo_change_cached_product_choice(monkeypatch):
         finally:
             await gateway.close()
     asyncio.run(run())
+
+
+def test_decline_flag_uses_active_scoped_memory_and_disappears_after_undo(monkeypatch):
+    from agent.memory_cache import KitchenFactsCache
+    from gateway.tests.test_learned import seed_declines
+    from store import learned
+
+    async def run():
+        db, gateway = environment(monkeypatch)
+        seed_declines(db)
+        seed_declines(db, product_id='unrelated')
+        seed_declines(db, kitchen_id='other-kitchen')
+        db.feedback.update_many({}, {'$set': {'note': 'RAW_NOTE_MUST_STAY_OUT'}})
+        model = Pick()
+        worker = BuyerWorker(db, gateway, model_factory=lambda: model, now=lambda: NOW)
+        clock = [0]
+        worker.memory_cache = KitchenFactsCache(clock=lambda: clock[0])
+        try:
+            await worker.run('demo-kitchen', NEED)
+            sent = json.loads(model.prompts[0][1]['content'])
+            assert sent['products'][0]['kitchen_declined'] is True
+            assert 'RAW_NOTE_MUST_STAY_OUT' not in json.dumps(model.prompts)
+            assert 'unrelated' not in model.prompts[0][0]['content']
+            fact = next(f for f in single_pick.compute_facts(single_pick._FactsGateway(db, NOW),
+                'demo-kitchen', NOW.date()) if f['product_id'] == '462775')
+            learned.disable(db, 'demo-kitchen', fact['id'], 'chef-1', NOW)
+            clock[0] = 61
+            await worker.run('demo-kitchen', {**NEED, 'idempotency_key': 'undo-decline'})
+            assert model.calls == 2
+            sent = json.loads(model.prompts[1][1]['content'])
+            assert sent['products'][0]['kitchen_declined'] is False
+            assert model.prompts[1][0]['content'] == single_pick.SYSTEM
+            assert db.orders.count_documents({}) == 0
+        finally:
+            await gateway.close()
+    asyncio.run(run())
+
+
+def test_prompt_revision_invalidates_a_previously_cached_choice(monkeypatch):
+    async def run():
+        db, gateway = environment(monkeypatch)
+        model = Pick()
+        worker = BuyerWorker(db, gateway, model_factory=lambda: model, now=lambda: NOW)
+        try:
+            await worker.run('demo-kitchen', NEED)
+            monkeypatch.setattr(single_pick, 'SYSTEM', single_pick.SYSTEM + ' Updated ranking policy.')
+            await worker.run('demo-kitchen', {**NEED, 'idempotency_key': 'new-prompt'})
+            assert model.calls == 2
+            assert model.prompts[0][0]['content'] != model.prompts[1][0]['content']
+        finally:
+            await gateway.close()
+    asyncio.run(run())
