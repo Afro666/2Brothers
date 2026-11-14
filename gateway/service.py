@@ -886,25 +886,32 @@ class Gateway:
         # quantity; the stored need keeps the unlearned number as the correction basis.
         from engine.learning import apply_ratio
         from gateway import learned as learned_facts
-        facts = learned_facts.compute_facts(self, kitchen_id, self.now().date())
-        ratios = {fact["product_id"]: fact for fact in facts
-                  if fact.get("kind") == "CORRECTION_RATIO" and fact.get("active") is True
-                  and fact.get("applicable") is True}
-        for need in needs:
-            fact = ratios.get(need["product_id"])
-            if fact is None:
-                continue
-            original = need["quantity"]
-            adjusted, info = apply_ratio(original, fact)
-            if info is None:
-                continue
-            need["quantity"] = f"{adjusted.normalize():f}"
-            # The offer store refuses binary floats; the API turns this back into a number.
-            need["learned"] = {**info, "ratio": f"{Decimal(str(info['ratio'])).normalize():f}",
-                               "unit": need["unit"]}
-            need["unlearned_quantity"] = original
-        problems = [*problems, *learned_facts.plan_problems(
-            self, kitchen_id, facts, [need["product_id"] for need in needs])]
+        # Learning is an extra: any error in it leaves the plan unlearned (#1522).
+        try:
+            learned_needs = [dict(need) for need in needs]
+            facts = learned_facts.compute_facts(self, kitchen_id, self.now().date())
+            ratios = {fact["product_id"]: fact for fact in facts
+                      if fact.get("kind") == "CORRECTION_RATIO" and fact.get("active") is True
+                      and fact.get("applicable") is True}
+            for need in learned_needs:
+                fact = ratios.get(need["product_id"])
+                if fact is None:
+                    continue
+                original = need["quantity"]
+                adjusted, info = apply_ratio(original, fact)
+                if info is None:
+                    continue
+                need["quantity"] = f"{adjusted.normalize():f}"
+                # The offer store refuses binary floats; the API turns this back into a number.
+                need["learned"] = {**info, "ratio": f"{Decimal(str(info['ratio'])).normalize():f}",
+                                   "unit": need["unit"]}
+                need["unlearned_quantity"] = original
+            learned_problems = [*problems, *learned_facts.plan_problems(
+                self, kitchen_id, facts, [need["product_id"] for need in learned_needs])]
+        except Exception:
+            log.warning("learned facts failed for kitchen %s; plan proposed unlearned", kitchen_id, exc_info=True)
+        else:
+            needs, problems = learned_needs, learned_problems
         return {"product_ids": [n["product_id"] for n in needs], "quantity": str(len(needs)), "unit": "products",
                 "requested_date": str(body.get("requested_date") or body["from"]), "needs": needs,
                 "text": body.get("text") or f"Order for the menu plan {start.isoformat()} to {end.isoformat()}",

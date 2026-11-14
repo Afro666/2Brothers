@@ -153,6 +153,22 @@ def test_a_disabled_fact_is_not_applied(env):
     assert audit(db, "learned_fact_applied") == []
 
 
+def test_a_learning_error_leaves_the_plan_unlearned(env, monkeypatch):
+    client, _, db = env
+    setup(client, [{"product_id": "462775", "on_hand": "5", "unit": "L"}])
+    seed_corrections(db)
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("learning bug")
+
+    monkeypatch.setattr("gateway.learned.compute_facts", broken)
+    proposal = plan(client, "learn-broken")
+    need = next(need for need in proposal["request"]["needs"] if need["product_id"] == "462775")
+    assert need["quantity"] == "20" and "learned" not in need and "unlearned_quantity" not in need
+    assert all("learned" not in line for line in proposal["lines"])
+    assert audit(db, "learned_fact_applied") == []
+
+
 def test_a_typed_request_is_never_adjusted(env):
     client, _, db = env
     seed_corrections(db)
