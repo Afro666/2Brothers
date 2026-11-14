@@ -1,11 +1,11 @@
-"""Check a delivery from a photo of its note (#362):
+"""Check a delivery from a photo of its note (#362, #1304):
 POST /v1/kitchens/{kitchen_id}/orders/{order_id}/delivery-note/photo.
 
 Built like gateway/stock_photo.py: this route checks who asks, the order and the image,
 hands the photo to the Buyer worker's POST /delivery-note (the model key lives there),
 and answers the checked lines (docs/contract.md "Check a delivery from a photo of its
-note"). It stores nothing but one audit entry, without the image or the note's text.
-The call is made once and never retried.
+note"). The structured observation is saved durably before `saved: true`; the image and
+the note's text are never stored. The call is made once and never retried.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from fastapi import Depends, Request
 
 from gateway.service import GatewayError
 from gateway.stock_photo import MODEL_NAME, STATUS as PHOTO_STATUS, WORKER_TIMEOUT, _image
-from store import orders
+from store import delivery_results, orders
 
 LINE_STATUSES = ("RECEIVED", "SHORT", "MISSING", "UNKNOWN")
 OTHER_STATUSES = ("SUBSTITUTE", "EXTRA", "UNREADABLE")
@@ -106,6 +106,142 @@ def _supplier_name(order: dict) -> str | None:
     return None
 
 
+def _id(value) -> str | None:
+    text = None if value is None else str(value).strip()
+    return None if not text or text.lower() == "unknown" else text
+
+
+def _unit(value) -> str | None:
+    text = value.strip() if isinstance(value, str) else ""
+    return text if text and text.lower() != "unknown" else None
+
+
+def _supplier_by_product(order: dict) -> dict[str, str]:
+    """The order's own supplier split, keyed by product; the model never supplies this."""
+    out: dict[str, str] = {}
+    for block in order.get("blocks") or []:
+        if not isinstance(block, dict) or not block.get("supplier_id"):
+            continue
+        supplier = _id(block["supplier_id"])
+        for product_id in block.get("product_ids") or []:
+            out.setdefault(_id(product_id), supplier)
+        for line in block.get("lines") or []:
+            if isinstance(line, dict) and line.get("product_id") is not None:
+                out.setdefault(_id(line["product_id"]), supplier)
+    for line in order.get("lines") or []:
+        if isinstance(line, dict) and line.get("supplier_id") is not None:
+            out.setdefault(_id(line.get("product_id")), _id(line["supplier_id"]))
+    return {key: value for key, value in out.items() if key is not None and value is not None}
+
+
+def _top_supplier(order: dict, by_product: dict[str, str]) -> str | None:
+    """The one supplier of the order; only a genuinely mixed order loses the top-level id."""
+    suppliers = set(by_product.values())
+    for block in order.get("blocks") or []:
+        supplier = _id(block.get("supplier_id")) if isinstance(block, dict) else None
+        if supplier:
+            suppliers.add(supplier)
+    supplier = _id(order.get("supplier_id"))
+    if supplier:
+        suppliers.add(supplier)
+    return next(iter(suppliers)) if len(suppliers) == 1 else None
+
+
+def _requested_date(db, order: dict):
+    """The trusted request date: the stored order, its receipt, else its offer."""
+    value = order.get("requested_date")
+    receipt = order.get("receipt") or {}
+    if value is None and isinstance(receipt, dict):
+        value = receipt.get("requested_date")
+    if value is None and order.get("offer_id"):
+        offer = orders.get_offer(db, order["offer_id"]) or {}
+        value = (offer.get("request") or {}).get("requested_date")
+        if value is None:
+            value = offer.get("requested_date")
+    return value
+
+
+def delivery_context(db, order: dict) -> dict:
+    """Identity, requested date and order timestamp from stored data, never the model."""
+    by_product = _supplier_by_product(order)
+    return {"supplier_id": _top_supplier(order, by_product),
+            "supplier_by_product": by_product,
+            "requested_date": _requested_date(db, order),
+            "ordered_at": order.get("ordered_at") or order.get("created_at")}
+
+
+def observation_lines(order: dict, answer_lines: list, context: dict) -> list[dict]:
+    """One observation line per original order product; the order keeps quantity and unit."""
+    seen = {}
+    for line in answer_lines:
+        if isinstance(line, dict) and line.get("product_id") is not None:
+            seen.setdefault(_id(line["product_id"]), line)
+    out = []
+    for stored in order.get("lines") or []:
+        if not isinstance(stored, dict):
+            continue
+        product_id = _id(stored.get("product_id"))
+        observed = seen.get(product_id) or {}
+        status = observed.get("status") if observed.get("status") in LINE_STATUSES else "UNKNOWN"
+        out.append({"supplier_id": context["supplier_by_product"].get(product_id,
+                                                                     context["supplier_id"]),
+                    "product_id": product_id, "status": status,
+                    "ordered": stored.get("quantity"),
+                    "delivered": _delivered(observed, stored),
+                    "unit": _unit(stored.get("unit"))})
+    return out
+
+
+def _delivered(observed: dict, stored: dict):
+    """The worker's base quantity in the order's unit; null when that conversion is unknown."""
+    if observed.get("status") == "UNKNOWN":
+        return None
+    received = _dec(observed.get("received"))
+    unit, base = _unit(stored.get("unit")), _unit(observed.get("base_unit"))
+    if received is None:
+        return None
+    if isinstance(unit, str) and unit and base == unit:
+        return received
+    ordered, wanted = _dec(observed.get("ordered")), _dec(stored.get("quantity"))
+    if ordered is None or ordered <= 0 or wanted is None or not isinstance(unit, str) or not unit:
+        return None
+    return _text(received * wanted / ordered)
+
+
+def manual_lines(order: dict, context: dict) -> list[dict]:
+    """One tap means every known ordered quantity arrived; unknown stays unknown."""
+    out = []
+    for stored in order.get("lines") or []:
+        if not isinstance(stored, dict):
+            continue
+        product_id = _id(stored.get("product_id"))
+        quantity, unit = _dec(stored.get("quantity")), _unit(stored.get("unit"))
+        known = quantity is not None and unit is not None
+        out.append({"supplier_id": context["supplier_by_product"].get(product_id,
+                                                                     context["supplier_id"]),
+                    "product_id": product_id,
+                    "status": "RECEIVED" if known else "UNKNOWN",
+                    "ordered": stored.get("quantity"),
+                    "delivered": stored.get("quantity") if known else None,
+                    "unit": unit if known else None})
+    return out
+
+
+def not_ordered_lines(answer_lines: list, context: dict) -> list[dict]:
+    """Only the observed exception fields; lots and best-before text stay transient."""
+    out = []
+    for line in answer_lines:
+        if not isinstance(line, dict) or line.get("status") not in OTHER_STATUSES:
+            continue
+        product_id = _id(line.get("product_id"))
+        out.append({"supplier_id": context["supplier_by_product"].get(product_id,
+                                                                     context["supplier_id"]),
+                    "product_id": product_id, "status": line["status"],
+                    "delivered": line.get("received"),
+                    "unit": _unit(line.get("base_unit")) or _unit(line.get("unit"))})
+    return out
+
+
 def claim(order: dict, lines: list) -> tuple[list, dict]:
     """The value of every short or missing line at the stored order's own price, and one
     total (#1198, docs/contract.md). Plain code: the model gives no price and no value.
@@ -185,5 +321,22 @@ def mount_delivery_note(app, gw, principal, worker=None) -> None:
                     needs_approval=sum(1 for ln in answer["not_ordered"] if ln["needs_approval"]),
                     duration_ms=duration_ms)
         lines, total = claim(order, answer["lines"])
-        return {"model": MODEL_NAME, "duration_ms": duration_ms, "saved": False, "order_id": order_id,
+        context = delivery_context(gw().db, order)
+        try:
+            result = delivery_results.save_observation(
+                gw().db, kitchen_id=kitchen_id, order_id=order_id,
+                supplier_id=context["supplier_id"], requested_date=context["requested_date"],
+                ordered_at=context["ordered_at"], delivery_date=answer["note"]["delivery_date"],
+                checked_by=who.name, checked_at=gw().now(), source="photo",
+                lines=observation_lines(order, answer["lines"], context),
+                not_ordered=not_ordered_lines(answer["not_ordered"], context))
+        except ValueError as exc:
+            raise GatewayError(422, "INVALID_REQUEST", str(exc)[:200]) from None
+        saved_counts: dict[str, int] = {}
+        for ln in [*result["lines"], *result["not_ordered"]]:
+            saved_counts[ln["status"]] = saved_counts.get(ln["status"], 0) + 1
+        gw()._audit(kitchen_id, "delivery_result_saved", who.name, order_id=order_id,
+                    result_id=result["result_id"], revision=result["revision"],
+                    statuses=saved_counts)
+        return {"model": MODEL_NAME, "duration_ms": duration_ms, "saved": True, "order_id": order_id,
                 **answer, "lines": lines, "claim": total}

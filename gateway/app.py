@@ -779,9 +779,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     from gateway.stock_photo import mount_stock_photo
     mount_stock_photo(app, gw, principal, shelf_worker)
 
-    # Check a delivery from a photo of its note (#362): read in the worker; stores nothing.
+    # Check a delivery from a photo of its note (#362): read in the worker; save the facts.
     from gateway.delivery_note import mount_delivery_note
     mount_delivery_note(app, gw, principal, delivery_note_worker)
+    # One-tap "it all arrived" (#1304): a chef or approver's own observation, no stock change.
+    from gateway.received import mount_received
+    mount_received(app, gw, principal, body)
     from gateway.menu_photo import mount_menu_photo
     mount_menu_photo(app, gw, principal, menu_photo_worker)
     from gateway.price_list_photo import mount_price_list_photo   # a supplier's price list from a photo (#1174)
