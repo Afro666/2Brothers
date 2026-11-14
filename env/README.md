@@ -1,7 +1,38 @@
 # env: kitchen simulation
 
 Shared world for the synthetic history (#32) and the Kitchen Week RL env (#23).
-Python 3.10+, standard library only.
+Python 3.10+. The original simulation uses the standard library; covers v2
+experiments additionally require `python -m pip install -e ".[covers]"`.
+
+Covers v2 (#433): `python -m env.covers_backtest --write` compares current,
+ridge and statsmodels ETS with rolling origins and a per-kitchen-type holdout
+cost gate. Results append to `BACKTEST.md`, preserving the existing experiments.
+`--allow-missing-ets` writes a clearly provisional comparison and disables adoption.
+The default command fails if ETS cannot run. `env/covers.py:SELECTED` is the reviewed
+deployment map used by `demo/seed.py` for forecast covers and menu plans; update it
+only after a complete comparison passes the gate. The completed six-seed comparison
+retains current for every kitchen type: neither ridge nor ETS clears the holdout
+cost gate. `BACKTEST.md` records the results, including lost covers and waste.
+
+`--signals snapshots.json` accepts an array of versioned `signals/weather` rows
+(`kitchen_id`, `date`, `as_of`, nested `weather`) with optional kitchen inputs:
+`is_school_holiday` (bool), `events_flag` (bool), `occupancy` (fraction 0-1),
+`reservations` (guest count). Use original env kitchen IDs (K01, etc.), including
+for the hotel renamed to demo-kitchen. `demo.seed.build(..., signal_rows=rows)`
+accepts the same archive. Missing weather/bookings/events remain unknown, distinct
+from zero; public holidays use Finnish python-holidays and school breaks default
+to the kitchen's configured holiday weeks. Integration-specific school calendars
+can override the default per date. No live weather fetch is performed by seeding.
+The existing synthetic actuals have no weather or bookings effect, so an archive
+alone cannot demonstrate their predictive benefit on this simulation.
+
+`--feedback joined.json` accepts exported `store.feedback.list_feedback` rows with
+an `outcome` object containing matching `kitchen_id`, `proposal_id`, `product_id`,
+`unit`, plus `actual_qty` and `resolved_at` (ISO timestamp after the edit's `ts`).
+The caller must resolve the proposal's demand horizon and convert to the same unit
+before joining. FVA is reduction in absolute quantity error, summed separately per
+unit; positive helped, negative hurt. Rows without a valid outcome join are
+unscorable. No live feedback or chef benefit is fabricated for the demo.
 
 | File | What |
 |---|---|

@@ -20,7 +20,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: python -m pip install -e ".[test,signals]" pytest
+        run: python -m pip install -e ".[test,signals,covers]" pytest
       - name: Run tests (no live calls; no secrets in this job)
         run: python -m pytest -q -p no:cacheprovider --ignore=web --ignore=vendor
 

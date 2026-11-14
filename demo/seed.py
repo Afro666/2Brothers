@@ -27,9 +27,11 @@ import json
 
 from env.backtest import WeekdayMA
 from env.catalog import PRODUCTS
-from env.history import Forecaster, simulate_kitchen
+from env.covers import demo_forecaster
+from env.history import simulate_kitchen
 from env.kitchens import RECIPES, make_kitchens
 from env.policies import POLICIES
+from signals.covers import CoverSignals
 
 START = date(2026, 8, 17)
 DEMO_ID = "demo-kitchen"
@@ -62,7 +64,8 @@ def _day(row: dict) -> date:
     return datetime.fromisoformat(row["ts"]["$date"].replace("Z", "")).date()
 
 
-def build(seed: int, today: date, future_weeks: int, kitchens: int = 20) -> dict:
+def build(seed: int, today: date, future_weeks: int, kitchens: int = 20,
+          signal_rows=()) -> dict:
     """Everything in memory. Pure apart from reading env/; deterministic for a seed."""
     end = today + timedelta(days=7 * future_weeks + (6 - today.weekday()))
     days = (end - START).days + 1
@@ -87,7 +90,11 @@ def build(seed: int, today: date, future_weeks: int, kitchens: int = 20) -> dict
                                 "type": k.type.name, "city": k.city, "base_covers": k.base_covers,
                                 "delivery_weekdays": list(k.type.delivery_days), "products": k.products})
 
-        engine, baseline = Forecaster(k), WeekdayMA(k)
+        # Stored demo signals use the public kitchen ID, while the synthetic
+        # forecaster still uses the generator's internal ID.
+        signals = CoverSignals(k, ({**row, "kitchen_id": k.id}
+                                   if row.get("kitchen_id") == kid else row for row in signal_rows))
+        engine, baseline = demo_forecaster(k, signals), WeekdayMA(k)
         for i in range(days):
             day = START + timedelta(days=i)
             if day < today and day.weekday() == 0:
@@ -100,13 +107,14 @@ def build(seed: int, today: date, future_weeks: int, kitchens: int = 20) -> dict
                 if target >= today and day != today:
                     continue                            # future days: forecast made today
                 use = k.usage_per_cover(target)
+                covers = engine(target)
                 for pid in k.products:
                     unit = PRODUCTS[pid].unit
-                    need = round(engine(target) * use.get(pid, 0.0), 3)
+                    need = round(covers * use.get(pid, 0.0), 3)
                     out["forecasts"].append({
                         "kitchen_id": kid, "product_id": pid, "date": target.isoformat(), "need": need,
                         "unit": unit, "method": "engine", "made_on": day.isoformat(),
-                        "why": f"{round(engine(target))} covers forecast x menu recipe quantity"})
+                        "why": f"{round(covers)} covers forecast ({engine.name}) x menu recipe quantity"})
                     if target < today:
                         out["baseline"].append({
                             "kitchen_id": kid, "product_id": pid, "date": target.isoformat(),
@@ -123,7 +131,7 @@ def build(seed: int, today: date, future_weeks: int, kitchens: int = 20) -> dict
                                "ingredients": [{"product_id": pid, "qty_per_portion": str(q),
                                                 "unit": PRODUCTS[pid].unit} for pid, q in items.items()]}
                               for name, items in RECIPES.items()]
-            plan = Forecaster(k)
+            plan = demo_forecaster(k, signals)
             weeks = defaultdict(list)
             for i in range(days):
                 day = START + timedelta(days=i)
