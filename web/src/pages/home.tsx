@@ -1,7 +1,8 @@
-import { useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 
 import { useApi } from "@/api";
 import { AppShell } from "@/components/purchasing/app-shell";
+import { Button } from "@/components/ui/button";
 import { useRole } from "@/lib/role";
 import type { Api } from "@/api/types";
 
@@ -27,11 +28,18 @@ export function HomePage() {
   return (
     <AppShell activeId="home">
       <div className="mx-auto max-w-6xl space-y-6">
-        <header>
-          <h1 className="text-2xl font-semibold">Kitchen Buyer</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {side === "kitchen" ? "What needs you today." : "Where demand may outrun supply."}
-          </p>
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">Kitchen Buyer</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {side === "kitchen" ? "What needs you today." : "Where demand may outrun supply."}
+            </p>
+          </div>
+          {side === "kitchen" ? (
+            <Button asChild>
+              <Link to="/requests">Request an order</Link>
+            </Button>
+          ) : null}
         </header>
         <div className="grid gap-4 md:grid-cols-2">
           {side === "kitchen" ? <KitchenDashboard api={api} now={now} /> : <ValioDashboard api={api} now={now} />}
