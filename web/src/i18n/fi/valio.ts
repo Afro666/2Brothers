@@ -19,6 +19,7 @@ export default {
   "Covered ({n})": "Katettu ({n})",
   "Open all": "Avaa kaikki",
   "Close all": "Sulje kaikki",
+  "No products in this filter": "Tässä suodattimessa ei ole tuotteita",
   "The supplier has not measured availability for this product": "Toimittaja ei ole mitannut tämän tuotteen saatavuutta",
   "Buy": "Osta",
   "No kitchens share this forecast": "Yksikään keittiö ei jaa tätä ennustetta",

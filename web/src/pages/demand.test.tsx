@@ -297,6 +297,28 @@ describe("DemandPage", () => {
     }
   });
 
+  it("says so when the chosen filter has no products, in the table and the phone list", async () => {
+    const user = userEvent.setup();
+    renderApp(
+      "/demand?week=2026-W47",
+      demandApi([
+        demandRow({ productId: "butter", productName: "Butter", risk: "COVERED", available: 500, suggestedBuy: 0 }),
+      ]),
+    );
+    await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await demandTableReady();
+
+    expect(screen.queryByText("No products in this filter")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Short (0)" }));
+    const table = within(document.querySelector("table")!);
+    expect(table.getByText("No products in this filter")).toBeInTheDocument();
+    const phone = within(document.querySelector("ul.md\\:hidden")!);
+    expect(phone.getByText("No products in this filter")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Covered (1)" }));
+    expect(screen.queryByText("No products in this filter")).not.toBeInTheDocument();
+  });
+
   it("moves to the next and previous week", async () => {
     const user = userEvent.setup();
     renderApp("/demand?week=2026-W47", createMockApi());
