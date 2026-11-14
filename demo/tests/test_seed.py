@@ -70,7 +70,8 @@ def test_load_and_prove_the_forecast(data, monkeypatch):
     assert counts["forecasts"] == len(data["forecasts"]) and counts["sharing"] >= 1
     assert counts["suppliers"] == 2 and counts["own_products"] == 2
     load(db, data)                                   # idempotent: run twice, same counts
-    assert db.suppliers.count_documents({"kitchen_id": DEMO_ID}) == 2
+    assert counts["demo_suppliers"] == 4      # the invented suppliers of #1604
+    assert db.suppliers.count_documents({"kitchen_id": DEMO_ID}) == 2 + 4
     # The delivery beat's order (#1198): one, however often the seed runs.
     assert counts["delivery_order"] == 1 and db.orders.count_documents({"reference": "DEMO-1198"}) == 1
     bun = db.products.find_one({"_id": "own-cinnamon-bun"})
