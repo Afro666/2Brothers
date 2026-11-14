@@ -127,6 +127,69 @@ describe("ApprovalsPage recalls", () => {
     expect((await api.listApprovals()).some((row) => row.orderId === "ORD-1045-R")).toBe(false);
   });
 
+  it("shows a recalled product that is in stock when no open order holds it", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    await api.reject("APR-313", "not needed", "human");
+    renderApp("/approvals", api);
+
+    const panel = await screen.findByRole("region", { name: "Food recalls" });
+    await user.click(within(panel).getByRole("button", { name: "Check recalls now" }));
+
+    expect(await within(panel).findByText("1 recall matches a product in your kitchen")).toBeInTheDocument();
+    expect(within(panel).queryByText("No recall matches your open orders.")).not.toBeInTheDocument();
+    const list = within(panel).getByRole("list", { name: "Recalled products in your kitchen" });
+    const item = within(list).getAllByRole("listitem")[0];
+    expect(item).toHaveTextContent("Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg is recalled.");
+    expect(item).toHaveTextContent(/Food Authority notice, .*6 Mar.* 2026/);
+    expect(within(item).getByRole("link", { name: /Suodatinkahvissa vierasesineriski/ })).toHaveAttribute(
+      "href",
+      "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suodatinkahvissa-vierasesineriski/",
+    );
+    expect(within(item).getByText("In stock: 5.673 KG")).toBeInTheDocument();
+    expect(within(item).getByText("In recipes: breakfast_buffet")).toBeInTheDocument();
+    expect(within(item).queryByText(/on the open purchase proposal/i)).not.toBeInTheDocument();
+    expect(within(item).getByText("No open order holds it. New orders leave it out.")).toBeInTheDocument();
+    expect(item).toHaveTextContent("Do not use it until checked.");
+    expect(screen.queryByRole("heading", { name: /Held by a recall/ })).not.toBeInTheDocument();
+  });
+
+  it("lists no product in the panel when the alert is on a held order", async () => {
+    const api = createMockApi();
+    await api.checkRecalls!("human");
+    renderApp("/approvals", api);
+    const panel = await screen.findByRole("region", { name: "Food recalls" });
+    expect(await within(panel).findByText("1 recall affects your open order")).toBeInTheDocument();
+    expect(within(panel).queryByRole("list", { name: "Recalled products in your kitchen" })).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/No open order holds it/)).not.toBeInTheDocument();
+  });
+
+  it("shows a review alert and a dismissed alert without a held order honestly", async () => {
+    const api = createMockApi();
+    const { alerts, lastCheck } = await (async () => {
+      await api.reject("APR-313", "not needed", "human");
+      return api.checkRecalls!("human");
+    })();
+    const base = alerts[0];
+    api.listRecalls = async () => ({
+      lastCheck,
+      alerts: [
+        { ...base, eventId: "review-1", match: "review", lineStatus: "WARNING", productName: null, where: [], recall: { ...base.recall, url: null } },
+        { ...base, eventId: "gone-1", status: "dismissed" },
+      ],
+    });
+    renderApp("/approvals", api);
+    const panel = await screen.findByRole("region", { name: "Food recalls" });
+    const list = await within(panel).findByRole("list", { name: "Recalled products in your kitchen" });
+    const items = within(list).getAllByRole("listitem");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent("A recall notice may be about 461332.");
+    expect(within(items[0]).getByText("No open order holds it.")).toBeInTheDocument();
+    expect(within(items[0]).queryByText(/New orders leave it out/)).not.toBeInTheDocument();
+    expect(within(items[0]).queryByRole("link")).not.toBeInTheDocument();
+    expect(items[0]).toHaveTextContent("Suodatinkahvissa vierasesineriski");
+  });
+
   it("refuses direct approval of a held order while allowing its rejection", async () => {
     const api = createMockApi();
     await api.checkRecalls!("human");
