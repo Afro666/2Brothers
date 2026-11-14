@@ -27,6 +27,38 @@ def _content_family(row: dict) -> str | None:
     return _family(content.get("unit")) if isinstance(content, dict) else None
 
 
+def of_kind(rows: list[dict], categories, unit: str = "") -> list[dict]:
+    """The search hits that are the kind of product the request names (gateway/kind.py).
+
+    `categories`: the catalog categories of that kind; empty means the catalog shows none,
+    and the rows come back as they are.
+
+    1. When some hits hold every search word in one name (the search marks them with a
+       score of `ALL_WORDS_BOOST` or more), the hits that hold only some of the words are
+       dropped: "coconut milk" must not be answered with plain milk.
+    2. Hits of the kind's categories are kept, best score first, and the others are
+       dropped: a cheese sauce is not cheese, condensed milk is not milk, a cleaner is
+       not cream.
+    3. Unless no hit is of the kind, or none of them is sold in the asked measure (`unit`
+       L or KG): then step 2 drops nothing, the request may mean something the rule
+       does not see.
+    """
+    wanted = {str(c) for c in categories}
+    if not wanted:
+        return rows
+    from store.search import ALL_WORDS_BOOST
+    scored = all(isinstance(r.get("score"), (int, float)) for r in rows)
+    if scored and any(r["score"] >= ALL_WORDS_BOOST for r in rows):
+        rows = [r for r in rows if r["score"] >= ALL_WORDS_BOOST]
+    kind = [r for r in rows if str(r.get("category")) in wanted]
+    family = _family(unit)
+    if not kind or (family and not any(_content_family(r) == family for r in kind)):
+        return rows
+    if scored:
+        kind.sort(key=lambda r: -r["score"])       # stable: equal scores keep the search order
+    return kind
+
+
 def pick_candidates(rows: list[dict], unit: str, cap: int = CANDIDATES) -> list[str]:
     """Product ids to price, best first, at most `cap`.
 
