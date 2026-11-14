@@ -103,3 +103,40 @@ not the human token or upstream Valio key. No worker port is published.
   It makes a READY proposal through the gateway and orders nothing. Run it before the first
   check: after a check has recorded the recall, new quotes leave the coffee out and the
   command says so.
+
+## Switch sign-in on (and off again)
+
+Default is the open demo: anyone with the link is the demo person and can approve. To close it:
+
+1. On the server, edit `/opt/2brothers/.env` and add three lines (type the values there, never in chat or git):
+
+   ```
+   GATEWAY_REQUIRE_LOGIN=true
+   DEMO_USER_EMAIL=<the approver's email>
+   DEMO_USER_PASSWORD='<at least 10 characters, single-quoted>'
+   ```
+
+2. Restart the gateway with the new settings:
+
+   ```
+   cd /opt/2brothers
+   docker compose --env-file .env -f deploy/compose.yaml up -d gateway
+   ```
+
+3. Open the site: it sends you to `/sign-in`. The first sign-in with the email and password
+   above creates that approver account.
+4. A read-only account for judges (it asks for the password twice, nothing is echoed):
+
+   ```
+   docker compose --env-file .env -f deploy/compose.yaml run --rm --no-deps gateway python -m gateway.users add --email <judge email> --role viewer
+   ```
+
+   `--role` is `approver`, `chef` (may ask for orders) or `viewer` (reads only). `python -m gateway.users list` shows the accounts, `remove --email` deletes one.
+
+What changes: the web needs a signed-in person; only an approver can approve, reject, make
+API tokens or change settings. What does not change: the Buyer worker (its own agent token),
+and outside agents on `/gateway/*` with a kitchen token. A new kitchen token must then be made
+by a signed-in approver (Settings > API & MCP tokens), not by an open call to `/api`.
+
+Off again, in under a minute: set `GATEWAY_REQUIRE_LOGIN=false` in `.env` and run the same
+`up -d gateway` command. Accounts stay; the open demo is back.
