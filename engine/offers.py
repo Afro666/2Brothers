@@ -14,9 +14,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
+from typing import TYPE_CHECKING
 
 from engine.packs import PackInfo, to_sales_units
 from engine.params import KitchenParams
+
+if TYPE_CHECKING:
+    from engine.partial import PartialFill   # partial.py imports this module
 
 CENT = Decimal("0.01")
 
@@ -67,6 +71,7 @@ class RequestPlan:
     reason_codes: tuple[str, ...]
     warnings: tuple[str, ...] = ()
     alternative: "RequestPlan | None" = field(default=None)
+    partial: "PartialFill | None" = field(default=None)   # engine/partial.py (#288)
 
 
 def _n(x: Decimal) -> str:
@@ -222,4 +227,8 @@ def plan_request(need: Decimal, measure: str, offers: list[Offer], requested: da
     alt = build(confirmed_first=False)
     if alt.lines and alt.shortfall <= plan.shortfall and alt.total < plan.total and alt.lines != plan.lines:
         plan = RequestPlan(**{**plan.__dict__, "alternative": alt})
+    from engine.partial import partial_fill   # imported here: partial.py imports this module
+    part = partial_fill(need, measure, offers, requested, event=event)
+    if part is not None:
+        plan = replace(plan, partial=part)
     return plan
