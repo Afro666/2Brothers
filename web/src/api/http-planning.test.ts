@@ -98,6 +98,7 @@ const settingsRow = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -449,6 +450,24 @@ describe("planning methods of createHttpApi", () => {
     const [row] = await createHttpApi("/api").getSupplierDemand("2026-11-16", "2026-11-22");
     expect(row).toMatchObject({ productName: "Milk", forecastDemand: 120, available: null, risk: "UNKNOWN" });
     expect(calls).toHaveLength(1);
+  });
+
+  it("reads the supplier from VITE_GATEWAY_SUPPLIER_ID, sup-valio without it", async () => {
+    vi.stubEnv("VITE_GATEWAY_SUPPLIER_ID", "");
+    vi.resetModules();
+    expect((await import("@/api/http-planning")).SUPPLIER_ID).toBe("sup-valio");
+    vi.stubEnv("VITE_GATEWAY_SUPPLIER_ID", "sup-other");
+    vi.resetModules();
+    const { createHttpApi: withSupplier } = await import("@/api/http");
+    const calls = gateway({
+      "GET /api/v1/suppliers/sup-other/demand?from=2026-11-16&to=2026-11-22": () => ({
+        supplier_id: "sup-other",
+        kitchens_sharing: 0,
+        rows: [],
+      }),
+    });
+    expect(await withSupplier("/api").getSupplierDemand("2026-11-16", "2026-11-22")).toEqual([]);
+    expect(routesOf(calls)).toEqual(["GET /api/v1/suppliers/sup-other/demand?from=2026-11-16&to=2026-11-22"]);
   });
 
   it("reads the settings and saves only what changed, decimals as strings", async () => {
