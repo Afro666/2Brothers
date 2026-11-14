@@ -536,7 +536,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | GET | `/forecast-accuracy?from=&to=` | `kitchen:read` | Past forecasts against what the kitchen really needed, per week. Shape under "Forecasts". |
 | GET | `/suppliers`, `/suppliers/{id}` | `kitchen:read` | Suppliers and their terms: free-delivery threshold, fee, order days, cut-off, lead time, discount tiers. User-set; demo values are placeholders. |
 | POST, PUT, DELETE | `/suppliers`, `/suppliers/{id}` | `kitchen:write` | Create, change or delete a supplier and its terms. |
-| POST | `/suppliers/{id}/price-list/photo` | `kitchen:write` | Read a photo of a manual supplier's price list into draft own products; writes nothing. Planned (#1174). Shape under "Read a supplier's price list from a photo". |
+| POST | `/suppliers/{id}/price-list/photo` | `kitchen:write` | Read a photo of a manual supplier's price list into draft own products; writes nothing. Served (#1174). Shape under "Read a supplier's price list from a photo". |
 | POST | `/needs` | `kitchen:propose` | Store a need (quantity, unit, date, optional `event`) before the Buyer runs. Answer: `need_id`. Shape under "Team gateway interfaces". |
 | POST | `/proposals` | `kitchen:propose` | Ask the Buyer: product codes with a quantity and a date, or free text ("1,000 L milk by Monday"). Returns the proposal in the `GET /proposals/{id}` shape, `status: READY` (or `REJECTED` when no line is left). Body, the free-text path and errors under "Creating a proposal". A demand window `from`/`to` is not a body yet. |
 | GET | `/proposals` | `kitchen:read` | `{"proposals": [...]}`, newest first, at most 100, each in the `GET /proposals/{id}` shape. |
@@ -1928,7 +1928,10 @@ A person can always plan the week by hand on the Planner page; no error blocks
 
 ### Read a supplier's price list from a photo (#1174)
 
-Planned. `POST /v1/kitchens/{kitchen_id}/suppliers/{supplier_id}/price-list/photo` reads
+Served by `gateway/price_list_photo.py` (#1174); the photo is read by the Buyer worker
+(`agent/price_list_service.py`), the texts by plain code (`agent/price_list.py`).
+The prepared demo photo is `demo/price-list-photo.png` (Corner Bakery).
+`POST /v1/kitchens/{kitchen_id}/suppliers/{supplier_id}/price-list/photo` reads
 one photo of a supplier's price list (paper, or a screenshot of a PDF) with Nemotron 3.5
 Super VL into **draft** own products. A person checks every row and saves it with the
 own-product routes (`POST /products`, `PUT /products/{id}`). **This route writes nothing**:
@@ -1979,7 +1982,8 @@ Answer:
 | `rows[].status` | `READ` or `PLEASE_CHECK`. |
 | `rows[].reasons` | Why a row needs a person, below. Empty for `READ`. |
 | `rows[].draft` | An own-product body for `POST /products`, never sent by this route. `unit_price_eur` is null when the price cannot be trusted. `allergen_data` is always `UNKNOWN`: a price list says nothing safe about allergens. |
-| `rows[].match` | A suggestion only: an existing own product of this supplier with the same name (case and spaces ignored), its stored price, and `kind` `SAME` or `PRICE_CHANGED`. Null when none. The person picks; nothing is overwritten (`PUT` is the person's own action). |
+| `rows[].match` | A suggestion only: an existing own product of this supplier with the same name (case and spaces ignored), its stored price, and `kind` `SAME` or `PRICE_CHANGED` (null when the read price is
+empty, so there is nothing to compare). Null when none, or when two own products have that name. The person picks; nothing is overwritten (`PUT` is the person's own action). |
 
 Reasons (`rows[].reasons`):
 
