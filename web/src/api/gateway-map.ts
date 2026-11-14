@@ -628,65 +628,12 @@ const TOOL_VERBS: Record<string, { started: string; done: string }> = {
 };
 
 /**
- * The plain label of each event kind the Python code writes to the audit log (#1776).
- * `event-labels.test.ts` reads the kinds from the sources: a new kind needs a line here
- * and a Finnish text in `i18n/fi/audit-events.ts`.
+ * The plain label of each event kind the Python code writes to the audit log. A kind that
+ * `lib/codes.ts` names (`kitchen_brief_read`, ...) is not here: `plainCode` gives its title.
+ * `event-labels.test.ts` reads the kinds from the sources (#1776): a new kind needs a line
+ * here and a Finnish text in `i18n/fi/audit-events.ts`.
  */
 export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
-  // #1776: every kind the gateway, the recall monitor and the demo scripts write. A kind that
-  // `lib/codes.ts` already names (#1591, #1783) takes its title from there: one text, one place.
-  approval_token_created: { kind: "settings", summary: CODE_LABELS.approval_token_created.title },
-  approval_token_revoked: { kind: "settings", summary: "Approval token revoked" },
-  token_created: { kind: "settings", summary: "API token created" },
-  token_revoked: { kind: "settings", summary: "API token revoked" },
-  webhook_created: { kind: "settings", summary: "Webhook added" },
-  webhook_deleted: { kind: "settings", summary: "Webhook removed" },
-  auto_approve_changed: { kind: "settings", summary: "Auto-approve setting changed" },
-  settings_changed: { kind: "settings", summary: "Settings changed" },
-  alias_set: { kind: "settings", summary: "Kitchen's own name for a product saved" },
-  alias_removed: { kind: "settings", summary: "Kitchen's own name for a product removed" },
-  suppliers_created: { kind: "settings", summary: "Supplier added" },
-  suppliers_changed: { kind: "settings", summary: "Supplier changed" },
-  suppliers_deleted: { kind: "settings", summary: "Supplier removed" },
-  recipes_created: { kind: "settings", summary: "Recipe added" },
-  recipes_changed: { kind: "settings", summary: "Recipe changed" },
-  recipes_deleted: { kind: "settings", summary: "Recipe removed" },
-  products_created: { kind: "settings", summary: "Own product added" },
-  products_changed: { kind: "settings", summary: "Own product changed" },
-  products_deleted: { kind: "settings", summary: "Own product removed" },
-  menu_plan_changed: { kind: "settings", summary: "Menu plan changed" },
-  learned_fact_applied: { kind: "request", summary: "A learned fact was used in the proposal" },
-  learned_fact_switched_off: { kind: "settings", summary: "A learned fact was switched off" },
-  share_granted: { kind: "forecast_share", summary: "Forecast sharing with the supplier switched on" },
-  share_revoked: { kind: "forecast_share", summary: "Forecast sharing with the supplier switched off" },
-  stock_counted: { kind: "stock", summary: "Stock counted" },
-  stock_photo_failed: { kind: "stock", summary: "Shelf photo could not be read" },
-  menu_photo_read: { kind: "other", summary: "Menu photo read" },
-  menu_photo_failed: { kind: "other", summary: "Menu photo could not be read" },
-  price_list_photo_read: { kind: "offer", summary: "Price list photo read" },
-  price_list_photo_failed: { kind: "offer", summary: "Price list photo could not be read" },
-  label_photo_read: { kind: "order", summary: "Label photo read" },
-  label_photo_failed: { kind: "order", summary: "Label photo could not be read" },
-  delivery_note_read: { kind: "other", summary: CODE_LABELS.delivery_note_read.title },
-  delivery_note_failed: { kind: "order", summary: "Delivery note could not be read" },
-  delivery_result_saved: { kind: "order", summary: "Delivery result saved" },
-  kitchen_brief_read: { kind: "other", summary: CODE_LABELS.kitchen_brief_read.title },
-  proposal_changed: { kind: "request", summary: CODE_LABELS.proposal_changed.title },
-  proposal_explanation_ready: { kind: "other", summary: "Proposal explanation written" },
-  proposal_explanation_failed: { kind: "other", summary: CODE_LABELS.proposal_explanation_failed.title },
-  auto_approved: { kind: "approval", summary: "Approved automatically, inside the kitchen's limit" },
-  auto_approve_skipped: { kind: "approval", summary: "Not approved automatically: a person decides" },
-  approve_rollback_failed: { kind: "approval", summary: "An approval failed and could not be undone: a person checks the order" },
-  stuck_commit_released: { kind: "approval", summary: "A stuck approval was released" },
-  recall_dismissed: { kind: "other", summary: "Recall dismissed by a person" },
-  recall_proposal_blocked: { kind: "approval", summary: "Proposal blocked by a recall" },
-  recall_replacement_proposed: { kind: "request", summary: "Replacement proposed after a recall" },
-  recall_replacement_rejected: { kind: "request", summary: "Replacement after a recall left out: it did not cover the need" },
-  replacement_enriched: { kind: "other", summary: "Producer facts added to the replacement product" },
-  replacement_enrichment_unknown: { kind: "other", summary: "Producer facts for the replacement product not found" },
-  "recall.alert": { kind: "other", summary: "Recall alert" },
-  demo_delivery_order_placed: { kind: "order", summary: "Demo order recorded by the demo seed" },
-  demo_offers_reset: { kind: "offer", summary: "Demo supplier offers reset" },
   // #899: kinds added on 14 Nov, with a plain-English label each.
   stock_photo_read: { kind: "stock", summary: "Shelf photo read by Nemotron VL" },
   audit_demo_tamper: { kind: "other", summary: "Tamper demo: a line was changed" },
@@ -710,7 +657,68 @@ export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> =
   supplier_offer_received: { kind: "offer", summary: "Offer received from the supplier's selling agent" },
   supplier_offer_accepted: { kind: "offer", summary: "Supplier offer accepted: a proposal was made from it" },
   supplier_offer_declined: { kind: "offer", summary: "Supplier offer declined" },
+  // Mock jury, 14 Nov: Home showed raw kinds such as `approval_token_created`.
+  approval_token_created: { kind: "settings", summary: "Personal approval token created" },
+  approval_token_revoked: { kind: "settings", summary: "Personal approval token revoked" },
+  token_created: { kind: "settings", summary: "Kitchen API token created" },
+  token_revoked: { kind: "settings", summary: "Kitchen API token revoked" },
+  webhook_created: { kind: "settings", summary: "Webhook added" },
+  webhook_deleted: { kind: "settings", summary: "Webhook removed" },
+  settings_changed: { kind: "settings", summary: "Settings changed" },
+  auto_approve_changed: { kind: "settings", summary: "Auto-approve setting changed" },
+  auto_approved: { kind: "approval", summary: "Approved automatically within the limit" },
+  auto_approve_skipped: { kind: "approval", summary: "Not approved automatically: a person decides" },
+  alias_set: { kind: "settings", summary: "Product name for the kitchen saved" },
+  alias_removed: { kind: "settings", summary: "Product name for the kitchen removed" },
+  proposal_changed: { kind: "request", summary: "Proposal changed" },
+  proposal_explanation_ready: { kind: "request", summary: "Proposal explained" },
+  menu_photo_read: { kind: "request", summary: "Menu photo read by Nemotron VL" },
+  menu_photo_failed: { kind: "request", summary: "Menu photo could not be read" },
+  menu_plan_changed: { kind: "request", summary: "Menu plan changed" },
+  stock_counted: { kind: "stock", summary: "Stock counted" },
+  stock_photo_failed: { kind: "stock", summary: "Shelf photo could not be read" },
+  label_photo_read: { kind: "stock", summary: "Label photo read by Nemotron VL" },
+  label_photo_failed: { kind: "stock", summary: "Label photo could not be read" },
+  price_list_photo_read: { kind: "offer", summary: "Price list photo read by Nemotron VL" },
+  price_list_photo_failed: { kind: "offer", summary: "Price list photo could not be read" },
+  delivery_note_failed: { kind: "order", summary: "Delivery note could not be read" },
+  delivery_result_saved: { kind: "order", summary: "Delivery check saved" },
+  approve_rollback_failed: { kind: "order", summary: "An approval could not be undone after a failed send" },
+  stuck_commit_released: { kind: "order", summary: "A stuck order send was released" },
+  demo_delivery_order_placed: { kind: "order", summary: "Demo delivery order placed by the demo seed" },
+  demo_offers_reset: { kind: "other", summary: "Demo supplier offers reset" },
+  learned_fact_applied: { kind: "other", summary: "A learned fact changed a proposal" },
+  learned_fact_switched_off: { kind: "settings", summary: "A learned fact was switched off" },
+  recall_dismissed: { kind: "other", summary: "Recall alert dismissed" },
+  recall_proposal_blocked: { kind: "approval", summary: "Proposal blocked by a recall" },
+  recall_replacement_proposed: { kind: "request", summary: "Replacement proposed for a recalled product" },
+  recall_replacement_rejected: { kind: "approval", summary: "Replacement for a recalled product rejected" },
+  replacement_enriched: { kind: "other", summary: "Replacement product details added" },
+  replacement_enrichment_unknown: { kind: "other", summary: "Replacement product details not found" },
+  // #1776: the kinds the source scan found without a label.
+  suppliers_created: { kind: "settings", summary: "Supplier added" },
+  suppliers_changed: { kind: "settings", summary: "Supplier changed" },
+  suppliers_deleted: { kind: "settings", summary: "Supplier removed" },
+  recipes_created: { kind: "settings", summary: "Recipe added" },
+  recipes_changed: { kind: "settings", summary: "Recipe changed" },
+  recipes_deleted: { kind: "settings", summary: "Recipe removed" },
+  products_created: { kind: "settings", summary: "Own product added" },
+  products_changed: { kind: "settings", summary: "Own product changed" },
+  products_deleted: { kind: "settings", summary: "Own product removed" },
+  // These two rows and the recall alert carry a `type`, not a `kind`.
+  share_granted: { kind: "forecast_share", summary: "Forecast sharing with the supplier switched on" },
+  share_revoked: { kind: "forecast_share", summary: "Forecast sharing with the supplier switched off" },
+  "recall.alert": { kind: "other", summary: "Recall alert" },
 };
+
+const SNAKE_CASE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
+
+/** A kind with no label of its own: a code `plainCode` knows stays as it is, other snake_case reads as words. */
+function kindWords(kind: string): string {
+  if (Object.hasOwn(CODE_LABELS, kind) || !SNAKE_CASE.test(kind)) return kind;
+  const text = kind.replace(/_/g, " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 /** `expected_total: 148.76; verdict: NEEDS_APPROVAL`: the gateway's own values, as sent. */
 function describe(fields: unknown): string {
@@ -851,7 +859,7 @@ function mapAuditEvent(event: Json): AuditEvent {
             : typeof actor === "string" && !actor.startsWith("token:")
               ? "human"
             : "system",
-    summary: known?.summary ?? name ?? "Unknown step",
+    summary: known?.summary ?? (name !== undefined ? kindWords(name) : "Unknown step"),
     reason: humanReason || (typeof kind === "string" && kind.startsWith("supplier_offer_") ? describe(rest) : ""),
     details: describe(details),
   };

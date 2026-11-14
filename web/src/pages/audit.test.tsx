@@ -94,7 +94,7 @@ describe("audit page", () => {
     expect(within(second).getAllByText("Second at same time")).toHaveLength(1);
   });
 
-  it("shows a plain-English label for the kinds and tools added on 14 Nov; unknown ones keep their name (#899)", async () => {
+  it("shows a plain-English label for the kinds and tools added on 14 Nov; an unknown kind reads as words (#899)", async () => {
     const labels: Record<string, string> = {
       stock_photo_read: "Shelf photo read by Nemotron VL",
       audit_demo_tamper: "Tamper demo: a line was changed",
@@ -107,9 +107,9 @@ describe("audit page", () => {
       delivery_note_read: "Delivery note read",
       proposal_explanation_failed: "No model sentence for a proposal",
       kitchen_brief_read: "Kitchen brief read",
-      approval_token_created: "Approval token created",
+      approval_token_created: "Personal approval token created",
       proposal_changed: "Proposal changed",
-      some_future_kind: "some_future_kind",
+      some_future_kind: "Some future kind",
     };
     const raw = [
       ...Object.keys(labels).map((kind, i) => ({

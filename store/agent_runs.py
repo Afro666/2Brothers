@@ -22,9 +22,13 @@ def claim(db, kitchen_id, key, payload):
         return row, False
 
 
-def finish(db, run_id, *, state, result):
-    db.agent_runs.update_one({'_id': run_id, 'state': 'RUNNING'}, {'$set': {
-        'state': state, 'result': result, 'finished_at': datetime.now(timezone.utc)}})
+def finish(db, run_id, *, state, result, usage=None):
+    """Close a run. `usage` is what the model used in a run that ended without a proposal
+    (#1801): it has no result to carry `buyer_usage`, so the counts are kept beside it."""
+    fields = {'state': state, 'result': result, 'finished_at': datetime.now(timezone.utc)}
+    if isinstance(usage, dict):
+        fields['usage'] = usage
+    db.agent_runs.update_one({'_id': run_id, 'state': 'RUNNING'}, {'$set': fields})
 
 
 def traces(db, kitchen_id, proposal_ids):
@@ -58,19 +62,21 @@ def _seconds(value):
 
 def usage_totals(db, kitchen_id):
     """What the Buyer's model used for this kitchen (#365): the sum of `result.buyer_usage`
-    over its runs. A run without usage (from before the meter, not finished, or ended
-    without a proposal) is counted in `runs_without_usage` and adds nothing to the sums.
+    over its runs, and the `usage` of a run that ended without a proposal (#1801). A run
+    without usage (from before the meter, not finished, or failed before a model call) is
+    counted in `runs_without_usage` and adds nothing to the sums.
     `since` is when the oldest counted run started, `last_run_at` when the newest one
     finished; both None when no run is counted."""
     out = {'runs': 0, 'finished_runs': 0, 'runs_without_usage': 0, 'seconds': 0.0,
            'since': None, 'last_run_at': None, **dict.fromkeys(USAGE_SUMS, 0)}
     rows = db.agent_runs.find({'kitchen_id': kitchen_id},
-                              {'state': 1, 'created_at': 1, 'finished_at': 1, 'result.buyer_usage': 1})
+                              {'state': 1, 'created_at': 1, 'finished_at': 1, 'result.buyer_usage': 1,
+                               'usage': 1})
     for row in rows:
         out['runs'] += 1
         out['finished_runs'] += row.get('state') == 'READY'
         result = row.get('result')
-        usage = result.get('buyer_usage') if isinstance(result, dict) else None
+        usage = result.get('buyer_usage') if isinstance(result, dict) else row.get('usage')
         if not isinstance(usage, dict):
             out['runs_without_usage'] += 1
             continue

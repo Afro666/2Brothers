@@ -176,35 +176,40 @@ describe("HomePage", () => {
     expect(screen.queryByText(/kitchen_brief_read|proposal_explanation_failed/)).not.toBeInTheDocument();
   });
 
-  describe("Latest steps from the gateway's own events (#1776)", () => {
-    const raw = [
-      { event_id: "e-1", kind: "approval_token_revoked", actor: "operator-cli", at: "2026-11-14T14:57:50+00:00" },
-      { event_id: "e-2", kind: "settings_changed", actor: "aron", at: "2026-11-14T15:00:00+00:00" },
-    ];
+  describe("Latest steps in Finnish (#1776)", () => {
     afterEach(() => {
       updateLanguage("en", false);
       localStorage.removeItem("purchasing-language");
     });
 
-    it("shows a plain label, never the raw event name", async () => {
-      const api = createMockApi();
-      api.listAudit = async () => mapAudit(raw);
-      renderApp(`/?now=${DEMO_NOW}`, api);
-
-      expect(await screen.findByText("Approval token revoked")).toBeInTheDocument();
-      expect(screen.getByText("Settings changed")).toBeInTheDocument();
-      expect(screen.queryByText(/approval_token_revoked|settings_changed/)).not.toBeInTheDocument();
-    });
-
-    it("shows the label in Finnish when the page is in Finnish", async () => {
+    it("shows the label of a gateway event in Finnish when the page is in Finnish", async () => {
       updateLanguage("fi"); // stored too: the app reads the stored language when it mounts
       const api = createMockApi();
-      api.listAudit = async () => mapAudit(raw);
+      api.listAudit = async () =>
+        mapAudit([
+          { event_id: "e-1", kind: "approval_token_revoked", actor: "operator-cli", at: "2026-11-14T14:57:50+00:00" },
+          { event_id: "e-2", kind: "settings_changed", actor: "aron", at: "2026-11-14T15:00:00+00:00" },
+        ]);
       renderApp(`/?now=${DEMO_NOW}`, api);
 
-      expect(await screen.findByText("Hyväksyntätunnus kumottu")).toBeInTheDocument();
+      expect(await screen.findByText("Henkilökohtainen hyväksyntätunnus kumottu")).toBeInTheDocument();
       expect(screen.getByText("Asetuksia muutettu")).toBeInTheDocument();
     });
+  });
+
+  it("shows gateway audit kinds as plain words in Latest steps, a new kind too (mock jury, 14 Nov)", async () => {
+    const api = createMockApi();
+    const kinds = ["approval_token_created", "token_created", "settings_changed", "proposal_changed", "some_future_kind"];
+    api.listAudit = async () =>
+      mapAudit(kinds.map((kind, i) => ({ event_id: `e-${i}`, kind, actor: "system", at: `2026-11-14T10:0${i}:00Z` })));
+    renderApp(`/?now=${DEMO_NOW}`, api);
+
+    expect(await screen.findByText("Personal approval token created")).toBeInTheDocument();
+    expect(screen.getByText("Kitchen API token created")).toBeInTheDocument();
+    expect(screen.getByText("Settings changed")).toBeInTheDocument();
+    expect(screen.getByText("Proposal changed")).toBeInTheDocument();
+    expect(screen.getByText("Some future kind")).toBeInTheDocument();
+    expect(screen.queryByText(/_/)).not.toBeInTheDocument();
   });
 });
 

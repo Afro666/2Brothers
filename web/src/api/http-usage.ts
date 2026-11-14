@@ -36,6 +36,7 @@ export function mapModelUsage(body: unknown): ModelUsage {
   return {
     model: text(row.model, "the model name"),
     runs: count(row.runs, "the run count"),
+    finishedRuns: count(row.finished_runs, "the count of finished runs"),
     runsWithoutUsage: count(
       row.runs_without_usage,
       "the count of runs without usage",

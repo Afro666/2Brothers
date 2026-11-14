@@ -60,6 +60,14 @@ def parse_need(body, *, today=None):
     return need
 
 
+def used(model):
+    """What the model used so far, for a run that ends without a proposal (#1801). None when
+    no model call was made, so a run that failed before the model stays "without usage"."""
+    meter = getattr(model, 'meter', None)
+    total = meter.total() if meter is not None else None
+    return total if total and total.get('calls') else None
+
+
 class BuyerWorker:
     def __init__(self, db, gateway, *, model_factory=None, timeout=None, now=None, strategy=None):
         self.strategy = strategy or os.environ.get('NEMOTRON_BUYER_STRATEGY', 'single_pick')
@@ -172,10 +180,10 @@ class BuyerWorker:
             status = 'READY'
             return result
         except asyncio.TimeoutError:
-            agent_runs.finish(self.db, row['_id'], state='RECONCILE', result=None)
+            agent_runs.finish(self.db, row['_id'], state='RECONCILE', result=None, usage=used(model))
             raise WorkerError(504, 'BUYER_TIMEOUT', fallback_safe=buyer is None or not buyer.mutations) from None
         except Exception as exc:
-            agent_runs.finish(self.db, row['_id'], state='RECONCILE', result=None)
+            agent_runs.finish(self.db, row['_id'], state='RECONCILE', result=None, usage=used(model))
             if isinstance(exc, WorkerError):
                 raise
             raise WorkerError(503, 'BUYER_UNAVAILABLE', fallback_safe=buyer is None or not buyer.mutations) from None

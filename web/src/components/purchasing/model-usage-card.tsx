@@ -73,6 +73,22 @@ export function ModelUsageCard() {
             ))}
           </dl>
         )}
+        {usage.status === "ready" && usage.data.runs > 0 && (
+          <p>
+            {t("{runs} Buyer runs in all: {finished} ended with a proposal, {open} did not (an error, a time limit, or still running).", {
+              runs: formatNumber(usage.data.runs),
+              finished: formatNumber(usage.data.finishedRuns),
+              open: formatNumber(Math.max(0, usage.data.runs - usage.data.finishedRuns)),
+            })}
+          </p>
+        )}
+        {usage.status === "ready" && usage.data.runsWithoutUsage > 0 && (
+          <p>
+            {t("{without} runs carry no count: they ran before the meter, or they ended without a proposal before the count was kept for such runs.", {
+              without: formatNumber(usage.data.runsWithoutUsage),
+            })}
+          </p>
+        )}
         <p className="text-muted-foreground">
           {t("Counted by the gateway from each run; a run from before the meter has no count.")}
         </p>

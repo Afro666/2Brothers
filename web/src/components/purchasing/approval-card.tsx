@@ -199,6 +199,9 @@ export function ApprovalCard({
   const t = useT();
   // #1630: `totalInclVat` is the approve figure; incl VAT is `inclVat`, or unknown when a rate is.
   const inclVat = inclVatOf(request);
+  // The approve figure (`expected_total`) holds the delivery fee; when it is not the figure shown
+  // as incl VAT, the card names the sum, so the total above and the approve button agree.
+  const approveDiffers = inclVat === null || Math.abs(inclVat - request.totalInclVat) >= 0.005;
   const [open, setOpen] = useState<"approve" | "reject" | null>(null);
   const [status, setStatus] = useState(request.status);
   const [reason, setReason] = useState("");
@@ -526,6 +529,15 @@ export function ApprovalCard({
                         threshold: formatEur(order.mov.threshold),
                       })
                     : t("Delivery fee {amount}", { amount: formatEur(order.deliveryFee) })}
+                </dd>
+              </>
+            ) : null}
+            {/* Mock jury, 14 Nov: "€37.74" here and "Approve €62.74" below, with no sum between. */}
+            {approveDiffers ? (
+              <>
+                <dt className="sr-only">{t("Amount you approve")}</dt>
+                <dd className="w-full font-mono text-xs font-semibold tabular-nums">
+                  {t("= {amount} to approve", { amount: formatEur(request.totalInclVat) })}
                 </dd>
               </>
             ) : null}

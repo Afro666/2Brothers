@@ -4,13 +4,21 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { EVENT_KINDS, mapAudit } from "@/api/gateway-map";
+import { CODE_LABELS, plainCode } from "@/lib/codes";
 import { translate } from "@/lib/i18n";
 
 /**
  * #1776: every event kind the Python code can write to the audit log has a plain label.
  * The kinds are read from the sources, so a new kind without a label fails here and
- * never reaches the activity list as a raw name.
+ * never reaches the activity list as a made-up or raw name. The label is the summary in
+ * EVENT_KINDS, or the title `plainCode` gives a kind that `lib/codes.ts` names.
  */
+const labelOf = (kind: string): string | undefined =>
+  Object.hasOwn(EVENT_KINDS, kind)
+    ? EVENT_KINDS[kind].summary
+    : Object.hasOwn(CODE_LABELS, kind)
+      ? CODE_LABELS[kind].title
+      : undefined;
 const REPO = resolve(process.cwd(), "..");
 /** The folders whose code appends to the audit log. The Buyer's tool calls have their own labels (TOOL_VERBS). */
 const FOLDERS = ["gateway", "monitor", "store", "demo"];
@@ -96,16 +104,23 @@ describe("audit event labels (#1776)", () => {
   });
 
   it("has a plain-English label for every kind the code can write", () => {
-    const missing = [...emitted].filter(([kind]) => !Object.hasOwn(EVENT_KINDS, kind));
+    const missing = [...emitted].filter(([kind]) => labelOf(kind) === undefined);
     expect(missing.map(([kind, file]) => `${kind} (${file})`)).toEqual([]);
   });
 
   it("has no label that reads as a raw code, and a Finnish text for each", () => {
-    for (const [kind, { summary }] of Object.entries(EVENT_KINDS)) {
-      expect(summary, kind).not.toMatch(/^[a-z0-9]+(?:[_.][a-z0-9]+)+$/);
-      expect(summary, kind).toMatch(/^[A-Z]/);
-      expect(translate("fi", summary), `Finnish for ${kind}: ${summary}`).not.toBe(summary);
+    const fi = (text: string) => translate("fi", text);
+    const noFinnish: string[] = [];
+    for (const kind of new Set([...emitted.keys(), ...Object.keys(EVENT_KINDS)])) {
+      const label = labelOf(kind);
+      if (label === undefined) continue; // the test above names it
+      expect(label, kind).not.toMatch(/^[a-z0-9]+(?:[_.][a-z0-9]+)+$/);
+      expect(label, kind).toMatch(/^[A-Z]/);
+      // What the pages do with a summary: `t(plainCode(summary, t))`.
+      const [{ summary }] = mapAudit([{ event_id: "x", kind, actor: "system" }]);
+      if (fi(plainCode(summary, fi)) === label) noFinnish.push(`${kind}: ${label}`);
     }
+    expect(noFinnish).toEqual([]);
   });
 
   it("labels an event that has a type and no kind (share_granted, recall.alert)", () => {
