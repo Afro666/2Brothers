@@ -99,6 +99,42 @@ Not built yet: the gateway route that stores the receipt and the stock count, so
 change shows on the live proposal (gateway and store, Aron's and Tymon's areas).
 Tests: `agent/tests/test_receiving.py` (offline, recorded replies).
 
+## Snap the shelf (#373)
+
+```powershell
+python -m agent.shelf agent/fixtures/shelf/shelf.png                  # recorded reply, offline
+python -m agent.shelf agent/fixtures/shelf/shelf.png --confirm-all    # the /stock-counts body
+python -m agent.shelf PHOTO.png --live                                # Nemotron VL on Verda
+```
+
+Same VL reader as the delivery note (`agent/vision.py`). Nemotron lists
+`{label, count, confidence}` per product (`SHELF_SCHEMA`, strict). Plain code matches
+each label to the kitchen's products by name; it needs one clear best match, so a
+label that fits two products is `UNMATCHED`. Rows:
+
+- `COUNTED`: matched, count read, confidence high or medium. A suggestion for the
+  person to confirm, never stored by itself.
+- `PLEASE_COUNT`: low confidence or an unreadable count. No number is shown.
+- `UNMATCHED`: no product, or two equally good ones. The person picks.
+
+The output is the body for `POST /v1/kitchens/{k}/stock-counts` (docs/contract.md),
+in the kitchen's unit (packs x pack size). A product seen on the shelf but not
+confirmed is sent as `null`: unknown, so the engine asks for a count.
+
+The test photo is synthetic (`fixtures/shelf/make_shelf.py`); `shelf.reply.json` is
+Nemotron's real reply, recorded live on 2026-11-14:
+
+| Product | On the shelf | Nemotron | Row |
+|---|---|---|---|
+| 462775 Arla lactose free 1 L | 7 | 7, high | `COUNTED` |
+| 463335 Valio Eila 3% 1 L | 6 | 6, high | `COUNTED` |
+| 462921 Valio Eila organic 1 L | 4 | 4, high | `COUNTED` |
+| 463038 Valio Eila 10 L novobox | 2 | 2, high | `COUNTED` |
+| 464179 Arla 10 L novobox (half hidden) | 1 | "Arla L m", low | `UNMATCHED`, please count |
+
+Not built yet: the stock page's photo button and the `/stock-counts` route
+(web and gateway, Tymon's and Aron's areas). Tests: `agent/tests/test_shelf.py`.
+
 ## Internal worker (#279)
 
 `two-brothers-buyer-worker` serves an internal `/run` endpoint on port 8001.
