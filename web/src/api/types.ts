@@ -205,6 +205,19 @@ export interface AuditChainCheck {
   checkedAt: string;
 }
 
+/** `GET /model-usage`: what the Buyer agent used on its model, summed over this kitchen's runs. */
+export interface ModelUsage {
+  model: string;
+  /** Every Buyer run of the kitchen. */
+  runs: number;
+  /** Runs that carry no count (from before the meter, or without a proposal). The sums leave them out. */
+  runsWithoutUsage: number;
+  modelCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+  modelSeconds: number;
+}
+
 /** Everything the screens ask the gateway for. Mock and HTTP both implement it. */
 export interface Api {
   /**
@@ -259,6 +272,7 @@ export interface Api {
   /** The newest `limit` audit lines with their chain hashes, oldest first. */
   listAuditChain(limit: number): Promise<AuditChainRow[]>;
   verifyAuditChain(): Promise<AuditChainCheck>;
+  getModelUsage(): Promise<ModelUsage>;
   /**
    * Demo only: changes the newest stored line and leaves its hash alone, so the next verify
    * reports the break. Fails with `DEMO_ONLY`, `ALREADY_TAMPERED` or `NOTHING_TO_TAMPER`.
