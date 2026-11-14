@@ -307,6 +307,26 @@ def test_free_text_uses_the_parser_and_the_engine(env):
     assert again.json()["proposal_id"] == p["proposal_id"]
 
 
+def test_the_parser_takes_the_day_of_the_form_when_the_text_names_none(env):
+    """A request typed without a day, with the date picked in the form: the parser fallback
+    must use that date, not answer CANNOT_READ_REQUEST."""
+    client, _, _ = env
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "text": "1000 l laktoositonta maitoa", "requested_date": "2026-11-16", "idempotency_key": "t-day"})
+    assert r.status_code == 200, r.text
+    p = r.json()
+    assert p["request"]["made_by"] == "parser" and p["request"]["requested_date"] == "2026-11-16"
+    # A day in the text still wins over the form.
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "text": "1000 l laktoositonta maitoa maanantaiksi", "requested_date": "2026-11-18",
+        "idempotency_key": "t-day2"})
+    assert r.status_code == 200 and r.json()["request"]["requested_date"] == "2026-11-16"
+    # A form value that is not a date is not a day: the text must then name one.
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "text": "1000 l laktoositonta maitoa", "requested_date": "soon", "idempotency_key": "t-day3"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "CANNOT_READ_REQUEST"
+
+
 def test_unreadable_text_is_refused_with_a_reason(env):
     client, _, _ = env
     r = client.post(K + "/proposals", headers=AGENT, json={"text": "some milk please", "idempotency_key": "t2"})
