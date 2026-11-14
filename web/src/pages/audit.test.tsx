@@ -24,7 +24,7 @@ describe("audit page", () => {
       "1,000 L lactose-free milk by Monday",
     ]);
     expect(screen.getByText("Asked the buyer to approve ORD-1043")).toBeInTheDocument();
-    expect(screen.getByText("3 requests, 8 steps")).toBeInTheDocument();
+    expect(screen.getByText("3 requests · 8 steps")).toBeInTheDocument();
   });
 
   it.each([999, 1000])("describes the gateway limit at %i steps", async (count) => {
@@ -40,7 +40,9 @@ describe("audit page", () => {
     renderApp("/audit", api);
 
     expect(await screen.findByText(
-      count === 1000 ? "1000 requests, the newest 1,000 steps" : "999 requests, 999 steps",
+      count === 1000
+        ? "1,000 requests · 1,000 steps · showing the newest 50 requests · from the newest 1,000 steps"
+        : "999 requests · 999 steps · showing the newest 50 requests",
     )).toBeInTheDocument();
   });
 
@@ -57,11 +59,11 @@ describe("audit page", () => {
   it("filters by order and restores all steps with Clear filters", async () => {
     const user = userEvent.setup();
     renderApp("/audit");
-    await screen.findByText("3 requests, 8 steps");
+    await screen.findByText("3 requests · 8 steps");
 
     await user.click(screen.getByRole("combobox", { name: "Order" }));
     await user.click(await screen.findByRole("option", { name: "ORD-1042" }));
-    expect(await screen.findByText("1 request, 2 steps")).toBeInTheDocument();
+    expect(await screen.findByText("1 request · 2 steps")).toBeInTheDocument();
     expect(screen.getByText("ORD-1042 placed for Mon 16 Nov")).toBeInTheDocument();
     expect(screen.queryByText("Asked the buyer to approve ORD-1043")).not.toBeInTheDocument();
 
@@ -69,7 +71,7 @@ describe("audit page", () => {
     await user.click(await screen.findByRole("option", { name: "Valio" }));
     expect(await screen.findByText("No audit steps match these filters")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(await screen.findByText("3 requests, 8 steps")).toBeInTheDocument();
+    expect(await screen.findByText("3 requests · 8 steps")).toBeInTheDocument();
     expect(screen.getByText("Asked the buyer to approve ORD-1043")).toBeInTheDocument();
   });
 
@@ -103,7 +105,7 @@ describe("audit page", () => {
       order_lookup: "Order status checked",
       order_resolved: "A person resolved an unknown send",
       recall_check: "Recall check",
-      demo_inbox_cleared: "Test proposals cleared before a demo",
+      demo_inbox_cleared: "Inbox cleared",
       delivery_note_read: "Delivery note read",
       proposal_explanation_failed: "No model sentence for a proposal",
       kitchen_brief_read: "Kitchen brief read",
@@ -177,12 +179,15 @@ describe("audit page", () => {
     expect(await screen.findAllByText("Step number 119")).toHaveLength(1);
     expect(screen.getAllByText("Step number 70")).toHaveLength(1);
     expect(screen.queryByText("Step number 69")).not.toBeInTheDocument();
-    expect(screen.getByText("120 requests, 120 steps")).toBeInTheDocument();
+    expect(screen.getByText("120 requests · 120 steps · showing the newest 50 requests")).toBeInTheDocument();
+    expect(screen.queryByText(/Showing the newest/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Show more (70 earlier requests)" }));
     expect(screen.getAllByText("Step number 20")).toHaveLength(1);
+    expect(screen.getByText("120 requests · 120 steps · showing the newest 100 requests")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Show more (20 earlier requests)" }));
     expect(screen.getAllByText("Step number 0")).toHaveLength(1);
+    expect(screen.getByText("120 requests · 120 steps")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Show more/ })).not.toBeInTheDocument();
   });
 
@@ -206,7 +211,7 @@ describe("audit page", () => {
 
     expect(await screen.findByRole("heading", { name: "Buyer is searching the catalog" })).toBeInTheDocument();
     expect(screen.queryByText("Buyer got the offer")).not.toBeInTheDocument();
-    expect(screen.getByText("1 request, 6 steps")).toBeInTheDocument();
+    expect(screen.getByText("1 request · 6 steps")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Buyer is searching the catalog" }).closest("section")).toHaveTextContent(
       "Order placed",
     );

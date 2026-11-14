@@ -642,17 +642,21 @@ export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> =
   order_lookup: { kind: "order", summary: "Order status checked" },
   order_resolved: { kind: "order", summary: "A person resolved an unknown send" },
   recall_check: { kind: "other", summary: "Recall check" },
-  demo_inbox_cleared: { kind: "other", summary: "Test proposals cleared before a demo" },
+  demo_inbox_cleared: { kind: "other", summary: "Inbox cleared" },
   signed_in: { kind: "other", summary: "Signed in" },
   password_changed: { kind: "settings", summary: "Password changed" },
+  kitchen_brief_read: { kind: "request", summary: "Kitchen brief read" },
+  delivery_note_read: { kind: "order", summary: "Delivery note read" },
   proposal_created: { kind: "request", summary: "Proposal created" },
+  proposal_explanation_failed: { kind: "request", summary: "No model sentence for a proposal" },
   approval_requested: { kind: "approval", summary: "Approval requested" },
   decision_summary: { kind: "mandate_check", summary: "Decision summary" },
   total_mismatch: { kind: "simulate", summary: "The total moved before placing: nothing was sent" },
   order_placed: { kind: "order", summary: "Order placed" },
   proposal_rejected: { kind: "approval", summary: "Proposal rejected" },
   // #548: a 403 to the agent or a kitchen API token; the details (code, method, path) are the reason.
-  refused: { kind: "refused", summary: "Refused: the gateway said no (403)" },
+  // The gateway writes this kind only for a 403 (gateway/app.py), so "status: 403" below is its own fact.
+  refused: { kind: "refused", summary: "Request refused by the gateway" },
   // #374: a supplier's selling agent suggests a substitute; only a person turns it into a proposal.
   supplier_offer_received: { kind: "offer", summary: "Offer received from the supplier's selling agent" },
   supplier_offer_accepted: { kind: "offer", summary: "Supplier offer accepted: a proposal was made from it" },
@@ -861,7 +865,7 @@ function mapAuditEvent(event: Json): AuditEvent {
             : "system",
     summary: known?.summary ?? (name !== undefined ? kindWords(name) : "Unknown step"),
     reason: humanReason || (typeof kind === "string" && kind.startsWith("supplier_offer_") ? describe(rest) : ""),
-    details: describe(details),
+    details: describe(kind === "refused" ? { status: 403, ...details } : details),
   };
 }
 

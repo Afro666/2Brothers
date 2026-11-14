@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatNumber } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
 import { useLiveEvents } from "@/lib/live-events";
 import { useT } from "@/lib/i18n";
@@ -47,6 +48,13 @@ export function AuditPage() {
   useEffect(() => setShown(AUDIT_PAGE), [order, kind, actor]);
   const visible = filtered.slice(0, shown);
   const earlier = filtered.length - visible.length;
+  const requestCount =
+    filtered.length === 1
+      ? t("{count} request", { count: formatNumber(filtered.length) })
+      : t("{count} requests", { count: formatNumber(filtered.length) });
+  const visibleStepCount =
+    stepCount === 1 ? t("{count} step", { count: formatNumber(stepCount) }) : t("{count} steps", { count: formatNumber(stepCount) });
+  const showingCount = t("showing the newest {count} requests", { count: formatNumber(visible.length) });
   function clearFilters() {
     setOrder("all");
     setKind("all");
@@ -117,22 +125,15 @@ export function AuditPage() {
               </label>
             </div>
             <p className="font-mono text-xs text-muted-foreground" aria-live="polite">
-              <span>
-                {events.length >= AUDIT_LIMIT && order === "all" && kind === "all" && actor === "all"
-                  ? filtered.length === 1
-                    ? t("{count} request, the newest 1,000 steps", { count: filtered.length })
-                    : t("{count} requests, the newest 1,000 steps", { count: filtered.length })
-                  : filtered.length === 1
-                  ? stepCount === 1
-                    ? t("{count} request, {steps} step", { count: filtered.length, steps: stepCount })
-                    : t("{count} request, {steps} steps", { count: filtered.length, steps: stepCount })
-                  : stepCount === 1
-                    ? t("{count} requests, {steps} step", { count: filtered.length, steps: stepCount })
-                    : t("{count} requests, {steps} steps", { count: filtered.length, steps: stepCount })}
-              </span>
-              <span className="sr-only">
-                {stepCount === 1 ? t("{count} step", { count: stepCount }) : t("{count} steps", { count: stepCount })}
-              </span>
+              {[
+                requestCount,
+                visibleStepCount,
+                earlier > 0 ? showingCount : null,
+                // The gateway sends at most AUDIT_LIMIT steps: say which steps these are.
+                events.length >= AUDIT_LIMIT ? t("from the newest 1,000 steps") : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
             {events.length === 0 ? (
               <EmptyState title={t("No audit steps yet")}>{t("Recorded events will appear here.")}</EmptyState>
@@ -146,10 +147,7 @@ export function AuditPage() {
               <div className="space-y-3">
                 {earlier > 0 ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm text-muted-foreground">
-                      {t("Showing the newest {count} requests, newest first.", { count: visible.length })}
-                    </p>
-                    <Button variant="outline" onClick={() => setShown((value) => value + AUDIT_PAGE)}>
+                    <Button className="ml-auto" variant="outline" onClick={() => setShown((value) => value + AUDIT_PAGE)}>
                       {earlier === 1
                         ? t("Show more ({count} earlier request)", { count: earlier })
                         : t("Show more ({count} earlier requests)", { count: earlier })}
