@@ -152,7 +152,10 @@ The trusted application/engine creates `need_id` before invoking the buyer agent
 The gateway loads quantities from that stored need; neither `get_offer` nor
 `simulate_order` accepts quantities invented by the model. Offer lines include
 `product_id`, `quantity`, `unit`, `why`, `available_date`, `unknown_stock` and
-`cutoff_passed`. Unknown stock is never represented as a measured sentinel value.
+`cutoff_passed`. A line also carries `unit_price` (decimal string, per `unit`, before
+tax) and `closing_time` (the order cut-off for that line as a timestamp with an offset,
+or null when the supplier gives none). Unknown stock is never represented as a measured
+sentinel value.
 `expected_total` includes fees and tax. Simulation also includes `mov_gap` and
 `delivery_fee` as decimal strings. Expired offers must be refreshed and simulated.
 
@@ -359,6 +362,7 @@ IDs) apply here too. Base path: `/v1`.
 | GET | `/proposals/{id}` | `kitchen:read` | Lines with `why`, one block per supplier, simulated totals (`expected_total`, `mov_gap`, `delivery_fee`), mandate reasons, warnings. |
 | POST | `/proposals/{id}/approve` | `kitchen:approve` (human) | Body: `blocks: [{supplier_id, expected_total}]` + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH`; nothing is sent. |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
+| POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". Proposed; the gateway does not serve it yet. |
 | GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
 | PUT | `/sharing` | `kitchen:write` | Consent: which suppliers may see this kitchen's forecast. Every change is an audit entry. |
@@ -395,6 +399,7 @@ cutoff. Supplier-linked alternatives are considered before catalog fallback.
 | `requires_chef_approval` | `true` | Choices never select, approve or place themselves. |
 | `stock_confirmed` | boolean | False if any line has unconfirmed stock. Approval cannot override it. |
 | `allergen_data_known` | boolean | False if any retained original line has unknown allergen data; never label it safe. |
+| `recommended` | boolean, optional | `true` on at most one option: the one the engine would take. Absent or `false` means not marked; the UI never infers it. |
 
 Options use the same trusted need/date. A partial-stock option can combine the
 original and substitute products so the engine converts the gap by base unit,
@@ -402,6 +407,35 @@ not by assuming supplier packs are interchangeable. A candidate that the engine
 excludes (cutoff, wrong unit, etc.) is not offered. Selecting a preference is not
 an applied edit: re-simulate the selected basket and obtain human approval to its
 exact total through the existing workflow before placement.
+
+**Choosing an option.** `POST /v1/kitchens/{kitchen_id}/proposals/{proposal_id}/choose-option`
+
+```json
+{"offer_id": "offer-7f3a", "idempotency_key": "choose-1"}
+```
+
+- `offer_id` is the `offer_id` of one entry in the proposal's `substitute_options`; that
+  is what identifies an option.
+- The gateway simulates that basket again with fresh prices and stock and makes it the
+  proposal's basket. The answer is the proposal in the `GET /proposals/{id}` shape, still
+  `READY`: its lines and `expected_total` are the chosen basket's, and its `offer_id` is
+  the fresh offer. The chosen entry in `substitute_options` carries the same refreshed
+  `offer_id`, so a client finds the current choice by comparing the two.
+- Nothing is approved and nothing is sent. The person then approves the new
+  `expected_total` through `/approve`, as for any proposal.
+- Only a human session may choose: 403 `HUMAN_SESSION_REQUIRED` for an API key or the
+  Buyer's token.
+
+| Status | Code | When |
+|---|---|---|
+| 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
+| 404 | `OPTION_NOT_FOUND` | `offer_id` is not one of this proposal's options. |
+| 409 | `NOT_PENDING` | The proposal is no longer `READY` (approved, rejected, expired). |
+| 409 | `STOCK_UNKNOWN` | The fresh simulation cannot confirm the stock of a line. |
+| 409 | `CLOSING_PASSED` | The cut-off of a line has passed. |
+| 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. |
+
+After a 409 the proposal is unchanged: it keeps the basket it had.
 
 The trusted worker reads `kitchen_settings.excluded_allergens` through `store`:
 an explicit string array of supported allergen names/GS1 codes, including `[]`
