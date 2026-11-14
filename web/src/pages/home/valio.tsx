@@ -83,7 +83,7 @@ export function ShortageTile({ state, now }: { state: AsyncState<SupplierDemandR
                     </p>
                     <p className="tabular-nums text-muted-foreground">
                       Forecast {formatNumber(row.forecastDemand)} {row.unit}; available{" "}
-                      {row.available === null ? "unknown" : `${formatNumber(row.available)} ${row.unit}`}
+                      {row.available === null ? <span className="unknown-value">unknown</span> : `${formatNumber(row.available)} ${row.unit}`}
                     </p>
                   </li>
                 ))}

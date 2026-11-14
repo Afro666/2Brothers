@@ -32,11 +32,11 @@ function DriftList({
   showKitchen: boolean;
 }) {
   return (
-    <ul className="space-y-3 text-sm">
+    <ul className="divide-y text-sm">
       {warnings.map((warning) => (
         <li
           key={`${warning.kitchenId ?? ""}-${warning.productId}-${warning.kind}`}
-          className="space-y-1"
+          className="space-y-1 py-2"
         >
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <span className="min-w-0 font-medium">
@@ -48,7 +48,7 @@ function DriftList({
                 </span>
               ) : null}
             </span>
-            <span className="tabular-nums text-destructive">
+            <span className="text-right font-mono text-[13px] font-medium text-danger">
               {KIND_LABEL[warning.kind]} +{Math.round(warning.change * 100)}%
             </span>
           </div>

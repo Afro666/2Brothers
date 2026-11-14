@@ -1,33 +1,18 @@
-import {
-  Boxes,
-  Calculator,
-  ChefHat,
-  ClipboardList,
-  Search,
-  Settings,
-  Send,
-  Share2,
-  ShieldCheck,
-  Tag,
-  UserCheck,
-  type LucideIcon,
-} from "lucide-react";
-
 import { formatDateTime } from "@/lib/format";
 import type { AuditEvent, AuditKind } from "@/types";
 
-export const KIND_META: Record<AuditKind, { label: string; icon: LucideIcon }> = {
-  request: { label: "Request", icon: ChefHat },
-  search: { label: "Search", icon: Search },
-  offer: { label: "Offer", icon: Tag },
-  simulate: { label: "Simulate", icon: Calculator },
-  mandate_check: { label: "Mandate check", icon: ShieldCheck },
-  approval: { label: "Approval", icon: UserCheck },
-  order: { label: "Order", icon: Send },
-  stock: { label: "Stock", icon: Boxes },
-  forecast_share: { label: "Forecast shared", icon: Share2 },
-  settings: { label: "Settings", icon: Settings },
-  other: { label: "Other", icon: ClipboardList },
+export const KIND_META: Record<AuditKind, { label: string }> = {
+  request: { label: "Request" },
+  search: { label: "Search" },
+  offer: { label: "Offer" },
+  simulate: { label: "Simulate" },
+  mandate_check: { label: "Mandate check" },
+  approval: { label: "Approval" },
+  order: { label: "Order" },
+  stock: { label: "Stock" },
+  forecast_share: { label: "Forecast shared" },
+  settings: { label: "Settings" },
+  other: { label: "Other" },
 };
 
 export const ACTOR_LABEL: Record<AuditEvent["actor"], string> = {
@@ -39,45 +24,50 @@ export const ACTOR_LABEL: Record<AuditEvent["actor"], string> = {
   system: "System",
 };
 
+const ACTOR_STYLE: Record<AuditEvent["actor"], string> = {
+  chef: "bg-foreground text-background",
+  human: "bg-foreground text-background",
+  agent: "border border-dashed border-input text-muted-foreground",
+  gateway: "border border-dashed border-input text-muted-foreground",
+  system: "border border-dashed border-input text-muted-foreground",
+  valio: "border border-input text-foreground",
+};
+
 /** Every step, oldest first, each with who did it and why. */
 export function AuditTimeline({ events }: { events: AuditEvent[] }) {
   // Array.sort is stable, so steps with the same time keep the order the API recorded them in.
   // A step with no recorded time keeps its place in that order too.
   const sorted = [...events].sort((a, b) => (a.at && b.at ? new Date(a.at).getTime() - new Date(b.at).getTime() : 0));
   if (sorted.length === 0) {
-    return (
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <ClipboardList className="size-4" aria-hidden /> No steps yet.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground">No steps yet.</p>;
   }
   return (
-    <ol className="relative space-y-5 border-l pl-6">
+    <ol className="divide-y rounded-sm border bg-card">
       {sorted.map((e) => {
         const meta = KIND_META[e.kind];
-        const Icon = meta.icon;
         return (
-          <li key={e.id} className="relative" data-kind={e.kind}>
-            <span className="absolute top-0 -left-[2.3rem] flex size-7 items-center justify-center rounded-full border bg-background">
-              <Icon className="size-3.5 text-muted-foreground" aria-hidden />
+          <li
+            key={e.id}
+            className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-[8.5rem_6rem_minmax(0,1fr)]"
+            data-kind={e.kind}
+            data-actor={e.actor}
+          >
+            <time dateTime={e.at ?? undefined} className="self-start font-mono text-xs leading-4 text-muted-foreground">
+              {formatDateTime(e.at)}
+            </time>
+            <span
+              className={`h-fit w-fit rounded-sm px-1.5 font-mono text-[10.5px] leading-4 font-bold tracking-wide uppercase ${ACTOR_STYLE[e.actor]}`}
+            >
+              {ACTOR_LABEL[e.actor]}
             </span>
-            <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
-              <time dateTime={e.at ?? undefined} className="tabular-nums">
-                {formatDateTime(e.at)}
-              </time>
-              <span>·</span>
-              <span>{meta.label}</span>
-              <span>·</span>
-              <span>{ACTOR_LABEL[e.actor]}</span>
-              {e.orderId ? (
-                <>
-                  <span>·</span>
-                  <span>{e.orderId}</span>
-                </>
-              ) : null}
+            <div className="col-span-2 min-w-0 sm:col-span-1">
+              <p className="label-caps">
+                {meta.label}
+                {e.orderId ? <span className="font-mono"> · {e.orderId}</span> : null}
+              </p>
+              <p className="mt-0.5 text-sm font-semibold break-words">{e.summary}</p>
+              <p className="text-sm break-words text-muted-foreground">{e.reason}</p>
             </div>
-            <p className="mt-0.5 text-sm font-medium">{e.summary}</p>
-            <p className="text-sm text-muted-foreground">{e.reason}</p>
           </li>
         );
       })}

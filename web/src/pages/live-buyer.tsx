@@ -113,8 +113,10 @@ function Decision({ row }: { row: Proposal }) {
   return (
     <>
       <section className="space-y-2" aria-label="Why this basket">
-        <h2 className="font-semibold">Why this basket</h2>
-        <p className="text-sm break-words whitespace-pre-line">{text(summary?.text) ?? "unknown"}</p>
+        <h2 className="label-caps">Why this basket</h2>
+        <p className="max-w-[68ch] text-[15px] leading-[22px] break-words whitespace-pre-line">
+          {text(summary?.text) ?? <span className="unknown-value">unknown</span>}
+        </p>
         {text(summary?.text) ? (
           <p className="text-xs text-muted-foreground">
             Built by the gateway from the stored request and figures. No model writes this text.
@@ -143,15 +145,15 @@ function Decision({ row }: { row: Proposal }) {
         ) : null}
       </section>
       <section className="space-y-2" aria-label="What the guards said">
-        <h2 className="font-semibold">What the guards said</h2>
+        <h2 className="label-caps">What the guards said</h2>
         <p className="text-sm">
           Verdict:{" "}
           {verdict === "NEEDS_APPROVAL" ? (
-            <Badge variant="secondary">Needs a person’s approval</Badge>
+            <Badge variant="secondary" className="stamp rounded-sm border-2 border-warning bg-transparent text-warning">Needs a person’s approval</Badge>
           ) : verdict === "REFUSED" ? (
-            <Badge variant="destructive">Refused</Badge>
+            <Badge variant="destructive" className="stamp rounded-sm border-2 border-danger bg-transparent text-danger">Refused</Badge>
           ) : (
-            "unknown"
+            <span className="unknown-value">unknown</span>
           )}
         </p>
         {reasons?.length ? (
@@ -161,7 +163,7 @@ function Decision({ row }: { row: Proposal }) {
             ))}
           </ul>
         ) : (
-          <p className="text-sm">{reasons ? "No reasons given." : "Reasons: unknown"}</p>
+          <p className="text-sm">{reasons ? "No reasons given." : <>Reasons: <span className="unknown-value">unknown</span></>}</p>
         )}
       </section>
     </>
@@ -208,8 +210,8 @@ export function LiveBuyerRequests() {
     <AppShell activeId="requests">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Request an order</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-[28px] leading-8 font-bold tracking-[-0.015em]">Request an order</h1>
+          <p className="max-w-[68ch] text-[15px] leading-[22px] text-muted-foreground">
             Ask the Buyer for a proposal using live supplier prices and availability. A person approves before anything
             is placed.
           </p>
@@ -219,52 +221,60 @@ export function LiveBuyerRequests() {
             <ChefRequestBox onSubmit={submit} />
           </CardContent>
         </Card>
-        {pending ? <LoadingState label="Buyer is checking the catalog and preparing your proposal" /> : null}
+        {pending ? (
+          <div className="space-y-3">
+            <div className="print-bar" aria-hidden="true" />
+            <LoadingState label="Buyer is checking the catalog and preparing your proposal" />
+          </div>
+        ) : null}
         {result ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Proposal ready for human review</CardTitle>
+          <Card className="docket gap-4 p-4 sm:p-5">
+            <CardHeader className="px-0">
+              <CardTitle className="label-caps leading-4">Proposal ready for human review</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">{proposedBy(result)}</p>
-              <p className="text-sm break-all">{result.proposal_id}</p>
-              <p className="font-semibold">
+            <CardContent className="space-y-4 px-0">
+              <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result)}</p>
+              <p className="break-all font-mono text-[11px] text-muted-foreground">{result.proposal_id}</p>
+              <p className="text-xl font-bold">
                 {formatEur(mapMoney(result.total_ex_vat))} ex VAT · {formatEur(mapMoney(result.expected_total))} total
               </p>
               <Decision row={result} />
-              <ul className="space-y-3">
+              <ul>
                 {result.lines.map((line) => (
-                  <li key={line.product_id} className="rounded-md border p-3">
-                    <p>
+                  <li key={line.product_id} className="border-t py-2 first:border-t-0">
+                    <p className="font-mono text-[13px]">
                       {line.quantity} {line.unit} · {product(line.product_id)}
                     </p>
-                    <p>{line.why}</p>
+                    <p className="max-w-[68ch] text-sm">{line.why}</p>
                     {line.unknown_stock ? (
-                      <p className="text-warning">Waiting for supplier stock confirmation.</p>
+                      <p><span className="unknown-value">Waiting for supplier stock confirmation.</span></p>
                     ) : null}
                   </li>
                 ))}
               </ul>
-              <p>No order has been placed. This proposal and the Buyer’s steps are recorded for human review.</p>
-              <a className="underline" href="/approvals">Open live approval inbox</a>
+              <p className="border-t border-dashed border-input pt-3 text-sm">No order has been placed. This proposal and the Buyer’s steps are recorded for human review.</p>
+              <a className="inline-block font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/approvals">Open live approval inbox</a>
               {result.substitute_options?.length ? (
-                <section className="space-y-3" aria-label="Chef substitute choices">
-                  <h2 className="font-semibold">Other baskets for the chef to consider</h2>
+                <section aria-label="Chef substitute choices">
+                  <h2 className="label-caps">Other baskets for the chef to consider</h2>
                   {result.substitute_options.map((option) => (
-                    <div key={option.tier} className="space-y-2 rounded-md border p-3">
-                      <p className="font-medium">
-                        {option.tier} · {formatEur(mapMoney(option.expected_total))}
+                    <div key={option.tier} className="space-y-2 border-t py-3 first:border-t-0">
+                      <p className="flex flex-wrap items-baseline gap-x-3">
+                        <span className="stamp">{option.tier}</span>
+                        {" · "}
+                        <span className="font-stamp text-xl">{formatEur(mapMoney(option.expected_total))}</span>
                       </p>
-                      <p>{option.why}</p>
-                      <p>
+                      <p className="max-w-[68ch] text-sm">{option.why}</p>
+                      <p className="font-mono text-[13px]">
                         {option.lines
                           .map((line) => `${line.quantity} ${line.unit} of ${product(line.product_id)}`)
                           .join("; ")}
                       </p>
-                      {option.stock_confirmed ? null : <p className="text-warning">Stock not confirmed</p>}
-                      {option.allergen_data_known ? null : <p className="text-warning">Allergen data unknown</p>}
+                      {option.stock_confirmed ? null : <p><span className="unknown-value">Stock not confirmed</span></p>}
+                      {option.allergen_data_known ? null : <p><span className="unknown-value">Allergen data unknown</span></p>}
                       <Button
                         variant="outline"
+                        className="w-full aria-pressed:border-primary aria-pressed:bg-accent sm:w-auto"
                         aria-pressed={preferred === option.tier}
                         onClick={() => setPreferred(option.tier)}
                       >
