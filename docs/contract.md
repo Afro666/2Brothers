@@ -25,6 +25,35 @@ The upstream specification has no order-placement endpoint. Any order simulation
 approval, or placement implemented by our gateway is a team-owned interface and
 must not be described as an upstream order submission.
 
+### Valio's rate limit and `SUPPLIER_BUSY` (#1237)
+
+Valio's rule (challenge Discord, 2026-11-14): a few hundred calls a minute is fine,
+more than 10 a second is not. Above it Valio answers 429 and blocks the caller for
+30 seconds. The gateway's Valio client honours this for the whole server process:
+
+- **Limiter.** At most 5 calls at once, then 4 a second (a token bucket shared by every
+  Valio client in the process), so never more than 9 calls in any one second. A call
+  waits briefly for its turn. A call that would wait more than 5 seconds is not sent:
+  it fails as `SUPPLIER_BUSY`.
+- **Rest after a 429.** No call goes to Valio for 30 seconds, or for `Retry-After`
+  seconds when Valio sends a longer one (at most 300). A 429 is never retried inside
+  that time. 5xx and network errors keep their short retries.
+- **Cache first.** An answer still in the client's cache (30 seconds) is served during
+  a rest. Only a call that would reach Valio fails.
+
+What a caller sees during a rest:
+
+| Where | Answer |
+|---|---|
+| A route that needs a live Valio price or stock (`get_offer`, creating or changing a proposal, addable products, a supplier offer) | 503 `SUPPLIER_BUSY` with `retry_after` (whole seconds) in the error body and a `Retry-After` header. Nothing is stored. Try again after `retry_after`. |
+| `search_products` with `need_id` | 200; `can_arrive` is `null` (unknown), as for any missing live answer. |
+| Supplier planner view (`/demand`) | 200; availability is unknown, `risk` is `UNKNOWN`; the demand still shows. |
+| Buyer agent | The `get_offer` tool fails, so the run ends `CANNOT_FULFIL` and says the tool failed; nothing is ordered. |
+
+```json
+{"error": {"code": "SUPPLIER_BUSY", "message": "Valio rate limit: wait 27 s", "retry_after": 27}}
+```
+
 ### Shared price and availability request
 
 ```json
