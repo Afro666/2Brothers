@@ -79,7 +79,7 @@ verifiable credential (planned in `docs/plan.md`, not in the code).
 ## NVIDIA: Best Use of Nemotron
 
 **Model.** Nemotron 3.5 Super VL (`nemotron-3.5-super-vl`) on Verda's shared inference
-endpoint (`agent/model.py:18`, `agent/model.py:27`). We did not train or fine-tune it.
+endpoint (`agent/model.py:21`, `agent/model.py:31`). We did not train or fine-tune it.
 
 **What it does.** It is the Buyer agent. It reads the chef's request and calls seven MCP
 tools: search, offer, simulate, request approval, place order, order status and audit log
@@ -93,6 +93,14 @@ The shelf reader is live on the Stock page ("Count from a photo", #373): on a pr
 test photo it filled five counts in about 2 s, and the half hidden pack got "please count"
 and no number; a person saves (`gateway/stock_photo.py`, `agent/shelf_service.py`,
 `docs/demo.md` "Photo beat").
+
+**How much we use it.** A token meter counts every model call per role from the
+endpoint's `usage` field (`agent/usage.py`, `agent/README.md` "Token meter"). Measured on
+2026-11-14: one Buyer request is about 4 model calls, 44,500 prompt tokens and 2,200
+completion tokens (12 requests: 50 calls, 534,312 prompt and 26,733 completion tokens, of
+which 20,567 reasoning). One photo read is one call of about 1,300 to 2,100 prompt tokens
+and 190 completion tokens. The benchmark used about 130,000 tokens per kitchen week with
+thinking on, over 12 weeks (`env/README.md`, the "tokens/episode" column).
 
 **Why it matters.** A chef writes a sentence, not product codes. The model turns it into
 catalog products and a reason a person can read. A wrong model answer cannot become a
@@ -112,8 +120,8 @@ Thinking on is worth about EUR 5,000 a week at about 9 times the tokens. No mode
 the engine, so the engine keeps the numbers. Other changes: the reply budget went to 64k
 tokens, because Nemotron answered nothing at 16k (`env/README.md:150`). A rejected read
 call returns a fixed reason code, and live Nemotron then corrected its call
-(`agent/README.md:284`). Vision replies use a strict JSON schema with thinking off; a
-reply outside the schema is refused whole (`agent/model.py:37`, `agent/vision.py`). A
+(`agent/README.md:342`). Vision replies use a strict JSON schema with thinking off; a
+reply outside the schema is refused whole (`agent/model.py:41`, `agent/vision.py`). A
 scripted prompt-injection test shows the guards hold when the model obeys the attack
 (`agent/conformance.py`, `agent/README.md:49`).
 
@@ -192,7 +200,7 @@ links, and the limits. The numbers below are from `python docs/codex_metrics.py 
   because its code was ahead of the contract.
 - Codex built the Valio client (#45), the MCP tools (#54), the Nemotron Buyer loop (#63),
   the weather and season signals (#183, #207), the human approval flow (#436) and the
-  recall holds with replacement baskets (#455). `agent/README.md:271` records the first three.
+  recall holds with replacement baskets (#455). `agent/README.md:329` records the first three.
 - Codex also worked as a second reviewer: on #120 it found six failing cases in code that
   the Claude Code session wrote, before the PR opened.
 - Five decisions in `docs/decisions.md` are tagged Codex: the unknown-stock rule (#48),
@@ -221,7 +229,7 @@ sped the work up, so we state none here. No CI step runs Codex (#361).
       Context.dev data does not show in the web demo, and the sponsor asks for that.
 - [ ] Context.dev: wire the onboarding lookup (#452). Limit credit spend on the open demo
       (#604, #652).
-- [ ] Nemotron: improvement round on the benchmark with a token meter (#365). Store a
+- [ ] Nemotron: improvement round on the benchmark (#365; the token meter is built). Store a
       delivery-note result through the gateway (#362) and add the shelf photo button (#373).
 - [ ] MongoDB: merge Atlas Vector Search (draft PR #405, #366), or keep it out of the form.
 - [ ] Valio: emit the two missing reason codes so S01 and S02 pass (`docs/scenarios.md`).
