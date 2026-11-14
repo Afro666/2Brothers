@@ -879,6 +879,68 @@ describe("createHttpApi", () => {
     await expect(api.getOrder("nope")).rejects.toMatchObject({ code: "NO_ROUTE" });
   });
 
+  // The demo seed's delivery order (#1726): placed without a proposal, VAT not known.
+  const seededOrder = {
+    ...placedOrder,
+    order_id: "ord-seed",
+    placed_by: "demo-seed",
+    receipt: null,
+    supplier_must_confirm: [],
+    expected_total: "178.09",
+    total_ex_vat: "178.09",
+    vat: null,
+    total_incl_vat: null,
+    vat_unknown: ["900001"],
+    delivery_fee: null,
+    lines: [{ product_id: "900001", name: "Kieku barn eggs L, 180 pcs", product_name: "Kieku Barn Eggs L180", quantity: "3", unit: "KI", unit_price: "59.36", total: "178.09", unknown_stock: false, reason_codes: [], vat_rate: null, vat_source: null }],
+  };
+
+  it("asks the order route first for an id that is on the proposals list neither way", async () => {
+    const calls = gateway({
+      [`GET ${K}/proposals`]: () => ({ proposals: [] }),
+      [`GET ${K}/orders/ord-seed`]: () => seededOrder,
+    });
+    const order = await createHttpApi("/api").getOrder("ord-seed");
+    expect(calls.map((call) => call.route)).not.toContain(`GET ${K}/proposals/ord-seed`);
+    // The money is the order row's own; the VAT it does not know stays unknown, never 0.
+    expect(order).toMatchObject({ id: "ord-seed", status: "PLACED", totalExVat: 178.09, vat: null, deliveryFee: null, withoutProposal: true });
+  });
+
+  it("still opens a waiting proposal that is somehow not on the list", async () => {
+    gateway({
+      [`GET ${K}/proposals`]: () => ({ proposals: [] }),
+      [`GET ${K}/orders/prop-1`]: () => error(404, "ORDER_NOT_FOUND"),
+      [`GET ${K}/proposals/prop-1`]: () => proposal,
+    });
+    const order = await createHttpApi("/api").getOrder("prop-1");
+    expect(order).toMatchObject({ id: "prop-1", status: "NEEDS_APPROVAL" });
+    expect(order.withoutProposal).toBeUndefined();
+  });
+
+  it("shows an order recorded without its proposal without a column of unknowns", async () => {
+    const calls = gateway({
+      [`GET ${K}/proposals`]: () => ({ proposals: [] }),
+      [`GET ${K}/orders/ord-seed`]: () => seededOrder,
+      [`GET ${K}/audit`]: () => ({ events: [] }),
+    });
+    renderApp("/orders/ord-seed", createHttpApi("/api"));
+
+    const lines = await screen.findByRole("list", { name: "Lines" });
+    expect(within(lines).getByText("Kieku Barn Eggs L180")).toBeVisible();
+    expect(within(lines).getByText("Unit price ex VAT")).toBeVisible();
+    for (const left of ["Compare", "Available", "Order by", "Why: ", "pack size not in the catalog"]) {
+      expect(within(lines).queryByText(left)).not.toBeInTheDocument();
+    }
+    expect(screen.getByText("This order was recorded without its proposal, so the offer details are not shown.")).toBeVisible();
+    expect(screen.getByText("not recorded")).toBeVisible();
+    const totals = screen.getByText("Total ex VAT").closest("dl")!;
+    expect(within(totals).getByText("Total ex VAT").nextElementSibling).toHaveTextContent("178.09");
+    expect(within(totals).getByText("VAT").nextElementSibling).toHaveTextContent("unknown");
+    expect(within(totals).getByText("Total incl VAT").nextElementSibling).toHaveTextContent("unknown");
+    expect(totals).not.toHaveTextContent(/€\s?0[.,]00/);
+    expect(calls.map((call) => call.route)).not.toContain(`GET ${K}/proposals/ord-seed`);
+  });
+
   it("reads the current role and what is known about an unknown send", async () => {
     const calls = gateway({
       "GET /api/v1/me": () => ({

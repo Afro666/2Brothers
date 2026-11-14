@@ -214,7 +214,8 @@ function proposalStatus(status: unknown): OrderStatus {
 /**
  * One UI order. The proposal carries the basket (lines with `why`, delivery date, totals);
  * the placed order, when there is one, carries the id and the outcome. An order whose
- * proposal is not at hand keeps its delivery date, ex-VAT total and delivery terms unknown.
+ * proposal is not at hand takes its totals from the order row and keeps its delivery date and
+ * delivery terms unknown.
  */
 export function mapOrder(proposal: Json | null, placed: Json | null): Order {
   const source = proposal ?? placed ?? invalid("an order");
@@ -228,9 +229,10 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     deliveryDate,
     lines: source.lines.map((line) => mapLine(object(line, "an order line"), deliveryDate ?? "")),
     supplierMustConfirm: placed ? strings(placed.supplier_must_confirm) : [],
-    totalExVat: proposal ? mapMoney(proposal.total_ex_vat, "total_ex_vat") : null,
-    vat: proposal ? decimal(proposal.vat, "vat") : null,
-    deliveryFee: proposal ? decimal(proposal.delivery_fee, "delivery_fee") : null,
+    // Without its proposal the money is the order row's own; a VAT it does not know stays null.
+    totalExVat: proposal ? mapMoney(proposal.total_ex_vat, "total_ex_vat") : decimal(source.total_ex_vat, "total_ex_vat"),
+    vat: decimal(source.vat, "vat"),
+    deliveryFee: decimal(source.delivery_fee, "delivery_fee"),
     totalInclVat: mapMoney((placed ?? source).expected_total, "expected_total"),
     mov: proposal ? mapMov(proposal) : null,
     supplierOrderRef: placed ? resolutionRecord(placed.resolution)?.supplierOrderRef ?? null : null,
@@ -239,6 +241,7 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     // Aron, 14 Nov: repeated demo orders of one product show what was asked, and when.
     requestText: typeof request?.text === "string" && request.text.trim() ? request.text.trim() : null,
     createdAt: placed ? nullableText(placed.created_at, "created_at") : null,
+    ...(proposal ? {} : { withoutProposal: true as const }),
   };
 }
 

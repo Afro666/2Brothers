@@ -131,7 +131,7 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
               <h2 className="text-[19px] leading-[25px] font-[650] [overflow-wrap:anywhere]">{title}</h2>
               <p className="text-sm">
                 <span className="label-caps mr-2">{t("Delivery")}</span>
-                {t(formatDate(order.deliveryDate))}
+                {order.withoutProposal && order.deliveryDate === null ? t("not recorded") : t(formatDate(order.deliveryDate))}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <code className="max-w-full font-mono text-xs break-all select-text text-muted-foreground" title={order.id}>
@@ -151,17 +151,24 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
               <h3 id="order-lines-heading" className="label-caps">
                 {t("Lines")}
               </h3>
-              <OrderLinesTable lines={order.lines} now={new Date()} variant="receipt" />
+              <OrderLinesTable lines={order.lines} now={new Date()} variant="receipt" offerDetails={!order.withoutProposal} />
+              {order.withoutProposal ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("This order was recorded without its proposal, so the offer details are not shown.")}
+                </p>
+              ) : null}
             </section>
             <dl className="space-y-2 border-t border-dashed border-input pt-4 text-sm">
               <div className="flex items-baseline justify-between gap-4">
                 <dt className="text-muted-foreground">{t("Total ex VAT")}</dt>
                 <dd className="text-right font-mono tabular-nums">{t(formatEur(order.totalExVat))}</dd>
               </div>
-              {order.vat !== null ? (
+              {order.vat !== null || order.withoutProposal ? (
                 <div className="flex items-baseline justify-between gap-4">
                   <dt className="text-muted-foreground">{t("VAT")}</dt>
-                  <dd className="text-right font-mono tabular-nums">{t(formatEur(order.vat))}</dd>
+                  <dd className="text-right font-mono tabular-nums">
+                    {order.vat === null ? t("unknown") : t(formatEur(order.vat))}
+                  </dd>
                 </div>
               ) : null}
               {order.deliveryFee !== null && order.deliveryFee > 0 ? (
@@ -172,7 +179,10 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
               ) : null}
               <div className="flex items-baseline justify-between gap-4 border-t border-dashed border-input pt-3 text-base font-semibold">
                 <dt>{t("Total incl VAT")}</dt>
-                <dd className="text-right font-mono text-lg tabular-nums">{t(formatEur(order.totalInclVat))}</dd>
+                <dd className="text-right font-mono text-lg tabular-nums">
+                  {/* docs/contract.md: with a VAT unknown, `expected_total` is not a total incl VAT. */}
+                  {order.withoutProposal && order.vat === null ? t("unknown") : t(formatEur(order.totalInclVat))}
+                </dd>
               </div>
             </dl>
             <MovProgress mov={order.mov} />

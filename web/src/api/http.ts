@@ -388,14 +388,16 @@ export function createHttpApi(baseUrl: string): Api {
         // A placed order: its basket is on the proposal that placed it.
         return mapOrder(placedBy, (await get(`${kitchen}/orders/${encodeURIComponent(id)}`)) as Json);
       }
-      let proposal: Json;
-      try {
-        proposal = (await get(proposalPath(id))) as Json;
-      } catch (error) {
-        if (!(error instanceof ApiError && error.code === "PROPOSAL_NOT_FOUND")) throw error;
-        // Not on the list and not a proposal: an order whose proposal the list no longer holds.
-        return mapOrder(null, (await get(`${kitchen}/orders/${encodeURIComponent(id)}`)) as Json);
+      if (!list.some((row) => row.proposal_id === id)) {
+        // On the list neither way: an order whose proposal is gone or never existed (the demo
+        // seed's, #1726) is asked as an order first; the proposal route only if no order has the id.
+        try {
+          return mapOrder(null, (await get(`${kitchen}/orders/${encodeURIComponent(id)}`)) as Json);
+        } catch (error) {
+          if (!(error instanceof ApiError && error.code === "ORDER_NOT_FOUND")) throw error;
+        }
       }
+      const proposal = (await get(proposalPath(id))) as Json;
       const orderId = proposal.order_id;
       return mapOrder(
         proposal,
