@@ -58,6 +58,13 @@ def allergen_codes(wanted) -> list[str]:
     return sorted(set(codes))
 
 
+def _excluded_codes(wanted) -> list[str]:
+    """The group rule of store/allergen_groups.py: `AN` also excludes `SA`, and `SA`
+    also excludes `AN`, so search refuses what the order path refuses (#742)."""
+    from store.allergen_groups import excluded_allergen_codes  # it imports this module
+    return excluded_allergen_codes(wanted)
+
+
 def _size(value, unit) -> dict:
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         raise ValueError("pack_size.value must be a number")
@@ -132,7 +139,7 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
         boost["compound"]["score"] = {"constant": {"value": SIZE_BOOST}}
         compound["should"].append(boost)
 
-    codes = allergen_codes(filters.get("exclude_allergens"))
+    codes = _excluded_codes(filters.get("exclude_allergens"))
     if codes:
         levels = ["contains", "may_contain"] + (["undeclared"] if strictness == "strict" else [])
         for level in levels:
@@ -257,7 +264,7 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
     filters = filters or {}
     size = (_size(filters["pack_size"]["value"], filters["pack_size"]["unit"])
             if filters.get("pack_size") else text_size)
-    codes = allergen_codes(filters.get("exclude_allergens"))
+    codes = _excluded_codes(filters.get("exclude_allergens"))
     rows = []
     for doc in db.products.aggregate(pipeline):
         doc["product_id"] = doc.pop("_id")

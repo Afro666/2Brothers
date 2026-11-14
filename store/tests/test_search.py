@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import unittest
 
-from store.search import _reasons, allergen_codes, build_pipeline, parse_query
+from store.search import _reasons, allergen_codes, build_pipeline, parse_query, search_products
 
 
 def compound(query="", filters=None, **kw):
@@ -40,6 +40,29 @@ class SearchQueryTests(unittest.TestCase):
         clauses = compound("bread", {"exclude_allergens": ["milk"]})["mustNot"]
         self.assertEqual(clauses, [{"in": {"path": "allergens.contains", "value": ["AM"]}},
                                    {"in": {"path": "allergens.may_contain", "value": ["AM"]}}])
+
+    def test_excluded_allergens_follow_the_group_rule(self):
+        # #742: a tree nut group code and a member code exclude each other, as orders do.
+        class Products:
+            def aggregate(self, pipeline):
+                refused = [c["in"] for c in pipeline[0]["$search"]["compound"]["mustNot"]
+                           if "in" in c]
+                return [dict(doc) for doc in docs if not any(
+                    set(doc["allergens"].get(r["path"].split(".")[1], [])) & set(r["value"])
+                    for r in refused)]
+
+        docs = [{"_id": "almond", "allergen_data_known": True,
+                 "allergens": {"contains": ["SA"]}},
+                {"_id": "nuts", "allergen_data_known": True,
+                 "allergens": {"contains": ["AN"]}},
+                {"_id": "bread", "allergen_data_known": True,
+                 "allergens": {"contains": ["AW"]}}]
+        db = type("Db", (), {"products": Products()})()
+        ids = lambda wanted: [row["product_id"] for row in search_products(  # noqa: E731
+            db, "", {"exclude_allergens": wanted})]
+        self.assertEqual(ids(["AN"]), ["bread"])
+        self.assertEqual(ids(["SA"]), ["bread"])
+        self.assertEqual(allergen_codes(["AN"]), ["AN"])  # the base helper is unchanged
 
     def test_strict_also_drops_unknown_and_undeclared(self):
         clauses = compound("bread", {"exclude_allergens": ["AM"],
