@@ -12,7 +12,7 @@ merges it only when green. Built and run on the night of 2026-11-14 (about 60 bo
 ## Run
 
 From the main checkout, in Git Bash. `GATE_PY` is a Python with the test deps
-(`pip install -e ".[test,signals]"`). Each gate needs its own `GATE_NAME`; the web deps are
+(`pip install -e ".[test,signals,covers]"`, the same extras as CI in tests.yml; without `covers` the env tests fail on numpy and look red). Each gate needs its own `GATE_NAME`; the web deps are
 installed once per gate worktree (`npm ci` in its `web/`).
 
 ```
