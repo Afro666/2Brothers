@@ -151,7 +151,7 @@ describe("RecallPanel, folded and unfolded", () => {
     expect(within(item).getByText("In recipes: breakfast_buffet")).toBeVisible();
     expect(within(item).getByText("No open order holds it. New orders leave it out.")).toBeVisible();
     expect(
-      within(item).getByText("Do not use it until checked. Check your packs: only 23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027 are recalled."),
+      within(item).getByText("Do not use it until checked. Check your packs: only 23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 and 5.9.2027 are recalled."),
     ).toBeVisible();
     expect(within(box).getByText(/Powered by Context\.dev/)).toHaveTextContent("Powered by Context.dev /v1/web/scrape");
 

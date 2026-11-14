@@ -211,7 +211,8 @@ function makeGroup(events: AuditEvent[], index: number): AuditStepGroup & { inde
 }
 
 function translatedReason(event: AuditEvent, t: ReturnType<typeof useT>): string {
-  if (Object.hasOwn(CODE_LABELS, event.reason)) return `${t(CODE_LABELS[event.reason].title)}. ${t(CODE_LABELS[event.reason].detail)}`;
+  // The log records what happened: a code's plain name, not the approval card's advice ("It cannot be approved").
+  if (Object.hasOwn(CODE_LABELS, event.reason)) return plainCode(event.reason, t);
   if (event.actor !== "agent") return event.reason;
   const productsForDate = /^(\d+) products? for (.+)$/.exec(event.reason);
   if (productsForDate) {

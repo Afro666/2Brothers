@@ -115,7 +115,7 @@ describe("audit page", () => {
         kind,
         actor: "system",
         ...(kind === "proposal_explanation_failed" ? { reason: "EXPLANATION_UNAVAILABLE" } : {}),
-        ...(kind === "delivery_note_read" ? { reason: "BLOCKED_BY_RECALL" } : {}),
+        ...(kind === "order_lookup" ? { reason: "BLOCKED_BY_RECALL" } : {}),
         at: `2026-11-14T10:${String(i).padStart(2, "0")}:00+00:00`,
       })),
       { event_id: "t-1", type: "tool_call_finished", tool: "request_approval", arguments: {}, result: {} },
@@ -132,8 +132,10 @@ describe("audit page", () => {
     expect(screen.getAllByText("Buyer simulated the order")).toHaveLength(1);
     expect(screen.getAllByText("Buyer is asking for approval")).toHaveLength(1);
     expect(screen.getAllByText("new_tool finished")).toHaveLength(1);
-    expect(screen.getByText("Explanation unavailable. The Buyer could not explain this proposal. Check the order details before approving.")).toBeInTheDocument();
-    expect(screen.getByText("Blocked by a recall. A product on this order matches a food recall. It cannot be approved.")).toBeInTheDocument();
+    // A reason code reads as its plain name, without the approval card's present-tense advice.
+    expect(screen.getByText("Explanation unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Blocked by a recall")).toBeInTheDocument();
+    expect(screen.queryByText(/EXPLANATION_UNAVAILABLE|BLOCKED_BY_RECALL|It cannot be approved/)).not.toBeInTheDocument();
     for (const name of ["stock_photo_read", "request_approval finished", "Buyer called request_approval"]) {
       expect(screen.queryByText(name)).not.toBeInTheDocument();
     }
