@@ -134,7 +134,9 @@ function DriftTileBody({
               <DriftList warnings={report.warnings} showKitchen={showKitchen} />
             )}
             <p className="mt-3 text-xs text-muted-foreground">
-              {t("From your last 4 weeks of orders (MongoDB Atlas time-series aggregation)")}
+              {showKitchen
+                ? t("From each kitchen's last 4 weeks of orders (MongoDB Atlas time-series aggregation)")
+                : t("From your last 4 weeks of orders (MongoDB Atlas time-series aggregation)")}
             </p>
           </>
         )}
