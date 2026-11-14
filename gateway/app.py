@@ -266,6 +266,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
             raise GatewayError(422, "INVALID_REQUEST", "from and to (YYYY-MM-DD) are required")
         return gw().forecast(kitchen_id, q["from"], q["to"])
 
+    @app.get(k + "/permissions")
+    def permissions_matrix(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
+        from gateway import permissions
+        return permissions.matrix()
+
     @app.get(k + "/audit")
     def audit(kitchen_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
