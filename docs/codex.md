@@ -219,9 +219,11 @@ it here; we did not see the session.
 - Codex is one of three developers and 11% of the merged PRs. Aron and Tymon use Claude
   Code. The review bot is Claude Opus (`ai-review.yml`). The fix bot is Claude (`ai-fix.yml`).
 - Maciek uses both agents. 15 of his 57 PRs, with all of `env/`, came from Claude Code.
-- A non-blocking OpenAI Codex CI reviewer is merged in #1075. Runtime verification
-  and the first genuine model comment are tracked in #361 / #1088; a green workflow
-  with an unavailable comment is not evidence of a successful review.
+- A non-blocking OpenAI Codex CI reviewer is merged in #1075, with runtime/auth fixes
+  in #1088. The [live authentication attempt](https://github.com/Afro666/2Brothers/actions/runs/43571581151)
+  reached OpenAI but returned **Quota exceeded**. #361 stays open pending API
+  credits/billing and a genuine model comment; green advisory jobs reporting
+  unavailable are not evidence of successful model reviews.
 - Codex generated a Buyer client from public docs alone in the recorded [#372 experiment](evidence/codex-372/README.md).
   An operator reviewed and executed it once: a live PENDING proposal, with no approval/order.
   The successful generation took 70.7 seconds; all setup/retries/review took 6 min 49 s.
