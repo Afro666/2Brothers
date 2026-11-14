@@ -74,6 +74,34 @@ describe("PlannerPage: plan from a menu photo", () => {
     expect(section.getByRole("status")).toHaveTextContent("A person approves it there. Nothing is ordered from this page.");
   });
 
+  it("sends the covers the person typed for dishes the menu shows none for", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const read = vi.spyOn(api, "readMenuPhoto");
+    renderApp("/planner", api);
+    const section = await panel();
+    const covers = section.getByLabelText("Covers for dishes without covers on the menu (optional)");
+    await user.type(covers, "90");
+    await user.upload(section.getByLabelText("Choose a photo of the menu"), PHOTO);
+    await waitFor(() => expect(read).toHaveBeenCalled());
+    expect(read.mock.calls[0][1]).toEqual({ from: "2026-11-23", to: "2026-11-29", requestedDate: "2026-11-23", covers: 90 });
+  });
+
+  it("sends no covers when the field is empty or not a whole number", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const read = vi.spyOn(api, "readMenuPhoto");
+    renderApp("/planner", api);
+    const section = await panel();
+    await user.upload(section.getByLabelText("Choose a photo of the menu"), PHOTO);
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(read.mock.calls[0][1]).not.toHaveProperty("covers");
+    await waitFor(() => expect(section.getByRole("button", { name: "Choose a file" })).toBeEnabled(), { timeout: 3000 });
+    await user.type(section.getByLabelText("Covers for dishes without covers on the menu (optional)"), "2.5");
+    expect(section.getByRole("alert")).toHaveTextContent("Covers must be a whole number");
+    expect(section.getByRole("button", { name: "Choose a file" })).toBeDisabled();
+  });
+
   it("lists a dish that matches no recipe as not known, with a link to the recipes", async () => {
     const user = userEvent.setup();
     renderApp("/planner", createMockApi());

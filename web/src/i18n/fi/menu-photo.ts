@@ -4,6 +4,10 @@ export default {
   "{model} reads a photo of this week's menu and matches each dish to your recipes. A proposal waits in the inbox; nothing is ordered here.":
     "{model} lukee kuvan viikon ruokalistasta ja yhdistää jokaisen ruoan resepteihisi. Ehdotus odottaa hyväksyttävänä; tältä sivulta ei tilata mitään.",
   "Take a photo": "Ota kuva",
+  "Covers for dishes without covers on the menu (optional)": "Annosmäärä ruoille, joilla ei ole annosmäärää listalla (valinnainen)",
+  "Covers must be a whole number, for example 90.": "Annosmäärän on oltava kokonaisluku, esimerkiksi 90.",
+  "Used only for a dish whose covers the menu does not show. Leave it empty to plan those by hand.":
+    "Käytetään vain ruokaan, jonka annosmäärää ruokalista ei näytä. Jätä tyhjäksi, niin suunnittelet ne käsin.",
   "Take a photo of the menu": "Ota kuva ruokalistasta",
   "Choose a photo of the menu": "Valitse kuva ruokalistasta",
   "{model} is reading the menu. This takes a few seconds.": "{model} lukee ruokalistaa. Tämä kestää muutaman sekunnin.",
