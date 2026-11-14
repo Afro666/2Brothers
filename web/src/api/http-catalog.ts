@@ -1,4 +1,4 @@
-import { type Json, object, rows, text } from "@/api/gateway-map";
+import { type Json, decimal, object, rows, text } from "@/api/gateway-map";
 import type { Api, MatchedBy, ProductSearchFilters, SearchedProduct, SearchedProducts } from "@/api/types";
 import { ApiError } from "@/api/types";
 import type { Allergen, PackUnit, Product, ProductLabel } from "@/types";
@@ -31,7 +31,21 @@ const ALLERGEN_NAMES: Record<string, string> = {
   UM: "Molluscs",
   ML: "Lactose",
   UW: "Wheat",
+  NR: "Rye",
+  GB: "Barley",
   GO: "Oats",
+  GS: "Spelt",
+  GK: "Kamut",
+  SA: "Almonds",
+  SC: "Cashew nuts",
+  SH: "Hazelnuts",
+  SM: "Macadamia nuts",
+  SP: "Pecan nuts",
+  // The member codes as agent/label.py NAMES has them. A code that is not in that table (BP) has
+  // no name here on purpose: a guessed allergen name would be a wrong warning.
+  SR: "Brazil nuts",
+  ST: "Pistachio nuts",
+  SW: "Walnuts",
 };
 
 /** The labels the UI knows how to show (`ProductLabel`); other labels are left out. */
@@ -133,6 +147,9 @@ export function mapCatalogProduct(value: unknown): Product {
     ),
     co2KgPerKg: nullableNumber(row.carbon_kg_co2e_per_kg, "carbon_kg_co2e_per_kg"),
     deliveryReliability: nullableNumber(row.reliability, "reliability"),
+    // Only the kitchen's own products carry a price in a search row (docs/contract.md,
+    // `unit_price_eur`): a supplier's price is live and comes with the offer, so it is absent here.
+    ...(row.source === "own" ? { priceExVat: decimal(row.unit_price_eur, "unit_price_eur") } : {}),
   };
 }
 
