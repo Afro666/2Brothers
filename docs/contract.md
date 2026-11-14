@@ -3603,9 +3603,10 @@ route errors, never an invented empty brief.
 
 **Implemented in stages.** Served so far: change reasons, context and outcomes (#1302),
 delivery results and the one-tap `/received` (#1304), and `GET`/`PUT /learned` with
-correction ratios applied to plan proposals (#1305 phase 2a). In this stage a
-`DECLINED_PRODUCT` fact and a late supplier (`SUPPLIER_LATE` with `on_time_rate` under
-0.7) only add a warning to the plan's `problems`: a declined recipe ingredient is never
+correction ratios applied to plan proposals (#1305 phase 2a), and a declined product
+left out of a plan proposal when no recipe needs it (#1307, "Declined products in a plan
+proposal" below). In this stage a late supplier (`SUPPLIER_LATE` with `on_time_rate` under
+0.7) only adds a warning to the plan's `problems`: a declined recipe ingredient is never
 left out silently, and learned lead times do not change safety stock yet.
 Learning adds no model-controlled write endpoint and never changes a typed request quantity.
 
@@ -3855,6 +3856,39 @@ alone, with Finnish number formatting normalized. An invalid sentence is omitted
 leaving the plain learned evidence. A not-applicable model suggestion is only text
 for human review; it does not skip an engine adjustment or persist a switch. Prompt memory is
 capped at 12 entries and approximately 600 tokens.
+
+#### Declined products in a plan proposal (#1307)
+
+Only a plan proposal (`request.made_by: "menu_plan"`: the menu-plan window and "Propose
+order for this week") reads an active `DECLINED_PRODUCT` fact. A typed, structured or
+list request that names the product still gets it.
+
+- **No recipe needs it in the window** (its need comes only from the history forecast):
+  the product gets no line. It is listed in the proposal's `excluded` and in
+  `mandate.reasons`, never dropped silently:
+
+  ```json
+  {"product_id": "462775", "product_name": "Milk 1 L",
+   "reason": "LEARNED_DECLINED: not proposed: you removed it 3 times (last on 2026-11-09). Switch this learned fact off to get it back.",
+   "fact_id": "lf_01JYK8M4N3M4K7W8N0E4Q2F6C5",
+   "evidence": {"rows": 3, "from": "2026-10-26", "to": "2026-11-09", "last": "2026-11-09"},
+   "quantity": "20", "unit": "L"}
+  ```
+
+  `fact_id`, `evidence`, `quantity` and `unit` are present only on a learned entry; every
+  other `excluded` entry keeps its shape. `quantity` and `unit` are the need that was left
+  out. The same entries are stored as `request.learned_excluded`.
+- **A recipe of a planned day needs it**: a recipe names one product, so nothing else
+  covers the ingredient. The line stays and `request.problems` gets the warning sentence,
+  as before.
+- **Every need of the plan is declined**: `422 NOTHING_NEEDED`, with one sentence per
+  left-out product in `problems`. No empty proposal is stored.
+- **Undo**: `PUT /learned/{fact_id}` with `{"active": false}`; the next plan proposal has
+  the product again. Adding the product to a proposal by hand also resets the history.
+  An existing proposal is not re-quoted.
+- **Audit**: each left-out product is one entry of `learned_fact_applied`, with `from_qty`
+  the need, `to_qty` `"0"` and the unit. A plan proposal with a left-out product is never
+  auto-approved.
 
 ### Disable, privacy and audit
 
