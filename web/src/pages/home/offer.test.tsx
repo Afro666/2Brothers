@@ -1,11 +1,12 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import { sampleSupplierOffer } from "@/api/mock-offers";
 import { mapModelTrace } from "@/api/model-trace";
 import { ApiError } from "@/api/types";
+import { updateLanguage } from "@/lib/i18n";
 import { madeByLabel } from "@/pages/home/offer";
 import { renderApp } from "@/test/render";
 
@@ -13,6 +14,7 @@ const title = () => screen.findByText("Offer from Valio Aimo");
 
 describe("SupplierOfferTile", () => {
   beforeEach(() => localStorage.clear());
+  afterEach(() => updateLanguage("en", false));
 
   it("shows the open offer: the product, what it replaces, the quantity, the reason and who wrote it", async () => {
     renderApp("/", createMockApi());
@@ -174,5 +176,22 @@ describe("madeByLabel", () => {
     expect(madeByLabel("rule")).toBe("picked by rule, not by a model");
     expect(madeByLabel("Sanna, Valio sales")).toBe("Sanna, Valio sales");
     expect(madeByLabel("")).toBe("unknown");
+  });
+});
+
+describe("madeByLabel Finnish", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => updateLanguage("en", false));
+
+  it("says the sentence is in English and leaves it as the model wrote it", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    const api = createMockApi();
+    renderApp("/", api);
+
+    expect(await screen.findByText(/Tarjous: Valio Aimo/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/^Valion myyntiagentin kirjoittama \(Nemotron 3.5 Super VL\) englanniksi$/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(sampleSupplierOffer.reason)).toBeInTheDocument();
   });
 });

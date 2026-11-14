@@ -65,7 +65,7 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-function updateLanguage(next: Language, persist = true) {
+export function updateLanguage(next: Language, persist = true) {
   currentLanguage = next;
   document.documentElement.lang = next;
   if (persist) {

@@ -82,7 +82,7 @@ describe("appearance settings", () => {
   it("ignores stored values that are not options", () => {
     localStorage.setItem("purchasing-appearance", JSON.stringify({ accent: "pink", density: "compact" }));
     loadAppearance();
-    expect(getAppearance()).toMatchObject({ accent: "herb", density: "compact", numberFormat: "comma" });
+    expect(getAppearance()).toMatchObject({ accent: "herb", density: "compact", numberFormat: null });
 
     localStorage.setItem("purchasing-appearance", "not json");
     loadAppearance();

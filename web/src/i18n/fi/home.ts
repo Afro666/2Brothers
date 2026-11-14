@@ -47,6 +47,7 @@ export default {
   "{amount}, from your own forecast": "{amount}, oman ennusteesi perusteella",
   "No reason given.": "Perustelua ei annettu.",
   "written by {possessive} selling agent ({madeBy})": "{possessive} myyntiagentin kirjoittama ({madeBy})",
+  "written by {possessive} selling agent ({madeBy}) in English": "{possessive} myyntiagentin kirjoittama ({madeBy}) englanniksi",
   "Valio's": "Valion",
   "the supplier's": "toimittajan",
   "picked by rule, not by a model": "säännön valitsema, ei mallin",

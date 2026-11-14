@@ -8,11 +8,45 @@ import { LoadingState } from "@/components/purchasing/loading-state";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
-import { useT } from "@/lib/i18n";
+import { useT, type TranslationVariables } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { SettingsSection } from "@/pages/settings/section";
 import type { BuyerPermissions } from "@/types";
+
+/** The rows the gateway sends (gateway/permissions.py), so the coverage test sees their Finnish. */
+export const PERMISSION_ACTIONS = [
+  "Search the catalog",
+  "Compare price, reliability and carbon",
+  "Choose products",
+  "Size quantities",
+  "Split an order",
+  "Refuse unsafe lines",
+  "Ask for approval",
+  "Every order",
+  "Every order that is not routine",
+  "Any substitute",
+  "Standing-order changes",
+  "Sharing forecasts",
+  "API tokens and webhooks",
+  "Approve from your own chat",
+  "Approve or reject an order",
+  "Approve with the credential that proposed",
+  "Place an order nobody approved",
+  "Cancel an order",
+  "Change a quantity",
+  "Act for another kitchen",
+  "Approve routine orders up to {limit} EUR",
+] as const;
+
+/** A gateway row through the dictionary; a row not listed above is shown as sent (t() does that). */
+export function permissionText(action: string, t: (text: string, vars?: TranslationVariables) => string) {
+  const limit = /^Approve routine orders up to (.+) EUR$/.exec(action);
+  if (limit) return t("Approve routine orders up to {limit} EUR", { limit: limit[1] });
+  // The catalog's field label uses the same text, so both share one Finnish entry ("Hae tuoteluettelosta").
+  if (action === "Search the catalog") return t("Search the catalog");
+  return t(action);
+}
 
 export const GROUPS: { key: keyof BuyerPermissions; title: string; description: string; icon: LucideIcon; tone: string }[] = [
   {
@@ -74,7 +108,7 @@ export function PermissionsSection() {
                         search={{ kind: row.auditKind } as never}
                         className="group flex min-h-11 flex-col justify-center gap-0.5 rounded-md py-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/70"
                       >
-                        <span className="font-medium group-hover:underline">{row.action}</span>
+                        <span className="font-medium group-hover:underline">{permissionText(row.action, t)}</span>
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                           {t("Activity log: {kind}", { kind: t(KIND_META[row.auditKind].label) })}
                           <ArrowRight className="size-3" aria-hidden />
@@ -169,3 +203,4 @@ export function PermissionsSection() {
     </SettingsSection>
   );
 }
+

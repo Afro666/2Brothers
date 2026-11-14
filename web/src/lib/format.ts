@@ -38,12 +38,22 @@ const num = {
   space: new Intl.NumberFormat(NUMBER_LOCALE.space),
 };
 
+/**
+ * The stored choice, or the language's own form when nothing was chosen ("space": Finnish
+ * writes "1 000,50 €"). A choice the person made always wins.
+ */
+function numberFormat(): keyof typeof NUMBER_LOCALE {
+  return getAppearance().numberFormat === "space" || (getAppearance().numberFormat !== "comma" && getLanguage() === "fi")
+    ? "space"
+    : "comma";
+}
+
 export function formatEur(value: number | null): string {
-  return value == null ? "price unknown" : eur[getAppearance().numberFormat].format(value);
+  return value == null ? "price unknown" : eur[numberFormat()].format(value);
 }
 
 export function formatNumber(value: number): string {
-  return num[getAppearance().numberFormat].format(value);
+  return num[numberFormat()].format(value);
 }
 
 export function shortOrderId(id: string): string {

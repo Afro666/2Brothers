@@ -3,10 +3,25 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { createMockApi } from "@/api/mock";
+import { permissionText } from "@/pages/settings/permissions";
+import { translate, updateLanguage } from "@/lib/i18n";
 import { renderApp } from "@/test/render";
 
 describe("Permissions settings", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    updateLanguage("en", false);
+  });
+
+  it.each([
+    ["Search the catalog", "Hae tuoteluettelosta"],
+    ["Approve routine orders up to 250 EUR", "Hyväksyy rutiinitilaukset 250 euroon asti"],
+    ["A row the gateway adds later", "A row the gateway adds later"],
+  ])("reads %s through the dictionary", (action, finnish) => {
+    expect(permissionText(action, (text: string, vars?: Record<string, string | number>) => translate("fi", text, vars))).toBe(
+      finnish,
+    );
+  });
 
   it("renders the three groups", async () => {
     renderApp("/settings/permissions");
@@ -103,5 +118,26 @@ describe("Permissions settings", () => {
     renderApp("/settings/permissions", api);
     expect(await screen.findByText(/On, switched on by aron\. Routine orders up to €500/)).toBeInTheDocument();
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("shows the gateway rows in Finnish on FI, a known row translated and an unknown one as sent", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    const api = createMockApi();
+    api.getPermissions = async () => ({
+      alone: [
+        { action: "Search the catalog", auditKind: "search" },
+        { action: "Approve routine orders up to 250 EUR", auditKind: "approval" },
+      ],
+      person: [{ action: "A row the gateway adds later", auditKind: "approval" }],
+      never: [],
+    });
+    renderApp("/settings/permissions", api);
+
+    const alone = await screen.findByRole("list", { name: "Ostaja tekee yksin" });
+    expect(within(alone).getByText("Hae tuoteluettelosta")).toBeInTheDocument();
+    expect(within(alone).getByText("Hyväksyy rutiinitilaukset 250 euroon asti")).toBeInTheDocument();
+    expect(screen.getByText("A row the gateway adds later")).toBeInTheDocument();
+    localStorage.clear();
+    updateLanguage("en", false);
   });
 });
