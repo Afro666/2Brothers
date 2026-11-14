@@ -11,9 +11,11 @@ from engine.quantity import Item, LinePlan, replenish
 from engine.offers import Offer, RequestPlan, plan_request
 from engine.urgency import Urgency, urgency
 from engine.allergens import allergen_codes
+from engine.padding import Padding, Wanted, pad_to_free_delivery
 from engine.addable import AddableRow, Candidate, Timing, rank_addable, rank_key
 
 __all__ = [
+    "Padding", "Wanted", "pad_to_free_delivery",
     "allergen_codes",
     "AddableRow", "Candidate", "Timing", "rank_addable", "rank_key",
     "Item", "KitchenParams", "LinePlan", "Offer", "PackInfo", "RequestPlan", "Urgency",

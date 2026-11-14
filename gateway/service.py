@@ -19,8 +19,8 @@ from uuid import uuid4
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 
-from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, allergen_codes, pack_info,
-                    plan_request, rank_addable)
+from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, allergen_codes, pack_info,
+                    pad_to_free_delivery, plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from gateway.decision import decision_summary
@@ -499,7 +499,17 @@ class Gateway:
             candidates.append(Candidate(item, name=names.get("en") or names.get("fi") or pid,
                                         unit_price=unit_price))
         rows = rank_addable(candidates, self._params(kitchen_id))
-        return {"proposal_id": proposal_id, "rows": [_addable_out(r) for r in rows], "skipped": skipped}
+        # S06: if the proposal is under free delivery, suggest the smallest wanted lines that close it.
+        wanted = [Wanted(r.product_id, r.name, r.suggested_qty, r.unit, r.unit_price) for r in rows
+                  if r.addable and r.suggested_qty > 0]
+        pad = pad_to_free_delivery(Decimal(offer["simulation"]["total_ex_vat"]),
+                                   threshold=_dec(terms.get("free_delivery_threshold_eur")),
+                                   fee=_dec(terms.get("delivery_fee_eur")), wanted=wanted)
+        return {"proposal_id": proposal_id, "rows": [_addable_out(r) for r in rows], "skipped": skipped,
+                "mov_padding": {"add": [{"product_id": w.product_id, "quantity": _qty(w.quantity), "unit": w.unit,
+                                         "value": _money(w.value)} for w in pad.add],
+                                "total_ex_vat": _money(pad.total), "saves_fee": _money(pad.saves_fee),
+                                "reason_codes": list(pad.reason_codes), "why": pad.why}}
 
     # ---- forecasts: prove the prediction (#275) ---------------------------------------
 
