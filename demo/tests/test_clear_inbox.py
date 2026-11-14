@@ -45,3 +45,12 @@ def test_apply_removes_only_waiting_proposals_before_the_cut_off():
     event = db.audit_log.find_one({})["event"]
     assert event["kind"] == "demo_inbox_cleared" and event["proposals_removed"] == 2
     assert clear(db, "demo-kitchen", NOW, apply=True)["removed"] == 0   # nothing left to remove
+
+
+def test_a_proposal_with_no_request_text_is_listed_and_removed():
+    db = mongomock.MongoClient(tz_aware=True)["t"]
+    db.proposals.insert_one({"_id": "voice", "kitchen_id": "demo-kitchen", "status": "READY", "order_id": None,
+                             "created_at": NOW - timedelta(minutes=10), "request": {"text": None}})
+    assert clear(db, "demo-kitchen", NOW, apply=False)["proposals"][0]["text"] == ""
+    assert clear(db, "demo-kitchen", NOW, apply=True)["removed"] == 1
+    assert db.proposals.count_documents({}) == 0
