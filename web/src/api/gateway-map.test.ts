@@ -81,6 +81,18 @@ describe("mapApproval", () => {
     expect(approval.reasons).toEqual([expect.objectContaining({ rule: "A person approves every order" })]);
   });
 
+  it("lists ALLERGEN_DATA_MISSING under what to check, from a line or the mandate", () => {
+    const check = {
+      rule: "Allergen data missing",
+      detail: "The catalog has no allergen data for one or more products. Check the label.",
+    };
+    const onLine = { ...proposal, lines: [{ ...proposal.lines[0], reason_codes: ["ALLERGEN_DATA_MISSING"] }] };
+    expect(mapApproval(onLine).reasons).toContainEqual(check);
+    const onMandate = { ...proposal, mandate: { verdict: "NEEDS_APPROVAL", reason_codes: ["ALLERGEN_DATA_MISSING"] } };
+    expect(mapApproval(onMandate).reasons).toEqual([check]);
+    expect(mapApproval(proposal).reasons).not.toContainEqual(check);
+  });
+
   it("uses null when the gateway has no approval id", () => {
     expect(mapApproval({ ...proposal, approval_id: null }).approvalRef).toBeNull();
   });
