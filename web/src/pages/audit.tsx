@@ -117,7 +117,11 @@ export function AuditPage() {
             </div>
             <p className="font-mono text-xs text-muted-foreground" aria-live="polite">
               <span>
-                {filtered.length === 1
+                {events.length === 1000 && order === "all" && kind === "all" && actor === "all"
+                  ? filtered.length === 1
+                    ? t("{count} request, the newest 1,000 steps", { count: filtered.length })
+                    : t("{count} requests, the newest 1,000 steps", { count: filtered.length })
+                  : filtered.length === 1
                   ? stepCount === 1
                     ? t("{count} request, {steps} step", { count: filtered.length, steps: stepCount })
                     : t("{count} request, {steps} steps", { count: filtered.length, steps: stepCount })

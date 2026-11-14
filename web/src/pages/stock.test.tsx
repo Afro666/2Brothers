@@ -25,6 +25,21 @@ describe("StockPage", () => {
     expect(rowFor("Valio Eila novobox milk")).toHaveTextContent("0 L");
   });
 
+  it("omits midnight from a date-only count but keeps a real count time", async () => {
+    const api = createMockApi();
+    const rows = await api.getStock();
+    api.getStock = async () => [
+      { ...rows[1], countedAt: "2026-11-13T22:00:00Z" },
+      { ...rows[5], countedAt: "2026-11-14T09:15:00+02:00" },
+    ];
+    renderApp("/stock", api);
+
+    const midnight = await screen.findAllByText("Arla lactose-free milk");
+    expect(midnight[0].closest("tr")).toHaveTextContent("Sat 14 Nov");
+    expect(midnight[0].closest("tr")).not.toHaveTextContent("00:00");
+    expect(rowFor("Salmon fillet")).toHaveTextContent("Sat 14 Nov, 09:15");
+  });
+
   it("saves a typed count, reloads the row and records a stock audit event", async () => {
     const user = userEvent.setup();
     const api = createMockApi();

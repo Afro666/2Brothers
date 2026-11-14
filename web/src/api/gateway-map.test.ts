@@ -412,6 +412,20 @@ describe("mapRecalls", () => {
 });
 
 describe("mapOrder", () => {
+  it("carries the request text and the placed order's time, so repeated orders differ", () => {
+    const order = mapOrder(proposal, placedOrder);
+    expect(order.requestText).toBe("50 L oat drink by Friday");
+    expect(order.createdAt).toBe("2026-11-14T10:05:00+00:00");
+  });
+
+  it("leaves the request text and time null when the gateway does not say them", () => {
+    const blank = { ...proposal, request: { ...proposal.request, text: "  " } };
+    expect(mapOrder(blank, null)).toMatchObject({ requestText: null, createdAt: null });
+    const { created_at: _created, ...noTime } = placedOrder;
+    expect(mapOrder(null, noTime).createdAt).toBeNull();
+    expect(mapOrder(null, placedOrder).requestText).toBeNull();
+  });
+
   it("maps the suppliers whose confirmation the placed order still needs", () => {
     const placed = { ...placedOrder, supplier_must_confirm: ["sup-bakery", "sup-fish"] };
     expect(mapOrder(proposal, placed).supplierMustConfirm).toEqual(["sup-bakery", "sup-fish"]);

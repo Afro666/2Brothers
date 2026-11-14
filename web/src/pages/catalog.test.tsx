@@ -248,6 +248,20 @@ describe("catalog page", () => {
     expect(screen.getByRole("searchbox")).toHaveValue("voi");
   });
 
+  it("shows the start hint, not 'No products match', when only strictness or meaning is set (#1218)", async () => {
+    const api = createMockApi();
+    // The live client answers [] without a call when nothing but strictness or meaning is set.
+    api.searchProducts = async (query) => (query.trim() ? [sampleProducts.arlaUht1l] : []);
+    const { router } = renderApp("/catalog?strict=true&meaning=true", api);
+    // The first visit searches the first example (#1587); the person then clears the box.
+    await startState(userEvent.setup(), "lactose-free milk");
+
+    await waitFor(() => expect(router.state.location.href).toBe("/catalog?strict=true&meaning=true"));
+    expect(await screen.findByRole("heading", { name: "Search the Valio Aimo catalog" })).toBeInTheDocument();
+    expect(screen.getByText("Type a product name, or pick an allergen, a label or a temperature.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No products match this search" })).not.toBeInTheDocument();
+  });
+
   it("still says no products match for a query that finds nothing", async () => {
     const api = createMockApi();
     const actual = api.searchProducts;

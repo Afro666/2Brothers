@@ -193,9 +193,9 @@ describe("DemandPage", () => {
         .getAllByRole("listitem")
         .map((item) => item.textContent),
     ).toEqual([
-      "K07 Hospital kitchen Turku73.34 L",
-      "K01 School 1 Tampere73.33 L",
-      "K04 Hotel Aurora Helsinki73.33 L",
+      "K07 Hospital kitchen Turku73.3 L",
+      "K01 School 1 Tampere73.3 L",
+      "K04 Hotel Aurora Helsinki73.3 L",
       "K00 Demo restaurant, Helsinki16 L",
     ]);
   });

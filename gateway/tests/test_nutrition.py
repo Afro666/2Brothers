@@ -66,6 +66,37 @@ def test_recipe_route(env):
     assert client.get(K + "/recipes/nope/nutrition", headers=AGENT).status_code == 404
 
 
+def test_batch_route_reads_every_recipe_with_one_product_lookup(env, monkeypatch):
+    from gateway import nutrition_routes
+    client, _, db = env
+    seed(client, db)
+    milk = {"recipe_id": "milk", "name": "Glass of milk", "ingredients": [
+        {"product_id": "469549", "qty_per_portion": "0.2", "unit": "L"}]}
+    assert client.post(K + "/recipes", headers=HUMAN, json=milk).status_code == 200
+    lookups = []
+    real = nutrition_routes._products
+    monkeypatch.setattr(nutrition_routes, "_products", lambda db, ids: lookups.append(ids) or real(db, ids))
+
+    rows = client.get(K + "/recipes/nutrition", headers=AGENT).json()["recipes"]
+    assert len(lookups) == 1                                 # one lookup, not one per recipe
+    by_id = {r["recipe_id"]: r for r in rows}
+    assert set(by_id) == {"porridge", "milk"}
+    single = client.get(K + "/recipes/porridge/nutrition", headers=AGENT).json()
+    assert by_id["porridge"] == single                       # the same row shape as the single route
+    assert by_id["milk"]["per_portion"]["kcal"] == "92"
+
+    asked = client.get(K + "/recipes/nutrition?ids=milk,nope,porridge", headers=AGENT).json()["recipes"]
+    assert [r["recipe_id"] for r in asked] == ["milk", "porridge"]   # order asked; unknown id left out
+    assert client.get(K + "/recipes/nutrition?ids=", headers=AGENT).status_code == 422
+    too_many = ",".join(f"r{i}" for i in range(201))
+    assert client.get(K + "/recipes/nutrition?ids=" + too_many, headers=AGENT).status_code == 422
+
+
+def test_batch_route_for_a_kitchen_without_recipes(env):
+    client, _, _ = env
+    assert client.get(K + "/recipes/nutrition", headers=AGENT).json() == {"recipes": []}
+
+
 def test_window_planned_per_day_and_ordered_against_planned(env):
     client, _, db = env
     seed(client, db)

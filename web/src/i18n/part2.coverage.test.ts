@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { ATLAS_INDEX_TYPES, ATLAS_LABELS, ATLAS_VERDICTS } from "@/components/purchasing/atlas-card";
 import { MODEL_USAGE_LABELS } from "@/components/purchasing/model-usage-card";
+import { NEMOTRON_ALSO, NEMOTRON_JOBS } from "@/components/purchasing/nemotron-jobs-card";
 import { CHOOSE_ERRORS } from "@/components/purchasing/option-compare";
 import { CHIP_TEXTS } from "@/lib/proposal-checks";
 import { MATCH_TEXT, REPLAN_ERROR_TEXT } from "@/components/purchasing/recall-lines";
@@ -36,6 +37,7 @@ const PART2_FILES = [
   "components/purchasing/urgency-badge.tsx",
   "components/purchasing/model-usage-card.tsx",
   "components/purchasing/atlas-card.tsx",
+  "components/purchasing/nemotron-jobs-card.tsx",
   "components/purchasing/model-trace-panel.tsx",
 ];
 
@@ -68,6 +70,8 @@ describe("part 2 translations", () => {
       ...Object.values(ATLAS_LABELS),
       ...Object.values(ATLAS_INDEX_TYPES),
       ...Object.values(ATLAS_VERDICTS),
+      ...NEMOTRON_JOBS.flatMap((job) => [job.name, job.text, job.link]),
+      ...NEMOTRON_ALSO.flatMap((row) => [row.text, row.link]),
     ];
     for (const text of dynamicTexts) {
       if (!Object.prototype.hasOwnProperty.call(dictionary, text)) missing.push(`dynamic: ${text}`);

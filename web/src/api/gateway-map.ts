@@ -236,6 +236,9 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     supplierOrderRef: placed ? resolutionRecord(placed.resolution)?.supplierOrderRef ?? null : null,
     ...(placed ? { receipt: mapReceipt(placed.receipt) } : {}),
     ...(placed?.placed_by === "demo-seed" ? { placedBy: "demo-seed" as const } : {}),
+    // Aron, 14 Nov: repeated demo orders of one product show what was asked, and when.
+    requestText: typeof request?.text === "string" && request.text.trim() ? request.text.trim() : null,
+    createdAt: placed ? nullableText(placed.created_at, "created_at") : null,
   };
 }
 

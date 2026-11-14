@@ -32,6 +32,7 @@ import { atlasFactsMock } from "@/api/mock-atlas";
 import { createWordsMock } from "@/api/mock-words";
 import {
   approval as seedApproval,
+  chefRequest,
   confirmedDemoApproval,
   confirmedDemoOrder,
   auditEvents,
@@ -100,6 +101,8 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
   const placedOrder: Order = {
     ...structuredClone(seedOrders.placed),
     receipt: sampleReceipt(seedOrders.placed, "aron", "2026-11-14T08:15:00Z"),
+    requestText: chefRequest.text,
+    createdAt: "2026-11-14T08:15:00Z",
   };
   const supplierConfirmationOrder: Order = {
     ...structuredClone(seedOrders.placed),
