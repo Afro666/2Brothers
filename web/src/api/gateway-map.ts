@@ -505,6 +505,15 @@ export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalR
   });
 }
 
+/** #1899: how many lines of Valio's own block have unknown stock; undefined when no blocks were sent. */
+export function mapValioToConfirm(proposal: { blocks?: unknown }): number | undefined {
+  if (!Array.isArray(proposal.blocks) || proposal.blocks.length === 0) return undefined;
+  return proposal.blocks.reduce((sum: number, block: Json | null) => {
+    if (!block || block.supplier_id !== SUPPLIER_ID || !Array.isArray(block.lines)) return sum;
+    return sum + block.lines.filter((line: Json | null) => line?.unknown_stock === true).length;
+  }, 0);
+}
+
 /** #1858: each supplier block's own delivery fee above zero, as the gateway sent it (never a sum). */
 export function mapBlockDeliveryFees(proposal: { blocks?: unknown }): NonNullable<ApprovalRequest["blockDeliveryFees"]> {
   if (!Array.isArray(proposal.blocks)) return [];
@@ -614,6 +623,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
       ? reasons
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],
     suppliersToConfirm: mapSuppliersToConfirm(proposal),
+    valioToConfirm: mapValioToConfirm(proposal),
     blockDeliveryFees: mapBlockDeliveryFees(proposal),
     rejectReason: proposal.status === "REJECTED" ? (rejectReason?.trim() ?? null) : null,
     cutoffs: Array.isArray(proposal.lines)

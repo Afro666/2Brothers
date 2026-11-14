@@ -107,7 +107,8 @@ export function statusChips({
   const unconfirmed = lines.filter((line) => !line.offer.salesBlock && isStockUnconfirmed(line.offer)).length;
   // #1865: a line in another supplier's block is that supplier's to confirm, never Valio's.
   const othersLines = request.suppliersToConfirm.reduce((sum, supplier) => sum + (supplier.count ?? 0), 0);
-  const valioLines = Math.max(0, unconfirmed - othersLines);
+  // #1899: with the gateway's blocks, Valio's count is its own block's lines; the subtraction is only a fallback.
+  const valioLines = request.valioToConfirm ?? Math.max(0, unconfirmed - othersLines);
   if (valioLines) {
     chips.push({ key: "confirm", tone: "warning", text: "Valio must confirm {count}", values: { count: valioLines } });
   }
