@@ -76,7 +76,7 @@ def test_a_pick_outside_the_shortlist_or_no_valid_answer_means_no_offer(w, answe
     assert w.db.supplier_offers.count_documents({}) == 0
 
 
-def test_a_reason_with_a_fact_the_model_was_not_given_means_no_offer(real):
+def test_a_reason_with_a_fact_the_model_was_not_given_means_no_offer(real, caplog):
     """Live on 14 Nov the model wrote "the same 1kg pack size" about Rosamunda potatoes, which
     the catalog sells by weight: there is no pack."""
     def run(reason):
@@ -85,12 +85,21 @@ def test_a_reason_with_a_fact_the_model_was_not_given_means_no_offer(real):
         report = asyncio.run(seller.run(real.gw, today=TODAY, apply=True, kitchen="K1", limit=1, model=model))
         return report[0]["result"], model
 
+    caplog.set_level("INFO", logger="agent.seller")
     result, model = run("This is the same type of washed potato in the same 1kg pack size.")
     assert result == "NO_VALID_PICK" and real.db.supplier_offers.count_documents({}) == 0
+    refused = [r.getMessage() for r in caplog.records if "refused" in r.getMessage()]
+    assert len(refused) == len(model.calls) >= 1                      # one line per refused answer
+    assert all("pack check" in m and "1kg pack size" in m for m in refused)
+    caplog.clear()
     facts = json.loads(model.calls[0][1]["content"])
     assert facts["shortlist"][0]["sold_as"] == "by weight, per KG"
     assert "pack" not in facts["shortlist"][0]                        # 1 KG net content is not a pack
-    assert run("A washed potato like the one that is short, 500 kg in stock.")[0] == "NO_VALID_PICK"
+    result, model = run("A washed potato like the one that is short, 500 kg in stock.")
+    assert result == "NO_VALID_PICK"
+    refused = [r.getMessage() for r in caplog.records if "refused" in r.getMessage()]
+    assert len(refused) == len(model.calls) >= 1
+    assert all("number check" in m and "500 kg" in m for m in refused)
     assert run("Also a washed potato, sold by weight; 121 kg are in stock for the day.")[0] == "OPEN"
 
 
