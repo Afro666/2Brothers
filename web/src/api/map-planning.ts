@@ -506,9 +506,13 @@ export function settingsBody(before: KitchenSettings, after: KitchenSettings): J
  * has been decided yet; with no decisions the rate is unknown, not 0 %.
  */
 export function mapAutoApproveLearning(body: unknown): AutoApproveLearning {
-  const learning = object(object(body, "auto-approve").learning, "auto-approve learning");
+  const status = object(body, "auto-approve");
+  const learning = object(status.learning, "auto-approve learning");
   const decisions = number(learning.decisions, "decisions");
   return {
+    enabled: status.enabled === true,
+    limitEur: typeof status.limit_eur === "string" ? status.limit_eur : null,
+    setBy: typeof status.set_by === "string" ? status.set_by : null,
     weeks: number(learning.weeks, "weeks"),
     weeksNeeded: number(learning.weeks_needed, "weeks_needed"),
     decisions,

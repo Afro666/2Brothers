@@ -94,4 +94,14 @@ describe("Permissions settings", () => {
     expect(toggle).toBeDisabled();
     expect(toggle).not.toBeChecked();
   });
+  it("says so when the gateway reports auto-approve on", async () => {
+    const api = createMockApi();
+    api.getAutoApproveLearning = async () => ({
+      weeks: 6, weeksNeeded: 4, decisions: 31, decisionsNeeded: 20, editRate: 0.03, maxEditRate: 0.1,
+      enabled: true, limitEur: "500", setBy: "aron",
+    });
+    renderApp("/settings/permissions", api);
+    expect(await screen.findByText(/On, switched on by aron\. Routine orders up to €500/)).toBeInTheDocument();
+    expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  });
 });
