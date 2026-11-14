@@ -27,6 +27,7 @@ NOT_LINKED = "This chat is not linked to a kitchen yet. Ask the kitchen's admin 
 MAX_VOICE_SECONDS = 30
 MAX_PHOTO_BYTES = 4 * 1024 * 1024       # the gateway's limit for a shelf photo
 MAX_SHELVES = 50
+MAX_ADDS = 200                          # proposals whose addable rows are kept
 
 
 BRIEF_TIMES = {"morning": "07:00", "evening": "16:00"}      # the kitchen's time
@@ -435,7 +436,10 @@ class Bot:
                 found.append({**row, "add_qty": qty})
         with self._lock:
             self._products.update(lots)
+            self._adds.pop(proposal_id, None)                   # re-adding moves it to the newest
             self._adds[proposal_id] = found
+            for old in list(self._adds)[:-MAX_ADDS]:             # the oldest lists go first
+                del self._adds[old]
         return found
 
     def _add(self, proposal: dict, index: int, product_id: str):
