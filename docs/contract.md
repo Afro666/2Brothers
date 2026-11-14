@@ -1231,6 +1231,9 @@ never holds the image or the text the model read.
 
 - Scope `kitchen:write`: a signed-in person who is not a `viewer`, or a kitchen API
   token with `kitchen:write`. The Buyer agent token is refused (403 `SCOPE_REQUIRED`).
+- One read per kitchen at a time (#839): a second photo while one is being read answers
+  429 `STOCK_PHOTO_BUSY` and never reaches the model. Wait for the first answer, then send
+  again. Each read is one model call of up to 60 s on shared credits.
 - Body: JSON, like every other gateway route (no multipart parser is installed, and the
   web client and the tokens already speak JSON). The image is base64 in one field:
 
