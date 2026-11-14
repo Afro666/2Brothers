@@ -37,7 +37,7 @@ def verify(db, kitchen_id: str) -> dict:
     kitchen = None
     if not result["ok"]:
         entry = db.audit_log.find_one({"_id": result["broken_at"]})
-        if entry and entry["hash"] != audit.entry_hash(entry):
+        if entry and entry["hash"] != audit.entry_hash(audit.as_read(entry)):
             kitchen = (entry.get("server") or {}).get("kitchen_id")
     return {**result, "broken_kitchen_id": kitchen,
             "kitchen_entries": db.audit_log.count_documents({"server.kitchen_id": kitchen_id})}
@@ -51,7 +51,12 @@ def _put_back(db, saved: dict) -> None:
 def _heal(db) -> None:
     """Restore a demo tamper that somebody forgot."""
     saved = db.audit_tamper_demo.find_one({"_id": DEMO_KITCHEN})
-    if saved and datetime.now(timezone.utc) - saved["tampered_at"] > TAMPER_TTL:
+    if not saved:
+        return
+    tampered_at = saved["tampered_at"]
+    if tampered_at.tzinfo is None:  # a db handle without tz_aware gives naive UTC
+        tampered_at = tampered_at.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) - tampered_at > TAMPER_TTL:
         _put_back(db, saved)
 
 
@@ -105,13 +110,33 @@ def watch_kitchen(db, kitchen_id: str, max_await_ms: int = 1000):
         "$or": [{"fullDocument.kitchen_id": kitchen_id},
                 {"fullDocument.server.kitchen_id": kitchen_id}]}}]
     stream = db.watch(pipeline, full_document="updateLookup", max_await_time_ms=max_await_ms)
+    return KitchenEvents(stream)
 
-    def events():
-        with stream:
-            while stream.alive:
-                change = stream.try_next()
-                yield None if change is None else {
-                    "collection": change["ns"]["coll"], "operation": change["operationType"],
-                    "document": change["fullDocument"]}
 
-    return events()
+class KitchenEvents:
+    """The iterator `watch_kitchen` returns. `close()` always closes the change stream,
+    also when the iterator was never advanced (a generator's `with` would not run then)."""
+
+    def __init__(self, stream):
+        self._stream = stream
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if not self._stream.alive:
+            self.close()
+            raise StopIteration
+        change = self._stream.try_next()
+        return None if change is None else {
+            "collection": change["ns"]["coll"], "operation": change["operationType"],
+            "document": change["fullDocument"]}
+
+    def close(self) -> None:
+        self._stream.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()

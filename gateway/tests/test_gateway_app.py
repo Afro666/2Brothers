@@ -377,3 +377,22 @@ def test_lost_attempt_response_retains_claim_for_reconciliation(env, monkeypatch
     body['idempotency_key'] = 'different-key'
     assert client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN, json=body).status_code == 409
     assert db.orders.count_documents({}) == 1
+
+
+def test_offer_lines_carry_delivery_date_and_cut_off(env):
+    """#531: each line says when it arrives and whether its order cut-off has passed (S01)."""
+    client, _, _ = env
+    line = milk(client, quantity="1000")["lines"][0]
+    assert line["product_id"] == "462775"
+    assert line["available_date"] == "2026-11-16"
+    assert line["cutoff_passed"] is False
+    assert line["closing_time"].startswith("2026-11-15T")
+
+
+def test_api_docs_load_the_spec_relative_to_their_own_path(env):
+    """#278: behind Caddy the docs live at /api/docs, so the spec URL must be relative."""
+    client, _, _ = env
+    page = client.get("/docs")
+    assert page.status_code == 200 and "url: 'openapi.json'" in page.text
+    spec = client.get("/openapi.json").json()
+    assert spec["servers"][0]["url"] == "/api" and "docs/choices.md" in spec["info"]["description"]

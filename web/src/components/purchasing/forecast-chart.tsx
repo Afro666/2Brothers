@@ -52,7 +52,7 @@ function TipRow({ label, value, children }: { label: string; value: string; chil
 
 /**
  * Needed against predicted per week: dots for what the kitchen needed, the accent line for our
- * engine, the grey line for the weekday average. Weeks without an actual sit in a "Forecast only" band.
+ * engine, the grey line for the weekday average. Weeks ahead sit in a "Forecast only" band.
  */
 export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: string | null }) {
   const titleId = useId();
@@ -67,7 +67,7 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
   const count = weeks.length;
   const center = (index: number) => ((index + 0.5) / count) * 100;
   const y = (value: number) => BOTTOM - ((value - low) / span) * (BOTTOM - TOP);
-  const firstAhead = weeks.findIndex((week) => week.actual == null);
+  const firstAhead = weeks.findIndex((week) => week.ahead);
   const past = firstAhead === -1 ? count : firstAhead;
 
   // shortcut: a method with a single week draws no line; the table below still gives its number.
@@ -216,7 +216,7 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
                 <span className="font-medium">Week {Number(shown.week.slice(6))}</span>
                 <span className="block text-muted-foreground">{weekRangeLabel(shown.week)}</span>
               </p>
-              <TipRow label="Needed" value={formatQuantity(shown.actual, unit, "not yet")}>
+              <TipRow label="Needed" value={formatQuantity(shown.actual, unit, shown.ahead ? "not yet" : "unknown")}>
                 <Key color={ACTUAL} dot />
               </TipRow>
               <TipRow label="Our engine" value={formatQuantity(shown.engine, unit)}>

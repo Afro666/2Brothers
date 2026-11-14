@@ -104,3 +104,47 @@ def test_demo_approver_is_seeded_from_the_server_env(env, monkeypatch):
     monkeypatch.setenv("DEMO_USER_PASSWORD", "demo password 1")
     assert sign_in(client, "demo@example.com", "demo password 1").status_code == 200
     assert db.users.count_documents({}) == 1
+
+
+def test_wrong_current_password_counts_toward_the_lockout(env):
+    client, _, db = env
+    people(db)
+    sign_in(client, "aron@example.com")
+    for _ in range(users.MAX_FAILS):
+        bad = client.post("/v1/auth/change-password", json={"current_password": "wrong", "new_password": NEW})
+        assert bad.status_code == 401
+    locked = client.post("/v1/auth/change-password", json={"current_password": PW, "new_password": NEW})
+    assert locked.status_code == 429 and locked.json()["error"]["code"] == "ACCOUNT_LOCKED"
+    assert sign_in(client, "aron@example.com").status_code == 429
+
+
+class _RacingUsers:
+    """find_one misses, as if a concurrent first login had not inserted yet; insert_one is real."""
+
+    def __init__(self, real):
+        self.real = real
+
+    def find_one(self, *args, **kwargs):
+        return None
+
+    def insert_one(self, doc):
+        return self.real.insert_one(doc)
+
+
+def test_seed_user_does_not_raise_when_inserted_concurrently(env):
+    _, _, db = env
+    users.create_user(db, "demo@example.com", "demo password 1", name="D", role="approver", kitchen_id="k")
+    racing = type("RacingDb", (), {"users": _RacingUsers(db.users)})()
+    assert users.seed_user(racing, "demo@example.com", "demo password 1", "k") is False
+    assert db.users.count_documents({}) == 1
+
+
+def test_an_approver_cannot_manage_tokens_of_another_kitchen(env):
+    client, _, db = env
+    people(db)
+    sign_in(client, "aron@example.com")
+    other = "/v1/kitchens/other-kitchen/tokens"
+    assert client.post(other, json={"name": "x", "scopes": ["kitchen:read"]}).status_code == 403
+    assert client.get(other).status_code == 403
+    assert client.delete(other + "/any").status_code == 403
+    assert db.api_tokens.count_documents({}) == 0

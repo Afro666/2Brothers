@@ -9,6 +9,9 @@ import { PendingApprovalsProvider } from "@/lib/pending-approvals";
 import { ThemeProvider } from "@/lib/theme";
 import { createAppRouter } from "@/router";
 
+import "@fontsource-variable/atkinson-hyperlegible-next";
+import "@fontsource-variable/atkinson-hyperlegible-mono";
+import "@fontsource-variable/archivo/standard.css";
 import "./index.css";
 
 const router = createAppRouter();

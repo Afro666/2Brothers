@@ -56,10 +56,11 @@ export function OfferCompare({
                 <span
                   className={cn(
                     "shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium",
+                    closed && "text-muted-foreground",
                     o.recommended && "border-primary bg-primary text-primary-foreground",
                   )}
                 >
-                  {TIER_LABEL[o.tier]}
+                  {closed ? "Misses the date" : TIER_LABEL[o.tier]}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">

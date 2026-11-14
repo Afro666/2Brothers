@@ -122,6 +122,35 @@ describe("StockPage", () => {
     ]);
   });
 
+  it("treats a cleared count or an unticked Not counted as untouched, so Save works for the rest", async () => {
+    const user = userEvent.setup();
+    const api: Api = createMockApi();
+    const submit = api.submitStockCount;
+    let submitted: unknown = null;
+    api.submitStockCount = async (counts, actor) => {
+      submitted = counts;
+      return submit(counts, actor);
+    };
+    renderApp("/stock", api);
+
+    await screen.findByText(/not counted: treated as unknown, not as zero/);
+    await user.type(screen.getAllByRole("textbox", { name: "Salmon fillet count in KG" })[0], "7");
+    const milk = screen.getAllByRole("textbox", { name: "Valio Eila 3 % milk count in L" })[0];
+    await user.type(milk, "5");
+    await user.clear(milk);
+    const arla = screen.getAllByRole("checkbox", { name: "Arla lactose-free milk not counted" })[0];
+    await user.click(arla);
+    await user.click(arla);
+
+    expect(within(rowFor("Valio Eila 3 % milk")).queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
+    expect(milk).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByRole("button", { name: "Save count" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save count" }));
+    expect(await screen.findByTestId("stock-count-saved-toast")).toHaveTextContent("Count saved");
+    expect(submitted).toEqual([{ productId: "OWN-SALMON", onHand: 7 }]);
+  });
+
   it("locks the inputs and the Save button while the count is in flight", async () => {
     const user = userEvent.setup();
     const api: Api = createMockApi();

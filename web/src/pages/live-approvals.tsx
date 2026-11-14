@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { gatewayRequest } from "@/api/http";
 import { mapMoney } from "@/api/map";
 import { AppShell } from "@/components/purchasing/app-shell";
@@ -8,6 +8,52 @@ import { useAsync } from "@/lib/use-async";
 import { LabelEvidence, type LabelCheck } from "@/components/purchasing/label-evidence";
 
 const path = "/v1/kitchens/demo-kitchen/proposals";
+interface RecallAlert {
+  event_id?: string;
+  product_id: string;
+  match: string;
+  status?: "active" | "dismissed";
+  dismiss_reason?: string;
+  recall: { url: string; lot?: string; title?: string };
+}
+
+function RecallNotice({ alert, reload }: { alert: RecallAlert; reload: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const reasonId = useId();
+  async function dismiss() {
+    if (!alert.event_id || reason.trim().length < 10 || reason.trim().length > 500) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await gatewayRequest("/api", `/v1/kitchens/demo-kitchen/recalls/${encodeURIComponent(alert.event_id)}/dismiss`, {
+        method: "POST", body: JSON.stringify({ reason: reason.trim() }),
+      }) as { status?: string };
+      if (result.status !== "dismissed") throw new Error("Dismissal was not confirmed. Refresh before trying again.");
+      setOpen(false);
+      reload();
+    } catch (e) { setError(e instanceof Error ? e.message : "Dismissal could not be confirmed."); }
+    finally { setBusy(false); }
+  }
+  return <div className="space-y-2 rounded border p-3">
+    <p className="text-destructive">
+      {alert.status === "dismissed" ? "Recall dismissed for future quotes" : alert.match === "review" ? "Recall warning — check the product" : "BLOCKED_BY_RECALL"}: {alert.product_id} · {alert.recall.title} · {alert.recall.lot ?? "Check affected packs"}
+      {/^https:\/\//.test(alert.recall.url) && <> · <a className="underline" href={alert.recall.url} target="_blank" rel="noreferrer">Official recall notice</a></>}
+    </p>
+    {alert.status === "dismissed" ? <p>{alert.dismiss_reason} · An already held basket stays blocked; close it and request a fresh basket.</p> : alert.event_id && <Button variant="outline" disabled={busy} onClick={() => setOpen(true)}>Dismiss recall after checking packs</Button>}
+    {open && <div role="dialog" aria-label="Confirm recall dismissal" className="space-y-3">
+      <p>Check the official notice and affected packs first. This dismisses this notice for future quotes only. Other recalls still apply, and this does not approve or release the held basket.</p>
+      <label htmlFor={reasonId}>Pack-check reason</label>
+      <textarea id={reasonId} className="block w-full rounded border p-2" maxLength={500} value={reason} onChange={e => setReason(e.target.value)} />
+      <p>Record 10–500 characters explaining why this kitchen is not affected or how the affected packs were resolved.</p>
+      <Button disabled={busy || reason.trim().length < 10} onClick={() => void dismiss()}>I checked the packs — dismiss recall</Button>
+      <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>Cancel dismissal</Button>
+    </div>}
+    {error && <p role="alert">{error}</p>}
+  </div>;
+}
 interface Proposal {
   proposal_id: string;
   offer_id: string;
@@ -21,7 +67,7 @@ interface Proposal {
   recall_replan_error?: string;
   product_evidence?: { product_id: string; source_url: string; checked_at: string; via: string;
     pack: string | null; origin: string | null; allergens: string | null }[];
-  recall_alerts?: { product_id: string; match: string; recall: { url: string; lot?: string; title?: string } }[];
+  recall_alerts?: RecallAlert[];
   decision_summary?: { text?: string };
   lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
 }
@@ -39,7 +85,7 @@ function parse(value: unknown): Proposal {
 }
 
 function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
-  const [confirm, setConfirm] = useState(false);
+  const [confirm, setConfirm] = useState<"approve" | "reject" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [placed, setPlaced] = useState<{ id: string; total: string }>();
@@ -47,6 +93,7 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
   const unknown = row.lines.some(l => l.unknown_stock);
   const expired = Date.parse(row.valid_until) <= Date.now();
   const pending = row.status === "READY" && !placed && !rejected;
+  const rejectable = ["READY", "BLOCKED_BY_RECALL"].includes(row.status) && !placed && !rejected;
   async function decide(approve: boolean) {
     setBusy(true);
     setError(undefined);
@@ -57,7 +104,7 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
           // Stable across retries and tabs; a changed offer gets a new decision key.
           idempotency_key: `web-approve-${row.proposal_id}-${row.offer_id}`,
           expected_total: row.expected_total,
-        } : { reason: "Rejected by chef in the approval inbox" }),
+        } : { reason: "Rejected by chef in the approval inbox", idempotency_key: `web-reject-${row.proposal_id}` }),
       }) as { order_id?: string; expected_total?: string; status?: string };
       if (approve) {
         if (typeof result.order_id !== "string" || typeof result.expected_total !== "string")
@@ -68,7 +115,7 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
         if (result.status !== "REJECTED") throw new Error("Rejection was not confirmed. Reload to reconcile.");
         setRejected(true);
       }
-      setConfirm(false);
+      setConfirm(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "The decision could not be confirmed.");
     } finally { setBusy(false); }
@@ -78,10 +125,7 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
     {typeof row.decision_summary?.text === "string" && <p className="whitespace-pre-line">{row.decision_summary.text}</p>}
     <ul>{row.lines.map(l => <li key={l.product_id}>{l.quantity} {l.unit} · {l.product_id} · {l.why}</li>)}</ul>
     {row.label_checks?.map(c => <LabelEvidence key={`${c.product_id}-${c.label}`} check={c} />)}
-    {row.recall_alerts?.map((alert, index) => <p key={index} className="text-destructive">
-      {alert.match === "review" ? "Recall warning — check the product" : "BLOCKED_BY_RECALL"}: {alert.product_id} · {alert.recall.title} · {alert.recall.lot ?? "Check affected packs"}
-      {/^https:\/\//.test(alert.recall.url) && <> · <a className="underline" href={alert.recall.url} target="_blank" rel="noreferrer">Official recall notice</a></>}
-    </p>)}
+    {row.recall_alerts?.map((alert, index) => <RecallNotice key={alert.event_id ?? index} alert={alert} reload={reload} />)}
     {row.replacement_proposal_id && <p><a className="underline" href={`#proposal-${row.replacement_proposal_id}`}>Review replacement proposal {row.replacement_proposal_id}</a>. A fresh human approval is required.</p>}
     {row.recall_replan_error && <p>No complete safe replacement is available ({row.recall_replan_error}). The original remains blocked.</p>}
     {row.product_evidence?.map(e => <div key={e.product_id} className="rounded border p-3 text-sm">
@@ -97,14 +141,19 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
       row.status === "APPROVED" ? <p>Order recorded: {row.order_id ?? "reload to reconcile"}. Recorded in our gateway; not submitted to Valio.</p> :
       !pending ? <p>{rejected ? "REJECTED" : row.status}</p> : null}
     {error && <div role="alert">{error} Check the current proposal before repeating a decision. <Button onClick={reload}>Reload proposals</Button></div>}
-    {pending && <div className="flex flex-wrap gap-3">
-      <Button disabled={busy || unknown || !row.lines.length} onClick={() => setConfirm(true)}>Approve {formatEur(mapMoney(row.expected_total))}</Button>
-      <Button variant="outline" disabled={busy} onClick={() => void decide(false)}>Reject proposal</Button>
+    {rejectable && <div className="flex flex-wrap gap-3">
+      {pending && <Button disabled={busy || unknown || !row.lines.length} onClick={() => setConfirm("approve")}>Approve {formatEur(mapMoney(row.expected_total))}</Button>}
+      <Button variant="outline" disabled={busy} onClick={() => setConfirm("reject")}>Reject proposal</Button>
     </div>}
-    {confirm && pending && <div role="dialog" aria-label="Confirm approval" className="space-y-3 rounded border p-4">
+    {confirm === "approve" && pending && <div role="dialog" aria-label="Confirm approval" className="space-y-3 rounded border p-4">
       <p>Confirm this exact basket for {formatEur(mapMoney(row.expected_total))}? The gateway checks price and stock again.</p>
       <Button disabled={busy || unknown} onClick={() => void decide(true)}>Confirm and record order</Button>
-      <Button variant="outline" disabled={busy} onClick={() => setConfirm(false)}>Cancel</Button>
+      <Button variant="outline" disabled={busy} onClick={() => setConfirm(null)}>Cancel</Button>
+    </div>}
+    {confirm === "reject" && rejectable && <div role="dialog" aria-label="Confirm rejection" className="space-y-3 rounded border p-4">
+      <p>Close this proposal? Its recall notices continue blocking future quotes until a person checks and dismisses them.</p>
+      <Button disabled={busy} onClick={() => void decide(false)}>Confirm rejection</Button>
+      <Button variant="outline" disabled={busy} onClick={() => setConfirm(null)}>Cancel rejection</Button>
     </div>}
   </article>;
 }

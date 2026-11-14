@@ -58,11 +58,11 @@ describe("mapForecastAccuracy", () => {
     expect(kitchen.unit).toBeNull();
     expect(products).toBeNull();
     expect(kitchen.weeks).toEqual([
-      { week: "2026-W44", actual: 990, engine: 1000, baseline: 900, engineWape: 0.04, baselineWape: 0.12 },
-      { week: "2026-W45", actual: 1010, engine: 1010, baseline: 1000, engineWape: 0.054, baselineWape: 0.108 },
+      { week: "2026-W44", actual: 990, ahead: false, engine: 1000, baseline: 900, engineWape: 0.04, baselineWape: 0.12 },
+      { week: "2026-W45", actual: 1010, ahead: false, engine: 1010, baseline: 1000, engineWape: 0.054, baselineWape: 0.108 },
       // The 8 Nov line belongs to a scored week and is not counted again.
-      { week: "2026-W46", actual: null, engine: 30.5, baseline: null, engineWape: null, baselineWape: null },
-      { week: "2026-W47", actual: null, engine: 7.25, baseline: null, engineWape: null, baselineWape: null },
+      { week: "2026-W46", actual: null, ahead: true, engine: 30.5, baseline: null, engineWape: null, baselineWape: null },
+      { week: "2026-W47", actual: null, ahead: true, engine: 7.25, baseline: null, engineWape: null, baselineWape: null },
     ]);
   });
 
@@ -81,7 +81,7 @@ describe("mapForecastAccuracy", () => {
     const oneSided = structuredClone(accuracy);
     oneSided.methods["weekday-average"].weeks.pop();
     const week = mapForecastAccuracy(oneSided, { lines: [] }).kitchen.weeks[1];
-    expect(week).toMatchObject({ week: "2026-W45", actual: 1010, engine: 1010, baseline: null, baselineWape: null });
+    expect(week).toMatchObject({ week: "2026-W45", actual: 1010, ahead: false, engine: 1010, baseline: null, baselineWape: null });
   });
 
   it.each([

@@ -7,6 +7,8 @@ import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
 import { driftMock, supplierDriftMock } from "@/api/mock-drift";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
+import { createRecallMock } from "@/api/mock-recalls";
+import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import {
   approval as seedApproval,
@@ -52,9 +54,9 @@ export interface MockApi extends Api {
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
 export function createMockApi(): MockApi {
   const approvals = new Map(
-    [{ ...confirmedDemoApproval, options: milkOptions }, seedApproval].map((row) => [row.id, structuredClone(row)]),
+    [{ ...confirmedDemoApproval, options: milkOptions }, seedApproval, coffeeApproval].map((row) => [row.id, structuredClone(row)]),
   );
-  const demoOrders = new Map([...Object.values(seedOrders), confirmedDemoOrder].map((row) => [row.id, structuredClone(row)]));
+  const demoOrders = new Map([...Object.values(seedOrders), confirmedDemoOrder, coffeeOrder].map((row) => [row.id, structuredClone(row)]));
   const audit: AuditEvent[] = [...auditEvents];
   const feedback: FeedbackRow[] = [];
   let nextFailure: ApiError | null = null;
@@ -178,6 +180,18 @@ export function createMockApi(): MockApi {
     getDrift: async () => driftMock(),
     getSupplierDrift: async () => supplierDriftMock(),
     ...permissionsMock,
+    ...createRecallMock({
+      getOrder: (id) => demoOrders.get(id),
+      isPending: (orderId) => [...approvals.values()].some((row) => row.orderId === orderId && row.status === "PENDING"),
+      replan(orderId, lines) {
+        const order = demoOrders.get(orderId)!;
+        const next = resimulate(lines, order);
+        Object.assign(order, next);
+        const approval = [...approvals.values()].find((row) => row.orderId === orderId)!;
+        approvals.set(approval.id, { ...approval, totalExVat: next.totalExVat, totalInclVat: next.totalInclVat, lineCount: lines.length });
+      },
+      recordAudit: (event) => audit.push({ ...event, id: `EV-${audit.length + 1}`, at: new Date().toISOString() }),
+    }),
     lookupKitchenBrand: lookupKitchenBrandMock,
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
@@ -265,7 +279,8 @@ export function createMockApi(): MockApi {
     async changeProposal(orderId, change: ProposalChange, actor) {
       const proposalOrder = demoOrders.get(orderId);
       if (!proposalOrder) throw new ApiError("NOT_FOUND", `Order ${orderId} was not found.`);
-      const approval = [...approvals.values()].find((row) => row.orderId === orderId)!;
+      const approval = [...approvals.values()].find((row) => row.orderId === orderId);
+      if (!approval) throw new ApiError("NOT_FOUND", `Order ${orderId} has no approval to change.`);
       pendingApproval(approval.id);
       if (change.type !== "REMOVE_LINE" && (!Number.isInteger(change.quantity) || change.quantity < 1)) {
         throw new ApiError("INVALID", "Quantity must be a whole number of at least 1.");

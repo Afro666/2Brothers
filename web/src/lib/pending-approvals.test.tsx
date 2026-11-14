@@ -9,28 +9,37 @@ function menu() {
   return within(screen.getAllByRole("navigation", { name: "Main" })[0]);
 }
 
+/** How many approvals wait in this mock right now. */
+async function waiting(api: ReturnType<typeof createMockApi>): Promise<number> {
+  return (await api.listApprovals()).filter((approval) => approval.status === "PENDING").length;
+}
+
 describe("Waiting-approvals count", () => {
   beforeEach(() => localStorage.clear());
 
   it("shows the count on the Orders entry and the To approve tab, and keeps the link names", async () => {
-    renderApp("/approvals", createMockApi());
+    const api = createMockApi();
+    const count = await waiting(api);
+    expect(count).toBeGreaterThan(0);
+    renderApp("/approvals", api);
 
     const orders = await waitFor(() => {
       const link = menu().getByRole("link", { name: "Orders" });
-      expect(link).toHaveAttribute("aria-description", "2 waiting");
+      expect(link).toHaveAttribute("aria-description", `${count} waiting`);
       return link;
     });
-    expect(orders).toHaveTextContent("2");
+    expect(orders).toHaveTextContent(String(count));
     const tab = within(screen.getByRole("navigation", { name: "Orders" })).getByRole("link", { name: "To approve" });
-    expect(tab).toHaveAttribute("aria-description", "2 waiting");
+    expect(tab).toHaveAttribute("aria-description", `${count} waiting`);
   });
 
   it("drops right after an approval, without navigation", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
+    const before = await waiting(api);
     renderApp("/approvals", api);
     await waitFor(() =>
-      expect(menu().getByRole("link", { name: "Orders" })).toHaveAttribute("aria-description", "2 waiting"),
+      expect(menu().getByRole("link", { name: "Orders" })).toHaveAttribute("aria-description", `${before} waiting`),
     );
 
     await user.click((await screen.findAllByRole("button", { name: /Reject/ }))[0]);
@@ -40,7 +49,10 @@ describe("Waiting-approvals count", () => {
     await user.click(within(dialog).getByRole("button", { name: /Reject/ }));
 
     await waitFor(() =>
-      expect(menu().getByRole("link", { name: "Orders" })).toHaveAttribute("aria-description", "1 waiting"),
+      expect(menu().getByRole("link", { name: "Orders" })).toHaveAttribute(
+        "aria-description",
+        `${before - 1} waiting`,
+      ),
     );
   });
 

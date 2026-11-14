@@ -4,12 +4,14 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 import { LabelChip } from "@/components/purchasing/chips";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, formatEur, formatNumber, formatPercent } from "@/lib/format";
-import { TONE_CLASSES } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import type { OfferTier, ProposalOption } from "@/types";
 
+/** How long to wait for the re-simulated options before freeing the buttons again. */
+export const CHOOSE_TIMEOUT_MS = 5000;
+
 const TIER_ORDER: OfferTier[] = ["good", "better", "best"];
-const BADGE = "rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap";
+const BADGE = "label-caps rounded-sm border border-input px-2 py-0.5 whitespace-nowrap";
 
 /** Why a person cannot approve this option now; null when they can. */
 function blockedReason(option: ProposalOption): string | null {
@@ -18,12 +20,22 @@ function blockedReason(option: ProposalOption): string | null {
   return null;
 }
 
-function Fact({ label, bad, children }: { label: string; bad?: boolean; children: ReactNode }) {
+function Fact({
+  label,
+  bad,
+  children,
+  className,
+}: {
+  label: string;
+  bad?: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn("tabular-nums", bad && "font-medium text-danger", children === "unknown" && "text-warning")}>
-        {children}
+      <dt className="label-caps">{label}</dt>
+      <dd className={cn("min-w-0 tabular-nums", bad && "font-medium text-danger", className)}>
+        {children === "unknown" ? <span className="unknown-value">unknown</span> : children}
       </dd>
     </div>
   );
@@ -65,6 +77,17 @@ export function OptionCompare({
     if (chosen && !blockedReason(chosen)) onApprove?.();
   }, [awaiting, options, onApprove]);
 
+  // If the reload after choosing fails or brings back the same options, free the
+  // buttons after a while and say so, so the person can try again.
+  useEffect(() => {
+    if (!awaiting) return;
+    const timer = setTimeout(() => {
+      setAwaiting(null);
+      setError("Could not load the updated options. Nothing was approved. Please try again.");
+    }, CHOOSE_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [awaiting]);
+
   async function choose(option: ProposalOption) {
     if (option.chosen) return onApprove?.();
     setBusy(true);
@@ -83,7 +106,7 @@ export function OptionCompare({
 
   return (
     <section className="space-y-2" aria-labelledby={headingId}>
-      <h4 id={headingId} className="text-sm font-medium">
+      <h4 id={headingId} className="label-caps">
         Your options
       </h4>
       <ul className="space-y-2">
@@ -104,11 +127,11 @@ export function OptionCompare({
             <li
               key={option.id}
               className={cn(
-                "space-y-3 rounded-md border p-3 text-sm",
-                recommended && "border-primary ring-1 ring-primary",
+                "grid gap-x-5 gap-y-2 rounded-sm border p-3 text-sm sm:grid-cols-[9.5rem_minmax(0,1fr)]",
+                recommended && "border-l-[3px] border-l-primary",
               )}
             >
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 sm:col-span-2">
                 <h5 className="font-medium">
                   Option {letter}:{" "}
                   {option.lines
@@ -116,16 +139,22 @@ export function OptionCompare({
                     .join(" + ")}
                 </h5>
                 {recommended ? (
-                  <span className={cn(BADGE, "border-primary bg-primary text-primary-foreground")}>
+                  <span className="stamp rounded-sm bg-primary px-2 py-0.5 text-xs whitespace-nowrap text-primary-foreground">
                     Recommended by the Buyer
                   </span>
                 ) : null}
                 {option.kind === "PARTIAL" ? <span className={BADGE}>Part now, the rest later</span> : null}
                 {option.chosen ? <span className={BADGE}>Proposed now</span> : null}
               </div>
-              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-                <Fact label="Price ex VAT">{prices.length === 1 ? prices[0] : prices.join(", ")}</Fact>
-                <Fact label="Total">{formatEur(option.totalInclVat)} incl VAT</Fact>
+              <dl className="grid grid-cols-2 items-start gap-x-4 gap-y-2 sm:grid-cols-1">
+                <Fact label="Price ex VAT" className="price-tag">
+                  {prices.length === 1 ? prices[0] : prices.join(", ")}
+                </Fact>
+                <Fact label="Total" className="font-semibold">
+                  {formatEur(option.totalInclVat)} incl VAT
+                </Fact>
+              </dl>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-3">
                 <Fact label="Stock">{option.stockConfirmed ? "confirmed" : "unknown"}</Fact>
                 <Fact label="Order cut-off" bad={option.cutoffPassed === true}>
                   {option.cutoffPassed == null
@@ -156,16 +185,16 @@ export function OptionCompare({
                   )}
                 </Fact>
               </dl>
-              <p>{option.tradeOff}</p>
+              <p className="max-w-[68ch] text-[15px] leading-[22px] sm:col-start-2">{option.tradeOff}</p>
               {blocked ? (
-                <p className={cn("rounded-md border px-3 py-2", TONE_CLASSES.warning)}>
+                <p className="hatch text-warning sm:col-start-2">
                   Cannot be approved now: {blocked}
                 </p>
               ) : canAct ? (
                 <Button
                   type="button"
                   variant={recommended ? "default" : "outline"}
-                  className="h-auto w-full whitespace-normal py-2 sm:w-auto"
+                  className="h-auto w-full whitespace-normal py-2 sm:col-start-2 sm:w-auto sm:justify-self-start"
                   disabled={disabled || busy || awaiting != null}
                   onClick={() => void choose(option)}
                 >
@@ -178,7 +207,7 @@ export function OptionCompare({
         })}
       </ul>
       {error ? (
-        <p role="alert" className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.danger)}>
+        <p role="alert" className="rounded-sm border border-danger/40 bg-danger-surface px-3 py-2 text-sm text-danger">
           {error}
         </p>
       ) : null}
