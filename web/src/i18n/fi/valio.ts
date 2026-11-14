@@ -1,5 +1,11 @@
 export default {
   "{count} {risk}": "{count} {risk}",
+  "{count} short": "{count} puutteessa",
+  "{count} unknown": "{count} tuntematonta",
+  "{count} at risk": "{count} vaarassa",
+  "{count} covered": "{count} katettua",
+  "{count} product: {items}": "{count} tuote: {items}",
+  "{count} products: {items}": "{count} tuotetta: {items}",
   "short": "puutetta",
   "at risk": "vaarassa",
   "covered": "katettu",
@@ -10,7 +16,8 @@ export default {
   "{count} days": "{count} päivää",
   "Short on {count} of {days} days": "Puutetta {count}/{days} päivänä",
   "Buy {amount}": "Osta {amount}",
-  "+ days with an unknown amount: {count}": "+ päiviä, joiden määrä on tuntematon: {count}",
+  "{count} day with no stock figure": "{count} päivä ilman varastolukemaa",
+  "{count} days with no stock figure": "{count} päivää ilman varastolukemaa",
   "kitchens: up to {count}": "keittiöitä enintään {count}",
   "Open the product page": "Avaa tuotesivu",
   "Covered products: {count}": "Katettuja tuotteita: {count}",
@@ -43,5 +50,6 @@ export default {
   "Risk": "Riski",
   "Forecasts come only from kitchens that agreed to share them.": "Ennusteet tulevat vain keittiöistä, jotka ovat suostuneet jakamaan ne.",
   "Buying note": "Ostomuistio",
+  "The buying note could not be loaded. The table below is complete.": "Ostomuistiota ei voitu ladata. Alla oleva taulukko on täydellinen.",
   "Written by {model}. Every number is checked against its row in the table.": "Kirjoittanut {model}. Jokainen luku on tarkistettu taulukon omalta riviltä.",
 } satisfies Record<string, string>;

@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAsync } from "@/lib/use-async";
 import { formatDate, formatEur, formatNumber } from "@/lib/format";
-import { isoWeekOf, shiftWeek, weekDates } from "@/lib/week";
+import { isoWeekOf, shiftWeek, weekDates, weekTitle } from "@/lib/week";
 import type { DemandLine, MenuPlanEntry, PlanProposal, Recipe } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { randomHex } from "@/lib/random-id";
@@ -36,21 +36,6 @@ function todayIso(): string {
 /** Without `?week=` the planner opens on next week: that is the week a kitchen plans and orders for. */
 function displayedWeek(week: string | undefined): string {
   return week ?? shiftWeek(isoWeekOf(todayIso()), 1);
-}
-
-function weekTitle(week: string, t: ReturnType<typeof useT>): string {
-  const dates = weekDates(week);
-  const from = new Date(`${dates[0]}T12:00:00Z`);
-  const to = new Date(`${dates[6]}T12:00:00Z`);
-  const locale = getLanguage() === "fi" ? "fi-FI" : "en-GB";
-  const month = new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" });
-  return t("Week {week}, {from} to {to} {month} {year}", {
-    week: Number(week.slice(-2)),
-    from: from.getUTCDate(),
-    to: to.getUTCDate(),
-    month: month.format(to),
-    year: to.getUTCFullYear(),
-  });
 }
 
 function weekday(date: string): string {

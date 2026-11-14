@@ -720,7 +720,7 @@ export interface Api {
   getSupplierDemand(from: string, to: string): Promise<SupplierDemandRow[]>;
   /**
    * Nemotron 3.5 Super VL's short buying note over the same window as the demand table.
-   * Null when there is nothing to say, the note was dropped, or the gateway failed.
+   * Null when there is nothing to say or the note was dropped. A failed request rejects.
    */
   getBuyingNote(from: string, to: string, language: "en" | "fi"): Promise<BuyingNote | null>;
   getKitchenSettings(): Promise<KitchenSettings>;

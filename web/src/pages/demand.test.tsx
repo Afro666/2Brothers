@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
-import type { Api } from "@/api/types";
+import { ApiError, type Api } from "@/api/types";
 import { renderApp } from "@/test/render";
 import type { SupplierDemandRow } from "@/types";
 import { groupByProduct } from "./demand";
@@ -15,7 +15,7 @@ function productSections(): HTMLElement[] {
 
 function productSection(productId: string): HTMLElement[] {
   const body = document.querySelector<HTMLElement>(`table tbody[data-product-section="${productId}"]`);
-  const rows = [...(body?.querySelectorAll<HTMLElement>(":scope > tr") ?? [])];
+  const rows = [...(body?.querySelectorAll<HTMLElement>(":scope > tr:not([data-demand-day-header])") ?? [])];
   if (rows.length < 2) throw new Error(`No demand rows for ${productId}`);
   return rows;
 }
@@ -94,19 +94,23 @@ describe("DemandPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" })).toBeInTheDocument();
     // The mock kitchen's own menu shares nothing with this week.
-    expect(await screen.findByText(/^3 short and 12 unknown$/)).toBeInTheDocument();
+    expect(await screen.findByText(/^5 products: 1 short, 4 unknown$/)).toBeInTheDocument();
     expect(screen.getByText("Forecasts come only from kitchens that agreed to share them.")).toBeInTheDocument();
 
     const [head, ...days] = productSection("462775");
     expect(head).toHaveTextContent("Arla lactose-free milk");
-    expect(head).toHaveTextContent("462775");
+    expect(head).not.toHaveTextContent("462775");
     expect(head).toHaveTextContent("Short on 3 of 3 days");
     expect(head).toHaveTextContent(/Buy [\d,.]+ l/);
     expect(head).toHaveTextContent("kitchens: up to 4");
     expect(within(head).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
     expect(days).toHaveLength(3);
+    const table = within(document.querySelector("table")!);
+    expect(table.queryByRole("columnheader", { name: "Date" })).not.toBeInTheDocument();
     for (const day of days) expect(day).not.toBeVisible();
     await openProduct("462775");
+    expect(table.getByRole("columnheader", { name: "Date" })).toBeVisible();
+    expect(table.getByRole("columnheader", { name: "Forecast demand" })).toBeVisible();
     for (const day of days) {
       expect(day).toBeVisible();
       expect(within(day).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
@@ -136,7 +140,7 @@ describe("DemandPage", () => {
     await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
     await demandTableReady();
     const [head, ...days] = productSection("462921");
-    expect(head).toHaveTextContent("+ days with an unknown amount: 3");
+    expect(head).toHaveTextContent("3 days with no stock figure");
     expect(head).not.toHaveTextContent("Buy 0 l");
     expect(head).toHaveTextContent("kitchens: up to 4");
     await openProduct("462921");
@@ -269,6 +273,22 @@ describe("DemandPage", () => {
     expect(productSection("butter")[1]).toBeVisible();
   });
 
+  it("keeps at-risk products out of the covered fold", async () => {
+    renderApp(
+      "/demand?week=2026-W47",
+      demandApi([
+        demandRow({ productId: "risky", productName: "Cream", risk: "AT_RISK", available: 110, suggestedBuy: 0 }),
+        demandRow({ productId: "covered", productName: "Butter", risk: "COVERED", available: 500, suggestedBuy: 0 }),
+      ]),
+    );
+    await demandTableReady();
+
+    expect(productSection("risky")[0]).toBeVisible();
+    expect(productSection("covered")[0]).not.toBeVisible();
+    expect(screen.getByRole("button", { name: "Covered (1)" })).toBeInTheDocument();
+    expect(screen.getByText("2 products: 1 at risk, 1 covered")).toBeInTheDocument();
+  });
+
   it("filters to short products and opens every day with Open all", async () => {
     const user = userEvent.setup();
     renderApp(
@@ -371,6 +391,18 @@ describe("DemandPage", () => {
     expect(await screen.findByRole("heading", { name: "Week 53, 28 Dec 2026 to 3 Jan 2027" })).toBeInTheDocument();
   });
 
+  it("formats the week and product summary in Finnish and asks for one Finnish note", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    const api = createMockApi();
+    const getBuyingNote = vi.spyOn(api, "getBuyingNote");
+    renderApp("/demand?week=2026-W47", api);
+
+    expect(await screen.findByRole("heading", { name: "Viikko 47, 16–22. marras 2026" })).toBeInTheDocument();
+    expect(await screen.findByText("5 tuotetta: 1 puutteessa, 4 tuntematonta")).toBeInTheDocument();
+    await waitFor(() => expect(getBuyingNote).toHaveBeenCalledWith("2026-11-16", "2026-11-22", "fi"));
+    expect(getBuyingNote).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["banana", "2026-W99"])("does not ask the API for the invalid week %s", async (week) => {
     const api: Api = createMockApi();
     let demandCalls = 0;
@@ -413,6 +445,42 @@ describe("DemandPage", () => {
     expect(screen.queryByRole("heading", { name: "Buying note" })).not.toBeInTheDocument();
   });
 
+  it("explains a failed buying note and lets a person try again", async () => {
+    const api = createMockApi();
+    api.getBuyingNote = vi.fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({
+        model: "nemotron-3.5-super-vl",
+        lines: [{ productId: "462775", productName: "Arla lactose-free milk", date: "2026-11-16", risk: "SHORT", text: "Buy more." }],
+      });
+    const user = userEvent.setup();
+    renderApp("/demand?week=2026-W47", api);
+
+    const failure = await screen.findByText("The buying note could not be loaded. The table below is complete.");
+    expect(failure).toBeVisible();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+    await demandTableReady();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByRole("heading", { name: "Buying note" })).toBeInTheDocument();
+    expect(api.getBuyingNote).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a 429 buying note once after the gateway's wait", async () => {
+    const api = createMockApi();
+    api.getBuyingNote = vi.fn().mockRejectedValue(
+      new ApiError("RATE_LIMITED", "wait", { retry_after_s: 0.2 }, 429),
+    );
+    renderApp("/demand?week=2026-W47", api);
+
+    expect(await screen.findByText("The buying note could not be loaded. The table below is complete.")).toBeVisible();
+    expect(api.getBuyingNote).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.getBuyingNote).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(api.getBuyingNote).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+  });
+
   it("shows the buying note lines under a Written by note", async () => {
     const api: Api = createMockApi();
     api.getBuyingNote = async () => ({
@@ -439,7 +507,7 @@ describe("DemandPage", () => {
     expect(lines[1]).toHaveTextContent("Tue 17 Nov");
     expect(lines[2]).toHaveAttribute("data-note-risk", "UNKNOWN");
     expect(box).toHaveTextContent(
-      "Written by nemotron-3.5-super-vl. Every number is checked against its row in the table.",
+      "Written by Nemotron 3.5 Super VL. Every number is checked against its row in the table.",
     );
   });
 
@@ -557,9 +625,9 @@ describe("DemandPage on a phone (#1142)", () => {
     const toggle = within(row).getByRole("button", { name: /Milk/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveTextContent("Buy 50 l");
-    expect(toggle).toHaveTextContent("+ days with an unknown amount: 1");
+    expect(toggle).toHaveTextContent("1 day with no stock figure");
     expect(within(toggle).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
-    // The product code, the short days and the kitchen count wait in the details.
+    // The short days and the kitchen count wait in the details.
     expect(toggle).not.toHaveTextContent("Short on 1 of 2 days");
     expect(toggle).not.toHaveTextContent("kitchens: up to 2");
     const details = row.querySelector<HTMLElement>("[data-phone-details]")!;
@@ -569,9 +637,9 @@ describe("DemandPage on a phone (#1142)", () => {
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(details).toBeVisible();
-    expect(details).toHaveTextContent("milk");
+    expect(details.textContent).not.toContain("milk");
     expect(details).toHaveTextContent("Short on 1 of 2 days");
-    expect(details).toHaveTextContent("+ days with an unknown amount: 1");
+    expect(details).toHaveTextContent("1 day with no stock figure");
     expect(details).toHaveTextContent("kitchens: up to 2");
     const [monday, tuesday] = [...details.querySelectorAll<HTMLElement>("li[data-phone-day]")];
     expect(monday).toHaveTextContent("Mon 16 Nov");
@@ -599,8 +667,8 @@ describe("DemandPage on a phone (#1142)", () => {
     const toggle = within(row).getByRole("button", { name: /Milk/ });
     expect(within(toggle).getByText("Unknown: check stock")).toHaveAttribute("data-risk", "UNKNOWN");
     expect(toggle).not.toHaveTextContent("Buy");
-    expect(toggle).not.toHaveTextContent("+ days with an unknown amount");
-    expect(row.querySelector("[data-phone-details]")).toHaveTextContent("+ days with an unknown amount: 1");
+    expect(toggle).not.toHaveTextContent("day with no stock figure");
+    expect(row.querySelector("[data-phone-details]")).toHaveTextContent("1 day with no stock figure");
   });
 
   it("limits the covered products behind their own fold the same way", async () => {

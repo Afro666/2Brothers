@@ -106,7 +106,12 @@ async function send(baseUrl: string, path: string, init?: RequestInit): Promise<
     // "wait a minute" would be wrong too, so the busy code and its details stay for the panel.
     const busy = BUSY_429.get(code);
     if (busy) throw new ApiError(code, busy, error && typeof error === "object" ? error : {}, 429);
-    throw new ApiError("RATE_LIMITED", "Too many requests - wait a minute and try again.");
+    throw new ApiError(
+      "RATE_LIMITED",
+      "Too many requests - wait a minute and try again.",
+      error && typeof error === "object" ? error : {},
+      429,
+    );
   }
   let body: unknown;
   try {
