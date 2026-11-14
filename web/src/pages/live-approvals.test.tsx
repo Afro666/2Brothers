@@ -147,6 +147,17 @@ it("loads real proposals and requires explicit confirmation before recording one
   expect(screen.queryByRole("button", { name: /Approve .*149/ })).toBeNull();
 });
 
+it("lists every basket line in the approve confirmation without opening details", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [{ ...row, lines: [
+    row.lines[0], { product_id: "100200", quantity: "3", unit: "KG", why: "Forecast", unknown_stock: false },
+  ] }] })));
+  const user = userEvent.setup();
+  renderApp("/approvals");
+  await user.click(await screen.findByRole("button", { name: /Approve .*149/ }));
+  const lines = within(screen.getByRole("dialog", { name: "Confirm approval" })).getAllByTestId("confirm-line");
+  expect(lines.map(l => l.textContent)).toEqual(["51 ST · 462775", "3 KG · 100200"]);
+});
+
 it("lets a person approve unknown stock and says the order waits for the supplier", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [
     { ...row, valid_until: "2000-01-01T00:00:00Z", lines: [{ ...row.lines[0], unknown_stock: true }] },
