@@ -379,7 +379,8 @@ The web Catalog page and screens that hold product codes use these rows: `search
 posts `search_products` with `limit: 50` and only the filters the person set (`exclude_allergens`
 with `allergen_strictness`, `require_labels`, `temperature`), and does not call it for an empty
 query with no filter. `getProducts` reads `GET /v1/kitchens/{kitchen_id}/catalog/products?ids=`
-in groups of 200. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
+in groups of 200; while the gateway does not serve that route (a 404 with no `error` envelope,
+before #1172), it answers from the sample products as it did before. A named 404 is an error. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
 `allergen_data_known: false` is `allergens: null` (unknown), never an empty list.
 
 ### Stored rows: order, approval, audit entry
