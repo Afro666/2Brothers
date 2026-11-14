@@ -556,6 +556,27 @@ describe("createHttpApi", () => {
       expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);
     });
 
+    it("does not reuse a GET that started while a POST was in flight", async () => {
+      const calls: string[] = [];
+      let finishPost: () => void = () => {};
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        if (route === `POST ${K}/proposals`) {
+          return new Promise<Response>((reply) => (finishPost = () => reply(new Response("{}"))));
+        }
+        return new Promise<Response>(() => {});
+      });
+      const api = createHttpApi("/api");
+      const write = gatewayRequest("/api", "/v1/kitchens/demo-kitchen/proposals", { method: "POST", body: "{}" });
+      void api.listApprovals();
+      finishPost();
+      await write;
+      void api.listApprovals();
+      expect(calls.filter((call) => call === `GET ${K}/proposals`)).toHaveLength(2);
+      expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);
+    });
+
     it("does not reuse a GET that started before a live event", async () => {
       const calls: string[] = [];
       const encoder = new TextEncoder();
