@@ -255,6 +255,19 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         who.need("kitchen:read", kitchen_id)
         return gw().get_order(kitchen_id, order_id)
 
+    # ---- unknown send (#291): a person records what happened; never a resend -------
+    @app.get(k + "/orders/{order_id}/resolution")
+    def order_resolution(kitchen_id: str, order_id: str, who: Principal = Depends(principal)):
+        from gateway import resolve
+        who.need("kitchen:read", kitchen_id)
+        return resolve.lookup(gw(), kitchen_id, order_id, human=who.human)
+
+    @app.post(k + "/orders/{order_id}/resolve")
+    async def resolve_order(kitchen_id: str, order_id: str, request: Request, who: Principal = Depends(principal)):
+        from gateway import resolve
+        who.need("kitchen:read", kitchen_id)
+        return resolve.resolve(gw(), kitchen_id, order_id, await body(request), human=who.human)
+
     @app.get(k + "/forecast-accuracy")
     def forecast_accuracy(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
