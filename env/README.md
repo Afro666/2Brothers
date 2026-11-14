@@ -149,4 +149,6 @@ table), so read the "all" rows. 9 of Kimi's 49 decisions hit the 16k-token cap o
 (empty reply = no order); its score is a lower bound. Reasoning models need a large
 `max_tokens` (now 64k): at 4k Kimi, at 16k Nemotron answered nothing. `/no_think` and a
 reasoning budget are ignored by the Nemotron endpoint; `chat_template_kwargs.enable_thinking`
-works.
+works. The live Buyer loop is a different job (it picks products and tools, the engine sets
+the quantities) and runs with thinking off and a 2,048 token budget; its own numbers are in
+`agent/README.md`, "Buyer loop settings".

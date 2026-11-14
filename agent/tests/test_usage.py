@@ -114,6 +114,7 @@ def test_worker_proposal_carries_the_run_usage_and_writes_one_usage_line(monkeyp
     assert len(lines) == 1 and lines[0].startswith(MARK)
     record = json.loads(lines[0][len(MARK):])
     assert (record["run"], record["status"]) == ("buyer", "READY")
+    assert (record["thinking"], record["max_tokens"]) == (False, 2048)    # the settings the run used (#706)
     assert record["roles"]["buyer"]["calls"] == 4
     assert "not-a-real-secret" not in lines[0] and "milk" not in lines[0]
     assert capsys.readouterr().err.count(MARK) == 1

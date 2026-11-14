@@ -79,7 +79,7 @@ verifiable credential (planned in `docs/plan.md`, not in the code).
 ## NVIDIA: Best Use of Nemotron
 
 **Model.** Nemotron 3.5 Super VL (`nemotron-3.5-super-vl`) on Verda's shared inference
-endpoint (`agent/model.py:21`, `agent/model.py:31`). We did not train or fine-tune it.
+endpoint (`agent/model.py:43`, `agent/model.py:54`). We did not train or fine-tune it.
 
 **What it does.** It is the Buyer agent. It reads the chef's request and calls seven MCP
 tools: search, offer, simulate, request approval, place order, order status and audit log
@@ -103,11 +103,13 @@ proposal waits for approval like any other (`docs/demo.md` "Selling-agent beat")
 
 **How much we use it.** A token meter counts every model call per role from the
 endpoint's `usage` field (`agent/usage.py`, `agent/README.md` "Token meter"). Measured on
-2026-11-14: one Buyer request is about 4 model calls, 44,500 prompt tokens and 2,200
-completion tokens (12 requests: 50 calls, 534,312 prompt and 26,733 completion tokens, of
-which 20,567 reasoning). One photo read is one call of about 1,300 to 2,100 prompt tokens
-and 190 completion tokens. The benchmark used about 130,000 tokens per kitchen week with
-thinking on, over 12 weeks (`env/README.md`, the "tokens/episode" column).
+2026-11-14 with the settings the product runs: one Buyer request is about 4 model calls,
+44,700 prompt tokens and 290 completion tokens (before the settings change: 2,250
+completion tokens, of which 1,720 reasoning). One photo read is one call of about 1,300 to
+2,100 prompt tokens and 190 completion tokens. The benchmark used about 130,000 tokens per
+kitchen week with thinking on, over 12 weeks (`env/README.md`, the "tokens/episode"
+column). Measuring the live loop on 2026-11-14 took 184 Buyer requests: 832 model calls
+and 9.57 million tokens (`agent/README.md` "Buyer loop settings").
 
 **Why it matters.** A chef writes a sentence, not product codes. The model turns it into
 catalog products and a reason a person can read. A wrong model answer cannot become a
@@ -127,10 +129,27 @@ Thinking on is worth about EUR 5,000 a week at about 9 times the tokens. No mode
 the engine, so the engine keeps the numbers. Other changes: the reply budget went to 64k
 tokens, because Nemotron answered nothing at 16k (`env/README.md:150`). A rejected read
 call returns a fixed reason code, and live Nemotron then corrected its call
-(`agent/README.md:342`). Vision replies use a strict JSON schema with thinking off; a
-reply outside the schema is refused whole (`agent/model.py:41`, `agent/vision.py`). A
+(`agent/README.md:422`). Vision replies use a strict JSON schema with thinking off; a
+reply outside the schema is refused whole (`agent/model.py:66`, `agent/vision.py`). A
 scripted prompt-injection test shows the guards hold when the model obeys the attack
 (`agent/conformance.py`, `agent/README.md:49`).
+
+The live Buyer loop got its own measurement, because there the model picks products and
+tools and sets no quantity (`agent/README.md` "Buyer loop settings", 24 requests per
+variant on the live model). Before, it ran on the endpoint default (thinking on) with a
+2,048 token reply budget: 5 of 346 model calls used the whole budget on reasoning and
+returned no tool call, so the run stopped and started again. The product now runs with
+thinking off, 2,048 tokens, and a prompt that asks for one offer with the three best
+products that can arrive (`agent/model.py`, `agent/runner.py`):
+
+| Live loop | Finished | On the first attempt | Completion tokens per request | Median seconds |
+|---|---|---|---|---|
+| Before: thinking on, old prompt | 24 of 24 | 20 | 2,251 | 14.1 |
+| Now: thinking off, one-offer prompt | 24 of 24 | 24 | 289 | 8.8 |
+
+The first offer now has three products every time (before: 1 to 5), and repeated runs of
+one request give the same products much more often. So thinking is on where the model
+decides numbers (the benchmark) and off where the engine does (the product).
 
 **Not built:** fine-tuning. The gate decided no-go: no GPU budget and no validated
 recipe, so we claim no adapter gain (`docs/fine-tuning-gate.md`). The gateway route that
@@ -207,7 +226,7 @@ links, and the limits. The numbers below are from `python docs/codex_metrics.py 
   because its code was ahead of the contract.
 - Codex built the Valio client (#45), the MCP tools (#54), the Nemotron Buyer loop (#63),
   the weather and season signals (#183, #207), the human approval flow (#436) and the
-  recall holds with replacement baskets (#455). `agent/README.md:329` records the first three.
+  recall holds with replacement baskets (#455). `agent/README.md:409` records the first three.
 - Codex also worked as a second reviewer: on #120 it found six failing cases in code that
   the Claude Code session wrote, before the PR opened.
 - Five decisions in `docs/decisions.md` are tagged Codex: the unknown-stock rule (#48),
