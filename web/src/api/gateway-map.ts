@@ -633,7 +633,7 @@ const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   audit_demo_tamper: { kind: "other", summary: "Tamper demo: a line was changed" },
   audit_demo_restore: { kind: "other", summary: "Tamper demo: the line was restored" },
   option_chosen: { kind: "approval", summary: "A person chose an option" },
-  order_lookup: { kind: "order", summary: "A person looked up an order with an unknown send result" },
+  order_lookup: { kind: "order", summary: "Order status checked" },
   order_resolved: { kind: "order", summary: "A person resolved an unknown send" },
   recall_check: { kind: "other", summary: "Recall check" },
   demo_inbox_cleared: { kind: "other", summary: "Test proposals cleared before a demo" },

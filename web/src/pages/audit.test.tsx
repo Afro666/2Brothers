@@ -100,13 +100,15 @@ describe("audit page", () => {
       audit_demo_tamper: "Tamper demo: a line was changed",
       audit_demo_restore: "Tamper demo: the line was restored",
       option_chosen: "A person chose an option",
-      order_lookup: "A person looked up an order with an unknown send result",
+      order_lookup: "Order status checked",
       order_resolved: "A person resolved an unknown send",
       recall_check: "Recall check",
       demo_inbox_cleared: "Test proposals cleared before a demo",
       delivery_note_read: "Delivery note read",
       proposal_explanation_failed: "Proposal explanation failed",
       kitchen_brief_read: "Kitchen brief read",
+      approval_token_created: "Approval token created",
+      proposal_changed: "Proposal changed",
       some_future_kind: "some_future_kind",
     };
     const raw = [
@@ -136,7 +138,13 @@ describe("audit page", () => {
     expect(screen.getByText("Explanation unavailable")).toBeInTheDocument();
     expect(screen.getByText("Blocked by a recall")).toBeInTheDocument();
     expect(screen.queryByText(/EXPLANATION_UNAVAILABLE|BLOCKED_BY_RECALL|It cannot be approved/)).not.toBeInTheDocument();
-    for (const name of ["stock_photo_read", "request_approval finished", "Buyer called request_approval"]) {
+    for (const name of [
+      "stock_photo_read",
+      "approval_token_created",
+      "proposal_changed",
+      "request_approval finished",
+      "Buyer called request_approval",
+    ]) {
       expect(screen.queryByText(name)).not.toBeInTheDocument();
     }
   });

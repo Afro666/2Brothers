@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { askedBy, mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, mapRecalls } from "@/api/gateway-map";
+import { translate } from "@/lib/i18n";
 import { addable, auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
 
 describe("mapPermissions", () => {
@@ -694,6 +695,12 @@ describe("mapAudit", () => {
   it("says a sign-in in plain words", () => {
     const step = mapAudit([{ seq: 1, event_id: "ev-1", kind: "signed_in", actor: "chef@example.test", at: null }])[0];
     expect(step).toMatchObject({ kind: "other", summary: "Signed in", actorName: "chef@example.test" });
+  });
+
+  it("says an order lookup in plain words in English and Finnish", () => {
+    const [step] = mapAudit([{ event_id: "lookup", kind: "order_lookup", at: null }]);
+    expect(step.summary).toBe("Order status checked");
+    expect(translate("fi", step.summary)).toBe("Tilauksen tila tarkistettu");
   });
 
   it("gives an order its own steps and those of the proposal that placed it", () => {

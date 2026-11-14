@@ -34,13 +34,15 @@ describe("codeLabel", () => {
       "BLOCKED_BY_RECALL",
       "proposal_explanation_failed",
       "kitchen_brief_read",
+      "approval_token_created",
+      "proposal_changed",
       "delivery_note_read",
       "EXPLANATION_UNAVAILABLE",
     ];
     for (const code of codes) {
       const label = CODE_LABELS[code];
       expect(label, code).toBeDefined();
-      expect(label.title).not.toMatch(/[A-Z]{2,}_/);
+      expect(label.title).not.toContain("_");
       expect(label.detail.length).toBeGreaterThan(10);
     }
   });
@@ -55,6 +57,8 @@ describe("codeLabel", () => {
   it.each([
     "proposal_explanation_failed",
     "kitchen_brief_read",
+    "approval_token_created",
+    "proposal_changed",
     "delivery_note_read",
     "EXPLANATION_UNAVAILABLE",
   ])("has Finnish words for %s", (code) => {
@@ -69,6 +73,8 @@ describe("plainCode", () => {
     const fi = (text: string) => translate("fi", text);
     expect(plainCode("kitchen_brief_read", (text) => text)).toBe("Kitchen brief read");
     expect(plainCode("kitchen_brief_read", fi)).toBe("Keittiön ohjeet luettu");
+    expect(plainCode("approval_token_created", fi)).toBe("Hyväksyntätunnus luotu");
+    expect(plainCode("proposal_changed", fi)).toBe("Ehdotusta muutettiin");
     expect(plainCode("Order placed", fi)).toBe("Order placed");
     // Only the map's own codes: a name on Object's prototype is just text.
     expect(plainCode("constructor", fi)).toBe("constructor");

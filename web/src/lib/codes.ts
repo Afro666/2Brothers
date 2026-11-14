@@ -93,6 +93,14 @@ export const CODE_LABELS: Record<string, CodeLabel> = {
     title: "Kitchen brief read",
     detail: "The Buyer read the kitchen's instructions and ordering rules.",
   },
+  approval_token_created: {
+    title: "Approval token created",
+    detail: "A person created a personal token for approving from chat.",
+  },
+  proposal_changed: {
+    title: "Proposal changed",
+    detail: "The proposal was changed. Review the latest order details before approving.",
+  },
   delivery_note_read: {
     title: "Delivery note read",
     detail: "The delivery note was read and compared with the order.",
