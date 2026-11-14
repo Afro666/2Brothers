@@ -175,15 +175,6 @@ export type OrderResolutionInput =
   | { resolution: "placed"; supplierOrderRef: string }
   | { resolution: "not_sent"; note?: string };
 
-export interface CurrentSession {
-  kind: "human" | "agent" | "token" | null;
-  name: string | null;
-  role: string | null;
-  kitchenId: string | null;
-  canApprove: boolean;
-  scopes: string[] | null;
-}
-
 /** One rule of the mandate that this order breaks or touches. */
 export interface MandateReason {
   rule: string;
@@ -193,6 +184,7 @@ export interface MandateReason {
 
 export interface ApprovalRequest {
   id: string;
+  approvalRef: string | null;
   orderId: string;
   requestedBy: string;
   createdAt: string | null;

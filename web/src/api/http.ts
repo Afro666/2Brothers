@@ -24,7 +24,6 @@ import type { Api, AuditActor, Session } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { formatEur } from "@/lib/format";
 import { randomBytes, randomHex, toHex } from "@/lib/random-id";
-import type { CurrentSession } from "@/types";
 
 function uuid(): string {
   const bytes = randomBytes(16);
@@ -32,18 +31,6 @@ function uuid(): string {
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = toHex(bytes);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-function mapCurrentSession(value: unknown): CurrentSession {
-  const row = value as Record<string, unknown>;
-  return {
-    kind: row.kind === "human" || row.kind === "agent" || row.kind === "token" ? row.kind : null,
-    name: typeof row.name === "string" ? row.name : null,
-    role: typeof row.role === "string" ? row.role : null,
-    kitchenId: typeof row.kitchen_id === "string" ? row.kitchen_id : null,
-    canApprove: row.can_approve === true,
-    scopes: Array.isArray(row.scopes) ? row.scopes.filter((scope): scope is string => typeof scope === "string") : null,
-  };
 }
 
 export const SIGNED_OUT_EVENT = "kitchen-buyer:signed-out";
@@ -129,6 +116,7 @@ export function createHttpApi(baseUrl: string): Api {
     const human = fromLogin || body.kind === "human";
     const email = typeof body.email === "string" ? body.email : human && name.includes("@") ? name : null;
     return {
+      kind: human ? "human" : body.kind === "agent" || body.kind === "token" ? body.kind : null,
       name,
       email,
       role,
@@ -145,7 +133,6 @@ export function createHttpApi(baseUrl: string): Api {
   // One key per ask, kept after a failure: a new key could create a second proposal.
   const requestKeys = new Map<string, string>();
   const resolutionKeys = new Map<string, string>();
-  const reopenedApprovals = new Map<string, string>();
 
   const real = {
     async getSession() {
@@ -202,9 +189,7 @@ export function createHttpApi(baseUrl: string): Api {
     },
     async approve(decision, actor) {
       const total = decision.expectedTotalInclVat.toFixed(2);
-      const baseKey = `web-approve:${decision.approvalId}:${total}`;
-      const reopened = reopenedApprovals.get(decision.approvalId);
-      const approvalKey = reopened ? `${baseKey}:reopened:${reopened}` : baseKey;
+      const approvalKey = `web-approve:${decision.approvalId}:${total}:${decision.approvalRef ?? "first"}`;
       try {
         await post(
           `${proposalPath(decision.approvalId)}/approve`,
@@ -272,9 +257,6 @@ export function createHttpApi(baseUrl: string): Api {
         typeof orderId === "string" ? ((await get(`${kitchen}/orders/${encodeURIComponent(orderId)}`)) as Json) : null,
       );
     },
-    async getCurrentSession() {
-      return mapCurrentSession(await get("/v1/me"));
-    },
     async getOrderResolution(orderId) {
       return mapOrderResolution(await get(`${kitchen}/orders/${encodeURIComponent(orderId)}/resolution`));
     },
@@ -295,11 +277,7 @@ export function createHttpApi(baseUrl: string): Api {
         { ...body, idempotency_key: idempotencyKey },
         actor,
       );
-      const mapped = mapOrderResolutionResult(result);
-      if (mapped.outcome === "NOT_SENT" && mapped.proposalId) {
-        reopenedApprovals.set(mapped.proposalId, idempotencyKey);
-      }
-      return mapped;
+      return mapOrderResolutionResult(result);
     },
     async listAudit(filter) {
       return mapAudit(await auditEvents(), filter?.orderId);

@@ -38,6 +38,7 @@ import type { AddableProduct, ApprovalRequest, Order, OrderLine, ProposalChange,
 /** What the gateway gets on approve: the exact totals the human read. */
 export interface ApprovalDecision {
   approvalId: string;
+  approvalRef: string | null;
   expectedTotalExVat: number;
   expectedTotalInclVat: number;
 }
@@ -420,6 +421,7 @@ export function ApprovalCard({
                 decide("APPROVED", () =>
                   onApprove?.({
                     approvalId: request.id,
+                    approvalRef: request.approvalRef,
                     expectedTotalExVat: request.totalExVat,
                     expectedTotalInclVat: request.totalInclVat,
                   }),

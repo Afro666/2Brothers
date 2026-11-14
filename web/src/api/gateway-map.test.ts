@@ -32,6 +32,7 @@ describe("mapApproval", () => {
   it("maps a proposal to the approval card, with who asked and when from the audit log", () => {
     expect(mapApproval(proposal, auditEvents)).toEqual({
       id: "prop-1",
+      approvalRef: "appr-1",
       orderId: "prop-1",
       requestedBy: "buyer-agent",
       createdAt: "2026-11-14T10:00:00+00:00",
@@ -78,6 +79,10 @@ describe("mapApproval", () => {
     const approval = mapApproval(bare);
     expect(approval).toMatchObject({ requestedBy: "unknown", createdAt: null, summary: "50 L" });
     expect(approval.reasons).toEqual([expect.objectContaining({ rule: "A person approves every order" })]);
+  });
+
+  it("uses null when the gateway has no approval id", () => {
+    expect(mapApproval({ ...proposal, approval_id: null }).approvalRef).toBeNull();
   });
 
   it.each([

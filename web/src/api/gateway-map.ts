@@ -373,6 +373,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
   }
   return {
     id,
+    approvalRef: typeof proposal.approval_id === "string" && proposal.approval_id ? proposal.approval_id : null,
     // The approval's order is the proposal's basket; a placed order gets its own id in `listOrders`.
     orderId: id,
     requestedBy: typeof created?.actor === "string" ? created.actor : "unknown",

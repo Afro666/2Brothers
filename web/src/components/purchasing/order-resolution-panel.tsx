@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime, formatEur } from "@/lib/format";
+import { useSession } from "@/lib/session";
 import { TONE_CLASSES } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import { useAsync } from "@/lib/use-async";
@@ -51,11 +52,14 @@ function plainMessage(error: Error, action: "placed" | "not_sent" | null = null)
 
 export function OrderResolutionPanel({ order, onChanged }: { order: Order; onChanged: () => void }) {
   const api = useApi();
-  const state = useAsync(async () => {
-    const session = await api.getCurrentSession();
-    const resolution = session.kind === "human" && session.canApprove ? await api.getOrderResolution(order.id) : null;
-    return { session, resolution };
-  }, [api, order.id]);
+  const { session, status: sessionStatus } = useSession();
+  const state = useAsync(
+    async () =>
+      sessionStatus === "signed-in" && session?.kind === "human" && session.canApprove
+        ? api.getOrderResolution(order.id)
+        : null,
+    [api, order.id, sessionStatus, session],
+  );
   const [open, setOpen] = useState<"placed" | "not_sent" | null>(null);
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
@@ -65,7 +69,7 @@ export function OrderResolutionPanel({ order, onChanged }: { order: Order; onCha
   const [latest, setLatest] = useState<OrderResolutionResult | null>(null);
 
   async function resolve() {
-    if (!open || state.status !== "ready" || !state.data.session.name) return;
+    if (!open || state.status !== "ready" || session?.kind !== "human" || !session.canApprove || !session.name) return;
     const trimmedReference = reference.trim();
     const trimmedNote = note.trim();
     if (open === "placed" && (!trimmedReference || trimmedReference.length > 200)) {
@@ -85,7 +89,7 @@ export function OrderResolutionPanel({ order, onChanged }: { order: Order; onCha
         action === "placed"
           ? { resolution: "placed", supplierOrderRef: trimmedReference }
           : { resolution: "not_sent", note: trimmedNote },
-        state.data.session.name,
+        session.name,
       );
       setLatest(result);
       setOpen(null);
@@ -110,8 +114,7 @@ export function OrderResolutionPanel({ order, onChanged }: { order: Order; onCha
     }
   }
 
-  const known = state.status === "ready" ? state.data.resolution : null;
-  const session = state.status === "ready" ? state.data.session : null;
+  const known = state.status === "ready" ? state.data : null;
   const record = latest?.resolution ?? known?.resolution ?? null;
   const expectedTotal = known ? known.expectedTotal : order.totalInclVat;
   const lines = known ? known.lines : order.lines;
@@ -137,11 +140,13 @@ export function OrderResolutionPanel({ order, onChanged }: { order: Order; onCha
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {state.status === "loading" ? <LoadingState label="Loading resolution details" /> : null}
-        {state.status === "error" ? (
+        {sessionStatus === "loading" || state.status === "loading" ? (
+          <LoadingState label="Loading resolution details" />
+        ) : null}
+        {sessionStatus !== "loading" && state.status === "error" ? (
           <ErrorState message={plainMessage(state.error)} onRetry={state.reload} />
         ) : null}
-        {state.status === "ready" ? (
+        {sessionStatus !== "loading" && state.status === "ready" ? (
           <>
             <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
               <div>

@@ -4,7 +4,6 @@ import type {
   AuditEvent,
   AddableProduct,
   ChefRequest,
-  CurrentSession,
   DemandLine,
   Mandate,
   MenuPlanEntry,
@@ -40,6 +39,7 @@ import type {
 export type AuditActor = AuditEvent["actor"];
 
 export interface Session {
+  kind: "human" | "agent" | "token" | null;
   name: string;
   email: string | null;
   role: "approver" | "chef" | "viewer" | null;
@@ -175,8 +175,6 @@ export interface Api {
   listFeedback(filter?: { orderId?: string }): Promise<FeedbackRow[]>;
   listOrders(): Promise<Order[]>;
   getOrder(id: string): Promise<Order>;
-  /** The current `/v1/me` identity, including whether this person may resolve orders. */
-  getCurrentSession(): Promise<CurrentSession>;
   getOrderResolution(orderId: string): Promise<OrderResolution>;
   resolveOrder(orderId: string, resolution: OrderResolutionInput, actor: string): Promise<OrderResolutionResult>;
   listAudit(filter?: { orderId?: string }): Promise<AuditEvent[]>;
