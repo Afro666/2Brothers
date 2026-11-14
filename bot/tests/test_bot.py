@@ -1,4 +1,7 @@
 """The bot with a fake Telegram and a fake gateway: no network, no token."""
+import copy
+import threading
+import time
 from datetime import datetime
 
 import pytest
@@ -326,6 +329,34 @@ def test_plus_moves_one_lot_and_updates_the_po_and_the_summary(bot):
     assert ("change", "463380", "704") in bot.gw.calls          # 698 + the lot size of 6
     assert any(e["id"] == summary_id and "EUR 2,100.00" in e["text"] for e in bot.tg.edits)
     assert bot.tg.edits[-1]["id"] == 555 and "704 L" in bot.tg.edits[-1]["text"]
+
+
+class SlowGateway(FakeGateway):
+    """Reads a copy of the proposal, then waits: two updates that run at once both see the old quantity."""
+    def proposal(self, proposal_id):
+        seen = copy.deepcopy(self.current)
+        time.sleep(0.05)
+        return seen
+
+
+def test_two_fast_plus_taps_on_one_chat_are_two_steps(bot):
+    bot.gw = SlowGateway()
+    taps = [threading.Thread(target=press, args=(bot, f"q:{PID}:0:0:+")) for _ in range(2)]
+    for tap in taps:
+        tap.start()
+    for tap in taps:
+        tap.join()
+    changes = [c for c in bot.gw.calls if c[0] == "change"]
+    assert changes == [("change", "463380", "704"), ("change", "463380", "710")]
+
+
+def test_a_busy_chat_does_not_block_another_chat(bot):
+    with bot._chat_lock(7):
+        other = threading.Thread(target=say, args=(bot, "/help", 8))
+        other.start()
+        other.join(2)
+        assert not other.is_alive()
+    assert bot.tg.sent[-1]["chat"] == 8
 
 
 def test_minus_without_a_lot_size_moves_one_unit(bot):

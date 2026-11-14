@@ -114,12 +114,27 @@ class Bot:
         self._adds: dict[str, list[dict]] = {}               # proposal -> its addable rows, until one is added
         self._shelves: dict[tuple[int, int], dict] = {}      # (chat, message) -> a shelf read to confirm
         self._lock = threading.Lock()
+        self._chat_locks: dict[int, threading.Lock] = {}     # chat -> held for one update at a time
         self._last_brief: dict = {}
         self._groups: set[int] = set()                       # chats that are not private: no web_app buttons
         self.brief_times = brief_times if brief_times is not None else dict(BRIEF_TIMES)
 
     # ---- entry -------------------------------------------------------------------------
     def handle(self, update: dict) -> None:
+        """One update. Updates from one chat run one at a time, in the order they came (two fast
+        "+" taps are two steps); other chats run in parallel."""
+        message = (update.get("callback_query") or {}).get("message") or update.get("message") or {}
+        chat = (message.get("chat") or {}).get("id")
+        if chat is None:
+            return self._handle(update)
+        with self._chat_lock(chat):
+            self._handle(update)
+
+    def _chat_lock(self, chat: int) -> threading.Lock:
+        with self._lock:
+            return self._chat_locks.setdefault(chat, threading.Lock())
+
+    def _handle(self, update: dict) -> None:
         try:
             if "callback_query" in update:
                 self._callback(update["callback_query"])
