@@ -94,3 +94,20 @@ def test_auto_approvals_do_not_count_as_learning_and_switching_off_is_instant(en
     off = client.put(K + "/auto-approve", headers=HUMAN, json={"enabled": False})
     assert off.status_code == 200 and off.json()["enabled"] is False
     assert propose(client, "p2", quantity="5")["status"] == "READY"
+
+
+def test_failed_approve_writes_no_auto_approved_entry_and_the_proposal_waits(env, monkeypatch):
+    from gateway.service import Gateway, GatewayError
+    client, _, db = env
+    history(db)
+    switch_on(client)
+
+    def fail(self, *args, **kwargs):
+        raise GatewayError(409, "TOTAL_MISMATCH", "the price or stock moved")
+    monkeypatch.setattr(Gateway, "approve", fail)
+    p = propose(client, "p1")
+    assert p["status"] == "READY" and not p["order_id"]
+    events = client.get(K + "/audit", headers=AGENT).json()["events"]
+    kinds = [e["kind"] for e in events]
+    assert "auto_approved" not in kinds and "order_placed" not in kinds
+    assert [e for e in events if e["kind"] == "auto_approve_skipped"][0]["reason"] == "TOTAL_MISMATCH"
