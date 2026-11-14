@@ -24,7 +24,7 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
                     pad_to_free_delivery, plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
-from gateway import options, product_names
+from gateway import options, product_names, seeded
 from gateway.decision import FOUND_BY_MEANING, decision_summary
 from gateway.partial_fill import partial_out
 from gateway.suppliers import (UNKNOWN_FACTS, VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers,
@@ -1388,8 +1388,8 @@ class Gateway:
                 expected_total=_money(Decimal(str(order["expected_total"]))), lines=order["lines"],
                 approved_by=order["approved_by"],
                 supplier_must_confirm=order.get("supplier_must_confirm") or [], at=self.now())}
-        except Exception as exc:  # log the type only: never the key or the seed
-            log.warning("receipt signing failed: %s", type(exc).__name__)
+        except Exception as exc:  # the type and the order id only: never the message, the key or the seed
+            log.warning("receipt signing failed: %s (order %s)", type(exc).__name__, order.get("order_id"))
             return {}
 
     def _order_out(self, order: dict, found: dict | None = None, rates: dict | None = None) -> dict:
@@ -1404,6 +1404,8 @@ class Gateway:
         lines = [_order_line_vat(ln, rates) for ln in order["lines"]]
         return {"order_id": order["order_id"], "outcome": order["outcome"], "status": order["status"],
                 "receipt": order.get("receipt"),     # signed order receipt (#290); null when not signed
+                # #1560: "demo-seed" when a seed placed it (no person approved it, so no receipt)
+                "placed_by": seeded.placed_by(order),
                 # #631: suppliers whose stock nobody confirmed yet; a person calls them
                 "supplier_must_confirm": list(order.get("supplier_must_confirm") or []),
                 "expected_total": _money(Decimal(str(order["expected_total"]))),

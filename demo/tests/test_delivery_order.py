@@ -49,6 +49,21 @@ def test_the_demo_order_is_placed_once_with_the_catalog_prices(db):
                                 "product_ids": ["463982", "460838", "463335"]}]
     assert order.get("proposal_id") is None      # no delivery day: never counted as stock on order
     assert len([e for e in db.audit_log.find({}) if e["event"]["kind"] == "demo_delivery_order_placed"]) == 1
+    # #1560: the seed placed it; no person approved it, so there is no fake approver
+    assert order["placed_by"] == "demo-seed" and "approved_by" not in order
+
+
+def test_the_order_answer_says_the_seed_placed_it_and_has_no_receipt(db, monkeypatch):
+    monkeypatch.setenv("GATEWAY_HUMAN_TOKEN", "human-test-token")
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    order_id = delivery_order.place(db)["order_id"]
+    client = TestClient(create_app(Gateway(db, None, now=lambda: NOW)))
+    one = client.get(f"{K}/orders/{order_id}", headers=HUMAN).json()
+    assert (one["placed_by"], one["receipt"]) == ("demo-seed", None)
+    assert client.get(f"{K}/orders", headers=HUMAN).json()["orders"][0]["placed_by"] == "demo-seed"
+    # the live order of 14 Nov was stored with a fake approver and no marker: it answers the same
+    db.orders.update_one({"_id": order_id}, {"$unset": {"placed_by": ""}, "$set": {"approved_by": "demo-seed"}})
+    assert client.get(f"{K}/orders/{order_id}", headers=HUMAN).json()["placed_by"] == "demo-seed"
 
 
 def test_find_reports_the_order_without_writing(db):
