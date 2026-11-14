@@ -73,6 +73,31 @@
   --info-surface: oklch(0.3 0.06 250);
 }
 
+/*
+ * Settings > Appearance (src/lib/appearance.ts sets these on <html>).
+ * An accent other than herb builds the same five tokens from one hue.
+ */
+:root[data-accent]:not([data-accent="herb"]) {
+  --primary: oklch(0.45 0.11 var(--accent-hue));
+  --primary-foreground: #ffffff;
+  --accent: oklch(0.96 0.025 var(--accent-hue));
+  --accent-foreground: oklch(0.45 0.11 var(--accent-hue));
+  --ring: oklch(0.45 0.11 var(--accent-hue));
+}
+
+:root[data-theme="dark"][data-accent]:not([data-accent="herb"]) {
+  --primary: oklch(0.78 0.11 var(--accent-hue));
+  --primary-foreground: oklch(0.2 0.04 var(--accent-hue));
+  --accent: oklch(0.3 0.05 var(--accent-hue));
+  --accent-foreground: oklch(0.86 0.07 var(--accent-hue));
+  --ring: oklch(0.78 0.11 var(--accent-hue));
+}
+
+/* Tailwind sizes every padding, gap and control from --spacing (0.25rem), so compact tightens the whole app. */
+:root[data-density="compact"] {
+  --spacing: 0.22rem;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -120,7 +145,13 @@
   body {
     background-color: var(--background);
     color: var(--foreground);
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
     -webkit-font-smoothing: antialiased;
   }
 }

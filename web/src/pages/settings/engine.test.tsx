@@ -5,11 +5,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
 
-describe("SettingsPage", () => {
+describe("Ordering engine settings", () => {
   beforeEach(() => localStorage.clear());
 
   it("renders the kitchen defaults", async () => {
-    renderApp("/settings", createMockApi());
+    renderApp("/settings/engine", createMockApi());
 
     expect(await screen.findByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
     expect(await screen.findByLabelText("A — Menu-critical")).toHaveValue(97.5);
@@ -26,7 +26,7 @@ describe("SettingsPage", () => {
   it("saves a service level and writes an audit event", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
-    const { router } = renderApp("/settings", api);
+    const { router } = renderApp("/settings/engine", api);
 
     const input = await screen.findByLabelText("A — Menu-critical");
     await user.clear(input);
@@ -49,7 +49,7 @@ describe("SettingsPage", () => {
 
   it("shows an out-of-range API error and keeps the typed value", async () => {
     const user = userEvent.setup();
-    renderApp("/settings", createMockApi());
+    renderApp("/settings/engine", createMockApi());
 
     const input = await screen.findByLabelText("A — Menu-critical");
     await user.clear(input);
@@ -63,7 +63,7 @@ describe("SettingsPage", () => {
   it("saves an empty budget warning as null", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
-    renderApp("/settings", api);
+    renderApp("/settings/engine", api);
 
     const input = await screen.findByLabelText("Per order (ex VAT, €)");
     await user.clear(input);
@@ -75,7 +75,7 @@ describe("SettingsPage", () => {
 
   it("resets edited values to the loaded settings", async () => {
     const user = userEvent.setup();
-    renderApp("/settings", createMockApi());
+    renderApp("/settings/engine", createMockApi());
 
     const input = await screen.findByLabelText("A — Menu-critical");
     await user.clear(input);

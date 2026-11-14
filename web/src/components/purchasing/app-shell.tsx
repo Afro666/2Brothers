@@ -143,7 +143,7 @@ function RolePicker() {
   );
 }
 
-/** Display choices at the foot of the nav; the language choice goes in here too. */
+/** The theme stays one tap away at the foot of the nav; every display choice is in Settings > Appearance. */
 function ShellFooter() {
   return (
     <div className="mt-auto space-y-4 border-t pt-4">
