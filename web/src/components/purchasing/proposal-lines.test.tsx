@@ -25,7 +25,7 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
       "Price",
       "Total",
       "Stock",
-      "Order by",
+      "Delivery",
       "Why this much",
     ]);
     expect(screen.getByText("All prices ex VAT")).toBeVisible();
@@ -55,6 +55,34 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
     expect(within(rowOf(byId("404151").product.names.en)).queryByText("Cut-off passed")).toBeNull();
     const milk = byId("404151");
     expect(within(rowOf(milk.product.names.en)).getAllByText(formatDateTime(milk.offer.closingTime)).length).toBeGreaterThan(0);
+  });
+
+  it("shows lead time in days and reliability as a percentage, with (demo) only on demo values (#1453)", () => {
+    const [milk, cream, cheese] = [byId("404151"), byId("404233"), byId("404318")];
+    const lines = [
+      { ...milk, offer: { ...milk.offer, cutoffSource: "demo" as const, leadTimeDays: 2, leadTimeSource: "demo" as const, deliveryReliability: 0.97, reliabilitySource: "valio" as const } },
+      { ...cream, offer: { ...cream.offer, cutoffSource: "valio" as const, leadTimeDays: 1, leadTimeSource: "supplier_terms" as const, deliveryReliability: 0.9, reliabilitySource: "demo" as const } },
+      // A proposal stored before #1453: no delivery facts at all.
+      { ...cheese, offer: { ...cheese.offer, cutoffSource: null, leadTimeDays: null, leadTimeSource: null, deliveryReliability: null, reliabilitySource: null } },
+    ];
+    render(<ProposalLines lines={lines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
+    const milkRow = rowOf(milk.product.names.en);
+    expect(within(milkRow).getAllByText(/2 days/).length).toBeGreaterThan(0);
+    expect(within(milkRow).getAllByText(/97 % delivered/).length).toBeGreaterThan(0);
+    // The cut-off and the lead time are demo values; the reliability is Valio's.
+    const milkDemo = milkRow.querySelectorAll("[data-demo]");
+    expect(milkDemo.length).toBeGreaterThan(0);
+    for (const note of milkDemo) expect(note).toHaveTextContent("(demo)");
+    expect(within(milkRow).getAllByTitle("Delivery reliability")[0].querySelector("[data-demo]")).toBeNull();
+    expect(within(milkRow).getAllByTitle("Lead time")[0].querySelector("[data-demo]")).not.toBeNull();
+    const creamRow = rowOf(cream.product.names.en);
+    expect(within(creamRow).getAllByText(/^1 day/).length).toBeGreaterThan(0);
+    expect(within(creamRow).getAllByTitle("Lead time")[0].querySelector("[data-demo]")).toBeNull();
+    expect(within(creamRow).getAllByTitle("Delivery reliability")[0].querySelector("[data-demo]")).not.toBeNull();
+    // No facts, no note and no invented figure.
+    const cheeseRow = rowOf(byId("404318").product.names.en);
+    expect(cheeseRow.querySelector("[data-demo]")).toBeNull();
+    expect(within(cheeseRow).queryByText(/delivered/)).toBeNull();
   });
 
   it("folds a long why to two lines and opens it by keyboard", async () => {

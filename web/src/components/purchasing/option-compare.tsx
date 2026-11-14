@@ -3,6 +3,7 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { LabelChip } from "@/components/purchasing/chips";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
+import { DemoNote, leadTimeText } from "@/components/purchasing/proposal-lines";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/api/types";
 import { formatDateTime, formatEur, formatNumber, formatPercent } from "@/lib/format";
@@ -260,17 +261,43 @@ export function OptionCompare({
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-3">
                 <Fact label={t("Stock")}>{option.stockConfirmed ? t("confirmed") : "unknown"}</Fact>
                 <Fact label={t("Order cut-off")} bad={option.cutoffPassed === true}>
-                  {option.cutoffPassed == null
-                    ? "unknown"
-                    : option.cutoffPassed
-                      ? option.cutoffAt
-                        ? t("missed (closed {date})", { date: formatDateTime(option.cutoffAt) })
-                        : t("missed")
-                      : option.cutoffAt
-                        ? t("met (order by {date})", { date: formatDateTime(option.cutoffAt) })
-                        : t("met")}
+                  {option.cutoffPassed == null && option.cutoffAt == null ? (
+                    "unknown"
+                  ) : (
+                    <>
+                      {option.cutoffPassed == null
+                        ? t("order by {date}", { date: formatDateTime(option.cutoffAt) })
+                        : option.cutoffPassed
+                          ? option.cutoffAt
+                            ? t("missed (closed {date})", { date: formatDateTime(option.cutoffAt) })
+                            : t("missed")
+                          : option.cutoffAt
+                            ? t("met (order by {date})", { date: formatDateTime(option.cutoffAt) })
+                            : t("met")}
+                      <DemoNote source={option.cutoffSource} />
+                    </>
+                  )}
                 </Fact>
-                <Fact label={t("Delivery reliability")}>{formatPercent(option.deliveryReliability)}</Fact>
+                <Fact label={t("Delivery reliability")}>
+                  {option.deliveryReliability == null ? (
+                    "unknown"
+                  ) : (
+                    <>
+                      {formatPercent(option.deliveryReliability)}
+                      <DemoNote source={option.reliabilitySource} />
+                    </>
+                  )}
+                </Fact>
+                <Fact label={t("Lead time")}>
+                  {option.leadTimeDays == null ? (
+                    "unknown"
+                  ) : (
+                    <>
+                      {leadTimeText(option.leadTimeDays, t)}
+                      <DemoNote source={option.leadTimeSource} />
+                    </>
+                  )}
+                </Fact>
                 <Fact label={t("CO2 (product-group average)")}>
                   {co2 == null
                     ? "unknown"

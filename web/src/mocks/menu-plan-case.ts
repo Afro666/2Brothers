@@ -75,8 +75,15 @@ function product(row: Row): Product {
   };
 }
 
-function offer(row: Row): Offer {
+function offer(row: Row, index: number): Offer {
   return {
+    // Delivery facts (#1453) as a demo kitchen gets them: demo cut-off and lead time, some
+    // reliability from Valio's data and some invented for the demo.
+    cutoffSource: "demo",
+    leadTimeDays: row.unit === "KG" ? 2 : 1,
+    leadTimeSource: "demo",
+    deliveryReliability: 0.9 + (index % 5) / 50,
+    reliabilitySource: index % 3 === 0 ? "valio" : "demo",
     productId: row.id,
     requestedDate: REQUESTED,
     priceExVat: row.price,
@@ -91,9 +98,9 @@ function offer(row: Row): Offer {
   };
 }
 
-export const menuPlanLines: OrderLine[] = ROWS.map((row) => ({
+export const menuPlanLines: OrderLine[] = ROWS.map((row, index) => ({
   product: product(row),
-  offer: offer(row),
+  offer: offer(row, index),
   quantity: row.quantity,
   lineTotal: Math.round(row.quantity * row.price * 100) / 100,
   why: row.why,

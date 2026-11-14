@@ -229,6 +229,29 @@ describe("OptionCompare", () => {
     expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
   });
 
+  it("shows cut-off, lead time and reliability with (demo) only on demo values (#1453)", () => {
+    render(
+      <OptionCompare
+        options={[
+          {
+            ...choosable,
+            cutoffPassed: null,
+            cutoffAt: "2026-11-15T17:00:00+02:00",
+            cutoffSource: "demo",
+            leadTimeDays: 2,
+            leadTimeSource: "supplier_terms",
+            deliveryReliability: 0.9,
+            reliabilitySource: "demo",
+          },
+        ]}
+        onChoose={vi.fn()}
+      />,
+    );
+    expect(fact("A", "Order cut-off")).toHaveTextContent(/^order by Sun,? 15 Nov,? 17:00 \(demo\)$/);
+    expect(fact("A", "Lead time")).toHaveTextContent(/^2 days$/);
+    expect(fact("A", "Delivery reliability")).toHaveTextContent(/^90 % \(demo\)$/);
+  });
+
   it("shows the milk story: price, total, labels, the engine's sentence and the API's recommendation", async () => {
     const user = userEvent.setup();
     render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);

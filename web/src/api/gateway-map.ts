@@ -1,4 +1,5 @@
 import { mapMoney } from "@/api/map";
+import { readDeliveryFacts } from "@/api/delivery-facts";
 import { mapProposalOptions } from "@/api/map-options";
 import { mapModelTrace } from "@/api/model-trace";
 import { SUPPLIER_ID } from "@/api/supplier-id";
@@ -164,10 +165,20 @@ function offerOf(
 function mapLine(row: Json, requestedDate: string): OrderLine {
   const id = text(row.product_id, "a line's product_id");
   const unit = text(row.unit, "a line's unit");
+  // Cut-off, lead time and reliability to show (#1453); an older proposal has none of them.
+  const facts = readDeliveryFacts(row);
   return {
     product: productOf(id, nullableText(row.product_name, "product_name"), unit),
-    // Only `unknown_stock: false` is a confirmation. The amount in stock is not sent.
-    offer: offerOf(id, unit, requestedDate, decimal(row.unit_price, "unit_price"), row.unknown_stock === false),
+    offer: {
+      // Only `unknown_stock: false` is a confirmation. The amount in stock is not sent.
+      ...offerOf(id, unit, requestedDate, decimal(row.unit_price, "unit_price"), row.unknown_stock === false),
+      closingTime: facts.cutoffAt,
+      cutoffSource: facts.cutoffSource,
+      leadTimeDays: facts.leadTimeDays,
+      leadTimeSource: facts.leadTimeSource,
+      deliveryReliability: facts.deliveryReliability,
+      reliabilitySource: facts.reliabilitySource,
+    },
     quantity: mapMoney(row.quantity, "quantity"),
     lineTotal: decimal(row.total, "line total"),
     why: typeof row.why === "string" && row.why ? row.why : "Not recorded with the order.",

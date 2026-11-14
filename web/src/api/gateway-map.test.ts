@@ -375,6 +375,36 @@ describe("mapOrder", () => {
     }
   });
 
+  it("reads a line's cut-off, lead time and reliability with their sources (#1453)", () => {
+    const line = {
+      ...proposal.lines[0],
+      cutoff_at: "2026-11-19T10:00:00+02:00", cutoff_source: "demo",
+      lead_time_days: 2, lead_time_source: "supplier_terms",
+      delivery_reliability: 0.94, reliability_source: "valio",
+    };
+    const { offer } = mapOrder({ ...proposal, lines: [line] }, null).lines[0];
+    expect(offer).toMatchObject({
+      closingTime: "2026-11-19T10:00:00+02:00",
+      cutoffSource: "demo",
+      leadTimeDays: 2,
+      leadTimeSource: "supplier_terms",
+      deliveryReliability: 0.94,
+      reliabilitySource: "valio",
+    });
+  });
+
+  it("reads a proposal stored before #1453 (no delivery facts) as unknown", () => {
+    const { offer } = mapOrder(proposal, null).lines[0];
+    expect(offer).toMatchObject({
+      closingTime: null,
+      cutoffSource: null,
+      leadTimeDays: null,
+      leadTimeSource: null,
+      deliveryReliability: null,
+      reliabilitySource: null,
+    });
+  });
+
   it("maps a waiting proposal; what the gateway does not send stays unknown, never zero", () => {
     const order = mapOrder(proposal, null);
     expect(order).toMatchObject({

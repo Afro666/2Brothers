@@ -10,6 +10,7 @@ import {
   formatEur,
   formatNumber,
   formatOfferStock,
+  formatPercent,
   isLater,
   isPassed,
   isStockUnconfirmed,
@@ -17,7 +18,7 @@ import {
 import { useT } from "@/lib/i18n";
 import { TONE_CLASSES, type Tone } from "@/lib/tone";
 import { cn } from "@/lib/utils";
-import type { OrderLine } from "@/types";
+import type { DeliverySource, OrderLine } from "@/types";
 
 const CHIP = "inline-flex items-center gap-1 rounded-sm border px-1.5 py-px text-xs font-medium whitespace-nowrap";
 
@@ -58,6 +59,23 @@ export function StockChip({ line, confirmBy }: { line: OrderLine; confirmBy: str
   );
 }
 
+/** A muted "(demo)" after a value the demo invented (#1453): never Valio's or a supplier's number. */
+export function DemoNote({ source }: { source: DeliverySource | null | undefined }) {
+  const t = useT();
+  if (source !== "demo") return null;
+  return (
+    <span data-demo className="font-normal text-muted-foreground">
+      {" "}({t("demo")})
+    </span>
+  );
+}
+
+/** Lead time in days, or null when no source knows it. */
+export function leadTimeText(days: number | null | undefined, t: ReturnType<typeof useT>): string | null {
+  if (days == null) return null;
+  return days === 1 ? t("1 day") : t("{count} days", { count: days });
+}
+
 function CutoffText({ line, now }: { line: OrderLine; now: Date }) {
   const t = useT();
   const late = isLater(line.offer.availableDate, line.offer.requestedDate);
@@ -68,14 +86,41 @@ function CutoffText({ line, now }: { line: OrderLine; now: Date }) {
           {t("Cut-off passed")}
         </span>
       ) : (
-        <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+        <span className="text-xs text-muted-foreground tabular-nums">
           <span className="md:sr-only">{t("order by")} </span>
           {t(formatDateTime(line.offer.closingTime))}
+          <DemoNote source={line.offer.cutoffSource} />
         </span>
       )}
+      <DeliveryFacts line={line} />
       {late ? (
         <span className="text-xs font-medium text-warning">
           {t("arrives {date}", { date: t(formatDate(line.offer.availableDate)) })}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** Lead time and delivery reliability of a line, when a source knows them (#1453). */
+function DeliveryFacts({ line }: { line: OrderLine }) {
+  const t = useT();
+  const lead = leadTimeText(line.offer.leadTimeDays, t);
+  const reliability = line.offer.deliveryReliability;
+  if (lead == null && reliability == null) return null;
+  return (
+    <span className="text-[11px] leading-4 text-muted-foreground tabular-nums">
+      {lead != null ? (
+        <span title={t("Lead time")}>
+          {lead}
+          <DemoNote source={line.offer.leadTimeSource} />
+        </span>
+      ) : null}
+      {lead != null && reliability != null ? " · " : null}
+      {reliability != null ? (
+        <span title={t("Delivery reliability")}>
+          {t("{percent} delivered", { percent: formatPercent(reliability) })}
+          <DemoNote source={line.offer.reliabilitySource} />
         </span>
       ) : null}
     </span>
@@ -132,8 +177,8 @@ export function ProposalLines({
   // One grid for the header and every row, so the columns line up like a table. On a phone
   // each row is two short lines: picture, name, quantity and total; then stock, cut-off, why.
   const columns = editing
-    ? "md:grid-cols-[minmax(10rem,1.2fr)_7.25rem_4.25rem_5rem_7.75rem_7.25rem_minmax(9rem,1.5fr)_1.75rem]"
-    : "md:grid-cols-[minmax(10rem,1.2fr)_5rem_4.25rem_5rem_7.75rem_7.25rem_minmax(9rem,1.5fr)]";
+    ? "md:grid-cols-[minmax(10rem,1.2fr)_7.25rem_4.25rem_5rem_7.75rem_10rem_minmax(7.5rem,1.4fr)_1.75rem]"
+    : "md:grid-cols-[minmax(10rem,1.2fr)_5rem_4.25rem_5rem_7.75rem_10rem_minmax(7.5rem,1.4fr)]";
   const head = "label-caps whitespace-nowrap";
   return (
     <div className="space-y-3">
@@ -145,7 +190,7 @@ export function ProposalLines({
             <span role="columnheader" className={cn(head, "text-right")}>{t("Price")}</span>
             <span role="columnheader" className={cn(head, "text-right")}>{t("Total")}</span>
             <span role="columnheader" className={head}>{t("Stock")}</span>
-            <span role="columnheader" className={head}>{t("Order by")}</span>
+            <span role="columnheader" className={head}>{t("Delivery")}</span>
             <span role="columnheader" className={head}>{t("Why this much")}</span>
             {editing ? (
               <span role="columnheader" className="sr-only">
