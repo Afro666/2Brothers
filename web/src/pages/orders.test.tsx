@@ -47,6 +47,18 @@ describe("orders pages", () => {
     expect(screen.queryByText(/Call .* to confirm/)).not.toBeInTheDocument();
   });
 
+  it("shortens a long order id in the page title and keeps the full id in its title attribute", async () => {
+    const longId = "d2148e9a0b1c4d5e6f708192a3b4c5d6";
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    api.getOrder = async () => ({ ...(await getOrder("ORD-1042")), id: longId });
+    renderApp(`/orders/${longId}`, api);
+
+    const title = await screen.findByRole("heading", { level: 1, name: "Order d2148e9a…" });
+    expect(title).toHaveAttribute("title", longId);
+    expect(await screen.findByRole("heading", { level: 2, name: longId })).toBeVisible();
+  });
+
   it("links from the order list to its detail and shows lines and filtered history", async () => {
     const user = userEvent.setup();
     renderApp("/orders");
