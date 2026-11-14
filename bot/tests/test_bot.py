@@ -408,6 +408,14 @@ def test_brief_says_when_the_gateway_refuses(bot):
     assert bot.tg.edits[-1]["text"] == "The store does not answer."
 
 
+def test_brief_never_stays_at_one_moment_on_an_unexpected_error(bot, capsys):
+    bot.gw.error = RuntimeError("secret content")
+    say(bot, "/brief")
+    assert bot.tg.edits[-1]["text"] == "The brief could not be made. Try /brief again."
+    err = capsys.readouterr().err
+    assert "RuntimeError" in err and "secret content" not in err
+
+
 def test_the_timed_brief_goes_out_once_per_slot_also_after_a_restart(bot, tmp_path):
     bot.now = lambda: datetime(2026, 11, 14, 16, 0, 20, tzinfo=render.HELSINKI)
     bot.tick()

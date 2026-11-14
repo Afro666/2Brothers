@@ -252,6 +252,10 @@ class Bot:
         except GatewayError as exc:
             self.tg.edit(chat, status, render.refusal(exc.code, exc.message))
             return
+        except Exception as exc:                    # an odd answer must not leave "One moment" stuck
+            print(f"bot: brief failed: {type(exc).__name__}", file=sys.stderr, flush=True)
+            self.tg.edit(chat, status, "The brief could not be made. Try /brief again.")
+            return
         self.tg.edit(chat, status, messages[0].text, messages[0].markup)
         for message in messages[1:]:
             self.tg.send(chat, message.text, message.markup, silent=True)
