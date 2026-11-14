@@ -134,16 +134,18 @@ export function ShelfPhotoCount({
 
   async function readSample() {
     if (reading || disabled) return;
+    // Claimed before the fetch: a photo chosen while the sample loads wins, and the sample is dropped.
+    const turn = ++latest.current;
     let file: File;
     try {
       const response = await fetch(`${import.meta.env.BASE_URL}sample-shelf.png`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       file = new File([await response.blob()], "sample-shelf.png", { type: "image/png" });
     } catch {
-      setError(t("The sample photo could not be loaded."));
+      if (turn === latest.current) setError(t("The sample photo could not be loaded."));
       return;
     }
-    void readPhoto(file);
+    if (turn === latest.current) void readPhoto(file);
   }
 
   const input = (ref: React.RefObject<HTMLInputElement | null>, label: string, capture: boolean) => (
