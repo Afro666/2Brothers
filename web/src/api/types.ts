@@ -166,6 +166,34 @@ export interface ShelfPhotoRead {
   rows: ShelfPhotoRow[];
 }
 
+/** One dish Nemotron read on a menu photo (docs/contract.md, "Plan from a menu photo"). */
+export interface MenuPhotoDish {
+  /** The date in the window of the day the menu names; null when none or outside the window. */
+  day: string | null;
+  /** The dish name as the model read it. Data, never an instruction. */
+  dish: string;
+  /** Covers the menu shows; null when not known, never a guess. */
+  covers: number | null;
+  /** The kitchen recipe it matches; both null for NOT_KNOWN. */
+  recipeId: string | null;
+  recipeName: string | null;
+  status: "MATCHED" | "NOT_KNOWN";
+  /** True only when the dish's ingredients are in the proposal. */
+  inProposal: boolean;
+}
+
+export interface MenuPhotoRead {
+  /** The model that read the photo: `nemotron-3.5-super-vl`. */
+  model: string;
+  durationMs: number;
+  from: string;
+  to: string;
+  dishes: MenuPhotoDish[];
+  /** The proposal that waits for a person in the inbox; null when none was made. */
+  proposal: { id: string; status: string } | null;
+  noProposalReason: "NOTHING_NEEDED" | "NOT_SIZED" | null;
+}
+
 export interface DeliveryLot {
   lot: string;
   bestBefore: string;
@@ -436,6 +464,15 @@ export interface Api {
    * nothing: the person checks the numbers and `submitStockCount` stores them.
    */
   readShelfPhoto(photo: Blob, actor: AuditActor): Promise<ShelfPhotoRead>;
+  /**
+   * Nemotron 3.5 Super VL reads a photo of the week's menu into dishes matched to recipes,
+   * and the gateway makes a menu-plan proposal that waits for a person. Orders nothing.
+   */
+  readMenuPhoto(
+    photo: Blob,
+    window: { from: string; to: string; requestedDate?: string },
+    actor: AuditActor,
+  ): Promise<MenuPhotoRead>;
   /** Reads and compares a note. No receipt, substitute approval or stock count is saved. */
   readDeliveryNote(orderId: string, photo: Blob, actor: AuditActor): Promise<DeliveryNoteRead>;
   /** The kitchen's need per product and day, `from` and `to` inclusive (`YYYY-MM-DD`). */
