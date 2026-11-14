@@ -11,6 +11,10 @@ describe("supplierName", () => {
     expect(supplierName("sup-valio", new Map())).toBe("Valio Aimo");
   });
 
+  it("matches the Valio id case-insensitively", () => {
+    expect(supplierName("SUP-VALIO", new Map())).toBe("Valio Aimo");
+  });
+
   it("keeps an unknown id as it is", () => {
     expect(supplierName("sup-bakery-7", new Map())).toBe("sup-bakery-7");
   });
