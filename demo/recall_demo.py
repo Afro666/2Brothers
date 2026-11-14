@@ -4,7 +4,7 @@
     python -m demo.recall_demo --key again # a second proposal (the default key replays the first)
 
 It asks the gateway for 5 kg of 461332 (Kulta Katriina filter coffee) for the first day from
-next Monday whose order cut-off has not passed (`--date` to pick one), as a
+next Monday whose live quote holds the coffee (`--date` to pick one), as a
 person would on the Requests page: a live Valio quote, a READY proposal, a pending
 approval. It orders nothing. Then "Check recalls now" in the inbox has a line to block.
 
@@ -50,6 +50,10 @@ def open_day(gateway, today: date, days: int = 10, kitchen_id: str = DEMO_ID) ->
                 "product_ids": [COFFEE], "quantity": "5", "unit": "KG", "requested_date": day.isoformat()})
         except Exception:
             return start                    # no live answer: keep the old rule, the proposal says why
+        if any(row.get("product_id") == COFFEE
+               and "BLOCKED_BY_RECALL" in str(row.get("reason") or "")
+               for row in offer["simulation"].get("excluded") or []):
+            return start                    # another delivery day cannot clear a recall
         if any(line["product_id"] == COFFEE for line in offer["simulation"]["lines"]):
             return day
     return start
@@ -74,7 +78,7 @@ def main(argv=None) -> None:
     p.add_argument("--key", help="idempotency key; a new key makes a new proposal")
     p.add_argument("--today", type=date.fromisoformat, default=date.today())
     p.add_argument("--date", type=date.fromisoformat, default=None,
-                   help="delivery day (default: the first day from next Monday whose cut-off has not passed)")
+                   help="delivery day (default: the first day from next Monday whose live quote holds the coffee)")
     a = p.parse_args(argv)
     from gateway.service import Gateway
     from gateway.valio_client import ValioClient

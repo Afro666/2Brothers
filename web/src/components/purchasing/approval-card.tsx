@@ -602,9 +602,14 @@ function AddableRow({
   const id = useId();
   return (
     <li className="space-y-2 py-3">
-      <div className="font-medium">{item.product.names.en}</div>
-      <div className="text-xs text-muted-foreground">
-        {item.product.id} · {item.product.salesUnit}
+      <div className="flex items-center gap-2">
+        <ProductThumb size="sm" en={item.product.names.en} fi={item.product.names.fi} brand={item.product.brand} />
+        <div className="min-w-0">
+          <div className="font-medium break-words">{item.product.names.en}</div>
+          <div className="text-xs text-muted-foreground">
+            {item.product.id} · {item.product.salesUnit}
+          </div>
+        </div>
       </div>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
         <dt className="text-muted-foreground">{t("Stock on hand")}</dt>

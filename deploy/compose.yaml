@@ -93,6 +93,25 @@ services:
       GATEWAY_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}
       GATEWAY_BASE_URL: http://gateway:8000
 
+  # Speech to text for the Telegram bot (#1331): Whisper on our own server. Internal only:
+  # no published port and no Caddy route. It holds no key and stores no audio or text.
+  # The limits keep a transcription from taking memory or cores from the gateway.
+  stt:
+    build:
+      context: ..
+      dockerfile: bot/Dockerfile.stt
+    restart: unless-stopped
+    environment:
+      # tiny, base, small or medium. small reads Finnish well enough and needs about 1 GB.
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      WHISPER_THREADS: ${WHISPER_THREADS:-2}
+    volumes:
+      # The model file, downloaded once at the first start.
+      - stt_models:/models
+    mem_limit: 2g
+    cpus: 2.0
+
 volumes:
   caddy_data:
   caddy_config:
+  stt_models:

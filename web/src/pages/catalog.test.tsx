@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { ApiError } from "@/api";
 import { createMockApi } from "@/api/mock";
+import { products as sampleProducts } from "@/mocks/milk-case";
 import { renderApp } from "@/test/render";
 
 const MILK_PRODUCTS = [
@@ -154,5 +155,78 @@ describe("catalog page", () => {
 
     renderApp("/catalog", Object.assign(createMockApi(), { live: new Set(["searchProducts" as const]) }));
     expect(await screen.findByText("Atlas Search")).toBeInTheDocument();
+  });
+
+  it("opens with a start state when the full search answers nothing", async () => {
+    const api = createMockApi();
+    api.searchProducts = async () => [];
+    renderApp("/catalog", api);
+
+    expect(await screen.findByRole("heading", { name: "Search the Valio Aimo catalog" })).toBeInTheDocument();
+    expect(screen.getByText("Type a product name, or pick an allergen, a label or a temperature.")).toBeInTheDocument();
+    expect(screen.getByText("Try:")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "lactose-free milk" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "butter" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "oat drink" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No products match this search" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
+  });
+
+  it("runs an example search from the start state", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const actual = api.searchProducts;
+    const calls: string[] = [];
+    const butter = [sampleProducts.arlaUht1l];
+    api.searchProducts = (query, filters) => {
+      calls.push(query);
+      if (query === "butter") return Promise.resolve(butter);
+      return query.trim() ? actual(query, filters) : Promise.resolve([]);
+    };
+    const { router } = renderApp("/catalog", api);
+
+    await user.click(await screen.findByRole("button", { name: "butter" }));
+
+    expect(calls).toContain("butter");
+    expect(await screen.findByText(butter[0].names.en)).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search the catalog" })).toHaveValue("butter");
+    expect(router.state.location.href).toBe("/catalog?q=butter");
+  });
+
+  it("sends an example search in the language shown", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const calls: string[] = [];
+    api.searchProducts = (query) => {
+      calls.push(query);
+      return Promise.resolve([]);
+    };
+    renderApp("/catalog", api);
+
+    await user.click(await screen.findByRole("button", { name: "voi" }));
+
+    expect(calls).toContain("voi");
+    expect(calls).not.toContain("butter");
+    expect(screen.getByRole("searchbox")).toHaveValue("voi");
+  });
+
+  it("still says no products match for a query that finds nothing", async () => {
+    const api = createMockApi();
+    const actual = api.searchProducts;
+    api.searchProducts = (query, filters) => (query === "zzz-nothing" ? Promise.resolve([]) : actual(query, filters));
+    renderApp("/catalog?q=zzz-nothing", api);
+
+    expect(await screen.findByRole("heading", { name: "No products match this search" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Search the Valio Aimo catalog" })).not.toBeInTheDocument();
+  });
+
+  it("lists the products when the empty search returns them", async () => {
+    renderApp("/catalog");
+
+    expect(await screen.findByText("5 products")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Search the Valio Aimo catalog" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No products match this search" })).not.toBeInTheDocument();
   });
 });
