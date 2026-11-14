@@ -71,3 +71,12 @@ the `two-brothers-buyer-worker` entrypoint. Set `VERDA_INFERENCE_KEY` in the ser
 not the human token or upstream Valio key. No worker port is published.
 `BUYER_WORKER_URL` on the gateway routes free-text proposal requests to it.
 
+## One deploy at a time, and pausing deploys
+
+- Deploys never overlap: the workflow queues runs (`concurrency: deploy`) and `deploy/update.sh`
+  takes a lock on the server, so a second deploy waits for the first.
+- Every deploy rebuilds and restarts the containers, which cuts off requests in flight. To pause
+  deploys (recording the demo, a long job on the server): `touch /opt/2brothers.hold` on the
+  server. Merges still pass; their deploy run says "on hold" and changes nothing. `rm
+  /opt/2brothers.hold` to resume; the next merge, or "Run workflow" on the deploy action, deploys
+  the newest commit.
