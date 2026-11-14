@@ -561,6 +561,30 @@ describe("createHttpApi", () => {
       stop();
     });
 
+    it("does not reuse a GET that started before the event stream connected again", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", (url: string, init: RequestInit = {}) => {
+        const route = `${init.method ?? "GET"} ${url}`;
+        calls.push(route);
+        // An open stream with no event: only the connection itself is reported.
+        if (route === `GET ${K}/events`) return Promise.resolve(new Response(new ReadableStream<Uint8Array>()));
+        return new Promise<Response>(() => {});
+      });
+      const api = createHttpApi("/api");
+      void api.listAudit();
+      let connected = false;
+      const stop = api.subscribeEvents!(
+        () => {},
+        (isConnected) => {
+          connected = isConnected;
+          if (isConnected) void api.listAudit();
+        },
+      );
+      await waitFor(() => expect(connected).toBe(true));
+      expect(calls.filter((call) => call === `GET ${K}/audit`)).toHaveLength(2);
+      stop();
+    });
+
     it("counts pending approvals from the proposals alone", async () => {
       const waiting = { ...proposal, status: "READY" };
       const calls = gateway({
