@@ -61,6 +61,24 @@ def test_recipes_menu_plan_stock_and_demand_end_to_end(env):
     assert "menu_plan_changed" in kinds and "stock_counted" in kinds
 
 
+def test_stock_unit_differs_from_recipe_unit_gives_unknown_net_need(env):
+    client, _, db = env
+    mash = {"recipe_id": "mash", "name": "Mash", "ingredients": [
+        {"product_id": "460708", "qty_per_portion": "150", "unit": "KG"}]}
+    assert client.post(K + "/recipes", headers=HUMAN, json=mash).status_code == 200
+    # The route takes kitchen units only; a recipe in G can still reach the store from an
+    # older row or another writer, so put one there directly.
+    assert db.recipes.update_one({"recipe_id": "mash"}, {"$set": {"ingredients.0.unit": "G"}}).modified_count == 1
+    plan = {"days": [{"date": "2026-11-16", "meal": "lunch", "recipe_id": "mash", "covers": 10}]}
+    assert client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan).status_code == 200
+    count = {**COUNT, "idempotency_key": "kg1", "counts": [{"product_id": "460708", "on_hand": "5", "unit": "KG"}]}
+    assert client.post(K + "/stock-counts", headers=HUMAN, json=count).status_code == 200
+    demand = client.get(K + "/demand?from=2026-11-16&to=2026-11-16", headers=AGENT).json()
+    row = next(r for r in demand["rows"] if r["product_id"] == "460708")
+    assert row["gross_need"] == "1500" and row["net_need"] is None       # never 1500 G - 5 KG
+    assert any("460708" in p and "KG" in p and "G" in p for p in demand["problems"])
+
+
 def test_suppliers_crud_and_validation(env):
     client, _, _ = env
     body = {"supplier_id": "sup-bakery", "name": "Bakery", "adapter": "manual",
