@@ -13,6 +13,10 @@ import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import { readShelfPhotoMock } from "@/api/mock-shelf";
 import { createMockAuth } from "@/api/mock-auth";
+import { createKitchenMock } from "@/api/mock-kitchen";
+import { createNotificationsMock } from "@/api/mock-notifications";
+import { createDeveloperMock } from "@/api/mock-developer";
+import { createPrivacyMock } from "@/api/mock-privacy";
 import { createTokensMock } from "@/api/mock-tokens";
 import {
   approval as seedApproval,
@@ -236,6 +240,10 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
 
   return {
     ...createMockAuth(options.signedOut),
+    ...createKitchenMock(recordAudit),
+    ...createNotificationsMock(recordAudit),
+    ...createDeveloperMock(recordAudit),
+    ...createPrivacyMock(recordAudit),
     ...createPlanningMock(recordAudit),
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),

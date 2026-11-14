@@ -37,9 +37,9 @@ describe("settings area", () => {
     expect(within(await sectionNav()).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
   });
 
-  it("a section that is not built yet says what will come", async () => {
+  it("loads real content in a formerly placeholder section", async () => {
     renderApp("/settings/team");
-    expect(await screen.findByText(/Inviting people to this kitchen/)).toBeInTheDocument();
+    expect(await screen.findByText(/Roles are managed by the gateway/)).toBeInTheDocument();
   });
 
   it("moves between sections from the nav", async () => {

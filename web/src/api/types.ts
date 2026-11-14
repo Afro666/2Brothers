@@ -46,6 +46,71 @@ export interface Session {
   canApprove: boolean;
 }
 
+export type KitchenProfileType = "restaurant" | "school" | "hospital" | "hotel" | "cafe";
+
+export interface KitchenProfile {
+  name: string;
+  type: KitchenProfileType;
+  address: string;
+  timezone: string;
+  deliveryAddress: string;
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: "approver" | "chef" | "viewer";
+}
+
+export interface NotificationPreferences {
+  approvalWaiting: boolean;
+  cutoffTwoHours: boolean;
+  recallAlert: boolean;
+  orderConfirmed: boolean;
+}
+
+export interface Webhook {
+  id: string;
+  url: string;
+  events: string[];
+  createdAt: string | null;
+  createdBy: string | null;
+}
+
+export interface CreatedWebhook extends Webhook {
+  secret: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  event: string;
+  at: string | null;
+  attempts: number | null;
+  status: number | null;
+  ok: boolean;
+  error: string | null;
+}
+
+export interface GatewayHealth {
+  status: string;
+  valioMode: "live" | "mock" | "unknown";
+}
+
+export interface RecentApiCall {
+  id: string;
+  method: string;
+  path: string;
+  status: number | null;
+  at: string | null;
+}
+
+export interface KitchenDeletionRequest {
+  id: string;
+  requestedAt: string;
+  status: "requested";
+}
+
 export type Draft<T extends { id: string }> = Omit<T, "id"> & { id?: string };
 
 export type ApiTokenScope = "kitchen:read" | "kitchen:propose" | "kitchen:write";
@@ -154,6 +219,17 @@ export interface Api {
   signIn(email: string, password: string): Promise<Session>;
   signOut(): Promise<void>;
   changePassword(current: string, next: string): Promise<void>;
+  getKitchenProfile(): Promise<KitchenProfile>;
+  saveKitchenProfile(profile: KitchenProfile, actor: AuditActor): Promise<KitchenProfile>;
+  listTeamMembers(): Promise<TeamMember[]>;
+  getNotificationPreferences(): Promise<NotificationPreferences>;
+  saveNotificationPreferences(preferences: NotificationPreferences, actor: AuditActor): Promise<NotificationPreferences>;
+  listWebhooks(): Promise<{ webhooks: Webhook[]; events: string[] }>;
+  createWebhook(input: { url: string; events: string[] }, actor: AuditActor): Promise<CreatedWebhook>;
+  testWebhook(id: string, actor: AuditActor): Promise<WebhookDelivery>;
+  getGatewayHealth(): Promise<GatewayHealth>;
+  listRecentApiCalls(): Promise<RecentApiCall[]>;
+  requestKitchenDeletion(confirmation: string, actor: AuditActor): Promise<KitchenDeletionRequest>;
   listApprovals(): Promise<ApprovalRequest[]>;
   getApproval(id: string): Promise<ApprovalRequest>;
   approve(decision: ApprovalDecision, actor: AuditActor): Promise<ApprovalRequest>;
