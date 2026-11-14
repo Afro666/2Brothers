@@ -708,8 +708,8 @@ token: agent and kitchen tokens still never approve.
 | Method | Path | Body | Answer |
 |---|---|---|---|
 | POST | `/v1/kitchens/{kitchen_id}/approval-tokens` | `name` (optional, 1 to 80 characters, default `"chat"`), `hours` (optional integer, 1 to 24, default 8) | The token row plus `token`. |
-| GET | `/v1/kitchens/{kitchen_id}/approval-tokens` | | `{"tokens": [...]}`, newest first, revoked and expired ones included. Never the secret. |
-| DELETE | `/v1/kitchens/{kitchen_id}/approval-tokens/{token_id}` | | The token row, with `revoked_at` set. A second revoke returns the same row. |
+| GET | `/v1/kitchens/{kitchen_id}/approval-tokens` | | `{"tokens": [...]}`: only the signed-in person's own tokens, newest first, revoked and expired ones included. Never the secret. |
+| DELETE | `/v1/kitchens/{kitchen_id}/approval-tokens/{token_id}` | | The token row, with `revoked_at` set. A second revoke returns the same row. Another person's token is `404 TOKEN_NOT_FOUND`. |
 
 Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email),
 `kitchen_id`, `prefix` (the first 8 characters), `created_at`, `created_by` (the
@@ -819,7 +819,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST | `/recalls/{event_id}/dismiss` | `kitchen:approve` (human) | A person dismisses one alert after checking the packs. Body: `reason`. Shape in [recall-contract.md](recall-contract.md). |
 | GET | `/label-checks` | `kitchen:read` | Recorded Hyvää Suomesta producer checks for catalog products 462535, 462576 and 462775, plus one synthetic `negative_control`. Answer: `{"checks": [...], "negative_control": {...}}`. Shape in [product-evidence-contract.md](product-evidence-contract.md). |
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
-| POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver` (create: signed-in session only) | Personal approval tokens. Shape under "Personal approval tokens". |
+| POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver`, signed-in session only (the open demo gets `403 PERSONAL_TOKEN_NEEDS_SIGN_IN`; the operator CLI manages all) | Personal approval tokens. Shape under "Personal approval tokens". |
 | GET | `/model-usage` | `kitchen:read` | How much the Buyer agent used its model for this kitchen: runs, model calls, tokens, seconds. Shape under "Model usage". |
 | GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". |
 | GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
