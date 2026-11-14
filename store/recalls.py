@@ -1,4 +1,5 @@
 """Recall evidence and proposal holds; Mongo access stays in store."""
+from store.orders import NotPending, decide_approval
 from store.products import get_products
 
 
@@ -48,3 +49,15 @@ def candidates(db, kitchen_id, source):
     if not ids and source.get('category'):
         ids = [row['_id'] for row in db.products.find({'category': source['category']}, {'_id': 1}).limit(20)]
     return get_products(db, ids[:20], kitchen_id)
+
+
+def reject_replacement(db, kitchen_id, proposal_id, reason):
+    """A partial recall replacement must not stay approvable in the inbox."""
+    row = db.proposals.find_one_and_update({'_id': proposal_id, 'kitchen_id': kitchen_id, 'status': 'READY'},
+        {'$set': {'status': 'REJECTED', 'reject_reason': reason}})
+    if row and row.get('approval_id'):
+        try:
+            decide_approval(db, row['approval_id'], status='REJECTED', decided_by='recall-monitor', reason=reason)
+        except NotPending:
+            pass
+    return row is not None

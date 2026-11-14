@@ -118,3 +118,29 @@ def test_audit_replay_ignores_changed_stock_and_replacement_ideas():
     changed[0]['replacement_proposal'] = [{'product_id': 'new'}]
     audit(db, changed, NOW)
     assert len(list_events(db, kitchen_id='hotel')) == 3  # proposal + summary + one notice
+
+
+class LowStock(Prices):
+    def availability(self, ids, day):
+        return {'products': [{'productId': pid, 'cutoff_passed': False,
+            'scheduleLines': [{'availableAmount': '2', 'availableDate': day}]} for pid in ids]}
+
+
+def test_shortfall_replacement_is_not_left_approvable():
+    db, gw, p = setup()
+    gw.valio = LowStock()
+    apply_notices(gw, 'hotel', NOTICES)
+    original = gw.get_proposal('hotel', p['proposal_id'])
+    assert original['status'] == 'BLOCKED_BY_RECALL'
+    assert original['recall_replan_error'] == 'REPLACEMENT_SHORTFALL'
+    assert not original['replacement_proposal_id']
+    assert db.proposals.count_documents({'status': 'READY'}) == 0
+    partial = db.proposals.find_one({'_id': {'$ne': p['proposal_id']}})
+    assert partial['status'] == 'REJECTED'
+    assert partial['reject_reason'] == 'recall replacement shortfall'
+    assert db.approvals.count_documents({'_id': partial['approval_id'], 'status': 'PENDING'}) == 0
+    kinds = [e['event'].get('kind') for e in list_events(db, kitchen_id='hotel')]
+    assert 'recall_replacement_rejected' in kinds
+    assert 'recall_replacement_proposed' not in kinds
+    assert db.orders.count_documents({}) == 0
+    assert verify_chain(db)['ok']
