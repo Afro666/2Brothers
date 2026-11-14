@@ -597,6 +597,41 @@ A person without the role gets 403 `ROLE_REQUIRED`. The shared human token acts 
 | 422 | `WEAK_PASSWORD` | The new password is shorter than 10 characters, or the same as the current one. |
 | 429 | `ACCOUNT_LOCKED` | Too many wrong passwords; try again in a few minutes. |
 
+### Kitchen aliases and unknown items
+
+`GET /v1/kitchens/{kitchen_id}/aliases` (`kitchen:read`) returns the kitchen's aliases
+and unknown phrases. Aliases are sorted by phrase; unknown phrases are sorted by
+ask count descending, at most 100:
+
+```json
+{
+  "aliases": [
+    {"phrase": "house milk", "product_id": "462775",
+     "product_name": "Valio Eila lactose-free milk 1 L", "set_by": "aron", "uses": 2}
+  ],
+  "unknown_items": [
+    {"phrase": "talon maito", "times": 2,
+     "first_asked": "2026-11-14T02:10:00+00:00",
+     "last_asked": "2026-11-14T02:31:00+00:00",
+     "suggestions": [{"product_id": "462775", "product_name": null}],
+     "suggested_by": "meaning"}
+  ]
+}
+```
+
+- An alias has `phrase`, `product_id`, `product_name`, `set_by` and `uses`;
+  `product_name` and `set_by` can be null.
+- An unknown item has `times` and nullable ISO `first_asked` and `last_asked`
+  timestamps. `suggestions` is null until looked up, otherwise a list of at most
+  three `{product_id, product_name}` objects; `product_name` is nullable.
+- `suggested_by` is `meaning` for vector search, `words` for text search, or null
+  when no lookup has completed.
+- Each call looks up at most three phrases without stored suggestions. Successful
+  lookups, including empty lists, are stored and reused without another search.
+  A search failure leaves the item unlooked-up so a later call retries it.
+- Suggestions never create an alias or link a product automatically, and never
+  create or change an order; a person decides whether to link one.
+
 ### Kitchen API tokens (#271)
 
 A person creates a token for one kitchen, for Claude over MCP, a script or another
