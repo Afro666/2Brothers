@@ -287,6 +287,7 @@ export type AuditKind =
   | "stock"
   | "forecast_share"
   | "settings"
+  | "refused"
   | "other";
 
 export interface AuditEvent {

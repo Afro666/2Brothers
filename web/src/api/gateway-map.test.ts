@@ -366,6 +366,31 @@ describe("mapAudit", () => {
     ]);
   });
 
+  it("maps a refused 403 to the 'refused' kind with code and path; a token is not a person", () => {
+    const refused = {
+      seq: 9,
+      event_id: "ev-9",
+      kind: "refused",
+      actor: "token:pos",
+      at: "2026-11-14T08:00:00+00:00",
+      code: "SCOPE_MISSING",
+      method: "POST",
+      path: "/kitchens/k-1/orders",
+    };
+    expect(mapAudit([refused])).toEqual([
+      {
+        id: "ev-9",
+        at: "2026-11-14T08:00:00+00:00",
+        orderId: undefined,
+        kind: "refused",
+        actor: "system",
+        summary: "Refused: the gateway said no (403)",
+        reason: "code: SCOPE_MISSING; method: POST; path: /kitchens/k-1/orders",
+      },
+    ]);
+    expect(mapAudit([{ ...refused, actor: "buyer-agent" }])[0].actor).toBe("agent");
+  });
+
   it("gives an order its own steps and those of the proposal that placed it", () => {
     expect(mapAudit(auditEvents, "ord-1").map((event) => event.id)).toEqual(["ev-3", "ev-4"]);
     expect(mapAudit(auditEvents, "prop-1").map((event) => event.id)).toEqual(["ev-3", "ev-4"]);
