@@ -179,6 +179,17 @@ describe("StockPage: count from a photo", () => {
     expect(screen.getByRole("button", { name: "Save count" })).toBeDisabled();
   });
 
+  it("says the sample shelf photo is there to try the count, not the kitchen's own", async () => {
+    renderApp("/stock", createMockApi());
+
+    expect(
+      await screen.findByText(
+        "A sample shelf photo to try the count. The model reads it now; nothing is saved until you press Save count.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/demo kitchen/)).not.toBeInTheDocument();
+  });
+
   it("reads the sample shelf photo through the same path and saves nothing", async () => {
     const user = userEvent.setup();
     const api = createMockApi();

@@ -194,7 +194,7 @@ export function ShelfPhotoCount({
         {input(camera, t("Take a photo of the shelf"), true)}
         {input(picker, t("Choose a photo of the shelf"), false)}
         <p className="max-w-prose text-xs text-muted-foreground">
-          {t("A prepared photo of the demo kitchen's shelf. The model reads it now; nothing is saved until you press Save.")}
+          {t("A sample shelf photo to try the count. The model reads it now; nothing is saved until you press Save count.")}
         </p>
       </div>
       {reading || result ? (

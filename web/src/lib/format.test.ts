@@ -122,6 +122,7 @@ describe("number format follows the language until the person picks one", () => 
     loadAppearance();
     expect(getAppearance().numberFormat).toBeNull();
     updateLanguage("fi", false);
+    expect(formatStock(1200, "KG")).toBe("1\u00a0200 kg");
     expect(formatEur(2099.41)).toBe("2\u00a0099,41\u00a0€");
     expect(formatNumber(2099.41)).toBe("2\u00a0099,41");
     expect(formatStock(1200, "KI")).toBe("1\u00a0200 laatikkoa");

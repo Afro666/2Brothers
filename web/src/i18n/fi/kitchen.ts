@@ -1,7 +1,7 @@
 export default {
   "({confidence} confidence)": "(varmuus {confidence})",
   "A count cannot be negative.": "Määrä ei voi olla negatiivinen.",
-  "A prepared photo of the demo kitchen's shelf. The model reads it now; nothing is saved until you press Save.": "Valmiiksi otettu kuva demokeittiön hyllystä. Malli lukee sen nyt; mitään ei tallenneta ennen kuin painat Tallenna.",
+  "A sample shelf photo to try the count. The model reads it now; nothing is saved until you press Save count.": "Esimerkkikuva hyllystä laskennan kokeilemiseksi. Malli lukee sen nyt; mitään ei tallenneta ennen kuin painat Tallenna määrä.",
   "A guess from the industry your website names. Change it if it is wrong.": "Arvio perustuu verkkosivustollasi mainittuun toimialaan. Muuta, jos se on väärin.",
   "Add a meal to plan the kitchen’s needs.": "Lisää ateria suunnitellaksesi keittiön tarpeet.",
   "Add a recipe to calculate ingredient demand.": "Lisää resepti raaka-ainetarpeen laskemista varten.",
@@ -107,6 +107,7 @@ export default {
   "No products match “{query}”.": "Haku “{query}” ei löytänyt tuotteita.",
   "No recipes yet": "Ei vielä reseptejä",
   "No stock to count": "Ei laskettavaa varastoa",
+  "No delivery recorded yet": "Ei vielä kirjattua toimitusta",
   "No suppliers yet": "Ei vielä toimittajia",
   "Nobody has counted this product yet": "Kukaan ei ole vielä laskenut tätä tuotetta",
   "None": "Ei logoa",
