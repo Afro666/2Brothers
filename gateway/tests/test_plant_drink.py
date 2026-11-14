@@ -262,3 +262,12 @@ def test_only_coconut_milk_is_also_a_cooking_product():
     assert not is_plant_drink(CAN[0], "coconut")
     assert not is_plant_drink(MILK[0], "coconut", cooking=True)
     assert not is_plant_drink(HAND_WASH[0], "coconut", cooking=True)
+
+
+def test_coconut_milk_soap_is_not_a_cooking_product():
+    """#1841: the cooking path keeps any category, but never a soap or lotion."""
+    soap = product("so0", "63111", "Coconut milk hand soap 300 ml", "Kookosmaito käsisaippua 300 ml", unit="L")
+    assert not is_plant_drink(soap, "coconut", cooking=True)
+    shampoo = product("so1", "63112", "Kookosmaito shampoo 250 ml", "Kookosmaito shampoo 250 ml", unit="L")
+    assert not is_plant_drink(shampoo, "coconut", cooking=True)
+    assert is_plant_drink(CAN[0], "coconut", cooking=True)
