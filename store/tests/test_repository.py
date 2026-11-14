@@ -219,10 +219,13 @@ class RepositoryTest(unittest.TestCase):
                     {"budget_warning_order_eur": "-1"}, {"budget_warning_week_eur": 6000.0},
                     {"excluded_allergens": None}, {"excluded_allergens": "AP"},
                     {"excluded_allergens": ["peanut butter"]}, {"excluded_allergens": [7]},
+                    {"excluded_allergens": ["ZZ"]}, {"excluded_allergens": ["AP", "ZZ"]},
                     {"auto_approve": True}):
             with self.assertRaises((ValueError, TypeError), msg=bad):
                 self.repo.settings.put("k1", bad)
         self.assertEqual(self.repo.settings.get("k1"), {"excluded_allergens": None})
+        self.repo.settings.put("k1", {"excluded_allergens": ["AW", "AM", "nuts"]})  # known ones save
+        self.assertEqual(self.repo.settings.get("k1")["excluded_allergens"], ["AW", "AM", "nuts"])
 
     # Recipes
 
