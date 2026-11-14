@@ -740,6 +740,58 @@ reference, the outcome before.
 | `ORDER_NOT_RESOLVABLE` | 409 | The order's outcome is not `UNCONFIRMED` or `SENT_READ_FAILED` and no resolution is stored. The error carries `outcome` |
 | `ALREADY_RESOLVED` | 409 | A different resolution, or another reference, is already stored. The error carries the stored `resolution` |
 
+### Optional Nemotron proposal explanation (#1173)
+
+`GET /v1/kitchens/{kitchen_id}/proposals/{proposal_id}` accepts optional
+`explanation_language=en|fi` (422 for any other value). It keeps `kitchen:read`
+and kitchen isolation. Without this parameter, it makes no model call. With it,
+the normal proposal returns immediately, adding `explanation: null` until the
+background job has a checked result. A later read with the same language returns:
+
+```json
+{"explanation": {"text": "?", "language": "en", "model": "nemotron-3.5-super-vl",
+ "checked": true, "source_hash": "?", "duration_ms": 1540}}
+```
+
+This field is optional for older clients. The web loads the existing approval card
+first and requests this detail separately for visible proposals, using the person's
+current language. It may poll this detail, but never waits for it before rendering
+the card. The full deterministic `decision_summary` stays available. Tymon owns
+that card integration. Missing, invalid or unavailable explanations leave the card
+unchanged. A proposal creation, option choice, approval or order never waits for
+an explanation.
+
+The worker receives only versioned facts derived from the stored request and offer
+simulation, the same sources as `gateway/decision.py`. Each fact binds its kind
+(`chosen`, `left_out`, `held`, `total`, `approval`), product, quantity, unit and
+reason. Nemotron composes two or three sentences by choosing among supplied,
+localized sentence forms for these facts; it cannot write an unsupported reason,
+change a product/quantity pairing, or claim a pending order is placed. Each sentence
+returns `{fact_id, kind, product_id, text, numbers}`. Gateway code validates the
+whole result against those facts and sentence forms; one invalid sentence discards
+the whole explanation. Amounts, dates, product names/codes and reasons are copied
+from the facts, never calculated by the model. EN/FI number formatting is accepted
+only when it denotes the same bound value; invented quantities and number words
+outside the supplied sentence forms fail. Unreadable or absent facts stay unknown.
+
+Results are cached separately by kitchen, proposal, source revision and language.
+The source revision includes the current offer, decision inputs and proposal status;
+choosing another option, refreshing an offer, approval or a recall invalidates the
+old explanation. A job finishing after a change cannot publish its stale text.
+Only the requested language is generated; a later view in the other language has
+its own result. The server permits one explanation job per kitchen at a time and
+at most one new model attempt per 30 seconds, with a five-minute cooldown for a
+failed source/language. Polling, parallel viewers and refreshes share a durable
+claim. Claims expire so an interrupted worker can be recovered. Expired proposals
+and non-pending states do not start jobs.
+
+One model call, thinking off, short reply budget, 15-second worker deadline; no
+model or gateway retry and no automatic provider fallback. Usage is metered as
+`proposal_explanation`. Audit actions `proposal_explanation_ready` and
+`proposal_explanation_failed` contain the proposal/source, language, model,
+latency, sentence count or safe error code. No explanation text, prompt or secret
+is written to audit. The signed offer and receipt remain authoritative.
+
 ### Creating a proposal
 
 `POST /v1/kitchens/{kitchen_id}/proposals` takes one of three bodies. All need a nonempty
