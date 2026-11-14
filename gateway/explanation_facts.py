@@ -3,6 +3,8 @@ import hashlib
 import json
 from decimal import Decimal, InvalidOperation
 
+MAX_FACTS = 20  # the explanation wire contract accepts at most this many facts
+
 
 def context(proposal, names, language):
     fi = language == 'fi'
@@ -66,6 +68,35 @@ def context(proposal, names, language):
     elif proposal['status'] == 'REJECTED':
         add('approval', None, 'Ehdotus on hylätty eikä mitään tilata.' if fi else
             'The proposal is rejected and nothing is ordered.', required=True)
+    for line in proposal.get('lines', []):
+        info = line.get('learned')
+        if not isinstance(info, dict):
+            continue
+        pid = line['product_id']
+        unit = info.get('unit') or line['unit']
+        rows = (info.get('evidence') or {}).get('rows', 0)
+        try:
+            percent = round(float(info.get('ratio')) * 100)
+        except (TypeError, ValueError):
+            continue            # no trustworthy ratio: no learned sentence, never "0 %"
+        to_qty, from_qty = amount(info.get('to_qty')), amount(info.get('from_qty'))
+        # One sentence in the reader's language, like every other fact here: `alternative`
+        # is another wording in the same language (both go into `forms`), never a translation.
+        sentence = (f'{to_qty} {unit} eikä {from_qty} {unit} ({name(pid)}): muutitte '
+                    f'tätä tuotetta {percent} %:iin ennusteesta viimeisissä {amount(rows)} muutoksessanne.'
+                    if fi else
+                    f'{to_qty} {unit} instead of {from_qty} {unit} of {name(pid)}: you changed '
+                    f'this product to {percent} % of the forecast in your last {amount(rows)} changes.')
+        add('learned', pid, sentence, required=True)
+    if len(facts) > MAX_FACTS:
+        # A learned correction outranks every ordinary fact when the wire cap bites.
+        learned = [i for i, fact in enumerate(facts) if fact['kind'] == 'learned']
+        required = [i for i, fact in enumerate(facts)
+                    if fact['kind'] != 'learned' and fact.get('required')]
+        optional = [i for i, fact in enumerate(facts)
+                    if fact['kind'] != 'learned' and not fact.get('required')]
+        keep = set((learned + required + optional)[:MAX_FACTS])
+        facts = [fact for i, fact in enumerate(facts) if i in keep]
     source = {k: proposal.get(k) for k in ('proposal_id', 'offer_id', 'offer_hash', 'status', 'request',
         'lines', 'excluded', 'expected_total', 'delivery_fee', 'shortfall', 'shortfalls', 'measure', 'mandate', 'recall_alerts', 'valid_until')}
     source['names'] = names
