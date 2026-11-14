@@ -647,8 +647,8 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
   `/tools/request_approval`, `/tools/place_order`, `/tools/change_proposal` and the
   `kitchen:write` routes are 403 `SCOPE_REQUIRED`. The Buyer worker never gets one.
 - Approve is unchanged: `expected_total` and `idempotency_key` are required; 409
-  `TOTAL_MISMATCH`, `BLOCKED_BY_RECALL`, `STOCK_UNKNOWN`, `NOT_PENDING` and the
-  idempotency replay apply exactly as in the web. Earned auto-approve is unchanged.
+  `TOTAL_MISMATCH`, `BLOCKED_BY_RECALL`, `NOT_PENDING` and the idempotency replay apply
+  exactly as in the web; unconfirmed stock is a warning, as in the web. Earned auto-approve is unchanged.
 - Audit: create and revoke are entries (`approval_token_created`,
   `approval_token_revoked`, with `token_id`, `person`, `expires_at`). Every approve and
   reject with it names the person as `actor` and carries `"via": "personal_token"` and
@@ -1335,7 +1335,7 @@ cutoff. Supplier-linked alternatives are considered before catalog fallback.
 | `lines` | offer-line array | Engine-owned `product_id`, decimal-string `quantity`, `unit`, `why`, `unknown_stock`. |
 | `why` | string | Short deterministic explanation, including unknown stock/allergen data. |
 | `requires_chef_approval` | `true` | Choices never select, approve or place themselves. |
-| `stock_confirmed` | boolean | False if any line has unconfirmed stock. Approval cannot override it. |
+| `stock_confirmed` | boolean | False if any line has unconfirmed stock. A person may still approve; the order then waits for the supplier (`supplier_must_confirm`). Auto-approve never places it. |
 | `allergen_data_known` | boolean | False if any retained original line has unknown allergen data; never label it safe. |
 | `recommended` | boolean, optional | `true` on at most one option: the one the engine would take. Absent or `false` means not marked; the UI never infers it. |
 | `held` | object, optional | Only on a `confirmed` option: `{quantity, unit}` of the need that this option does not order. It waits until the supplier confirms stock. Absent when confirmed stock covers the whole need. |

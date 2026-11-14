@@ -39,7 +39,8 @@ Fixtures are small responses recorded from the challenge API, without credential
 
 ## Remote MCP at /mcp (#280)
 
-The gateway app also serves the same seven Buyer tools over MCP streamable HTTP at
+The gateway app also serves eight tools over MCP streamable HTTP (the seven Buyer tools plus
+`change_proposal`) at
 `/mcp`, so Claude, Codex or any MCP client can be the Buyer:
 
 ```bash
@@ -70,7 +71,7 @@ For an isolated demo, explicitly run `python -m gateway.mcp_server --mock`.
 This simulates a pending milk approval, never a live purchase. The real HTTP
 gateway is a separate dependency (#19/#25); it is not implemented by this adapter.
 
-All seven tools have typed inputs and restrictive descriptions. There are no
+All eight tools have typed inputs and restrictive descriptions. There are no
 approve/cancel tools or model-supplied quantities. Mutation requests are sent
 once; ambiguous transport failures must be reconciled before another attempt.
 The mock has no persistence and is intended only for demos and tests.
