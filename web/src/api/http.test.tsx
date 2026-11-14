@@ -233,6 +233,26 @@ describe("the app on the gateway", () => {
     expect(await screen.findByText("Sample data")).toBeVisible();
   });
 
+  it("has a Set for live and is not a thenable", () => {
+    const api = createHttpApi("http://x");
+    expect(api.live).toBeInstanceOf(Set);
+    expect(typeof (api as unknown as Record<string, unknown>).then).not.toBe("function");
+  });
+
+  it("renders /catalog on the gateway Api without crashing", async () => {
+    gateway({});
+    renderApp("/catalog", createHttpApi("http://x"));
+    expect(await screen.findByRole("heading", { name: "Products" })).toBeVisible();
+    expect(screen.queryByText("Atlas Search")).not.toBeInTheDocument();
+  });
+
+  it("renders /trust on the gateway Api without crashing", async () => {
+    gateway({});
+    renderApp("/trust", createHttpApi("http://x"));
+    expect(await screen.findByRole("heading", { name: "Tamper check" })).toBeVisible();
+    expect(screen.getByText("Sample data")).toBeVisible();
+  });
+
   it("does not mark anything on the mock", async () => {
     renderApp("/stock");
     expect(await screen.findByRole("heading", { name: "Stock count" })).toBeVisible();
