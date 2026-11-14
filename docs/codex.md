@@ -219,7 +219,11 @@ it here; we did not see the session.
 - Codex is one of three developers and 11% of the merged PRs. Aron and Tymon use Claude
   Code. The review bot is Claude Opus (`ai-review.yml`). The fix bot is Claude (`ai-fix.yml`).
 - Maciek uses both agents. 15 of his 57 PRs, with all of `env/`, came from Claude Code.
-- No CI step runs Codex. Using `codex exec` as a second reviewer is an open idea (#361).
+- A non-blocking OpenAI Codex CI reviewer is merged in #1075, with runtime/auth fixes
+  in #1088. The [live authentication attempt](https://github.com/Afro666/2Brothers/actions/runs/43571581151)
+  reached OpenAI but returned **Quota exceeded**. #361 stays open pending API
+  credits/billing and a genuine model comment; green advisory jobs reporting
+  unavailable are not evidence of successful model reviews.
 - Codex generated a Buyer client from public docs alone in the recorded [#372 experiment](evidence/codex-372/README.md).
   An operator reviewed and executed it once: a live PENDING proposal, with no approval/order.
   The successful generation took 70.7 seconds; all setup/retries/review took 6 min 49 s.
@@ -229,20 +233,21 @@ it here; we did not see the session.
 - The [#372 generation recording](evidence/codex-372/generation.mp4) is available.
   It records generation, not the separate operator-executed proposal write.
 
-## For Maciek to fill in
+## Session evidence and remaining unknowns
 
-About 20 minutes. Add each item under this heading, or as a comment on #360.
+The [session notes](codex-session-notes.md) give three exact prompts, the selected
+issues/PRs, two mistakes, known model routing and the limits of historical attribution.
+The 42-PR author/trailer classification above is a repository heuristic, not a
+per-session model ledger. Exact old model IDs and hands-on/manual comparison times
+were not retained; they remain unknown rather than retroactively invented.
 
-1. Confirm the split: are the 42 PRs in the "Maciek, Codex" row all from Codex? List any
-   that are not. (Run `python docs/codex_metrics.py` to print the PR numbers.)
-2. Three real prompts, copied from the Codex session history, each with its issue number.
-   Longer than "Finish those tasks" if any exist; if all were that short, say so.
-3. Two cases where Codex was wrong. #503 and #514 are in episode 6: for each, add one
-   line on what Codex did first and who noticed. Replace them if you have better ones.
-4. The 60 to 90 second screen recording: one issue to a merged PR with Codex. Add the link.
-5. A time estimate for each of the six episodes: minutes with Codex, and your rough guess
-   without it. Mark the numbers as estimates.
-6. The model for each session: plain `codex` (name the OpenAI model) or a Verda profile
-   (`verda-kimi`, `verda-deepseek`). The #360 comment covers PRs #436 to #527 only; say
-   it for the first evening (#8 to #335) too.
-7. One line on why #85 and #87 went from Codex to your Claude session.
+[Watch the 82-second issue-to-merge recording](evidence/codex-360/issue-to-merge.mp4)
+([editing and scope notes](evidence/codex-360/README.md)). It shows actual #372
+client generation, a live read of the result, and PR #1083 passing review and
+merging. Excerpts play at 1.25x with waiting removed. The separately executed
+proposal write is evidenced by its saved result, not claimed to be filmed.
+
+Why #85/#87 changed hands: the contract had to merge before the implementation;
+Maciek's Claude session requested ownership of those branches in the PR discussion.
+Codex stopped pushing, and Claude performed the final rebase/merge. This is a
+process handoff, not evidence of a model capability difference.
