@@ -189,6 +189,8 @@ export default {
   "Unsaved changes": "Tallentamattomat muutokset",
   "Week saved": "Viikko tallennettu",
   "Week {week}, {from} to {to} {month} {year}": "Viikko {week}, {from}–{to}. {month} {year}",
+  "Week {week}, {from} {fromMonth} to {to} {month} {year}": "Viikko {week}, {from}. {fromMonth}–{to}. {month} {year}",
+  "Week {week}, {from} {fromMonth} {fromYear} to {to} {month} {year}": "Viikko {week}, {from}. {fromMonth} {fromYear}–{to}. {month} {year}",
   "What is on hand and on order. A product nobody counted is unknown, not zero.": "Mitä on varastossa ja tilauksessa. Tuote, jota kukaan ei ole laskenut, on tuntematon, ei nolla.",
   "What this week needs": "Tämän viikon tarve",
   "What was read from the photo": "Kuvasta luetut tiedot",
