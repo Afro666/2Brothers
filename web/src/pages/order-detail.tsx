@@ -85,14 +85,23 @@ function SignedReceipt({ receipt, placedBy }: { receipt?: OrderReceipt | null; p
                   ? t("Nothing sent to the supplier yet")
                   : t(receipt.supplierOutcome ?? "unknown")}
               </dd>
-              {receipt.supplierNote ? (
+              {receipt.supplierOutcome === "NOT_SENT" ? (
+                <dd className="mt-1 break-words text-xs text-muted-foreground">
+                  {t("The gateway recorded the order. Nothing was sent to the supplier, and the supplier has not accepted this order.")}
+                </dd>
+              ) : receipt.supplierNote ? (
                 <dd className="mt-1 break-words text-xs text-muted-foreground">{receipt.supplierNote}</dd>
               ) : null}
             </div>
           </dl>
-          <Button type="button" variant="outline" size="sm" onClick={() => void copyReceipt(receipt.jws)}>
-            {t("Copy receipt")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => void copyReceipt(receipt.jws)}>
+              {t("Copy receipt")}
+            </Button>
+            <a className="text-sm text-muted-foreground underline underline-offset-4" href="/api/.well-known/jwks.json" target="_blank" rel="noreferrer">
+              {t("Public key")}
+            </a>
+          </div>
         </>
       ) : (
         <p className="text-sm text-muted-foreground">

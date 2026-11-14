@@ -30,6 +30,7 @@ function lineFacts(line: OrderLine, now: Date) {
       product.baseUnitsPerSalesUnit == null
         ? null
         : formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit),
+    soldByWeight: product.salesUnit.toUpperCase() === "KG" || (product.baseUnit ?? "").toUpperCase() === "KG",
     salesUnit: peopleUnit(product.salesUnit, 1),
     quantity: `${formatNumber(line.quantity)} ${peopleUnit(product.salesUnit, line.quantity)}`,
     lineTotal: line.lineTotal,
@@ -103,16 +104,20 @@ function ReceiptLines({ facts, offerDetails }: { facts: Facts[]; offerDetails: b
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
             <div className="min-w-0">
               <div className="font-medium [overflow-wrap:anywhere]">{f.name}</div>
-              <div className="mt-1 font-mono text-xs leading-5 break-words text-muted-foreground">
-                {offerDetails ? (
-                  <>
-                    {f.name !== f.code ? <>{f.code} · </> : null}
-                    <PackText f={f} />
-                  </>
-                ) : (
-                  f.code
-                )}
-              </div>
+              {offerDetails && f.soldByWeight ? (
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("Sold by weight, per kg")}</p>
+              ) : (
+                <div className="mt-1 font-mono text-xs leading-5 break-words text-muted-foreground">
+                  {offerDetails ? (
+                    <>
+                      {f.name !== f.code ? <>{f.code} · </> : null}
+                      <PackText f={f} />
+                    </>
+                  ) : (
+                    f.code
+                  )}
+                </div>
+              )}
             </div>
             <div className="text-right font-mono text-sm tabular-nums">
               <div>
@@ -128,24 +133,26 @@ function ReceiptLines({ facts, offerDetails }: { facts: Facts[]; offerDetails: b
           <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-xs">
             <dt className="text-muted-foreground">{t("Unit price ex VAT")}</dt>
             <dd className="text-right font-mono tabular-nums">{t(f.unitPrice)}</dd>
-            {offerDetails ? (
+            {offerDetails && f.comparison !== "unknown" ? (
               <>
-                <dt className="text-muted-foreground">{t("Compare")}</dt>
-                <dd className="text-right font-mono tabular-nums">
-                  {f.comparison === "unknown" ? t("unknown") : f.comparison}
-                </dd>
+                <dt className="text-muted-foreground">{t("Price per kg")}</dt>
+                <dd className="text-right font-mono tabular-nums">{f.comparison}</dd>
               </>
             ) : null}
             <dt className="text-muted-foreground">{t("Stock")}</dt>
             <dd className="text-right">
               <StockText f={f} />
             </dd>
-            {offerDetails ? (
+            {offerDetails && f.available !== "unknown" ? (
               <>
                 <dt className="text-muted-foreground">{t("Available")}</dt>
                 <dd className="text-right">
                   <AvailableText f={f} />
                 </dd>
+              </>
+            ) : null}
+            {offerDetails && f.closing !== "unknown" ? (
+              <>
                 <dt className="text-muted-foreground">{t("Order by")}</dt>
                 <dd className="text-right">
                   <ClosingText f={f} />

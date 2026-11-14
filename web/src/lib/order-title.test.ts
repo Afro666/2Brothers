@@ -22,20 +22,32 @@ describe("orderTitle", () => {
   it("names both products on a two-line order", async () => {
     const order = await createMockApi().getOrder("ORD-1042");
     const lines = [namedLine(order.lines[0]!, "Milk"), namedLine(order.lines[0]!, "Cream")];
-    expect(orderTitle({ ...order, lines }, t)).toBe("Milk × 51 pieces · Cream × 51 pieces");
+    expect(orderTitle({ ...order, lines }, t)).toBe("Milk, 51 pieces · Cream, 51 pieces");
   });
 
   it("keeps the first product and counts the rest on a four-line order", async () => {
     const order = await createMockApi().getOrder("ORD-1042");
     const lines = [1, 2, 3, 4].map((index) => namedLine(order.lines[0]!, `Product ${index}`));
-    expect(orderTitle({ ...order, lines }, t)).toBe("Product 1 × 51 pieces +3 more");
+    expect(orderTitle({ ...order, lines }, t)).toBe("Product 1, 51 pieces +3 more");
   });
 
   it("uses plain case units in a compact multi-line title", async () => {
     const order = await createMockApi().getOrder("ORD-1042");
     const line = { ...order.lines[0]!, quantity: 3, product: { ...order.lines[0]!.product, salesUnit: "KI" } };
     const lines = [1, 2, 3].map((index) => namedLine(line, `Product ${index}`));
-    expect(orderTitle({ ...order, lines }, t)).toBe("Product 1 × 3 cases +2 more");
+    expect(orderTitle({ ...order, lines }, t)).toBe("Product 1, 3 cases +2 more");
+  });
+
+  it("separates a product name that ends in a size from its quantity (#1803)", async () => {
+    const order = await createMockApi().getOrder("ORD-1042");
+    const line = namedLine(order.lines[0]!, "Flounderfillet fresh 5kg MSC");
+    expect(orderTitle({ ...order, lines: [{ ...line, quantity: 15 }] }, t)).toBe(
+      "Flounderfillet fresh 5kg MSC × 15 pieces",
+    );
+    const other = namedLine(order.lines[0]!, "Flounder roe");
+    expect(orderTitle({ ...order, lines: [{ ...line, quantity: 15 }, other] }, t)).toBe(
+      "Flounderfillet fresh 5kg MSC, 15 pieces · Flounder roe, 51 pieces",
+    );
   });
 
   it("uses the code when a line has no product name", async () => {
