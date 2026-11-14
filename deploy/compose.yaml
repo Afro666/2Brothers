@@ -77,6 +77,7 @@ services:
     command: ["two-brothers-buyer-worker"]
     restart: unless-stopped
     environment:
+      NEMOTRON_BUYER_STRATEGY: ${NEMOTRON_BUYER_STRATEGY:-single_pick}
       # Optional: without it only this worker fails (503 BUYER_UNAVAILABLE), not the deploy.
       VERDA_INFERENCE_KEY: ${VERDA_INFERENCE_KEY:-}
       NEMOTRON_BASE_URL: ${NEMOTRON_BASE_URL:-}

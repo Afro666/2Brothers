@@ -1,5 +1,6 @@
 import { mapMoney } from "@/api/map";
 import { mapProposalOptions } from "@/api/map-options";
+import { mapModelTrace } from "@/api/model-trace";
 import { SUPPLIER_ID } from "@/api/supplier-id";
 import { ApiError } from "@/api/types";
 import { codeLabel, plainReason } from "@/lib/codes";
@@ -509,6 +510,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
       typeof proposal.offer_id === "string" ? proposal.offer_id : undefined,
       productNames,
     ),
+    modelTrace: mapModelTrace((proposal as { model_trace?: unknown }).model_trace),
   };
 }
 

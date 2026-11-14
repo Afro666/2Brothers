@@ -58,7 +58,12 @@ describe("ForecastPage", () => {
     expect(
       within(salmon!)
         .getAllByRole("cell")
-        .map((cell) => cell.textContent),
+        .map((cell) => {
+          // The product picture is decorative (aria-hidden): only the cell's readable text counts.
+          const copy = cell.cloneNode(true) as HTMLElement;
+          copy.querySelectorAll("[aria-hidden]").forEach((node) => node.remove());
+          return copy.textContent;
+        }),
     ).toEqual([
       "Salmon filletOWN-SALMON",
       expect.stringMatching(/^[\d,]+ KG$/),

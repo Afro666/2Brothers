@@ -5,6 +5,7 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { PhotoMark, ShelfPhotoCount } from "@/components/purchasing/shelf-photo-count";
 import { useApi } from "@/api";
 import type { StockCount } from "@/api/types";
@@ -215,8 +216,13 @@ export function StockPage() {
                         return (
                           <TableRow key={item.productId}>
                             <TableCell>
-                              <div className="font-medium">{item.productName}</div>
-                              <div className="text-xs text-muted-foreground">{item.productId}</div>
+                              <div className="flex items-center gap-2">
+                                <ProductThumb en={item.productName} size="sm" />
+                                <div className="min-w-0">
+                                  <div className="font-medium">{item.productName}</div>
+                                  <div className="text-xs text-muted-foreground">{item.productId}</div>
+                                </div>
+                              </div>
                             </TableCell>
                             <TableCell>{item.unit}</TableCell>
                             <TableCell className="text-right">
@@ -285,10 +291,13 @@ export function StockPage() {
                     const errorId = `stock-error-m-${item.productId}`;
                     return (
                       <li key={item.productId} className="space-y-3 py-3">
-                        <div>
-                          <div className="font-medium">{item.productName}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {item.productId} · {item.unit}
+                        <div className="flex items-center gap-2">
+                          <ProductThumb en={item.productName} size="sm" />
+                          <div className="min-w-0">
+                            <div className="font-medium break-words">{item.productName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {item.productId} · {item.unit}
+                            </div>
                           </div>
                         </div>
                         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">

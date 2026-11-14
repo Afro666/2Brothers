@@ -97,7 +97,7 @@ class Gateway:
         audit.append_event(self.db, event, {"kitchen_id": kitchen_id, "at": self.now().isoformat()})
         try:    # webhooks (#277): after the event is stored; a receiver can never break an order
             from gateway import webhooks
-            webhooks.dispatch(self.db, kitchen_id, kind, data)
+            webhooks.dispatch(self.db, kitchen_id, kind, data, actor=actor)
         except Exception:
             pass
 
@@ -158,11 +158,6 @@ class Gateway:
             supplier_of.update({pid: supplier_id for pid in ids})
         return offers, skipped, tax, supplier_of, when
 
-    def _approve_unconfirmed_manual(self, kitchen_id: str) -> bool:
-        """#631: the kitchen's switch, stored with the engine settings. Off unless set to true."""
-        doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}, {"engine.approve_unconfirmed_manual": 1}) or {}
-        return (doc.get("engine") or {}).get("approve_unconfirmed_manual") is True
-
     def _block(self, supplier: dict, lines: list, tax: dict) -> dict:
         """One supplier's part of a basket: its lines and its own user-set terms."""
         terms = supplier.get("terms") or {}
@@ -185,7 +180,6 @@ class Gateway:
                   supplier_of: dict[str, str] | None = None, when: dict | None = None) -> dict:
         supplier_of, when = supplier_of or {}, when or {}
         unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None}
-        manual_ok = self._approve_unconfirmed_manual(kitchen_id)
         by_supplier: dict[str, list] = {}
         for ln in plan.lines:
             by_supplier.setdefault(supplier_of.get(ln.product_id, VALIO), []).append(ln)
@@ -207,13 +201,13 @@ class Gateway:
         if plan.shortfall > 0:
             reasons.append(f"{plan.shortfall.normalize():f} {plan.measure} of the request cannot be covered for this date.")
         if any(ln.unknown_stock and supplier_of.get(ln.product_id, VALIO) == VALIO for ln in plan.lines):
-            reasons.append("Some lines have stock Valio does not report: not confirmed until Valio confirms.")
+            reasons.append("Some lines have stock Valio does not report: not confirmed until Valio confirms."
+                           " You may approve it; the order then waits for Valio's confirmation.")
         for b in blocks:
             if b["supplier_id"] != VALIO:
                 reasons.append(f"{b['name']} is a price list the kitchen entered: its stock is not known "
-                               "until the supplier confirms." + (
-                                   " You may approve it; the order then waits for the supplier's "
-                                   "confirmation (call or e-mail them)." if manual_ok else ""))
+                               "until the supplier confirms. You may approve it; the order then waits "
+                               "for the supplier's confirmation (call or e-mail them).")
             if b["vat"] is None:
                 reasons.append(f"VAT for {b['name']} is not known: its total is ex VAT.")
         verdict = "NEEDS_APPROVAL" if plan.lines else "REFUSED"
@@ -729,7 +723,17 @@ class Gateway:
         except Exception:
             pass
 
-    def _proposal_out(self, doc: dict) -> dict:
+    def _trace(self, doc: dict, traces: dict | None = None) -> dict | None:
+        """What the model did (#1197): the Buyer run's trace, the parser's rule trace, or None."""
+        from gateway import model_trace
+        from store import agent_runs
+        if (doc.get("request") or {}).get("made_by") == "parser":
+            return model_trace.parser_trace()
+        if traces is None:
+            traces = agent_runs.traces(self.db, doc["kitchen_id"], [doc["_id"]])
+        return model_trace.stored(traces.get(doc["_id"]))
+
+    def _proposal_out(self, doc: dict, traces: dict | None = None) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
         result = {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
                 "substitute_options": options.merged(doc),
@@ -748,6 +752,7 @@ class Gateway:
         from store.products import get_products
         result['label_checks'] = checks(get_products(self.db,
             [line['product_id'] for line in result['lines']], doc['kitchen_id']), now=self.now())
+        result['model_trace'] = self._trace(doc, traces)
         return result
 
     def _summary(self, request: dict, sim: dict) -> dict:
@@ -763,11 +768,15 @@ class Gateway:
         return self._proposal_out(doc)
 
     def list_proposals(self, kitchen_id: str) -> list[dict]:
-        return [self._proposal_out(d) for d in
-                self.db.proposals.find({"kitchen_id": kitchen_id}).sort("created_at", -1).limit(100)]
+        from store import agent_runs
+        docs = list(self.db.proposals.find({"kitchen_id": kitchen_id}).sort("created_at", -1).limit(100))
+        traces = agent_runs.traces(self.db, kitchen_id, [d["_id"] for d in docs])     # one read for all
+        return [self._proposal_out(d, traces) for d in docs]
 
-    def approve(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None) -> dict:
-        """A human says yes to the figure they saw. Re-check live; place only if unchanged."""
+    def approve(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None,
+                via: dict | None = None) -> dict:
+        """A human says yes to the figure they saw. Re-check live; place only if unchanged.
+        `via`: audit fields of a personal approval token ({"via": "personal_token", "token_id"})."""
         if not human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can approve an order")
         key, seen = body.get("idempotency_key"), body.get("expected_total")
@@ -792,7 +801,7 @@ class Gateway:
         if claimed is None:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
         try:
-            return self._place(kitchen_id, proposal_id, doc, stored, seen, key, human)
+            return self._place(kitchen_id, proposal_id, doc, stored, seen, key, human, via)
         except BaseException:
             # A write may have succeeded before its response failed. Only a
             # confirmed absence permits releasing the post-quote commit claim.
@@ -855,7 +864,9 @@ class Gateway:
             raise GatewayError(409, "NOT_PENDING", "this proposal is already approved")
         raise GatewayError(409, "NOT_PENDING", f"proposal is {doc.get('status')}")
 
-    def _place(self, kitchen_id: str, proposal_id: str, doc: dict, stored: dict, seen, key: str, human: str) -> dict:
+    def _place(self, kitchen_id: str, proposal_id: str, doc: dict, stored: dict, seen, key: str, human: str,
+               via: dict | None = None) -> dict:
+        via = via or {}
         # Live re-check: price or stock may have moved since the human looked.
         fresh = self._quote(kitchen_id, doc["request"])
         new_total = Decimal(fresh["simulation"]["expected_total"])
@@ -863,7 +874,7 @@ class Gateway:
                 fresh["simulation"]["lines"] != stored["simulation"]["lines"]:
             self.db.proposals.update_one({"_id": proposal_id}, {"$set": {"offer_id": fresh["offer_id"]}})
             self._audit(kitchen_id, "total_mismatch", human, proposal_id=proposal_id,
-                        seen=str(seen), now=fresh["simulation"]["expected_total"])
+                        seen=str(seen), now=fresh["simulation"]["expected_total"], **via)
             raise GatewayError(409, "TOTAL_MISMATCH", "the price or stock moved; look at the new total",
                                expected_total=fresh["simulation"]["expected_total"])
         # Unchanged basket on an expired offer: place it on the fresh live quote, so the
@@ -871,18 +882,17 @@ class Gateway:
         if datetime.fromisoformat(stored["valid_until"]) <= self.now():
             stored = fresh
         sim = stored["simulation"]
-        # A person's consent is not supplier stock confirmation. Keep unknown
-        # lines visible in proposals, but never record a placed order for them.
-        # One exception, off by default (#631): a manual/csv supplier's block, when the
-        # kitchen switched `approve_unconfirmed_manual` on; that order waits for the supplier.
+        # A person's consent is not supplier stock confirmation, but it is enough to send
+        # the order (Aron, 2026-11-14): a kitchen cannot wait for the supplier. The lines keep
+        # unknown_stock and the order names each supplier that must still confirm. Every
+        # supplier, Valio too; `approve_unconfirmed_manual` (#631) is no longer needed.
+        # Earned auto-approve never places unknown stock: its rules refuse it, and so does this.
         blocks = sim.get("blocks") or [{"supplier_id": VALIO}]   # an offer stored before #73
-        manual = {ln["product_id"]: b["supplier_id"] for b in blocks if b["supplier_id"] != VALIO
-                  for ln in b.get("lines", [])}
+        supplier = {ln["product_id"]: b["supplier_id"] for b in blocks for ln in b.get("lines", [])}
         unknown = [ln for ln in sim["lines"] if ln.get("unknown_stock") is not False]
-        if unknown and not (self._approve_unconfirmed_manual(kitchen_id)
-                            and all(ln["product_id"] in manual for ln in unknown)):
-            raise GatewayError(409, "STOCK_UNKNOWN", "supplier stock must be confirmed before placement")
-        must_confirm = sorted({manual[ln["product_id"]] for ln in unknown})
+        if unknown and human.startswith("auto-approve"):
+            raise GatewayError(409, "STOCK_UNKNOWN", "auto-approve never places unconfirmed stock")
+        must_confirm = sorted({supplier.get(ln["product_id"], VALIO) for ln in unknown})
         # Atomic commit point shared with the recall monitor. A notice arriving
         # during the live quote can still claim APPROVING and prevent this order.
         committed = self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
@@ -911,13 +921,14 @@ class Gateway:
                                          {"$set": {"status": "APPROVED", "order_id": order["order_id"]}})
             self._audit(kitchen_id, "order_placed", human, proposal_id=proposal_id,
                         order_id=order["order_id"], expected_total=sim["expected_total"],
-                        supplier_must_confirm=must_confirm)
+                        supplier_must_confirm=must_confirm, **via)
         else:   # the key already placed an order: nothing new placed here, release the claim
             self.db.proposals.update_one({"_id": proposal_id, "status": "COMMITTING", "approving_key": key},
                                          {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
         return {"proposal_id": proposal_id, **self._order_out(order)}
 
-    def reject(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None) -> dict:
+    def reject(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None,
+               via: dict | None = None) -> dict:
         if not human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can reject an order")
         reason = body.get('reason', '')
@@ -933,13 +944,14 @@ class Gateway:
         first_time = self.db.audit_log.find_one({'event.event_id': event_id}, {'_id': 1}) is None
         audit.append_event(self.db, {'event_id': event_id,
             'kind': 'proposal_rejected', 'actor': doc.get('rejected_by', human),
-            'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')},
+            'proposal_id': proposal_id, 'reason': doc.get('reject_reason', ''), **(via or {})},
             {'kitchen_id': kitchen_id, 'at': doc.get('rejected_at', self.now().isoformat())})
         if first_time:   # this path writes its audit event itself, so it also tells the webhooks (#277)
             try:
                 from gateway import webhooks
                 webhooks.dispatch(self.db, kitchen_id, 'proposal_rejected',
-                                  {'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')})
+                                  {'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')},
+                                  actor=doc.get('rejected_by', human))
             except Exception:
                 pass
         return {"proposal_id": proposal_id, "status": "REJECTED"}
