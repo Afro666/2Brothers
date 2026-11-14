@@ -76,6 +76,9 @@ describe("createHttpApi", () => {
         "getKitchenSettings",
         "saveKitchenSettings",
         "getAutoApproveLearning",
+        // Standing-order drift (store/drift.py behind the gateway).
+        "getDrift",
+        "getSupplierDrift",
       ].sort(),
     );
     expect((await api.getMandate()).restaurant).toBeTruthy();
@@ -88,6 +91,45 @@ describe("createHttpApi", () => {
     });
     await expect(api.lookupKitchenBrand({ website: "example.fi" })).rejects.toMatchObject({ code: "NOT_SERVED" });
     expect(api.chooseOption).toBeUndefined();
+  });
+
+  it("reads standing-order drift from the gateway for the kitchen and for the supplier", async () => {
+    const warning = {
+      product_id: "460008",
+      product_name: "Barilla 5kg Fusilli dry pasta",
+      kind: "portion_creep",
+      change: 0.631,
+      unit: "BAG",
+      qty_per_100: 0.15,
+      baseline_qty: 0.09,
+      spend_per_100: 2.67,
+      baseline_spend: 1.64,
+      baseline_weeks: 4,
+      why: "0.15 BAG per 100 guests last week, 0.09 on average over the 4 weeks before (+63%).",
+    };
+    const calls = gateway({
+      [`GET ${K}/drift`]: () => ({ week: "2026-11-02", warnings: [warning] }),
+      "GET /api/v1/suppliers/sup-valio/demand/drift": () => ({
+        week: "2026-11-02",
+        warnings: [{ ...warning, kitchen_id: "K01", kitchen_name: "School 1 Tampere" }],
+      }),
+    });
+    const api = createHttpApi("/api");
+
+    const own = await api.getDrift();
+    expect(own).toMatchObject({ week: "2026-11-02" });
+    expect(own.warnings[0]).toMatchObject({ productId: "460008", productName: "Barilla 5kg Fusilli dry pasta" });
+    const shared = await api.getSupplierDrift();
+    expect(shared.warnings[0]).toMatchObject({ kitchenId: "K01", kitchenName: "School 1 Tampere" });
+    expect(calls.map((call) => call.route)).toEqual([
+      `GET ${K}/drift`,
+      "GET /api/v1/suppliers/sup-valio/demand/drift",
+    ]);
+  });
+
+  it("passes a drift error on, so the tile shows it instead of sample data", async () => {
+    gateway({ [`GET ${K}/drift`]: () => error(503, "DRIFT_UNAVAILABLE") });
+    await expect(createHttpApi("/api").getDrift()).rejects.toMatchObject({ code: "DRIFT_UNAVAILABLE" });
   });
 
   it("is not a thenable, so awaiting the Api itself settles", async () => {
