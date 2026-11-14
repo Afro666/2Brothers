@@ -126,8 +126,8 @@ describe("HomePage", () => {
     renderApp(`/?now=${DEMO_NOW}`, api);
 
     expect(await screen.findByText("Bread rolls")).toBeInTheDocument();
-    expect(screen.getByText("Bread rolls").parentElement).toHaveTextContent("short by 1,922 PCS");
-    expect(screen.getByText("Potatoes").parentElement).toHaveTextContent("short by 41.5 KG");
+    expect(screen.getByText("Bread rolls").parentElement).toHaveTextContent("short by 1,922 pcs");
+    expect(screen.getByText("Potatoes").parentElement).toHaveTextContent("short by 41.5 kg");
   });
 });
 
@@ -150,5 +150,20 @@ describe("nextCutoff", () => {
   it("returns null when order terms are missing", () => {
     expect(nextCutoff(supplier(null, null), new Date("2026-11-13T21:00:00+02:00"))).toBeNull();
     expect(nextCutoff(supplier([1], null), new Date("2026-11-13T21:00:00+02:00"))).toBeNull();
+  });
+  it("shows the 5 most urgent stock rows and links the rest to the stock page", async () => {
+    const api = createMockApi();
+    const ids = ["A", "B", "C", "D", "E", "F", "G"];
+    api.getStock = async () =>
+      ids.map((id, i) => ({ productId: id, productName: `Item ${id}`, unit: "KG", onHand: i, onOrder: 0, countedAt: null, lastDelivery: null }));
+    api.getDemand = async () =>
+      ids.map((id) => ({ productId: id, productName: `Item ${id}`, unit: "KG", date: "2026-11-13", need: 10, why: "menu" }));
+    renderApp(`/?now=${DEMO_NOW}`, api);
+
+    expect(await screen.findByText("Item A")).toBeInTheDocument();
+    expect(screen.getByText("Item E")).toBeInTheDocument();
+    expect(screen.queryByText("Item F")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "+2 more" })).toHaveAttribute("href", "/stock");
+    expect(screen.getByText(/A purchasing agent for professional kitchens/)).toBeInTheDocument();
   });
 });
