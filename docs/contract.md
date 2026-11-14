@@ -716,21 +716,43 @@ token: agent and kitchen tokens still never approve.
 | Method | Path | Body | Answer |
 |---|---|---|---|
 | POST | `/v1/kitchens/{kitchen_id}/approval-tokens` | `name` (optional, 1 to 80 characters, default `"chat"`), `hours` (optional integer, 1 to 24, default 8) | The token row plus `token`. |
-| GET | `/v1/kitchens/{kitchen_id}/approval-tokens` | | `{"tokens": [...]}`: only the signed-in person's own tokens, newest first, revoked and expired ones included. Never the secret. |
-| DELETE | `/v1/kitchens/{kitchen_id}/approval-tokens/{token_id}` | | The token row, with `revoked_at` set. A second revoke returns the same row. Another person's token is `404 TOKEN_NOT_FOUND`. |
+| GET | `/v1/kitchens/{kitchen_id}/approval-tokens` | | `{"tokens": [...]}`: only the caller's own tokens (a signed-in person's own; for the open demo, the `open-demo` tokens), newest first, revoked and expired ones included. Never the secret. |
+| DELETE | `/v1/kitchens/{kitchen_id}/approval-tokens/{token_id}` | | The token row, with `revoked_at` set. A second revoke returns the same row. Another person's token is `404 TOKEN_NOT_FOUND` (for the open demo: every token that is not `open-demo`). |
 
-Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email),
-`kitchen_id`, `prefix` (the first 8 characters), `created_at`, `created_by` (the
-person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at` (or null).
+Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email, or
+`open-demo`), `kitchen_id`, `prefix` (the first 8 characters), `created_at`, `created_by`
+(the person, `open-demo`, or `operator-cli`), `expires_at`, `last_used_at` (or null),
+`revoked_at` (or null).
 
 - Who creates one: only a person signed in with the session cookie, role `approver`,
   whose account is in the `users` collection, for their own kitchen. The token is that
-  person's, bound to that kitchen. The open demo's shared human token (everyone acts as
-  the demo approver) cannot create one: 403 `PERSONAL_TOKEN_NEEDS_SIGN_IN`. An agent, a
-  kitchen token or a personal token: 403 `HUMAN_SESSION_REQUIRED`. A chef or a viewer:
-  403 `ROLE_REQUIRED`. Any approver of the kitchen may list and revoke the kitchen's
-  personal tokens (list and revoke also work with the shared human token, like the
-  kitchen token routes), so a lost token can be stopped at once.
+  person's, bound to that kitchen. An agent, a kitchen token or a personal token: 403
+  `HUMAN_SESSION_REQUIRED`. A chef or a viewer: 403 `ROLE_REQUIRED`. A signed-in person
+  lists and revokes only their own tokens.
+- The open demo (decision 2026-11-14 18:08 UTC, so judges can try approve-from-chat): while
+  it is on (`GATEWAY_REQUIRE_LOGIN` is not `true`, so the shared human token works), the
+  shared human token may create a personal approval token too, but only for the open
+  demo's kitchen (`GATEWAY_KITCHEN_ID`, default `demo-kitchen`; another kitchen is 403
+  `KITCHEN_SCOPE`). Its `person` and `created_by` are `open-demo`, never the `X-User` name
+  or any account's email. It is the same kind of token: approve and reject only, never
+  proposes, the same expiry (8 hours by default, at most 24). Create and revoke are
+  audited with `open-demo` as `actor`; every approve and reject with it names
+  `open-demo` as `actor` with `"via": "personal_token"` and its own `token_id`, so each
+  judge's token is distinct in the audit.
+  - The open demo lists and revokes only `open-demo` tokens. It never sees a real
+    person's token or email, and it never revokes one (`404 TOKEN_NOT_FOUND`).
+  - Every visitor of the open demo is the same `open-demo` person, so judges see and can
+    revoke each other's open-demo tokens. That is accepted for the demo. The list shows
+    only the prefix and the times created, last used and expiring; the full token is in
+    the create answer only, never again.
+  - Cap: at most 50 active (not revoked, not expired) `open-demo` tokens per kitchen. A
+    create beyond that revokes the oldest active `open-demo` token first (audited as
+    `approval_token_revoked` with `"reason": "open_demo_cap"`), so a new judge is never
+    refused and the number of live open-demo tokens stays bounded.
+  - When the open demo is switched off (`GATEWAY_REQUIRE_LOGIN=true`), an `open-demo`
+    token stops working at once (401 `UNAUTHENTICATED`), and creating, listing and
+    revoking need a signed-in account, as before.
+  Signed-in sessions keep the rule above. The limit to an account can come back later.
 - Operator command for the stage, on the server: `python -m gateway.tokens add-approver
   --email <an existing approver's email> [--hours 8] [--kitchen <id>]` (`--kitchen` is
   needed only for an all-kitchens account), `python -m gateway.tokens list-approvers
@@ -764,12 +786,12 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 
 | Status | Code | When |
 |---|---|---|
-| 401 | `UNAUTHENTICATED` | The token is expired, revoked or unknown, or its account is gone. |
-| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | Create with the open demo's shared human token: a personal token needs a real signed-in account. |
+| 401 | `UNAUTHENTICATED` | The token is expired, revoked or unknown, or its account is gone, or it is an `open-demo` token and the open demo is off. |
+| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | Create, list or revoke by a person who is neither a signed-in session nor the open demo's shared human token. |
 | 403 | `HUMAN_SESSION_REQUIRED` | Create, list or revoke by a token or the agent; any person-only route called with a personal token. |
 | 403 | `ROLE_REQUIRED` | The person is not an `approver`. |
 | 403 | `SCOPE_REQUIRED` | A personal token on a propose or write route. |
-| 403 | `KITCHEN_SCOPE` | Another kitchen than the token's or the session's. |
+| 403 | `KITCHEN_SCOPE` | Another kitchen than the token's or the session's; for the open demo, another kitchen than `GATEWAY_KITCHEN_ID`. |
 | 404 | `TOKEN_NOT_FOUND` | No such approval token in this kitchen. |
 | 422 | `INVALID_REQUEST` | `hours` is not an integer from 1 to 24, or `name` is too long. |
 
@@ -828,7 +850,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST | `/recalls/{event_id}/dismiss` | `kitchen:approve` (human) | A person dismisses one alert after checking the packs. Body: `reason`. Shape in [recall-contract.md](recall-contract.md). |
 | GET | `/label-checks` | `kitchen:read` | Recorded Hyvää Suomesta producer checks for catalog products 462535, 462576 and 462775, plus one synthetic `negative_control`. Answer: `{"checks": [...], "negative_control": {...}}`. Shape in [product-evidence-contract.md](product-evidence-contract.md). |
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
-| POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver`, signed-in session only (the open demo gets `403 PERSONAL_TOKEN_NEEDS_SIGN_IN`; the operator CLI manages all) | Personal approval tokens. Shape under "Personal approval tokens". |
+| POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver`, a signed-in session (their own tokens), or the open demo (only `open-demo` tokens, only in its kitchen); the operator CLI manages all | Personal approval tokens. Shape under "Personal approval tokens". |
 | GET | `/model-usage` | `kitchen:read` | How much the Buyer agent used its model for this kitchen: runs, model calls, tokens, seconds. Shape under "Model usage". |
 | GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". |
 | GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
