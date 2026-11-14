@@ -147,7 +147,7 @@ def register(app, gw, principal, body) -> None:
         return {"stock_count_id": count_id, "stored": stored}
 
     def stock_items(kitchen_id: str) -> list[dict]:
-        return _stock_items(gw().db, kitchen_id)
+        return _stock_items(gw().db, kitchen_id, gw().now().date())
 
 
     @app.get(k + "/stock")
@@ -167,7 +167,7 @@ def register(app, gw, principal, body) -> None:
                 raise ValueError("from must be on or before to, at most 62 days apart")
             return start, end
         start, end = guarded(window)
-        rows, problems = demand_rows(gw().db, kitchen_id, start, end)
+        rows, problems = demand_rows(gw().db, kitchen_id, start, end, gw().now().date())
         return {"from": start.isoformat(), "to": end.isoformat(), "rows": _json(_named(gw().db, rows)),
                 "problems": problems}
 
@@ -219,21 +219,64 @@ def _named(db, rows: list[dict]) -> list[dict]:
     return [{**row, "product_name": names.get(row["product_id"])} for row in rows]
 
 
-def _stock_items(db, kitchen_id: str) -> list[dict]:
+def _open_orders(db, kitchen_id: str, today: date) -> tuple[dict, dict, set]:
+    """What is on order per product, in kitchen units: approved orders whose delivery day is
+    today or later. Returns (quantity per product, next delivery day per product, products
+    whose order line cannot be converted to kitchen units: for those on order is unknown)."""
+    qty: dict[str, Decimal] = {}
+    due: dict[str, date] = {}
+    unknown: set[str] = set()
+    orders = list(db.orders.find({"kitchen_id": kitchen_id, "outcome": "CONFIRMED",
+                                  "status": {"$in": ["SENT", "CONFIRMED", "PARTIAL"]}}))
+    if not orders:
+        return qty, due, unknown
+    days = {p["_id"]: (p.get("request") or {}).get("requested_date")
+            for p in db.proposals.find({"_id": {"$in": [o.get("proposal_id") for o in orders]}}, {"request": 1})}
+    ids = sorted({ln.get("product_id") for o in orders for ln in o.get("lines", [])})
+    docs = {d["_id"]: d for d in db.products.find({"_id": {"$in": ids}}, {"units": 1, "net_content": 1})}
+    for order in orders:
+        try:
+            delivery = date.fromisoformat(str(days.get(order.get("proposal_id"))))
+        except ValueError:
+            continue                        # no delivery day known: not counted as on order
+        if delivery < today:
+            continue                        # the day has passed: it is in the next stock count
+        for line in order.get("lines", []):
+            pid = line.get("product_id")
+            doc = docs.get(pid) or {}
+            sizes = {u.get("unit"): u.get("size_in_base_units") for u in doc.get("units") or []}
+            base_units = sizes.get(line.get("unit"))
+            content = (doc.get("net_content") or {}).get("value")
+            if base_units is None:
+                unknown.add(pid)
+                continue
+            per = Decimal(str(base_units)) * (Decimal(str(content)) if content else Decimal(1))
+            qty[pid] = qty.get(pid, Decimal(0)) + Decimal(str(line.get("quantity"))) * per
+            due[pid] = min(due.get(pid, delivery), delivery)
+    return qty, due, unknown
+
+
+def _stock_items(db, kitchen_id: str, today: date | None = None) -> list[dict]:
     from store.history import current_stock
+    qty, due, unknown = _open_orders(db, kitchen_id, today or datetime.now().date())
     items = []
     for row in current_stock(db, kitchen_id):
+        pid = row["product_id"]
         on_hand = row.get("on_hand")
         on_hand = None if on_hand is None else Decimal(str(on_hand))
-        # Open orders are in supplier units; they are not converted to kitchen units yet,
-        # so `on_order` is 0 and `on_order_known` says so (never a silent zero).
-        items.append({"product_id": row["product_id"], "unit": row["unit"], "on_hand": on_hand,
-                      "counted_at": row.get("counted_at"), "on_order": Decimal(0),
-                      "on_order_known": False, "position": on_hand, "next_delivery_date": None})
+        known = pid not in unknown
+        # An order line that cannot be converted to kitchen units makes `on_order` unknown
+        # (null with `on_order_known: false`), never a silent zero.
+        on_order = qty.get(pid, Decimal(0)) if known else None
+        position = None if on_hand is None or on_order is None else on_hand + on_order
+        items.append({"product_id": pid, "unit": row["unit"], "on_hand": on_hand,
+                      "counted_at": row.get("counted_at"), "on_order": on_order, "on_order_known": known,
+                      "position": position, "next_delivery_date": due.get(pid)})
     return items
 
 
-def demand_rows(db, kitchen_id: str, start: date, end: date) -> tuple[list[dict], list[str]]:
+def demand_rows(db, kitchen_id: str, start: date, end: date,
+                today: date | None = None) -> tuple[list[dict], list[str]]:
     """Per product and day: gross and net need from the menu plan; days without a plan use
     the stored forecast. Shared by GET /demand and the "propose an order for this plan" path."""
     from datetime import timezone
@@ -257,5 +300,5 @@ def demand_rows(db, kitchen_id: str, start: date, end: date) -> tuple[list[dict]
             rows.append({"product_id": f["meta"]["product_id"], "date": day, "unit": f["unit"],
                          "covers": None, "gross_need": Decimal(str(f["need"])),
                          "why": f.get("why") or "forecast from history", "source": "history"})
-    stock = {item["product_id"]: item["position"] for item in _stock_items(db, kitchen_id)}
+    stock = {item["product_id"]: item["position"] for item in _stock_items(db, kitchen_id, today)}
     return net_needs(rows, stock), problems
