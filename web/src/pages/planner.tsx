@@ -1,4 +1,4 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -34,9 +34,8 @@ function shiftWeek(week: string, amount: number): string {
 }
 
 /** Without `?week=` the planner opens on next week: that is the week a kitchen plans and orders for. */
-function displayedWeek(search: string): string {
-  const value = new URLSearchParams(search).get("week");
-  return value && /^\d{4}-W\d{2}$/.test(value) ? value : shiftWeek(isoWeekOf(todayIso()), 1);
+function displayedWeek(week: string | undefined): string {
+  return week ?? shiftWeek(isoWeekOf(todayIso()), 1);
 }
 
 function weekTitle(week: string): string {
@@ -123,8 +122,8 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
 export function PlannerPage() {
   const api = useApi();
   const navigate = useNavigate();
-  const search = useRouterState({ select: (state) => state.location.searchStr });
-  const week = displayedWeek(search);
+  const search = useSearch({ from: "/planner" });
+  const week = displayedWeek(search.week);
   const dates = useMemo(() => weekDates(week), [week]);
   const menu = useAsync(async () => Promise.all([api.getMenuPlan(week), api.listRecipes()]), [api, week]);
   const demand = useAsync(() => api.getDemand(dates[0], dates[6]), [api, week]);
