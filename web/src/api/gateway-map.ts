@@ -542,6 +542,10 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
   const created = events.find(
     (event) => event.proposal_id === id && (event.kind === "proposal_created" || event.kind === "approval_requested"),
   );
+  const rejected = events.find((event) => event.proposal_id === id && event.kind === "proposal_rejected");
+  const rejectReason = [proposal.reason, rejected?.reason].find(
+    (value): value is string => typeof value === "string" && value.trim() !== "",
+  );
   const codes = new Set(strings(mandate.reason_codes));
   if (Array.isArray(proposal.lines)) {
     for (const line of proposal.lines) for (const code of strings(line?.reason_codes)) codes.add(code);
@@ -610,6 +614,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],
     suppliersToConfirm: mapSuppliersToConfirm(proposal),
     blockDeliveryFees: mapBlockDeliveryFees(proposal),
+    rejectReason: proposal.status === "REJECTED" ? (rejectReason?.trim() ?? null) : null,
     cutoffs: Array.isArray(proposal.lines)
       ? proposal.lines.map((line) => ({
           closingTime: nullableText(line?.closing_time, "closing_time"),

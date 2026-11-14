@@ -401,7 +401,9 @@ export function createHttpApi(baseUrl: string): Api {
           if (!(error instanceof ApiError && error.code === "ORDER_NOT_FOUND")) throw error;
         }
       }
-      const proposal = (await get(proposalPath(id))) as Json;
+      // #1858: both routes answer the same `_proposal_out` (gateway/service.py), so the list row is
+      // the proposal; the single route is asked only when the row is not on the list (100 newest).
+      const proposal = (list.find((row) => row.proposal_id === id) ?? (await get(proposalPath(id)))) as Json;
       const orderId = proposal.order_id;
       return mapOrder(
         proposal,

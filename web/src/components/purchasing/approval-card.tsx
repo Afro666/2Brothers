@@ -840,6 +840,11 @@ export function ApprovalCard({
                 : status === "BLOCKED_BY_RECALL"
                   ? t("Blocked by a recall. This proposal cannot be approved as it is.")
                   : t("Rejected. This order will not be sent.")}
+            {status === "REJECTED" && request.rejectReason ? (
+              <span className="mt-1 block font-normal [overflow-wrap:anywhere]">
+                {t("Reason: {reason}", { reason: request.rejectReason })}
+              </span>
+            ) : null}
           </p>
         )}
         {canDecide && approvalBlockedReason ? (

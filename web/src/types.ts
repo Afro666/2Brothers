@@ -278,6 +278,8 @@ export interface ApprovalRequest {
   approvalRef: string | null;
   orderId: string;
   requestedBy: string | null;
+  /** The person's reason on a rejection (the row's `reason`, or the `proposal_rejected` audit event's); null when not stored. */
+  rejectReason?: string | null;
   createdAt: string | null;
   /** One line: what the chef asked and what this order covers. */
   summary: string;

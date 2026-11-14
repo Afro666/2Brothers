@@ -899,7 +899,9 @@ describe("createHttpApi", () => {
       // No `GET /proposals/ord-1` route: asking the proposal route for an order id (a 404 on
       // every order page) would fail this test with NO_ROUTE.
       [`GET ${K}/orders/ord-1`]: () => placedOrder,
-      [`GET ${K}/proposals`]: () => ({ proposals: [{ ...proposal, status: "APPROVED", order_id: "ord-1" }] }),
+      [`GET ${K}/proposals`]: () => ({
+        proposals: [proposal, { ...proposal, proposal_id: "prop-2", status: "APPROVED", order_id: "ord-1" }],
+      }),
     });
     const api = createHttpApi("/api");
     expect(await api.getOrder("prop-1")).toMatchObject({ id: "prop-1", status: "NEEDS_APPROVAL" });
@@ -1344,6 +1346,34 @@ describe("the app on the gateway", () => {
     expect(screen.getByText("Lines incl VAT")).toBeVisible();
     expect(screen.queryByText(/does not itemise/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Approve €340\.00 incl VAT/ })).toBeEnabled();
+  });
+
+  it("reads each card's proposal from the list, not one by one (#1858)", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    const calls = gateway({
+      ...inbox(),
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    expect(await screen.findByRole("button", { name: /Approve €91\.20 incl VAT/ })).toBeEnabled();
+    expect(calls.filter((call) => call.route === `GET ${K}/proposals/prop-1`)).toEqual([]);
+  });
+
+  it("shows the person's reject reason on a rejected card (#1858)", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    gateway({
+      ...inbox({ ...proposal, status: "REJECTED" }),
+      [`GET ${K}/audit`]: () => ({
+        events: [
+          ...auditEvents,
+          { kind: "proposal_rejected", proposal_id: "prop-1", actor: "aron", reason: "Too dear this week", at: "2026-11-14T10:00:00Z" },
+        ],
+      }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    expect(await screen.findByText("Reason: Too dear this week")).toBeVisible();
   });
 
   it("shows no breakdown when the amount to approve is the total incl VAT", async () => {
