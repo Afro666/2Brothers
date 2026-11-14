@@ -80,6 +80,7 @@ const settingsRow = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -345,7 +346,21 @@ describe("planning methods of createHttpApi", () => {
     expect(calls[1].headers).toMatchObject({ "X-User": "human" });
   });
 
-  it("reads the supplier demand view of sup-valio", async () => {
+  it("reads the supplier demand view of the supplier VITE_GATEWAY_SUPPLIER_ID names", async () => {
+    vi.stubEnv("VITE_GATEWAY_SUPPLIER_ID", "sup/dairy");
+    const calls = gateway({
+      "GET /api/v1/suppliers/sup%2Fdairy/demand?from=2026-11-16&to=2026-11-22": () => ({
+        supplier_id: "sup/dairy",
+        kitchens_sharing: 0,
+        rows: [],
+      }),
+    });
+    expect(await createHttpApi("/api").getSupplierDemand("2026-11-16", "2026-11-22")).toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("reads the supplier demand view of sup-valio by default", async () => {
+    vi.stubEnv("VITE_GATEWAY_SUPPLIER_ID", "");
     const calls = gateway({
       "GET /api/v1/suppliers/sup-valio/demand?from=2026-11-16&to=2026-11-22": () => ({
         supplier_id: "sup-valio",

@@ -47,8 +47,12 @@ type PlanningApi = Pick<
 /** One JSON call to the gateway: `gatewayRequest` of api/http.ts with its base URL filled in. */
 type GatewayCall = (path: string, init?: RequestInit) => Promise<unknown>;
 
-/** The supplier whose demand view this is. The gateway's consenting kitchens share with this id. */
-const SUPPLIER_ID = "sup-valio";
+
+/**
+ * The supplier whose demand view this is (`VITE_GATEWAY_SUPPLIER_ID`, else `sup-valio`).
+ * The gateway's consenting kitchens share with this id.
+ */
+const supplierId = (): string => import.meta.env.VITE_GATEWAY_SUPPLIER_ID || "sup-valio";
 
 /**
  * The planning screens against the real gateway (gateway/kitchen_routes.py,
@@ -143,7 +147,7 @@ export function createPlanningHttp(call: GatewayCall, kitchen: string): Planning
     },
     async getSupplierDemand(from, to) {
       return mapSupplierDemand(
-        await call(`/v1/suppliers/${encodeURIComponent(SUPPLIER_ID)}/demand?${window(from, to)}`),
+        await call(`/v1/suppliers/${encodeURIComponent(supplierId())}/demand?${window(from, to)}`),
       );
     },
 
