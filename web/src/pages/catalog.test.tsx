@@ -252,8 +252,11 @@ describe("catalog page", () => {
     const api = createMockApi();
     // The live client answers [] without a call when nothing but strictness or meaning is set.
     api.searchProducts = async (query) => (query.trim() ? [sampleProducts.arlaUht1l] : []);
-    renderApp("/catalog?strict=true&meaning=true", api);
+    const { router } = renderApp("/catalog?strict=true&meaning=true", api);
+    // The first visit searches the first example (#1587); the person then clears the box.
+    await startState(userEvent.setup(), "lactose-free milk");
 
+    await waitFor(() => expect(router.state.location.href).toBe("/catalog?strict=true&meaning=true"));
     expect(await screen.findByRole("heading", { name: "Search the Valio Aimo catalog" })).toBeInTheDocument();
     expect(screen.getByText("Type a product name, or pick an allergen, a label or a temperature.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "No products match this search" })).not.toBeInTheDocument();
