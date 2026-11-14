@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, mapRecalls } from "@/api/gateway-map";
+import { askedBy, mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, mapRecalls } from "@/api/gateway-map";
 import { addable, auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
 
 describe("mapPermissions", () => {
@@ -130,6 +130,12 @@ describe("mapApproval", () => {
       detail: "A warning. It does not block the order.",
       warning: true,
     });
+  });
+
+  it("names an API token and the chef in words, not raw actor codes", () => {
+    expect(askedBy("token:x", {})).toBe("an API client");
+    expect(askedBy("token:demo", {})?.startsWith("token:")).toBe(false);
+    expect(askedBy("chef", {})).toBe("the chef");
   });
 
   it("names Valio's selling agent for a supplier offer proposal", () => {

@@ -380,6 +380,8 @@ export default {
   "a demo visitor": "demon kävijä",
   "the demo setup": "demon alustus",
   "a person": "henkilö",
+  "the chef": "keittiömestari",
+  "an API client": "API-asiakas",
   "{amount} incl VAT": "{amount} sis. alv",
   "{amount} to free delivery": "{amount} ilmaiseen toimitukseen",
   "{amount} to go": "{amount} jäljellä",
