@@ -67,3 +67,35 @@ def test_unknown_cutoff_gives_can_arrive_null_between_true_and_false(env):
             ("462775", True), ("463335", None), ("462921", False)]
     finally:
         Gateway.tool_search, ValioClient.availability = original, original_availability
+
+
+def test_own_products_are_never_sent_to_valio_availability(env):
+    """A kitchen's own product (source "own") is unknown to Valio: asking for it can fail
+    the whole call and wipe can_arrive for every row (#668)."""
+    client, _, _ = env
+    from gateway.service import Gateway
+    from gateway.valio_client import ValioClient
+    original, original_availability = Gateway.tool_search, ValioClient.availability
+    rows = [{"product_id": "own-oat-1", "net_content": {"value": 1.0, "unit": "L"}, "source": "own"},
+            {"product_id": "462775", "net_content": {"value": 1.0, "unit": "L"}, "source": "valio"}]
+    asked: list[list[str]] = []
+
+    def with_catalog(self, *args, **kwargs):
+        self._search = lambda db, query, filters, limit, kitchen_id=None: [dict(r) for r in rows][:limit]
+        return original(self, *args, **kwargs)
+
+    def recording(self, products, *args, **kwargs):
+        asked.append(list(products))
+        return original_availability(self, products, *args, **kwargs)
+
+    Gateway.tool_search, ValioClient.availability = with_catalog, recording
+    try:
+        need = client.post(K + "/needs", headers=AGENT, json={
+            "quantity": "20", "unit": "L", "requested_date": "2026-11-16"}).json()
+        found = client.post("/tools/search_products", headers=AGENT, json={
+            "query": "oat milk", "filters": {}, "need_id": need["need_id"]}).json()
+        assert asked == [["462775"]]
+        arrive = {p["product_id"]: p["can_arrive"] for p in found["products"]}
+        assert arrive == {"462775": True, "own-oat-1": None}
+    finally:
+        Gateway.tool_search, ValioClient.availability = original, original_availability
