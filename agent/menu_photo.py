@@ -57,7 +57,8 @@ def match_dishes(data, recipes, start, end, covers=None):
         matches = by_name.get(normalized(row['dish']), []) if normalized(row['dish']) != 'unknown' else []
         recipe = matches[0] if len(matches) == 1 else None
         day = menu_day(row['day'], start, end)
-        count = row['covers'] if type(row['covers']) is int else covers
+        # JSON Schema's integer includes integral JSON numbers such as 120.0.
+        count = covers if row['covers'] == 'unknown' else int(row['covers'])
         out.append({'day': day, 'dish': row['dish'], 'covers': count,
                     'recipe_id': recipe['recipe_id'] if recipe else None,
                     'recipe_name': recipe['name'] if recipe else None,

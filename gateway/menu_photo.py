@@ -16,7 +16,7 @@ from agent.menu_photo import match_dishes
 from gateway.request_docs import document_body
 from gateway.service import GatewayError
 from gateway.stock_photo import MODEL_NAME, STATUS, WORKER_TIMEOUT, _image
-from store.menu_photos import cached_result
+from store.menu_photos import cached_result, remember_empty_result
 from store.repository import Repository
 
 
@@ -95,7 +95,8 @@ def mount_menu_photo(app, gw, principal, worker=None):
             gw()._audit(kitchen_id, 'menu_photo_read', who.name, window={'from': start.isoformat(), 'to': end.isoformat()},
                         statuses={kind: sum(d['status'] == kind for d in cached['response']['dishes'])
                                   for kind in ('MATCHED', 'NOT_KNOWN')},
-                        proposal_id=cached['proposal']['proposal_id'], no_proposal_reason=None,
+                        proposal_id=cached['proposal']['proposal_id'] if cached['proposal'] else None,
+                        no_proposal_reason=cached['response']['no_proposal_reason'],
                         model=MODEL_NAME, duration_ms=duration)
             return {**cached['response'], 'proposal': cached['proposal'], 'duration_ms': duration}
         if kitchen_id in busy:
@@ -130,6 +131,11 @@ def mount_menu_photo(app, gw, principal, worker=None):
                     if exc.code != 'NOTHING_NEEDED':
                         raise
                     response['no_proposal_reason'] = 'NOTHING_NEEDED'
+            if proposal is None:
+                saved = remember_empty_result(gw().db, kitchen_id, key, fingerprint, response)
+                if saved['fingerprint'] != fingerprint:
+                    raise GatewayError(409, 'IDEMPOTENCY_KEY_REUSED', 'key used with another request')
+                response, proposal = saved['response'], saved['proposal']
             duration = round((time.monotonic()-started)*1000)
             gw()._audit(kitchen_id, 'menu_photo_read', who.name, window={'from': start.isoformat(), 'to': end.isoformat()},
                         statuses={kind: sum(d['status'] == kind for d in dishes) for kind in ('MATCHED', 'NOT_KNOWN')},

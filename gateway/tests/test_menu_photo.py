@@ -75,6 +75,21 @@ def test_unmatched_unsized_and_stock_covered_do_not_create_proposals(env, dish, 
     assert env[2].orders.count_documents({}) == 0
 
 
+def test_no_proposal_success_is_replayed_and_consumes_key(env):
+    setup(env[0])
+    calls = []
+    async def worker(*args):
+        calls.append(1)
+        return {'dishes': [{'dish': 'Latte', 'day': 'Monday', 'covers': 'unknown'}]}
+    client = TestClient(app_for(env, worker))
+    first = client.post(K + '/menu-photo', headers=HUMAN, json=BODY)
+    assert first.json()['no_proposal_reason'] == 'NOT_SIZED'
+    second = client.post(K + '/menu-photo', headers=HUMAN, json=BODY)
+    assert second.json()['dishes'] == first.json()['dishes'] and len(calls) == 1
+    changed = client.post(K + '/menu-photo', headers=HUMAN, json={**BODY, 'covers': 10})
+    assert changed.status_code == 409 and len(calls) == 1
+
+
 @pytest.mark.parametrize('change', [{'from': 'bad'}, {'to': '2027-01-01'}, {'covers': True},
                                     {'covers': -1}, {'idempotency_key': ''}, {'image_base64': 'bad'}])
 def test_bad_input_and_agent_scope_do_not_reach_model(env, change):

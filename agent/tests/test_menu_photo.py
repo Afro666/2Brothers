@@ -38,6 +38,11 @@ def test_ambiguous_or_outside_days_are_never_guessed():
     assert menu_day('Monday', START, date(2026, 11, 30)) is None
 
 
+def test_integral_json_number_keeps_printed_covers():
+    rows = match_dishes({'dishes': [{'day': 'Monday', 'dish': 'Salmon soup', 'covers': 120.0}]}, RECIPES, START, END, 5)
+    assert rows[0]['covers'] == 120 and rows[0]['in_proposal'] is True
+
+
 def test_reader_uses_one_schema_constrained_photo_call():
     model = RecordedModel({'content': json.dumps({'dishes': [{'day': 'Monday', 'dish': 'Salmon soup', 'covers': 120}]})})
     model.close = lambda: asyncio.sleep(0)
@@ -70,3 +75,22 @@ def test_worker_auth_and_kitchen_scope(monkeypatch):
             assert (await client.post('/menu-photo', json=body)).status_code == 401
             assert (await client.post('/menu-photo', headers={'Authorization': 'Bearer test-agent'}, json={**body, 'kitchen_id': 'other'})).status_code == 403
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('timeout', [True, False])
+def test_failed_single_call_closes_client(timeout):
+    class Model:
+        calls = 0
+        closed = False
+        async def complete_json(self, *args):
+            self.calls += 1
+            if timeout:
+                await asyncio.sleep(10)
+            raise RuntimeError('provider unavailable')
+        async def close(self):
+            self.closed = True
+    model = Model()
+    with pytest.raises(WorkerError) as err:
+        asyncio.run(MenuPhotoReader(WorkerError, model_factory=lambda: model, timeout=0.01).read(PHOTO))
+    assert err.value.code == ('VISION_TIMEOUT' if timeout else 'VISION_UNAVAILABLE')
+    assert model.calls == 1 and model.closed
