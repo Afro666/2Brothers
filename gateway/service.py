@@ -1031,7 +1031,7 @@ class Gateway:
         filtered = bool(same) and measure in ("L", "KG")
         if filtered:
             rows = same
-        rows = self._alias_first(kitchen_id, need["text"] or query, rows)
+        rows = self._alias_first(kitchen_id, need["text"] or query, rows, measure if filtered else None)
         rows = rows[:max(limit, 20)]
         arrival: dict[str, bool | None] = {}   # None: unknown (no answer or no cut-off time)
         try:
@@ -1057,10 +1057,13 @@ class Gateway:
                 "note": "can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
                         "prefer products with can_arrive true"}
 
-    def _alias_first(self, kitchen_id: str, words: str, rows: list[dict]) -> list[dict]:
+    def _alias_first(self, kitchen_id: str, words: str, rows: list[dict],
+                     measure: str | None = None) -> list[dict]:
         """What this kitchen calls things (gateway/memory.py): when the request holds a phrase a
         person linked to a product, that product leads the shortlist, marked `alias: true`.
-        The allergen rule, the cut-off and the stock checks still apply to it like to any other."""
+        The allergen rule, the cut-off and the stock checks still apply to it like to any other.
+        With `measure` (the shortlist kept to L or KG), an aliased product sold in another
+        measure is left out: a litre need never gets a kilo product at the top."""
         from gateway import memory
         from store.products import get_product
         try:
@@ -1074,6 +1077,8 @@ class Gateway:
             row = get_product(self.db, pid)
             if row is None:
                 return rows
+        if measure and (row.get("net_content") or {}).get("unit") != measure:
+            return rows
         return [{**row, "alias": True}] + [r for r in rows if r.get("product_id") != pid]
 
     def tool_get_offer(self, kitchen_id: str, body: dict) -> dict:
