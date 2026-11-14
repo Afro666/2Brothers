@@ -4,6 +4,7 @@ import json
 from decimal import Decimal, InvalidOperation
 
 MAX_FACTS = 20  # the explanation wire contract accepts at most this many facts
+MAX_SENTENCES = 3  # agent/explanation.py SCHEMA: a reply has at most this many sentences
 
 
 def context(proposal, names, language):
@@ -87,15 +88,20 @@ def context(proposal, names, language):
                     if fi else
                     f'{to_qty} {unit} instead of {from_qty} {unit} of {name(pid)}: you changed '
                     f'this product to {percent} % of the forecast in your last {amount(rows)} changes.')
-        add('learned', pid, sentence, required=True)
+        add('learned', pid, sentence)
+    # A reply has at most MAX_SENTENCES sentences and must cover every required fact,
+    # so only the learned facts that still fit the budget become required.
+    budget = MAX_SENTENCES - sum(1 for fact in facts if fact['required'])
+    for fact in [f for f in facts if f['kind'] == 'learned'][:max(budget, 0)]:
+        fact['required'] = True
     if len(facts) > MAX_FACTS:
-        # A learned correction outranks every ordinary fact when the wire cap bites.
-        learned = [i for i, fact in enumerate(facts) if fact['kind'] == 'learned']
-        required = [i for i, fact in enumerate(facts)
-                    if fact['kind'] != 'learned' and fact.get('required')]
+        # Required facts first, then a learned correction outranks every ordinary fact.
+        required = [i for i, fact in enumerate(facts) if fact['required']]
+        learned = [i for i, fact in enumerate(facts)
+                   if fact['kind'] == 'learned' and not fact['required']]
         optional = [i for i, fact in enumerate(facts)
-                    if fact['kind'] != 'learned' and not fact.get('required')]
-        keep = set((learned + required + optional)[:MAX_FACTS])
+                    if fact['kind'] != 'learned' and not fact['required']]
+        keep = set((required + learned + optional)[:MAX_FACTS])
         facts = [fact for i, fact in enumerate(facts) if i in keep]
     source = {k: proposal.get(k) for k in ('proposal_id', 'offer_id', 'offer_hash', 'status', 'request',
         'lines', 'excluded', 'expected_total', 'delivery_fee', 'shortfall', 'shortfalls', 'measure', 'mandate', 'recall_alerts', 'valid_until')}
