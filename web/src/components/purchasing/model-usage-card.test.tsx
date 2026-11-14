@@ -108,7 +108,10 @@ describe("the model usage card on the About page", () => {
       }),
     );
     const view = await card();
-    expect(await view.findByText("No runs counted yet")).toBeInTheDocument();
+    expect(
+      await view.findByText("The counts are not available right now"),
+    ).toBeInTheDocument();
+    expect(view.queryByText("No runs counted yet")).not.toBeInTheDocument();
     expect(view.queryAllByRole("term")).toEqual([]);
     expect(
       view.queryByText("The gateway did not answer."),
