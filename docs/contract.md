@@ -518,7 +518,9 @@ and quantities are decimal strings on the wire.
 - **Order:** `order_id`, `kitchen_id`, `offer_id`, `idempotency_key`, `expected_total`,
   `lines`, `payload_hash`, `offer_hash` ("Signed offers"), `approved_by` (a person, or
   `"auto-approve (rule set by <person>)"`), `status`, `outcome`, `created_at`,
-  `updated_at`, and `receipt` ("Signed order receipt") once the order is placed. The row is
+  `updated_at`, and `receipt` ("Signed order receipt") once the order is placed. An order
+  that a seed script placed has `placed_by: "demo-seed"` and no `approved_by`: no person
+  approved it ("Signed order receipt"). The row is
   written before any send, with `status` and `outcome` null; both are set when the attempt ends.
 - **Approval:** `approval_id`, `kitchen_id`, `offer_id`, `idempotency_key`, `status`
   (`PENDING`, `APPROVED`, `REJECTED`), `reasons` (string[]), `requested_at`,
@@ -809,7 +811,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". |
 | POST | `/proposals/{id}/change` | `kitchen:propose` (a person or an agent) | Set a line's quantity (0 removes it) or add a product from the addable list. Re-quotes live; approves and sends nothing. Returns the proposal in the `GET /proposals/{id}` shape with a new `offer_id` and `expected_total`. Body and errors under "Changing a proposal". MCP tool `change_proposal`. |
-| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. `receipt` is the signed order receipt or null ("Signed order receipt"). Each order also has `total_ex_vat`, `vat`, `total_incl_vat`, `vat_unknown` and `delivery_fee`, and each line `vat_rate` and `vat_source` ("VAT per product"). |
+| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. `receipt` is the signed order receipt or null ("Signed order receipt"). `placed_by` is `"demo-seed"` for an order the demo seed placed (it has no receipt), and null for every other order. Each order also has `total_ex_vat`, `vat`, `total_incl_vat`, `vat_unknown` and `delivery_fee`, and each line `vat_rate` and `vat_source` ("VAT per product"). |
 | GET | `/orders/{id}/resolution` | `kitchen:approve` (human) | What our store knows about an order whose send result is unknown. Shape under "Resolving an unknown send". |
 | POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
@@ -1869,7 +1871,8 @@ own human decisions. `gateway/autoapprove.py` holds every rule.
 
 - `learning_done` is true when all three hold: at least 4 weeks since the first human
   decision, at least 20 human decisions (approve or reject), and at most 10% of the
-  approved proposals edited before approval. Auto-approvals never count.
+  approved proposals edited before approval. Auto-approvals never count, and nothing
+  the demo seed did counts (`demo-seed` is not a person, #1560).
 - `never`: the reason codes that always send a proposal to a person.
 
 `PUT /v1/kitchens/{kitchen_id}/auto-approve` with `{"enabled": true, "limit_eur": "500"}`
@@ -1889,7 +1892,8 @@ When it is on, `POST /proposals` approves a new proposal without waiting only wh
 of these hold: the total is at or under the limit; no warning; no reason code from
 `never`; nothing excluded; every line has confirmed stock; nothing short; not an event
 and not a recall replacement; every product was already on at least 3 human-approved
-orders of this kitchen whose lines were not edited. Any doubt or error: the proposal
+orders of this kitchen whose lines were not edited (an order the demo seed placed is
+not one of them, #1560). Any doubt or error: the proposal
 waits for a person (`READY`).
 
 - The approval runs the normal approve path, with the same live re-check (a moved price
@@ -1948,8 +1952,14 @@ it records the order a person approved, with the same key as the offers.
   A later change (a supplier confirmation, a person's resolution) is in the order's
   `status` and `outcome`, not in the receipt.
 - `receipt` is null when signing failed (the order is still placed, and the gateway logs
-  a warning), and for every order placed before this field existed. Old orders are not
-  signed afterwards.
+  a warning with the exception type and the order id, never key material), and for every
+  order placed before this field existed. Old orders are not signed afterwards.
+- Every order answer also carries `placed_by` (#1560): `"demo-seed"` for an order that a
+  seed script wrote straight into the store (today one order: the fixed delivery demo
+  order, reference `DEMO-1198`), null for every other order. A seeded order never passed
+  the approve path, so no person approved it and its `receipt` is null; it is never signed
+  afterwards. A client shows this as "placed by the demo seed", not as a missing receipt.
+  An order stored before this field, with `approved_by: "demo-seed"`, answers the same.
 - To verify: take the public key from `GET /.well-known/jwks.json`, check the JWS, then
   compare `sub`, `expected_total` and `lines` with the order shown.
   `python -m gateway.verify_offer --base-url <gateway> --receipt order.json` does this
