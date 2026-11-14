@@ -116,6 +116,7 @@ describe("createHttpApi", () => {
         // Plan from a menu photo (api/http-menu-photo.ts).
         "readMenuPhoto",
         "readDeliveryNote",
+        "readLabelPhoto",
         "getDemand",
         "proposeOrderForPlan",
         "getSharing",

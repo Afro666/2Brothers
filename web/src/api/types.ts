@@ -1,5 +1,6 @@
 import type { ApprovalDecision } from "@/components/purchasing/approval-card";
 import type {
+  AllergenPresence,
   ApprovalRequest,
   AuditEvent,
   AddableProduct,
@@ -274,6 +275,38 @@ export interface DeliveryNoteRead {
   claim: DeliveryClaim | null;
 }
 
+/** docs/contract.md "Check a package's allergen label from a photo" (#1175). The first that applies. */
+export type LabelPhotoOutcome = "EXCLUDED_ALLERGEN" | "PLEASE_CHECK" | "DIFFERS" | "CATALOG_UNKNOWN" | "AGREES";
+export type LabelProductCheck = "CONFIRMED_BY_EAN" | "CONFIRMED_BY_NAME" | "MISMATCH" | "NOT_CONFIRMED";
+export type LabelPleaseCheck = "NO_STATEMENT_READ" | "WORD_UNKNOWN" | "PRODUCT_MISMATCH" | "PRODUCT_NOT_CONFIRMED";
+
+/** A word as printed on the label, with its GS1 allergen code. */
+export interface LabelWord {
+  word: string;
+  code: string;
+}
+
+/** One label read. Shown to a person and stored nowhere: it never changes the catalog. */
+export interface LabelPhotoRead {
+  model: string;
+  /** null when the gateway sent no duration. */
+  durationMs: number | null;
+  orderId: string;
+  productId: string;
+  /** false: a substitute that is not on the order. */
+  inOrder: boolean;
+  outcome: LabelPhotoOutcome;
+  /** The gateway's one sentence (English). */
+  message: string;
+  productCheck: LabelProductCheck;
+  label: { productName: string | null; ean: string | null; contains: LabelWord[]; mayContain: LabelWord[]; unknownWords: string[] };
+  excludedHits: { code: string; level: AllergenPresence }[];
+  differences: { code: string; kind: "LABEL_ADDS" | "CATALOG_ADDS"; text: string }[];
+  /** UNKNOWN is never "free from". */
+  catalogAllergenData: "KNOWN" | "UNKNOWN";
+  pleaseCheck: LabelPleaseCheck[];
+}
+
 export type ProductTemperature = "ambient" | "chilled" | "frozen";
 
 export interface ProductSearchFilters {
@@ -536,6 +569,11 @@ export interface Api {
   ): Promise<MenuPhotoRead>;
   /** Reads and compares a note. No receipt, substitute approval or stock count is saved. */
   readDeliveryNote(orderId: string, photo: Blob, actor: AuditActor): Promise<DeliveryNoteRead>;
+  /**
+   * Nemotron 3.5 Super VL reads the allergen label of one delivered package (#1175). Plain
+   * code compares it with the catalog and the kitchen's rule. Read-only: nothing is stored.
+   */
+  readLabelPhoto(orderId: string, productId: string, photo: Blob, actor: AuditActor): Promise<LabelPhotoRead>;
   /** The kitchen's need per product and day, `from` and `to` inclusive (`YYYY-MM-DD`). */
   getDemand(from: string, to: string): Promise<DemandLine[]>;
   /**
