@@ -139,7 +139,16 @@ function ProposeMessage({ outcome }: { outcome: ProposeOutcome }) {
   );
   return (
     <div className="space-y-1">
-      {proposal.status === "READY" ? (
+      {proposal.status === "APPROVED" ? (
+        <p>
+          Order placed automatically: {formatNumber(proposal.lineCount)} {proposal.lineCount === 1 ? "line" : "lines"},{" "}
+          {formatEur(proposal.totalInclVat)}. See it in{" "}
+          <Link to="/orders" className="font-medium text-primary underline underline-offset-4">
+            Order history
+          </Link>
+          .
+        </p>
+      ) : proposal.status === "READY" ? (
         <p>
           Proposal ready: {formatNumber(proposal.lineCount)} {proposal.lineCount === 1 ? "line" : "lines"},{" "}
           {formatEur(proposal.totalInclVat)}. A person approves it in {approvals}.

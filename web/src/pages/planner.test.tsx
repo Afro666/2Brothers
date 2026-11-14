@@ -53,6 +53,31 @@ describe("PlannerPage", () => {
     expect(screen.getByRole("button", { name: "Propose order for this week" })).toBeEnabled();
   });
 
+  it("says that an auto-approved order was placed and links to the orders page", async () => {
+    onDay("2026-11-18");
+    const user = userEvent.setup();
+    const api = createMockApi();
+    api.proposeOrderForPlan = async () => ({
+      id: "prop-plan-2",
+      status: "APPROVED" as const,
+      totalInclVat: 98.5,
+      lineCount: 2,
+      needCount: 2,
+      uncountedCount: 0,
+      shortfallCount: 0,
+      reasonCodes: [],
+    });
+    renderApp("/planner?week=2026-W47", api);
+
+    await user.click(await screen.findByRole("button", { name: "Propose order for this week" }));
+
+    const text = await screen.findByText(/Order placed automatically/);
+    const message = text.closest("[role='status']") as HTMLElement;
+    expect(message).toHaveTextContent(`Order placed automatically: 2 lines, ${formatEur(98.5)}. See it in Order history.`);
+    expect(within(message).getByRole("link", { name: "Order history" })).toHaveAttribute("href", "/orders");
+    expect(within(message).queryByRole("link", { name: "Orders > To approve" })).toBeNull();
+  });
+
   it("says that stock covers the plan when the gateway answers NOTHING_NEEDED", async () => {
     onDay("2026-11-13");
     const user = userEvent.setup();
