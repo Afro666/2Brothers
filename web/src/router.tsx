@@ -69,7 +69,20 @@ const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", com
 const signInRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sign-in", component: SignInPage });
 const kitRoute = createRoute({ getParentRoute: () => rootRoute, path: "/kit", component: KitPage });
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/requests", component: RequestsPage });
-const approvalsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/approvals", component: ApprovalsPage });
+const approvalsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/approvals",
+  // The router parses a value that looks like JSON, so an all-digit id arrives as a number.
+  validateSearch: (search: Record<string, unknown>): { proposal?: string } => ({
+    proposal:
+      typeof search.proposal === "number" && Number.isSafeInteger(search.proposal)
+        ? String(search.proposal)
+        : typeof search.proposal === "string" && search.proposal.length > 0
+          ? search.proposal
+          : undefined,
+  }),
+  component: ApprovalsPage,
+});
 const ordersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/orders", component: OrdersPage });
 const orderDetailRoute = createRoute({
   getParentRoute: () => rootRoute,

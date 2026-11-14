@@ -130,6 +130,8 @@ class Buyer:
         products = None
         if name == "search_products" and isinstance(result.get("products"), list):
             count = len(result["products"])
+            if code is None and result.get("search") == "meaning-fallback":
+                code = "MEANING_FALLBACK"     # found by Atlas Vector Search after no word hit (#1384)
         if name == "get_offer" and isinstance(args.get("product_ids"), list):
             products = len(args["product_ids"])
         if code is None:

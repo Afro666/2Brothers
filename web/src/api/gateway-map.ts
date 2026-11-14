@@ -418,6 +418,7 @@ const ACTOR_NAMES: Record<string, string> = {
   "demo-visitor": "a demo visitor",
   "demo-seed": "the demo setup",
   human: "a person",
+  chef: "the chef",
 };
 
 /**
@@ -428,6 +429,7 @@ const ACTOR_NAMES: Record<string, string> = {
 export function askedBy(actor: unknown, request: Json): string | null {
   if (typeof actor === "string" && actor.trim()) {
     if (actor.startsWith("supplier:")) return "Valio's selling agent";
+    if (actor.startsWith("token:")) return "an API client";
     return ACTOR_NAMES[actor] ?? actor;
   }
   if (typeof request.text === "string" && request.text.startsWith("Offer from ")) return "Valio's selling agent";

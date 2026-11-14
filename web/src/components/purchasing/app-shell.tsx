@@ -19,7 +19,7 @@ import {
   UserCheck,
   type LucideIcon,
 } from "lucide-react";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useState } from "react";
 
 import type { Api } from "@/api/types";
 import { KitchenLogo } from "@/components/purchasing/kitchen-logo";
@@ -34,6 +34,7 @@ import { useT } from "@/lib/i18n";
 import { usePendingApprovals } from "@/lib/pending-approvals";
 import { ROLE_LABELS, type Role, useRole } from "@/lib/role";
 import { useSession } from "@/lib/session";
+import { getTelegramWebApp } from "@/lib/telegram";
 import { cn } from "@/lib/utils";
 
 export interface NavItem {
@@ -317,6 +318,11 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
   const { side } = useRole();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { count: waiting } = usePendingApprovals();
+  const telegram = getTelegramWebApp();
+  useEffect(() => {
+    telegram?.ready();
+    telegram?.expand();
+  }, [telegram]);
   const base = items ?? (side === "valio" ? VALIO_NAV : KITCHEN_NAV);
   // Only the kitchen's own menu shows what waits; zero or unknown shows no badge.
   const nav =
@@ -329,39 +335,50 @@ export function AppShell({ items, activeId, children }: { items?: NavItem[]; act
   const menu = menuEntries(nav);
   const menuActive = group ? groupId(group) : current;
   return (
-    <div className="min-h-screen bg-background md:flex">
-      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col gap-5 overflow-y-auto border-r p-4 md:flex">
-        <Brand />
-        <RolePicker />
-        <NavList items={menu} activeId={menuActive} />
-        <ShellFooter />
-      </aside>
+    <div className={cn("min-h-screen bg-background", !telegram && "md:flex")}>
+      {!telegram ? (
+        <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col gap-5 overflow-y-auto border-r p-4 md:flex">
+          <Brand />
+          <RolePicker />
+          <NavList items={menu} activeId={menuActive} />
+          <ShellFooter />
+        </aside>
+      ) : null}
 
-      <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top,0px))] items-center gap-3 border-b bg-background/95 pt-[env(safe-area-inset-top,0px)] pr-[calc(1rem+env(safe-area-inset-right,0px))] pl-[calc(1rem+env(safe-area-inset-left,0px))] backdrop-blur md:hidden">
-        <Button variant="ghost" size="icon" aria-label={t("Open menu")} onClick={() => setOpen(true)}>
-          <Menu />
-        </Button>
-        <Brand />
-      </header>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="left">
-          <SheetHeader>
-            <SheetTitle>
-              <Brand />
-            </SheetTitle>
-            <SheetDescription className="sr-only">{t("Main navigation")}</SheetDescription>
-          </SheetHeader>
-          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4">
-            <RolePicker />
-            <NavList items={menu} activeId={menuActive} onNavigate={() => setOpen(false)} />
-            <ShellFooter />
-          </div>
-        </SheetContent>
-      </Sheet>
+      {!telegram ? (
+        <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top,0px))] items-center gap-3 border-b bg-background/95 pt-[env(safe-area-inset-top,0px)] pr-[calc(1rem+env(safe-area-inset-right,0px))] pl-[calc(1rem+env(safe-area-inset-left,0px))] backdrop-blur md:hidden">
+          <Button variant="ghost" size="icon" aria-label={t("Open menu")} onClick={() => setOpen(true)}>
+            <Menu />
+          </Button>
+          <Brand />
+        </header>
+      ) : null}
+      {!telegram ? (
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetContent side="left">
+            <SheetHeader>
+              <SheetTitle>
+                <Brand />
+              </SheetTitle>
+              <SheetDescription className="sr-only">{t("Main navigation")}</SheetDescription>
+            </SheetHeader>
+            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4">
+              <RolePicker />
+              <NavList items={menu} activeId={menuActive} onNavigate={() => setOpen(false)} />
+              <ShellFooter />
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : null}
 
       {/* Safe-area insets are 0px on devices without a notch, so the gutters stay 1rem / 2rem there. */}
-      <main className="min-w-0 flex-1 pt-6 pr-[calc(1rem+env(safe-area-inset-right,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pl-[calc(1rem+env(safe-area-inset-left,0px))] md:pr-[calc(2rem+env(safe-area-inset-right,0px))] md:pl-[calc(2rem+env(safe-area-inset-left,0px))]">
-        {group && tabs.length > 1 ? <SectionTabs label={group} items={tabs} activeId={current} /> : null}
+      <main
+        className={cn(
+          "min-w-0 flex-1 pt-6 pr-[calc(1rem+env(safe-area-inset-right,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pl-[calc(1rem+env(safe-area-inset-left,0px))] md:pr-[calc(2rem+env(safe-area-inset-right,0px))] md:pl-[calc(2rem+env(safe-area-inset-left,0px))]",
+          telegram && "w-full",
+        )}
+      >
+        {!telegram && group && tabs.length > 1 ? <SectionTabs label={group} items={tabs} activeId={current} /> : null}
         {current && SCREEN_DATA[current] ? (
           <div className="mx-auto mb-3 max-w-5xl empty:hidden">
             <SampleData of={SCREEN_DATA[current]} />

@@ -91,3 +91,41 @@ def search(db, query: str, filters: dict | None, limit: int, kitchen_id: str | N
         except Exception:      # no key, 429, timeout, no vector index: never fail the search
             _state["skip_until"] = now() + COOLDOWN_S
     return search_products(db, query, filters or {}, limit, kitchen_id=kitchen_id), "text"
+
+
+class MeaningUnavailable(RuntimeError):
+    """The meaning search could not run: no query vector (no key, the rate limit, a slow
+    answer, the rest after a failure) or no vector index. Never carries a key or a body."""
+
+
+def meaning(db, query: str, filters: dict | None, limit: int, kitchen_id: str | None = None,
+            *, injected=None, now=time.monotonic) -> list[dict]:
+    """Atlas Vector Search for one query, whatever `SEARCH_HYBRID` says: the Buyer's fallback
+    when the word search found nothing (#1384). The same hard filters as the word search.
+
+    It is the hybrid search: with no word hit, `$rankFusion` gives the vector rows only,
+    each with the reason "similar meaning, no word match". One embedding call at most, cached
+    and rested like the hybrid search. `MeaningUnavailable` when it cannot run; a bad filter
+    stays a `ValueError`. `injected` is the gateway's own meaning search (tests, offline runs).
+    """
+    text = (query or "").strip()
+    if not text:
+        return []
+    if injected is not None:
+        try:
+            return injected(db, query, filters or {}, limit, kitchen_id=kitchen_id)
+        except ValueError:
+            raise
+        except Exception:
+            raise MeaningUnavailable("the meaning search failed") from None
+    if now() < _state["skip_until"] and text.lower() not in _vectors:
+        raise MeaningUnavailable("the embedding service rests after a failure")
+    from store.search import search_products
+    try:
+        return search_products(db, query, filters or {}, limit, kitchen_id=kitchen_id,
+                               hybrid=True, embedder=_query_embedder())
+    except ValueError:
+        raise
+    except Exception:          # no key, 429, timeout, no vector index
+        _state["skip_until"] = now() + COOLDOWN_S
+        raise MeaningUnavailable("the query vector could not be made") from None

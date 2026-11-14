@@ -107,8 +107,8 @@ def revoke(db, kitchen_id: str | None, token_id: str, now: datetime | None = Non
 
 
 def verify(db, token: str, now: datetime | None = None) -> tuple[dict, dict] | None:
-    """(token row, the person's account now), or None: unknown, revoked, expired, or an
-    account that is gone. Never raises on a bad token."""
+    """(token row, the person's account now), or None: unknown, revoked, expired, an
+    account that is gone, or an account now in another kitchen. Never raises on a bad token."""
     if not isinstance(token, str) or not token.startswith(PREFIX) or len(token) > 200:
         return None
     doc = db.approval_tokens.find_one({"hash": _hash(token), "revoked_at": None})
@@ -120,6 +120,8 @@ def verify(db, token: str, now: datetime | None = None) -> tuple[dict, dict] | N
     user = db.users.find_one({"_id": doc["person"]})
     if user is None:
         return None
+    if user.get("kitchen_id") is not None and user["kitchen_id"] != doc["kitchen_id"]:
+        return None   # moved to another kitchen since the token was made
     last = _aware(doc.get("last_used_at"))
     if last is None or now - last > TOUCH_EVERY:
         db.approval_tokens.update_one({"_id": doc["_id"]}, {"$set": {"last_used_at": now}})

@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { StatusBadge } from "@/components/purchasing/status-badge";
-import { placedStatuses } from "@/pages/order-detail";
+import { placedStatuses } from "@/lib/order-status";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";

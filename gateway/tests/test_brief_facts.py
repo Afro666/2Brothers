@@ -106,3 +106,21 @@ def test_unrelated_audit_traffic_cannot_hide_delivery_checks(source):
     db.audit_log.insert_many([{'server':{'kitchen_id':'k','at':(NOW+timedelta(minutes=1)).isoformat()},
         'event':{'kind':'kitchen_brief_read'}} for _ in range(1001)])
     assert collect(gw,'k','evening','en')[0]['kind']=='DELIVERY_CHECK'
+
+
+def test_morning_cutoff_skips_closing_times_already_passed(source):
+    db, gw = source
+    hel = timezone(timedelta(hours=2))
+    ten = datetime(2026, 11, 14, 10, tzinfo=hel)
+    gw.now = lambda: ten
+    proposal(db, 'past', closing=datetime(2026, 11, 14, 8, tzinfo=hel))
+    rows = collect(gw, 'k', 'morning', 'en')
+    assert [r['kind'] for r in rows] == ['WAITING_DRAFTS']
+    proposal(db, 'two', closing=datetime(2026, 11, 14, 8, tzinfo=hel))
+    db.offers.update_one({'_id': 'two-offer'}, {'$push': {'simulation.lines': {
+        'product_id': 'milk', 'quantity': '2', 'unit': 'L',
+        'closing_time': datetime(2026, 11, 14, 15, tzinfo=hel)}}})
+    cutoffs = [r for r in collect(gw, 'k', 'morning', 'en') if r['kind'] == 'CUTOFF']
+    assert [r['ref_id'] for r in cutoffs] == ['two']
+    text = cutoffs[0]['variants'][0]
+    assert '2026-11-14 15:00' in text and '08:00' not in text

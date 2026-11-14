@@ -65,6 +65,23 @@ class PlaceOrderRequest(RequestApprovalRequest):
     expected_total: str = Field(pattern=r'^\d+\.\d{2}$', description='Exact simulated total. Only an already human-approved order can be returned.')
 
 
+ChangeReason = Literal['TOO_MUCH', 'TOO_LITTLE', 'IN_STOCK', 'MENU_CHANGED', 'BUDGET', 'OTHER']
+
+
+class ChangeLine(RequestBody):
+    product_id: Identifier
+    quantity: str = Field(pattern=r'^\d{1,7}(\.\d{1,3})?$',
+                          description='Decimal string in the line sales unit; 0 removes a line.')
+    reason: ChangeReason | None = Field(default=None, description='Absent or null preserves legacy behaviour.')
+    note: str | None = Field(default=None, max_length=200, description='Only with reason OTHER.')
+
+
+class ChangeProposalRequest(RequestBody):
+    idempotency_key: Identifier
+    lines: list[ChangeLine] = Field(default_factory=list)
+    add: list[ChangeLine] = Field(default_factory=list)
+
+
 def document_body(model: type[BaseModel]) -> dict:
     """Inline nested definitions so every OpenAPI reference resolves without a hook.
 

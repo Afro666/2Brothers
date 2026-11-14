@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate, formatNumber } from "@/lib/format";
 import { getLanguage, useT } from "@/lib/i18n";
 import { downscalePhoto } from "@/lib/shelf-photo";
+import { NemotronMark } from "@/components/nemotron-mark";
 
 /** The name people know; the gateway's `model` field is the id (`nemotron-3.5-super-vl`). */
 const MODEL_NAME = "Nemotron 3.5 Super VL";
@@ -109,6 +110,7 @@ function Outcome({ read }: { read: MenuPhotoRead }) {
   return (
     <div className="space-y-1 text-sm">
       <p>
+        <NemotronMark />
         {t("{model} read {count} dishes in {seconds} s: {matched} matched to your recipes, {unknown} not known.", {
           model: MODEL_NAME,
           count: read.dishes.length,
@@ -209,6 +211,7 @@ export function MenuPhotoPlan({
             {t("Plan from a menu photo")}
           </h2>
           <p className="max-w-prose text-sm text-muted-foreground">
+            <NemotronMark />
             {t("{model} reads a photo of this week's menu and matches each dish to your recipes. A proposal waits in the inbox; nothing is ordered here.", {
               model: MODEL_NAME,
             })}
@@ -228,7 +231,7 @@ export function MenuPhotoPlan({
       </div>
       <div role="status" aria-live="polite">
         {reading ? (
-          <p className="text-sm">{t("{model} is reading the menu. This takes a few seconds.", { model: MODEL_NAME })}</p>
+          <p className="text-sm"><NemotronMark />{t("{model} is reading the menu. This takes a few seconds.", { model: MODEL_NAME })}</p>
         ) : null}
         {!reading && shown ? <Outcome read={shown} /> : null}
       </div>

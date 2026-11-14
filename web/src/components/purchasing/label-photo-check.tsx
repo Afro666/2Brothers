@@ -10,6 +10,7 @@ import { useT } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { downscalePhoto } from "@/lib/shelf-photo";
 import type { Order } from "@/types";
+import { NemotronMark } from "@/components/nemotron-mark";
 
 /** The name people know; the gateway's `model` field is the id (`nemotron-3.5-super-vl`). */
 const MODEL_NAME = "Nemotron 3.5 Super VL";
@@ -120,6 +121,7 @@ function Outcome({ read }: { read: LabelPhotoRead }) {
         </ul>
       ) : null}
       <p className="text-muted-foreground">
+        <NemotronMark />
         {seconds != null ? t("Read by {model} in {seconds} s.", { model: MODEL_NAME, seconds }) : t("Read by {model}.", { model: MODEL_NAME })}{" "}
         {t("The photo is not saved. It does not change the catalog, the order or the stock.")}
       </p>
@@ -163,6 +165,7 @@ export function LabelPhotoCheck({ order }: { order: Order }) {
       <div className="space-y-1">
         <h2 id="label-photo-title" className="text-base font-semibold">{t("Check an allergen label")}</h2>
         <p className="max-w-prose text-sm text-muted-foreground">
+          <NemotronMark />
           {t("Take a photo of a delivered package's label. Nemotron reads the allergens and compares them with the catalog and your allergen rule. The photo does not change the catalog.")}
         </p>
       </div>

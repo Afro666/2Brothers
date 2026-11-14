@@ -31,7 +31,9 @@ it("reloads proposals after an event without remounting an unchanged card", asyn
 
   expect(await screen.findByRole("heading", { name: "Proposal p1" })).toBeVisible();
   await act(async () => { report?.(true); });
-  expect(screen.getByText("Live")).toHaveAttribute("title", "New proposals appear here without a refresh");
+  expect(screen.getByTitle("New proposals appear here without a refresh (MongoDB Atlas change stream)")).toHaveTextContent(
+    "Live· MongoDB Atlas change stream",
+  );
   await user.click(screen.getByRole("button", { name: "Reject proposal" }));
   expect(screen.getByRole("dialog", { name: "Confirm rejection" })).toBeVisible();
 

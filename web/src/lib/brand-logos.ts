@@ -5,6 +5,7 @@ import type { Api, BrandLogo } from "@/api/types";
 import { safeLogoUrl } from "@/lib/kitchen-brand";
 
 const BATCH = 50; // the route takes at most 50 names
+const MAX_NAME = 100; // a longer name makes the route answer 422 for the whole batch
 
 interface Loader {
   cache: Map<string, Promise<BrandLogo | null>>;
@@ -38,6 +39,8 @@ function flush(api: Api, loader: Loader) {
  * to the gateway in one call; each brand is asked once per page.
  */
 export function loadBrandLogo(api: Api, brand: string): Promise<BrandLogo | null> {
+  // Never sent: one long name would drop the logos of every other brand in its batch.
+  if (brand.trim().length > MAX_NAME) return Promise.resolve(null);
   let loader = loaders.get(api);
   if (!loader) {
     loader = { cache: new Map(), waiting: new Map(), timer: null };

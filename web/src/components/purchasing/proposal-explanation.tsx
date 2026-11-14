@@ -2,6 +2,7 @@ import { useOptionalApi } from "@/api";
 import type { ProposalExplanation } from "@/api/types";
 import { useT } from "@/lib/i18n";
 import { useProposalExplanation } from "@/lib/proposal-explanation";
+import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
 
 /**
  * "Written by" needs a readable model name: `nemotron-3.5-super-vl` is written
@@ -45,6 +46,7 @@ export function ProposalExplanationBlock({
         {explanation.text}
       </p>
       <p className="text-xs leading-4 text-muted-foreground">
+        <NemotronMark when={isNemotron(explanation.model)} />
         {t("Written by {model} from the checked decision record", {
           model: explanationModelName(explanation.model),
         })}

@@ -179,6 +179,16 @@ def test_a_person_who_is_no_longer_an_approver_cannot_approve(env):
     assert client.get(K + "/proposals", headers=tka).status_code == 401
 
 
+def test_a_person_moved_to_another_kitchen_cannot_approve(env):
+    client, _, db = env
+    _, tka = personal(client, db)
+    p = milk(client)
+    db.users.update_one({"_id": "aron@example.com"}, {"$set": {"kitchen_id": "other-kitchen"}})
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=tka, json=approve_body(p))
+    assert r.status_code == 401 and r.json()["error"]["code"] == "UNAUTHENTICATED"
+    assert db.orders.count_documents({}) == 0
+
+
 # ---- what it cannot do ------------------------------------------------------------------
 
 def test_agent_and_kitchen_tokens_still_cannot_approve(env):
@@ -358,6 +368,13 @@ def test_expired_personal_token_is_401_on_mcp(mcp_env):
                                  hours=1, now=NOW - timedelta(hours=2))
     r = rpc(client, "tools/list", {}, {"Authorization": "Bearer " + old["token"]})
     assert r.status_code == 401
+
+
+def test_personal_token_of_a_person_moved_to_another_kitchen_is_401_on_mcp(mcp_env):
+    client, _, db = mcp_env
+    _, tka = personal(client, db)
+    db.users.update_one({"_id": "aron@example.com"}, {"$set": {"kitchen_id": "other-kitchen"}})
+    assert rpc(client, "tools/list", {}, tka).status_code == 401
 
 
 # ---- operator CLI -----------------------------------------------------------------------

@@ -1258,6 +1258,22 @@ above, unchanged.
    `request.split_by` `model` or `rules`. The trace (`model_trace`) is the parser's rule
    trace: the model only split the words, the matching is plain code.
 
+The worker's `/split` (internal, gateway to Buyer worker only, #1439). `POST
+BUYER_WORKER_URL/split` with `Authorization: Bearer <GATEWAY_AGENT_TOKEN>`:
+
+- Request: `{"text": "<the person's text, 1 to 500 characters>", "kitchen_id": "<1 to 64
+  characters>"}`. Anything else: 422 `INVALID_REQUEST`; a wrong token: 401
+  `UNAUTHENTICATED`.
+- Answer 200: `{"model": "nemotron-3.5-super-vl", "needs": [{"text", "quantity", "unit"}],
+  "usage": {...} | null}`. At most 30 needs; `text` 1 to 120 characters, `quantity` the
+  number as the person wrote it (a string), `unit` one of `L`, `KG`, `G`, `ST`. One model
+  call with a strict JSON schema (`agent/split.py`), thinking off, 35 s.
+- Errors, `{"error": {"code", ...}}` with no model or upstream text: 504 `SPLIT_TIMEOUT`,
+  502 `REPLY_INVALID` (the reply is outside the schema), 503 `SPLIT_UNAVAILABLE` (no model
+  key, or the model failed). The gateway treats every error, and no answer within 40 s, as
+  "the model is off" and splits with plain code (step 4); it never shows the worker's
+  answer to a person unchecked.
+
 **Menu-plan window body (#74, #701).** `from` and `to` and no `product_ids` and no
 `text`: one proposal for everything the menu plan needs in that window, net of counted
 stock. This is the Planner's "Propose order for this week".

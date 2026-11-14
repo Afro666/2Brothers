@@ -43,6 +43,21 @@ describe("Label photo gateway boundary (#1175)", () => {
     expect(hit.outcome).toBe("EXCLUDED_ALLERGEN");
   });
 
+  it("says please check for another product or an unknown word, even if the gateway forgets the reason", () => {
+    const base = { ...LABEL_ANSWER, outcome: "AGREES", excluded_hits: [], please_check: [] };
+    const mismatch = mapLabelPhoto({ ...base, product_check: "MISMATCH" }, "ORD-1042", "462775");
+    expect(mismatch.outcome).toBe("PLEASE_CHECK");
+    expect(mismatch.pleaseCheck).toEqual(["PRODUCT_MISMATCH"]);
+    const unsure = mapLabelPhoto({ ...base, outcome: "DIFFERS", product_check: "NOT_CONFIRMED" }, "ORD-1042", "462775");
+    expect(unsure.outcome).toBe("PLEASE_CHECK");
+    expect(unsure.pleaseCheck).toEqual(["PRODUCT_NOT_CONFIRMED"]);
+    const word = mapLabelPhoto({ ...base, label: { ...LABEL_ANSWER.label, unknown_words: ["pähkinä"] } }, "ORD-1042", "462775");
+    expect(word.outcome).toBe("PLEASE_CHECK");
+    expect(word.pleaseCheck).toEqual(["WORD_UNKNOWN"]);
+    const listed = mapLabelPhoto({ ...base, product_check: "MISMATCH", please_check: ["PRODUCT_MISMATCH"] }, "ORD-1042", "462775");
+    expect(listed.pleaseCheck).toEqual(["PRODUCT_MISMATCH"]);
+  });
+
   it("keeps a missing duration unknown", () => {
     const { duration_ms: _drop, ...rest } = LABEL_ANSWER;
     expect(mapLabelPhoto(rest, "ORD-1042", "462775").durationMs).toBeNull();

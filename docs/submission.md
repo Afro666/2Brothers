@@ -91,25 +91,74 @@ verifiable credential (planned in `docs/plan.md`, not in the code).
 **Model.** Nemotron 3.5 Super VL (`nemotron-3.5-super-vl`) on Verda's shared inference
 endpoint (`agent/model.py:43`, `agent/model.py:54`). We did not train or fine-tune it.
 
-**What it does.** It is the Buyer agent. It reads the chef's request and calls seven MCP
-tools: search, offer, simulate, request approval, place order, order status and audit log
-(`gateway/mcp_server.py:83`, `agent/runner.py`). It chooses the products and the next step.
-It never sets a quantity, a price or a total, and it has no approve tool. The deployed
-gateway sends free-text requests to it (`deploy/compose.yaml:41`, `agent/service.py`). The
-vision side reads a delivery-note photo and a shelf photo into a strict JSON schema
-(`agent/vision.py`, `agent/receiving.py`, `agent/shelf.py`). Plain code then compares the
-note with the order.
-The shelf reader is live on the Stock page ("Count from a photo", #373): on a prepared
-test photo it filled five counts in about 2 s, and the half hidden pack got "please count"
-and no number; a person saves (`gateway/stock_photo.py`, `agent/shelf_service.py`,
-`docs/demo.md` "Photo beat").
-It also has a second role, on the supplier's side (#374): Valio's selling agent
-(`agent/seller.py`). Code reads the shortage view and builds a shortlist of at most five
-substitutes; the model picks one and writes the reason; a pick outside the shortlist means
-no offer. The gateway takes no price and no quantity from it (`gateway/supplier_offers.py`).
-Live on 2026-11-14 it offered the demo kitchen Rosamunda washed potato in place of washed
-potato that is predicted short on 16 Nov; a person made a proposal from the tile, and that
-proposal waits for approval like any other (`docs/demo.md` "Selling-agent beat").
+**What it does: five jobs in one buying loop.** One model plans, buys, sells, counts and
+receives. In every job it reads or chooses, and plain code sets every number. It never
+sets a quantity, a price or a total, and it has no approve tool.
+
+1. **Plan: a menu photo** (#1136; #1140, #1154, #1160, #1217). The chef uploads next
+   week's menu on the Planner page. Nemotron reads the dishes and the printed covers; code
+   matches each dish to a kitchen recipe and the engine sizes the ingredients. The result
+   is a normal proposal that waits for approval (`gateway/menu_photo.py:81`,
+   `agent/menu_photo.py`). Live on 2026-11-14 it read `demo/menu-photo.png` in 1,893 ms
+   end to end: five dishes matched, with their covers 120, 100, 110, 90 and 100 (comment
+   on #1136).
+2. **Buy: the Buyer agent.** It reads the chef's request and calls seven MCP tools:
+   search, offer, simulate, request approval, place order, order status and audit log
+   (`gateway/mcp_server.py:83`, `agent/runner.py`). It chooses the products and the next
+   step. The deployed gateway sends free-text requests to it (`deploy/compose.yaml:41`,
+   `agent/service.py`).
+   - **Several products in one sentence** (#1375; #1437, #1474). "20 L oat drink, 5 kg
+     butter and 40 rolls for Monday" becomes one proposal. Nemotron splits the text into
+     needs (`agent/split.py`). Plain code then checks the split: one need per quantity in
+     the text, each quantity read from the person's words, none added or changed
+     (`gateway/split.py:149`). A split that fails the check is refused with 422
+     `CANNOT_READ_REQUEST`; with no model answer, plain code cuts the text before each
+     quantity (`gateway/app.py:380`, `gateway/split.py:125`). A need that cannot be ordered is
+     listed with its reason, and the others are proposed (`gateway/service.py:609`).
+   - **Meaning search when words find nothing** (#1384; #1407, #1443). When the Buyer's
+     search words find no product (a typo, a Finnish phrase), the search tool runs Atlas
+     Vector Search once, with the same allergen filters. The answer says
+     `search: "meaning-fallback"`, and the proposal says "found by meaning (Atlas Vector
+     Search) after the word search found nothing" (`gateway/service.py:1386`,
+     `agent/runner.py:134`). It never runs for a refused need.
+3. **Sell: Valio's selling agent** (#374). A second role, on the supplier's side
+   (`agent/seller.py`). Code reads the shortage view and builds a shortlist of at most five
+   substitutes (`agent/seller.py:14`); the model picks one and writes the reason; a pick
+   outside the shortlist means no offer. The gateway takes no price and no quantity from it
+   (`gateway/supplier_offers.py`). Live on 2026-11-14 it offered the demo kitchen
+   Rosamunda washed potato in place of washed potato that is predicted short on 16 Nov; a
+   person made a proposal from the tile, and that proposal waits for approval like any
+   other (`docs/demo.md` "Selling-agent beat").
+4. **Count: a shelf photo** (#373). The shelf reader is live on the Stock page ("Count
+   from a photo"): on a prepared test photo it filled five counts in about 2 s, and the
+   half hidden pack got "please count" and no number; a person saves
+   (`gateway/stock_photo.py`, `agent/shelf_service.py`, `docs/demo.md` "Photo beat").
+5. **Receive: a delivery-note photo** (#1198; #1231, #1314). Nemotron reads the note into
+   a strict JSON schema (`agent/vision.py`, `agent/receiving.py`). Plain code compares it
+   with the order and computes the claim: the EUR value of each short or missing line at
+   the stored order's own price, and one total (`gateway/delivery_note.py:245`). The model
+   gives no price. On the prepared note for the fixed demo order `DEMO-1198` (EUR 178.09)
+   the claim is 3 cases, EUR 91.08 (`demo/tests/test_delivery_order.py:47`,
+   `demo/tests/test_delivery_order.py:84`).
+
+**See what it did: the "What Nemotron did" panel** (#1197; #1228, #1279). Each Buyer
+proposal and each supplier offer has a folded panel. Folded, it shows one line: model
+calls, seconds and thinking on or off. Unfolded, it lists the steps, each marked Model or
+Code, and ends with "Quantities and prices: the engine. Approval: you."
+(`web/src/components/purchasing/model-trace-panel.tsx`). The trace holds counts and codes
+only: never a key, the system prompt, model text, a price or a quantity
+(`gateway/model_trace.py:1`). A parser answer says the parser answered, and a rule pick
+says "Picked by rule. No model ran."
+
+**The 90-second NVIDIA demo** (#1249). `docs/demo.md` "NVIDIA demo" runs the five jobs
+above in 90 seconds, with an honest fallback for each beat when the model does not answer.
+`python -m demo.record_demo --story nvidia` records it as a fallback video; it never
+approves, never accepts the offer and never saves a count (`demo/record_demo.py:6`).
+
+**Embeddings are not Nemotron.** We tried to make the product vectors with Nemotron
+(#1199). Verda serves no embedding model: the Nemotron container answers 404 on
+`/embeddings` and lists one chat model, and Verda's docs say embeddings return 404 (comment
+on #1199). So the vectors for Atlas Vector Search are MongoDB's `voyage-4`.
 
 **How much we use it.** A token meter counts every model call per role from the
 endpoint's `usage` field (`agent/usage.py`, `agent/README.md` "Token meter"). Measured on
@@ -165,25 +214,53 @@ one request give the same products much more often. So thinking is on where the 
 decides numbers (the benchmark) and off where the engine does (the product).
 
 **Not built:** fine-tuning. The gate decided no-go: no GPU budget and no validated
-recipe, so we claim no adapter gain (`docs/fine-tuning-gate.md`). The gateway route that
-stores a delivery-note result (`agent/README.md:98`). A test of the shelf reader on a real
-phone photo: only synthetic photos were read. The benchmark has 3 seeds per kitchen type,
-so read the "all" rows only.
+recipe, so we claim no adapter gain (`docs/fine-tuning-gate.md`). Nemotron embeddings:
+Verda serves no embedding model (#1199). A test of the photo readers on real phone photos:
+the shelf, menu and delivery-note photos are prepared test photos (`docs/demo.md` "NVIDIA
+demo"). The benchmark has 3 seeds per kitchen type, so read the "all" rows only.
 
 ## MongoDB Atlas
 
 The database is MongoDB Atlas. `store/` is the only package that talks to it
 (`store/README.md`, `docs/decisions.md`).
 
-**See it live: the About page, "The data lives in MongoDB Atlas"** (#1383). It shows the
-live numbers from `GET /v1/kitchens/{k}/atlas` (`store/atlas.py`, `gateway/atlas_routes.py`,
-kept for a minute): the product vectors with their model and size (voyage-4, 1,024
-numbers), the indexes `products_search` and `products_vector` with Atlas's own status, the
-database size, the time-series collections, the audit chain length and the change-stream
-collections. A part that cannot be read shows "unknown", never zero. Under it is the
-measured comparison of words against hybrid (`$rankFusion`) on 10 searches: better on 6,
-equal on 2, slightly worse on 2 (`web/src/data/atlas-search-comparison.json`, with its
-source). The Buyer searches by words on stage; the Catalog page can search by meaning.
+**See it live: the About page, "The data lives in MongoDB Atlas"** (#1383; #1398, #1401,
+#1447). The card shows the live numbers from `GET /v1/kitchens/{kitchen_id}/atlas`
+(`store/atlas.py:49`, `gateway/atlas_routes.py:3`, kept for 60 s,
+`gateway/atlas_routes.py:20`; `web/src/components/purchasing/atlas-card.tsx`). A part that
+cannot be read shows "unknown", never zero. Read from that route on 2026-11-14 at about
+15:45 UTC:
+
+| On the card | Live value |
+|---|---|
+| MongoDB version | 8.0.37 |
+| Data and indexes | 216 MB |
+| Products | 17,548 |
+| Product vectors | 17,546, model `voyage-4`, 1,024 dimensions |
+| Search indexes | `products_search` READY, `products_vector` READY |
+| Time-series collections | forecasts 43,078, kitchen_stock 32,218, deliveries 13,221, covers 1,780, orders_history 1,050 |
+| Audit entries (the hash chain) | 1,491 |
+| Change streams | proposals, approvals, audit_log |
+
+Under the numbers is the measured comparison of words against hybrid search
+(`$rankFusion` of Atlas Search and Atlas Vector Search) on 10 queries, top 8 each: better
+on 6, equal on 2, slightly worse on 2. These are written-down results, not computed at
+page load; the file's `source` field says they were measured on the server on 2026-11-14
+at about 07:18 UTC (`web/src/data/atlas-search-comparison.json`, #1080).
+
+**Search by meaning on the Catalog page** (#1382; #1406, #1448). A switch "Search by
+meaning (Atlas Vector Search)" runs the hybrid search for that one request
+(`web/src/pages/catalog.tsx:235`, `gateway/catalog_search.py:71`). Each row says how it
+was found: `matched_by` is `words`, `meaning` or `both` (`store/search.py:295`), and the
+page marks the row "By meaning" or "By words and meaning"
+(`web/src/pages/catalog.tsx:114`). When the meaning search cannot run, the page says so
+and shows the word matches (`web/src/pages/catalog.tsx:316`).
+
+**Hybrid stays off for the Buyer on stage** (#1127). `SEARCH_HYBRID` is not on, so the
+rehearsed baskets stay as they are (`docs/decisions.md`, 2026-11-14 11:55). The Buyer
+searches by words, and by meaning only when the words find nothing (#1384, below). The
+Catalog switch and the Buyer's shortlist are separate: the shortlist ignores `mode`
+(`docs/decisions.md`, 2026-11-14 ~15:00, #1382).
 
 | Atlas feature | What we use it for | Source |
 |---|---|---|
@@ -196,8 +273,8 @@ source). The Buyer searches by words on stage; the Catalog page can search by me
 | Hash-chained audit log | Insert-only. Each row stores the hash of the row before. `verify_chain` finds a changed row. | `store/audit.py:91`, `store/audit.py:129` |
 
 Why it matters: an order must not be sent twice, money must not round, and a person must
-be able to check that nobody changed the log. The catalog and its indexes take about
-121 MB of the free tier's 512 MB (`store/README.md`).
+be able to check that nobody changed the log. The whole database, data and indexes, is
+216 MB (the About card, read at about 15:45 UTC on 2026-11-14).
 
 **Atlas Vector Search.** The index `products_vector` (1,024 dimensions, cosine) and the
 hybrid search with `$rankFusion` are on `main` (`store/search.py`, `store/embeddings.py`,
@@ -206,6 +283,15 @@ hybrid search with `$rankFusion` are on `main` (`store/search.py`, `store/embedd
 --export-from ... --out ...`, then `--import-from`). The gateway uses hybrid search only
 with `SEARCH_HYBRID=true` and falls back to the text search on any failure; the tool
 answer says which one ran (`gateway/catalog_search.py`). It is off by default.
+The Buyer's search uses Atlas Vector Search on its own when the words find nothing, with
+the same hard filters, and says `search: "meaning-fallback"` (`gateway/catalog_search.py:101`
+`meaning`, `gateway/service.py:1386`, #1384).
+The `$vectorSearch` pre-filter applies the same allergen group rule as the text search: an
+excluded allergen also excludes the allergens of its group, before any ranking
+(`store/search.py:192`, `store/search.py:61`; #1481, PR #1485). A similar meaning never
+overrides an allergen filter.
+The vectors are `voyage-4` and not Nemotron, because Verda serves no embedding model
+(comment on #1199).
 
 **Also served by the gateway:** the tamper check and the change stream. `GET
 /v1/kitchens/{k}/audit/verify` walks the hash chain, and the Trust page runs a tamper test
