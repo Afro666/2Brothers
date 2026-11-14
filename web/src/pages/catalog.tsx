@@ -27,6 +27,13 @@ const ALLERGENS = [
   { code: "AP", name: "Peanuts" },
   { code: "AS", name: "Sesame" },
   { code: "AY", name: "Soy" },
+  { code: "AC", name: "Crustaceans" },
+  { code: "UM", name: "Molluscs" },
+  { code: "BC", name: "Celery" },
+  { code: "BM", name: "Mustard" },
+  { code: "AU", name: "Sulphites" },
+  { code: "NL", name: "Lupin" },
+  { code: "ML", name: "Lactose" },
 ] as const;
 
 const LABEL_OPTIONS = Object.keys(LABEL_META) as ProductLabel[];
@@ -79,8 +86,17 @@ function filtersOf(search: CatalogSearch): ProductSearchFilters {
   };
 }
 
+/** The /catalog URL params; every one is optional, so a plain `/catalog` link is valid. */
+export interface CatalogParams {
+  q?: string;
+  exclude?: string;
+  strict?: true;
+  labels?: string;
+  temp?: ProductTemperature;
+}
+
 /** Empty params stay out of the URL, so a plain `/catalog` is a clean link. */
-function toParams(search: CatalogSearch): Record<string, string | true | undefined> {
+function toParams(search: CatalogSearch): CatalogParams {
   return {
     q: search.q.trim() || undefined,
     exclude: search.exclude.length > 0 ? search.exclude.join(",") : undefined,
@@ -88,6 +104,11 @@ function toParams(search: CatalogSearch): Record<string, string | true | undefin
     labels: search.labels.length > 0 ? search.labels.join(",") : undefined,
     temp: search.temp,
   };
+}
+
+/** `validateSearch` for the /catalog route: drops unknown and malformed params. */
+export function validateCatalogSearch(search: Record<string, unknown>): CatalogParams {
+  return toParams(parseSearch(search));
 }
 
 function toggle<T>(values: T[], value: T): T[] {
@@ -98,8 +119,7 @@ type Update = (change: (current: CatalogSearch) => CatalogSearch) => void;
 
 export function CatalogPage() {
   const api = useApi();
-  // The catalog route has no typed search, so the params are read defensively.
-  const search = parseSearch(useSearch({ strict: false }));
+  const search = parseSearch(useSearch({ from: "/catalog" }));
   const navigate = useNavigate();
   const [query, setQuery] = useState(search.q);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -115,7 +135,7 @@ export function CatalogPage() {
   function update(change: (current: CatalogSearch) => CatalogSearch) {
     const next = change(latest.current);
     latest.current = next;
-    void navigate({ to: "/catalog", search: toParams(next) as never, replace: true });
+    void navigate({ to: "/catalog", search: toParams(next), replace: true });
   }
 
   function submit(event: FormEvent) {
@@ -129,7 +149,7 @@ export function CatalogPage() {
     const cleared = parseSearch({});
     setQuery("");
     latest.current = cleared;
-    void navigate({ to: "/catalog", search: {} as never, replace: true });
+    void navigate({ to: "/catalog", search: {}, replace: true });
   }
 
   const searchKey = JSON.stringify(search);
