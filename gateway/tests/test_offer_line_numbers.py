@@ -38,6 +38,20 @@ def test_approved_order_lines_answer_numbers_too(env):
     assert not any(isinstance(v, float) for ln in db.orders.find_one({})["lines"] for v in ln.values())
 
 
+def test_order_lookup_answers_reliability_and_carbon_as_numbers(env):
+    client, _, db = env
+    db.products.update_one({"_id": "462775"}, {"$set": {"reliability": 0.97, "carbon_kg_co2e_per_kg": 1.1}})
+    p = milk(client)
+    r = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                    json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
+    assert r.status_code == 200, r.text
+    known = client.get(f"{K}/orders/{r.json()['order_id']}/resolution", headers=HUMAN)
+    assert known.status_code == 200, known.text
+    line = next(ln for ln in known.json()["lines"] if ln["product_id"] == "462775")
+    assert line["reliability"] == 0.97 and line["carbon_kg_co2e_per_kg"] == 1.1
+    assert not isinstance(line["reliability"], str)          # the contract says number or null
+
+
 def test_short_order_with_an_alternative_and_a_partial_fill_is_stored(env):
     client, _, db = env
     db.products.update_many({}, {"$set": {"reliability": 0.9, "carbon_kg_co2e_per_kg": 1.1}})

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from gateway.service import Gateway, GatewayError, _money
+from gateway.service import Gateway, GatewayError, _line_out, _money
 from store import audit, orders, recalls
 from store.order_resolution import RESOLVABLE, resolve_order
 
@@ -53,7 +53,8 @@ def lookup(gw: Gateway, kitchen_id: str, order_id: str, *, human: str | None) ->
             "offer_id": order["offer_id"], "supplier_id": order.get("supplier_id"),
             "approved_by": order.get("approved_by"),
             "outcome": order["outcome"], "status": order["status"],
-            "expected_total": _money(Decimal(str(order["expected_total"]))), "lines": order["lines"],
+            "expected_total": _money(Decimal(str(order["expected_total"]))),
+            "lines": [_line_out(ln) for ln in order["lines"]],
             "created_at": _iso(order["created_at"]), "updated_at": _iso(order["updated_at"]),
             "resolvable": order["outcome"] in RESOLVABLE,
             "resolution": _public(order.get("resolution"))}
