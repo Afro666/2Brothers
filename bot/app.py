@@ -356,7 +356,10 @@ class Bot:
             except GatewayError:
                 return
             url = f"{self.site_url}/approvals" if self.site_url else None
-            self._edit_quietly(chat, last["id"], render.brief(last["answer"], waiting, last["day"], url))
+            try:                            # an odd stored brief must not stop the change
+                self._edit_quietly(chat, last["id"], render.brief(last["answer"], waiting, last["day"], url))
+            except Exception as exc:
+                print(f"bot: brief refresh failed: {type(exc).__name__}", file=sys.stderr, flush=True)
 
     def _edit_quietly(self, chat: int, message_id: int, message: render.Message) -> None:
         try:
