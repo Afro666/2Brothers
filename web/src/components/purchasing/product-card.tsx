@@ -7,6 +7,7 @@ import { useT } from "@/lib/i18n";
 import type { Product } from "@/types";
 
 import { AllergenList, LabelChip } from "./chips";
+import { ProductThumb } from "./product-thumb";
 
 function Fact({ icon: Icon, label, value, hint }: { icon: typeof Truck; label: string; value: string; hint?: string }) {
   const t = useT();
@@ -30,12 +31,15 @@ export function ProductCard({ product, className }: { product: Product; classNam
   const altNames = [product.names.fi, product.names.sv].filter(Boolean).join(" · ");
   return (
     <Card className={cn("gap-4", className)}>
-      <CardHeader>
-        <CardTitle className="leading-snug">{product.names.en}</CardTitle>
-        <CardDescription>
-          {product.id} · {product.brand} · {formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit)}
-          {altNames ? <span className="block">{altNames}</span> : null}
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start gap-3">
+        <ProductThumb en={product.names.en} fi={product.names.fi} size="lg" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <CardTitle className="leading-snug break-words">{product.names.en}</CardTitle>
+          <CardDescription>
+            {product.id} · {product.brand} · {formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit)}
+            {altNames ? <span className="block">{altNames}</span> : null}
+          </CardDescription>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <section aria-label={t("Allergens")} className="space-y-1">

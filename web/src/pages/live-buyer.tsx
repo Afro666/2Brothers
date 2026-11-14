@@ -4,6 +4,7 @@ import { mapMoney } from "@/api/map";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { ChefRequestBox } from "@/components/purchasing/chef-request-box";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -332,8 +333,11 @@ export function LiveBuyerRequests() {
               <ul>
                 {result.lines.map((line) => (
                   <li key={line.product_id} className="border-t py-2 first:border-t-0">
-                    <p className="font-mono text-[13px]">
-                      {line.quantity} {line.unit} · {product(line.product_id)}
+                    <p className="flex items-center gap-2 font-mono text-[13px]">
+                      <ProductThumb en={names.get(line.product_id)} size="sm" />
+                      <span className="min-w-0 break-words">
+                        {line.quantity} {line.unit} · {product(line.product_id)}
+                      </span>
                     </p>
                     <p className="max-w-[68ch] text-sm">{line.why}</p>
                     {line.unknown_stock ? (
