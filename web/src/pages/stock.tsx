@@ -102,8 +102,8 @@ function OnOrder({ item }: { item: StockItem }) {
   );
 }
 
-function countedAt(value: string, t: ReturnType<typeof useT>): string {
-  return t(formatTime(value) === "00:00" ? formatDate(value) : formatDateTime(value));
+function countedAt(value: string): string {
+  return formatTime(value) === "00:00" ? formatDate(value) : formatDateTime(value);
 }
 
 export function StockPage() {
@@ -251,7 +251,7 @@ export function StockPage() {
                               <OnOrder item={item} />
                             </TableCell>
                             {deliveries > 0 ? <TableCell>{item.lastDelivery == null ? t("unknown") : formatDate(item.lastDelivery)}</TableCell> : null}
-                            <TableCell>{item.countedAt == null ? t("unknown") : countedAt(item.countedAt, t)}</TableCell>
+                            <TableCell>{item.countedAt == null ? t("unknown") : countedAt(item.countedAt)}</TableCell>
                             <TableCell>
                               <label className="flex items-center gap-2 text-xs font-medium" htmlFor={countId}>
                                 {t("Count")}
@@ -335,7 +335,7 @@ export function StockPage() {
                             </>
                           ) : null}
                           <dt className="text-muted-foreground">{t("Counted at")}</dt>
-                          <dd className="text-right">{item.countedAt == null ? t("unknown") : countedAt(item.countedAt, t)}</dd>
+                          <dd className="text-right">{item.countedAt == null ? t("unknown") : countedAt(item.countedAt)}</dd>
                         </dl>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                           <label className="flex items-center gap-2 text-sm font-medium" htmlFor={countId}>
