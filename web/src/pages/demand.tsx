@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, formatNumber } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
-import { isValidWeek, isoWeekOf, weekDates, weekLabel } from "@/lib/week";
+import { isValidWeek, isoWeekOf, shiftWeek, weekDates, weekLabel } from "@/lib/week";
 import type { ShortageRisk, SupplierDemandRow } from "@/types";
 
 /** Worst first: a short week matters more than an unmeasured one. */
@@ -73,12 +73,6 @@ export function groupByProduct(rows: SupplierDemandRow[]): ProductGroup[] {
         a.productName.localeCompare(b.productName) ||
         a.productId.localeCompare(b.productId),
     );
-}
-
-function shiftWeek(week: string, days: number): string {
-  const monday = new Date(`${weekDates(week)[0]}T12:00:00Z`);
-  monday.setUTCDate(monday.getUTCDate() + days);
-  return isoWeekOf(monday.toISOString().slice(0, 10));
 }
 
 interface WeekSection {
@@ -267,7 +261,7 @@ export function DemandPage() {
   });
   const navigate = useNavigate();
   // Without `?week=` the page opens on next week: that is the demand Valio can still act on.
-  const defaultWeek = shiftWeek(isoWeekOf(new Date().toISOString().slice(0, 10)), 7);
+  const defaultWeek = shiftWeek(isoWeekOf(new Date().toISOString().slice(0, 10)), 1);
   const week = requestedWeek ?? defaultWeek;
   const weekIsValid = isValidWeek(week);
   const state = useAsync(() => (weekIsValid ? loadWeek(api, week) : noWeek()), [api, week, weekIsValid]);
@@ -287,11 +281,11 @@ export function DemandPage() {
         </header>
         {weekIsValid ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => showWeek(shiftWeek(week, -7))}>
+            <Button variant="outline" onClick={() => showWeek(shiftWeek(week, -1))}>
               Previous week
             </Button>
             <h2 className="px-2 text-center text-lg font-semibold">{weekLabel(week)}</h2>
-            <Button variant="outline" onClick={() => showWeek(shiftWeek(week, 7))}>
+            <Button variant="outline" onClick={() => showWeek(shiftWeek(week, 1))}>
               Next week
             </Button>
           </div>

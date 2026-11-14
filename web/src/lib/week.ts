@@ -30,6 +30,13 @@ export function weekDates(week: string): string[] {
   });
 }
 
+/** The ISO week `weeks` weeks after `week` (negative goes back), across year ends. */
+export function shiftWeek(week: string, weeks: number): string {
+  const monday = parseDate(weekDates(week)[0]);
+  monday.setUTCDate(monday.getUTCDate() + weeks * 7);
+  return isoWeekOf(monday.toISOString().slice(0, 10));
+}
+
 const ISO_WEEK = /^(\d{4})-W(0[1-9]|[1-4]\d|5[0-3])$/;
 
 export function isValidWeek(week: string): boolean {
