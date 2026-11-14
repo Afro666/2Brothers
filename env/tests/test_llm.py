@@ -134,3 +134,38 @@ class LLMPolicyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VariantTest(unittest.TestCase):
+    """#365: prompt variants run the same model with another system prompt; v3 adds the
+    calculator's expected use to the observation, computed from the forecast only."""
+
+    def _seen(self, name):
+        class Fake(LLMPolicy):
+            def _complete(self, messages):
+                self.seen.append((messages[0]["content"], json.loads(messages[1]["content"])))
+                return '{"order": {}}', 10
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Fake(name, out=Path(tmp))
+            policy.seen = []
+            env = run(policy, seed=1)
+        return policy, env
+
+    def test_v2_adds_the_self_review_rules_and_no_calculator(self):
+        from env.llm import SELF_REVIEW_RULES, SYSTEM
+        policy, _ = self._seen("nemotron-nothink-v2")
+        system, obs = policy.seen[0]
+        self.assertTrue(system.startswith(SYSTEM) and SELF_REVIEW_RULES[0] in system)
+        self.assertNotIn("expected_use", obs)
+        self.assertEqual(policy.extra, {"chat_template_kwargs": {"enable_thinking": False}})
+
+    def test_v3_shows_expected_use_from_the_forecast(self):
+        policy, env = self._seen("nemotron-nothink-v3")
+        _, obs = policy.seen[0]
+        self.assertEqual(set(obs["expected_use"]), set(obs["products"]))
+        self.assertTrue(all(len(days) == len(obs["forecast"]) for days in obs["expected_use"].values()))
+        self.assertTrue(any(v > 0 for days in obs["expected_use"].values() for v in days))
+
+    def test_variants_are_policies(self):
+        from env.llm import LLM_POLICIES
+        self.assertTrue({"llm-nemotron-nothink-v2", "llm-nemotron-nothink-v3", "llm-nemotron-v3"} <= set(LLM_POLICIES))
