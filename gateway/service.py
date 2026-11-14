@@ -1537,6 +1537,7 @@ class Gateway:
                 "receipt": order.get("receipt"),     # signed order receipt (#290); null when not signed
                 # #1560: "demo-seed" when a seed placed it (no person approved it, so no receipt)
                 "placed_by": seeded.placed_by(order),
+                **_supplier_side(order),
                 # #631: suppliers whose stock nobody confirmed yet; a person calls them
                 "supplier_must_confirm": list(order.get("supplier_must_confirm") or []),
                 "expected_total": _money(Decimal(str(order["expected_total"]))),
@@ -2027,6 +2028,21 @@ def _addable_out(r: AddableRow) -> dict:
             "unit_price": None if r.unit_price is None else _money(r.unit_price),
             "addable": r.addable, "timing": r.timing.name, "days_of_stock": _qty(r.days_of_stock),
             "reason_codes": list(r.reason_codes), "why": r.why}
+
+
+def _supplier_side(order: dict) -> dict:
+    """What the supplier has of this order, in the receipt's own words (#1768).
+
+    `outcome: CONFIRMED, status: SENT` means "placed in our gateway". The gateway sends
+    nothing (no upstream order endpoint), so the answer says that beside them. Null when a
+    person recorded that the supplier has the order (resolution `placed`), and for every
+    outcome that is not CONFIRMED: there the outcome itself says what is known.
+    """
+    from gateway import signing
+    placed_by_person = (order.get("resolution") or {}).get("resolution") == "placed"
+    if order.get("outcome") != "CONFIRMED" or placed_by_person:
+        return {"supplier_outcome": None, "supplier_note": None}
+    return {"supplier_outcome": "NOT_SENT", "supplier_note": signing.NOT_SENT_NOTE}
 
 
 def _order_line_vat(line: dict, rates: dict) -> dict:
