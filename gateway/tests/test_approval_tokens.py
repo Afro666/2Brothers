@@ -82,6 +82,30 @@ def test_the_open_demo_principal_cannot_create_one(env):
     assert r.status_code == 403 and r.json()["error"]["code"] == "PERSONAL_TOKEN_NEEDS_SIGN_IN"
 
 
+def test_the_open_demo_cannot_list_or_revoke_and_sees_no_email(env):
+    """Live check 14 Nov: the open demo listed every token with the person's email, and anyone
+    could revoke it. Only the signed-in owner lists or revokes their own tokens."""
+    client, _, db = env
+    out, _ = personal(client, db)
+    listed = client.get(K + "/approval-tokens", headers=HUMAN)
+    assert listed.status_code == 403 and listed.json()["error"]["code"] == "PERSONAL_TOKEN_NEEDS_SIGN_IN"
+    assert "aron@example.com" not in listed.text
+    gone = client.delete(f"{K}/approval-tokens/{out['token_id']}", headers=HUMAN)
+    assert gone.status_code == 403
+    assert db.approval_tokens.find_one({"_id": out["token_id"]})["revoked_at"] is None
+
+
+def test_another_approver_neither_sees_nor_revokes_my_token(env):
+    client, _, db = env
+    out, _ = personal(client, db)
+    users.create_user(db, "maciek@example.com", PW, name="Maciek", role="approver", kitchen_id="demo-kitchen")
+    sign_in(client, "maciek@example.com")
+    assert client.get(K + "/approval-tokens").json()["tokens"] == []
+    r = client.delete(f"{K}/approval-tokens/{out['token_id']}")
+    assert r.status_code == 404 and r.json()["error"]["code"] == "TOKEN_NOT_FOUND"
+    assert db.approval_tokens.find_one({"_id": out["token_id"]})["revoked_at"] is None
+
+
 def test_a_chef_cannot_create_one(env):
     client, _, db = env
     people(db)
