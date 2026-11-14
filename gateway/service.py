@@ -332,6 +332,18 @@ class Gateway:
         except BaseException:
             self.db.proposals.update_one({"_id": proposal_id, "status": "APPROVING", "approving_key": key},
                                          {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
+            # A write may have succeeded before its response failed. Only a
+            # confirmed absence permits releasing the post-quote commit claim.
+            try:
+                attempt = orders.attempt_for_key(self.db, kitchen_id, key)
+                if attempt is None:
+                    blocked = recalls.blocked_ids(self.db, kitchen_id)
+                    state = 'BLOCKED_BY_RECALL' if any(l['product_id'] in blocked for l in stored['simulation']['lines']) else 'READY'
+                    self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
+                        'status': 'COMMITTING', 'approving_key': key},
+                        {'$set': {'status': state}, '$unset': {'approving_key': ''}})
+            except Exception:
+                pass  # Cannot prove absence while the database is unavailable.
             raise
 
     def _approved_or_conflict(self, kitchen_id: str, proposal_id: str, key: str) -> dict:
