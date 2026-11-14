@@ -533,3 +533,17 @@ def test_a_persons_refusal_is_not_audited(env):
     client.post("/v1/auth/login", json={"email": "view@example.com", "password": "viewer pass 12"})
     assert client.post(K + "/recipes", json={"name": "x"}).status_code == 403
     assert not [e for e in list_events(db, kitchen_id="demo-kitchen") if e["event"]["kind"] == "refused"]
+
+
+def test_refusals_cannot_flood_or_invent_another_kitchens_log(env):
+    """#853: a made-up kitchen in the URL goes to the caller's own kitchen; a repeat is one row."""
+    from gateway import tokens
+    from store.audit import list_events
+    client, _, db = env
+    made = tokens.create(db, "demo-kitchen", "pos", ["kitchen:read"], "aron")
+    pos = {"Authorization": "Bearer " + made["token"]}
+    for _ in range(5):
+        assert client.get("/v1/kitchens/no-such-kitchen/proposals", headers=pos).status_code == 403
+    assert not list_events(db, kitchen_id="no-such-kitchen")
+    refused = [e for e in list_events(db, kitchen_id="demo-kitchen") if e["event"]["kind"] == "refused"]
+    assert len(refused) == 1 and refused[0]["event"]["code"] == "KITCHEN_SCOPE"
