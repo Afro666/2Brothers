@@ -268,8 +268,11 @@ class Gateway:
         search = self._search
         if search is None:
             from store.search import search_products as search
-        rows = search(self.db, parsed.query, {}, 8, kitchen_id=kitchen_id)
-        ids = [r["product_id"] for r in rows][:8]
+        from gateway.candidates import SEARCH_LIMIT, pick_candidates
+        rows = search(self.db, parsed.query, {}, SEARCH_LIMIT, kitchen_id=kitchen_id)
+        # Keep the hits that can answer the request: the text search alone ranks chocolate
+        # and bread mix above the milk for "lactose free milk".
+        ids = pick_candidates(rows, parsed.as_need().get("unit") or "")
         if not ids:
             raise GatewayError(422, "NO_PRODUCTS_FOUND", f"no catalog product matches {parsed.query!r}")
         return {**body, "product_ids": ids, **{k: v for k, v in parsed.as_need().items() if k != "query"},

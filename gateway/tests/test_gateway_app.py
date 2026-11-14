@@ -333,6 +333,30 @@ def test_parser_is_not_used_after_an_ambiguous_buyer_failure(monkeypatch):
     assert r.status_code == 200 and r.json()["request"]["made_by"] == "parser"
 
 
+def test_the_parser_prices_products_that_fit_the_asked_measure_not_the_top_text_hits(monkeypatch):
+    """Live case 2026-11-14: "lactose free milk" ranked chocolate (kg) above the milk (L),
+    the parser took the top 8, and the proposal came back REJECTED with no lines."""
+    seen = {}
+
+    def search(db, query, filters, limit, kitchen_id=None):
+        seen["limit"] = limit
+        return [{"product_id": "466215", "net_content": {"value": 0.15, "unit": "KG"}, "category": "52201"},
+                {"product_id": "462775", "net_content": {"value": 1.0, "unit": "L"}, "category": "10400"}]
+
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    db = mongomock.MongoClient(tz_aware=True)["test"]
+    for pid, raw in RAW.items():
+        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
+    fake = FakeValio()
+    gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: NOW), now=lambda: NOW,
+                 search=search)
+    r = TestClient(create_app(gw)).post(K + "/proposals", headers=AGENT,
+                                        json={"text": "60 l milk by Monday", "idempotency_key": "fit1"})
+    assert r.status_code == 200
+    assert r.json()["request"]["product_ids"] == ["462775"]      # the chocolate is not priced
+    assert seen["limit"] == 50                                     # a wider look than the top 8
+
+
 def test_a_structured_body_cannot_claim_the_parser_made_it(env):
     """made_by and query are set by the gateway, never by the client."""
     client, _, _ = env
