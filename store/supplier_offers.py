@@ -1,6 +1,6 @@
 """Supplier offers (#374): a suggestion a supplier sent to one kitchen. Never an order.
 
-One row per supplier, kitchen, offered product and date: the `_id` is made from those four,
+One row per supplier, kitchen, offered product, date and round: the `_id` is made from those,
 so two requests at the same moment store one offer, and a later offer for the same four
 answers the stored one (also after a "no thanks"). `status` only leaves `OPEN` through
 `decide`, a compare-and-set: two clicks decide once.
@@ -21,9 +21,26 @@ def ensure_indexes(db) -> None:
     db.supplier_offers.create_index([("kitchen_id", 1), ("created_at", -1)])
 
 
-def offer_id(supplier_id: str, kitchen_id: str, product_id: str, requested_date: str) -> str:
-    key = "\x1f".join((supplier_id, kitchen_id, product_id, requested_date))
-    return hashlib.sha256(key.encode()).hexdigest()[:32]
+def offer_id(supplier_id: str, kitchen_id: str, product_id: str, requested_date: str,
+             round_: int = 0) -> str:
+    """Round 0 keeps the ids made before rounds existed; a later round gives a new id."""
+    parts = (supplier_id, kitchen_id, product_id, requested_date) + ((str(round_),) if round_ else ())
+    return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()[:32]
+
+
+def round_of(db, kitchen_id: str) -> int:
+    """The kitchen's current round of offers: 0 until a demo reset starts a new one."""
+    row = db.supplier_offer_rounds.find_one({"_id": kitchen_id})
+    return int(row["round"]) if row else 0
+
+
+def next_round(db, kitchen_id: str) -> int:
+    """Start a new round for this kitchen and return its number. Offers of earlier rounds
+    stay as they were; in the new round the same supplier, product and day may be offered
+    again, as a new offer with a new id (demo/reset_offers.py)."""
+    row = db.supplier_offer_rounds.find_one_and_update(
+        {"_id": kitchen_id}, {"$inc": {"round": 1}}, upsert=True, return_document=ReturnDocument.AFTER)
+    return int(row["round"])
 
 
 def by_key(db, supplier_id: str, idempotency_key: str) -> dict | None:

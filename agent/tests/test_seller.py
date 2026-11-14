@@ -39,6 +39,16 @@ def go(w, **kwargs):
     return asyncio.run(seller.run(w.gw, today=TODAY, **{"apply": False, "kitchen": "K1", **kwargs}))
 
 
+def test_after_a_new_round_the_seller_offers_the_same_shortage_again(w):
+    from store import supplier_offers as offers
+    model = FakeModel({"index": 1, "reason": "The same kind of drink, in stock for Monday."})
+    assert go(w, model=model, apply=True, limit=1)[0]["result"] == "OPEN"
+    assert go(w, model=model, apply=True, limit=1)[0]["result"] == "ALREADY_OFFERED"
+    offers.next_round(w.db, "K1")
+    assert go(w, model=model, apply=True, limit=1)[0]["result"] == "OPEN"
+    assert w.db.supplier_offers.count_documents({"kitchen_id": "K1"}) == 2
+
+
 def test_dry_run_prints_the_pick_and_sends_nothing(w):
     model = FakeModel({"index": 1, "reason": "The same kind of drink, in stock for Monday."})
     report = go(w, model=model)
