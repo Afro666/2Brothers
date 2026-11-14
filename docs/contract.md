@@ -3597,8 +3597,12 @@ route errors, never an invented empty brief.
 
 ## Learning from kitchen changes and deliveries (#1300)
 
-**Future contract, implemented in stages.** This section does not make every route or field
-available immediately. The existing change route keeps its behaviour until each stage lands.
+**Implemented in stages.** Served so far: change reasons, context and outcomes (#1302),
+delivery results and the one-tap `/received` (#1304), and `GET`/`PUT /learned` with
+correction ratios applied to plan proposals (#1305 phase 2a). In this stage a
+`DECLINED_PRODUCT` fact and a late supplier (`SUPPLIER_LATE` with `on_time_rate` under
+0.7) only add a warning to the plan's `problems`: a declined recipe ingredient is never
+left out silently, and learned lead times do not change safety stock yet.
 Learning adds no model-controlled write endpoint and never changes a typed request quantity.
 
 ### Changes and human feedback
