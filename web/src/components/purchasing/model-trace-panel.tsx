@@ -56,6 +56,8 @@ function action(step: ModelTraceStep, t: T): string {
     case "shortlist":
       return t("Built a shortlist of {count} products from the catalog", { count });
     case "pick":
+      // A reused pick (agent/service.py, store/buyer_picks.py): the model's earlier pick, not a rule.
+      if (step.code === "CACHED_PICK") return t("Reused Nemotron’s pick for the same request from a few minutes ago");
       return step.by === "model" ? t("Picked one product from the shortlist") : t("The rule picked the first product");
     default:
       return t("Made a call the policy could not read");
@@ -83,6 +85,8 @@ const tenths = (seconds: number): string => formatNumber(Math.round(seconds * 10
  */
 function headline(trace: ModelTrace, calls: number, seconds: number, t: T): string {
   const vars = { calls, seconds: tenths(seconds) };
+  if (calls === 0 && trace.steps.some((step) => step.tool === "pick" && step.code === "CACHED_PICK"))
+    return t("0 model calls (pick reused)");
   if (trace.thinking === true)
     return calls === 1
       ? t("1 model call, {seconds} s, thinking on", vars)
