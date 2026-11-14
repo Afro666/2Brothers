@@ -126,10 +126,23 @@ def steps(base: str, text: str, needed_by: str, approve: bool) -> list[tuple[str
         A proposal with unconfirmed stock has no Approve button a person can press: its
         "Choose option" button takes the option that confirmed stock covers and opens the
         same dialog. That button comes first; a plain Approve is the other case.
+        The inbox shows the options folded: "Choose option" exists only after "Option A" is
+        opened, so a folded "Option A" is opened first.
         """
         cards = page.locator('[data-slot="card"]').filter(has=page.get_by_text(text.strip(), exact=True))
-        buttons = [b for name in ("Choose option", "Approve")
-                   for b in cards.get_by_role("button", name=name, exact=False).all() if b.is_enabled()]
+
+        def enabled(name):
+            return [b for b in cards.get_by_role("button", name=name, exact=False).all() if b.is_enabled()]
+
+        buttons = enabled("Choose option")
+        if not buttons:
+            for header in enabled("Option A"):
+                if header.get_attribute("aria-expanded") == "false":
+                    header.scroll_into_view_if_needed()
+                    header.click()
+                    page.wait_for_timeout(600)
+            buttons = enabled("Choose option")
+        buttons = buttons or enabled("Approve")
         if not buttons:
             raise RuntimeError(f'no proposal for "{text.strip()}" in the inbox can be approved')
         buttons[0].scroll_into_view_if_needed()
