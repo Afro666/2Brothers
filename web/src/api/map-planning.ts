@@ -272,8 +272,9 @@ export function menuPlanBody(entries: Draft<MenuPlanEntry>[]): Json {
 // ---- stock ----------------------------------------------------------------------------
 
 /**
- * `GET /stock`. `on_order` counts only when the gateway says `on_order_known`; today it does
- * not, so it is unknown. The gateway has no last delivery date.
+ * `GET /stock`. `on_order` is the open approved orders in the kitchen's unit; it counts only
+ * when the gateway says `on_order_known` (false, with `on_order` null, when a line cannot be
+ * converted), else it is unknown. The gateway has no last delivery date.
  */
 export function mapStock(body: unknown): StockItem[] {
   return rows(body, "items").map((row) => {
