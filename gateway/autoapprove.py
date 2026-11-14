@@ -58,7 +58,8 @@ def learning(db, kitchen_id: str, now: datetime) -> dict:
     edit_rate = edited / len(approved) if approved else 0.0
     done = weeks >= WEEKS_NEEDED and len(decided) >= DECISIONS_NEEDED and edit_rate <= MAX_EDIT_RATE
     return {"weeks": weeks, "weeks_needed": WEEKS_NEEDED, "decisions": len(decided),
-            "decisions_needed": DECISIONS_NEEDED, "edit_rate": round(edit_rate, 3),
+            "decisions_needed": DECISIONS_NEEDED,
+            "edit_rate": round(edit_rate, 3) if approved else None,   # nothing approved yet: unknown, not 0
             "max_edit_rate": MAX_EDIT_RATE, "learning_done": done}
 
 

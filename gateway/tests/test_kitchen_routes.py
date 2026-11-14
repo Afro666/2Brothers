@@ -100,3 +100,21 @@ def test_settings_and_sharing_are_an_approvers_and_audited(env):
     events = client.get(K + "/audit", headers=AGENT).json()["events"]
     assert "settings_changed" in [e.get("kind") for e in events]
     assert "share_granted" in [e.get("type") for e in events]
+
+
+def test_names_defaults_and_unknown_edit_rate(env):
+    client, _, db = env
+    db.products.insert_one({"_id": "469549", "names": {"en": "Valio semi skimmed milk 1 l ESL"}})
+    for recipe in (SOUP, PORRIDGE):
+        client.post(K + "/recipes", headers=HUMAN, json=recipe)
+    client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json={"days": [
+        {"date": "2026-11-16", "meal": "lunch", "recipe_id": "soup", "covers": 10}]})
+    client.post(K + "/stock-counts", headers=HUMAN, json=COUNT)
+    stock = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}
+    assert stock["469549"]["product_name"] == "Valio semi skimmed milk 1 l ESL"
+    assert stock["460708"]["product_name"] is None                       # not in the catalog here: no invented name
+    rows = client.get(K + "/demand?from=2026-11-16&to=2026-11-16", headers=AGENT).json()["rows"]
+    assert {r["product_id"]: r["product_name"] for r in rows}["469549"] == "Valio semi skimmed milk 1 l ESL"
+    settings = client.get(K + "/settings", headers=AGENT).json()
+    assert settings["defaults"]["stockout_cap"] == 1.8 and settings["defaults"]["service_level"]["A"] == "0.975"
+    assert client.get(K + "/auto-approve", headers=AGENT).json()["learning"]["edit_rate"] is None
