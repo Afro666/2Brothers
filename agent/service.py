@@ -108,7 +108,8 @@ class BuyerWorker:
                     from agent.single_pick import SinglePickModel
                     clock = self.now() if self.now else datetime.now(ZoneInfo('Europe/Helsinki'))
                     selected_model = SinglePickModel(model, self.db, kitchen_id, need, stored['need_id'],
-                                                    exclusions, today=clock.date(), memory_cache=self.memory_cache)
+                                                    exclusions, today=clock.date(), memory_cache=self.memory_cache,
+                                                    as_of=clock)
                 async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
                     buyer = Buyer(selected_model, session, self.gateway, need_id=stored['need_id'],
                                   requested_date=need['requested_date'],
@@ -123,8 +124,12 @@ class BuyerWorker:
                     trace = [{**step, 'by': 'code'} for step in buyer.trace]
                     if selected_model.selected_ids:
                         trace.insert(2, model_trace.step('pick', by='code' if selected_model.cached else 'model',
-                            attempt=attempt, products=len(selected_model.selected_ids),
+                            attempt=attempt, products=(selected_model.raw_pick_count
+                                if selected_model.pruned else len(selected_model.selected_ids)),
                             code='CACHED_PICK' if selected_model.cached else 'PICKED'))
+                        if selected_model.pruned:
+                            trace.insert(3, model_trace.step('pick', by='code', attempt=attempt,
+                                products=len(selected_model.selected_ids), code='FULL_COVERAGE_GUARD'))
                     steps += trace
                 else:
                     steps += buyer.trace

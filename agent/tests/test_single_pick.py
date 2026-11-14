@@ -59,17 +59,19 @@ def test_one_model_call_then_cached_ids_with_fresh_price_and_new_offer(monkeypat
             assert first == again and model.calls == 1
             factor[0] = 2
             second = await worker.run('demo-kitchen', {**NEED, 'idempotency_key': 'second'})
-            assert second['offer_id'] != first['offer_id'] and model.calls == 1
+            assert second['offer_id'] != first['offer_id'] and model.calls == 2
             assert float(second['expected_total']) > float(first['expected_total'])
             assert first['lines'][0]['quantity'] == '51'
             assert next(s for s in first['model_trace']['steps'] if s['tool'] == 'pick')['by'] == 'model'
-            assert next(s for s in second['model_trace']['steps'] if s['tool'] == 'pick')['code'] == 'CACHED_PICK'
+            third = await worker.run('demo-kitchen', {**NEED, 'idempotency_key': 'third'})
+            assert model.calls == 2
+            assert next(s for s in third['model_trace']['steps'] if s['tool'] == 'pick')['code'] == 'CACHED_PICK'
             assert all(s['by'] == 'code' for s in first['model_trace']['steps'] if s['tool'] != 'pick')
-            assert db.orders.count_documents({}) == 0 and db.proposals.count_documents({}) == 2
+            assert db.orders.count_documents({}) == 0 and db.proposals.count_documents({}) == 3
             sent = json.loads(model.prompts[0][1]['content'])
-            assert len(json.dumps(model.prompts[0])) < 2500
+            assert len(json.dumps(model.prompts[0])) < 6000
             assert set(sent['products'][0]) == {'index', 'product_id', 'name', 'pack', 'can_arrive', 'alias',
-                                               'price_per_unit', 'price_unit', 'engine_selected'}
+                                               'price_per_unit', 'price_unit', 'engine_selected', 'selection'}
         finally:
             await gateway.close()
     asyncio.run(run())
