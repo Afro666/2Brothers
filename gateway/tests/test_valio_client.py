@@ -124,8 +124,8 @@ class ValioTests(unittest.TestCase):
         client.availability(["462775"], "2026-11-16")
         self.assertEqual(len(calls), 2)
 
-    def test_retry_429_and_503_then_succeed(self):
-        errors = [429, 503]
+    def test_retry_503_twice_then_succeed(self):
+        errors = [503, 502]
         sleeps = []
         def transport(*args):
             if errors:

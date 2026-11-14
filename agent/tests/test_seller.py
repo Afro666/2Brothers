@@ -318,3 +318,17 @@ def test_the_cli_meters_the_pick_as_seller_pick_and_writes_one_usage_line(monkey
     roles, runs = collect((tmp_path / "usage.jsonl").read_text().splitlines())
     assert runs == 1 and set(roles) == {"seller_pick"}
     assert (roles["seller_pick"]["calls"], roles["seller_pick"]["prompt_tokens"]) == (1, 100)
+
+
+def test_a_valio_rest_ends_the_pass_with_supplier_busy_and_sends_nothing(w, monkeypatch):
+    """#1237: Valio answered 429 while the shortlist was read; the pass stops, no offer."""
+    from gateway.valio_client import ValioBusy
+
+    def resting(*args, **kwargs):
+        raise ValioBusy(30)
+
+    monkeypatch.setattr(seller, "shortlist", resting)
+    report = go(w, kitchen=None, apply=True, limit=3)
+    assert [r["result"] for r in report] == ["SUPPLIER_BUSY"]
+    assert report[0]["retry_after"] == 30
+    assert w.db.supplier_offers.count_documents({}) == 0
