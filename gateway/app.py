@@ -403,12 +403,14 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     @app.post("/tools/search_products")
     async def search(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:read")
-        from store.search import search_products
         data = await body(request)
         limit = data.get("limit", 20)
         if not isinstance(limit, int) or not 1 <= limit <= 50:
             raise GatewayError(422, "INVALID_REQUEST", "limit: 1 to 50")
-        return {"products": search_products(gw().db, data.get("query") or "", data.get("filters") or {}, limit)}
+        need_id = data.get("need_id")
+        if need_id is not None and not isinstance(need_id, str):
+            raise GatewayError(422, "INVALID_REQUEST", "need_id must be a string")
+        return gw().tool_search(kitchen(who), data.get("query") or "", data.get("filters") or {}, limit, need_id)
 
     @app.post("/tools/get_offer")
     async def get_offer(request: Request, who: Principal = Depends(principal)):
