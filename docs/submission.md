@@ -531,10 +531,10 @@ Catalog switch and the Buyer's shortlist are separate: the shortlist ignores `mo
 | Change streams | `watch_kitchen` follows proposals, approvals and the audit log of one kitchen | `store/trust.py:112` |
 | `Decimal128` | Money is `Decimal` in Python and `Decimal128` in Mongo. A binary float is refused. | `store/db.py:21`, `store/orders.py` |
 | Unique indexes | `(kitchen_id, idempotency_key)`: a repeated send returns the stored order | `store/db.py:63` |
-| Hash-chained audit log | Insert-only. Each row stores the hash of the row before. `verify_chain` finds a changed row. | `store/audit.py:91`, `store/audit.py:129` |
+| Hash-chained audit log | Insert-only. Each row stores the hash of the row before. `verify_chain` finds a changed or missing row, and since #1882 a cut or rewritten end, against a head record kept beside the log. The head is in the same database and is not signed yet (#1886), so it catches an accident or a careless edit, not someone who can write to the database. | `store/audit.py:91`, `store/audit.py:129` |
 
 Why it matters: an order must not be sent twice, money must not round, and a person must
-be able to check that nobody changed the log. The whole database, data and indexes, is
+be able to check the log for changes (within the limit named in the table above). The whole database, data and indexes, is
 221 MB (the same route, read on 14 Nov at 21:46 UTC).
 
 **Atlas Vector Search.** The index `products_vector` (1,024 dimensions, cosine) and the
