@@ -114,3 +114,34 @@ def test_s03_coeliac_school_never_quotes_oatly_or_unknown_allergens():
 def test_unknown_allergen_policy_codes_fail_closed():
     with pytest.raises(ValueError):
         AllergenPolicy(('not-an-allergen',))
+
+
+def _original_option(lines):
+    class FakeBuyer:
+        offer_products = {'offer-1': ['463380']}
+    catalog = {pid: product(pid) for pid in ('463380', '463335')}
+
+    async def read(name, args):
+        return {'products': []}
+    simulation = {'offer_id': 'offer-1', 'expected_total': '2579.29', 'currency': 'EUR',
+                  'mandate': {'verdict': 'NEEDS_APPROVAL'}, 'lines': lines}
+    planner = SubstitutePlanner(catalog.get, AllergenPolicy())
+    options = asyncio.run(planner.plan(FakeBuyer(), simulation, read))
+    assert options[0]['source'] == 'original'
+    return options[0]
+
+
+def test_original_option_with_unconfirmed_line_says_what_waits():
+    option = _original_option([
+        {'product_id': '463380', 'quantity': '698', 'unit': 'ST', 'unknown_stock': False},
+        {'product_id': '463335', 'quantity': '302', 'unit': 'ST', 'unknown_stock': True}])
+    assert 'confirmed portion only' not in option['why']
+    assert option['why'] == "The Buyer's basket as proposed: 698 ST confirmed, 302 ST waits for stock confirmation."
+    assert option['stock_confirmed'] is False
+
+
+def test_original_option_all_confirmed_keeps_confirmed_portion_text():
+    option = _original_option([
+        {'product_id': '463380', 'quantity': '698', 'unit': 'ST', 'unknown_stock': False}])
+    assert option['why'] == 'Requested product, confirmed portion only.'
+    assert option['stock_confirmed'] is True
