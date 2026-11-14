@@ -170,6 +170,14 @@ sentinel value.
 A product that the kitchen's allergen rule refuses is left out of the offer, as in
 `POST /proposals` (see `ALLERGEN_RULE` in "Reason codes").
 
+**A need the allergen rule refuses as a whole (#974).** When the need has a `text`, the
+gateway applies the rule under "A request the allergen rule removes" to its product
+words when it stores the need. For a refused need, `search_products` with that `need_id`
+answers `products: []` for every query, with the reason in `note`. `get_offer` quotes
+the refused products the person named, not the `product_ids` of the call: the offer has
+no line, `mandate.verdict` is `REFUSED`, and `mandate.reasons[0]` is the reason. The
+answer of `POST /needs` does not change.
+
 | Status | Code | When (`get_offer`) |
 |---|---|---|
 | 422 | `INVALID_NEED` | `need_id` is missing or names no need of this kitchen. |
@@ -308,6 +316,8 @@ need (#639):
   `null` when nothing was filtered) and `note` (a short hint for the model).
 - An unknown `need_id` (not this kitchen's) is 422 `INVALID_NEED`; a `need_id` that is
   not a string is 422 `INVALID_REQUEST`. The offer step still checks every product.
+- A need that the kitchen's allergen rule refuses as a whole gives `products: []` and
+  the reason in `note` (see "A need the allergen rule refuses as a whole").
 
 **Which search ran (`search`).** `"text"` is the Atlas Search text index. `"hybrid"` is
 the text search fused with Atlas Vector Search over product embeddings (`$rankFusion`),
@@ -773,6 +783,28 @@ The proposal's `request` object echoes what was quoted: `product_ids`, `quantity
   `product_ids`.
 - `query`: the product words the parser searched for. Only on `made_by: parser`.
 - `event`: `true`, only when the request was an event.
+- `refusal`: only on a request the allergen rule removes (below): `code`
+  (`ALLERGEN_RULE`), `allergens` (string[], the names a person reads, for example
+  `["peanuts"]`) and `message` (one sentence).
+
+**A request the allergen rule removes (#974).** A kitchen that excludes peanuts asks for
+"15 kg peanut butter". Before the Buyer worker runs, and again on the parser path, the
+gateway reads the product words and searches the catalog with no allergen filter:
+
+1. The best matches are the hits whose names hold the most of the request's words.
+2. One best match with known allergen data and no excluded allergen: the request goes on
+   as above. The same when no best match declares an excluded allergen, or fewer than
+   half of them do (missing allergen data alone never refuses a request).
+3. Otherwise the request is refused. The answer is 200 with a proposal in the usual
+   shape: `status: REJECTED`, no line, `mandate.verdict: REFUSED`, `ALLERGEN_RULE` in
+   `mandate.reason_codes`, `request.made_by: parser`, `request.refusal` set,
+   `request.product_ids` and `excluded` are the refused best matches (20 at most), and
+   `mandate.reasons[0]` is `request.refusal.message`: `This kitchen excludes peanuts, so
+   "peanut butter" cannot be ordered: ...`. No other kind of product is proposed, and
+   the Buyer worker is not called.
+
+The delivery day of such a request may come from `requested_date` in the body when the
+text names none. A replay with the same key and text returns the same proposal.
 
 **Menu-plan window body (#74, #701).** `from` and `to` and no `product_ids` and no
 `text`: one proposal for everything the menu plan needs in that window, net of counted
