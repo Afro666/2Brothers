@@ -619,9 +619,10 @@ def nvidia_steps(base: str, text: str, needed_by: str, photos: dict | None) -> l
         ("intro", f"{NVIDIA_SENTENCE} Nemotron 3.5 Super VL on Verda.", intro),
         ("plan", "Plan: Nemotron VL reads a photo of next week's menu and matches each dish to a recipe. "
                  "The engine sizes the order; the proposal waits for a person.", plan),
-        ("buy", "Buy: the Buyer turns a chef's sentence into catalog products with seven MCP tools. "
-                "It picks products; the engine sets every quantity and price.", buy),
-        ("trace", "What Nemotron did: each tool call, in order. It has no approve tool.", trace),
+        ("buy", "Buy: Nemotron picks catalog products from a shortlist in one call; code runs the audited "
+                "MCP tools. The engine sets every quantity and price.", buy),
+        ("trace", "The trace: Nemotron's one pick, then each audited tool call the code made, in order. "
+                  "There is no approve tool.", trace),
         ("sell", "Sell: Valio's own selling agent, also Nemotron, picks a substitute before a shortage. "
                  "The amount is the kitchen's own forecast.", sell),
         ("count", "Count: Nemotron VL counts the shelf. Unknown is never zero: the hidden pack says "
