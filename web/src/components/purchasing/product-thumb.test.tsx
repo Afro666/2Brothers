@@ -66,6 +66,21 @@ describe("ProductThumb with a brand", () => {
     expect(container.querySelector("img")).toBeNull();
   });
 
+  it("does not send a brand name over 100 characters", async () => {
+    const long = "X".repeat(101);
+    const list = vi.fn(async (names: string[]) => names.map((name) => logo(name, true)));
+    const { container } = render(
+      <ApiProvider api={withLogos(list)}>
+        <ProductThumb en="Long brand milk" brand={long} />
+        <ProductThumb en="Valio milk 1 l" brand="Valio" />
+      </ApiProvider>,
+    );
+    await waitFor(() => expect(container.querySelectorAll("img")).toHaveLength(1));
+    expect(screen.getByAltText("Valio logo")).toHaveAttribute("src", URL);
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledWith(["Valio"]);
+  });
+
   it("never shows a logo that is not https", async () => {
     const list = vi.fn(async (names: string[]) =>
       names.map((name): BrandLogo => ({ ...logo(name, true), logoUrl: "javascript:alert(1)" })),
