@@ -365,13 +365,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--markdown", action="store_true")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--strict", action="store_true", help="exit 1 when any case is FAIL")
     args = parser.parse_args(argv)
     results = run()
     if args.json:
         print(json.dumps([asdict(r) for r in results], indent=2))
     else:
         print(table(results, markdown=args.markdown))
-    return 1 if any(r.status == "ERROR" for r in results) else 0
+    bad = {"ERROR", "FAIL"} if args.strict else {"ERROR"}
+    return 1 if any(r.status in bad for r in results) else 0
 
 
 if __name__ == "__main__":
