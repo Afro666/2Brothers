@@ -792,7 +792,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
 | POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver` (create: signed-in session only) | Personal approval tokens. Shape under "Personal approval tokens". |
 | GET | `/model-usage` | `kitchen:read` | How much the Buyer agent used its model for this kitchen: runs, model calls, tokens, seconds. Shape under "Model usage". |
-| GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". Proposed (#1393); the store function exists, the route is not built. |
+| GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". |
 | GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
 | POST, GET | `/webhooks` | human, role `approver` | Register a webhook (body `url`, `events`) or list them. Shape under "Webhooks". |
 | DELETE | `/webhooks/{id}` | human, role `approver` | Remove the webhook and its delivery log. |
@@ -2697,11 +2697,11 @@ reached the Buyer worker):
 - Counts only: no request text, no reply text, no key.
 - Where it shows: the About page.
 
-### Atlas facts (proposed, #1393)
+### Atlas facts (#1393, #1383)
 
 `GET /v1/kitchens/{kitchen_id}/atlas` (`kitchen:read`) answers what MongoDB Atlas holds
-and runs for the product, read live. Proposed: the store function exists
-(`store.atlas.atlas_facts`); the gateway route is not built yet (#1383).
+and runs for the product, read live: `store.atlas.atlas_facts` behind
+`gateway/atlas_routes.py`.
 
 ```json
 {"mongodb_version": "8.0.37", "data_mb": 215, "products": 17548,

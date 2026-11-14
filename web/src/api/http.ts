@@ -12,6 +12,7 @@ import { createDeliveryNoteHttp } from "@/api/http-delivery-note";
 import { createLabelPhotoHttp } from "@/api/http-label-photo";
 import { createTrustHttp } from "@/api/http-trust";
 import { createUsageHttp } from "@/api/http-usage";
+import { createAtlasHttp } from "@/api/http-atlas";
 import { createTokensHttp } from "@/api/http-tokens";
 import { createApprovalTokensHttp } from "@/api/http-approval-tokens";
 import { createDeveloperHttp } from "@/api/http-developer";
@@ -227,6 +228,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createLabelPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createUsageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createAtlasHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createApprovalTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),

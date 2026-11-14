@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
 import { AppShell } from "@/components/purchasing/app-shell";
+import { AtlasCard } from "@/components/purchasing/atlas-card";
 import { ModelUsageCard } from "@/components/purchasing/model-usage-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useT } from "@/lib/i18n";
@@ -96,6 +97,10 @@ export function AboutPage() {
 
         <section aria-labelledby="about-model">
           <ModelUsageCard />
+        </section>
+
+        <section aria-labelledby="about-atlas">
+          <AtlasCard />
         </section>
 
         <section aria-labelledby="about-sides" className="space-y-3">

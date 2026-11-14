@@ -26,6 +26,7 @@ import { createPrivacyMock } from "@/api/mock-privacy";
 import { createTokensMock } from "@/api/mock-tokens";
 import { createApprovalTokensMock } from "@/api/mock-approval-tokens";
 import { modelUsageMock } from "@/api/mock-usage";
+import { atlasFactsMock } from "@/api/mock-atlas";
 import { createWordsMock } from "@/api/mock-words";
 import {
   approval as seedApproval,
@@ -317,6 +318,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     // Like the gateway: only a signed-in account (it has an email) gets a personal approval token.
     ...createApprovalTokensMock(async () => (await auth.getSession())?.email ?? null),
     getModelUsage: async () => modelUsageMock(),
+    getAtlasFacts: async () => atlasFactsMock(),
     readShelfPhoto: readShelfPhotoMock,
     readMenuPhoto: readMenuPhotoMock,
     readPriceListPhoto: readPriceListPhotoMock,

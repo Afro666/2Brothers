@@ -68,6 +68,7 @@ describe("createHttpApi", () => {
         "changeProposal",
         "chooseOption",
         "getApproval",
+        "getAtlasFacts",
         "getForecastAccuracy",
         "getOrder",
         "getOrderResolution",
