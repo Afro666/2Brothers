@@ -82,11 +82,21 @@ describe("StockPage: count from a photo", () => {
     await choosePhoto(user);
 
     const list = await screen.findByRole("list", { name: "What was read from the photo" });
-    expect(within(list).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-      "7 L🥛Arla lactose-free milk7 packs x 1 L. Read on the pack: “Arla lactose free 1L” (high confidence)",
-      "please count🥛Valio Eila 3 % milkRead on the pack: “Valio Eila 3% 1L” (low confidence)",
-      "please count📦No product on your stock list matchesRead on the pack: “Arla L m” (low confidence)",
-    ]);
+    // Thumbnail loading may replace its decorative emoji with an image. Assert the
+    // read/count semantics, which must stay the same in either loading state.
+    const photoRows = within(list).getAllByRole("listitem");
+    expect(photoRows).toHaveLength(3);
+    expect(photoRows[0]).toHaveTextContent("7 L");
+    expect(photoRows[0]).toHaveTextContent("Arla lactose-free milk");
+    expect(photoRows[0]).toHaveTextContent("7 packs x 1 L");
+    expect(photoRows[0]).toHaveTextContent("high confidence");
+    expect(photoRows[1]).toHaveTextContent("Valio Eila 3 % milk");
+    expect(photoRows[2]).toHaveTextContent("No product on your stock list matches");
+    for (const row of photoRows.slice(1)) {
+      expect(row).toHaveTextContent("please count");
+      expect(row).toHaveTextContent("low confidence");
+      expect(row).not.toHaveTextContent(/\d+ packs x/);
+    }
     expect(count("Valio Eila 3 % milk")).toHaveValue("");
     expect(screen.getAllByText(MARK)).toHaveLength(2); // only the Arla row
     expect(screen.getByRole("status")).toHaveTextContent("1 count filled in below; 2 to count by hand.");

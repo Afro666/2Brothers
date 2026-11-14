@@ -200,3 +200,31 @@ def test_route_with_no_risk_rows_makes_no_model_call(env):
     calls = []
     data = app_for(env, echo_worker(calls)).get(URL, headers=HUMAN).json()
     assert data["note"] == [] and data["rows_used"] == 0 and calls == []
+
+
+def test_dropped_note_cools_down_then_recovers_while_valid_notes_keep_five_minutes(env, monkeypatch):
+    import gateway.buying_note as module
+    original_mount = module.mount_buying_note
+    clock = [0.0]
+    monkeypatch.setattr(module, 'mount_buying_note',
+                        lambda *a, **kw: original_mount(*a, **kw, clock=lambda: clock[0]))
+    seed(env[2])
+    calls = []
+    good = echo_worker(calls)
+    async def worker(*args):
+        reply = await good(*args)
+        if len(calls) == 1:
+            reply['lines'][0]['text'] += ' Also 99999 L.'
+        return reply
+    client = app_for(env, worker)
+    first = client.get(URL, headers=HUMAN).json()
+    assert first['note'] is None and not first['cached']
+    clock[0] = 29.9
+    assert client.get(URL, headers=HUMAN).json()['cached'] and len(calls) == 1
+    clock[0] = 30
+    recovered = client.get(URL, headers=HUMAN).json()
+    assert recovered['note'] and not recovered['cached'] and len(calls) == 2
+    clock[0] = 329.9
+    assert client.get(URL, headers=HUMAN).json()['cached'] and len(calls) == 2
+    clock[0] = 330
+    assert not client.get(URL, headers=HUMAN).json()['cached'] and len(calls) == 3
