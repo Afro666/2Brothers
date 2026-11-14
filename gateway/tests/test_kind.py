@@ -314,3 +314,37 @@ def test_the_parser_path_prices_the_kind_only(gateway):
     _, gw = gateway
     read = gw._from_text("demo-kitchen", {"text": "100 L cream by Monday", "idempotency_key": "k"})
     assert read["product_ids"] and all(pid.startswith("cr") for pid in read["product_ids"])
+
+
+def test_a_failed_kinds_read_backs_off_and_an_old_snapshot_is_rebuilt(gateway, monkeypatch):
+    """#1026: one Mongo blip must not re-read the whole catalog on every search, and a
+    snapshot older than KINDS_TTL is read again (a reloaded catalog changes the kinds)."""
+    from datetime import timedelta
+    from gateway import kind, service
+    _, gw = gateway
+    clock = [NOW]
+    gw.now = lambda: clock[0]
+    calls, fail = [], [True]
+    real = kind.Kinds.from_db
+
+    def from_db(db):
+        calls.append(clock[0])
+        if fail[0]:
+            raise RuntimeError("atlas blip")
+        return real(db)
+    monkeypatch.setattr(kind.Kinds, "from_db", staticmethod(from_db))
+    rows = scored(SAUCE[:1], 240)
+    for seconds in (0, 10, 59):
+        clock[0] = NOW + timedelta(seconds=seconds)
+        assert gw._of_kind(rows, "cheese", {}, "50 kg cheese", "KG") == rows
+    assert len(calls) == 1                       # at most once in the back-off window
+    fail[0] = False
+    clock[0] = NOW + service.KINDS_RETRY
+    kinds = gw._of_kind(rows, "cheese", {}, "50 kg cheese", "KG")
+    assert kinds and all(r["category"] == "10603" for r in kinds)
+    assert len(calls) == 2
+    gw._of_kind(rows, "cheese", {}, "50 kg cheese", "KG")
+    assert len(calls) == 2                       # a fresh snapshot is kept
+    clock[0] += service.KINDS_TTL
+    gw._of_kind(rows, "cheese", {}, "50 kg cheese", "KG")
+    assert len(calls) == 3                       # an old snapshot is rebuilt
