@@ -518,7 +518,9 @@ and quantities are decimal strings on the wire.
 - **Order:** `order_id`, `kitchen_id`, `offer_id`, `idempotency_key`, `expected_total`,
   `lines`, `payload_hash`, `offer_hash` ("Signed offers"), `approved_by` (a person, or
   `"auto-approve (rule set by <person>)"`), `status`, `outcome`, `created_at`,
-  `updated_at`, and `receipt` ("Signed order receipt") once the order is placed. The row is
+  `updated_at`, and `receipt` ("Signed order receipt") once the order is placed. An order
+  that a seed script placed has `placed_by: "demo-seed"` and no `approved_by`: no person
+  approved it ("Signed order receipt"). The row is
   written before any send, with `status` and `outcome` null; both are set when the attempt ends.
 - **Approval:** `approval_id`, `kitchen_id`, `offer_id`, `idempotency_key`, `status`
   (`PENDING`, `APPROVED`, `REJECTED`), `reasons` (string[]), `requested_at`,
@@ -719,21 +721,43 @@ token: agent and kitchen tokens still never approve.
 | Method | Path | Body | Answer |
 |---|---|---|---|
 | POST | `/v1/kitchens/{kitchen_id}/approval-tokens` | `name` (optional, 1 to 80 characters, default `"chat"`), `hours` (optional integer, 1 to 24, default 8) | The token row plus `token`. |
-| GET | `/v1/kitchens/{kitchen_id}/approval-tokens` | | `{"tokens": [...]}`: only the signed-in person's own tokens, newest first, revoked and expired ones included. Never the secret. |
-| DELETE | `/v1/kitchens/{kitchen_id}/approval-tokens/{token_id}` | | The token row, with `revoked_at` set. A second revoke returns the same row. Another person's token is `404 TOKEN_NOT_FOUND`. |
+| GET | `/v1/kitchens/{kitchen_id}/approval-tokens` | | `{"tokens": [...]}`: only the caller's own tokens (a signed-in person's own; for the open demo, the `open-demo` tokens), newest first, revoked and expired ones included. Never the secret. |
+| DELETE | `/v1/kitchens/{kitchen_id}/approval-tokens/{token_id}` | | The token row, with `revoked_at` set. A second revoke returns the same row. Another person's token is `404 TOKEN_NOT_FOUND` (for the open demo: every token that is not `open-demo`). |
 
-Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email),
-`kitchen_id`, `prefix` (the first 8 characters), `created_at`, `created_by` (the
-person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at` (or null).
+Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email, or
+`open-demo`), `kitchen_id`, `prefix` (the first 8 characters), `created_at`, `created_by`
+(the person, `open-demo`, or `operator-cli`), `expires_at`, `last_used_at` (or null),
+`revoked_at` (or null).
 
 - Who creates one: only a person signed in with the session cookie, role `approver`,
   whose account is in the `users` collection, for their own kitchen. The token is that
-  person's, bound to that kitchen. The open demo's shared human token (everyone acts as
-  the demo approver) cannot create one: 403 `PERSONAL_TOKEN_NEEDS_SIGN_IN`. An agent, a
-  kitchen token or a personal token: 403 `HUMAN_SESSION_REQUIRED`. A chef or a viewer:
-  403 `ROLE_REQUIRED`. Any approver of the kitchen may list and revoke the kitchen's
-  personal tokens (list and revoke also work with the shared human token, like the
-  kitchen token routes), so a lost token can be stopped at once.
+  person's, bound to that kitchen. An agent, a kitchen token or a personal token: 403
+  `HUMAN_SESSION_REQUIRED`. A chef or a viewer: 403 `ROLE_REQUIRED`. A signed-in person
+  lists and revokes only their own tokens.
+- The open demo (decision 2026-11-14 18:08 UTC, so judges can try approve-from-chat): while
+  it is on (`GATEWAY_REQUIRE_LOGIN` is not `true`, so the shared human token works), the
+  shared human token may create a personal approval token too, but only for the open
+  demo's kitchen (`GATEWAY_KITCHEN_ID`, default `demo-kitchen`; another kitchen is 403
+  `KITCHEN_SCOPE`). Its `person` and `created_by` are `open-demo`, never the `X-User` name
+  or any account's email. It is the same kind of token: approve and reject only, never
+  proposes, the same expiry (8 hours by default, at most 24). Create and revoke are
+  audited with `open-demo` as `actor`; every approve and reject with it names
+  `open-demo` as `actor` with `"via": "personal_token"` and its own `token_id`, so each
+  judge's token is distinct in the audit.
+  - The open demo lists and revokes only `open-demo` tokens. It never sees a real
+    person's token or email, and it never revokes one (`404 TOKEN_NOT_FOUND`).
+  - Every visitor of the open demo is the same `open-demo` person, so judges see and can
+    revoke each other's open-demo tokens. That is accepted for the demo. The list shows
+    only the prefix and the times created, last used and expiring; the full token is in
+    the create answer only, never again.
+  - Cap: at most 50 active (not revoked, not expired) `open-demo` tokens per kitchen. A
+    create beyond that revokes the oldest active `open-demo` token first (audited as
+    `approval_token_revoked` with `"reason": "open_demo_cap"`), so a new judge is never
+    refused and the number of live open-demo tokens stays bounded.
+  - When the open demo is switched off (`GATEWAY_REQUIRE_LOGIN=true`), an `open-demo`
+    token stops working at once (401 `UNAUTHENTICATED`), and creating, listing and
+    revoking need a signed-in account, as before.
+  Signed-in sessions keep the rule above. The limit to an account can come back later.
 - Operator command for the stage, on the server: `python -m gateway.tokens add-approver
   --email <an existing approver's email> [--hours 8] [--kitchen <id>]` (`--kitchen` is
   needed only for an all-kitchens account), `python -m gateway.tokens list-approvers
@@ -767,12 +791,12 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 
 | Status | Code | When |
 |---|---|---|
-| 401 | `UNAUTHENTICATED` | The token is expired, revoked or unknown, or its account is gone. |
-| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | Create with the open demo's shared human token: a personal token needs a real signed-in account. |
+| 401 | `UNAUTHENTICATED` | The token is expired, revoked or unknown, or its account is gone, or it is an `open-demo` token and the open demo is off. |
+| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | Create, list or revoke by a person who is neither a signed-in session nor the open demo's shared human token. |
 | 403 | `HUMAN_SESSION_REQUIRED` | Create, list or revoke by a token or the agent; any person-only route called with a personal token. |
 | 403 | `ROLE_REQUIRED` | The person is not an `approver`. |
 | 403 | `SCOPE_REQUIRED` | A personal token on a propose or write route. |
-| 403 | `KITCHEN_SCOPE` | Another kitchen than the token's or the session's. |
+| 403 | `KITCHEN_SCOPE` | Another kitchen than the token's or the session's; for the open demo, another kitchen than `GATEWAY_KITCHEN_ID`. |
 | 404 | `TOKEN_NOT_FOUND` | No such approval token in this kitchen. |
 | 422 | `INVALID_REQUEST` | `hours` is not an integer from 1 to 24, or `name` is too long. |
 
@@ -809,7 +833,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". |
 | POST | `/proposals/{id}/change` | `kitchen:propose` (a person or an agent) | Set a line's quantity (0 removes it) or add a product from the addable list. Re-quotes live; approves and sends nothing. Returns the proposal in the `GET /proposals/{id}` shape with a new `offer_id` and `expected_total`. Body and errors under "Changing a proposal". MCP tool `change_proposal`. |
-| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. `receipt` is the signed order receipt or null ("Signed order receipt"). Each order also has `total_ex_vat`, `vat`, `total_incl_vat`, `vat_unknown` and `delivery_fee`, and each line `vat_rate` and `vat_source` ("VAT per product"). |
+| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. `receipt` is the signed order receipt or null ("Signed order receipt"). `placed_by` is `"demo-seed"` for an order the demo seed placed (it has no receipt), and null for every other order. Each order also has `total_ex_vat`, `vat`, `total_incl_vat`, `vat_unknown` and `delivery_fee`, and each line `vat_rate` and `vat_source` ("VAT per product"). |
 | GET | `/orders/{id}/resolution` | `kitchen:approve` (human) | What our store knows about an order whose send result is unknown. Shape under "Resolving an unknown send". |
 | POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
@@ -833,7 +857,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST | `/recalls/{event_id}/dismiss` | `kitchen:approve` (human) | A person dismisses one alert after checking the packs. Body: `reason`. Shape in [recall-contract.md](recall-contract.md). |
 | GET | `/label-checks` | `kitchen:read` | Recorded Hyvää Suomesta producer checks for catalog products 462535, 462576 and 462775, plus one synthetic `negative_control`. Answer: `{"checks": [...], "negative_control": {...}}`. Shape in [product-evidence-contract.md](product-evidence-contract.md). |
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
-| POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver`, signed-in session only (the open demo gets `403 PERSONAL_TOKEN_NEEDS_SIGN_IN`; the operator CLI manages all) | Personal approval tokens. Shape under "Personal approval tokens". |
+| POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver`, a signed-in session (their own tokens), or the open demo (only `open-demo` tokens, only in its kitchen); the operator CLI manages all | Personal approval tokens. Shape under "Personal approval tokens". |
 | GET | `/model-usage` | `kitchen:read` | How much the Buyer agent used its model for this kitchen: runs, model calls, tokens, seconds. Shape under "Model usage". |
 | GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". |
 | GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
@@ -1675,7 +1699,12 @@ the engine and a plain weekday average.
 {"kitchen_id": "demo-kitchen", "from": "2026-09-01", "to": "2026-11-09", "methods": {
   "engine": {
     "total": {"predicted": 1200.0, "actual": 1150.0, "wape": 0.113, "bias": 0.0435,
-              "under": 40.0, "over": 90.0, "series": 48},
+              "under": null, "over": null, "series": 48,
+              "under_eur": "212.40", "over_eur": "388.10", "unpriced_series": 0,
+              "by_unit": [{"unit": "KG", "under": 25.0, "over": 60.0, "series": 30,
+                           "under_eur": "170.20", "over_eur": "331.70"},
+                          {"unit": "L", "under": 15.0, "over": 30.0, "series": 18,
+                           "under_eur": "42.20", "over_eur": "56.40"}]},
     "weeks": [{"week": "2026-W36", "predicted": 120.0, "actual": 115.0, "wape": 0.0957,
                "bias": 0.0435, "under": 3.0, "over": 8.0, "series": 5}]
   },
@@ -1690,6 +1719,18 @@ the engine and a plain weekday average.
   `wape` is the sum of the absolute errors divided by `actual`. `bias` is
   (`predicted` - `actual`) / `actual`. `under` is the sum of actual above predicted,
   `over` the sum of predicted above actual. `series` counts the product-weeks.
+- Short and waste are never one sum over mixed units (#1618). `by_unit` has one row per
+  kitchen unit (`KG`, `L`, `PCS`), sorted by unit: `under` and `over` in that unit, and
+  `series`. `under` and `over` at the top of a row are that sum only when every product
+  has the same unit; with two or more units they are `null`.
+- `under_eur` and `over_eur` (strings, EUR before VAT) value `under` and `over` at the
+  product's price per kitchen unit, in each `by_unit` row and over all units. They count
+  only products with a known price; `null` when none has one. `unpriced_series` counts the
+  product-weeks without a price (in `by_unit`, not in the euros).
+- The price per kitchen unit is the kitchen's latest `orders_history` line price per sales
+  unit divided by the kitchen units in one sales unit, as its deliveries show
+  (`kitchen_stock.received` / `deliveries.delivered_qty`). No order or delivery: no price.
+- Every `weeks` row has the same fields as `total`.
 - These are numbers for display, never figures to approve.
 - `weeks` has one row per ISO week (`YYYY-Www`), oldest first.
 - The window is at most 400 days.
@@ -1869,7 +1910,8 @@ own human decisions. `gateway/autoapprove.py` holds every rule.
 
 - `learning_done` is true when all three hold: at least 4 weeks since the first human
   decision, at least 20 human decisions (approve or reject), and at most 10% of the
-  approved proposals edited before approval. Auto-approvals never count.
+  approved proposals edited before approval. Auto-approvals never count, and nothing
+  the demo seed did counts (`demo-seed` is not a person, #1560).
 - `never`: the reason codes that always send a proposal to a person.
 
 `PUT /v1/kitchens/{kitchen_id}/auto-approve` with `{"enabled": true, "limit_eur": "500"}`
@@ -1889,7 +1931,8 @@ When it is on, `POST /proposals` approves a new proposal without waiting only wh
 of these hold: the total is at or under the limit; no warning; no reason code from
 `never`; nothing excluded; every line has confirmed stock; nothing short; not an event
 and not a recall replacement; every product was already on at least 3 human-approved
-orders of this kitchen whose lines were not edited. Any doubt or error: the proposal
+orders of this kitchen whose lines were not edited (an order the demo seed placed is
+not one of them, #1560). Any doubt or error: the proposal
 waits for a person (`READY`).
 
 - The approval runs the normal approve path, with the same live re-check (a moved price
@@ -1948,8 +1991,14 @@ it records the order a person approved, with the same key as the offers.
   A later change (a supplier confirmation, a person's resolution) is in the order's
   `status` and `outcome`, not in the receipt.
 - `receipt` is null when signing failed (the order is still placed, and the gateway logs
-  a warning), and for every order placed before this field existed. Old orders are not
-  signed afterwards.
+  a warning with the exception type and the order id, never key material), and for every
+  order placed before this field existed. Old orders are not signed afterwards.
+- Every order answer also carries `placed_by` (#1560): `"demo-seed"` for an order that a
+  seed script wrote straight into the store (today one order: the fixed delivery demo
+  order, reference `DEMO-1198`), null for every other order. A seeded order never passed
+  the approve path, so no person approved it and its `receipt` is null; it is never signed
+  afterwards. A client shows this as "placed by the demo seed", not as a missing receipt.
+  An order stored before this field, with `approved_by: "demo-seed"`, answers the same.
 - To verify: take the public key from `GET /.well-known/jwks.json`, check the JWS, then
   compare `sub`, `expected_total` and `lines` with the order shown.
   `python -m gateway.verify_offer --base-url <gateway> --receipt order.json` does this
@@ -3756,9 +3805,10 @@ route errors, never an invented empty brief.
 delivery results and the one-tap `/received` (#1304), and `GET`/`PUT /learned` with
 correction ratios applied to plan proposals (#1305 phase 2a), and a declined product
 left out of a plan proposal when no recipe needs it (#1307, "Declined products in a plan
-proposal" below). In this stage a late supplier (`SUPPLIER_LATE` with `on_time_rate` under
-0.7) only adds a warning to the plan's `problems`: a declined recipe ingredient is never
-left out silently, and learned lead times do not change safety stock yet.
+proposal" below). A late supplier (`SUPPLIER_LATE` with `on_time_rate` under 0.7) adds a
+warning to the plan's `problems`, and its learned lead-time spread adds safety stock to
+its plan lines (#1306, "Learned safety stock" below); it never moves a date. A declined
+recipe ingredient is never left out silently.
 Learning adds no model-controlled write endpoint and never changes a typed request quantity.
 
 ### Changes and human feedback
@@ -4007,6 +4057,52 @@ alone, with Finnish number formatting normalized. An invalid sentence is omitted
 leaving the plain learned evidence. A not-applicable model suggestion is only text
 for human review; it does not skip an engine adjustment or persist a switch. Prompt memory is
 capped at 12 entries and approximately 600 tokens.
+
+#### Learned safety stock (#1306)
+
+A plan proposal has no safety stock of its own: it orders the window's net need. Only
+when the supplier of a line has an active `SUPPLIER_LATE` fact with `on_time_rate` under
+0.7 and a known `sigma_lead_time` above 0 does the gateway add the engine's safety
+stock (`engine.demand.safety_stock`) to that line's need:
+
+`safety_stock = z x daily_demand x sigma_lead_time`
+
+- `daily_demand` is the line's gross need in the window divided by the window's days;
+  `z` is the kitchen's service level for the product's class (`engine/params.py`).
+- The statistics are this product's own deliveries from the supplier when at least
+  five of them are in the last eight weeks (`evidence.scope: "product"`), else all of
+  the supplier's deliveries (`"supplier"`). The lead time passed to the engine is the
+  learned `mean_lead_time` when it differs from the supplier's term by one day or
+  more, else the term.
+- Caps: `sigma_lead_time` counts for at most 2 days, and the safety stock is at most
+  25 % of the line's need (`capped: true` when a cap applied). Fewer than five
+  deliveries: no fact, no safety stock.
+- A line that a `CORRECTION_RATIO` already adjusted gets no safety stock on top: the
+  person's own correction is the last word, and a line names one fact.
+- Typed requests, lists, supplier offers and the Buyer's proposals never get it. For
+  Valio it only adds quantity: `availableDate` and `closingTime` stay Valio's.
+
+The line and its stored need then carry `learned` in this form (no `ratio`; a
+`learned` object without `kind` is a `CORRECTION_RATIO` adjustment):
+
+```json
+"learned": {"fact_id": "lf_01JYK8M4N3M4K7W8N0E4Q2F6C5", "kind": "SUPPLIER_LATE",
+            "name": "Corner Bakery", "from_qty": "70", "to_qty": "79.6", "unit": "KG",
+            "safety_stock": "9.6", "sigma_lead_time": 0.49, "capped": false,
+            "evidence": {"rows": 5, "late": 3, "scope": "supplier",
+                         "from": "2026-11-02", "to": "2026-11-10", "last": "2026-11-10"}}
+```
+
+`safety_stock`, `from_qty` and `to_qty` are decimal strings in `unit`, before pack
+rounding; `sigma_lead_time` is a JSON number in days, as used after the cap;
+`evidence.rows` is the number of deliveries with a known lateness and `evidence.late`
+how many of them were late. The line's `why` starts with the same facts in a sentence:
+"Includes 9.6 KG learned safety stock on top of 70 KG: Corner Bakery was late in 3 of
+its last 5 deliveries (lead time varies by 0.49 days). Switch this learned fact off to
+order 70 KG." Switching the fact off (`PUT /learned/{id}`) makes the next plan proposal
+use the plain need again. Each adjusted line is in the `learned_fact_applied` audit
+entry, in the same shape as a correction ratio. Any learning error leaves the plan
+without the adjustment.
 
 #### Declined products in a plan proposal (#1307)
 
