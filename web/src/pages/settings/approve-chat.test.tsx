@@ -34,7 +34,8 @@ describe("Approve from chat settings", () => {
     expect(create).toHaveBeenCalledWith({ hours: 8 });
     expect(await screen.findByText("tka_demo_0001", { selector: "code" })).toBeVisible();
     const config = screen.getByLabelText("claude_desktop_config.json");
-    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "tka_demo_0001"));
+    // The config never carries the token (#1595): it is shown once, in its own box.
+    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "<token>"));
     const list = await screen.findByRole("list", { name: "Approval tokens" });
     expect(within(list).getByText("open-demo")).toBeVisible();
     expect(within(list).queryByText(/tka_demo_0001/)).not.toBeInTheDocument();
