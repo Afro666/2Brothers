@@ -27,20 +27,12 @@ import type {
   RecipeItem,
   Supplier,
 } from "@/types";
+import { EU_ALLERGENS } from "@/lib/allergens";
 import { ProductPicker, type PickerProduct } from "@/pages/products/product-picker";
 import { recipeAllergens } from "@/pages/products/recipe-allergens";
 import { catalogProductIdsInRecipes } from "@/pages/products/recipe-products";
 
-const ALLERGENS = [
-  ["AM", "Milk"],
-  ["AW", "Gluten cereals"],
-  ["AE", "Egg"],
-  ["AF", "Fish"],
-  ["AN", "Tree nuts"],
-  ["AP", "Peanuts"],
-  ["AS", "Sesame"],
-  ["AY", "Soy"],
-] as const;
+const ALLERGENS = EU_ALLERGENS.map(({ code, name }) => [code, name] as const);
 
 function productName(product: Product | OwnProduct): string {
   return "names" in product ? product.names.en : product.name;

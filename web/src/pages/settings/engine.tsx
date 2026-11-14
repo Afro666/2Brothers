@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ALLERGEN_NAMES as ALLERGENS } from "@/lib/allergens";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { useAsync } from "@/lib/use-async";
@@ -17,16 +18,6 @@ import { SampleData } from "@/components/purchasing/sample-data";
 import { SettingsSection } from "@/pages/settings/section";
 import type { DemandClass, KitchenSettings } from "@/types";
 
-const ALLERGENS: Record<string, string> = {
-  AM: "Milk",
-  AW: "Gluten cereals",
-  AE: "Egg",
-  AF: "Fish",
-  AN: "Tree nuts",
-  AP: "Peanuts",
-  AS: "Sesame",
-  AY: "Soy",
-};
 const DEMAND_CLASSES: { key: DemandClass; name: string; description: string }[] = [
   { key: "A", name: "A", description: "Menu-critical" },
   { key: "B", name: "B", description: "Regular" },

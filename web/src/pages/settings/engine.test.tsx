@@ -23,6 +23,18 @@ describe("Ordering engine settings", () => {
     expect(screen.getByRole("button", { name: "Save settings" })).toBeDisabled();
   });
 
+  it("offers all 14 EU allergens", async () => {
+    renderApp("/settings/engine", createMockApi());
+
+    await screen.findByLabelText("A — Menu-critical");
+    for (const name of [
+      "AW Gluten cereals", "AC Crustaceans", "AE Egg", "AF Fish", "AP Peanuts", "AY Soy", "AM Milk",
+      "AN Tree nuts", "BC Celery", "BM Mustard", "AS Sesame", "AU Sulphites", "NL Lupin", "UM Molluscs",
+    ]) {
+      expect(screen.getByRole("checkbox", { name })).toBeInTheDocument();
+    }
+  });
+
   it("saves a service level and writes an audit event", async () => {
     const user = userEvent.setup();
     const api = createMockApi();

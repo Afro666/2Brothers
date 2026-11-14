@@ -16,18 +16,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EU_ALLERGENS } from "@/lib/allergens";
 import type { ProductLabel } from "@/types";
 
-const ALLERGENS = [
-  { code: "AM", name: "Milk" },
-  { code: "AW", name: "Gluten cereals" },
-  { code: "AE", name: "Egg" },
-  { code: "AF", name: "Fish" },
-  { code: "AN", name: "Tree nuts" },
-  { code: "AP", name: "Peanuts" },
-  { code: "AS", name: "Sesame" },
-  { code: "AY", name: "Soy" },
-] as const;
+const ALLERGENS = EU_ALLERGENS;
 
 const LABEL_OPTIONS = Object.keys(LABEL_META) as ProductLabel[];
 const TEMPERATURES: ProductTemperature[] = ["ambient", "chilled", "frozen"];
