@@ -86,12 +86,20 @@ class BuyerWorker:
             stored = await self.gateway.request('POST', f'/v1/kitchens/{kitchen_id}/needs', payload=need)
             model = self.model_factory()
             lookup = lambda pid: buyer_context.product(self.db, kitchen_id, pid)
-            async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
-                buyer = Buyer(model, session, self.gateway, need_id=stored['need_id'],
-                              requested_date=need['requested_date'], run_id=row['_id'], max_steps=12, now=self.now,
-                              catalog_lookup=lookup, allergen_policy=policy,
-                              substitute_planner=SubstitutePlanner(lookup, policy) if policy else None)
-                outcome = await buyer.run(need['text'])
+            # The model does not finish every run (seen live: about 1 in 3 stopped without asking
+            # for approval). A run that wrote nothing is safe to start once more, under its own
+            # run id so its audit steps stay separate. A run that wrote something is never repeated.
+            for attempt in (1, 2):
+                async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
+                    buyer = Buyer(model, session, self.gateway, need_id=stored['need_id'],
+                                  requested_date=need['requested_date'],
+                                  run_id=row['_id'] if attempt == 1 else f"{row['_id']}-retry",
+                                  max_steps=12, now=self.now,
+                                  catalog_lookup=lookup, allergen_policy=policy,
+                                  substitute_planner=SubstitutePlanner(lookup, policy) if policy else None)
+                    outcome = await buyer.run(need['text'])
+                if outcome['status'] == 'SENT_FOR_APPROVAL' or buyer.mutations:
+                    break
             if outcome['status'] != 'SENT_FOR_APPROVAL':
                 raise WorkerError(503, 'BUYER_INCOMPLETE', fallback_safe=not buyer.mutations)
             proposals = await self.gateway.request('GET', f'/v1/kitchens/{kitchen_id}/proposals')
