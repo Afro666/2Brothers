@@ -60,6 +60,21 @@ describe("ProductThumb with a brand", () => {
     expect(list).toHaveBeenCalledWith(["Valio", "Arla"]);
   });
 
+  it("never asks for a brand name over 100 characters, and the others still get logos", async () => {
+    const long = "B".repeat(101);
+    const list = vi.fn(async (names: string[]) => names.map((name) => logo(name, true)));
+    const { container } = render(
+      <ApiProvider api={withLogos(list)}>
+        <ProductThumb en="Valio milk 1 l" brand="Valio" />
+        <ProductThumb en="Other milk 1 l" brand={long} />
+      </ApiProvider>,
+    );
+    await waitFor(() => expect(container.querySelectorAll("img")).toHaveLength(1));
+    expect(screen.getByAltText("Valio logo")).toHaveAttribute("src", URL);
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledWith(["Valio"]);
+  });
+
   it("goes back to the kind tile when the image does not load", async () => {
     const list = vi.fn(async (names: string[]) => names.map((name) => logo(name, true)));
     const { container } = render(
