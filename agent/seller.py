@@ -30,6 +30,7 @@ import asyncio
 from datetime import date, timedelta
 from decimal import Decimal
 import json
+import logging
 import re
 
 SUPPLIER = "sup-valio"
@@ -38,6 +39,8 @@ SHORTLIST = 5
 CANDIDATES = 150           # how many products of the category are asked for live availability
 UNKNOWN_FROM = 999999      # an available amount from here up is Valio's filler, not a count
 DAYS = 7
+
+log = logging.getLogger(__name__)
 MAX_PAIRS = 60             # kitchen and product pairs looked at in one run (each costs a search)
 MEASURES = ("L", "KG")     # the engine sizes a request in litres or kilograms
 SCHEMA = {"type": "object", "additionalProperties": False, "required": ["index", "reason"],
@@ -200,9 +203,11 @@ async def model_pick(model, row: dict, demand: Decimal, entries: list[dict]) -> 
         return None
     reason = clean_text(reason)[:REASON_MAX].strip()
     if re.search(r"\bpack", reason, re.IGNORECASE) and not entries[index]["sold_as"].startswith("pieces"):
+        log.info("model reason refused by the pack check: %r", reason)
         return None
     given = {n.replace(",", ".") for n in _NUMBER.findall(messages[1]["content"])}
     if any(n.replace(",", ".") not in given for n in _NUMBER.findall(reason)):
+        log.info("model reason refused by the number check: %r", reason)
         return None
     return (index, reason) if reason else None
 
