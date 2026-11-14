@@ -137,7 +137,7 @@ class BuyerWorker:
                 await model.close()
 
 
-def create_app(worker=None, shelf=None):
+def create_app(worker=None, shelf=None, delivery_note=None):
     state = {}
     @asynccontextmanager
     async def lifespan(app):
@@ -190,6 +190,9 @@ def create_app(worker=None, shelf=None):
     # Snap the shelf (#373): POST /shelf reads a photo into a stock count to confirm.
     from agent.shelf_service import mount_shelf
     mount_shelf(app, WorkerError, shelf)
+    # Delivery-note check (#362): POST /delivery-note reads a note and checks it against the order.
+    from agent.receiving_service import mount_delivery_note
+    mount_delivery_note(app, WorkerError, delivery_note)
     return app
 
 
