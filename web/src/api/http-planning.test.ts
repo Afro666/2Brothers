@@ -505,6 +505,9 @@ describe("planning methods of createHttpApi", () => {
       decisionsNeeded: 20,
       editRate: 0.125,
       maxEditRate: 0.1,
+      enabled: false,
+      limitEur: null,
+      setBy: null,
     });
     expect(calls).toHaveLength(1);
   });
