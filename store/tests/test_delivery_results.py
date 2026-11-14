@@ -96,6 +96,82 @@ def test_manual_replay_returns_the_old_result_even_after_a_later_check():
             lines=[line])
 
 
+def _check(database, **over):
+    values = dict(kitchen_id="k-1", order_id="order-1", supplier_id="sup-1",
+                  requested_date="2026-11-16", ordered_at="2026-11-14T10:00:00Z",
+                  delivery_date="2026-11-17", checked_by="chef-1", checked_at=NOW,
+                  source="photo", lines=[LINE], not_ordered=[])
+    values.update(over)
+    return delivery_results.save_observation(database, **values)
+
+
+def test_two_saves_at_the_same_revision_store_revisions_one_and_two(monkeypatch):
+    database = db()
+    real_current = delivery_results._current
+    stale = {}
+
+    def racing_current(d, kitchen_id, order_id):
+        # The first read of the second save sees what the first save saw: nothing.
+        if not stale:
+            stale["done"] = True
+            return None
+        return real_current(d, kitchen_id, order_id)
+
+    first = _check(database)
+    monkeypatch.setattr(delivery_results, "_current", racing_current)
+    second = _check(database, checked_by="chef-2")
+    assert (first["revision"], second["revision"]) == (1, 2)
+    assert second["result_id"] == first["result_id"]
+    current = database.delivery_result_current.find_one({"order_id": "order-1"})
+    assert current["revision"] == 2
+
+    # The same race on a recheck: both read revision 2.
+    monkeypatch.setattr(delivery_results, "_current", real_current)
+    seen = real_current(database, "k-1", "order-1")
+    calls = []
+
+    def stale_current(d, kitchen_id, order_id):
+        calls.append(1)
+        return dict(seen) if len(calls) == 1 else real_current(d, kitchen_id, order_id)
+
+    _check(database, checked_by="chef-3")
+    monkeypatch.setattr(delivery_results, "_current", stale_current)
+    fourth = _check(database, checked_by="chef-4")
+    assert fourth["revision"] == 4
+    assert sorted(r["revision"] for r in database.delivery_results.find()) == [1, 2, 3, 4]
+
+
+def test_a_refused_conflicting_received_leaves_the_current_version_unchanged(monkeypatch):
+    database = db()
+    line = {**LINE, "status": "RECEIVED", "delivered": "40"}
+    first, _ = delivery_results.save_received(
+        database, kitchen_id="k-1", order_id="order-1", idempotency_key="received-1",
+        delivery_date="2026-11-17", supplier_id="sup-1", requested_date="2026-11-16",
+        ordered_at=None, checked_by="chef-1", checked_at=NOW, lines=[line])
+    before = database.delivery_result_current.find_one({"order_id": "order-1"})
+
+    # A racer whose first key lookup ran before the first save reserved the key.
+    real_find_one = mongomock.collection.Collection.find_one
+    missed = []
+
+    def racing_find_one(self, *args, **kwargs):
+        if self.name == delivery_results.KEYS and not missed:
+            missed.append(1)
+            return None
+        return real_find_one(self, *args, **kwargs)
+
+    monkeypatch.setattr(mongomock.collection.Collection, "find_one", racing_find_one)
+    with pytest.raises(delivery_results.IdempotencyConflict):
+        delivery_results.save_received(
+            database, kitchen_id="k-1", order_id="order-1", idempotency_key="received-1",
+            delivery_date="2026-11-18", supplier_id="sup-1", requested_date="2026-11-16",
+            ordered_at=None, checked_by="chef-1", checked_at=NOW, lines=[line])
+    after = database.delivery_result_current.find_one({"order_id": "order-1"})
+    assert (after["result_id"], after["revision"]) == (before["result_id"], 1)
+    assert database.delivery_results.count_documents({}) == 1
+    assert first["revision"] == 1
+
+
 def test_only_structured_fields_are_stored():
     result = photo(delivery_date="2026-11-17")
     text = str(result)
