@@ -127,7 +127,10 @@ export function CatalogPage() {
   const search = parseSearch(useSearch({ from: "/catalog" }));
   const navigate = useNavigate();
   const [query, setQuery] = useState(search.q);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const hasFilters =
+    search.exclude.length > 0 || search.strict || search.labels.length > 0 || search.temp !== undefined;
+  const [filtersOpen, setFiltersOpen] = useState<boolean | null>(null);
+  const showFilters = filtersOpen ?? hasFilters;
   const [visibleCount, setVisibleCount] = useState(RESULTS_PER_PAGE);
   const phone = useMediaQuery(PHONE_QUERY);
   const resultList = useRef<HTMLUListElement>(null);
@@ -163,6 +166,7 @@ export function CatalogPage() {
   function clearFilters() {
     const cleared = parseSearch({});
     setQuery("");
+    setFiltersOpen(false);
     latest.current = cleared;
     void navigate({ to: "/catalog", search: {}, replace: true });
   }
@@ -280,17 +284,21 @@ export function CatalogPage() {
             <Button
               type="button"
               variant="ghost"
-              aria-expanded={filtersOpen}
-              onClick={() => setFiltersOpen((open) => !open)}
-              className="flex w-full justify-between px-0 text-sm font-medium md:hidden"
+              aria-expanded={showFilters}
+              aria-controls="catalog-filters"
+              onClick={() => setFiltersOpen(!showFilters)}
+              className="flex w-full justify-between px-0 text-sm font-medium"
             >
               {t("Filters")}
               <ChevronDown
-                className={`size-4 text-muted-foreground transition-transform ${filtersOpen ? "rotate-180" : ""}`}
+                className={`size-4 text-muted-foreground transition-transform ${showFilters ? "rotate-180" : ""}`}
                 aria-hidden
               />
             </Button>
-            <div className={`${filtersOpen ? "" : "hidden"} border-t pt-4 md:mt-0 md:block md:border-0 md:pt-0`}>
+            <div
+              id="catalog-filters"
+              className={`${showFilters ? "" : "hidden"} border-t pt-4 md:mt-0 md:border-0 md:pt-0`}
+            >
               <Filters search={search} update={update} />
             </div>
           </div>
@@ -320,6 +328,11 @@ export function CatalogPage() {
         ) : null}
         {currentResult.status === "ready" && results.length === 0 && !unfiltered ? (
           <EmptyState title={t("No products match this search")}>
+            {active.meaning && currentResult.data?.meaningUnavailable ? (
+              <p className="text-sm text-muted-foreground">
+                {t("Search by meaning is not available right now; only words were searched.")}
+              </p>
+            ) : null}
             <Button className="mt-3" variant="outline" onClick={clearFilters}>
               {t("Clear filters")}
             </Button>
@@ -329,7 +342,11 @@ export function CatalogPage() {
           <div className="space-y-3">
             <div className="space-y-1" aria-live="polite">
               <p className="text-sm text-muted-foreground">
-                {results.length === 1 ? t("{count} product", { count: results.length }) : t("{count} products", { count: results.length })}
+                {Math.min(visibleCount, results.length) < results.length
+                  ? t("{shown} of {total} products", { shown: visibleCount, total: results.length })
+                  : results.length === 1
+                    ? t("{count} product", { count: results.length })
+                    : t("{count} products", { count: results.length })}
               </p>
               {withoutData > 0 ? (
                 <p className="text-sm text-muted-foreground">
@@ -473,7 +490,6 @@ function Filters({ search, update }: { search: CatalogSearch; update: Update }) 
             onChange={() => update((current) => ({ ...current, exclude: toggle(current.exclude, allergen.code) }))}
           >
             {t(allergen.name)}
-            <span className="ml-1 text-xs text-muted-foreground">({allergen.code})</span>
           </CheckRow>
         ))}
         <div className="pt-2">

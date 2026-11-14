@@ -25,14 +25,25 @@ async function startState(user: ReturnType<typeof userEvent.setup>, firstExample
   await user.keyboard("{Enter}");
 }
 
+async function openFilters(user: ReturnType<typeof userEvent.setup>) {
+  const button = await screen.findByRole("button", { name: "Filters" });
+  if (button.getAttribute("aria-expanded") === "false") await user.click(button);
+}
+
 describe("catalog page", () => {
   beforeEach(() => localStorage.clear());
 
-  it("exposes allergen filters at desktop width without opening a panel", async () => {
+  it("keeps filters folded at desktop width until requested, without allergen codes", async () => {
+    const user = userEvent.setup();
     renderApp("/catalog");
 
-    expect(await screen.findByRole("checkbox", { name: /Milk/ })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /Gluten cereals/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Filters" })).toHaveAttribute("aria-expanded", "false");
+    expect(document.getElementById("catalog-filters")).toHaveClass("hidden");
+    await openFilters(user);
+    expect(document.getElementById("catalog-filters")).not.toHaveClass("hidden");
+    expect(screen.getByRole("checkbox", { name: "Milk" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Gluten cereals" })).toBeInTheDocument();
+    expect(screen.queryByText("(AM)")).not.toBeInTheDocument();
   });
 
   it("lists the milk products for a query", async () => {
@@ -62,6 +73,7 @@ describe("catalog page", () => {
     renderApp("/catalog?q=milk");
     await screen.findByText("5 products");
 
+    await openFilters(user);
     await user.click(screen.getByRole("checkbox", { name: /Milk/ }));
 
     expect(await screen.findByText("1 product")).toBeInTheDocument();
@@ -77,6 +89,7 @@ describe("catalog page", () => {
 
     expect(await screen.findByText("5 products")).toBeInTheDocument();
     expect(screen.getByRole("searchbox", { name: "Search the catalog" })).toHaveValue("");
+    await openFilters(user);
     expect(screen.getByRole("checkbox", { name: /Milk/ })).not.toBeChecked();
   });
 
@@ -97,6 +110,7 @@ describe("catalog page", () => {
     const box = screen.getByRole("searchbox", { name: "Search the catalog" });
     await user.clear(box);
     await user.type(box, "organic");
+    await openFilters(user);
     await user.click(screen.getByRole("checkbox", { name: "Finnish swan" }));
 
     await waitFor(() => expect(router.state.location.search).toMatchObject({ labels: "GOODS_FROM_FINLAND_BLUE_SWAN" }));
@@ -122,6 +136,7 @@ describe("catalog page", () => {
     const { router } = renderApp("/catalog");
     await screen.findByText("5 products");
 
+    await openFilters(user);
     await user.click(screen.getByRole("combobox", { name: "Temperature" }));
     await user.click(await screen.findByRole("option", { name: "Ambient" }));
 
@@ -315,13 +330,16 @@ describe("catalog page", () => {
     const user = userEvent.setup();
     renderApp("/catalog?q=milk", api);
 
-    expect(await screen.findByText("30 products")).toBeInTheDocument();
+    expect(await screen.findByText("12 of 30 products")).toBeInTheDocument();
     expect(screen.getAllByText(/^Product \d+$/)).toHaveLength(12);
     await user.click(screen.getByRole("button", { name: "Show more (18 more)" }));
     expect(await screen.findByText("Product 24")).toBeInTheDocument();
     expect(screen.getAllByText(/^Product \d+$/)).toHaveLength(24);
-    expect(screen.getByText("30 products")).toBeInTheDocument();
+    expect(screen.getByText("24 of 30 products")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show more (6 more)" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show more (6 more)" }));
+    expect(await screen.findByText("30 products")).toBeInTheDocument();
+    expect(screen.queryByText(/ of 30 products/)).not.toBeInTheDocument();
   });
 
   describe("Search by meaning (#1382)", () => {
@@ -363,6 +381,16 @@ describe("catalog page", () => {
         await screen.findByText("Search by meaning is not available right now. These products match by words."),
       ).toBeInTheDocument();
       expect(screen.getAllByText("By words")).toHaveLength(5);
+    });
+
+    it("says so in the empty state when meaning search is unavailable and words find nothing", async () => {
+      const { api } = meaningApi(true);
+      renderApp("/catalog?q=zzz-nothing&meaning=true", api);
+
+      expect(await screen.findByRole("heading", { name: "No products match this search" })).toBeInTheDocument();
+      expect(
+        screen.getByText("Search by meaning is not available right now; only words were searched."),
+      ).toBeInTheDocument();
     });
 
     it("is not shown on sample data: the mock is not Atlas", async () => {
@@ -415,7 +443,7 @@ describe("catalog page: a short result list on a phone (#1142)", () => {
     const user = userEvent.setup();
     renderApp("/catalog?q=milk", manyProducts(30));
 
-    expect(await screen.findByText("30 products")).toBeInTheDocument();
+    expect(await screen.findByText("12 of 30 products")).toBeInTheDocument();
     expect(resultItems()).toHaveLength(12);
 
     await user.click(screen.getByRole("button", { name: "Show more (18 more)" }));
@@ -481,7 +509,7 @@ describe("catalog page: a short result list on a phone (#1142)", () => {
     onAPhone();
     const user = userEvent.setup();
     renderApp("/catalog?q=milk", manyProducts(30));
-    await screen.findByText("30 products");
+    await screen.findByText("12 of 30 products");
 
     expect(resultItems()).toHaveLength(12);
     await user.click(screen.getByRole("button", { name: "Show more (18 more)" }));
