@@ -181,6 +181,27 @@ class HybridQueryTests(unittest.TestCase):
                                    {"allergens.contains": {"$nin": ["AM"]}},
                                    {"allergens.may_contain": {"$nin": ["AM"]}}])
 
+    def test_almonds_excluded_also_drops_a_tree_nuts_only_product_on_every_side(self):
+        # #1481: the group rule (#741) holds for the text, the vector and the hybrid search.
+        filters = {"exclude_allergens": ["SA"]}  # almonds
+        nuts_only = {"allergens": {"contains": ["AN"], "may_contain": []}}
+
+        def text_refuses(search):
+            return any(set(nuts_only["allergens"].get(c["in"]["path"].split(".")[1], []))
+                       & set(c["in"]["value"]) for c in search["compound"]["mustNot"] if "in" in c)
+
+        def vector_refuses(vector_filter_doc):
+            return any(set(nuts_only["allergens"].get(path.split(".")[1], [])) & set(cond["$nin"])
+                       for clause in vector_filter_doc["$and"] for path, cond in clause.items()
+                       if path.startswith("allergens."))
+
+        from store.search import build_pipeline
+        self.assertTrue(text_refuses(build_pipeline("drink", filters)[0]["$search"]))
+        self.assertTrue(vector_refuses(vector_filter(filters)))
+        sides = build_hybrid_pipeline("drink", "VECTOR", filters)[0]["$rankFusion"]["input"]["pipelines"]
+        self.assertTrue(text_refuses(sides["text"][0]["$search"]))
+        self.assertTrue(vector_refuses(sides["vector"][0]["$vectorSearch"]["filter"]))
+
     def test_hybrid_pipeline_fuses_text_and_vector_over_the_same_filters(self):
         pipeline = build_hybrid_pipeline("oat drink", "VECTOR", {"exclude_allergens": ["gluten"]}, 5, "k1")
         sides = pipeline[0]["$rankFusion"]["input"]["pipelines"]
