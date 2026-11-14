@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 
 import { formatDateTime } from "@/lib/format";
+import { CODE_LABELS, plainCode } from "@/lib/codes";
 import { useT } from "@/lib/i18n";
 import type { AuditEvent, AuditKind } from "@/types";
 
@@ -210,6 +211,7 @@ function makeGroup(events: AuditEvent[], index: number): AuditStepGroup & { inde
 }
 
 function translatedReason(event: AuditEvent, t: ReturnType<typeof useT>): string {
+  if (Object.hasOwn(CODE_LABELS, event.reason)) return `${t(CODE_LABELS[event.reason].title)}. ${t(CODE_LABELS[event.reason].detail)}`;
   if (event.actor !== "agent") return event.reason;
   const productsForDate = /^(\d+) products? for (.+)$/.exec(event.reason);
   if (productsForDate) {
@@ -288,6 +290,7 @@ function AuditStepRow({
   const actorLabel = ACTOR_LABEL[event.actor] ? t(ACTOR_LABEL[event.actor]) : event.actor;
   const actorStyle = ACTOR_STYLE[event.actor] ?? ACTOR_STYLE.system;
   const person = event.actor === "chef" || event.actor === "human";
+  const summary = plainCode(event.summary, t);
   return (
     <li
       className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-[8.5rem_6rem_minmax(0,1fr)] ${person ? "bg-muted/30" : ""}`}
@@ -307,7 +310,7 @@ function AuditStepRow({
           {kindLabel}
           {showOrder && event.orderId ? <span className="font-mono"> · {event.orderId}</span> : null}
         </p>
-        {event.summary !== groupTitle ? <p className="mt-0.5 text-sm font-semibold break-words">{event.summary}</p> : null}
+        {event.summary !== groupTitle ? <p className="mt-0.5 text-sm font-semibold break-words">{summary}</p> : null}
         {event.actorName ? (
           <p className="text-sm break-all" data-actor-name>
             {t("By {name}", { name: event.actorName })}
@@ -351,7 +354,7 @@ function AuditGroupCard({ group }: { group: AuditStepGroup }) {
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b bg-muted/20 px-4 py-3">
         <div className="min-w-0 flex-1">
           <h2 id={headingId} className="text-base font-semibold break-words">
-            {t(group.title)}
+            {t(plainCode(group.title, t))}
           </h2>
           {group.titleEvent?.reason && group.titleEvent.reason !== group.title ? (
             // The whole decision summary, in the agent's words: the heading holds only what was asked.

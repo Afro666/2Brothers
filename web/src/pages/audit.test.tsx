@@ -104,6 +104,9 @@ describe("audit page", () => {
       order_resolved: "A person resolved an unknown send",
       recall_check: "Recall check",
       demo_inbox_cleared: "Test proposals cleared before a demo",
+      delivery_note_read: "Delivery note read",
+      proposal_explanation_failed: "Proposal explanation failed",
+      kitchen_brief_read: "Kitchen brief read",
       some_future_kind: "some_future_kind",
     };
     const raw = [
@@ -111,7 +114,9 @@ describe("audit page", () => {
         event_id: `k-${i}`,
         kind,
         actor: "system",
-        at: `2026-11-14T10:0${i}:00+00:00`,
+        ...(kind === "proposal_explanation_failed" ? { reason: "EXPLANATION_UNAVAILABLE" } : {}),
+        ...(kind === "delivery_note_read" ? { reason: "BLOCKED_BY_RECALL" } : {}),
+        at: `2026-11-14T10:${String(i).padStart(2, "0")}:00+00:00`,
       })),
       { event_id: "t-1", type: "tool_call_finished", tool: "request_approval", arguments: {}, result: {} },
       { event_id: "t-2", type: "tool_call_finished", tool: "simulate_order", arguments: {}, result: {} },
@@ -127,6 +132,8 @@ describe("audit page", () => {
     expect(screen.getAllByText("Buyer simulated the order")).toHaveLength(1);
     expect(screen.getAllByText("Buyer is asking for approval")).toHaveLength(1);
     expect(screen.getAllByText("new_tool finished")).toHaveLength(1);
+    expect(screen.getByText("Explanation unavailable. The Buyer could not explain this proposal. Check the order details before approving.")).toBeInTheDocument();
+    expect(screen.getByText("Blocked by a recall. A product on this order matches a food recall. It cannot be approved.")).toBeInTheDocument();
     for (const name of ["stock_photo_read", "request_approval finished", "Buyer called request_approval"]) {
       expect(screen.queryByText(name)).not.toBeInTheDocument();
     }

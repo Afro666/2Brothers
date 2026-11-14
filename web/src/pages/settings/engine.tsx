@@ -106,7 +106,7 @@ export function EngineSection() {
       </span>
     ) : null;
 
-  const allergenCodes = draft ?[...new Set([...Object.keys(ALLERGENS), ...draft.excludedAllergens])].sort() : [];
+  const allergenCodes = draft ? [...new Set([...Object.keys(ALLERGENS), ...draft.excludedAllergens])] : [];
 
   return (
     <SettingsSection
@@ -353,7 +353,11 @@ export function EngineSection() {
                       }}
                     />
                     <Label htmlFor={id}>
-                      {code} {ALLERGENS[code] ? t(ALLERGENS[code]) : t("(GS1 code {code})", { code })}
+                      {ALLERGENS[code] ? (
+                        <>{t(ALLERGENS[code])} <span className="text-xs text-muted-foreground">({code})</span></>
+                      ) : (
+                        t("(GS1 code {code})", { code })
+                      )}
                     </Label>
                   </div>
                 );

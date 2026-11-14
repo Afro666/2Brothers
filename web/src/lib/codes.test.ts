@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { CODE_LABELS, codeLabel, plainReason } from "@/lib/codes";
+import { CODE_LABELS, codeLabel, plainCode, plainReason } from "@/lib/codes";
+import { translate } from "@/lib/i18n";
 
 describe("codeLabel", () => {
   it("gives the over-budget warning a plain title and says it does not block", () => {
@@ -31,6 +32,10 @@ describe("codeLabel", () => {
       "COVER_CEILING",
       "POSITION_OK",
       "BLOCKED_BY_RECALL",
+      "proposal_explanation_failed",
+      "kitchen_brief_read",
+      "delivery_note_read",
+      "EXPLANATION_UNAVAILABLE",
     ];
     for (const code of codes) {
       const label = CODE_LABELS[code];
@@ -45,6 +50,28 @@ describe("codeLabel", () => {
       title: "New thing warning",
       detail: "The gateway flagged this. Check the order before you approve.",
     });
+  });
+
+  it.each([
+    "proposal_explanation_failed",
+    "kitchen_brief_read",
+    "delivery_note_read",
+    "EXPLANATION_UNAVAILABLE",
+  ])("has Finnish words for %s", (code) => {
+    const label = codeLabel(code);
+    expect(translate("fi", label.title)).not.toBe(label.title);
+    expect(translate("fi", label.detail)).not.toBe(label.detail);
+  });
+});
+
+describe("plainCode", () => {
+  it("gives a raw step code its plain title and leaves any other text as it is (#1591)", () => {
+    const fi = (text: string) => translate("fi", text);
+    expect(plainCode("kitchen_brief_read", (text) => text)).toBe("Kitchen brief read");
+    expect(plainCode("kitchen_brief_read", fi)).toBe("Keittiön ohjeet luettu");
+    expect(plainCode("Order placed", fi)).toBe("Order placed");
+    // Only the map's own codes: a name on Object's prototype is just text.
+    expect(plainCode("constructor", fi)).toBe("constructor");
   });
 });
 

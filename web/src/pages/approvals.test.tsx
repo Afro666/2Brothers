@@ -330,7 +330,7 @@ describe("ApprovalsPage", () => {
     renderApp("/approvals", api);
     await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[0]);
     const originalQuantity = screen.getByRole("spinbutton", {
-      name: "Quantity for Arla 1 L lactose free fat free UHT milk drink (ST)",
+      name: "Quantity for Arla 1 L lactose free fat free UHT milk drink (pieces)",
     });
     await user.clear(originalQuantity);
     await user.type(originalQuantity, "40");
@@ -370,7 +370,7 @@ describe("ApprovalsPage", () => {
 
     expect(await screen.findByRole("button", { name: /Approve €2,213\.33 incl VAT/ })).toBeInTheDocument();
     expect((await api.getOrder("ORD-1043")).lines).toHaveLength(2);
-    const lineQuantities = screen.getAllByRole("spinbutton", { name: /Quantity for .* \(ST\)/ });
+    const lineQuantities = screen.getAllByRole("spinbutton", { name: /Quantity for .* \((?:piece|pieces)\)/ });
     const updateButtons = screen.getAllByRole("button", { name: /^Update / });
     expect(lineQuantities).toHaveLength(3);
     expect(updateButtons).toHaveLength(2);

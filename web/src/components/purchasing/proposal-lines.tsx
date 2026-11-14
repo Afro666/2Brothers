@@ -14,6 +14,7 @@ import {
   isLater,
   isPassed,
   isStockUnconfirmed,
+  peopleUnit,
 } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { TONE_CLASSES, type Tone } from "@/lib/tone";
@@ -279,7 +280,7 @@ export function ProposalLines({
                       }}
                     >
                       <label className="sr-only" htmlFor={editing.inputId(line)}>
-                        {t("Quantity for {product} ({unit})", { product: name, unit: product.salesUnit })}
+                        {t("Quantity for {product} ({unit})", { product: name, unit: peopleUnit(product.salesUnit, number) })}
                       </label>
                       <Input
                         id={editing.inputId(line)}
@@ -289,9 +290,11 @@ export function ProposalLines({
                         value={value}
                         disabled={editing.busy || removing}
                         onChange={(event) => editing.onType(line, event.target.value)}
-                        className="h-8 w-16 px-1.5 text-right font-mono tabular-nums"
+                        className="h-8 w-12 shrink-0 px-1 text-right font-mono tabular-nums"
                       />
-                      <span className="w-5 font-mono text-[11px] text-muted-foreground">{product.salesUnit}</span>
+                      <span className="min-w-0 flex-1 text-[11px] leading-3 text-muted-foreground">
+                        {peopleUnit(product.salesUnit, number)}
+                      </span>
                       <Button
                         type="submit"
                         size="icon"
@@ -306,7 +309,7 @@ export function ProposalLines({
                     </form>
                   ) : (
                     <span className="font-mono whitespace-nowrap tabular-nums">
-                      {formatNumber(line.quantity)} {product.salesUnit}
+                      {formatNumber(line.quantity)} {peopleUnit(product.salesUnit, line.quantity)}
                     </span>
                   )}
                 </div>

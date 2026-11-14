@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate, formatEur, formatPack, isLater, isPassed } from "@/lib/format";
+import { formatDate, formatEur, formatPack, isLater, isPassed, peopleUnit } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { useT } from "@/lib/i18n";
@@ -39,7 +39,7 @@ export function OfferCompare({
         const late = isLater(offer.availableDate, offer.requestedDate);
         const facts: [string, string, boolean?][] = [
           [
-            t("Price per {unit}", { unit: offer.comparisonUnit ?? product.baseUnit }),
+            t("Price per {unit}", { unit: peopleUnit(offer.comparisonUnit ?? product.baseUnit, 1) }),
             offer.comparisonPrice == null ? t("unknown") : formatEur(offer.comparisonPrice),
           ],
           [t("Fat"), product.fatPercent == null ? t("unknown") : `${product.fatPercent} %`],

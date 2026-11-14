@@ -39,6 +39,7 @@ describe("Data & privacy settings", () => {
     expect(await screen.findByRole("checkbox", { name: "Share forecast with Valio Aimo" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Share forecast with Töölö Bakery" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Share forecast with Hakaniemi Fish" })).not.toBeChecked();
+    expect(screen.queryByText("sup-valio")).not.toBeInTheDocument();
     expect(screen.getByText(/Retention period: unknown/)).toBeVisible();
     expect(screen.getByText(/Every change writes an audit entry/)).toBeVisible();
   });

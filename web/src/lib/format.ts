@@ -3,7 +3,7 @@
  * Valio's server and of the restaurant, whatever the browser's zone is.
  */
 import { getAppearance } from "@/lib/appearance";
-import { getLanguage } from "@/lib/i18n";
+import { getLanguage, translate } from "@/lib/i18n";
 
 /** Valio's "stock not measured" values (docs/valio-data.md). Never show them as stock. */
 export const UNKNOWN_STOCK_SENTINELS: readonly number[] = [999999, 9999999999];
@@ -76,11 +76,24 @@ export function shortOrderId(id: string): string {
 /** Units a kitchen weighs or measures; every other unit (PCS, ST, KI, ...) is counted. */
 const MEASURED_UNITS = new Set(["KG", "G", "L", "DL", "CL", "ML"]);
 
-/** Units in the letters people write: "kg", "l", "pcs". Other units stay as the catalog has them. */
-const PEOPLE_UNITS: Record<string, string> = { KG: "kg", G: "g", L: "l", DL: "dl", CL: "cl", ML: "ml", PCS: "pcs" };
+/** Unit words in one place; an unrecognized catalog code stays as it is. */
+const PEOPLE_UNITS: Record<string, { one: string; many: string }> = {
+  KG: { one: "kg", many: "kg" },
+  G: { one: "g", many: "g" },
+  L: { one: "l", many: "l" },
+  DL: { one: "dl", many: "dl" },
+  CL: { one: "cl", many: "cl" },
+  ML: { one: "ml", many: "ml" },
+  ST: { one: "piece", many: "pieces" },
+  PCS: { one: "piece", many: "pieces" },
+  KI: { one: "case", many: "cases" },
+  BOT: { one: "bottle", many: "bottles" },
+  PRK: { one: "pack", many: "packs" },
+};
 
-function peopleUnit(unit: string): string {
-  return PEOPLE_UNITS[unit.toUpperCase()] ?? unit;
+export function peopleUnit(unit: string, amount = 2): string {
+  const words = PEOPLE_UNITS[unit.toUpperCase()];
+  return words ? translate(getLanguage(), amount === 1 ? words.one : words.many) : unit;
 }
 
 /**
@@ -91,7 +104,7 @@ export function formatShortfall(amount: number, unit: string): string {
   const step = MEASURED_UNITS.has(unit.toUpperCase()) ? 10 : 1;
   // The small epsilon keeps float noise (41.4 * 10 = 413.99...) from rounding up a step.
   const rounded = Math.ceil(amount * step - 1e-9) / step;
-  return `${formatNumber(rounded)} ${peopleUnit(unit)}`;
+  return `${formatNumber(rounded)} ${peopleUnit(unit, rounded)}`;
 }
 
 /**
@@ -102,13 +115,14 @@ export function formatQuantity(amount: number | string, unit: string): string {
   const value = typeof amount === "number" ? amount : Number(amount);
   if (typeof amount === "string" && (!amount.trim() || !Number.isFinite(value))) return `${amount} ${peopleUnit(unit)}`;
   const step = MEASURED_UNITS.has(unit.toUpperCase()) ? 10 : 1;
-  return `${formatNumber(Math.round(value * step) / step)} ${peopleUnit(unit)}`;
+  const rounded = Math.round(value * step) / step;
+  return `${formatNumber(rounded)} ${peopleUnit(unit, rounded)}`;
 }
 
 /** Stock in sales units, or "unknown" for a sentinel / missing value. */
 export function formatStock(amount: number | null | undefined, unit: string): string {
   if (isUnknownStock(amount)) return "unknown";
-  return `${formatNumber(amount as number)} ${unit}`;
+  return `${formatNumber(amount as number)} ${peopleUnit(unit, amount as number)}`;
 }
 
 const weekdayFmt = {
@@ -190,6 +204,6 @@ export function formatPercent(fraction: number | null): string {
 
 /** "KI 12 × 1 L": the pack a sales unit holds, from the catalog `units[]`. */
 export function formatPack(salesUnit: string, baseUnitsPerSalesUnit: number | null, baseUnit: string): string {
-  if (baseUnitsPerSalesUnit == null) return `${salesUnit} (pack size unknown)`;
-  return `${salesUnit} = ${formatNumber(baseUnitsPerSalesUnit)} ${baseUnit}`;
+  if (baseUnitsPerSalesUnit == null) return `${peopleUnit(salesUnit, 1)} (${translate(getLanguage(), "pack size unknown")})`;
+  return `1 ${peopleUnit(salesUnit, 1)} = ${formatNumber(baseUnitsPerSalesUnit)} ${peopleUnit(baseUnit, baseUnitsPerSalesUnit)}`;
 }
