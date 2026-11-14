@@ -1,5 +1,5 @@
 import { Check, X } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OptionCompare } from "@/components/purchasing/option-compare";
@@ -47,6 +47,9 @@ export interface ApprovalDecision {
  * order. The human's "yes" to that figure is the consent; the total alone
  * is not.
  */
+/** Wait this long after the last keystroke before searching addable products. */
+export const ADD_SEARCH_DEBOUNCE_MS = 250;
+
 export function ApprovalCard({
   request,
   order,
@@ -76,7 +79,15 @@ export function ApprovalCard({
   const [showOrder, setShowOrder] = useState(false);
   const [search, setSearch] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
-  const addables = useAsync(() => listAddableProducts?.(search) ?? Promise.resolve([]), [search]);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), ADD_SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  const addables = useAsync(
+    () => listAddableProducts?.(debouncedSearch) ?? Promise.resolve([]),
+    [debouncedSearch],
+  );
   const reasonId = useId();
   const pending = status === "PENDING";
   const stockMessage =
