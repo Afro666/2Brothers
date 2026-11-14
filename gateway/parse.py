@@ -35,6 +35,11 @@ WEEKDAYS = {
     "lauantai": 5, "lauantaiksi": 5, "lauantaina": 5,
     "sunnuntai": 6, "sunnuntaiksi": 6, "sunnuntaina": 6,
 }
+# A 3-letter weekday form is also a food word ("sun dried tomatoes", "sat" in a name). It is a
+# day only right after one of these words: "by sun", "for mon", "next fri" (#1016). A full
+# weekday name is always a day.
+SHORT_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+DAY_LEADS = {"by", "on", "for", "until", "before", "next", "this", "ensi"}
 RELATIVE = {"today": 0, "tänään": 0, "tomorrow": 1, "huomenna": 1, "huomiseksi": 1,
             "ylihuomenna": 2}
 MONTHS = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6, "jul": 7, "aug": 8,
@@ -57,6 +62,14 @@ FILLER = {
     "tarvitsen", "tarvitsemme", "tilaa", "haluan", "haluamme", "ole", "hyvä", "kiitos", "mennessä",
     "ensi", "tällä", "viikolla", "ja",
 }
+
+
+def _is_weekday(words: list[str], i: int) -> bool:
+    """True when word `i` names a weekday: a full name, or a short form after a day word."""
+    w = words[i]
+    if w not in WEEKDAYS:
+        return False
+    return w not in SHORT_DAYS or (i > 0 and words[i - 1] in DAY_LEADS)
 
 
 class ParseError(ValueError):
@@ -138,8 +151,9 @@ def product_words(text: str) -> str:
         if d:
             rest = rest[:d.start()] + " " + rest[d.end():]
             break
-    kept = [FI_STEMS.get(w, w) for w in re.findall(r"[a-zåäö%-]+", rest)
-            if w not in WEEKDAYS and w not in RELATIVE and w not in FILLER]
+    words = re.findall(r"[a-zåäö%-]+", rest)
+    kept = [FI_STEMS.get(w, w) for i, w in enumerate(words)
+            if not _is_weekday(words, i) and w not in RELATIVE and w not in FILLER]
     return " ".join(" ".join(kept).replace("-", " ").split())
 
 
@@ -176,8 +190,9 @@ def named_day(text: str, today: date) -> date | None:
     when, rest = _written_date(rest, today)
     if when is not None:
         return when
-    for w in re.findall(r"[a-zåäö%-]+", rest):
-        if w in WEEKDAYS:
+    words = re.findall(r"[a-zåäö%-]+", rest)
+    for i, w in enumerate(words):
+        if _is_weekday(words, i):
             return _next_weekday(today, WEEKDAYS[w])
         if w in RELATIVE:
             return today + timedelta(days=RELATIVE[w])
@@ -211,14 +226,15 @@ def parse_request(text: str, today: date, default_day: date | None = None) -> Pa
     when, rest = _written_date(rest, today)
     words = re.findall(r"[a-zåäö%-]+", rest)
     kept = []
-    for w in words:
-        if when is None and w in WEEKDAYS:
+    for i, w in enumerate(words):
+        weekday = _is_weekday(words, i)       # "sun" in "sun dried tomatoes" is a product word
+        if when is None and weekday:
             when = _next_weekday(today, WEEKDAYS[w])
             continue
         if when is None and w in RELATIVE:
             when = today + timedelta(days=RELATIVE[w])
             continue
-        if w in WEEKDAYS or w in RELATIVE or w in FILLER:
+        if weekday or w in RELATIVE or w in FILLER:
             continue
         kept.append(FI_STEMS.get(w, w))
     when = when or default_day
