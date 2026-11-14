@@ -36,6 +36,7 @@ DEMAND_DAYS = 28                    # usage history behind the daily demand of a
 REVIEW_DAYS = 3.0                   # days to the delivery after next, until order days are wired
 CENT = Decimal("0.01")
 TOLERANCE = Decimal("0.005")
+COMMIT_STALE = timedelta(seconds=60)   # older COMMITTING with no attempt row is stuck (#715)
 log = logging.getLogger(__name__)
 OFFER_TTL = timedelta(minutes=15)   # Aron, 2026-11-14 (#19 answer F)
 
@@ -572,6 +573,8 @@ class Gateway:
         doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id})
         if doc is None:
             raise GatewayError(404, "PROPOSAL_NOT_FOUND", "no such proposal")
+        if doc["status"] == "COMMITTING" and self._release_stuck_commit(kitchen_id, doc, human):
+            doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id}) or doc
         if doc["status"] != "READY":
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
         stored = orders.get_offer(self.db, doc["offer_id"])
@@ -588,11 +591,11 @@ class Gateway:
         try:
             return self._place(kitchen_id, proposal_id, doc, stored, seen, key, human)
         except BaseException:
-            self.db.proposals.update_one({"_id": proposal_id, "status": "APPROVING", "approving_key": key},
-                                         {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
             # A write may have succeeded before its response failed. Only a
             # confirmed absence permits releasing the post-quote commit claim.
             try:
+                self.db.proposals.update_one({"_id": proposal_id, "status": "APPROVING", "approving_key": key},
+                                             {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
                 attempt = orders.attempt_for_key(self.db, kitchen_id, key)
                 if attempt is None:
                     blocked = recalls.blocked_ids(self.db, kitchen_id)
@@ -604,9 +607,38 @@ class Gateway:
                     # The attempt never ended: the send result is unknown. The proposal stays
                     # held; a person resolves the order (gateway/resolve.py, #291).
                     orders.set_outcome(self.db, attempt['order_id'], outcome='UNCONFIRMED', status=None)
-            except Exception:
-                pass  # Cannot prove absence while the database is unavailable.
+            except Exception as exc:
+                # Cannot prove absence while the database is unavailable. A later approve
+                # releases a stale COMMITTING claim that has no attempt row (#715).
+                try:
+                    self._audit(kitchen_id, "approve_rollback_failed", human, proposal_id=proposal_id,
+                                reason=type(exc).__name__)
+                except Exception:
+                    pass
             raise
+
+    def _release_stuck_commit(self, kitchen_id: str, doc: dict, human: str) -> bool:
+        """A COMMITTING claim whose rollback failed (#715): with no order attempt for its key
+        and older than COMMIT_STALE (so never an approval still in flight), release it."""
+        since = doc.get("committing_at")
+        if since is not None:
+            if since.tzinfo is None:
+                since = since.replace(tzinfo=timezone.utc)
+            if self.now() - since < COMMIT_STALE:
+                return False
+        claim = doc.get("approving_key")
+        if claim and orders.attempt_for_key(self.db, kitchen_id, claim) is not None:
+            return False   # an attempt exists: resolve the order instead (gateway/resolve.py)
+        stored = orders.get_offer(self.db, doc["offer_id"])
+        blocked = recalls.blocked_ids(self.db, kitchen_id)
+        state = 'BLOCKED_BY_RECALL' if any(l['product_id'] in blocked for l in stored['simulation']['lines']) else 'READY'
+        released = self.db.proposals.update_one(
+            {"_id": doc["_id"], "kitchen_id": kitchen_id, "status": "COMMITTING", "approving_key": claim},
+            {"$set": {"status": state}, "$unset": {"approving_key": "", "committing_at": ""}})
+        if not released.modified_count:
+            return False
+        self._audit(kitchen_id, "stuck_commit_released", human, proposal_id=doc["_id"], status=state)
+        return True
 
     def _approved_or_conflict(self, kitchen_id: str, proposal_id: str, key: str) -> dict:
         """Not READY: replay the order placed with this key, else 409 NOT_PENDING."""
@@ -644,7 +676,7 @@ class Gateway:
         # during the live quote can still claim APPROVING and prevent this order.
         committed = self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
             'status': 'APPROVING', 'approving_key': key},
-            {'$set': {'status': 'COMMITTING', 'offer_id': stored['offer_id']}})
+            {'$set': {'status': 'COMMITTING', 'offer_id': stored['offer_id'], 'committing_at': self.now()}})
         if not committed.modified_count:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
         payload = {"offer_id": stored["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}
