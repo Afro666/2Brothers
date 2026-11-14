@@ -85,6 +85,8 @@ export interface Offer {
 
 export type OrderStatus =
   | "NEEDS_APPROVAL"
+  | "IN_PROGRESS"
+  | "BLOCKED_BY_RECALL"
   | "REFUSED"
   | "PLACED"
   | "NOT_SENT"
@@ -147,7 +149,8 @@ export interface ApprovalRequest {
   totalExVat: number;
   totalInclVat: number;
   reasons: MandateReason[];
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  /** Only PENDING can be approved; IN_PROGRESS and BLOCKED_BY_RECALL wait, they are not decided. */
+  status: "PENDING" | "IN_PROGRESS" | "BLOCKED_BY_RECALL" | "APPROVED" | "REJECTED";
   /** The baskets the engine offers for this request; absent or empty when it offers one. */
   options?: ProposalOption[];
 }

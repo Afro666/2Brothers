@@ -368,7 +368,11 @@ export function ApprovalCard({
             ) : null}
             {status === "APPROVED"
               ? `Approved: ${formatEur(request.totalExVat)} ex VAT, ${formatEur(request.totalInclVat)} incl VAT. The order may now be sent.`
-              : "Rejected. This order will not be sent."}
+              : status === "IN_PROGRESS"
+                ? "In progress. This proposal cannot be approved yet."
+                : status === "BLOCKED_BY_RECALL"
+                  ? "Blocked by a recall. This proposal cannot be approved as it is."
+                  : "Rejected. This order will not be sent."}
           </p>
         )}
         {pending && approvalBlockedReason ? (

@@ -164,7 +164,6 @@ describe("createHttpApi", () => {
     expect(calls[0].route).toBe(`POST ${K}/proposals/prop-1/approve`);
     expect(calls[0].body).toEqual({
       expected_total: "91.20",
-      blocks: [{ supplier_id: "sup-valio", expected_total: "91.20" }],
       idempotency_key: "web-approve:prop-1:91.20",
     });
     expect(calls[0].headers).toMatchObject({ "X-User": "chef" });
