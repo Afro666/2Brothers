@@ -1585,9 +1585,10 @@ Answer:
 - `dropped` is null, or one of `ROW_UNKNOWN`, `PRODUCT_MISMATCH`, `ROW_REPEATED`,
   `NUMBER_NOT_IN_ROW`, `NUMBERS_LIST_MISMATCH`, `GAP_FOR_UNKNOWN`, `NUMBER_WORD`, or
   `REPLY_INVALID` (the model's reply did not match its schema at all).
-- The answer is cached for 5 minutes by supplier, window, language and the input rows,
-  so a page refresh makes no new model call (`cached: true`). One supplier's note is
-  never served to another.
+- Passing notes are cached for 5 minutes by supplier, window, language and the input
+  rows. Dropped notes (`note: null`) are cached for 30 seconds (#1211), so a refresh
+  immediately after a bad reply does not spend another call, but a later view can
+  recover. Cache hits have `cached: true`. One supplier's note is never served to another.
 - One note per supplier at a time: a second request while one is written answers 429
   `BUYING_NOTE_BUSY`. One model call, up to 30 s, never retried by the gateway.
 - 503 `BUYING_NOTE_UNAVAILABLE` (model or worker down, or no model key) and 504
