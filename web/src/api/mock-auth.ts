@@ -19,15 +19,21 @@ export function createMockAuth(signedOut = false): Pick<Api, "getSession" | "sig
     name: account.label,
     role: account.label === "Chef" ? ("chef" as const) : account.label === "Buyer" ? ("approver" as const) : ("viewer" as const),
   }));
-  let currentAccount = signedOut ? null : accounts.find((account) => account.role === "approver")!;
+  // Not signed out: the open demo (#1052), the shared demo approver with no account and no email.
+  let openDemo = !signedOut;
+  let currentAccount: (typeof accounts)[number] | null = null;
   const session = (): Session | null =>
-    currentAccount && {
-      kind: "human",
-      name: currentAccount.name,
-      email: currentAccount.email,
-      role: currentAccount.role,
-      canApprove: currentAccount.role === "approver",
-    };
+    currentAccount
+      ? {
+          kind: "human",
+          name: currentAccount.name,
+          email: currentAccount.email,
+          role: currentAccount.role,
+          canApprove: currentAccount.role === "approver",
+        }
+      : openDemo
+        ? { kind: "human", name: "demo-visitor", email: null, role: "approver", canApprove: true }
+        : null;
 
   return {
     async getSession() {
@@ -43,6 +49,7 @@ export function createMockAuth(signedOut = false): Pick<Api, "getSession" | "sig
     },
     async signOut() {
       currentAccount = null;
+      openDemo = false;
     },
     async changePassword(current, next) {
       if (!currentAccount) throw new ApiError("UNAUTHENTICATED", "sign in first");

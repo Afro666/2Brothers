@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { gatewayRequest } from "@/api/http";
 import { mapMoney } from "@/api/map";
 import { AppShell } from "@/components/purchasing/app-shell";
+import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
 import { Button } from "@/components/ui/button";
 import { formatEur } from "@/lib/format";
 import { useT } from "@/lib/i18n";
@@ -177,6 +178,7 @@ export function LiveApprovalsPage() {
     return result.proposals.map((item) => parse(item, t));
   }, []);
   return <AppShell activeId="approvals"><main className="mx-auto max-w-5xl space-y-5">
+    <OpenDemoNote />
     <h1 className="page-title">{t("To approve")}</h1>
     <p className="max-w-[68ch] text-[15px] leading-[22px]">{t("Live demo proposals. A person confirms the exact basket and total before an order is recorded.")}</p>
     <Button variant="outline" onClick={proposals.reload}>{t("Refresh proposals")}</Button>

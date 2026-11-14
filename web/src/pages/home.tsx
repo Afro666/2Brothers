@@ -3,6 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 
 import { useApi } from "@/api";
 import { AppShell } from "@/components/purchasing/app-shell";
+import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
 import { useRole } from "@/lib/role";
@@ -32,6 +33,7 @@ export function HomePage() {
   return (
     <AppShell activeId="home">
       <div className="mx-auto max-w-6xl space-y-6">
+        <OpenDemoNote />
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="page-title">Kitchen Buyer</h1>
