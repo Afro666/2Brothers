@@ -19,6 +19,25 @@ function withLogos(list: Api["listBrandLogos"]): Api {
   return { ...createMockApi(), listBrandLogos: list };
 }
 
+describe("ProductThumb kind tile", () => {
+  it("draws a line icon on a tinted tile, not an emoji", () => {
+    const { container } = render(<ProductThumb en="Valio milk 1 l" size="sm" />);
+    const tile = container.querySelector("[data-kind]");
+    expect(tile).toHaveAttribute("data-kind", "milk and cream");
+    expect(tile).toHaveAttribute("aria-hidden");
+    expect(tile?.querySelector("svg")).not.toBeNull();
+    expect(tile?.className).toMatch(/bg-sky-100/);
+    expect(tile?.textContent).toBe("");
+  });
+
+  it("falls back to a package icon for an unknown name", () => {
+    const { container } = render(<ProductThumb en="RAPID SUPREME S50 XYZ" />);
+    const tile = container.querySelector("[data-kind]");
+    expect(tile).toHaveAttribute("data-kind", "product");
+    expect(tile?.querySelector("svg")).not.toBeNull();
+  });
+});
+
 describe("ProductThumb with a brand", () => {
   it("shows the kind tile without a provider", () => {
     const { container } = render(<ProductThumb en="Valio milk 1 l" brand="Valio" />);
