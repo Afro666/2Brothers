@@ -16,7 +16,8 @@ from decimal import InvalidOperation
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from gateway.service import Gateway, GatewayError
 
@@ -70,7 +71,21 @@ def _env_principal(request: Request, token: str) -> Principal:
 
 
 def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
-    app = FastAPI(title="Trusted Kitchen Buyer gateway", version="0.1.0")
+    app = FastAPI(
+        title="Trusted Kitchen Buyer gateway", version="0.1.0",
+        description=("REST and MCP gateway between a kitchen's Buyer agent and its suppliers. "
+                     "The engine sizes every quantity, a person approves every order, every step is audited. "
+                     "Why it is built this way: docs/choices.md. Field-level rules: docs/contract.md."),
+        # Behind Caddy the gateway lives under /api (people) and /gateway (agents with a bearer token).
+        servers=[{"url": "/api", "description": "demo site, as a person"},
+                 {"url": "/gateway", "description": "agents, with a bearer token"},
+                 {"url": "/", "description": "local run"}],
+        docs_url=None, redoc_url=None)
+
+    @app.get("/docs", include_in_schema=False)
+    async def _docs() -> HTMLResponse:
+        # A relative spec URL, so /api/docs loads /api/openapi.json and not the web app's /openapi.json (#278).
+        return get_swagger_ui_html(openapi_url="openapi.json", title="Trusted Kitchen Buyer gateway - API")
     state: dict[str, Gateway] = {}
 
     def gw() -> Gateway:
@@ -425,12 +440,14 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     @app.post("/tools/search_products")
     async def search(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:read")
-        from store.search import search_products
         data = await body(request)
         limit = data.get("limit", 20)
         if not isinstance(limit, int) or not 1 <= limit <= 50:
             raise GatewayError(422, "INVALID_REQUEST", "limit: 1 to 50")
-        return {"products": search_products(gw().db, data.get("query") or "", data.get("filters") or {}, limit)}
+        need_id = data.get("need_id")
+        if need_id is not None and not isinstance(need_id, str):
+            raise GatewayError(422, "INVALID_REQUEST", "need_id must be a string")
+        return gw().tool_search(kitchen(who), data.get("query") or "", data.get("filters") or {}, limit, need_id)
 
     @app.post("/tools/get_offer")
     async def get_offer(request: Request, who: Principal = Depends(principal)):
@@ -479,9 +496,16 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     from gateway.drift_routes import mount_drift
     mount_drift(app, gw, principal)
 
+    # Onboarding lookup (#375): Context.dev brand lookup for the sign-up form.
+    from gateway.onboarding import mount_onboarding
+    mount_onboarding(app, principal, body)
+
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp
     mount_mcp(app)
+    # Agent discovery (#293): /.well-known/agent-card.json and /llms.txt, built from this app.
+    from gateway.discovery import mount_discovery
+    mount_discovery(app)
     return app
 
 

@@ -122,7 +122,7 @@ refused: a token can never approve. A token acts only for its own kitchen (403
 `KITCHEN_SCOPE`), and a missing scope gives 403 `SCOPE_REQUIRED`. Create and revoke are
 audit entries. A token with `kitchen:propose` can also drive `/mcp`:
 
-    claude mcp add --transport http kitchen-buyer https://<host>/api/mcp --header "Authorization: Bearer tkb_..."
+    claude mcp add --transport http kitchen-buyer https://<host>/gateway/mcp --header "Authorization: Bearer tkb_..."
 
 ## Webhooks (#277)
 
@@ -153,6 +153,20 @@ The URL must be `https`. Private, loopback and link-local addresses and internal
 are refused, at registration and again at delivery time; redirects are not followed. For a
 receiver on your own machine set `GATEWAY_WEBHOOKS_DEV=true`: then `http://localhost` and
 `http://127.0.0.1` are allowed. Never set it in production.
+
+## Agent discovery (#293)
+
+`GET /.well-known/agent-card.json` (an A2A-style agent card) and `GET /llms.txt` (Markdown
+for an LLM) need no token. `gateway/discovery.py` builds both from the running app on every
+request: a skill is listed only when its route is registered, the MCP tool names and
+descriptions come from the mounted MCP server, the scopes from `gateway/tokens.py`, and the
+URLs from the request plus `GATEWAY_PUBLIC_PREFIX` (the prefix the proxy strips: `/gateway`
+on the deployed site, set in `deploy/compose.yaml`). The card says plainly that the gateway
+does not serve the A2A message protocol; it points at HTTP + JSON and MCP. Caddy serves both
+files at the site root too. A token must come in through `/gateway/*`: on `/api/*` the
+server replaces the `Authorization` header with the demo person's session.
+The copy-paste curl sequence and the MCP client config are in `docs/byoa.md`.
+Tests: `gateway/tests/test_discovery.py`.
 
 ## Sign-in (#270)
 
@@ -198,3 +212,59 @@ recalls, events and new products always wait for a person. The order is recorded
 `auto-approve (rule set by <person>)`, the audit entry `auto_approved` carries the evidence,
 and the same live re-check applies (a moved price still refuses). Auto-approvals never count
 as learning. `{"enabled": false}` switches it off at once.
+## Onboarding lookup (#375)
+
+`POST /v1/onboarding/lookup` with `{"email": ...}` or `{"website": ...}` (a person's
+session only; 403 `HUMAN_SESSION_REQUIRED` for the agent and API tokens). `gateway/onboarding.py`
+makes one Context.dev call, `POST /v1/brand/retrieve` (`by_email` / `by_domain`), and
+returns `domain`, `found` and `name`, `logo_url`, `colors`, `address`, `kitchen_type`,
+`opening_hours`, each as `{value, source}`. An unknown field is `null`, never a guess.
+
+- `CONTEXT_DEV_API_KEY` comes from the server environment and is sent only as the bearer
+  header to Context.dev. It is never logged or returned. Without it: 502.
+- The gateway never fetches the address the person typed: it checks that it is an email
+  or a public domain name and passes only that to Context.dev.
+- 422 `FREE_EMAIL` (free or disposable mailbox), 422 `INVALID_QUERY`, 502
+  `LOOKUP_UNAVAILABLE` (down, slow, out of credits, no key), 200 `found: false` when
+  Context.dev does not know the domain. Nothing is saved, nothing is cached.
+- `opening_hours` is always `null` for now: the optional scrape call is not made.
+- Each lookup costs Context.dev credits (10 for the recorded call).
+
+Tests replace the HTTP call and use one recorded, trimmed answer
+(`gateway/tests/fixtures/context_brand_retrieve.json`): `gateway/tests/test_onboarding.py`.
+
+## Several suppliers in one proposal (#73)
+
+`gateway/suppliers.py` holds one adapter per supplier kind. Each gives the engine the
+same thing: `offers(product_ids, measure, requested_date) -> (offers, skipped, tax)`.
+
+- `ValioAdapter`: live Valio price and availability (the logic that was in `Gateway._offers`).
+- `ManualAdapter`: a supplier with adapter `manual` or `csv`. Its price list is the
+  kitchen's own products for that supplier (`unit_price_eur`, `pack_size_in_base_units`).
+  Stock is always unknown, so every line has `unknown_stock: true`. The cut-off comes
+  from the supplier's terms: the next order day whose `cutoff_time` is still ahead, plus
+  `lead_time_days`, must reach the requested date. If it cannot, the product is excluded
+  ("order cut-off has passed"). If one of the three terms is unknown, it is excluded too
+  ("no cut-off time known").
+
+A request may name products of several suppliers. A catalog product belongs to
+`sup-valio`; an own product belongs to its `supplier_id`. The engine plans the whole
+request as before. The simulation then also returns `blocks`, one per supplier that has
+a line:
+
+```json
+{"supplier_id": "sup-bakery", "name": "Leipomo Demo", "lines": [],
+ "total_ex_vat": "58.80", "vat": null, "mov_gap": "41.20", "delivery_fee": "9.50",
+ "expected_total": "68.30"}
+```
+
+- `mov_gap` and `delivery_fee` come from that supplier's user-set terms. An unknown term
+  gives `null`, never zero. `vat` is `null` for an own product (no VAT rate is stored).
+- The top-level `expected_total` is the sum of the block totals. The top-level `mov_gap`
+  and `delivery_fee` are those of the block when there is one supplier, and `null` when
+  there are several.
+- `discount_tiers`: the tier with the highest `min_qty` at or below the line quantity, in
+  the line's unit, sets the unit price. The line's `why` names the tier.
+- Approve is still one human yes and one order; the order stores `blocks`. A line with
+  unknown stock still returns 409 `STOCK_UNKNOWN`, so a block of a manual supplier cannot
+  be placed until a supplier confirmation exists.
