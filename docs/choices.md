@@ -32,8 +32,9 @@ in [`contract.md`](contract.md); who decided what, and when, is in
   The person sees the new figure and decides again.
 - Stock that the supplier does not confirm blocks the approval (`STOCK_UNKNOWN`), and a
   recalled product blocks it (`BLOCKED_BY_RECALL`).
-- There is no auto-approve. A budget limit is a warning on the approval, never a reason to
-  skip it.
+- Every order needs a person, unless the kitchen has earned auto-approve and switched it
+  on for small routine orders; it is off by default. A budget limit is a warning on the
+  approval, never a reason to skip it.
 
 ## Every write can be repeated safely
 
@@ -62,7 +63,7 @@ in [`contract.md`](contract.md); who decided what, and when, is in
 | Part | State |
 |---|---|
 | Valio Aimo product, price and availability API | Live: Valio's own mock API for the challenge |
-| Valio order placement | Valio's mock API; no real order reaches Valio |
+| Valio order placement | Recorded in our gateway: Valio's challenge API has no order endpoint; no real order reaches Valio |
 | Catalog, prices and stock in the demo | From that API and the challenge datasets |
 | Kitchen history (covers, stock counts, orders) | Synthetic, from `env/` |
 | Buyer agent | Nemotron 3.5 Super VL on Verda |
