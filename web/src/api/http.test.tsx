@@ -109,6 +109,23 @@ describe("createHttpApi", () => {
     expect(alone).toMatchObject({ id: "ord-old", status: "PLACED", deliveryDate: null, totalExVat: null });
   });
 
+  it("skips a malformed proposal or order and lists the rest", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    gateway({
+      [`GET ${K}/proposals`]: () => ({ proposals: [proposal, { proposal_id: "prop-old" }] }),
+      [`GET ${K}/audit`]: () => ({ events: auditEvents }),
+      [`GET ${K}/orders`]: () => ({ orders: [placedOrder, { order_id: "ord-bad", expected_total: "1.00" }] }),
+    });
+    const api = createHttpApi("/api");
+    const approvals = await api.listApprovals();
+    expect(approvals.map((a) => a.id)).toEqual(["prop-1"]);
+    const orders = await api.listOrders();
+    expect(orders.map((o) => o.id)).toEqual(["ord-1"]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("prop-old"), expect.anything());
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("ord-bad"), expect.anything());
+    warn.mockRestore();
+  });
+
   it("gets an order by its order id or by the id of a waiting proposal", async () => {
     gateway({
       ...inbox(),

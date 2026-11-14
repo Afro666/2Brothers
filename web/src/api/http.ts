@@ -34,6 +34,18 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
   return body;
 }
 
+/** Maps each row on its own: a row that does not map is logged and skipped, not fatal for the list. */
+function mapEach<T>(list: Json[], what: string, idKey: string, map: (row: Json) => T): T[] {
+  return list.flatMap((row) => {
+    try {
+      return [map(row)];
+    } catch (error) {
+      console.warn(`Skipped ${what} ${String(row?.[idKey] ?? "(no id)")}:`, error);
+      return [];
+    }
+  });
+}
+
 /**
  * Hybrid: the order flow (proposals, approve and reject, orders, audit) talks to the real
  * gateway; every other method still answers from the mock, and `live` says which is which.
@@ -64,7 +76,7 @@ export function createHttpApi(baseUrl: string): Api {
   const real = {
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
-      return list.map((proposal) => mapApproval(proposal, events));
+      return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));
     },
     getApproval: approval,
     async approve(decision, actor) {
@@ -110,7 +122,7 @@ export function createHttpApi(baseUrl: string): Api {
     },
     async listOrders() {
       const [placed, list] = await Promise.all([get(`${kitchen}/orders`), proposals()]);
-      return rows(placed, "orders").map((order) =>
+      return mapEach(rows(placed, "orders"), "order", "order_id", (order) =>
         mapOrder(list.find((proposal) => proposal.order_id === order.order_id) ?? null, order),
       );
     },
