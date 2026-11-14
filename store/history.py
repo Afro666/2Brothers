@@ -267,6 +267,40 @@ def product_docs(db, product_ids) -> dict[str, dict]:
 
 # Stock counts from the kitchen (POST /stock-counts)
 
+class StockCountBusy(RuntimeError):
+    """The same idempotency key is being stored right now by another request."""
+
+
+def stock_count_once(db, kitchen_id: str, key: str, store) -> tuple[str, int, bool]:
+    """Run `store()` (it writes the count, returns the number of lines) at most once per
+    `(kitchen_id, key)`. Returns `(stock_count_id, stored, replayed)`.
+
+    The key row is claimed first, with the key as `_id`, so two replays at the same moment
+    cannot both store (#646). A failed store releases the claim, so the key can be retried.
+    """
+    from pymongo.errors import DuplicateKeyError
+    count_id = f"{kitchen_id}:{key}"
+    try:
+        db.stock_count_keys.insert_one({"_id": count_id, "stock_count_id": count_id, "stored": None})
+    except DuplicateKeyError:
+        done = db.stock_count_keys.find_one({"_id": count_id}) or {}
+        if done.get("stored") is None:
+            raise StockCountBusy(count_id) from None
+        return count_id, done["stored"], True
+    try:
+        stored = store()
+    except BaseException:
+        db.stock_count_keys.delete_one({"_id": count_id, "stored": None})
+        raise
+    db.stock_count_keys.update_one({"_id": count_id}, {"$set": {"stored": stored}})
+    return count_id, stored, False
+
+
+def forecasts_between(db, kitchen_id: str, lo: datetime, hi: datetime) -> list[dict]:
+    """The kitchen's stored forecast rows with `lo <= ts <= hi`."""
+    return list(db.forecasts.find({"meta.kitchen_id": kitchen_id, "ts": {"$gte": lo, "$lte": hi}}))
+
+
 def record_stock_count(db, kitchen_id: str, counted_at: datetime, counts: list[dict],
                        source: str = "manual") -> int:
     """Store a stock count: one `kitchen_stock` row per product.
