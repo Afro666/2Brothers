@@ -37,6 +37,24 @@ type PlanningApi = Pick<
 
 type AuditRecorder = (event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason">) => void;
 
+/** One line of a mock menu-plan proposal; `priceInclVat` is the sample price per unit. */
+export interface PlannedLine {
+  productId: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  priceInclVat: number;
+}
+
+/** A READY menu-plan proposal, handed to the approvals mock so it shows in the inbox (#800). */
+export interface PlannedProposal {
+  proposal: PlanProposal;
+  from: string;
+  to: string;
+  requestedDate: string;
+  lines: PlannedLine[];
+}
+
 const copy = <T>(value: T): T => structuredClone(value);
 
 function requiredName(name: string): void {
@@ -50,7 +68,10 @@ function round3(value: number): number {
 /** Sample price of a catalog product per unit; the mock has no price list for them. */
 const SAMPLE_CATALOG_PRICE_EUR = 1.19;
 
-export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
+export function createPlanningMock(
+  recordAudit: AuditRecorder,
+  addProposal: (planned: PlannedProposal) => void = () => {},
+): PlanningApi {
   let suppliers = copy(planningSuppliers);
   let ownProducts = copy(planningOwnProducts);
   let recipes = copy(planningRecipes);
@@ -213,15 +234,17 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
     async getDemand(from, to) {
       return getDemand(from, to);
     },
-    async proposeOrderForPlan(from, to): Promise<PlanProposal> {
+    async proposeOrderForPlan(from, to, requestedDate): Promise<PlanProposal> {
       // Need per product over the window, net of counted stock; a product never counted keeps its full need.
       const needs = new Map<string, number>();
-      for (const line of getDemand(from, to)) needs.set(line.productId, (needs.get(line.productId) ?? 0) + line.need);
+      const demand = getDemand(from, to);
+      for (const line of demand) needs.set(line.productId, (needs.get(line.productId) ?? 0) + line.need);
       let lineCount = 0;
       let needCount = 0;
       let uncountedCount = 0;
       let shortfallCount = 0;
       let total = 0;
+      const lines: PlannedLine[] = [];
       for (const [productId, need] of needs) {
         const onHand = stock.find((item) => item.productId === productId)?.onHand ?? null;
         const net = onHand === null ? need : need - onHand;
@@ -237,11 +260,19 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
         }
         lineCount += 1;
         total += Math.ceil(net) * price;
+        const first = demand.find((line) => line.productId === productId);
+        lines.push({
+          productId,
+          productName: first?.productName ?? productId,
+          unit: first?.unit ?? "PCS",
+          quantity: Math.ceil(net),
+          priceInclVat: price,
+        });
       }
       if (needCount === 0) {
         throw new ApiError("NOTHING_NEEDED", "the plan needs nothing beyond the stock in this window");
       }
-      return {
+      const proposal: PlanProposal = {
         id: makeId("PLAN"),
         status: lineCount > 0 ? "READY" : "REJECTED",
         totalInclVat: Math.round(total * 100) / 100,
@@ -251,6 +282,9 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
         shortfallCount,
         reasonCodes: shortfallCount > 0 ? ["PARTIAL_STOCK"] : [],
       };
+      // A READY proposal waits for a person in Orders > To approve, as on the gateway.
+      if (proposal.status === "READY") addProposal({ proposal: copy(proposal), from, to, requestedDate, lines });
+      return proposal;
     },
     async getSharing() {
       return sharingRows();
