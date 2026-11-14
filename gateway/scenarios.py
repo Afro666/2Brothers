@@ -297,8 +297,8 @@ def s08() -> Result:
     line = replenish(Item("469549", esl, daily_demand=20, lead_time_days=0, review_days=7, on_hand=120,
                           safety_stock=20, category="fresh_dairy", standing_order=D(200)), P)
     r.expect("this week qty", f"{line.quantity.normalize():f}", "40")
+    r.expect("proposed standing order", f"{line.numbers.get('propose_standing_order', 0):f}", "140")
     r.codes(line.reason_codes, ["STANDING_ORDER_DRIFT"])
-    r.checks.append("proposing the standing order 200 -> 140: not built")
     return r.finish()
 
 

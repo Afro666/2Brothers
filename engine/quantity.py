@@ -42,7 +42,16 @@ def _drift(item: Item, qty: Decimal) -> str | None:
     if s is None or s <= 0 or abs(s - qty) <= s * DRIFT_TOLERANCE:
         return None
     return (f" Standing order {_fmt(s)} {item.pack.sales_unit} no longer matches usage: "
-            f"this delivery needs {_fmt(qty)}.")
+            f"this delivery needs {_fmt(qty)}. Suggested standing order: "
+            f"{_fmt(proposed_standing_order(item))} {item.pack.sales_unit} (usage per delivery); "
+            f"a person changes it.")
+
+
+def proposed_standing_order(item: Item) -> Decimal:
+    """S08: what one delivery cycle really uses (demand x review days), in sales units.
+    Only a suggestion: the engine never changes a standing order itself."""
+    qty, _ = to_sales_units(Decimal(str(item.daily_demand * item.review_days)), item.pack)
+    return qty
 
 
 @dataclass(frozen=True)
@@ -92,6 +101,7 @@ def replenish(item: Item, params: KitchenParams) -> LinePlan:
         drift = _drift(item, Decimal(0))
         if drift:
             codes.append("STANDING_ORDER_DRIFT")
+            numbers["propose_standing_order"] = proposed_standing_order(item)
             why += drift
         return LinePlan(item.product_id, Decimal(0), item.pack.sales_unit, tier, tuple(codes), why, numbers)
 
@@ -111,6 +121,7 @@ def replenish(item: Item, params: KitchenParams) -> LinePlan:
     drift = _drift(item, qty)
     if drift:
         codes.append("STANDING_ORDER_DRIFT")
+        numbers["propose_standing_order"] = proposed_standing_order(item)
         why += drift
     return LinePlan(item.product_id, qty, item.pack.sales_unit, tier, tuple(codes), why, numbers)
 

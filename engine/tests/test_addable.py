@@ -104,4 +104,5 @@ def test_standing_order_drift_keeps_its_sentence_in_the_row_why():
     (row,) = rank_addable([c], P)
     assert "STANDING_ORDER_DRIFT" in row.reason_codes
     assert row.why == ("The engine says order this week: 5 ST. "
-                       "Standing order 20 ST no longer matches usage: this delivery needs 5.")
+                       "Standing order 20 ST no longer matches usage: this delivery needs 5. "
+                       "Suggested standing order: 30 ST (usage per delivery); a person changes it.")
