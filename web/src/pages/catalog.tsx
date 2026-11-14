@@ -25,6 +25,7 @@ export const ALLERGENS = [...EU_ALLERGENS, { code: "ML", name: "Lactose" }] as c
 const LABEL_OPTIONS = Object.keys(LABEL_META) as ProductLabel[];
 const TEMPERATURES: ProductTemperature[] = ["ambient", "chilled", "frozen"];
 const EXAMPLE_SEARCHES = ["lactose-free milk", "butter", "oat drink"];
+const RESULTS_PER_PAGE = 12;
 
 export const TEMPERATURE_LABELS: Record<ProductTemperature, string> = {
   ambient: "Ambient",
@@ -124,6 +125,7 @@ export function CatalogPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState(search.q);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(RESULTS_PER_PAGE);
   // A click and a navigation render later, so chained toggles read the latest params here.
   const latest = useRef(search);
   latest.current = search;
@@ -190,6 +192,7 @@ export function CatalogPage() {
   const active = latest.current;
   const excluding = active.exclude.length > 0;
   const results = currentResult.status === "ready" ? (currentResult.data ?? []) : [];
+  useEffect(() => setVisibleCount(RESULTS_PER_PAGE), [searchKey]);
   const withoutData = excluding && !active.strict ? results.filter((product) => product.allergens === null).length : 0;
   const unfiltered = !active.q.trim() && !excluding && active.labels.length === 0 && !active.temp;
 
@@ -326,8 +329,8 @@ export function CatalogPage() {
                 </p>
               ) : null}
             </div>
-            <ul className="grid gap-4 md:grid-cols-2">
-              {results.map((product) => (
+            <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {results.slice(0, visibleCount).map((product) => (
                 <li key={product.id} className="space-y-1 tabular-nums">
                   {active.meaning && product.matchedBy ? (
                     <Badge variant="outline">{t(MATCHED_BY_LABELS[product.matchedBy])}</Badge>
@@ -336,6 +339,11 @@ export function CatalogPage() {
                 </li>
               ))}
             </ul>
+            {results.length > visibleCount ? (
+              <Button variant="outline" className="w-full" onClick={() => setVisibleCount((count) => count + RESULTS_PER_PAGE)}>
+                {t("Show more ({count} more)", { count: results.length - visibleCount })}
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </div>

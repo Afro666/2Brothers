@@ -255,6 +255,7 @@ describe("mapCatalogProduct", () => {
       labels: ["GOODS_FROM_FINLAND_BLUE_SWAN"],
       co2KgPerKg: 1.2,
       deliveryReliability: 0.97,
+      priceExVat: null,
     });
   });
 
@@ -284,6 +285,27 @@ describe("mapCatalogProduct", () => {
       mapCatalogProduct({ ...MILK, temperature: "frozen", temperature_condition: null, min_temperature_c: null })
         .temperature,
     ).toEqual({ code: 0, label: "Frozen" });
+  });
+
+  it("maps an own product's entered price per sales unit", () => {
+    expect(mapCatalogProduct({ ...MILK, source: "own", unit_price_eur: "12.50" }).priceExVat).toBe(12.5);
+    expect(mapCatalogProduct({ ...MILK, source: "own", unit_price_eur: null }).priceExVat).toBeNull();
+    // A supplier's row has no price in the search answer: absent, not "unknown".
+    expect(mapCatalogProduct({ ...MILK, source: "valio", unit_price_eur: null }).priceExVat).toBeUndefined();
+  });
+
+  it("names the individual allergen codes sent by the catalog", () => {
+    // The names are the ones in agent/label.py NAMES. BP is not in that table: it keeps its code
+    // (the card then says "Other allergen (BP)"), because a guessed name would be a wrong warning.
+    expect(
+      mapCatalogProduct({ ...MILK, allergens: { contains: ["BP", "GB", "NR", "SR", "SW"], may_contain: [] } }).allergens,
+    ).toEqual([
+      { code: "BP", name: "BP", presence: "CONTAINS" },
+      { code: "GB", name: "Barley", presence: "CONTAINS" },
+      { code: "NR", name: "Rye", presence: "CONTAINS" },
+      { code: "SR", name: "Brazil nuts", presence: "CONTAINS" },
+      { code: "SW", name: "Walnuts", presence: "CONTAINS" },
+    ]);
   });
 
   it("refuses a row without a product code", () => {

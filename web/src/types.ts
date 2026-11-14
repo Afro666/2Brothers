@@ -58,6 +58,8 @@ export interface Product {
   co2KgPerKg: number | null;
   /** Delivered vs ordered, 0..1; null when not in the dataset. */
   deliveryReliability: number | null;
+  /** A catalog own-product price per sales unit before VAT; null when absent. */
+  priceExVat?: number | null;
 }
 
 /** Where a delivery fact comes from (#1453): Valio, the supplier's own terms, or demo values. */

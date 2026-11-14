@@ -281,6 +281,26 @@ describe("catalog page", () => {
     expect(screen.queryByRole("heading", { name: "No products match this search" })).not.toBeInTheDocument();
   });
 
+  it("shows twelve results at a time while keeping the full result count", async () => {
+    const api = createMockApi();
+    const many = Array.from({ length: 30 }, (_, index) => ({
+      ...sampleProducts.arlaUht1l,
+      id: `product-${index + 1}`,
+      names: { en: `Product ${index + 1}` },
+    }));
+    api.searchProducts = async () => many;
+    const user = userEvent.setup();
+    renderApp("/catalog?q=milk", api);
+
+    expect(await screen.findByText("30 products")).toBeInTheDocument();
+    expect(screen.getAllByText(/^Product \d+$/)).toHaveLength(12);
+    await user.click(screen.getByRole("button", { name: "Show more (18 more)" }));
+    expect(await screen.findByText("Product 24")).toBeInTheDocument();
+    expect(screen.getAllByText(/^Product \d+$/)).toHaveLength(24);
+    expect(screen.getByText("30 products")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show more (6 more)" })).toBeInTheDocument();
+  });
+
   describe("Search by meaning (#1382)", () => {
     function meaningApi(unavailable = false) {
       const base = createMockApi();
