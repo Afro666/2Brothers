@@ -14,8 +14,7 @@ def apply_notices(gateway, kitchen_id, notices):
     alerts = scan(notices, kitchen, now)
     audit(db, alerts, now)
     # Publish all holds before quoting any replacement.
-    for alert in alerts:
-        recalls.remember(db, alert)
+    alerts = [recalls.remember(db, alert) for alert in alerts]
     results = []
     for proposal in proposals:
         offer = get_offer(db, proposal['offer_id'])
@@ -26,8 +25,9 @@ def apply_notices(gateway, kitchen_id, notices):
             held = recalls.hold(db, kitchen_id, proposal['_id'], alert) or held
         if not held:
             continue
-        gateway._audit(kitchen_id, 'recall_proposal_blocked', 'recall-monitor',
-                       proposal_id=proposal['_id'], product_ids=sorted(ids & recalls.blocked_ids(db, kitchen_id)))
+        if proposal['status'] != 'BLOCKED_BY_RECALL':
+            gateway._audit(kitchen_id, 'recall_proposal_blocked', 'recall-monitor',
+                           proposal_id=proposal['_id'], product_ids=sorted(ids & recalls.blocked_ids(db, kitchen_id)))
         if proposal.get('replacement_proposal_id'):
             results.append(gateway.get_proposal(kitchen_id, proposal['_id']))
             continue

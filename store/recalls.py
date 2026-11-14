@@ -16,6 +16,8 @@ def context(db, kitchen_id):
 def remember(db, alert):
     db.recall_alerts.update_one({'_id': alert['event_id'], 'kitchen_id': alert['kitchen_id']},
         {'$setOnInsert': {k: v for k, v in alert.items() if k != 'event_id'}}, upsert=True)
+    saved = db.recall_alerts.find_one({'_id': alert['event_id'], 'kitchen_id': alert['kitchen_id']})
+    return {'event_id': saved.pop('_id'), **saved}
 
 
 def blocked_ids(db, kitchen_id):

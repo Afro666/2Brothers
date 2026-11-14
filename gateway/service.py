@@ -369,7 +369,7 @@ class Gateway:
             self._audit(kitchen_id, "order_placed", human, proposal_id=proposal_id,
                         order_id=order["order_id"], expected_total=sim["expected_total"])
         else:   # the key already placed an order: nothing new placed here, release the claim
-            self.db.proposals.update_one({"_id": proposal_id, "status": "APPROVING", "approving_key": key},
+            self.db.proposals.update_one({"_id": proposal_id, "status": "COMMITTING", "approving_key": key},
                                          {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
         return {"proposal_id": proposal_id, **self._order_out(order)}
 
