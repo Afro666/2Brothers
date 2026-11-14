@@ -36,3 +36,22 @@ jobs:
           docker run -d --name gw -p 8000:8000 gateway-test
           for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8000/health && exit 0; sleep 1; done
           docker logs gw; exit 1
+
+  # The web app's own checks; without this job a broken web test did not block a merge.
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --testTimeout=30000
+      - run: npm run build

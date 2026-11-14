@@ -76,6 +76,12 @@ class Gateway:
         doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}) or {}
         return KitchenParams.from_dict(doc.get("engine"))
 
+    def _standing_orders(self, kitchen_id: str) -> dict[str, Decimal]:
+        """Per product: the standing order per delivery, in sales units (#380, S08)."""
+        doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}, {"standing_orders": 1}) or {}
+        return {pid: _dec(qty) for pid, qty in (doc.get("standing_orders") or {}).items()
+                if _dec(qty) is not None}
+
     def _terms(self, kitchen_id: str) -> dict:
         doc = self.db.suppliers.find_one({"kitchen_id": kitchen_id, "adapter": "valio_api"}) or {}
         return doc.get("terms") or {}
@@ -506,6 +512,7 @@ class Gateway:
                       self.valio.price([c["product_id"] for c in counts], requested)["products"]}
         terms = self._terms(kitchen_id)
         lead = float(terms.get("lead_time_days") or 1)
+        standing = self._standing_orders(kitchen_id)
         candidates, skipped = [], []
         for count in counts:
             pid = count["product_id"]
@@ -527,7 +534,8 @@ class Gateway:
             on_hand = count.get("on_hand")
             item = Item(pid, pack, daily_demand=self._daily_demand(kitchen_id, pid), lead_time_days=lead,
                         review_days=REVIEW_DAYS, on_hand=None if on_hand is None else float(on_hand),
-                        abc=product.get("abc"), category=product.get("category"))
+                        abc=product.get("abc"), category=product.get("category"),
+                        standing_order=standing.get(pid))
             names = product.get("names") or {}
             candidates.append(Candidate(item, name=names.get("en") or names.get("fi") or pid,
                                         unit_price=unit_price))

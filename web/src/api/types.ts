@@ -23,6 +23,9 @@ import type {
   KitchenSettings,
   ForecastAccuracy,
   DriftReport,
+  BuyerPermissions,
+  AutoApproveLearning,
+  KitchenBrandLookup,
 } from "@/types";
 
 /** Who a decision is recorded as in the audit log. */
@@ -55,8 +58,37 @@ export interface ChefProposal {
   approval: ApprovalRequest | null;
 }
 
+/** One audit line with its place in the hash chain (the entry shape of `store/audit.py`). */
+export interface AuditChainRow {
+  /** Position in the chain, from 1. */
+  seq: number;
+  event: AuditEvent;
+  prevHash: string;
+  hash: string;
+}
+
+/** `GET /audit/verify`. The chain is one for all kitchens. */
+export interface AuditChainCheck {
+  ok: boolean;
+  /** Lines checked up to the first broken one. */
+  length: number;
+  /** `seq` of the first changed or removed line. */
+  brokenAt: number | null;
+  /** The kitchen that line belongs to; null when the chain is whole or the gateway cannot tell. */
+  brokenKitchenId: string | null;
+  /** How many of the lines belong to this kitchen. */
+  kitchenEntries: number;
+  /** When the web app got the answer; the gateway does not send it. */
+  checkedAt: string;
+}
+
 /** Everything the screens ask the gateway for. Mock and HTTP both implement it. */
 export interface Api {
+  /**
+   * Gateway mode only: the methods the real gateway answers. Every other method still
+   * returns sample data from the mock. Absent on the mock itself.
+   */
+  readonly live?: ReadonlySet<keyof Api>;
   listApprovals(): Promise<ApprovalRequest[]>;
   getApproval(id: string): Promise<ApprovalRequest>;
   approve(decision: ApprovalDecision, actor: AuditActor): Promise<ApprovalRequest>;
@@ -79,6 +111,16 @@ export interface Api {
   listOrders(): Promise<Order[]>;
   getOrder(id: string): Promise<Order>;
   listAudit(filter?: { orderId?: string }): Promise<AuditEvent[]>;
+  /** The newest `limit` audit lines with their chain hashes, oldest first. */
+  listAuditChain(limit: number): Promise<AuditChainRow[]>;
+  verifyAuditChain(): Promise<AuditChainCheck>;
+  /**
+   * Demo only: changes the newest stored line and leaves its hash alone, so the next verify
+   * reports the break. Fails with `DEMO_ONLY`, `ALREADY_TAMPERED` or `NOTHING_TO_TAMPER`.
+   */
+  tamperAuditRow(): Promise<{ seq: number }>;
+  /** Demo only: puts the tampered line back. `seq` is null when nothing was tampered. */
+  restoreAuditRow(): Promise<{ seq: number | null; restored: boolean }>;
   submitChefRequest(request: ChefRequest): Promise<ChefProposal>;
   searchProducts(query: string, filters?: ProductSearchFilters): Promise<Product[]>;
   /** Catalog products by id; ids the catalog does not know are absent from the result. */
@@ -113,6 +155,14 @@ export interface Api {
   getDrift(): Promise<DriftReport>;
   /** Drift warnings of the kitchens that share with this supplier (`GET /demand/drift`). */
   getSupplierDrift(): Promise<DriftReport>;
+  getPermissions(): Promise<BuyerPermissions>;
+  /** Progress only. There is no method to switch auto-approve on: a person approves every order. */
+  getAutoApproveLearning(): Promise<AutoApproveLearning>;
+  /**
+   * Onboarding: the gateway looks the kitchen up with Context.dev (`POST /v1/brand/retrieve`)
+   * from a work email or a website. It saves nothing; a person confirms the fields first.
+   */
+  lookupKitchenBrand(query: { email: string } | { website: string }): Promise<KitchenBrandLookup>;
 }
 
 /** A gateway error: `code` is the contract's error code, e.g. `TOTAL_MISMATCH`. */

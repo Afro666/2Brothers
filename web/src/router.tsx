@@ -17,6 +17,7 @@ import { DemandPage } from "@/pages/demand";
 import { ForecastPage } from "@/pages/forecast";
 import { OrderDetailPage } from "@/pages/order-detail";
 import { OrdersPage } from "@/pages/orders";
+import { OnboardingPage } from "@/pages/onboarding";
 import { PlannerPage } from "@/pages/planner";
 import { ProductsPage } from "@/pages/products";
 import { RequestsPage } from "@/pages/requests";
@@ -25,6 +26,7 @@ import { SuppliersPage } from "@/pages/suppliers";
 import { HomePage } from "@/pages/home";
 import { DEFAULT_SETTINGS_SECTION } from "@/pages/settings/sections";
 import { SettingsPage } from "@/pages/settings/settings-page";
+import { TrustPage } from "@/pages/trust";
 
 function RootLayout() {
   return (
@@ -71,6 +73,8 @@ const settingsSectionRoute = createRoute({
   component: SettingsPage,
 });
 const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: "/about", component: AboutPage });
+const trustRoute = createRoute({ getParentRoute: () => rootRoute, path: "/trust", component: TrustPage });
+const onboardingRoute = createRoute({ getParentRoute: () => rootRoute, path: "/onboarding", component: OnboardingPage });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -90,6 +94,8 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
   settingsSectionRoute,
   aboutRoute,
+  trustRoute,
+  onboardingRoute,
 ]);
 
 export function createAppRouter(history?: RouterHistory) {

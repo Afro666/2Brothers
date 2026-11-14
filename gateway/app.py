@@ -22,9 +22,22 @@ from gateway.service import Gateway, GatewayError
 DEFAULT_KITCHEN = "demo-kitchen"
 
 
+ALL_SCOPES = frozenset({"kitchen:read", "kitchen:propose"})
+
+
 class Principal:
-    def __init__(self, kind: str, name: str):
-        self.kind, self.name = kind, name
+    """kind: human | agent | token. `kitchen_id` None = any kitchen (server env tokens)."""
+
+    def __init__(self, kind: str, name: str, kitchen_id: str | None = None,
+                 scopes: frozenset = ALL_SCOPES):
+        self.kind, self.name, self.kitchen_id, self.scopes = kind, name, kitchen_id, frozenset(scopes)
+
+    def need(self, scope: str, kitchen_id: str | None = None) -> None:
+        """403 unless this caller holds `scope` for `kitchen_id`."""
+        if self.kind != "human" and scope not in self.scopes:
+            raise GatewayError(403, "SCOPE_REQUIRED", f"this token lacks {scope}")
+        if kitchen_id is not None and self.kitchen_id is not None and kitchen_id != self.kitchen_id:
+            raise GatewayError(403, "KITCHEN_SCOPE", "this token belongs to another kitchen")
 
     @property
     def human(self) -> str | None:
@@ -36,9 +49,7 @@ def _token_matches(given: str, env: str) -> bool:
     return bool(expected) and hmac.compare_digest(given.encode(), expected.encode())
 
 
-def principal(request: Request) -> Principal:
-    auth = request.headers.get("authorization", "")
-    token = auth[7:] if auth.lower().startswith("bearer ") else ""
+def _env_principal(request: Request, token: str) -> Principal:
     if token and _token_matches(token, "GATEWAY_HUMAN_TOKEN"):
         user = (request.headers.get("x-user") or "").strip()[:100]
         if not user:
@@ -71,6 +82,22 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     async def _invalid(_: Request, exc: ValueError) -> JSONResponse:
         return JSONResponse(status_code=422, content={"error": {"code": "INVALID_REQUEST", "message": str(exc)[:200]}})
 
+    def principal(request: Request) -> Principal:
+        """Server env tokens first (web session stand-in, Buyer worker), then kitchen API tokens."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:] if auth.lower().startswith("bearer ") else ""
+        try:
+            return _env_principal(request, token)
+        except GatewayError:
+            pass
+        from gateway import tokens
+        doc = tokens.verify(gw().db, token)
+        if doc is None:
+            raise GatewayError(401, "UNAUTHENTICATED", "a valid bearer token is required")
+        return Principal("token", f"token:{doc['name']}", doc["kitchen_id"], frozenset(doc["scopes"]))
+
+    app.state.verify_token = lambda token: __import__("gateway.tokens", fromlist=["verify"]).verify(gw().db, token)
+
     async def body(request: Request) -> dict[str, Any]:
         try:
             data = await request.json()
@@ -89,6 +116,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.post(k + "/proposals")
     async def create_proposal(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:propose", kitchen_id)
         data = await body(request)
         if 'text' in data and 'product_ids' not in data:
             from gateway.buyer_worker import run_buyer
@@ -105,38 +133,47 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.get(k + "/proposals")
     def list_proposals(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
         return {"proposals": gw().list_proposals(kitchen_id)}
 
     @app.get(k + "/proposals/{proposal_id}")
     def get_proposal(kitchen_id: str, proposal_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
         return gw().get_proposal(kitchen_id, proposal_id)
 
     @app.get(k + "/proposals/{proposal_id}/addable")
     def addable(kitchen_id: str, proposal_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
         return gw().addable(kitchen_id, proposal_id)
 
     @app.post(k + "/proposals/{proposal_id}/approve")
     async def approve(kitchen_id: str, proposal_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
         return gw().approve(kitchen_id, proposal_id, await body(request), human=who.human)
 
     @app.post(k + "/proposals/{proposal_id}/reject")
     async def reject(kitchen_id: str, proposal_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
         return gw().reject(kitchen_id, proposal_id, await body(request), human=who.human)
 
     @app.post(k + "/needs")
     async def create_need(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:propose", kitchen_id)
         return gw().create_need(kitchen_id, await body(request), who.name)
 
     @app.get(k + "/orders")
     def list_orders(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
         return {"orders": gw().list_orders(kitchen_id)}
 
     @app.get(k + "/orders/{order_id}")
     def get_order(kitchen_id: str, order_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
         return gw().get_order(kitchen_id, order_id)
 
     @app.get(k + "/forecast-accuracy")
     def forecast_accuracy(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
         q = request.query_params
         if not q.get("from") or not q.get("to"):
             raise GatewayError(422, "INVALID_REQUEST", "from and to (YYYY-MM-DD) are required")
@@ -144,6 +181,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.get(k + "/forecast")
     def forecast(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
         q = request.query_params
         if not q.get("from") or not q.get("to"):
             raise GatewayError(422, "INVALID_REQUEST", "from and to (YYYY-MM-DD) are required")
@@ -151,14 +189,52 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.get(k + "/audit")
     def audit(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
         return {"events": gw().audit_log(kitchen_id)}
 
+    # ---- API tokens (#271): a person creates and revokes them; tokens never approve ----
+    @app.post(k + "/tokens")
+    async def create_token(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        from gateway import tokens
+        if not who.human:
+            raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can create a token")
+        data = await body(request)
+        try:
+            out = tokens.create(gw().db, kitchen_id, data.get("name"), data.get("scopes"), who.human)
+        except tokens.TokenError as exc:
+            raise GatewayError(422, "INVALID_REQUEST", str(exc)) from None
+        gw()._audit(kitchen_id, "token_created", who.human, token_id=out["token_id"],
+                    name=out["name"], scopes=out["scopes"])
+        return out
+
+    @app.get(k + "/tokens")
+    def list_tokens(kitchen_id: str, who: Principal = Depends(principal)):
+        from gateway import tokens
+        if not who.human:
+            raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can list tokens")
+        return {"tokens": tokens.list_tokens(gw().db, kitchen_id)}
+
+    @app.delete(k + "/tokens/{token_id}")
+    def revoke_token(kitchen_id: str, token_id: str, who: Principal = Depends(principal)):
+        from gateway import tokens
+        if not who.human:
+            raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can revoke a token")
+        out = tokens.revoke(gw().db, kitchen_id, token_id)
+        if out is None:
+            raise GatewayError(404, "TOKEN_NOT_FOUND", "no such token")
+        gw()._audit(kitchen_id, "token_revoked", who.human, token_id=token_id)
+        return out
+
     # ---- Buyer agent tools (one kitchen per agent token in the demo) ----------------
-    def kitchen() -> str:
+    def kitchen(who: Principal | None = None) -> str:
+        """A kitchen API token acts for its own kitchen; the server agent token for the default."""
+        if who is not None and who.kitchen_id is not None:
+            return who.kitchen_id
         return os.environ.get("GATEWAY_KITCHEN_ID", DEFAULT_KITCHEN)
 
     @app.post("/tools/search_products")
     async def search(request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:read")
         from store.search import search_products
         data = await body(request)
         limit = data.get("limit", 20)
@@ -168,36 +244,43 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.post("/tools/get_offer")
     async def get_offer(request: Request, who: Principal = Depends(principal)):
-        return gw().tool_get_offer(kitchen(), await body(request))
+        who.need("kitchen:propose")
+        return gw().tool_get_offer(kitchen(who), await body(request))
 
     @app.post("/tools/simulate_order")
     async def simulate(request: Request, who: Principal = Depends(principal)):
-        return gw().tool_simulate(kitchen(), await body(request))
+        who.need("kitchen:propose")
+        return gw().tool_simulate(kitchen(who), await body(request))
 
     @app.post("/tools/request_approval")
     async def request_approval(request: Request, who: Principal = Depends(principal)):
-        return gw().tool_request_approval(kitchen(), await body(request), who.name)
+        who.need("kitchen:propose")
+        return gw().tool_request_approval(kitchen(who), await body(request), who.name)
 
     @app.post("/tools/place_order")
     async def place_order(request: Request, who: Principal = Depends(principal)):
-        return gw().tool_place_order(kitchen(), await body(request))
+        who.need("kitchen:propose")
+        return gw().tool_place_order(kitchen(who), await body(request))
 
     @app.get("/tools/get_order_status")
     def order_status(order_id: str, who: Principal = Depends(principal)):
-        order = gw().get_order(kitchen(), order_id)
+        who.need("kitchen:read")
+        order = gw().get_order(kitchen(who), order_id)
         return {"order_id": order["order_id"], "status": order["status"], "outcome": order["outcome"]}
 
     @app.get("/tools/get_audit_log")
     def audit_tool(run_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read")
         from store.audit import list_events
-        return {"events": [e["event"] for e in list_events(gw().db, run_id=run_id)]}
+        return {"events": [e["event"] for e in list_events(gw().db, run_id=run_id, kitchen_id=kitchen(who))]}
 
     @app.post("/audit/events")
     async def audit_ingest(request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:propose")
         from store.audit import AuditConflict, append_event
         event = await body(request)
         try:
-            entry = append_event(gw().db, event, {"kitchen_id": kitchen(), "principal": who.name})
+            entry = append_event(gw().db, event, {"kitchen_id": kitchen(who), "principal": who.name})
         except AuditConflict:
             raise GatewayError(409, "IDEMPOTENCY_CONFLICT", "event_id reused with other content") from None
         return {"event_id": entry["event"]["event_id"], "stored": True}

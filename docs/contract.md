@@ -369,10 +369,13 @@ IDs) apply here too. Base path: `/v1`.
 | GET | `/settings` | `kitchen:read` | Kitchen settings: how the engine sizes orders and what the Buyer may propose. Shape below. |
 | PUT | `/settings` | `kitchen:write` (human) | Change settings. Only the fields in the body change. Every change is an audit entry. Proposed; the gateway does not serve these two routes yet. |
 | GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
+| GET | `/drift` | `kitchen:read` | Standing-order drift for the last full week: products whose order per 100 guests (`portion_creep`) or spend per 100 guests (`cost_creep`) is 15% or more above the 4 weeks before. Shape below. Proposed; the gateway does not serve it yet (`store.drift.standing_order_drift`). |
 | GET | `/audit/verify` | `kitchen:read` | Check the audit hash chain now. Shape below. Proposed, like the next three rows; the gateway does not serve them yet. |
 | POST | `/audit/demo-tamper` | `kitchen:approve` (human) | Demo only: edit one audit row of the synthetic demo kitchen, so `/audit/verify` shows the break. 403 `DEMO_ONLY` for any other kitchen. |
 | POST | `/audit/demo-restore` | `kitchen:approve` (human) | Demo only: put the tampered row back exactly as it was. |
 | GET | `/events` | `kitchen:read` | Server-sent events: this kitchen's new and changed proposals, approvals and audit entries, as they happen. Shape below. |
+| GET | `/recalls` | `kitchen:read` | This kitchen's open `recall.alert`s and the last check. Shape below. Proposed, like the next row; the gateway does not serve them yet (#358). |
+| POST | `/recalls/check` | `kitchen:write` | Run the recall monitor now: Context.dev scrape of the Ruokavirasto list, matched to stock, recipes and open proposals. Body: `idempotency_key`. |
 
 Proposal `status`: `PENDING`, `READY`, `APPROVED`, `REJECTED`, `EXPIRED`. An approved
 proposal places one order per supplier block, through the same `place_order` guards.
@@ -462,6 +465,7 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. |
 | GET | `/demand/shortage-risk` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability. |
+| GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Proposed. |
 | POST | `/offers` | `supplier:read-orders` | Proactive offer to a kitchen (substitute, promotion). It shows up as a suggestion, never as an order. |
 
 A supplier only sees demand from kitchens whose `/sharing` consent names it.
@@ -590,6 +594,26 @@ data: {"operation": "insert", "document": {"proposal_id": "...", "status": "PEND
 - Nothing is replayed after a reconnect: the client loads the lists again, then listens.
 - The browser's `EventSource` cannot send an `Authorization` header; the web client
   reads the stream with `fetch`.
+
+### Standing-order drift
+
+`GET /v1/kitchens/{kitchen_id}/drift` answers `{"week": "2026-11-09", "warnings": [...]}`,
+biggest change first. `week` is the Monday of the last full week. Each warning:
+
+```json
+{"product_id": "462775", "kind": "portion_creep", "change": 0.4, "unit": "ST",
+ "qty_per_100": 14.0, "baseline_qty": 10.0, "spend_per_100": 35.98,
+ "baseline_spend": 25.7, "baseline_weeks": 4,
+ "why": "14.0 ST per 100 guests last week, 10.0 on average over the 4 weeks before (+40%). Check portions before this order renews."}
+```
+
+- `kind`: `portion_creep` (more ordered per guest) or `cost_creep` (the same amount per
+  guest costs more). A drop is not a warning.
+- Fewer than 3 weeks of history, or a week without guests, is never drift: it is left out.
+- Rates are per 100 guests from the `covers` series; money values are numbers for display
+  only, never a figure to approve (approval figures come from `simulate_order`).
+- Where it shows: a warning on the next proposal for that product, and a list on the
+  supplier demand view (consenting kitchens only).
 
 ### Webhooks (both sides)
 
@@ -760,6 +784,154 @@ left out keeps its value, so a partial save can never drop the allergen policy.
   `service_level` (fraction), `maxDaysOfCover` to `max_cover_days`, `stockOutDemandCap`
   to `stockout_cap`, `budgetWarningPerOrderExVat` / `budgetWarningPerWeekExVat` to the
   two budget fields, `excludedAllergens` to `excluded_allergens`.
+
+### Onboarding lookup (Context.dev)
+
+`POST /v1/onboarding/lookup` (human user session). On sign-up the kitchen types its work
+email or its website; the gateway looks the business up with Context.dev and returns the
+profile fields to pre-fill. Proposed (issue #375); the gateway does not serve it yet. The
+web page (`/onboarding`) is built against the mock.
+
+Request: exactly one of the two fields. A POST, so the email never sits in a URL or an
+access log. It saves nothing, so it takes no `idempotency_key`.
+
+```json
+{"email": "chef@hotelkuusi.fi"}
+{"website": "https://www.hotelkuusi.fi"}
+```
+
+Response: every field is `{value, source}`. `value` `null` means unknown: Context.dev did
+not return it, and the gateway never guesses one. `source` is `null` exactly when `value`
+is.
+
+```json
+{
+  "domain": "hotelkuusi.fi",
+  "found": true,
+  "name": {"value": "Hotel Kuusi",
+           "source": {"provider": "Context.dev", "endpoint": "POST /v1/brand/retrieve"}},
+  "logo_url": {"value": "https://...", "source": {"...": "..."}},
+  "colors": {"value": ["#1f4d3a", "#e9d8a6"], "source": {"...": "..."}},
+  "address": {"value": {"street": "Satakunnankatu 41", "postal_code": "33210",
+                        "city": "Tampere", "country": "Finland"}, "source": {"...": "..."}},
+  "kitchen_type": {"value": "hotel", "source": {"...": "..."}},
+  "opening_hours": {"value": null, "source": null}
+}
+```
+
+| Field | From Context.dev | Rule |
+|---|---|---|
+| `domain` | | The domain the lookup used: from the email after `@`, or the website's host without `www.`. |
+| `found` | | `false` when Context.dev knows nothing about the domain (its 400 `NOT_FOUND`): 200 with every field unknown, so the person fills in the form. |
+| `name` | `brand.title` | |
+| `logo_url` | `brand.logos[]` | An https URL. Prefer `type` `icon` or `logo` in light `mode`; `null` when there is none. |
+| `colors` | `brand.colors[].hex` | `#rrggbb`, main colour first. `null` when there are none, never `[]`. |
+| `address` | `brand.address` | `street`, `postal_code`, `city`, `country`; a part Context.dev leaves out is `null` on its own. |
+| `kitchen_type` | `brand.industries.eic[]` | `hotel`, `school`, `hospital` or `restaurant` when the industry or subindustry clearly says so (hotels and accommodation, primary or secondary education, hospitals and health care, restaurants and food service). Anything else is `null`. A guess; the person confirms it. |
+| `opening_hours` | not in `brand/retrieve` | Free text as the website writes it. Optional second call: `POST /v1/web/scrape` (the endpoint `monitor/recalls.py` uses) on the home or contact page, reading schema.org `openingHours`. Without it, `null`. `source.endpoint` names whichever endpoint gave the value. |
+
+Which Context.dev endpoint, and why:
+
+- `POST https://api.context.dev/v1/brand/retrieve` with `{"type": "by_email", "email": ...}`
+  or `{"type": "by_domain", "domain": ...}`. One call returns name, logos, colours, address
+  and industry (EIC), which is every field but the opening hours. `by_email` resolves the
+  work email's domain for us; that is the sponsor's own example ("brand itself from a
+  customer's email"). `/brand/styleguide` (fonts, spacing) and `/brand/search` (name
+  autocomplete) are not needed for the form.
+- Context.dev answers a free or disposable email with 422 `FREE_EMAIL_DETECTED` /
+  `DISPOSABLE_EMAIL_DETECTED`. The gateway returns 422 `FREE_EMAIL` with "Type the
+  kitchen's website instead."; the page then asks for the website.
+- An address that is neither an email nor a domain: 422 `INVALID_QUERY`. Context.dev down,
+  out of credits or slow (a cold domain can take more than 10 s; use a timeout of at least
+  10,000 ms): 502 `LOOKUP_UNAVAILABLE`. The page shows a blank form in both cases.
+
+Rules:
+
+- `CONTEXT_DEV_API_KEY` stays on the gateway (the same key as the recall monitor). The
+  browser calls our route, never Context.dev.
+- Nothing is saved by this route. The person checks every field, changes what is wrong
+  and presses "Confirm and save"; only then is the profile stored. Until the kitchen
+  profile has a save route, the web keeps the confirmed profile in the browser and shows
+  the logo in the app shell.
+- Every pre-filled field shows "From your website via Context.dev" and its
+  `source.endpoint` until the person edits it.
+- The web client maps `logo_url` to `logoUrl`, `kitchen_type` to `kitchenType`,
+  `opening_hours` to `openingHours` and `postal_code` to `postalCode`.
+
+### Recall alerts (Context.dev)
+
+The recall monitor (`monitor/recalls.py`) scrapes the Ruokavirasto recall list with
+Context.dev `POST /v1/web/scrape` and writes one `recall.alert` per notice, kitchen and
+product. These two routes show the alerts in the approval inbox and let a person run a
+check now. The gateway serves the routes (Aron); the monitor and the re-plan are #358
+(Maciek).
+
+`GET /v1/kitchens/{kitchen_id}/recalls` and `POST .../recalls/check` both answer:
+
+```json
+{
+  "last_check": {
+    "checked_at": "2026-11-14T00:30:00+02:00",
+    "source": "recording",
+    "fetched_at": "2026-11-13T22:17:51+00:00",
+    "via": "/v1/web/scrape",
+    "notices_scanned": 38
+  },
+  "alerts": [
+    {
+      "event_id": "recall-3f1c9a0b5e7d2c4a8b6e1f0d",
+      "type": "recall.alert",
+      "kitchen_id": "K10",
+      "product_id": "461332",
+      "product_name": "Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg",
+      "match": "possible",
+      "why": "same brand Kulta Katriina, shared word(s) kahvi, perinteinen",
+      "where": ["in stock: 5.673 KG", "in recipes: breakfast_buffet", "on the open purchase proposal"],
+      "recall": {
+        "url": "https://www.ruokavirasto.fi/elintarvikkeet/ohjeita-kuluttajille/takaisinvedot-2023-/suodatinkahvissa-vierasesineriski/",
+        "date": "2026-03-06", "title": "Suodatinkahvissa vierasesineriski",
+        "reason": "...", "action": "...",
+        "recalled_product": "Kulta Katriina Perinteinen suodatinkahvi", "brand": "Kulta Katriina",
+        "gtin": null, "package_size": "500 g",
+        "lot": "23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027"
+      },
+      "next_step": "Do not use it until checked. Check your packs: ...",
+      "proposal_id": "prop-7c2e",
+      "line_status": "BLOCKED_BY_RECALL",
+      "replacement_line": {"product_id": "475842", "product_name": "12 x Löfbergs Crescendo Ground Coffee 500g Rainforest Alliance",
+                           "quantity": "2", "unit": "KI"},
+      "replacement_proposal": [{"product_id": "475842", "name": "...", "brand": "Löfbergs"}],
+      "detected_at": "2026-11-14T00:30:00+02:00"
+    }
+  ]
+}
+```
+
+- The alert fields are the monitor's `recall.alert` as it is (monitor/README.md), plus three
+  fields the re-plan adds: `proposal_id`, `line_status` and `replacement_line`.
+- `last_check` is `null` when no check has run for this kitchen. Then the screens say "not
+  checked yet", never "no recalls". An empty `alerts` list with a `last_check` means the
+  check found nothing on this kitchen's stock, recipes or open proposals.
+- `source`: `live` when the scrape ran now; `recording` when Context.dev was slow or down
+  and the last saved scrape was used. `fetched_at` says how old the scrape is. The screens
+  show which one, so a recording is never shown as live.
+- `proposal_id` is the open proposal the alert hits, else `null`. `line_status` is
+  `BLOCKED_BY_RECALL` for an `exact` or `possible` match on a proposal line, `WARNING` for a
+  `review` match (shown, never blocking on its own).
+- `replacement_line` is the line the Buyer re-planned in place of the blocked one, sized by
+  the engine (`quantity` a decimal string in `unit`); `null` while it has not. A proposal
+  that still holds a `BLOCKED_BY_RECALL` line cannot be approved: approve answers 409
+  `RECALL_BLOCKED`. After the re-plan the proposal has a new `expected_total`, and a person
+  approves that exact figure as usual. `replacement_proposal` stays ideas for the chef;
+  nothing is ordered from an alert.
+- `POST /recalls/check` with a repeat `idempotency_key` returns the stored result. A new
+  check that finds an alert already known (same `event_id`) does not re-plan again.
+- Every check and every re-plan is an audit entry (`store.audit`).
+- `CONTEXT_DEV_API_KEY` stays on the gateway and the monitor; the browser never calls
+  Context.dev. A check that cannot scrape and has no recording answers 502
+  `RECALL_CHECK_UNAVAILABLE`; the screens then show recalls as unknown.
+- The web client maps snake_case to camelCase, `proposal_id` to `orderId`, `replacement_proposal`
+  to `replacementIdeas` and `quantity` to a number.
 
 ## Daily weather and holiday signals
 
