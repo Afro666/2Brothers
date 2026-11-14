@@ -9,6 +9,7 @@ import time
 
 import httpx
 from fastapi import Depends, Request
+from starlette.concurrency import run_in_threadpool
 from jsonschema import ValidationError
 from pydantic import BaseModel, Field
 
@@ -122,7 +123,9 @@ def mount_menu_photo(app, gw, principal, worker=None):
                 response['no_proposal_reason'] = 'NOT_SIZED'
             else:
                 try:
-                    made = gw().create_proposal(kitchen_id, {'from': start.isoformat(), 'to': end.isoformat(),
+                    # Off the event loop: the Valio limiter may wait (#1280).
+                    made = await run_in_threadpool(
+                            gw().create_proposal, kitchen_id, {'from': start.isoformat(), 'to': end.isoformat(),
                             'requested_date': delivery.isoformat(), 'idempotency_key': key}, who.name,
                             auto_approve=False, plan_entries=entries,
                             menu_photo={'fingerprint': fingerprint, 'response': response})
