@@ -160,7 +160,7 @@ describe("HomePage", () => {
     renderApp(`/?now=${DEMO_NOW}`, api);
 
     expect(await screen.findByText("Kitchen brief read")).toBeInTheDocument();
-    expect(screen.getByText("Proposal explanation failed")).toBeInTheDocument();
+    expect(screen.getByText("No model sentence for a proposal")).toBeInTheDocument();
     expect(screen.queryByText(/kitchen_brief_read|proposal_explanation_failed/)).not.toBeInTheDocument();
   });
 });

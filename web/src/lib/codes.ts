@@ -86,8 +86,8 @@ export const CODE_LABELS: Record<string, CodeLabel> = {
     detail: "A product on this order matches a food recall. It cannot be approved.",
   },
   proposal_explanation_failed: {
-    title: "Proposal explanation failed",
-    detail: "The Buyer could not explain this proposal. Check the order details before approving.",
+    title: "No model sentence for a proposal",
+    detail: "Nemotron's short text was not written or did not pass the check. The card shows the decision record instead.",
   },
   kitchen_brief_read: {
     title: "Kitchen brief read",
@@ -107,7 +107,7 @@ export const CODE_LABELS: Record<string, CodeLabel> = {
   },
   EXPLANATION_UNAVAILABLE: {
     title: "Explanation unavailable",
-    detail: "The Buyer could not explain this proposal. Check the order details before approving.",
+    detail: "Nemotron's short text was not written or did not pass the check. The card shows the decision record instead.",
   },
 };
 
