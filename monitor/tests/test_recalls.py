@@ -88,6 +88,7 @@ class ScanRecordedPageTest(unittest.TestCase):
         self.assertEqual(a["type"], "recall.alert")
         self.assertIn("2027", a["recall"]["lot"])  # the recalled best-before dates
         self.assertIn("in stock: 5.5 KG", a["where"])
+        self.assertTrue(a["found"]["stock"])
         self.assertEqual(a["replacement_proposal"][0]["product_id"], "475842")
         self.assertIn("Do not use it until checked", a["next_step"])
 

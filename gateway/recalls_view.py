@@ -211,13 +211,18 @@ def _found(alert: dict) -> dict | None:
     """The stock and recipe evidence in an active alert, or None when it has neither."""
     if alert.get("status") == "dismissed":
         return None
-    where = alert.get("where") or []
-    stock = any(entry.startswith(("in stock", "on the stock list")) for entry in where)
-    names = next((entry.removeprefix("in recipes: ") for entry in where
-                  if entry.startswith("in recipes: ")), "")
-    found = {"stock": stock, "recipes": len(names.split(", ")) if names else 0,
-             "open_proposal": "on the open purchase proposal" in where}
-    return found if stock or found["recipes"] else None
+    data = alert.get("found")
+    if isinstance(data, dict):      # structured evidence from monitor/recalls.py
+        found = {"stock": bool(data.get("stock")), "recipes": len(data.get("recipes") or []),
+                 "open_proposal": bool(data.get("open_proposal"))}
+    else:                           # an alert from before the structured field: read the text
+        where = alert.get("where") or []
+        names = next((entry.removeprefix("in recipes: ") for entry in where
+                      if entry.startswith("in recipes: ")), "")
+        found = {"stock": any(entry.startswith(("in stock", "on the stock list")) for entry in where),
+                 "recipes": len(names.split(", ")) if names else 0,
+                 "open_proposal": "on the open purchase proposal" in where}
+    return found if found["stock"] or found["recipes"] else None
 
 
 def _check(gw: Gateway, kitchen_id: str, event_id: str, actor: str) -> dict:

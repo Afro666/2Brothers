@@ -96,6 +96,15 @@ def test_failed_delivery_is_retried_by_the_next_check(env, receiver):
     assert len(sent(receiver, "FOUND")) == 4
 
 
+def test_found_counts_recipes_from_structured_data():
+    from gateway.recalls_view import _found
+    alert = {"where": ["in recipes: Soup, Tomato"],
+             "found": {"stock": False, "recipes": ["Soup, Tomato"], "open_proposal": False}}
+    assert _found(alert) == {"stock": False, "recipes": 1, "open_proposal": False}
+    assert _found({"where": ["in recipes: A, B"]})["recipes"] == 2     # an old alert: the text
+    assert _found({**alert, "status": "dismissed"}) is None
+
+
 def test_blocked_proposal_alert_names_its_case(env, receiver):
     client, _, _, proposal = env
     make(client)
