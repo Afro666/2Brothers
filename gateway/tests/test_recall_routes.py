@@ -446,5 +446,8 @@ def test_recalled_product_on_the_shelf_alerts_with_no_proposal_to_hold(env):
         "product_ids": [COFFEE], "quantity": "5", "unit": "KG", "requested_date": "2026-11-16",
         "text": "hotel coffee", "idempotency_key": "after-the-alert"})
     assert later.status_code in (200, 201), later.text
-    assert later.json()["excluded"] == [{"product_id": COFFEE, "reason": "BLOCKED_BY_RECALL"}]
+    assert later.json()["excluded"] == [{"product_id": COFFEE, "reason": "BLOCKED_BY_RECALL",   # names: #1130
+                                         "product_name": "Kulta Katriina Perinteinen kahvi",
+                                         "product_name_fi": "Kulta Katriina Perinteinen kahvi",
+                                         "brand": "Kulta Katriina"}]
     assert verify_chain(db)["ok"]
