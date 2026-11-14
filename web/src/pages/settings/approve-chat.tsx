@@ -282,7 +282,9 @@ export function ApproveChatSection() {
           </div>
           {tokens.status === "loading" ? <LoadingState label={t("Loading approval tokens")} /> : null}
           {tokens.status === "error" ? (
-            tokens.error instanceof ApiError && tokens.error.status === 403 ? (
+            tokens.error instanceof ApiError && tokens.error.code === "PERSONAL_TOKEN_NEEDS_SIGN_IN" ? (
+              <p className="text-sm text-muted-foreground">{refusal(tokens.error, t)}</p>
+            ) : tokens.error instanceof ApiError && tokens.error.status === 403 ? (
               <p className="text-sm text-muted-foreground">{t("Only an approver can see the approval tokens.")}</p>
             ) : (
               <ErrorState message={tokens.error.message} onRetry={tokens.reload} />

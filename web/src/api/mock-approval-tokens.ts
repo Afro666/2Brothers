@@ -13,20 +13,25 @@ export function createApprovalTokensMock(
 ): Pick<Api, "listApprovalTokens" | "createApprovalToken" | "revokeApprovalToken"> {
   const tokens: ApprovalToken[] = [];
   let sequence = 0;
+  const signedIn = async () => {
+    const email = await person();
+    if (!email) {
+      throw new ApiError(
+        "PERSONAL_TOKEN_NEEDS_SIGN_IN",
+        "a personal approval token needs a real signed-in account",
+        {},
+        403,
+      );
+    }
+    return email;
+  };
   return {
     async listApprovalTokens() {
-      return structuredClone(tokens);
+      const email = await signedIn();
+      return structuredClone(tokens.filter((token) => token.person === email));
     },
     async createApprovalToken({ hours, name = "chat" }) {
-      const email = await person();
-      if (!email) {
-        throw new ApiError(
-          "PERSONAL_TOKEN_NEEDS_SIGN_IN",
-          "a personal approval token needs a real signed-in account",
-          {},
-          403,
-        );
-      }
+      const email = await signedIn();
       if (!Number.isInteger(hours) || hours < 1 || hours > 24) {
         throw new ApiError("INVALID_REQUEST", "hours: an integer from 1 to 24", {}, 422);
       }
@@ -52,7 +57,8 @@ export function createApprovalTokensMock(
       return { ...structuredClone(row), token };
     },
     async revokeApprovalToken(id) {
-      const row = tokens.find((token) => token.id === id);
+      const email = await signedIn();
+      const row = tokens.find((token) => token.id === id && token.person === email);
       if (!row) throw new ApiError("TOKEN_NOT_FOUND", "no such approval token in this kitchen", {}, 404);
       if (row.revokedAt === null) row.revokedAt = new Date().toISOString();
       return structuredClone(row);

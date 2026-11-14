@@ -121,6 +121,33 @@ def test_create_checks_the_account_exists_and_is_an_approver(env):
     assert other.value.code == "KITCHEN_SCOPE"
 
 
+def test_a_person_lists_and_revokes_only_their_own_tokens(env):
+    client, _, db = env
+    out, tka = personal(client, db)                                    # aron's token
+    users.create_user(db, "maija@example.com", PW, name="Maija", role="approver", kitchen_id="demo-kitchen")
+    sign_in(client, "maija@example.com")
+    mine = client.post(K + "/approval-tokens", json={}).json()
+    listed = client.get(K + "/approval-tokens").json()["tokens"]
+    assert [t["token_id"] for t in listed] == [mine["token_id"]]
+    r = client.delete(f"{K}/approval-tokens/{out['token_id']}")
+    assert r.status_code == 404 and r.json()["error"]["code"] == "TOKEN_NOT_FOUND"
+    assert db.approval_tokens.find_one({"_id": out["token_id"]})["revoked_at"] is None
+    client.cookies.clear()
+    assert client.get(K + "/proposals", headers=tka).status_code == 200   # aron's still works
+    sign_in(client, "aron@example.com")
+    assert [t["token_id"] for t in client.get(K + "/approval-tokens").json()["tokens"]] == [out["token_id"]]
+    assert client.delete(f"{K}/approval-tokens/{out['token_id']}").status_code == 200
+
+
+def test_the_open_demo_principal_cannot_list_or_revoke(env):
+    client, _, db = env
+    out, _ = personal(client, db)
+    for method, path in (("GET", K + "/approval-tokens"), ("DELETE", f"{K}/approval-tokens/{out['token_id']}")):
+        r = client.request(method, path, headers=HUMAN)
+        assert r.status_code == 403 and r.json()["error"]["code"] == "PERSONAL_TOKEN_NEEDS_SIGN_IN", path
+    assert db.approval_tokens.find_one({"_id": out["token_id"]})["revoked_at"] is None
+
+
 # ---- what it can do ---------------------------------------------------------------------
 
 def test_approve_via_rest_is_audited_with_the_person_and_via(env):
@@ -391,9 +418,14 @@ def test_cli_add_list_remove(env, monkeypatch, capsys):
     assert row["person"] == "aron@example.com" and row["created_by"] == "operator-cli"
     secret = [w for w in printed.split() if w.startswith("tka_")]
     assert len(secret) == 1                                            # printed once, to this terminal
+    users.create_user(db, "maija@example.com", PW, name="Maija", role="approver", kitchen_id="demo-kitchen")
+    assert tokens.main(["add-approver", "--email", "maija@example.com"]) == 0
+    other = db.approval_tokens.find_one({"person": "maija@example.com"})
+    capsys.readouterr()
     assert tokens.main(["list-approvers"]) == 0
     listing = capsys.readouterr().out
-    assert row["_id"] in listing and secret[0] not in listing
+    assert row["_id"] in listing and other["_id"] in listing and secret[0] not in listing   # every person
+    assert tokens.main(["remove-approver", "--token-id", other["_id"]]) == 0
     assert tokens.main(["remove-approver", "--token-id", row["_id"]]) == 0
     assert db.approval_tokens.find_one({})["revoked_at"] is not None
     assert tokens.main(["add-approver", "--email", "chef@example.com"]) == 1

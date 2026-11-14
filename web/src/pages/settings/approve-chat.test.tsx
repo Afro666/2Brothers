@@ -28,8 +28,30 @@ describe("Approve from chat settings", () => {
       "/sign-in",
     );
     expect(screen.queryByRole("button", { name: "Create approval token" })).not.toBeInTheDocument();
-    expect(await screen.findByText("No approval tokens yet")).toBeVisible();
+    expect(await screen.findByText("A personal approval token needs your own signed-in account.")).toBeVisible();
+    expect(screen.queryByText("No approval tokens yet")).not.toBeInTheDocument();
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("the mock lists and revokes only the signed-in person's own tokens", async () => {
+    const api = await signedIn("buyer@demo.kitchen");
+    const mine = await api.createApprovalToken({ hours: 8 });
+    await expect(createMockApi().listApprovalTokens()).rejects.toMatchObject({
+      status: 403,
+      code: "PERSONAL_TOKEN_NEEDS_SIGN_IN",
+    });
+    await api.signOut();
+    await expect(api.revokeApprovalToken(mine.id)).rejects.toMatchObject({
+      status: 403,
+      code: "PERSONAL_TOKEN_NEEDS_SIGN_IN",
+    });
+    await api.signIn("chef@demo.kitchen", "demo-kitchen-2026");
+    expect(await api.listApprovalTokens()).toEqual([]);
+    await expect(api.revokeApprovalToken(mine.id)).rejects.toMatchObject({ status: 404, code: "TOKEN_NOT_FOUND" });
+    await api.signOut();
+    await api.signIn("buyer@demo.kitchen", "demo-kitchen-2026");
+    expect((await api.listApprovalTokens()).map((row) => row.id)).toEqual([mine.id]);
+    expect((await api.revokeApprovalToken(mine.id)).revokedAt).not.toBeNull();
   });
 
   it("never calls the mock create when gateway mode does not serve it", async () => {
