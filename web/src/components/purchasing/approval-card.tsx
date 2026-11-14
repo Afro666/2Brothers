@@ -31,6 +31,7 @@ import {
   formatTime,
   isStockUnconfirmed,
 } from "@/lib/format";
+import { inclVatText } from "@/lib/incl-vat";
 import { useT } from "@/lib/i18n";
 import { splitChecks, statusChips } from "@/lib/proposal-checks";
 import { cn } from "@/lib/utils";
@@ -497,7 +498,7 @@ export function ApprovalCard({
         <dl className="flex items-baseline gap-3 sm:block sm:text-right">
           <dt className="sr-only">{t("Total incl VAT")}</dt>
           <dd className="inline-block border-b-[3px] border-double border-foreground text-xl leading-7 font-bold tabular-nums">
-            {formatEur(request.totalInclVat)}
+            {request.inclVatUnknown ? inclVatText(request, t) : formatEur(request.totalInclVat)}
           </dd>
           <dt className="sr-only">{t("Total ex VAT")}</dt>
           <dd className="font-mono text-xs text-muted-foreground tabular-nums">

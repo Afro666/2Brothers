@@ -29,6 +29,21 @@ describe("mapPermissions", () => {
 });
 
 describe("mapApproval", () => {
+  it("keeps expected_total for the approve button and marks incl VAT unknown when a rate is unknown", () => {
+    const unknown = {
+      ...proposal,
+      lines: [{ ...proposal.lines[0], product_name: "Lettuce" }],
+      vat: null,
+      total_incl_vat: null,
+      vat_unknown: ["900001"],
+      expected_total: "80.00",
+    };
+    const approval = mapApproval(unknown, auditEvents);
+    expect(approval.totalInclVat).toBe(80);
+    expect(approval.inclVatUnknown).toEqual(["Lettuce"]);
+    expect(mapApproval({ ...proposal, total_incl_vat: "91.20", vat_unknown: [] }, auditEvents).inclVatUnknown).toBeUndefined();
+  });
+
   it("maps a proposal to the approval card, with who asked and when from the audit log", () => {
     expect(mapApproval(proposal, auditEvents)).toEqual({
       id: "prop-1",
@@ -498,6 +513,47 @@ describe("mapOrder", () => {
     );
     expect(order.deliveryFee).toBe(4.5);
     expect(order.lines[0]!.product.names.en).toBe("Oat drink 1 L");
+  });
+
+  it("reads the totals of an order without a proposal from the order answer itself (#1603)", () => {
+    const placed = {
+      ...placedOrder,
+      total_ex_vat: "80.00",
+      vat: "10.80",
+      total_incl_vat: "90.80",
+      vat_unknown: [],
+      delivery_fee: "0.40",
+      expected_total: "91.20",
+    };
+    const order = mapOrder(null, placed);
+    expect(order).toMatchObject({ totalExVat: 80, vat: 10.8, deliveryFee: 0.4, totalInclVat: 91.2 });
+    expect(order.inclVatUnknown).toBeUndefined();
+    // The order's own totals win over the proposal's.
+    expect(mapOrder(proposal, placed)).toMatchObject({ totalExVat: 80, vat: 10.8, deliveryFee: 0.4 });
+  });
+
+  it("falls back to the proposal's totals for an order stored before #1603", () => {
+    expect(mapOrder(proposal, placedOrder)).toMatchObject({ totalExVat: 80, vat: 11.2 });
+    expect(mapOrder(proposal, placedOrder).inclVatUnknown).toBeUndefined();
+    expect(mapOrder(null, placedOrder)).toMatchObject({ totalExVat: null, vat: null });
+  });
+
+  it("marks the total incl VAT unknown, with the line names, when a rate is unknown", () => {
+    const placed = {
+      ...placedOrder,
+      lines: [{ ...placedOrder.lines[0], product_name: "Oat drink 1 L" }],
+      total_ex_vat: "80.00",
+      vat: null,
+      total_incl_vat: null,
+      vat_unknown: ["900001"],
+      expected_total: "80.00",
+    };
+    const order = mapOrder(null, placed);
+    expect(order.totalExVat).toBe(80);
+    expect(order.vat).toBeNull();
+    expect(order.inclVatUnknown).toEqual(["Oat drink 1 L"]);
+    // The approved figure stays expected_total.
+    expect(order.totalInclVat).toBe(80);
   });
 
   it.each([true, undefined, "false"])("treats unknown_stock %j as not confirmed", (unknown_stock) => {

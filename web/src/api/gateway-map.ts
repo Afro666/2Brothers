@@ -212,6 +212,23 @@ function proposalStatus(status: unknown): OrderStatus {
 }
 
 /**
+ * `{ inclVatUnknown }` with the names of the `vat_unknown` lines when the gateway's
+ * `total_incl_vat` is null (docs/contract.md "VAT per product"); nothing when it is known
+ * or the answer predates #1603.
+ */
+function inclVatUnknown(totals: Json | null, lines: unknown[]): { inclVatUnknown?: string[] } {
+  if (!totals || !("total_incl_vat" in totals) || totals.total_incl_vat != null) return {};
+  const names = new Map<string, string>();
+  for (const line of lines) {
+    const row = line as Json | null;
+    if (typeof row?.product_id === "string" && typeof row.product_name === "string" && row.product_name) {
+      names.set(row.product_id, row.product_name);
+    }
+  }
+  return { inclVatUnknown: strings(totals.vat_unknown).map((id) => names.get(id) ?? id) };
+}
+
+/**
  * One UI order. The proposal carries the basket (lines with `why`, delivery date, totals);
  * the placed order, when there is one, carries the id and the outcome. An order whose
  * proposal is not at hand keeps its delivery date, ex-VAT total and delivery terms unknown.
@@ -221,6 +238,8 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
   const request = proposal ? object(proposal.request, "a proposal's request") : null;
   const deliveryDate = request ? text(request.requested_date, "requested_date") : null;
   if (!Array.isArray(source.lines)) invalid("order lines");
+  // #1603: the order answer has its own totals; an order stored before it falls back to the proposal.
+  const totals = placed && placed.total_ex_vat != null ? placed : proposal;
   return {
     id: text(placed ? placed.order_id : source.proposal_id, "an order id"),
     status: placed ? placedStatus(placed.outcome) : proposalStatus(source.status),
@@ -228,10 +247,11 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     deliveryDate,
     lines: source.lines.map((line) => mapLine(object(line, "an order line"), deliveryDate ?? "")),
     supplierMustConfirm: placed ? strings(placed.supplier_must_confirm) : [],
-    totalExVat: proposal ? mapMoney(proposal.total_ex_vat, "total_ex_vat") : null,
-    vat: proposal ? decimal(proposal.vat, "vat") : null,
-    deliveryFee: proposal ? decimal(proposal.delivery_fee, "delivery_fee") : null,
+    totalExVat: totals ? mapMoney(totals.total_ex_vat, "total_ex_vat") : null,
+    vat: totals ? decimal(totals.vat, "vat") : null,
+    deliveryFee: totals ? decimal(totals.delivery_fee, "delivery_fee") : null,
     totalInclVat: mapMoney((placed ?? source).expected_total, "expected_total"),
+    ...inclVatUnknown(totals, source.lines),
     mov: proposal ? mapMov(proposal) : null,
     supplierOrderRef: placed ? resolutionRecord(placed.resolution)?.supplierOrderRef ?? null : null,
     ...(placed ? { receipt: mapReceipt(placed.receipt) } : {}),
@@ -556,7 +576,9 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
     lineCount: Array.isArray(proposal.lines) ? proposal.lines.length : invalid("proposal lines"),
     deliveryDate: text(request.requested_date, "requested_date"),
     totalExVat: mapMoney(proposal.total_ex_vat, "total_ex_vat"),
+    // The figure approved; a screen calls it "incl VAT" only when `inclVatUnknown` is not set.
     totalInclVat: mapMoney(proposal.expected_total, "expected_total"),
+    ...inclVatUnknown(proposal, Array.isArray(proposal.lines) ? proposal.lines : []),
     reasons: reasons.length
       ? reasons
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],

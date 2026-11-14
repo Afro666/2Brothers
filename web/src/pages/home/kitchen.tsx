@@ -1,4 +1,5 @@
 import { formatDateTime, formatEur, formatShortfall } from "@/lib/format";
+import { inclVatText } from "@/lib/incl-vat";
 import { useAsync } from "@/lib/use-async";
 import { Link } from "@tanstack/react-router";
 
@@ -61,7 +62,9 @@ export function ApprovalTile({ api }: { api: Api }) {
                 ) : null}
               </div>
               <p className="w-fit border-b-[3px] border-double border-foreground text-2xl font-bold tabular-nums sm:justify-self-end">
-                {t(formatEur(oldest?.totalInclVat ?? null))} {t("incl VAT")}
+                {oldest?.inclVatUnknown
+                  ? inclVatText(oldest, t)
+                  : `${t(formatEur(oldest?.totalInclVat ?? null))} ${t("incl VAT")}`}
               </p>
             </div>
           );

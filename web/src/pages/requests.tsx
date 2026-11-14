@@ -15,6 +15,7 @@ import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatEur } from "@/lib/format";
+import { inclVatText } from "@/lib/incl-vat";
 import { useT } from "@/lib/i18n";
 import type { ChefRequest } from "@/types";
 import { LiveBuyerRequests } from "@/pages/live-buyer";
@@ -113,10 +114,10 @@ function Proposal({
             <UrgencyBadge urgency={order.urgency} />
           </div>
           <p className="text-sm tabular-nums text-muted-foreground">
-            {t("Delivery {date} · {exVat} ex VAT · {inclVat} incl VAT", {
+            {t("Delivery {date} · {exVat} ex VAT · {total}", {
               date: t(formatDate(order.deliveryDate)),
               exVat: t(formatEur(order.totalExVat)),
-              inclVat: formatEur(order.totalInclVat),
+              total: inclVatText(order, t),
             })}
           </p>
         </CardHeader>
