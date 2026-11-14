@@ -4,6 +4,7 @@ import { mapMoney } from "@/api/map";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { Button } from "@/components/ui/button";
 import { formatEur } from "@/lib/format";
+import { usePendingApprovals } from "@/lib/pending-approvals";
 import { useAsync } from "@/lib/use-async";
 import { LabelEvidence, type LabelCheck } from "@/components/purchasing/label-evidence";
 
@@ -90,6 +91,7 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
   const [error, setError] = useState<string>();
   const [placed, setPlaced] = useState<{ id: string; total: string }>();
   const [rejected, setRejected] = useState(false);
+  const { refresh: refreshWaiting } = usePendingApprovals();
   const unknown = row.lines.some(l => l.unknown_stock);
   const expired = Date.parse(row.valid_until) <= Date.now();
   const pending = row.status === "READY" && !placed && !rejected;
@@ -115,6 +117,7 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
         if (result.status !== "REJECTED") throw new Error("Rejection was not confirmed. Reload to reconcile.");
         setRejected(true);
       }
+      refreshWaiting();
       setConfirm(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "The decision could not be confirmed.");

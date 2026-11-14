@@ -1,6 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
 
 const row = {
@@ -119,4 +120,20 @@ it("keeps the decision key after a lost response and never displays an unconfirm
   await user.click(screen.getByRole("button", { name: "Confirm and record order" }));
   expect(await screen.findByRole("status")).toHaveTextContent("order1");
   expect(fetch.mock.calls[1][1].body).toBe(fetch.mock.calls[2][1].body);
+});
+
+it.each([
+  ["approve", /Approve .*149/, "Confirm and record order", { order_id: "order1", expected_total: "149.02" }],
+  ["reject", "Reject proposal", "Confirm rejection", { status: "REJECTED", proposal_id: "p1" }],
+])("refreshes the waiting-approvals badge after a confirmed %s", async (_, open, confirm, response) => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json({ proposals: [row] })).mockResolvedValueOnce(json(response)));
+  const api = createMockApi();
+  const listApprovals = vi.spyOn(api, "listApprovals");
+  const user = userEvent.setup();
+  renderApp("/approvals", api);
+  await user.click(await screen.findByRole("button", { name: open }));
+  await vi.waitFor(() => expect(listApprovals).toHaveBeenCalled());
+  const before = listApprovals.mock.calls.length;
+  await user.click(screen.getByRole("button", { name: confirm }));
+  await vi.waitFor(() => expect(listApprovals.mock.calls.length).toBeGreaterThan(before));
 });
