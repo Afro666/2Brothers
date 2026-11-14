@@ -15,8 +15,9 @@ stock = client.availability(["462775", "462921"], "2026-11-16")
 Requests use bounded 1,000-code chunks, a 30-second bounded cache and up to two
 retries for network errors, HTTP 429 and 5xx. Only read operations are implemented.
 Do not use this retry policy for gateway order placement. Check each price row's
-`error` flag. Both stock sentinels become `availableAmount: null` with
-`unknown_stock: true`. `closingTime` includes a timezone; `cutoff_passed` is
+`error` flag. A filler amount (999999 or more: Valio does not know the stock)
+becomes `availableAmount: null` with `unknown_stock: true`; an absent or null amount
+is not available (Valio, 14 Nov: "Empty = not available") and becomes `0`. `closingTime` includes a timezone; `cutoff_passed` is
 recomputed even on cache hits. Missing cutoffs or stock never produce an
 `orderable: true` result. This is a preliminary upstream check, not mandate consent.
 `orderable` also requires a valid `availableDate` no later than the requested date.
@@ -32,14 +33,15 @@ screens must keep these products visible and label the quantity as unconfirmed;
 they must not discard a product simply because this flag is false. A human can
 review the proposal, but supplier confirmation is required before placement.
 Allergen, delivery cutoff and other refusal guards still apply. A missing stock
-value is treated the same way; measured zero stock is unavailable, not unknown.
+value and measured zero stock are unavailable, not unknown.
 
 Run offline tests: `python -m unittest discover -s gateway/tests -v`.
 Fixtures are small responses recorded from the challenge API, without credentials.
 
 ## Remote MCP at /mcp (#280)
 
-The gateway app also serves the same seven Buyer tools over MCP streamable HTTP at
+The gateway app also serves eight tools over MCP streamable HTTP (the seven Buyer tools plus
+`change_proposal`) at
 `/mcp`, so Claude, Codex or any MCP client can be the Buyer:
 
 ```bash
@@ -70,7 +72,7 @@ For an isolated demo, explicitly run `python -m gateway.mcp_server --mock`.
 This simulates a pending milk approval, never a live purchase. The real HTTP
 gateway is a separate dependency (#19/#25); it is not implemented by this adapter.
 
-All seven tools have typed inputs and restrictive descriptions. There are no
+All eight tools have typed inputs and restrictive descriptions. There are no
 approve/cancel tools or model-supplied quantities. Mutation requests are sent
 once; ambiguous transport failures must be reconciled before another attempt.
 The mock has no persistence and is intended only for demos and tests.
@@ -312,8 +314,8 @@ a line:
 - `discount_tiers`: the tier with the highest `min_qty` at or below the line quantity, in
   the line's unit, sets the unit price. The line's `why` names the tier.
 - Approve is still one human yes and one order; the order stores `blocks`. A line with
-  unknown stock still returns 409 `STOCK_UNKNOWN`, so a block of a manual supplier cannot
-  be placed until a supplier confirmation exists.
+  unknown stock does not block it (2026-11-14): the order is placed and its
+  `supplier_must_confirm` names the suppliers that must still confirm.
 
 ## Recall list and "check now" (#358)
 

@@ -217,6 +217,32 @@ export interface ApprovalRequest {
   status: "PENDING" | "IN_PROGRESS" | "BLOCKED_BY_RECALL" | "APPROVED" | "REJECTED";
   /** The baskets the engine offers for this request; absent or empty when it offers one. */
   options?: ProposalOption[];
+  /** What the Buyer's model did (#1197); null when no model or parser made it. */
+  modelTrace?: ModelTrace | null;
+}
+
+/** One step of a model trace (docs/contract.md, "What the model did"). Codes, never text. */
+export interface ModelTraceStep {
+  by: "model" | "code";
+  attempt: number;
+  tool: string;
+  query?: string;
+  products?: number;
+  count?: number;
+  code?: string;
+}
+
+/** What the model did on a proposal or an offer: counts and codes only. */
+export interface ModelTrace {
+  madeBy: "model" | "rule";
+  reader: "buyer" | "parser" | "seller";
+  model: string | null;
+  thinking: boolean | null;
+  calls: number;
+  seconds: number;
+  attempts: number;
+  truncated: boolean;
+  steps: ModelTraceStep[];
 }
 
 export interface ProposalOptionLine {
@@ -342,6 +368,8 @@ export interface SupplierOffer {
   proposalId: string | null;
   /** false = the catalog declares no allergens for the offered product: a person checks the label. */
   allergenDataKnown: boolean;
+  /** What the selling agent's model did (#1197); null when the supplier sent none. */
+  modelTrace?: ModelTrace | null;
 }
 
 /** The answer to accepting an offer: the proposal it became. `REJECTED` = nothing waits in the inbox. */
@@ -488,6 +516,21 @@ export interface SupplierDemandRow {
 export interface SharingConsent {
   supplierId: string;
   shared: boolean;
+}
+
+/** One checked line of the supplier planner's buying note (#1176). */
+export interface BuyingNoteLine {
+  productId: string;
+  productName: string;
+  date: string;
+  risk: ShortageRisk;
+  text: string;
+}
+
+/** The buying note the gateway writes from the shortage-risk rows; null when it was dropped. */
+export interface BuyingNote {
+  model: string;
+  lines: BuyingNoteLine[];
 }
 
 export type DemandClass = "A" | "B" | "C";

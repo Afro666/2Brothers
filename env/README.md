@@ -258,3 +258,39 @@ The Buyer's own measurement is in `agent/README.md`, "Token meter": 832 calls,
 
 Caveats: 2-3 seeds per kitchen, with a large seed-to-seed sd, so read the means over all
 kitchens. Transcripts are in `env/out/llm/` (git-ignored).
+
+## Learning from the kitchen's changes (#1309, part 1: engine arms)
+
+Can the tool learn from how a chef changes its proposals? We only have API access to Nemotron, so nothing is trained: plain code learns from the chef's edits (`env/learn.py`, the rules of #1305), and the engine is passed what it learned.
+
+**The simulated chef** (`env/chef.py`) is synthetic. Per kitchen it has hidden habits, seeded and never read by the learner:
+- one product the kitchen really uses at ×0.5 of the recipe (reason "too much")
+- one at ×1.3 ("too little")
+- one it doesn't use at all (removed)
+
+It also makes edits that must **not** be learned:
+- "still in stock" cuts when 3 days of use are on hand
+- 10% random noise with no reason
+
+The simulation's real use follows the habits, while the engine keeps believing the recipe.
+
+**How the learner works:**
+- **Rule:** the median of the last 8 "too much"/"too little" edits of a product, at least 3, limited to 0.3…1.5. A product removed 3 times is no longer proposed.
+- **Measured against** the engine's *unlearned* quantity (in the product, the stored `forecast_need`, #1302). Measuring against the shown proposal applied a learned cut twice: in the first run, stock-outs of the habit products doubled.
+
+**Run:** `python -m env.learning_run --seeds 1-5 --weeks 4 --kitchen all`. Four chained weeks per kitchen, all 4 kitchen types × seeds 1–5, the same seeds for both arms. No model calls; it takes about 4 s.
+
+Weeks 3–4, means per kitchen-week:
+
+| Arm | Chef edits | Score | Lost covers | Waste | Habit stock-out days |
+|---|---:|---:|---:|---:|---:|
+| engine | 7.42 | 6,403 | 102.1 | 335.6 | 0.25 |
+| engine + learning | **6.03** (−19%) | **6,446** | **99.2** | 334.3 | **0.20** |
+
+**Findings:**
+- **Edits:** the chef has to change less, and it improves week by week. In week 4, edits fall from 6.95 to 5.30 (−24%).
+- **Edits with a reason:** most remaining edits are the noise nothing can learn. Leaving the noise out, week-4 edits fall from about 4.8 to 2.9 (−39%).
+- **No over-learning:** habit stock-outs do not rise (0.25 → 0.20), and score and lost covers are slightly better.
+- **Short window:** 4 weeks is short. A learned fact needs 3 edits, and a kitchen orders a few times a week.
+
+**Not yet:** part 2 adds the Nemotron arms (the Buyer without memory, and with the kitchen memory of #1308) on the frozen held-out seeds, as in #365. Until then, no claim about Nemotron is made from this table.

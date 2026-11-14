@@ -21,6 +21,8 @@ import unicodedata
 
 from fastapi import Depends, Request
 
+from gateway import model_trace
+from gateway import webhooks
 from gateway.service import GatewayError, _hash
 from gateway.suppliers import VALIO
 from gateway.supplier_routes import supplier_demand
@@ -58,7 +60,27 @@ def _out(doc: dict, today: date) -> dict:
                 "replaces_product_id", "replaces_product_name", "requested_date", "quantity", "unit",
                 "reason", "made_by", "created_at", "proposal_id", "decided_by", "decided_at")},
             # false: the catalog declares no allergens for the offered product (see `_allergens_ok`)
-            "allergen_data_known": doc.get("allergen_data_known") is True}
+            "allergen_data_known": doc.get("allergen_data_known") is True,
+            # What the selling agent's model did (#1197); null for an offer sent without one.
+            "model_trace": model_trace.stored(doc.get("model_trace"))}
+
+
+def _trace(body: dict, made_by: str) -> dict | None:
+    """The selling agent's trace, checked (#1197). It is the supplier's account of its own
+    agent: shown to a person, never read as a price, a quantity or a reason."""
+    if body.get("model_trace") is None:
+        return None
+    try:
+        trace = model_trace.clean(body["model_trace"])
+    except ValueError as exc:
+        raise GatewayError(422, "INVALID_REQUEST", str(exc)) from None
+    if trace["reader"] != "seller":
+        raise GatewayError(422, "INVALID_REQUEST", "model_trace.reader: seller")
+    if trace["made_by"] != ("rule" if made_by == "rule" else "model"):
+        raise GatewayError(422, "INVALID_REQUEST", "model_trace.made_by disagrees with made_by")
+    if any("query" in s for s in trace["steps"]):
+        raise GatewayError(422, "INVALID_REQUEST", "model_trace.steps.query: not on a seller step")
+    return trace
 
 
 def _name(row: dict | None, fallback: str) -> str:
@@ -66,15 +88,22 @@ def _name(row: dict | None, fallback: str) -> str:
     return names.get("en") or names.get("fi") or fallback
 
 
-def _audit_once(gw, kitchen_id: str, kind: str, offer_id: str, actor: str, at: str, **data) -> None:
-    """One audit line per offer and step: the event id is fixed, so a retry adds nothing."""
-    audit.append_event(gw.db, {"event_id": f"{kind}:{offer_id}", "kind": kind, "actor": actor,
+def _audit_once(gw, kitchen_id: str, kind: str, offer_id: str, actor: str, at: str, *,
+                offer: dict | None = None, **data) -> None:
+    """One audit line per offer and step: the event id is fixed, so a retry adds nothing.
+    The webhook goes out only for the line this call appended, never for a replay."""
+    event_id = f"{kind}:{offer_id}"
+    fresh = gw.db.audit_log.find_one({"event.event_id": event_id}) is None
+    audit.append_event(gw.db, {"event_id": event_id, "kind": kind, "actor": actor,
                                "offer_id": offer_id, **data}, {"kitchen_id": kitchen_id, "at": at})
+    if fresh:
+        webhooks.dispatch(gw.db, kitchen_id, kind, {"offer_id": offer_id, **(offer or {}), **data})
 
 
 def _audit_received(gw, doc: dict) -> None:
     _audit_once(gw, doc["kitchen_id"], "supplier_offer_received", doc["_id"],
                 f"supplier:{doc['supplier_id']}", doc["created_at"],
+                offer=doc,
                 **{key: doc[key] for key in ("supplier_id", "product_id", "replaces_product_id",
                                              "requested_date", "quantity", "unit", "made_by")})
 
@@ -103,6 +132,10 @@ def _validated(body: dict, today: date) -> dict:
 
 def _kitchen_demand(gw, supplier_id: str, kitchen_id: str, product_id: str, day: date) -> tuple[str, str] | None:
     """(quantity, unit): this kitchen's forecast demand in the SHORT row, or None."""
+    from gateway.valio_client import ValioBusy, ValioClient
+    left = gw.valio.resting() if isinstance(gw.valio, ValioClient) else 0
+    if left:        # #1237: the demand view would say UNKNOWN, and the offer NO_SHORTAGE
+        raise ValioBusy(left)
     answer = supplier_demand(gw.db, gw.valio, supplier_id, day, day, product_id)
     for row in answer["rows"]:
         if row["product_id"] != product_id or row["date"] != day.isoformat() or row["risk"] != "SHORT":
@@ -131,6 +164,7 @@ def create(gw, supplier_id: str, body: dict, sender: str) -> dict:
     nothing and writes nothing in a kitchen's audit log."""
     today = gw.now().date()
     fields = _validated(body, today)
+    trace = _trace(body, fields["made_by"])     # not part of the payload: a retry's counts may differ
     key, payload_hash = body["idempotency_key"], _hash(fields)
     stored = offers.by_key(gw.db, supplier_id, key)
     if stored is not None:
@@ -169,7 +203,7 @@ def create(gw, supplier_id: str, body: dict, sender: str) -> dict:
         **fields, "product_name": _name(product, product_id),
         "replaces_product_name": _name(rows.get(fields["replaces_product_id"]), fields["replaces_product_id"]),
         "quantity": demand[0], "unit": demand[1], "status": offers.OPEN, "round": round_,
-        "allergen_data_known": product.get("allergen_data_known") is True,
+        "allergen_data_known": product.get("allergen_data_known") is True, "model_trace": trace,
         "idempotency_key": key, "payload_hash": payload_hash, "sent_by": sender,
         "created_at": gw.now().isoformat(), "proposal_id": None, "decided_by": None, "decided_at": None})
     _audit_received(gw, doc)
@@ -243,7 +277,7 @@ def accept(gw, kitchen_id: str, offer_id: str, *, human: str | None) -> dict:
             raise GatewayError(409, "OFFER_NOT_OPEN", f"this offer is {updated['status']}",
                                proposal_id=proposal["proposal_id"])
     _audit_once(gw, kitchen_id, "supplier_offer_accepted", offer_id, updated["decided_by"],
-                updated["decided_at"], proposal_id=updated["proposal_id"])
+                updated["decided_at"], offer=updated, proposal_id=updated["proposal_id"])
     return {"offer": _out(updated, today), "proposal_id": updated["proposal_id"],
             "proposal_status": proposal["status"]}
 
@@ -260,7 +294,7 @@ def decline(gw, kitchen_id: str, offer_id: str, body: dict, *, human: str | None
         if doc["status"] != offers.DECLINED:
             raise GatewayError(409, "OFFER_NOT_OPEN", f"this offer is {doc['status']}")
     _audit_once(gw, kitchen_id, "supplier_offer_declined", offer_id, doc["decided_by"],
-                doc["decided_at"], reason=doc.get("decline_reason", ""))
+                doc["decided_at"], offer=doc, reason=doc.get("decline_reason", ""))
     return _out(doc, gw.now().date())
 
 

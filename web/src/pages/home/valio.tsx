@@ -1,3 +1,4 @@
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { formatDate, formatNumber } from "@/lib/format";
 import { isoWeekOf, weekDates } from "@/lib/week";
 import { useAsync, type AsyncState } from "@/lib/use-async";
@@ -86,8 +87,11 @@ export function ShortageTile({ state, now }: { state: AsyncState<SupplierDemandR
               <ul className="space-y-3 text-sm">
                 {worst.map((row) => (
                   <li key={`${row.productId}-${row.date}`} className="space-y-1">
-                    <p className="font-medium">
-                      {row.productName} · {formatDate(row.date)}
+                    <p className="flex items-center gap-2 font-medium">
+                      <ProductThumb size="sm" en={row.productName} />
+                      <span className="min-w-0">
+                        {row.productName} · {formatDate(row.date)}
+                      </span>
                     </p>
                     <p className="tabular-nums text-muted-foreground">
                       {t("Forecast {forecast} {unit}; available", {

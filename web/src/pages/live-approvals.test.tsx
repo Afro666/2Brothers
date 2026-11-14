@@ -41,33 +41,26 @@ it("reloads proposals after an event without remounting an unchanged card", asyn
   expect(screen.getByRole("dialog", { name: "Confirm rejection" })).toBeVisible();
 });
 
-it.each([
-  ["on", "Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them."],
-  ["off", "Leipomo Demo must confirm stock before this order can be approved."],
-  ["absent", "Leipomo Demo must confirm stock before this order can be approved."],
-  ["failed", "Leipomo Demo must confirm stock before this order can be approved."],
-] as const)("shows the supplier-confirm notice when the kitchen setting is %s", async (setting, expected) => {
-  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [{
-    ...row,
-    blocks: [{ supplier_id: "sup-bakery", name: "Leipomo Demo", lines: [{ unknown_stock: true }] }],
-  }] })));
-  const api = createMockApi();
-  const getKitchenSettings = api.getKitchenSettings;
-  api.getKitchenSettings = vi.fn(async () => {
-    if (setting === "failed") throw new Error("Settings unavailable");
-    if (setting === "absent") return mapKitchenSettings({});
-    return { ...(await getKitchenSettings()), approveUnconfirmedManual: setting === "on" };
-  });
-  renderApp("/approvals", api);
+it.each(["on", "off", "absent", "failed"] as const)(
+  "says the order is sent and waits for the supplier whatever the kitchen setting (%s)",
+  async (setting) => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [{
+      ...row,
+      blocks: [{ supplier_id: "sup-bakery", name: "Leipomo Demo", lines: [{ unknown_stock: true }] }],
+    }] })));
+    const api = createMockApi();
+    const getKitchenSettings = api.getKitchenSettings;
+    api.getKitchenSettings = vi.fn(async () => {
+      if (setting === "failed") throw new Error("Settings unavailable");
+      if (setting === "absent") return mapKitchenSettings({});
+      return { ...(await getKitchenSettings()), approveUnconfirmedManual: setting === "on" };
+    });
+    renderApp("/approvals", api);
 
-  expect(await screen.findByText(expected)).toBeVisible();
-  if (setting === "on") {
-    expect(screen.queryByText("Leipomo Demo must confirm stock before this order can be approved.")).toBeNull();
-  } else {
-    expect(screen.queryByText(/Leipomo Demo must confirm stock\. If you approve/)).toBeNull();
-  }
-  expect(api.getKitchenSettings).toHaveBeenCalledTimes(1);
-});
+    expect(await screen.findByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
+    expect(screen.queryByText(/before this order can be approved/)).toBeNull();
+  },
+);
 
 it("disables live approval decisions with the reason for a read-only account", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [row] })));
@@ -154,12 +147,25 @@ it("loads real proposals and requires explicit confirmation before recording one
   expect(screen.queryByRole("button", { name: /Approve .*149/ })).toBeNull();
 });
 
-it("blocks unknown stock even on an expired offer", async () => {
+it("lets a person approve unknown stock and says the order waits for the supplier", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [
     { ...row, valid_until: "2000-01-01T00:00:00Z", lines: [{ ...row.lines[0], unknown_stock: true }] },
   ] })));
   renderApp("/approvals");
-  for (const button of await screen.findAllByRole("button", { name: /Approve .*149/ })) expect(button).toBeDisabled();
+  for (const button of await screen.findAllByRole("button", { name: /Approve .*149/ })) expect(button).toBeEnabled();
+  expect(screen.getByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
+  expect(screen.queryByText(/Approval is unavailable/)).toBeNull();
+});
+
+it("names the products each supplier must confirm, from the gateway's reasons (Valio, 14 Nov)", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [
+    { ...row, lines: [{ ...row.lines[0], unknown_stock: true }],
+      mandate: { reasons: ["Some lines have stock Valio does not report.", "Valio must confirm stock for: Valio Eila 3 % 1 L."] } },
+  ] })));
+  renderApp("/approvals");
+  expect(await screen.findByText("Valio must confirm stock for: Valio Eila 3 % 1 L.")).toBeVisible();
+  expect(screen.queryByText("Some lines have stock Valio does not report.")).toBeNull();
+  for (const button of screen.getAllByRole("button", { name: /Approve .*149/ })) expect(button).toBeEnabled();
 });
 
 it("recovers from an expired changed offer inside the inbox and confirms its new exact total", async () => {

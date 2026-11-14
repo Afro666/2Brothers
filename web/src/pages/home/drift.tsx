@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
 import type { DriftReport, DriftWarning } from "@/types";
 
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
 import { Tile, TileState } from "@/pages/home/tile";
@@ -49,14 +50,17 @@ function DriftList({
           className="space-y-1 py-2"
         >
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <span className="min-w-0 font-medium">
-              {warning.productName ?? warning.productId}
-              {showKitchen && warning.kitchenName ? (
-                <span className="font-normal text-muted-foreground">
-                  {" "}
-                  · {warning.kitchenName}
-                </span>
-              ) : null}
+            <span className="flex min-w-0 items-center gap-2">
+              <ProductThumb en={warning.productName} size="sm" />
+              <span className="min-w-0 font-medium break-words">
+                {warning.productName ?? warning.productId}
+                {showKitchen && warning.kitchenName ? (
+                  <span className="font-normal text-muted-foreground">
+                    {" "}
+                    · {warning.kitchenName}
+                  </span>
+                ) : null}
+              </span>
             </span>
             <span className="text-right font-mono text-[13px] font-medium text-danger">
               {t(KIND_LABEL[warning.kind])} +{Math.round(warning.change * 100)}%

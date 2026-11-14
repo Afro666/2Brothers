@@ -31,6 +31,7 @@ const PART2_FILES = [
   "components/purchasing/status-badge.tsx",
   "components/purchasing/urgency-badge.tsx",
   "components/purchasing/model-usage-card.tsx",
+  "components/purchasing/model-trace-panel.tsx",
 ];
 
 describe("part 2 translations", () => {

@@ -5,6 +5,7 @@ import hmac
 import os
 import re
 from contextlib import asynccontextmanager
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request
@@ -14,6 +15,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 from agent.model import Nemotron
 from agent.runner import Buyer
 from agent.usage import emit
+from gateway import model_trace
 from gateway.mcp_server import GatewayClient, build_server
 from store import agent_runs
 from store import buyer_context
@@ -58,8 +60,14 @@ def parse_need(body, *, today=None):
 
 
 class BuyerWorker:
-    def __init__(self, db, gateway, *, model_factory=Nemotron, timeout=150, now=None):
-        self.db, self.gateway, self.model_factory, self.timeout = db, gateway, model_factory, timeout
+    def __init__(self, db, gateway, *, model_factory=None, timeout=None, now=None, strategy=None):
+        self.strategy = strategy or os.environ.get('NEMOTRON_BUYER_STRATEGY', 'single_pick')
+        if self.strategy not in ('single_pick', 'loop'):
+            raise ValueError('invalid Buyer strategy')
+        self.db, self.gateway = db, gateway
+        self.model_factory = model_factory or ((lambda: Nemotron(max_attempts=1))
+                                               if self.strategy == 'single_pick' else Nemotron)
+        self.timeout = timeout if timeout is not None else (35 if self.strategy == 'single_pick' else 150)
         self.now = now
 
     async def run(self, kitchen_id, body):
@@ -90,22 +98,51 @@ class BuyerWorker:
             # The model does not finish every run (seen live: about 1 in 3 stopped without asking
             # for approval). A run that wrote nothing is safe to start once more, under its own
             # run id so its audit steps stay separate. A run that wrote something is never repeated.
-            for attempt in (1, 2):
+            steps = []
+            for attempt in ((1,) if self.strategy == 'single_pick' else (1, 2)):
                 run_id = row['_id'] if attempt == 1 else f"{row['_id']}-retry"
+                selected_model = model
+                if self.strategy == 'single_pick':
+                    from agent.single_pick import SinglePickModel
+                    clock = self.now() if self.now else datetime.now(ZoneInfo('Europe/Helsinki'))
+                    selected_model = SinglePickModel(model, self.db, kitchen_id, need, stored['need_id'],
+                                                    exclusions, today=clock.date())
                 async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
-                    buyer = Buyer(model, session, self.gateway, need_id=stored['need_id'],
+                    buyer = Buyer(selected_model, session, self.gateway, need_id=stored['need_id'],
                                   requested_date=need['requested_date'],
                                   run_id=run_id,
                                   max_steps=12, now=self.now,
                                   catalog_lookup=lookup, allergen_policy=policy,
-                                  substitute_planner=SubstitutePlanner(lookup, policy) if policy else None)
+                                  substitute_planner=SubstitutePlanner(lookup, policy) if policy else None,
+                                  attempt=attempt)
                     outcome = await buyer.run(need['text'])
+                if self.strategy == 'single_pick':
+                    # The new trace distinguishes host orchestration from the one model pick.
+                    trace = [{**step, 'by': 'code'} for step in buyer.trace]
+                    if selected_model.selected_ids:
+                        trace.insert(2, model_trace.step('pick', by='code' if selected_model.cached else 'model',
+                            attempt=attempt, products=len(selected_model.selected_ids),
+                            code='CACHED_PICK' if selected_model.cached else 'PICKED'))
+                    steps += trace
+                else:
+                    steps += buyer.trace
+                if getattr(selected_model, 'timed_out', False):
+                    raise WorkerError(504, 'BUYER_TIMEOUT', fallback_safe=not buyer.mutations)
                 if outcome['status'] == 'SENT_FOR_APPROVAL' or buyer.mutations:
                     break
             if outcome['status'] != 'SENT_FOR_APPROVAL':
                 raise WorkerError(503, 'BUYER_INCOMPLETE', fallback_safe=not buyer.mutations)
-            proposals = await self.gateway.request('GET', f'/v1/kitchens/{kitchen_id}/proposals')
-            result = next((p for p in proposals['proposals'] if p.get('approval_id') == outcome['approval_id']), None)
+            proposal_id = outcome.get('proposal_id')
+            result = None
+            if isinstance(proposal_id, str) and proposal_id.strip() and len(proposal_id) <= 200:
+                result = await self.gateway.request('GET',
+                    f'/v1/kitchens/{kitchen_id}/proposals/{quote(proposal_id, safe="")}')
+                if result.get('proposal_id') != proposal_id or result.get('approval_id') != outcome['approval_id']:
+                    result = None
+            elif proposal_id is None:
+                # Compatibility with older gateways only. Never fall back after an ID mismatch.
+                proposals = await self.gateway.request('GET', f'/v1/kitchens/{kitchen_id}/proposals')
+                result = next((p for p in proposals['proposals'] if p.get('approval_id') == outcome['approval_id']), None)
             if result is None:
                 raise WorkerError(503, 'BUYER_RECONCILIATION_REQUIRED')
             if outcome.get('substitute_options'):
@@ -116,6 +153,11 @@ class BuyerWorker:
             if meter is not None:
                 # Model calls, tokens and seconds of this request, both attempts (agent/usage.py).
                 result['buyer_usage'] = meter.total()
+            # What the model did (#1197): kept with the run, served on the proposal later.
+            result['model_trace'] = model_trace.build(
+                reader='buyer', made_by='model', usage=meter.total() if meter is not None else None,
+                thinking=False if self.strategy == 'single_pick' else getattr(model, 'thinking', None),
+                steps=steps, attempts=attempt)
             return result
         try:
             result = await asyncio.wait_for(execute(), timeout=self.timeout)
@@ -133,7 +175,9 @@ class BuyerWorker:
         finally:
             if model is not None:
                 emit(getattr(model, 'meter', None), run='buyer', status=status,
-                     thinking=getattr(model, 'thinking', None), max_tokens=getattr(model, 'max_tokens', None))
+                     strategy=self.strategy,
+                     thinking=False if self.strategy == 'single_pick' else getattr(model, 'thinking', None),
+                     max_tokens=512 if self.strategy == 'single_pick' else getattr(model, 'max_tokens', None))
                 await model.close()
 
 
@@ -195,6 +239,8 @@ def create_app(worker=None, shelf=None, delivery_note=None, menu_photo=None, buy
     mount_delivery_note(app, WorkerError, delivery_note)
     from agent.menu_photo_service import mount_menu_photo
     mount_menu_photo(app, WorkerError, menu_photo)
+    from agent.brief_service import mount_brief
+    mount_brief(app, WorkerError)
     from agent.buying_note_service import mount_buying_note
     mount_buying_note(app, WorkerError, buying_note)
     from agent.price_list_service import mount_price_list

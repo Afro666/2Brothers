@@ -52,6 +52,7 @@ describe("mapApproval", () => {
       suppliersToConfirm: [],
       status: "PENDING",
       options: [],
+      modelTrace: null, // no model_trace on this proposal (#1197)
     });
   });
 
@@ -71,6 +72,12 @@ describe("mapApproval", () => {
       { supplierId: "sup-bakery", name: "Leipomo Demo" },
       { supplierId: "sup-nameless", name: "sup-nameless" },
     ]);
+  });
+
+  it("shows the gateway's must-confirm sentence as it is (Valio, 14 Nov)", () => {
+    const sentence = "Valio must confirm stock for: Valio Eila 3 % 1 L.";
+    const result = mapApproval({ ...proposal, mandate: { ...proposal.mandate, reasons: [sentence] } });
+    expect(result.reasons.map((reason) => reason.rule)).toContain(sentence);
   });
 
   it("uses no supplier confirmations when blocks are missing", () => {

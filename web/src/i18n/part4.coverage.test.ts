@@ -35,6 +35,7 @@ const TRANSLATED_FILES = [
   "pages/settings/permissions.tsx",
   "pages/settings/team.tsx",
   "pages/settings/tokens.tsx",
+  "pages/settings/approve-chat.tsx",
 ];
 
 const SETTINGS_FILES = TRANSLATED_FILES.filter(

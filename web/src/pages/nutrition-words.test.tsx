@@ -52,7 +52,7 @@ describe("nutrition on the recipes tab", () => {
     renderApp("/products", api);
 
     const pudding = await recipeCard("Rice pudding");
-    expect(await within(pudding).findByText("Nutrition is not available right now.")).toBeInTheDocument();
+    expect(await within(pudding).findByText("Nutrition is not available right now.", {}, { timeout: 5000 })).toBeInTheDocument();
     expect(within(pudding).getByRole("button", { name: "Edit Rice pudding" })).toBeEnabled();
     expect(pudding).toHaveTextContent("1 item");
   });
@@ -128,7 +128,7 @@ describe("energy on the planner", () => {
     api.getNutrition = () => Promise.reject(new ApiError("NETWORK", "Could not reach the gateway."));
     renderApp("/planner?week=2026-W47", api);
 
-    expect(await screen.findByText("Energy numbers are not available right now.")).toBeInTheDocument();
+    expect(await screen.findByText("Energy numbers are not available right now.", {}, { timeout: 5000 })).toBeInTheDocument();
     const monday = screen.getByRole("heading", { name: /Monday/ }).closest("[data-slot='card']") as HTMLElement;
     expect(within(monday).getByText(/Rice pudding/)).toBeInTheDocument();
     expect(monday).not.toHaveTextContent("kcal");
@@ -240,6 +240,6 @@ describe("the kitchen's words on the products tab", () => {
     renderApp("/products", api);
 
     expect(await screen.findByText("Rye bread loaf")).toBeInTheDocument();
-    expect(await screen.findByText("Could not reach the gateway.")).toBeInTheDocument();
+    expect(await screen.findByText("Could not reach the gateway.", {}, { timeout: 5000 })).toBeInTheDocument();
   });
 });

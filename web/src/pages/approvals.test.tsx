@@ -20,40 +20,33 @@ function withConfirmedStock() {
 }
 
 describe("ApprovalsPage", () => {
-  it.each([
-    ["on", "Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them."],
-    ["off", "Leipomo Demo must confirm stock before this order can be approved."],
-    ["absent", "Leipomo Demo must confirm stock before this order can be approved."],
-    ["failed", "Leipomo Demo must confirm stock before this order can be approved."],
-  ] as const)("shows the supplier-confirm notice when the kitchen setting is %s", async (setting, expected) => {
-    const api = createMockApi();
-    const listApprovals = api.listApprovals;
-    api.listApprovals = async () => (await listApprovals()).map((approval, index) => index === 0 ? {
-      ...approval,
-      suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
-    } : approval);
-    const getKitchenSettings = api.getKitchenSettings;
-    api.getKitchenSettings = vi.fn(async () => {
-      if (setting === "failed") throw new Error("Settings unavailable");
-      if (setting === "absent") return mapKitchenSettings({});
-      return { ...(await getKitchenSettings()), approveUnconfirmedManual: setting === "on" };
-    });
-    renderApp("/approvals", api);
+  it.each(["on", "off", "absent", "failed"] as const)(
+    "says the order is sent and waits for the supplier whatever the kitchen setting (%s)",
+    async (setting) => {
+      const api = createMockApi();
+      const listApprovals = api.listApprovals;
+      api.listApprovals = async () => (await listApprovals()).map((approval, index) => index === 0 ? {
+        ...approval,
+        suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
+      } : approval);
+      const getKitchenSettings = api.getKitchenSettings;
+      api.getKitchenSettings = vi.fn(async () => {
+        if (setting === "failed") throw new Error("Settings unavailable");
+        if (setting === "absent") return mapKitchenSettings({});
+        return { ...(await getKitchenSettings()), approveUnconfirmedManual: setting === "on" };
+      });
+      renderApp("/approvals", api);
 
-    expect((await screen.findAllByText(expected)).length).toBeGreaterThan(0);
-    if (setting === "on") {
-      expect(screen.queryByText("Leipomo Demo must confirm stock before this order can be approved.")).toBeNull();
-    } else {
-      expect(screen.queryByText(/Leipomo Demo must confirm stock\. If you approve/)).toBeNull();
-    }
-    expect(api.getKitchenSettings).toHaveBeenCalledTimes(1);
-  });
+      expect((await screen.findAllByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/before this order can be approved/)).toBeNull();
+    },
+  );
 
   it("keeps the milk proposal visible while awaiting stock confirmation", async () => {
     renderApp("/approvals", createMockApi());
     expect(await screen.findByRole("heading", { name: "Waiting for you (4)" })).toBeVisible();
-    expect(await screen.findByText(/Waiting for supplier stock confirmation/)).toBeVisible();
-    expect(screen.getAllByRole("button", { name: /^Approve/ }).filter((button) => button.hasAttribute("disabled"))).toHaveLength(1);
+    expect(await screen.findByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: /^Approve/ }).filter((button) => button.hasAttribute("disabled"))).toHaveLength(0);
     expect(screen.getAllByRole("button", { name: "Reject" })[0]).toBeEnabled();
   });
   beforeEach(() => localStorage.clear());
@@ -211,19 +204,19 @@ describe("ApprovalsPage", () => {
     );
   });
 
-  it("follows the edited lines: approval opens once the line with unconfirmed stock is removed", async () => {
+  it("follows the edited lines: the waiting notice goes once the line with unconfirmed stock is removed", async () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
     await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
     await user.type(screen.getByRole("searchbox", { name: "Search products" }), "Arla 1 L");
     await user.click(await screen.findByRole("button", { name: "Add Arla 1 L lactose free fat free UHT milk drink" }));
-    // Arla's stock is known, Eila's is not: the order is still blocked.
+    // Arla's stock is known, Eila's is not: the order still waits for the supplier, but can be approved.
     await screen.findByRole("button", { name: "Remove Arla 1 L lactose free fat free UHT milk drink" });
-    expect(screen.getByText(/Waiting for supplier stock confirmation/)).toBeVisible();
-    expect(screen.getAllByRole("button", { name: /^Approve/ })[1]).toBeDisabled();
+    expect(screen.getByText(/wait for the supplier's stock confirmation/)).toBeVisible();
+    expect(screen.getAllByRole("button", { name: /^Approve/ })[1]).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
-    await waitFor(() => expect(screen.queryByText(/Waiting for supplier stock confirmation/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/wait for the supplier's stock confirmation/)).toBeNull());
     expect(screen.getAllByRole("button", { name: /^Approve/ })[1]).toBeEnabled();
   });
 

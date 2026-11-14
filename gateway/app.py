@@ -3,8 +3,10 @@
 Auth (demo): two bearer tokens from the server's environment.
 - GATEWAY_AGENT_TOKEN: the Buyer agent and other services. Can read, propose and use the
   /tools routes. Can never approve.
-- GATEWAY_HUMAN_TOKEN: the web app's signed-in person; `X-User` names who. Only this
-  token may approve or reject (403 HUMAN_SESSION_REQUIRED otherwise).
+- GATEWAY_HUMAN_TOKEN: the web app's signed-in person; `X-User` names who.
+Only a person approves or rejects: a signed-in session (or this shared token in the open
+demo), or a personal approval token (gateway/approval_tokens.py). Agent and kitchen tokens
+get 403 HUMAN_SESSION_REQUIRED.
 Run: `two-brothers-gateway` (uvicorn on 0.0.0.0:8000). Never logs keys or bodies.
 """
 
@@ -13,6 +15,7 @@ from __future__ import annotations
 import hmac
 import os
 import time
+from datetime import datetime
 from decimal import InvalidOperation
 from typing import Any, Literal
 
@@ -21,6 +24,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from gateway.service import Gateway, GatewayError
+from gateway.valio_client import ValioBusy
 from gateway.request_docs import (CreateNeedRequest, GetOfferRequest, PlaceOrderRequest,
                                   RequestApprovalRequest, SearchProductsRequest,
                                   SimulateOrderRequest, document_body)
@@ -32,15 +36,25 @@ ALL_SCOPES = frozenset({"kitchen:read", "kitchen:propose"})
 
 
 class Principal:
-    """kind: human | agent | token. `kitchen_id` None = any kitchen (server env tokens)."""
+    """kind: human | agent | token | personal. `kitchen_id` None = any kitchen (server env tokens).
+
+    `personal` is a personal approval token (gateway/approval_tokens.py): one person, read
+    plus approve and reject only. It is not `human`, so every other person-only route
+    (`who.human`) refuses it, and it holds only kitchen:read, so it never proposes."""
 
     def __init__(self, kind: str, name: str, kitchen_id: str | None = None,
-                 scopes: frozenset = ALL_SCOPES, role: str = "approver"):
+                 scopes: frozenset = ALL_SCOPES, role: str = "approver", via: str | None = None,
+                 token_id: str | None = None, expires_at: str | None = None):
         self.kind, self.name, self.kitchen_id, self.scopes = kind, name, kitchen_id, frozenset(scopes)
         self.role = role          # people only: approver, chef or viewer (#270)
+        # human: "session" (cookie, a real account) or "shared_token" (the open demo's stand-in)
+        self.via, self.token_id, self.expires_at = via, token_id, expires_at
 
     def need(self, scope: str, kitchen_id: str | None = None) -> None:
         """403 unless this caller holds `scope` for `kitchen_id`."""
+        if self.kind == "personal" and scope not in self.scopes:
+            raise GatewayError(403, "SCOPE_REQUIRED", f"a personal approval token can read, approve and "
+                                                      f"reject only; it never proposes ({scope})")
         if self.kind != "human" and scope not in self.scopes:
             raise GatewayError(403, "SCOPE_REQUIRED", f"this token lacks {scope}")
         if self.kind == "human" and scope in ("kitchen:propose", "kitchen:write") and self.role == "viewer":
@@ -63,6 +77,21 @@ class Principal:
             raise GatewayError(403, "ROLE_REQUIRED", "only an approver can do this")
         return self.name if self.kind == "human" else None
 
+    @property
+    def approver(self) -> str | None:
+        """Who approves or rejects: a signed-in approver, or the person of a personal approval
+        token whose account is still an approver. Agents and kitchen tokens: None."""
+        if self.kind == "personal":
+            if self.role != "approver":
+                raise GatewayError(403, "ROLE_REQUIRED", "only an approver can do this")
+            return self.name
+        return self.human
+
+    @property
+    def via_audit(self) -> dict:
+        """Audit fields for an approve or reject made with a personal token; never its value."""
+        return {"via": self.via, "token_id": self.token_id} if self.kind == "personal" else {}
+
 
 def _token_matches(given: str, env: str) -> bool:
     expected = os.environ.get(env, "")
@@ -76,7 +105,7 @@ def _env_principal(request: Request, token: str) -> Principal:
         user = (request.headers.get("x-user") or "").strip()[:100]
         if not user:
             raise GatewayError(401, "UNAUTHENTICATED", "X-User names the person")
-        return Principal("human", user)
+        return Principal("human", user, via="shared_token")
     if token and _token_matches(token, "GATEWAY_AGENT_TOKEN"):
         return Principal("agent", "buyer-agent")
     raise GatewayError(401, "UNAUTHENTICATED", "a valid bearer token is required")
@@ -86,7 +115,7 @@ REFUSAL_WINDOW = 60.0          # seconds: one audit row per repeated refusal (#8
 
 
 def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None,
-               delivery_note_worker=None, menu_photo_worker=None, buying_note_worker=None, price_list_worker=None, explanation_worker=None, label_photo_worker=None) -> FastAPI:
+               delivery_note_worker=None, menu_photo_worker=None, buying_note_worker=None, price_list_worker=None, explanation_worker=None, label_photo_worker=None, brief_worker=None) -> FastAPI:
     from gateway.buyer_worker import Breaker
     buyer_breaker = Breaker()        # one per app: a timeout skips the model for 2 minutes
     app = FastAPI(
@@ -135,7 +164,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
             if len(refusals_seen) > 10_000:
                 refusals_seen.clear()
         refusals_seen[key] = now
-        gw()._audit(target, "refused", who.name, code=code, method=request.method, path=request.url.path)
+        gw()._audit(target, "refused", who.name, code=code, method=request.method,
+                    route=route, path=request.url.path)
 
     @app.exception_handler(GatewayError)
     async def _error(request: Request, exc: GatewayError) -> JSONResponse:
@@ -149,6 +179,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
                 pass                # a failed audit write never turns a refusal into a 500
         return JSONResponse(status_code=exc.status,
                             content={"error": {"code": exc.code, "message": exc.message, **exc.extra}})
+
+    @app.exception_handler(ValioBusy)   # #1237: Valio rests after a 429, or our queue is too long
+    async def _supplier_busy(_: Request, exc: ValioBusy) -> JSONResponse:
+        return JSONResponse(status_code=503, headers={"Retry-After": str(exc.retry_after)},
+                            content={"error": {"code": "SUPPLIER_BUSY", "message": str(exc),
+                                               "retry_after": exc.retry_after}})
 
     @app.exception_handler(ValueError)
     async def _invalid(_: Request, exc: ValueError) -> JSONResponse:
@@ -169,20 +205,30 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         from gateway import users
         person = users.session_user(gw().db, request.cookies.get(users.COOKIE))
         if person is not None:
-            return Principal("human", person["email"], person["kitchen_id"], role=person["role"])
+            return Principal("human", person["email"], person["kitchen_id"], role=person["role"], via="session")
         auth = request.headers.get("authorization", "")
         token = auth[7:] if auth.lower().startswith("bearer ") else ""
         try:
             return _env_principal(request, token)
         except GatewayError:
             pass
-        from gateway import tokens
+        from gateway import approval_tokens, tokens
+        if token.startswith(approval_tokens.PREFIX):
+            found = approval_tokens.verify(gw().db, token, gw().now())
+            if found is None:
+                raise GatewayError(401, "UNAUTHENTICATED", "this approval token is expired, revoked or unknown")
+            doc, user = found
+            return Principal("personal", user["_id"], doc["kitchen_id"], frozenset({"kitchen:read"}),
+                             role=user["role"], via=approval_tokens.VIA, token_id=doc["_id"],
+                             expires_at=approval_tokens._iso(doc["expires_at"]))
         doc = tokens.verify(gw().db, token)
         if doc is None:
             raise GatewayError(401, "UNAUTHENTICATED", "a valid bearer token is required")
         return Principal("token", f"token:{doc['name']}", doc["kitchen_id"], frozenset(doc["scopes"]))
 
     app.state.verify_token = lambda token: __import__("gateway.tokens", fromlist=["verify"]).verify(gw().db, token)
+    app.state.verify_approval_token = lambda token: __import__(
+        "gateway.approval_tokens", fromlist=["verify"]).verify(gw().db, token, gw().now())
 
     async def body(request: Request) -> dict[str, Any]:
         try:
@@ -226,9 +272,13 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
 
     @app.get("/v1/me")
     def me(who: Principal = Depends(principal)):
-        return {"kind": who.kind, "name": who.name, "role": who.role if who.kind == "human" else None,
-                "kitchen_id": who.kitchen_id, "can_approve": who.kind == "human" and who.role == "approver",
-                "scopes": sorted(who.scopes) if who.kind != "human" else None}
+        person = who.kind in ("human", "personal")
+        out = {"kind": who.kind, "name": who.name, "role": who.role if person else None,
+               "kitchen_id": who.kitchen_id, "can_approve": person and who.role == "approver",
+               "scopes": sorted(who.scopes) if who.kind != "human" else None}
+        if who.kind == "personal":
+            out.update(via=who.via, token_id=who.token_id, expires_at=who.expires_at)
+        return out
 
     @app.post("/v1/auth/change-password")
     async def change_password(request: Request):
@@ -255,7 +305,17 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
 
     @app.get("/health")
     def health() -> dict:
-        return {"status": "ok"}
+        """Public and cheap (#1188): never calls Valio, never opens the database. Mode and a
+        yes/no from the last call the gateway made; no host, key or upstream text."""
+        built = gateway if gateway is not None else state.get("gw")
+        valio = getattr(built, "valio", None)
+        if valio is None:       # no request served yet: the server builds a real client on the first one
+            return {"status": "ok", "valio_api": "live", "valio_reachable": None, "valio_checked_at": None}
+        at = getattr(valio, "last_checked_at", None)
+        reachable = getattr(valio, "last_reachable", None)
+        return {"status": "ok", "valio_api": "live" if getattr(valio, "live", False) is True else "mock",
+                "valio_reachable": reachable if isinstance(reachable, bool) else None,
+                "valio_checked_at": at.isoformat() if isinstance(at, datetime) else None}
 
     # ---- kitchen side -------------------------------------------------------------
     k = "/v1/kitchens/{kitchen_id}"
@@ -296,6 +356,16 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need("kitchen:read", kitchen_id)
         return {"proposals": gw().list_proposals(kitchen_id)}
 
+    @app.get(k + "/catalog/products")
+    def catalog_products(kitchen_id: str, ids: str = "", who: Principal = Depends(principal)):
+        """Product rows by code, in the order asked (#304): for screens that hold codes."""
+        who.need("kitchen:read", kitchen_id)
+        codes = [c.strip() for c in ids.split(",") if c.strip()]
+        if not 1 <= len(codes) <= 200:
+            raise GatewayError(422, "INVALID_REQUEST", "ids is 1 to 200 product codes, comma-separated")
+        from store.products import get_products
+        return {"products": get_products(gw().db, codes, kitchen_id)}
+
     @app.get(k + "/label-checks")
     def label_checks(kitchen_id: str, who: Principal = Depends(principal)):
         who.need('kitchen:read', kitchen_id)
@@ -327,13 +397,16 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
 
     @app.post(k + "/proposals/{proposal_id}/approve")
     async def approve(kitchen_id: str, proposal_id: str, request: Request, who: Principal = Depends(principal)):
+        # A person: a signed-in approver, or a personal approval token (decision 2026-11-14).
         who.need("kitchen:read", kitchen_id)
-        return gw().approve(kitchen_id, proposal_id, await body(request), human=who.human)
+        return gw().approve(kitchen_id, proposal_id, await body(request), human=who.approver,
+                            via=who.via_audit)
 
     @app.post(k + "/proposals/{proposal_id}/reject")
     async def reject(kitchen_id: str, proposal_id: str, request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
-        return gw().reject(kitchen_id, proposal_id, await body(request), human=who.human)
+        return gw().reject(kitchen_id, proposal_id, await body(request), human=who.approver,
+                           via=who.via_audit)
 
     @app.post(k + "/proposals/{proposal_id}/choose-option")
     async def choose_option(kitchen_id: str, proposal_id: str, request: Request,
@@ -471,6 +544,50 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         if out is None:
             raise GatewayError(404, "TOKEN_NOT_FOUND", "no such token")
         gw()._audit(kitchen_id, "token_revoked", who.human, token_id=token_id)
+        return out
+
+    # ---- Personal approval tokens (decision 2026-11-14): a person approves from chat ----
+    @app.post(k + "/approval-tokens")
+    async def create_approval_token(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        from gateway import approval_tokens
+        who.need("kitchen:read", kitchen_id)        # a session is bound to its kitchen
+        if who.kind != "human":
+            raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a signed-in person can create an approval token")
+        person = who.human                          # ROLE_REQUIRED for a chef or a viewer
+        if who.via != "session":
+            # The open demo's shared token is everyone at once: it stands for no one person.
+            raise GatewayError(403, "PERSONAL_TOKEN_NEEDS_SIGN_IN",
+                               "sign in with your own account to create a personal approval token")
+        data = await body(request)
+        try:
+            out = approval_tokens.create(gw().db, person, kitchen_id, person, hours=data.get("hours"),
+                                         name=data.get("name"), now=gw().now())
+        except approval_tokens.ApprovalTokenError as exc:
+            raise GatewayError(exc.status, exc.code, str(exc)) from None
+        gw()._audit(kitchen_id, "approval_token_created", person, token_id=out["token_id"],
+                    person=out["person"], expires_at=out["expires_at"])
+        return out
+
+    def approval_token_admin(who: Principal, kitchen_id: str) -> str:
+        who.need("kitchen:read", kitchen_id)
+        if not who.human:
+            raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can manage approval tokens")
+        return who.human
+
+    @app.get(k + "/approval-tokens")
+    def list_approval_tokens(kitchen_id: str, who: Principal = Depends(principal)):
+        from gateway import approval_tokens
+        approval_token_admin(who, kitchen_id)
+        return {"tokens": approval_tokens.list_tokens(gw().db, kitchen_id)}
+
+    @app.delete(k + "/approval-tokens/{token_id}")
+    def revoke_approval_token(kitchen_id: str, token_id: str, who: Principal = Depends(principal)):
+        from gateway import approval_tokens
+        person = approval_token_admin(who, kitchen_id)
+        out = approval_tokens.revoke(gw().db, kitchen_id, token_id, gw().now())
+        if out is None:
+            raise GatewayError(404, "TOKEN_NOT_FOUND", "no such approval token")
+        gw()._audit(kitchen_id, "approval_token_revoked", person, token_id=token_id, person=out["person"])
         return out
 
     # ---- Webhooks (#277): an approver registers them; the secret is shown once ---------
@@ -615,6 +732,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     mount_drift(app, gw, principal)
     from gateway.supplier_routes import mount_supplier   # the wholesaler's demand view (#33)
     mount_supplier(app, gw, principal)
+    from gateway.brief import mount_brief
+    mount_brief(app, gw, principal, brief_worker)
     from gateway.buying_note import mount_buying_note   # Nemotron's note for the supplier's planner (#1176)
     mount_buying_note(app, gw, principal, buying_note_worker)
     from gateway.nutrition_routes import mount_nutrition   # label nutrition per recipe, day and order

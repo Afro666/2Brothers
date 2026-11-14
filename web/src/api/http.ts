@@ -4,12 +4,14 @@ import { createNutritionHttp } from "@/api/http-nutrition";
 import { createOffersHttp } from "@/api/http-offers";
 import { createOnboardingHttp } from "@/api/http-onboarding";
 import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
+import { createBuyingNoteHttp } from "@/api/http-buying-note";
 import { createShelfHttp } from "@/api/http-shelf";
 import { createMenuPhotoHttp } from "@/api/http-menu-photo";
 import { createDeliveryNoteHttp } from "@/api/http-delivery-note";
 import { createTrustHttp } from "@/api/http-trust";
 import { createUsageHttp } from "@/api/http-usage";
 import { createTokensHttp } from "@/api/http-tokens";
+import { createApprovalTokensHttp } from "@/api/http-approval-tokens";
 import { createDeveloperHttp } from "@/api/http-developer";
 import { createEventsHttp } from "@/api/http-events";
 import {
@@ -109,6 +111,7 @@ function mapEach<T>(list: Json[], what: string, idKey: string, map: (row: Json) 
  */
 export function createHttpApi(baseUrl: string): Api {
   let currentSession: Session | null = null;
+  const mock = createMockApi();
   const kitchen = `/v1/kitchens/${encodeURIComponent(import.meta.env.VITE_GATEWAY_KITCHEN_ID || "demo-kitchen")}`;
   const proposalPath = (id: string) => `${kitchen}/proposals/${encodeURIComponent(id)}`;
   const get = (path: string) => gatewayRequest(baseUrl, path);
@@ -177,6 +180,7 @@ export function createHttpApi(baseUrl: string): Api {
       await post("/v1/auth/change-password", { current_password: current, new_password: next });
     },
     ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createBuyingNoteHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createNutritionHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOnboardingHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createBrandLogosHttp((path, init) => gatewayRequest(baseUrl, path, init)),
@@ -187,8 +191,9 @@ export function createHttpApi(baseUrl: string): Api {
     ...createUsageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createApprovalTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen, mock.getProducts),
     ...createEventsHttp(baseUrl, kitchen, () => currentSession),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
@@ -256,6 +261,31 @@ export function createHttpApi(baseUrl: string): Api {
       return mapAddable(addable, typeof requested === "string" ? requested : "").filter(({ product }) =>
         words.every((word) => product.names.en.toLocaleLowerCase().includes(word)),
       );
+    },
+    async changeProposal(orderId, change, actor) {
+      // docs/contract.md "Changing a proposal": SET_QUANTITY and REMOVE_LINE are one `lines`
+      // entry (0 removes), ADD_LINE is one `add` entry. Quantities go as decimal strings.
+      const body: Json =
+        change.type === "ADD_LINE"
+          ? { add: [{ product_id: change.productId, quantity: String(change.quantity) }] }
+          : {
+              lines: [
+                {
+                  product_id: change.productId,
+                  quantity: change.type === "REMOVE_LINE" ? "0" : String(change.quantity),
+                },
+              ],
+            };
+      // One key per change, kept only until it is answered: a retry after a network failure
+      // repeats it, and making the same change again later is a new change.
+      const identity = `change:${orderId}:${JSON.stringify(body)}`;
+      const key = requestKeys.get(identity) ?? `web-change:${uuid()}`;
+      requestKeys.set(identity, key);
+      const answered = (await post(`${proposalPath(orderId)}/change`, { ...body, idempotency_key: key }, actor)) as Json;
+      requestKeys.delete(identity);
+      // The change is made: an unreadable audit log only loses who asked, never the new total.
+      const events = await auditEvents().catch(() => []);
+      return { order: mapOrder(answered, null), approval: mapApproval(answered, events) };
     },
     async listOrders() {
       const [placed, list] = await Promise.all([get(`${kitchen}/orders`), proposals()]);
@@ -349,13 +379,8 @@ export function createHttpApi(baseUrl: string): Api {
   } satisfies Partial<Api>;
 
   return {
-    ...createMockApi(),
+    ...mock,
     ...real,
-    // Never the mock for what acts on real input: it would change a sample order, not the real
-    // proposal.
-    async changeProposal() {
-      throw new ApiError("NOT_SERVED", "The gateway cannot change a proposal yet. Reject it and ask the Buyer again");
-    },
     live: new Set(Object.keys(real) as (keyof Api)[]),
   };
 }

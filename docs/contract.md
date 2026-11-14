@@ -25,6 +25,35 @@ The upstream specification has no order-placement endpoint. Any order simulation
 approval, or placement implemented by our gateway is a team-owned interface and
 must not be described as an upstream order submission.
 
+### Valio's rate limit and `SUPPLIER_BUSY` (#1237)
+
+Valio's rule (challenge Discord, 2026-11-14): a few hundred calls a minute is fine,
+more than 10 a second is not. Above it Valio answers 429 and blocks the caller for
+30 seconds. The gateway's Valio client honours this for the whole server process:
+
+- **Limiter.** At most 5 calls at once, then 4 a second (a token bucket shared by every
+  Valio client in the process), so never more than 9 calls in any one second. A call
+  waits briefly for its turn. A call that would wait more than 5 seconds is not sent:
+  it fails as `SUPPLIER_BUSY`.
+- **Rest after a 429.** No call goes to Valio for 30 seconds, or for `Retry-After`
+  seconds when Valio sends a longer one (at most 300). A 429 is never retried inside
+  that time. 5xx and network errors keep their short retries.
+- **Cache first.** An answer still in the client's cache (30 seconds) is served during
+  a rest. Only a call that would reach Valio fails.
+
+What a caller sees during a rest:
+
+| Where | Answer |
+|---|---|
+| A route that needs a live Valio price or stock (`get_offer`, creating or changing a proposal, addable products, a supplier offer) | 503 `SUPPLIER_BUSY` with `retry_after` (whole seconds) in the error body and a `Retry-After` header. Nothing is stored. Try again after `retry_after`. |
+| `search_products` with `need_id` | 200; `can_arrive` is `null` (unknown), as for any missing live answer. |
+| Supplier planner view (`/demand`) | 200; availability is unknown, `risk` is `UNKNOWN`; the demand still shows. |
+| Buyer agent | The `get_offer` tool fails, so the run ends `CANNOT_FULFIL` and says the tool failed; nothing is ordered. |
+
+```json
+{"error": {"code": "SUPPLIER_BUSY", "message": "Valio rate limit: wait 27 s", "retry_after": 27}}
+```
+
 ### Shared price and availability request
 
 ```json
@@ -75,28 +104,40 @@ Each entry requires `productId`, `salesBlock`, and `scheduleLines`;
 - `scheduleLines` is empty when the product cannot currently be delivered on any
   date; otherwise the challenge returns exactly one line.
 - A line requires `salesBlock` and `salesUnit`. `availableAmount` may be absent
-  or null: that is unknown stock (see the sentinel rule below), never zero.
+  or null. Valio (challenge Discord, 14 Nov): "Empty = not available". So an absent
+  or null amount is not available, the same as zero. It is not unknown stock.
   `availableDate` may be absent or null. Its value is the earliest available date
   and can differ from the requested date.
 - `availableAmount` is expressed in `salesUnit`. Zero means unavailable.
-- Both `999999` and `9999999999` are unknown-stock sentinels for any product type,
-  including Terminal and Stock. Neither is a measured quantity. Missing or null
-  stock also means unknown, not zero.
+- An `availableAmount` of `999999` or more is a filler, not a measured quantity, for
+  any product type, Terminal and Stock. Valio (challenge Discord, 14 Nov): "Availability
+  ge 999999 means that we do not know the availability and our current logic allows
+  ordering any quantity." Seen live on 2026-11-14 (2,000 products, one date): fillers
+  `999999`, `666666666`, `9999999999`, `1999999999` and others, never below `999999`;
+  the largest measured amount was `68293`. Empty was `scheduleLines: []` (335 of 2,000);
+  an absent or null `availableAmount` was never seen.
+- So, in Valio's words: a filler is unknown stock (a person may still approve it, see
+  `POST /proposals/{id}/approve`); an empty answer (no schedule line, or an absent or
+  null amount) is not available; zero is not available.
 
 #### Gateway availability normalization
 
 The raw Valio API above does not provide the following derived flags. The gateway
-adapter normalizes each schedule line with a sentinel, missing or null amount to
+adapter normalizes each schedule line with a filler amount (`999999` or more) to
 `availableAmount: null`, `unknown_stock: true`, and `orderable: false`. This rule
 applies to both Terminal and Stock products even when their cutoff is in the
-future. Measured zero remains zero: unavailable, but not unknown.
+future. A missing or null amount becomes `availableAmount: 0`, `unknown_stock: false`,
+`orderable: false`: not available, never unknown. Measured zero remains zero:
+unavailable, but not unknown. A product with `scheduleLines: []` is left out of a quote
+("Valio cannot deliver it on any date").
 
 The adapter retains these products and schedule lines. UI and agent consumers
 must keep them visible in proposals, labelled as unconfirmed stock, rather than
 hide them because `orderable` is false. `orderable` describes confirmed upstream
 fulfilment for the requested deadline; it is not permission to show a proposal
-or consent to place an order. Supplier availability must be confirmed before
-placement; human approval alone does not confirm stock. Cutoff, delivery-date,
+or consent to place an order. Human approval does not confirm stock, but since
+2026-11-14 it is enough to place the order: the order names each supplier that must
+still confirm (`supplier_must_confirm`, see `POST /proposals/{id}/approve`). Cutoff, delivery-date,
 sales-block and other refusal guards still apply. A true flag likewise does not
 bypass the required human approval or the gateway's placement checks.
 
@@ -399,7 +440,8 @@ The web Catalog page and screens that hold product codes use these rows: `search
 posts `search_products` with `limit: 50` and only the filters the person set (`exclude_allergens`
 with `allergen_strictness`, `require_labels`, `temperature`), and does not call it for an empty
 query with no filter. `getProducts` reads `GET /v1/kitchens/{kitchen_id}/catalog/products?ids=`
-in groups of 200. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
+in groups of 200; while the gateway does not serve that route (a 404 with no `error` envelope,
+before #1172), it answers from the sample products as it did before. A named 404 is an error. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
 `allergen_data_known: false` is `allergens: null` (unknown), never an empty list.
 
 ### Stored rows: order, approval, audit entry
@@ -421,6 +463,24 @@ and quantities are decimal strings on the wire.
   `order_id` when the event belongs to an order) and `server` (what the gateway adds:
   `kitchen_id`, `principal`, its own timestamp). `hash` covers the whole entry and
   the previous entry's hash, so a changed or removed entry is detectable.
+
+### Gateway health
+
+Served (#1188, `gateway/app.py`). `GET /health` is public (no token) and never calls
+Valio: monitors call it often. Answer:
+
+```json
+{"status": "ok", "valio_api": "live", "valio_reachable": true,
+ "valio_checked_at": "2026-11-14T13:40:02+00:00"}
+```
+
+- `valio_api`: `live` when the gateway talks to Valio's challenge API, `mock` when it runs
+  on a stand-in (tests, the web's mock gateway).
+- `valio_reachable`: from the last call to Valio that the gateway made anyway: `true`
+  when it answered, `false` when it failed (an HTTP error, a timeout, a 429), `null` when
+  no call was made since the gateway started. `valio_checked_at` is the time of that call,
+  or null.
+- Nothing else: no host name, key, status code or upstream error text.
 
 ### Agent audit ingestion
 
@@ -587,8 +647,8 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
   `/tools/request_approval`, `/tools/place_order`, `/tools/change_proposal` and the
   `kitchen:write` routes are 403 `SCOPE_REQUIRED`. The Buyer worker never gets one.
 - Approve is unchanged: `expected_total` and `idempotency_key` are required; 409
-  `TOTAL_MISMATCH`, `BLOCKED_BY_RECALL`, `STOCK_UNKNOWN`, `NOT_PENDING` and the
-  idempotency replay apply exactly as in the web. Earned auto-approve is unchanged.
+  `TOTAL_MISMATCH`, `BLOCKED_BY_RECALL`, `NOT_PENDING` and the idempotency replay apply
+  exactly as in the web; unconfirmed stock is a warning, as in the web. Earned auto-approve is unchanged.
 - Audit: create and revoke are entries (`approval_token_created`,
   `approval_token_revoked`, with `token_id`, `person`, `expires_at`). Every approve and
   reject with it names the person as `actor` and carries `"via": "personal_token"` and
@@ -620,7 +680,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST | `/menu-photo` | `kitchen:write` + `kitchen:propose` | Nemotron 3.5 Super VL reads a photo of a week's menu into dishes matched to recipes, and a menu-plan proposal that waits for a person. Orders nothing. Shape under "Plan from a menu photo". Served by `gateway/menu_photo.py` (#1154). |
 | GET | `/products`, `/products/{id}` | `kitchen:read` | Own products (not in a supplier catalog). Shape below. |
 | POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Create, change or delete an own product. |
-| GET | `/catalog/products?ids=` | `kitchen:read` | Product rows by code, for screens that hold product codes (recipes, orders). `ids` is 1 to 200 codes, comma-separated. Returns `{"products": [...]}` in the order asked, each in the product row shape of `search_products` (no `score`, no `match_reasons`). Covers the supplier catalogs and this kitchen's own products, never another kitchen's. A code that is not found is left out; it is not an error. Proposed; the gateway does not serve it yet. |
+| GET | `/catalog/products?ids=` | `kitchen:read` | Product rows by code, for screens that hold product codes (recipes, orders). `ids` is 1 to 200 codes, comma-separated. Returns `{"products": [...]}` in the order asked, each in the product row shape of `search_products` (no `score`, no `match_reasons`). Covers the supplier catalogs and this kitchen's own products, never another kitchen's. A code that is not found is left out; it is not an error. Fewer than 1 or more than 200 codes is 422 `INVALID_REQUEST`. |
 | GET | `/recipes`, `/recipes/{id}` | `kitchen:read` | Recipe = products x quantity per portion, with yield; allergens rolled up. |
 | POST, PUT, DELETE | `/recipes`, `/recipes/{id}` | `kitchen:write` | Create, change or delete a recipe. |
 | GET | `/menu-plans/{week}` | `kitchen:read` | The week's menu plan (shape below). |
@@ -636,7 +696,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | GET | `/proposals` | `kitchen:read` | `{"proposals": [...]}`, newest first, at most 100, each in the `GET /proposals/{id}` shape. |
 | GET | `/proposals/{id}` | `kitchen:read` | Lines with `why`, one block per supplier, simulated totals (`expected_total`, `mov_gap`, `delivery_fee`), mandate reasons, warnings. |
 | GET | `/proposals/{id}/addable` | `kitchen:read` | What the buyer can add to this proposal, most probable first, and the lines that reach free delivery. Shape under "Addable products". |
-| POST | `/proposals/{id}/approve` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN` (one exception: the kitchen setting `approve_unconfirmed_manual`, see "Kitchen settings"); a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
+| POST | `/proposals/{id}/approve` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed does not block a person's approval (2026-11-14, any supplier, Valio too): the order is placed, its lines keep `unknown_stock: true` and its `supplier_must_confirm` names each supplier that must still confirm (earned auto-approve never places such a proposal); a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". |
 | POST | `/proposals/{id}/change` | `kitchen:propose` (a person or an agent) | Set a line's quantity (0 removes it) or add a product from the addable list. Re-quotes live; approves and sends nothing. Returns the proposal in the `GET /proposals/{id}` shape with a new `offer_id` and `expected_total`. Body and errors under "Changing a proposal". MCP tool `change_proposal`. |
@@ -1183,6 +1243,9 @@ person approves it. Over MCP the tool `change_proposal` calls the same code
 
 The web's `ProposalChange` maps onto this body: `SET_QUANTITY` is one `lines` entry,
 `REMOVE_LINE` is one `lines` entry with `quantity: 0`, `ADD_LINE` is one `add` entry.
+The web client (`changeProposal` in `web/src/api/http.ts`) sends one change per call, with
+quantities as decimal strings and one `web-change:<uuid>` key per change (kept for a retry
+until it is answered). The approval card then reloads and approves the new `expected_total`.
 
 | Status | Code | When |
 |---|---|---|
@@ -1272,7 +1335,7 @@ cutoff. Supplier-linked alternatives are considered before catalog fallback.
 | `lines` | offer-line array | Engine-owned `product_id`, decimal-string `quantity`, `unit`, `why`, `unknown_stock`. |
 | `why` | string | Short deterministic explanation, including unknown stock/allergen data. |
 | `requires_chef_approval` | `true` | Choices never select, approve or place themselves. |
-| `stock_confirmed` | boolean | False if any line has unconfirmed stock. Approval cannot override it. |
+| `stock_confirmed` | boolean | False if any line has unconfirmed stock. A person may still approve; the order then waits for the supplier (`supplier_must_confirm`). Auto-approve never places it. |
 | `allergen_data_known` | boolean | False if any retained original line has unknown allergen data; never label it safe. |
 | `recommended` | boolean, optional | `true` on at most one option: the one the engine would take. Absent or `false` means not marked; the UI never infers it. |
 | `held` | object, optional | Only on a `confirmed` option: `{quantity, unit}` of the need that this option does not order. It waits until the supplier confirms stock. Absent when confirmed stock covers the whole need. |
@@ -1319,7 +1382,7 @@ the confirmed one first, then the Buyer's, with tiers `good`, `better`, `best` i
 | 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
 | 404 | `OPTION_NOT_FOUND` | `offer_id` is not one of this proposal's options. |
 | 409 | `NOT_PENDING` | The proposal is no longer `READY` (approved, rejected, expired). |
-| 409 | `STOCK_UNKNOWN` | The fresh simulation cannot confirm the stock of a line. |
+| 409 | `STOCK_UNKNOWN` | The fresh simulation cannot confirm the stock of a line (choosing an option, or an auto-approval; a person's approve does not return it since 2026-11-14). |
 | 409 | `CLOSING_PASSED` | The cut-off of a line has passed. |
 | 409 | `OPTION_UNAVAILABLE` | A product of the option cannot be ordered now for another reason (a recall hold, an allergen rule, no price). |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. |
@@ -1396,7 +1459,7 @@ A part:
 | `why` | string | One deterministic sentence with the part's numbers. |
 | `lines` | array | `product_id`, `quantity`, `unit`, `unit_price`, `total`, `why`, `unknown_stock` (always `false`), `reason_codes`. Empty for `HOLD`. |
 
-- Unknown stock (a sentinel, missing or null) is never counted, in `now` or in `LATER`.
+- Unknown stock (a filler, 999999 or more) is never counted, in `now` or in `LATER`.
 - `partial_fill` is information: it has no `offer_id`, and it does not change the
   proposal's `lines` or `expected_total`. It cannot be approved or placed as it is.
   Its totals are ex VAT; a figure a person approves still comes from a simulation.
@@ -1485,7 +1548,8 @@ it records the order a person approved, with the same key as the offers.
   `iss` (`trusted-kitchen-buyer`), `type` (`order_receipt`), `sub` (the `order_id`),
   `kitchen_id`, `offer_id`, `offer_hash` (the signed offer the person approved),
   `currency` (`EUR`), `expected_total` (decimal string), `lines` (`product_id`,
-  `quantity`, `unit`), `approved_by` (the person, or
+  `quantity`, `unit`, `stock`: `"confirmed"` or `"unknown"`; an `"unknown"` line is one
+  its supplier in `supplier_must_confirm` must still confirm), `approved_by` (the person, or
   `"auto-approve (rule set by <person>)"`), `iat` (when the gateway recorded the order),
   `supplier_outcome`, `supplier_note` and `supplier_must_confirm`.
 - `supplier_outcome` is what the gateway knows about the supplier when it signs. Today
@@ -2441,9 +2505,24 @@ webhooks per kitchen. Create and delete are audit entries (`webhook_created`,
 (the events one can subscribe to). These routes take no `idempotency_key`.
 
 Events: `proposal.ready`, `proposal.approved`, `proposal.rejected`, `order.placed`,
-`total_mismatch`, `recall.alert`. They come from the audit trail, so a webhook says what
-the audit log says. `ping` is sent only by `POST .../webhooks/{id}/test`; it is not a
-subscription.
+`total_mismatch`, `recall.alert`, and (planned, #1188) `supplier.offer`, `agent.refused`,
+`delivery.checked`. They come from the audit trail, so a webhook says what the audit log
+says. `ping` is sent only by `POST .../webhooks/{id}/test`; it is not a subscription. A
+webhook gets only the events it names; the web form ticks `proposal.ready` and
+`recall.alert` for a new webhook and offers the others unticked.
+
+Bodies (`data`) of the planned events and of the second `recall.alert` case. Each holds
+only fields of its audit entry:
+
+| Event | From the audit kind | `data` | Sent |
+|---|---|---|---|
+| `supplier.offer` | `supplier_offer_received`, `supplier_offer_accepted`, `supplier_offer_declined` (#374) | `step` (`RECEIVED`, `ACCEPTED`, `DECLINED`), `offer_id`, `supplier_id`, `product_id`, `replaces_product_id`, `requested_date`, `quantity`, `unit`; `proposal_id` when accepted. Never the supplier's reason text. | Once per offer and step, also when the offer is written by the selling agent's one-off command (`python -m agent.seller --apply`): that command waits for its deliveries before it exits. |
+| `agent.refused` | `refused` (#548) | `actor`, `code` (for example `HUMAN_SESSION_REQUIRED`), `method`, `route`: the route **pattern**, such as `/v1/kitchens/{kitchen_id}/approvals/{approval_id}/approve`, never the path with ids. | At most one delivery per webhook, actor and code a minute; more refusals in that minute stay in the audit log only. |
+| `delivery.checked` | `delivery_note_read` (#362) | `order_id`, `statuses` (count per line status), `complete`, `needs_approval` (substitute lines waiting for a person), `duration_ms`. Never the photo or the note's text. | Once per read. |
+| `recall.alert`, case `FOUND` (#1187) | the recall alert of a check (`POST /recalls/check`) | `case: "FOUND"`, `recall_event_id`, `product_id`, `product_name`, `match` (`exact`, `possible`, `review`), `found`: `{stock: true/false, recipes: <count>, open_proposal: true/false}`, `notice_url`, `next_step`. | When a check finds a recalled product in this kitchen's stock or recipes, also when no open proposal holds it. **Once per webhook and recall alert**: an alert stored before the webhook existed is sent at the next check; every later check sends nothing for it. A check inside the 60 s cooldown sends nothing. |
+
+The existing `recall.alert` for a blocked proposal (`recall_proposal_blocked`) keeps its
+body and gains `case: "PROPOSAL_BLOCKED"`.
 
 A delivery is one JSON POST:
 
@@ -2537,7 +2616,8 @@ strings in the stated unit.
 
 - `price_source` is `entered` (typed in by a person, the default) or `price_list_photo`
   (read from a photo of the supplier's price list and checked by a person, #1174). It
-  says where `unit_price_eur` came from; it never changes how the price is used.
+  says where `unit_price_eur` came from; it never changes how the price is used. A
+  change of `unit_price_eur` without `price_source` sets it back to `entered`.
 - `allergen_data` is `ENTERED` or `UNKNOWN`. An empty `allergens` list with `UNKNOWN`
   means unknown, never "free from".
 - Codes are the GS1 allergen codes the Valio catalog uses; `level` is `CONTAINS` or
@@ -2637,7 +2717,7 @@ engine's default, except `excluded_allergens`, which is `null` until a person se
 | `certainty_premium_max` | decimal string or null | How much more the kitchen pays for stock the supplier confirms: the main plan uses a confirmed-stock offer only when its price per litre or kilo is at most this many times the cheapest orderable price. At least `1`; default `3`; `null` means no limit. A dearer confirmed offer is left out of the plan and listed in `excluded` with the two prices. When leaving it out would make the order short, it stays and the plan carries `CERTAINTY_PREMIUM_HIGH`. Engine default until `store/` saves it and the settings page shows it. |
 | `excluded_allergens` | string[] or null | GS1 codes or the allergen names of `search_products`. A product that lists one as CONTAINS, MAY_CONTAIN or UNDECLARED is refused. `[]` means the kitchen has explicitly no exclusions. `null` means nobody has set the policy yet: unknown, not "none". |
 | `standing_orders` | object of decimal strings | Per `product_id`: the kitchen's standing order per delivery, in that product's sales unit. `{}` means none. The engine only flags a standing order more than 10 % off the need (`STANDING_ORDER_DRIFT`, S08); a person changes it. |
-| `approve_unconfirmed_manual` | boolean | Off by default (#631). Absent from `GET` until a person sets it; absent means off. Another type is a 422. When `true`, an approver may approve a proposal whose unknown-stock lines all belong to a manual or csv supplier's block. The order then carries that block's `supplier_id` in `supplier_must_confirm` and waits for the supplier's confirmation; the block's mandate reason says so. A Valio line with unknown stock is still 409 `STOCK_UNKNOWN`. Earned auto-approve never applies to these blocks: it refuses every unknown-stock line. When `false` or absent, every unknown-stock line is 409 `STOCK_UNKNOWN`. |
+| `approve_unconfirmed_manual` | boolean | Redundant since 2026-11-14 (Aron): still stored and returned, and another type is still a 422, but approval no longer reads it. A person may approve any proposal with unknown-stock lines, from any supplier, Valio too; the order then names those suppliers in `supplier_must_confirm` and waits for their confirmation. Earned auto-approve never applies to these lines: it refuses every unknown-stock line. Off by default (#631); absent from `GET` until a person sets it. |
 
 `PUT /settings` takes any subset of these fields plus `idempotency_key`. A field that is
 left out keeps its value, so a partial save can never drop the allergen policy.
@@ -3097,7 +3177,7 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | Code | Kind | Meaning |
 |---|---|---|
 | `CLOSING_PASSED` | reason | `closingTime` is at or before now for this delivery. The product is left out; the code is on the mandate. |
-| `STOCK_UNKNOWN` | reason | availability is a sentinel (999999 or 9999999999), missing or null. Also a 409 error on approve. |
+| `STOCK_UNKNOWN` | reason | Valio's availability is a filler (999999 or more), or the supplier is a manual or csv price list. A missing, null or zero amount is not available, not unknown. A warning on approve: a person may still approve, the order then waits for the supplier (`supplier_must_confirm`). For each supplier with such lines the mandate reasons say "<supplier> must confirm stock for: <product names>." (`Valio` for Valio's lines). |
 | `PARTIAL_STOCK` | reason | less is available than needed |
 | `SUBSTITUTE_NEEDS_OK` | reason | a substitute changes the product; a human agrees |
 | `SUBSTITUTE_FAT_LEVEL` | reason | two lines of one plan have known fat levels more than 0.5 g per 100 g apart (fat-free and 3 % milk, S01). From the supplier record's `FAT` nutrient; unknown fat is never compared. On the mandate. |
@@ -3127,8 +3207,8 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | `SENT_READ_FAILED` | It landed; only reading the answer failed | Re-read the order status. Never resend |
 
 Refusals before any send are errors, not outcomes: `TOTAL_MISMATCH` (409: re-simulate
-and ask the human again), `STOCK_UNKNOWN` (409: the supplier has not confirmed the stock
-of a line; nothing is recorded and the proposal stays `READY`), `BLOCKED_BY_RECALL`
+and ask the human again), `STOCK_UNKNOWN` (409 only for an auto-approval or a chosen option: a person's
+approval of an unconfirmed line places the order with `supplier_must_confirm`), `BLOCKED_BY_RECALL`
 (409: a recall holds the proposal; look at its replacement proposal), `NOT_PENDING`
 (409: the proposal is not `READY`), `APPROVAL_MISMATCH` (409: `place_order` names an
 offer other than the one the person approved), `HUMAN_SESSION_REQUIRED` (403),
@@ -3137,3 +3217,71 @@ offer other than the one the person approved), `HUMAN_SESSION_REQUIRED` (403),
 The way out of `UNCONFIRMED` and `SENT_READ_FAILED` is "Resolving an unknown send": a
 person records `placed` or `not_sent`. Its refusals are `ORDER_NOT_RESOLVABLE` (409) and
 `ALREADY_RESOLVED` (409).
+
+
+## Kitchen morning/evening brief (#1332)
+
+`GET /v1/kitchens/{kitchen_id}/brief?when=morning|evening&lang=en|fi`
+requires `kitchen:read` scoped to that kitchen. Both parameters are required;
+missing, repeated, unknown parameters or unsupported values return 422
+`INVALID_REQUEST`. Calendar dates and cut-offs use `Europe/Helsinki`.
+This read creates no proposal, approval, order or delivery decision.
+
+Plain code gathers current kitchen-scoped facts and ranks at most six rows:
+1. READY waiting proposals with the earliest known offer closing time today
+   (morning), or from now until tomorrow noon (evening).
+2. Active recall alerts matching stock, recipes or waiting proposals.
+3. OPEN supplier suggestions waiting for an answer.
+4. Non-cancelled orders arriving today (morning); today's latest delivery-note
+   check per order with SHORT, MISSING or SUBSTITUTE counts (evening).
+5. Remaining READY drafts, grouped by supplier with count and known EUR total.
+6. Non-cancelled orders with `supplier_must_confirm`.
+
+Ties use time, then stable reference ID. A cut-off already represented is not
+repeated in the draft summary. Missing stock, quantity or price stays unknown,
+never zero; incomplete totals are not shown as complete totals. Existing delivery
+checks expose audit counts, not product quantities: the brief reports only those
+counts until a separate delivery-result contract provides more. No upstream
+supplier call, photo, document text or other kitchen's data is used.
+
+Each internal row has `kind` (`CUTOFF`, `RECALL`, `SUPPLIER_OFFER`, `DELIVERY`,
+`DELIVERY_CHECK`, `WAITING_DRAFTS`, `UNCONFIRMED`), `ref_id`, code-set `urgent`, and
+only its known product/supplier names, quantities with units, amounts and times.
+The worker receives these compact rows with closed English/Finnish sentence
+variants generated from their facts. It selects wording in strict JSON:
+`{lines: [{text, kind, ref_id, numbers: ["..."]}]}`. Exactly one line per row,
+in source order. The gateway accepts only that row's complete allowed sentence,
+and additionally checks its declared/written numbers against the same row using
+`claim_check` with Finnish formatting normalized. Numeric inclusion alone cannot
+prove a product/date/advice claim. A bad or missing line is replaced individually
+by its deterministic localized sentence. Extra rows never appear.
+
+Response (no wrapper):
+```json
+{"when":"morning","lang":"en","made_by":"model",
+ "lines":[{"text":"...","kind":"CUTOFF","ref_id":"...","urgent":true}],
+ "nothing_urgent":false,"model":"nemotron-3.5-super-vl","duration_ms":123}
+```
+`made_by` is `model` when all returned lines passed, `mixed` when some passed,
+or `rule` when none passed. `nothing_urgent` means no reportable rows: empty
+`lines` and `true`; a nonempty brief has `false`, even with no urgent row.
+Only cut-offs today and active recalls have `urgent:true`. Tomorrow-morning
+cut-offs included in an evening brief have `urgent:false` until their local date.
+An empty brief or missing worker configuration has `made_by:"rule"` and
+`model:null`. `model` names Nemotron only when a model was attempted; rejected
+model output can therefore have `made_by:"rule"` with a non-null model.
+`duration_ms` is measured handler elapsed time (including fact reads, cache lookup
+and any worker wait), even when no model call is made or a cache entry is used.
+
+One model call, no retry, with a 30-second model deadline and a 35-second worker
+request deadline. Missing configuration, timeout, invalid reply or a busy writer
+returns the same facts in rule-based lines, never a model error in place of the
+brief. Empty briefs make no model call. No model key reaches the gateway.
+Cache per kitchen, period, language and current fact fingerprint: valid results
+300 seconds, partial/rule fallback 30 seconds, bounded entries. Facts are rebuilt
+before cache lookup so a changed approval/recall/offer does not reuse old text.
+Simultaneous readers do not start duplicate model calls for the same key.
+The usage meter records role `kitchen_brief`. Audit kind `kitchen_brief_read`
+records only row/model-line/rule-line counts, duration, cache use and period/language;
+no line text or model reply. Authentication/scope/storage failures are ordinary
+route errors, never an invented empty brief.

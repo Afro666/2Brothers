@@ -5,6 +5,7 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { RiskBadge } from "@/components/purchasing/risk-badge";
 import { useApi } from "@/api";
 import type { Api } from "@/api/types";
@@ -12,10 +13,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, formatNumber } from "@/lib/format";
-import { translate, useT } from "@/lib/i18n";
+import { translate, useLanguage, useT } from "@/lib/i18n";
+import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
 import { isValidWeek, isoWeekOf, shiftWeek, weekDates, weekRangeLabel } from "@/lib/week";
-import type { ShortageRisk, SupplierDemandRow } from "@/types";
+import type { BuyingNote, ShortageRisk, SupplierDemandRow } from "@/types";
 
 /** Worst first: a short week matters more than an unmeasured one. */
 const RISK_ORDER: Record<ShortageRisk, number> = { SHORT: 0, UNKNOWN: 1, AT_RISK: 2, COVERED: 3 };
@@ -88,6 +90,55 @@ interface WeekSection {
   groups: ProductGroup[];
 }
 
+/** The buying note for one window and language; a stale answer is ignored by `useAsync`. */
+function loadNote(api: Api, from: string, to: string, language: "en" | "fi"): Promise<BuyingNote | null> {
+  return api.getBuyingNote(from, to, language).catch(() => null);
+}
+
+const noteTone: Record<string, string> = {
+  UNKNOWN: TONE_CLASSES.warning,
+  SHORT: TONE_CLASSES.danger,
+};
+
+function BuyingNoteBox({ note }: { note: BuyingNote }) {
+  const t = useT();
+  const model = note.model || "Nemotron 3.5 Super VL";
+  // The note often has one line per day for the same product: name it once.
+  const byProduct = new Map<string, BuyingNote["lines"]>();
+  for (const line of note.lines) byProduct.set(line.productId, [...(byProduct.get(line.productId) ?? []), line]);
+  const products = [...byProduct.values()];
+  return (
+    <section aria-labelledby="buying-note-title" className="space-y-3 rounded-lg border bg-card p-4 text-sm">
+      <h2 id="buying-note-title" className="font-medium">
+        {t("Buying note")}
+      </h2>
+      <ul className="space-y-2">
+        {products.map((product) => (
+          <li key={product[0].productId} className="space-y-1 rounded-md border px-3 py-2 text-sm">
+            <p className="font-medium">{product[0].productName}</p>
+            <ul className="space-y-1">
+              {product.map((line) => (
+                <li
+                  key={line.date}
+                  data-note-risk={line.risk}
+                  className={`flex flex-col gap-x-2 rounded px-2 py-1 sm:flex-row sm:items-baseline ${noteTone[line.risk] ?? ""}`}
+                >
+                  <span className="shrink-0 font-mono text-xs">{formatDate(line.date)}</span>
+                  <RiskBadge risk={line.risk} />
+                  <span>{line.text}</span>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted-foreground">
+        {t("Written by {model}. Every number is checked against its row in the table.", { model })}
+      </p>
+    </section>
+  );
+}
+
 /** Never settles, so an invalid week makes no API call and shows the error instead. */
 function noWeek(): Promise<WeekSection> {
   return new Promise<WeekSection>(() => undefined);
@@ -112,13 +163,18 @@ function ProductSection({ group }: { group: ProductGroup }) {
     <TableBody data-product-section={group.productId}>
       <TableRow className="border-b-0 bg-muted/40 hover:bg-muted/40">
         <TableHead scope="rowgroup" colSpan={6} className="py-2 align-top font-normal whitespace-normal">
-          <div className="font-medium">{group.productName}</div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{group.productId}</span>
-            <span aria-hidden>·</span>
-            <span>{t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })}</span>
-            <span aria-hidden>·</span>
-            <span>{t("{count} days", { count: group.rows.length })}</span>
+          <div className="flex items-start gap-2">
+            <ProductThumb en={group.productName} size="sm" />
+            <div className="min-w-0">
+              <div className="font-medium break-words">{group.productName}</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>{group.productId}</span>
+                <span aria-hidden>·</span>
+                <span>{t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })}</span>
+                <span aria-hidden>·</span>
+                <span>{t("{count} days", { count: group.rows.length })}</span>
+              </div>
+            </div>
           </div>
         </TableHead>
       </TableRow>
@@ -215,11 +271,14 @@ function MobileGroup({ group }: { group: ProductGroup }) {
   const t = useT();
   return (
     <li className="space-y-3 py-4">
-      <div>
-        <div className="font-medium">{group.productName}</div>
-        <div className="text-xs text-muted-foreground">
-          {group.productId} · {t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })} ·{" "}
-          {t("{count} days", { count: group.rows.length })}
+      <div className="flex items-start gap-2">
+        <ProductThumb en={group.productName} size="sm" />
+        <div className="min-w-0">
+          <div className="font-medium break-words">{group.productName}</div>
+          <div className="text-xs text-muted-foreground">
+            {group.productId} · {t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })} ·{" "}
+            {t("{count} days", { count: group.rows.length })}
+          </div>
         </div>
       </div>
       <ul className="space-y-3">
@@ -284,7 +343,13 @@ export function DemandPage() {
   const defaultWeek = shiftWeek(isoWeekOf(new Date().toISOString().slice(0, 10)), 1);
   const week = requestedWeek ?? defaultWeek;
   const weekIsValid = isValidWeek(week);
+  const { language } = useLanguage();
   const state = useAsync(() => (weekIsValid ? loadWeek(api, week, t) : noWeek()), [api, week, weekIsValid, t]);
+  const noteWindow = weekIsValid ? [weekDates(week)[0], weekDates(week)[6]] : null;
+  const note = useAsync(
+    () => (noteWindow ? loadNote(api, noteWindow[0], noteWindow[1], language) : Promise.resolve(null)),
+    [api, noteWindow?.[0], noteWindow?.[1], language],
+  );
 
   function showWeek(target: string) {
     void navigate({ to: "/demand", search: { week: target } });
@@ -344,8 +409,10 @@ export function DemandPage() {
                 })}
               </EmptyState>
             ) : (
-              <Card>
-                <CardContent>
+              <div className="space-y-4">
+                {note.status === "ready" && note.data ? <BuyingNoteBox note={note.data} /> : null}
+                <Card>
+                  <CardContent>
                   <div className="hidden md:block">
                     <Table>
                       <TableHeader>
@@ -368,8 +435,9 @@ export function DemandPage() {
                       <MobileGroup key={group.productId} group={group} />
                     ))}
                   </ul>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             )}
             <p className="text-sm text-muted-foreground">
               {t("Forecasts come only from kitchens that agreed to share them.")}

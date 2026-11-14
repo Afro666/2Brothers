@@ -21,7 +21,8 @@ person's session on it, so your own token is ignored there.
 ## 1. Get a token
 
 A token belongs to one kitchen and has scopes. `kitchen:read` reads; `kitchen:propose`
-asks for orders. There is no approve scope: a token can never approve.
+asks for orders. There is no approve scope: a kitchen token can never approve. (A person can
+approve from their own chat with a separate personal approval token: see "A person approves".)
 
 A signed-in person creates the token (`POST /v1/kitchens/{kitchen_id}/tokens`). On the
 demo site everybody is the demo person, so this one call works without a password:
@@ -169,13 +170,22 @@ and approves or rejects. A token that calls `.../approve` gets
 `403 HUMAN_SESSION_REQUIRED` (test: `gateway/tests/test_discovery.py`,
 `test_approval_is_human_only_and_not_a_skill`).
 
+A person may also approve from their own chat (decision 2026-11-14), with a **personal
+approval token** (`tka_...`). It is not your agent's token: only a signed-in approver
+creates it (`POST /v1/kitchens/{kitchen_id}/approval-tokens`; the open demo cannot), it
+stands for that one person, it ends after 8 hours, it approves and rejects only and never
+proposes, and every use is audited with `via: personal_token`. With it, `/mcp` also lists
+`list_proposals`, `get_proposal`, `list_orders`, `approve_proposal` and `reject_proposal`.
+The chat shows the person the total and gets an explicit yes first. Your agent's token
+never sees these tools; called by name, they return the same 403.
+
 ## 3. An MCP client
 
 The gateway serves MCP over streamable HTTP at `/gateway/mcp` (#280): this is the remote
 endpoint, not the stdio server. The same kitchen token works when it has
 `kitchen:propose`. The tools are `search_products`, `get_offer`, `simulate_order`,
-`request_approval`, `place_order`, `get_order_status` and `get_audit_log`. There is no
-approve tool.
+`request_approval`, `change_proposal`, `place_order`, `get_order_status` and `get_audit_log`. There is no
+approve tool for this token (only a person's own approval token lists one).
 
 Checked on the deployed site with the token from step 1 (2026-11-14):
 
@@ -185,7 +195,7 @@ curl -s -X POST $BASE/mcp -H "Authorization: Bearer $TOKEN" \
   -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}'
 ```
 
-It answers 200 with the seven tools above. Without a token it answers 401.
+It answered 200 with seven tools when checked; `change_proposal` came later the same day. Without a token it answers 401.
 
 ### Claude Code
 
@@ -246,6 +256,9 @@ proposal. Output on the live site, 2026-11-14 05:30 UTC:
 RESULT: an outside agent reached a waiting proposal over MCP, and could not approve it
 11. token revoked        HTTP 200
 ```
+
+Later the same day `change_proposal` was added (#303), so `tools/list` now shows 8 tools for
+this token. Still no approve tool.
 
 The agent picked three products; the engine sized one line from the stored need (40 L) and
 left the other two out. With login switched on, make the token as a signed-in person and

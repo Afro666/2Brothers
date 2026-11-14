@@ -28,6 +28,7 @@ import type {
   ForecastAccuracy,
   DriftReport,
   BuyerPermissions,
+  BuyingNote,
   AutoApproveLearning,
   RecallList,
   KitchenBrandLookup,
@@ -138,6 +139,25 @@ export interface CreatedApiToken extends ApiToken {
   token: string;
 }
 
+/** A personal approval token row (`tka_...`): one person, one kitchen, approve and reject only. Never the secret. */
+export interface ApprovalToken {
+  id: string;
+  name: string;
+  /** The person's email. */
+  person: string;
+  prefix: string;
+  createdAt: string;
+  createdBy: string;
+  expiresAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+/** Only the create answer carries the secret. */
+export interface CreatedApprovalToken extends ApprovalToken {
+  token: string;
+}
+
 export interface StockCount {
   productId: string;
   onHand: number | null;
@@ -209,6 +229,27 @@ export interface DeliveryNoteLine {
   missing: number | null;
   baseUnit: string;
   lots: DeliveryLot[];
+  /** As stored on the order (#1198); null when the gateway does not say. */
+  orderQuantity: number | null;
+  orderUnit: string | null;
+  /** `missing` in the order unit. */
+  missingOrderQty: number | null;
+  /** EUR ex VAT per order unit, the order's own price. */
+  unitPrice: number | null;
+  /** The value of what did not come, computed by the gateway; null = unknown, never zero. */
+  claimEur: number | null;
+}
+
+/** One total to claim for the short and missing lines, computed by the gateway (#1198). */
+export interface DeliveryClaim {
+  totalEur: number;
+  lines: number;
+  /** Set only when every short line has the same order unit. */
+  quantity: number | null;
+  unit: string | null;
+  /** Lines that may be short but have no value; not in `totalEur`. */
+  notValued: number;
+  supplierName: string | null;
 }
 
 export interface DeliveryNoteOther extends DeliveryLot {
@@ -229,6 +270,8 @@ export interface DeliveryNoteRead {
   complete: boolean;
   lines: DeliveryNoteLine[];
   notOrdered: DeliveryNoteOther[];
+  /** null when the gateway sent no claim (an older gateway). */
+  claim: DeliveryClaim | null;
 }
 
 export type ProductTemperature = "ambient" | "chilled" | "frozen";
@@ -387,6 +430,9 @@ export interface Api {
   listApiTokens(): Promise<ApiToken[]>;
   createApiToken(input: { name: string; scopes: ApiTokenScope[] }): Promise<CreatedApiToken>;
   revokeApiToken(id: string): Promise<ApiToken>;
+  listApprovalTokens(): Promise<ApprovalToken[]>;
+  createApprovalToken(input: { hours: number; name?: string }): Promise<CreatedApprovalToken>;
+  revokeApprovalToken(id: string): Promise<ApprovalToken>;
   getSession(): Promise<Session | null>;
   signIn(email: string, password: string): Promise<Session>;
   signOut(): Promise<void>;
@@ -499,6 +545,11 @@ export interface Api {
   getSharing(): Promise<SharingConsent[]>;
   setSharing(supplierId: string, shared: boolean, actor: AuditActor): Promise<SharingConsent[]>;
   getSupplierDemand(from: string, to: string): Promise<SupplierDemandRow[]>;
+  /**
+   * Nemotron 3.5 Super VL's short buying note over the same window as the demand table.
+   * Null when there is nothing to say, the note was dropped, or the gateway failed.
+   */
+  getBuyingNote(from: string, to: string, language: "en" | "fi"): Promise<BuyingNote | null>;
   getKitchenSettings(): Promise<KitchenSettings>;
   saveKitchenSettings(settings: KitchenSettings, actor: AuditActor): Promise<KitchenSettings>;
   /** Predicted against actual for the last 12 full weeks, and the forecast for this week and the 3 after. */
