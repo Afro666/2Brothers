@@ -446,3 +446,175 @@ describe("DemandPage", () => {
     expect(await screen.findByRole("heading", { name: "Buying note" })).toBeInTheDocument();
   });
 });
+
+describe("DemandPage on a phone (#1142)", () => {
+  beforeEach(() => localStorage.clear());
+
+  function phoneList(): HTMLElement {
+    const list = document.querySelector<HTMLElement>("ul[data-phone-list]");
+    if (!list) throw new Error("No phone list");
+    return list;
+  }
+
+  function phoneRows(): HTMLElement[] {
+    return [...phoneList().querySelectorAll<HTMLElement>("li[data-phone-product]")];
+  }
+
+  /** Twelve short products; the largest buy is "Product 12". */
+  function twelveShort(): SupplierDemandRow[] {
+    return Array.from({ length: 12 }, (_, index) =>
+      demandRow({
+        productId: `p${index + 1}`,
+        productName: `Product ${index + 1}`,
+        suggestedBuy: (index + 1) * 10,
+      }),
+    );
+  }
+
+  async function phoneReady() {
+    await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" });
+    await waitFor(() => expect(phoneRows().length).toBeGreaterThan(0));
+  }
+
+  it("shows the ten largest shortages first and the rest behind Show more", async () => {
+    const user = userEvent.setup();
+    renderApp("/demand?week=2026-W47", demandApi(twelveShort()));
+    await phoneReady();
+
+    expect(phoneRows().map((row) => row.getAttribute("data-phone-product"))).toEqual([
+      "p12", "p11", "p10", "p9", "p8", "p7", "p6", "p5", "p4", "p3",
+    ]);
+    // The desktop table keeps every product.
+    expect(productSections()).toHaveLength(12);
+
+    const more = within(phoneList()).getByRole("button", { name: "Show 2 more" });
+    await user.click(more);
+
+    expect(phoneRows()).toHaveLength(12);
+    expect(within(phoneList()).queryByRole("button", { name: /^Show \d+ more$/ })).not.toBeInTheDocument();
+    // Focus goes to the first product that was hidden, so a keyboard carries on from there.
+    expect(within(phoneRows()[10]).getByRole("button", { name: /Product 2/ })).toHaveFocus();
+  });
+
+  it("shows ten more per tap and starts again at ten when the filter changes", async () => {
+    const user = userEvent.setup();
+    const rows = Array.from({ length: 25 }, (_, index) =>
+      demandRow({ productId: `p${index + 1}`, productName: `Product ${index + 1}`, suggestedBuy: index + 1 }),
+    );
+    renderApp("/demand?week=2026-W47", demandApi(rows));
+    await phoneReady();
+
+    await user.click(within(phoneList()).getByRole("button", { name: "Show 10 more" }));
+    expect(phoneRows()).toHaveLength(20);
+    expect(within(phoneList()).getByRole("button", { name: "Show 5 more" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Short (25)" }));
+    expect(phoneRows()).toHaveLength(10);
+  });
+
+  it("has no Show more button for ten products or fewer", async () => {
+    renderApp("/demand?week=2026-W47", demandApi(twelveShort().slice(0, 10)));
+    await phoneReady();
+
+    expect(phoneRows()).toHaveLength(10);
+    expect(within(phoneList()).queryByRole("button", { name: /^Show \d+ more$/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps a product row to its name, its risk and what to buy; the days open on a tap", async () => {
+    const user = userEvent.setup();
+    renderApp(
+      "/demand?week=2026-W47",
+      demandApi([
+        demandRow({
+          date: "2026-11-16",
+          forecastDemand: 100,
+          available: 50,
+          suggestedBuy: 50,
+          kitchens: 2,
+          byKitchen: [
+            { kitchenId: "K01", kitchenName: "K01 School", demand: 60 },
+            { kitchenId: "K02", kitchenName: "K02 Hotel", demand: 40 },
+          ],
+        }),
+        demandRow({ date: "2026-11-17", forecastDemand: 80, available: null, risk: "UNKNOWN", suggestedBuy: null }),
+      ]),
+    );
+    await phoneReady();
+
+    const [row] = phoneRows();
+    const toggle = within(row).getByRole("button", { name: /Milk/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveTextContent("Buy 50 L");
+    expect(toggle).toHaveTextContent("+ days with an unknown amount: 1");
+    expect(within(toggle).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
+    // The product code, the short days and the kitchen count wait in the details.
+    expect(toggle).not.toHaveTextContent("Short on 1 of 2 days");
+    expect(toggle).not.toHaveTextContent("kitchens: up to 2");
+    const details = row.querySelector<HTMLElement>("[data-phone-details]")!;
+    expect(details).not.toBeVisible();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(details).toBeVisible();
+    expect(details).toHaveTextContent("milk");
+    expect(details).toHaveTextContent("Short on 1 of 2 days");
+    expect(details).toHaveTextContent("+ days with an unknown amount: 1");
+    expect(details).toHaveTextContent("kitchens: up to 2");
+    const [monday, tuesday] = [...details.querySelectorAll<HTMLElement>("li[data-phone-day]")];
+    expect(monday).toHaveTextContent("Mon 16 Nov");
+    expect(monday).toHaveTextContent("Forecast demand100 L");
+    expect(monday).toHaveTextContent("Available50 L");
+    expect(monday).toHaveTextContent("Buy50 L");
+    expect(within(monday).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
+    expect(tuesday).toHaveTextContent("Forecast demand80 L");
+    expect(tuesday).toHaveTextContent("Availableunknown");
+    expect(tuesday).toHaveTextContent("Buyunknown");
+
+    await user.click(within(monday).getByRole("button", { name: /^2 kitchens for Milk, / }));
+    expect(within(monday).getByText("K01 School")).toBeVisible();
+    expect(within(monday).getByText("60 L")).toBeVisible();
+  });
+
+  it("keeps the unknown days of a product with no known buy in its details", async () => {
+    renderApp(
+      "/demand?week=2026-W47",
+      demandApi([demandRow({ risk: "UNKNOWN", available: null, suggestedBuy: null })]),
+    );
+    await phoneReady();
+
+    const [row] = phoneRows();
+    const toggle = within(row).getByRole("button", { name: /Milk/ });
+    expect(within(toggle).getByText("Unknown: check stock")).toHaveAttribute("data-risk", "UNKNOWN");
+    expect(toggle).not.toHaveTextContent("Buy");
+    expect(toggle).not.toHaveTextContent("+ days with an unknown amount");
+    expect(row.querySelector("[data-phone-details]")).toHaveTextContent("+ days with an unknown amount: 1");
+  });
+
+  it("limits the covered products behind their own fold the same way", async () => {
+    const user = userEvent.setup();
+    const rows = Array.from({ length: 11 }, (_, index) =>
+      demandRow({
+        productId: `c${index + 1}`,
+        productName: `Covered ${String(index + 1).padStart(2, "0")}`,
+        risk: "COVERED",
+        available: 500,
+        suggestedBuy: 0,
+      }),
+    );
+    renderApp("/demand?week=2026-W47", demandApi(rows));
+    await phoneReady();
+
+    await user.click(within(phoneList()).getByRole("button", { name: "Covered products: 11" }));
+    expect(phoneRows()).toHaveLength(10);
+    await user.click(within(phoneList()).getByRole("button", { name: "Show 1 more" }));
+    expect(phoneRows()).toHaveLength(11);
+  });
+
+  it("says Show more in Finnish", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    renderApp("/demand?week=2026-W47", demandApi(twelveShort()));
+    await waitFor(() => expect(phoneRows().length).toBeGreaterThan(0));
+    expect(within(phoneList()).getByRole("button", { name: "Näytä 2 lisää" })).toBeInTheDocument();
+  });
+});
