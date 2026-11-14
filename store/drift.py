@@ -81,6 +81,13 @@ def _change(now, before) -> float | None:
     return float((Decimal(str(now)) - Decimal(str(before))) / Decimal(str(before)))
 
 
+def _rate(value) -> str:
+    """One decimal for a rate of 1 or more, two below it: 0.15 and 0.09 must not both
+    read "0.1" next to "+63%"."""
+    number = float(value)
+    return f"{number:.1f}" if abs(number) >= 1 else f"{number:.2f}"
+
+
 def flag(row: dict, threshold: float = THRESHOLD) -> dict | None:
     """A warning for one product's week, or None when it is within the threshold.
 
@@ -101,8 +108,8 @@ def flag(row: dict, threshold: float = THRESHOLD) -> dict | None:
         return None
     unit = row.get("unit") or "units"
     if kind == "portion_creep":
-        why = (f"{float(row['qty_per_100']):.1f} {unit} per 100 guests last week, "
-               f"{float(row['baseline_qty']):.1f} on average over the "
+        why = (f"{_rate(row['qty_per_100'])} {unit} per 100 guests last week, "
+               f"{_rate(row['baseline_qty'])} on average over the "
                f"{row['baseline_weeks']} weeks before (+{change:.0%}). "
                "Check portions before this order renews.")
     else:
