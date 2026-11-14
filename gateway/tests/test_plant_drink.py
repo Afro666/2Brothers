@@ -262,3 +262,16 @@ def test_only_coconut_milk_is_also_a_cooking_product():
     assert not is_plant_drink(CAN[0], "coconut")
     assert not is_plant_drink(MILK[0], "coconut", cooking=True)
     assert not is_plant_drink(HAND_WASH[0], "coconut", cooking=True)
+
+
+def test_a_word_that_only_starts_with_the_plant_is_not_that_plant():
+    """#1758: "pea" is not "peanut" or "peach", "ris" is not "risotto"."""
+    def row(en, fi=""):
+        return {"category": "10402", "names": {"en": en, "fi": fi}}
+    assert not is_plant_drink({"category": "10402", "names": {"en": "Peanut drink 1L"}}, "pea")
+    assert not is_plant_drink(row("Peach drink 1L"), "pea")
+    assert not is_plant_drink(row("Risotto drink 1L"), "rice")
+    assert is_plant_drink(row("Oatly Oat Drink Organic 1L"), "oat")
+    assert is_plant_drink(row("Oatly iKaffe 1L"), "oat")
+    assert is_plant_drink(row("Alpro Mantelijuoma 1L", "Alpro Mantelijuoma 1L"), "almond")
+    assert is_plant_drink(row("Pea drink 1L"), "pea")
