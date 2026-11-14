@@ -3489,7 +3489,7 @@ JSON number, not a decimal string:
 |---|---|---|
 | `CORRECTION_RATIO` | Product; `value` is the ratio, within `0.3..1.5`. | `raw_value` (finite ratio), `applicable` boolean; an out-of-band ratio is clamped for display and `applicable:false`, never applied. |
 | `DECLINED_PRODUCT` | Product; `value` is numeric `1`, meaning declined. | None required. |
-| `SUPPLIER_LATE` | Supplier; `value` is nonnegative `mean_days_late`. | `on_time_rate` in `0..1`, `sigma_lead_time` nonnegative, `deliveries` integer. |
+| `SUPPLIER_LATE` | Supplier; `value` is nonnegative `mean_days_late`. | `mean_days_late` equals `value`, `on_time_rate` in `0..1`, `deliveries` integer; `mean_lead_time` and `sigma_lead_time` in days, nonnegative when known (else null). |
 | `SUPPLIER_SHORT` | Supplier; `value` is `fill_rate` in `0..1`. | None required. |
 
 `evidence.rows` is a nonnegative integer; `from`, `to`, `last` and `since` are ISO dates.
@@ -3499,10 +3499,16 @@ trusted feedback windows and outcomes. `CORRECTION_RATIO` requires at least thre
 rows with `ran_out:true` after a cut are excluded. Ratios use `to_qty /
 context.forecast_need` (removal is zero), never `to_qty / from_qty` after learning.
 No fact is emitted for the no-change band `0.95..1.05`; `IN_STOCK`, `MENU_CHANGED`, `BUDGET` and `OTHER` do not qualify.
-`DECLINED_PRODUCT` requires at least three qualifying removals, and an explicit human product
-addition resets its decline history. Supplier facts need at least five distinct eligible deliveries in the last eight
+`DECLINED_PRODUCT` requires at least three removals with reason `TOO_MUCH`,
+`OTHER` or no reason, excluding `IN_STOCK`, `MENU_CHANGED` and `BUDGET`; an
+explicit human product addition resets its decline history. Recipe/menu-required
+products with no covering alternative remain with a warning rather than silently
+removing the ingredient. Excluded learned products expose their fact id and
+evidence in the existing `excluded` list for undo. Supplier facts need at least five distinct eligible deliveries in the last eight
 weeks. Unknown dates/quantities are excluded from their respective statistic, not
-counted as on-time/full. Fields are finite numeric values, never NaN/infinity.
+counted as on-time/full. Missing order timestamps leave mean/sigma lead time
+null; they cannot turn into zero-day delivery. The engine keeps user-set terms
+when learned timing is unknown. Fields are finite numeric values, never NaN/infinity.
 `name` is the trusted product/supplier display name. API adapters must normalize
 these facts to the compact `agent.memory` shape; that helper is not the wire API.
 
