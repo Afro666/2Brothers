@@ -783,6 +783,79 @@ left out keeps its value, so a partial save can never drop the allergen policy.
   to `stockout_cap`, `budgetWarningPerOrderExVat` / `budgetWarningPerWeekExVat` to the
   two budget fields, `excludedAllergens` to `excluded_allergens`.
 
+### Onboarding lookup (Context.dev)
+
+`POST /v1/onboarding/lookup` (human user session). On sign-up the kitchen types its work
+email or its website; the gateway looks the business up with Context.dev and returns the
+profile fields to pre-fill. Proposed (issue #375); the gateway does not serve it yet. The
+web page (`/onboarding`) is built against the mock.
+
+Request: exactly one of the two fields. A POST, so the email never sits in a URL or an
+access log. It saves nothing, so it takes no `idempotency_key`.
+
+```json
+{"email": "chef@hotelkuusi.fi"}
+{"website": "https://www.hotelkuusi.fi"}
+```
+
+Response: every field is `{value, source}`. `value` `null` means unknown: Context.dev did
+not return it, and the gateway never guesses one. `source` is `null` exactly when `value`
+is.
+
+```json
+{
+  "domain": "hotelkuusi.fi",
+  "found": true,
+  "name": {"value": "Hotel Kuusi",
+           "source": {"provider": "Context.dev", "endpoint": "POST /v1/brand/retrieve"}},
+  "logo_url": {"value": "https://...", "source": {"...": "..."}},
+  "colors": {"value": ["#1f4d3a", "#e9d8a6"], "source": {"...": "..."}},
+  "address": {"value": {"street": "Satakunnankatu 41", "postal_code": "33210",
+                        "city": "Tampere", "country": "Finland"}, "source": {"...": "..."}},
+  "kitchen_type": {"value": "hotel", "source": {"...": "..."}},
+  "opening_hours": {"value": null, "source": null}
+}
+```
+
+| Field | From Context.dev | Rule |
+|---|---|---|
+| `domain` | | The domain the lookup used: from the email after `@`, or the website's host without `www.`. |
+| `found` | | `false` when Context.dev knows nothing about the domain (its 400 `NOT_FOUND`): 200 with every field unknown, so the person fills in the form. |
+| `name` | `brand.title` | |
+| `logo_url` | `brand.logos[]` | An https URL. Prefer `type` `icon` or `logo` in light `mode`; `null` when there is none. |
+| `colors` | `brand.colors[].hex` | `#rrggbb`, main colour first. `null` when there are none, never `[]`. |
+| `address` | `brand.address` | `street`, `postal_code`, `city`, `country`; a part Context.dev leaves out is `null` on its own. |
+| `kitchen_type` | `brand.industries.eic[]` | `hotel`, `school`, `hospital` or `restaurant` when the industry or subindustry clearly says so (hotels and accommodation, primary or secondary education, hospitals and health care, restaurants and food service). Anything else is `null`. A guess; the person confirms it. |
+| `opening_hours` | not in `brand/retrieve` | Free text as the website writes it. Optional second call: `POST /v1/web/scrape` (the endpoint `monitor/recalls.py` uses) on the home or contact page, reading schema.org `openingHours`. Without it, `null`. `source.endpoint` names whichever endpoint gave the value. |
+
+Which Context.dev endpoint, and why:
+
+- `POST https://api.context.dev/v1/brand/retrieve` with `{"type": "by_email", "email": ...}`
+  or `{"type": "by_domain", "domain": ...}`. One call returns name, logos, colours, address
+  and industry (EIC), which is every field but the opening hours. `by_email` resolves the
+  work email's domain for us; that is the sponsor's own example ("brand itself from a
+  customer's email"). `/brand/styleguide` (fonts, spacing) and `/brand/search` (name
+  autocomplete) are not needed for the form.
+- Context.dev answers a free or disposable email with 422 `FREE_EMAIL_DETECTED` /
+  `DISPOSABLE_EMAIL_DETECTED`. The gateway returns 422 `FREE_EMAIL` with "Type the
+  kitchen's website instead."; the page then asks for the website.
+- An address that is neither an email nor a domain: 422 `INVALID_QUERY`. Context.dev down,
+  out of credits or slow (a cold domain can take more than 10 s; use a timeout of at least
+  10,000 ms): 502 `LOOKUP_UNAVAILABLE`. The page shows a blank form in both cases.
+
+Rules:
+
+- `CONTEXT_DEV_API_KEY` stays on the gateway (the same key as the recall monitor). The
+  browser calls our route, never Context.dev.
+- Nothing is saved by this route. The person checks every field, changes what is wrong
+  and presses "Confirm and save"; only then is the profile stored. Until the kitchen
+  profile has a save route, the web keeps the confirmed profile in the browser and shows
+  the logo in the app shell.
+- Every pre-filled field shows "From your website via Context.dev" and its
+  `source.endpoint` until the person edits it.
+- The web client maps `logo_url` to `logoUrl`, `kitchen_type` to `kitchenType`,
+  `opening_hours` to `openingHours` and `postal_code` to `postalCode`.
+
 ## Daily weather and holiday signals
 
 `signals.weather` writes `daily_signals` through `store.signals`; forecast/engine
