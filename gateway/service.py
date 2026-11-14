@@ -476,6 +476,7 @@ class Gateway:
         refused = self._allergen_refusals(kitchen_id, ids)
         params = self._params(kitchen_id)
         lines, excluded, codes, short = [], [], [], []
+        owners: list[tuple[str, str]] = []      # (product_id, unit) of the need behind each line
         skipped = [(p, "BLOCKED_BY_RECALL") for p in ids if p in blocked]
         skipped += [(p, f"ALLERGEN_RULE: the kitchen excludes {', '.join(hits)}") for p, hits in refused.items()]
         tax, supplier_of, when = {}, {}, {}
@@ -499,6 +500,7 @@ class Gateway:
                 plan = plan_request(Decimal(str(n["quantity"])), measure, mine, requested, None,
                                     event=bool(request.get("event")))
                 lines += [_learned_why(_set_by(ln, n, mine[0].pack.lot_size), n) for ln in plan.lines]
+                owners += [(n["product_id"], n["unit"])] * len(plan.lines)
                 excluded += list(plan.excluded)
                 codes += [c for c in plan.reason_codes if c not in codes]
                 if plan.shortfall > 0:
@@ -516,15 +518,15 @@ class Gateway:
         if request.get("made_by") == "menu_plan":
             # The change helper measures a later correction against the unlearned engine
             # number, never against the already learned line (#1305).
-            ratios = {}
-            for need in needs:
-                ratio = (need.get("learned") or {}).get("ratio")
-                if ratio is not None:
-                    ratios[need["product_id"]] = Decimal(str(ratio))
-            for line in sim["lines"]:
-                ratio = ratios.get(line["product_id"])
-                if ratio is not None and ratio > 0:
-                    line["unlearned_quantity"] = f"{(Decimal(str(line['quantity'])) / ratio).normalize():f}"
+            # Each line belongs to the need it was sized for, by product and unit: one product
+            # planned in two units never gets the other unit's learned change (#1702).
+            learned = {(need["product_id"], need["unit"]): need["learned"]
+                       for need in needs if need.get("learned")}
+            for line, owner in zip(sim["lines"], owners):
+                ratio = (learned.get(owner) or {}).get("ratio")
+                if ratio is not None and Decimal(str(ratio)) > 0:
+                    line["unlearned_quantity"] = \
+                        f"{(Decimal(str(line['quantity'])) / Decimal(str(ratio))).normalize():f}"
             # Shown, not hidden (#1307): a product a learned fact left out, with the fact id
             # for the undo. A person who added it back by hand has it as a need again.
             asked = {need["product_id"] for need in needs}
@@ -534,14 +536,12 @@ class Gateway:
                     sim["mandate"]["reasons"].append(f"{entry['product_id']}: {entry['reason']}")
             # Learned safety stock (#1306) has no ratio: the same basis from its two quantities.
             from gateway.learned_timing import unlearned_line_quantity
-            for need in needs:
-                if (need.get("learned") or {}).get("kind") != "SUPPLIER_LATE":
-                    continue
-                for line in sim["lines"]:
-                    if line["product_id"] == need["product_id"]:
-                        basis = unlearned_line_quantity(line["quantity"], need["learned"])
-                        if basis is not None:
-                            line["unlearned_quantity"] = basis
+            for line, owner in zip(sim["lines"], owners):
+                info = learned.get(owner) or {}
+                if info.get("kind") == "SUPPLIER_LATE":
+                    basis = unlearned_line_quantity(line["quantity"], info)
+                    if basis is not None:
+                        line["unlearned_quantity"] = basis
         sim["shortfalls"] = [{"product_id": p, "shortfall": f"{q.normalize():f}", "unit": u} for p, q, u in short]
         for p, q, u in short:
             sim["mandate"]["reasons"].append(f"{p}: {q.normalize():f} {u} of the plan's need cannot be covered for this date.")
