@@ -121,7 +121,6 @@ in rehearsal and decide then if you press Save on stage.
 
 **If it fails.** The panel says why, and the counts can still be typed by hand. "no vision
 model is configured" means `VERDA_INFERENCE_KEY` is missing in the `buyer` container.
-"Too many requests": the route allows 10 photos a minute per address.
 
 ## What was measured on the live site (2026-11-14)
 
