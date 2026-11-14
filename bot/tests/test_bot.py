@@ -220,6 +220,20 @@ def test_a_request_gives_a_summary_and_one_message_per_supplier(bot):
     assert "product own-1" in bakery                   # no name known: said so, never invented
 
 
+@pytest.mark.parametrize("kind", ["group", "supergroup"])
+def test_a_group_chat_gets_a_url_button_and_the_supplier_messages(bot, kind):
+    bot.handle({"message": {"chat": {"id": 7, "type": kind}, "text": "what the menu needs"}})
+    button = bot.tg.edits[0]["markup"]["inline_keyboard"][0][0]
+    assert "web_app" not in button                     # Telegram refuses web_app outside a private chat
+    assert button["url"] == f"https://site.example/approvals?proposal={PID}"
+    assert len(bot.tg.sent) == 3                       # the status message, then one per supplier
+
+
+def test_a_private_chat_keeps_the_web_app_button(bot):
+    bot.handle({"message": {"chat": {"id": 7, "type": "private"}, "text": "what the menu needs"}})
+    assert bot.tg.edits[0]["markup"]["inline_keyboard"][0][0]["web_app"]["url"].endswith(f"proposal={PID}")
+
+
 def test_week_starts_on_the_next_working_day_and_names_it_as_the_delivery_day(bot):
     say(bot, "/week")                # the fixture's "now" is Saturday 14 Nov: Sunday is skipped
     assert bot.gw.calls == [("plan", "2026-11-16", "2026-11-22", "2026-11-16")]
