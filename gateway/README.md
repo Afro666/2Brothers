@@ -392,3 +392,18 @@ supplier blocks, one approval. `request.needs` lists the need per product (`stoc
 false` when the stock was never counted: then the full need is proposed, not a guess);
 `shortfalls` lists what cannot be covered per product; 422 `NOTHING_NEEDED` when stock covers
 the plan. Approve, reject, signing and the live re-check work as for any proposal.
+
+## Nutrition from the label data
+
+Valio's catalog has the nutrition table (per 100 g or 100 ml) of about 12,000 of its 17,500
+products. `engine/nutrition.py` reads it; two read-only routes use it:
+
+- `GET /v1/kitchens/{k}/recipes/{id}/nutrition`: one portion as eaten: `per_portion` (kcal,
+  protein, fat, saturated fat, carbs, sugar, fibre, salt), `known_ingredients`, `unknown`
+  (ingredients without a table or a convertible amount) and `complete`.
+- `GET /v1/kitchens/{k}/nutrition?from=&to=`: per menu-plan day `covers`, `kcal`,
+  `kcal_per_cover`; for the window `planned.kcal`, `ordered` (what the approved orders for
+  the window contain) and `ordered_vs_planned`.
+
+A product without a table is unknown, never zero; `complete` is false when anything is
+missing. A litre is counted as a kilo (density about 1). Stock on hand is in neither number.
