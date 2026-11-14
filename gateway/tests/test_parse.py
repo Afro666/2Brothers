@@ -27,6 +27,31 @@ def test_phrasings(text, qty, unit, query, when):
     assert (r.quantity, r.unit, r.query, r.requested_date) == (qty, unit, query, when)
 
 
+@pytest.mark.parametrize("text", [
+    "100 L cream and 50 kg cheese by Monday",
+    "100 l kermaa ja 50 kg juustoa maanantaiksi",
+    "20 kg butter & 10 kg sugar tomorrow",
+    "20 kg butter, 10 kg sugar and 5 L milk by Friday",
+    "5 kg coffee + 40 L milk by Monday",
+])
+def test_two_products_in_one_request_are_refused(text):
+    """Live on 2026-11-14: "100 L cream and 50 kg cheese" was read as 100 L of "cream and
+    cheese" and answered with a cleaning product. One request names one product."""
+    with pytest.raises(ParseError, match="one product per request"):
+        parse_request(text, FRI)
+
+
+@pytest.mark.parametrize("text,qty,unit", [
+    ("200 L milk in 1 l cartons by Monday", D(200), "L"),      # a pack size, not a second product
+    ("200 L milk in 1,5 l bottles by Monday", D(200), "L"),    # the comma of a decimal number
+    ("30 kg salt and pepper mix by Monday", D(30), "KG"),      # "and" with one quantity
+    ("40 kg macaroni and cheese by Monday", D(40), "KG"),
+])
+def test_one_quantity_or_a_pack_size_is_still_one_product(text, qty, unit):
+    r = parse_request(text, FRI)
+    assert (r.quantity, r.unit) == (qty, unit)
+
+
 def test_finnish_comma_is_a_decimal_mark():
     assert parse_request("1,500 kg voita perjantaiksi", FRI).quantity == D("1.5")
     assert parse_request("1,000 L lactose-free milk by Monday", FRI).quantity == D(1000)

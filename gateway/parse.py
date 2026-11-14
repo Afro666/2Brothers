@@ -78,6 +78,9 @@ class ParsedRequest:
 
 _NUM = r"(\d{1,3}(?:[ ,. ]\d{3})+|\d+(?:[.,]\d+)?)"
 _QTY = re.compile(_NUM + r"\s*(" + "|".join(sorted(UNITS, key=len, reverse=True)) + r")\b", re.I)
+# Two products in one text: a second quantity after "and", "ja", "sekä", "och", "&", "+"
+# or a comma (not the comma of a decimal number, "1,5 l").
+_SECOND = re.compile(r"(?:\b(?:and|ja|sekä|och)\b|[&+]|(?<!\d),)\s*" + _QTY.pattern, re.I)
 _ISO = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _DMY = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})?")
 _DMON = re.compile(r"\b(\d{1,2})\s+(" + "|".join(MONTHS) + r")[a-z]*\b", re.I)
@@ -102,6 +105,20 @@ def _number(raw: str, language: str = "en") -> Decimal:
 def _next_weekday(today: date, weekday: int) -> date:
     days = (weekday - today.weekday()) % 7
     return today + timedelta(days=days or 7)       # "by Monday" on a Monday means next Monday
+
+
+ONE_PRODUCT = ("one product per request: this text asks for more than one "
+               "(ask for each product in its own request)")
+
+
+def asks_for_two(text: str) -> bool:
+    """True when the text joins two quantities with "and" (or "ja", "&", "+", a comma):
+    "100 L cream and 50 kg cheese". Two products are two requests: the first one alone
+    would be a guess, and the words of both together find neither. A pack size is not a
+    second product ("200 L milk in 1 l cartons")."""
+    low = (text or "")[:500].lower()
+    m = _QTY.search(low)
+    return bool(m and _SECOND.search(low, m.end()))
 
 
 def product_words(text: str) -> str:
@@ -177,6 +194,8 @@ def parse_request(text: str, today: date, default_day: date | None = None) -> Pa
     if unit == "G":
         quantity, unit = quantity / 1000, "KG"
     rest = low[:m.start()] + " " + low[m.end():]
+    if asks_for_two(text):
+        raise ParseError(ONE_PRODUCT)
 
     when, rest = _written_date(rest, today)
     words = re.findall(r"[a-zåäö%-]+", rest)
