@@ -2,7 +2,7 @@ import { decimal, object, rows, type Json } from "@/api/gateway-map";
 import { blobToBase64 } from "@/api/http-shelf";
 import { ApiError, type Api, type DeliveryClaim, type DeliveryLot, type DeliveryNoteLine, type DeliveryNoteOther, type DeliveryNoteRead } from "@/api/types";
 
-const invalid = (): never => { throw new ApiError("INVALID_RESPONSE", "The delivery note answer is invalid. Check the delivery by hand."); };
+const invalid = (): never => { throw new ApiError("INVALID_RESPONSE", "The delivery note answer is invalid"); };
 const text = (v: unknown): string => typeof v === "string" && v ? v : invalid();
 const quantity = (v: unknown): number | null => {
   if (v == null || v === "unknown") return null;
@@ -13,7 +13,7 @@ const lot = (r: Json): DeliveryLot => ({ lot: typeof r.lot === "string" && r.lot
 
 export function mapDeliveryNote(body: unknown, orderId: string): DeliveryNoteRead {
   const raw = object(body, "the delivery note");
-  if (raw.order_id !== orderId || raw.saved !== false || typeof raw.complete !== "boolean") invalid();
+  if (raw.order_id !== orderId || typeof raw.saved !== "boolean" || typeof raw.complete !== "boolean") invalid();
   const lines = rows(body, "lines").map((r): DeliveryNoteLine => {
     const status = r.status;
     if (status !== "RECEIVED" && status !== "SHORT" && status !== "MISSING" && status !== "UNKNOWN") return invalid();
