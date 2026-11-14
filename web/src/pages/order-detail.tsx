@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, formatDateTime, formatEur } from "@/lib/format";
-import { useT } from "@/lib/i18n";
+import { getLanguage, translate, useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import type { OrderReceipt } from "@/types";
 
@@ -35,44 +35,45 @@ async function copyReceipt(jws: string) {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(jws);
-      toast.success("Receipt copied");
+      toast.success(translate(getLanguage(), "Receipt copied"));
       return;
     }
   } catch {}
-  toast.error("Copy failed. Select the receipt text and copy it.");
+  toast.error(translate(getLanguage(), "Copy failed. Select the receipt text and copy it."));
 }
 
 /** The signed receipt: claims decoded for display only. Anyone checks the signature with the public key. */
 function SignedReceipt({ receipt }: { receipt: OrderReceipt | null }) {
+  const t = useT();
   return (
     <section aria-labelledby="receipt-heading" className="space-y-2 border-t pt-4">
       <h3 id="receipt-heading" className="text-base font-semibold">
-        Signed receipt
+        {t("Signed receipt")}
       </h3>
       {receipt ? (
         <>
-          <p className="text-sm text-muted-foreground">Signed by the gateway. Anyone can check it with the public key.</p>
+          <p className="text-sm text-muted-foreground">{t("Signed by the gateway. Anyone can check it with the public key.")}</p>
           <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-3">
             <div>
-              <dt className="text-muted-foreground">Approved by</dt>
-              <dd className="break-words">{receipt.approvedBy ?? "unknown"}</dd>
+              <dt className="text-muted-foreground">{t("Approved by")}</dt>
+              <dd className="break-words">{receipt.approvedBy ?? t("unknown")}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Signed at</dt>
+              <dt className="text-muted-foreground">{t("Signed at")}</dt>
               <dd>{formatDateTime(receipt.signedAt)}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Signed total</dt>
+              <dt className="text-muted-foreground">{t("Signed total")}</dt>
               <dd>{formatEur(receipt.total)}</dd>
             </div>
           </dl>
           <Button type="button" variant="outline" size="sm" onClick={() => void copyReceipt(receipt.jws)}>
-            Copy receipt
+            {t("Copy receipt")}
           </Button>
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
-          No signed receipt (this order is from before receipts, or signing was not possible)
+          {t("No signed receipt (this order is from before receipts, or signing was not possible)")}
         </p>
       )}
     </section>
