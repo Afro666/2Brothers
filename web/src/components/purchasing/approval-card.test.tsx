@@ -257,4 +257,35 @@ describe("ApprovalCard", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Rejection failed: network error");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
+
+  it.each([
+    ["NOT_PENDING", "This proposal is no longer waiting for approval."],
+    ["LINE_NOT_FOUND", "That product is not on this proposal."],
+    ["NOT_ADDABLE", "That product cannot be added to this proposal."],
+    ["CLOSING_PASSED", "The order cut-off for this line has passed."],
+    ["LINE_UNAVAILABLE", "This product cannot be ordered now."],
+    ["EMPTY_PROPOSAL", "Every line would be removed: reject the proposal instead."],
+    ["ROLE_REQUIRED", "Your role cannot change proposals."],
+  ])("explains a refused %s change next to the controls without changing the basket", async (code, message) => {
+    const user = userEvent.setup();
+    const onChangeProposal = vi.fn().mockRejectedValue(new ApiError(code, code));
+    render(
+      <ApprovalCard
+        request={approval}
+        order={confirmedOrder}
+        onChangeProposal={onChangeProposal}
+        listAddableProducts={vi.fn().mockResolvedValue([])}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Show order lines" }));
+    const quantity = screen.getAllByRole("spinbutton", { name: /^Quantity for / })[0];
+    const originalQuantity = (quantity as HTMLInputElement).valueAsNumber;
+
+    await user.click(screen.getAllByRole("button", { name: /^Remove / })[0]);
+
+    const orderSection = screen.getByRole("button", { name: "Hide order lines" }).closest("section")!;
+    expect(await within(orderSection).findByRole("alert")).toHaveTextContent(message);
+    expect(within(orderSection).getByRole("alert")).toHaveTextContent("The proposal is unchanged.");
+    expect(quantity).toHaveValue(originalQuantity);
+  });
 });
