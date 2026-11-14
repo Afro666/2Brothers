@@ -3,6 +3,7 @@ import { ApiError } from "@/api/types";
 import { nameProducts } from "@/api/map";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
+import { driftMock, supplierDriftMock } from "@/api/mock-drift";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
 import {
   approval as seedApproval,
@@ -153,6 +154,8 @@ export function createMockApi(): MockApi {
     ...createPlanningMock(recordAudit),
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),
+    getDrift: async () => driftMock(),
+    getSupplierDrift: async () => supplierDriftMock(),
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
     },

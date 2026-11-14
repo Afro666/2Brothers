@@ -451,3 +451,31 @@ export interface ForecastAccuracy {
   /** null when the gateway does not say per product (unknown, not "no products"). */
   products: ForecastSeries[] | null;
 }
+
+/** Standing-order drift (docs/contract.md, "Standing-order drift"). */
+export type DriftKind = "portion_creep" | "cost_creep";
+
+export interface DriftWarning {
+  productId: ProductCode;
+  /** null when the gateway sends only the code. */
+  productName: string | null;
+  kind: DriftKind;
+  /** 0.4 = 40% above the baseline. */
+  change: number;
+  unit: string;
+  qtyPer100: number;
+  baselineQty: number;
+  spendPer100: number;
+  baselineSpend: number;
+  baselineWeeks: number;
+  why: string;
+  /** Set on the supplier side only: the consenting kitchen it belongs to. */
+  kitchenId?: string;
+  kitchenName?: string | null;
+}
+
+export interface DriftReport {
+  /** Monday of the last full week, `YYYY-MM-DD`. */
+  week: string;
+  warnings: DriftWarning[];
+}

@@ -22,6 +22,7 @@ import type {
   SubstituteOption,
   KitchenSettings,
   ForecastAccuracy,
+  DriftReport,
 } from "@/types";
 
 /** Who a decision is recorded as in the audit log. */
@@ -108,6 +109,10 @@ export interface Api {
   saveKitchenSettings(settings: KitchenSettings, actor: AuditActor): Promise<KitchenSettings>;
   /** Predicted against actual for the last 12 full weeks, and the forecast for this week and the 3 after. */
   getForecastAccuracy(): Promise<ForecastAccuracy>;
+  /** Standing-order drift for the last full week (`GET /drift`). */
+  getDrift(): Promise<DriftReport>;
+  /** Drift warnings of the kitchens that share with this supplier (`GET /demand/drift`). */
+  getSupplierDrift(): Promise<DriftReport>;
 }
 
 /** A gateway error: `code` is the contract's error code, e.g. `TOTAL_MISMATCH`. */
