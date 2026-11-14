@@ -70,9 +70,12 @@ def main() -> None:
     else:
         try:
             print(f"embedded {embed_products(db)} new or changed products")
+        except embeddings.EmbeddingError as exc:  # catalog is loaded; text search still works
+            print(f"embeddings failed: {exc} (rerun python -m store.embeddings)")
+        try:
             print(f"vector index: {ensure_vector_index(db)}")
-        except (embeddings.EmbeddingError, OperationFailure) as exc:
-            print(f"embeddings: not finished ({exc})")
+        except OperationFailure as exc:
+            print(f"vector index: not created ({exc})")
 
 
 if __name__ == "__main__":
