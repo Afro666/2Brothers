@@ -68,6 +68,7 @@ function series(productId: string | null, name: string, unit: string | null, row
       return {
         week,
         actual: over ? sum(cells.map((cell) => cell.need)) : null,
+        ahead: !over,
         engine: sum(cells.map((cell) => cell.engine)),
         // Like the gateway: a future week has the engine's forecast only.
         baseline: over ? sum(cells.map((cell) => cell.baseline)) : null,

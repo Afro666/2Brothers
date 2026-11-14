@@ -59,6 +59,7 @@ export function mapForecastAccuracy(accuracy: unknown, forecast: unknown): Forec
     return {
       week,
       actual: known(ours, "actual") ?? known(plain, "actual"),
+      ahead: false,
       engine: known(ours, "predicted"),
       baseline: known(plain, "predicted"),
       engineWape: known(ours, "wape"),
@@ -82,6 +83,7 @@ export function mapForecastAccuracy(accuracy: unknown, forecast: unknown): Forec
     weeks.push({
       week,
       actual: null,
+      ahead: true,
       engine: Math.round(need * 1000) / 1000,
       baseline: null,
       engineWape: null,
