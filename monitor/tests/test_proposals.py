@@ -51,6 +51,8 @@ def test_coffee_hold_replans_different_brand_without_ordering():
     assert original['recall_alerts'][0]['recall']['lot']
     replacement = gw.get_proposal('hotel', original['replacement_proposal_id'])
     assert replacement['status'] == 'READY'
+    assert replacement['product_evidence'][0]['source_url'].startswith('https://www.lofbergs.fi/')
+    assert replacement['product_evidence'][0]['allergens'] is None
     assert [(l['product_id'], l['quantity']) for l in replacement['lines']] == [('475842', '5')]
     assert db.orders.count_documents({}) == 0
     with pytest.raises(GatewayError, match='recall'):
