@@ -271,3 +271,19 @@ def test_the_real_sender_connects_to_the_address_it_checked(monkeypatch):
     assert webhooks.http_send("https://rebind.example.com/x?a=1", b"{}", {}) == 204
     assert seen == {"url": "https://93.184.215.14/x?a=1", "host": "rebind.example.com", "sni": "rebind.example.com"}
     assert next(answers)[0][4][0] == "169.254.169.254"        # the second answer was never asked for
+
+
+def test_the_real_sender_brackets_an_ipv6_literal_host(monkeypatch):
+    """#772: an IPv6-literal receiver gets `Host: [addr]`, and no SNI for an IP literal."""
+    import httpx
+    monkeypatch.setattr(webhooks.socket, "getaddrinfo",
+                        lambda *a, **k: [(10, 1, 6, "", ("2606:4700::1111", 443, 0, 0))])
+    seen = {}
+
+    def handler(request):
+        seen.update(url=str(request.url), host=request.headers["host"], sni=request.extensions.get("sni_hostname"))
+        return httpx.Response(204)
+    real = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
+    assert webhooks.http_send("https://[2606:4700::1111]/x", b"{}", {}) == 204
+    assert seen == {"url": "https://[2606:4700::1111]/x", "host": "[2606:4700::1111]", "sni": None}
