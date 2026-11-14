@@ -351,7 +351,7 @@ export function TokensSection() {
             <div className="min-w-0 space-y-2">
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <Label id="curl-command-label" className="label-caps">
-                  HTTP: request a proposal
+                  HTTP: list proposals (needs kitchen:read)
                 </Label>
                 <CopyButton text={curlCommand} label="Copy curl command" target={curlRef} />
               </div>
