@@ -43,6 +43,7 @@ KIND_EVENTS = {
     "supplier_offer_received": ("supplier.offer",),
     "supplier_offer_accepted": ("supplier.offer",),
     "supplier_offer_declined": ("supplier.offer",),
+    "recall_found": ("recall.alert",),         # a check found it in stock or recipes (#1187)
 }
 _OFFER_FIELDS = ("offer_id", "supplier_id", "product_id", "replaces_product_id", "requested_date",
                  "quantity", "unit")
@@ -215,7 +216,7 @@ def deliveries(db, kitchen_id: str, hook_id: str, limit: int = 50) -> list[dict]
 
 
 def _deliver_one(db, hook: dict, event: str, payload: dict, send: Send, sleep: Callable[[float], None],
-                 attempts: int) -> dict:
+                 attempts: int, once_key: str | None = None) -> dict:
     delivery_id = uuid4().hex
     now = datetime.now(timezone.utc)
     body = json.dumps({"id": delivery_id, "event": event, "kitchen_id": hook["kitchen_id"],
@@ -237,16 +238,17 @@ def _deliver_one(db, hook: dict, event: str, payload: dict, send: Send, sleep: C
             break
     row = {"_id": delivery_id, "hook_id": hook["_id"], "kitchen_id": hook["kitchen_id"], "event": event,
            "at": now, "attempts": tries, "status": status, "error": error,
-           "ok": status is not None and 200 <= status < 300}
+           "ok": status is not None and 200 <= status < 300, "once_key": once_key}
     db.webhook_deliveries.insert_one(row)
     return _delivery_out(row)
 
 
 def deliver(db, kitchen_id: str, event: str, payload: dict, send: Send | None = None, *,
             sleep: Callable[[float], None] = time.sleep, hook_id: str | None = None,
-            attempts: int = MAX_ATTEMPTS) -> list[dict]:
+            attempts: int = MAX_ATTEMPTS, once_key: str | None = None) -> list[dict]:
     """POST `event` to every hook of the kitchen subscribed to it (or to `hook_id` alone,
-    whatever it subscribes to: the test ping). Returns the delivery log rows. Never raises."""
+    whatever it subscribes to: the test ping). Returns the delivery log rows. Never raises.
+    With `once_key`, a hook that already got this key delivered (ok) is skipped (#1187)."""
     out: list[dict] = []
     try:
         query = {"kitchen_id": kitchen_id, "_id": hook_id} if hook_id else {"kitchen_id": kitchen_id, "events": event}
@@ -255,8 +257,12 @@ def deliver(db, kitchen_id: str, event: str, payload: dict, send: Send | None = 
         return out
     for hook in hooks:
         try:
+            if once_key is not None and db.webhook_deliveries.find_one({
+                    "hook_id": hook["_id"], "kitchen_id": kitchen_id, "event": event,
+                    "once_key": once_key, "ok": True}):
+                continue
             out.append(_deliver_one(db, hook, event, payload, send or http_send, sleep,
-                                    max(1, min(attempts, MAX_ATTEMPTS))))
+                                    max(1, min(attempts, MAX_ATTEMPTS)), once_key))
         except Exception:
             continue                                  # one broken hook never stops the others
     return out
@@ -330,7 +336,8 @@ def _first_refusal(kitchen_id: str, hook_id: str, actor: str, code, now: float) 
     return True
 
 
-def dispatch(db, kitchen_id: str, kind: str, data: dict, actor: str = "") -> None:
+def dispatch(db, kitchen_id: str, kind: str, data: dict, actor: str = "", *,
+             once_key: str | None = None) -> None:
     """Called once for every audit event (Gateway._audit). Maps the audit kind to webhook
     events and delivers them in a background thread. Never raises, never waits for a receiver."""
     try:
@@ -341,6 +348,8 @@ def dispatch(db, kitchen_id: str, kind: str, data: dict, actor: str = "") -> Non
         if not hooks:
             return
         payload = _PAYLOADS.get(kind, lambda d, a: dict(d))(data, actor)
+        if kind == "recall_proposal_blocked":
+            payload = {**payload, "case": "PROPOSAL_BLOCKED"}
         now = _clock()
         targets = []
         for hook in hooks:
@@ -357,7 +366,7 @@ def dispatch(db, kitchen_id: str, kind: str, data: dict, actor: str = "") -> Non
 
         def job() -> None:
             for event, hook_id in targets:
-                deliver(db, kitchen_id, event, payload, hook_id=hook_id)
+                deliver(db, kitchen_id, event, payload, hook_id=hook_id, once_key=once_key)
 
         run_async(job)
     except Exception:

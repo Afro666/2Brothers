@@ -31,6 +31,7 @@ from urllib.parse import urljoin, urlsplit
 
 from fastapi import Depends, FastAPI, Request
 
+from gateway import webhooks
 from gateway.limits import KeyedLocks, TooMany, env_number
 from gateway.service import Gateway, GatewayError, _hash
 from monitor.recalls import LIST_SCHEMA, LIST_URL, ContextDev, parse_date
@@ -206,6 +207,19 @@ def run_check(gw: Gateway, kitchen_id: str, body: dict, actor: str) -> dict:
         return _check(gw, kitchen_id, event_id, actor)
 
 
+def _found(alert: dict) -> dict | None:
+    """The stock and recipe evidence in an active alert, or None when it has neither."""
+    if alert.get("status") == "dismissed":
+        return None
+    where = alert.get("where") or []
+    stock = any(entry.startswith(("in stock", "on the stock list")) for entry in where)
+    names = next((entry.removeprefix("in recipes: ") for entry in where
+                  if entry.startswith("in recipes: ")), "")
+    found = {"stock": stock, "recipes": len(names.split(", ")) if names else 0,
+             "open_proposal": "on the open purchase proposal" in where}
+    return found if stock or found["recipes"] else None
+
+
 def _check(gw: Gateway, kitchen_id: str, event_id: str, actor: str) -> dict:
     """One check, with the kitchen's lock held."""
     stored = recalls.check_entry(gw.db, kitchen_id, event_id)
@@ -220,6 +234,15 @@ def _check(gw: Gateway, kitchen_id: str, event_id: str, actor: str) -> dict:
     from monitor.proposals import apply_notices     # imports the agent package: only when used
     apply_notices(gw, kitchen_id, notices)
     view = recall_view(gw, kitchen_id)
+    for alert in view["alerts"]:
+        found = _found(alert)
+        if found is None:
+            continue
+        webhooks.dispatch(gw.db, kitchen_id, "recall_found", {
+            "case": "FOUND", "recall_event_id": alert["event_id"], "product_id": alert["product_id"],
+            "product_name": alert["product_name"], "match": alert["match"], "found": found,
+            "notice_url": alert["recall"]["url"], "next_step": alert["next_step"]},
+            once_key=alert["event_id"])
     event = {"event_id": event_id, "kind": "recall_check", "actor": actor, **facts,
              "alerts": [alert["event_id"] for alert in view["alerts"]],
              "proposals_held": sorted({row["proposal_id"] for alert in view["alerts"]
