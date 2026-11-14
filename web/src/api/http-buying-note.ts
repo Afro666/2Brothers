@@ -13,6 +13,11 @@ const text = (value: unknown): string => {
  * The gateway's buying-note answer (`GET /suppliers/{id}/demand/buying-note`). `note: null`
  * (dropped) and `note: []` (nothing short) read as null: the page then shows the table only.
  */
+const day = (value: unknown): string => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("a buying note line has no date");
+  return value;
+};
+
 export function mapBuyingNote(body: unknown): BuyingNote | null {
   const raw = object(body, "the buying note");
   const note = raw.note;
@@ -26,7 +31,7 @@ export function mapBuyingNote(body: unknown): BuyingNote | null {
     return {
       productId: text(row.product_id),
       productName: text(row.product_name),
-      date: text(row.date),
+      date: day(row.date),
       risk,
       text: text(row.text),
     };

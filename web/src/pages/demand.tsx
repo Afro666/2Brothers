@@ -123,6 +123,7 @@ function BuyingNoteBox({ note }: { note: BuyingNote }) {
                   className={`flex flex-col gap-x-2 rounded px-2 py-1 sm:flex-row sm:items-baseline ${noteTone[line.risk] ?? ""}`}
                 >
                   <span className="shrink-0 font-mono text-xs">{formatDate(line.date)}</span>
+                  <RiskBadge risk={line.risk} />
                   <span>{line.text}</span>
                 </li>
               ))}

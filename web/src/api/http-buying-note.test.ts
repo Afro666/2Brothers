@@ -75,4 +75,9 @@ describe("Buying note gateway boundary", () => {
     expect(mapBuyingNote({ model: "m", note: [] })).toBeNull();
     expect(mapBuyingNote(ANSWER)?.lines).toHaveLength(2);
   });
+
+  it("hides the note when a line's date is not a day", async () => {
+    gateway({ ...ANSWER, note: [{ ...ANSWER.note[0], date: "next week" }] });
+    expect(await createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "fi")).toBeNull();
+  });
 });
