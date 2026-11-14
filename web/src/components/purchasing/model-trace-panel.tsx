@@ -1,6 +1,7 @@
 import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import type { ModelTrace, ModelTraceStep } from "@/types";
+import { NemotronMark } from "@/components/nemotron-mark";
 
 type T = ReturnType<typeof useT>;
 
@@ -107,6 +108,7 @@ export function ModelTracePanel({ trace }: { trace: ModelTrace | null | undefine
   return (
     <details className="text-sm" aria-label={t("What Nemotron did")}>
       <summary className="cursor-pointer">
+        <NemotronMark />
         <span className="font-medium">{t("What Nemotron did")}</span>{" "}
         <span className="font-mono text-[13px] tabular-nums text-muted-foreground">{headline(trace, t)}</span>
       </summary>
