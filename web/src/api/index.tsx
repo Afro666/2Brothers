@@ -5,7 +5,7 @@ import { createMockApi } from "@/api/mock";
 import type { Api } from "@/api/types";
 
 export { ApiError } from "@/api/types";
-export type { Api, AuditActor, ChefProposal, ProductSearchFilters, Session } from "@/api/types";
+export type { Api, AuditActor, ChefProposal, LiveEvent, ProductSearchFilters, Session } from "@/api/types";
 
 /** The mock unless `VITE_GATEWAY_URL` is set and `VITE_USE_MOCKS` is "false". */
 export function getApi(): Api {

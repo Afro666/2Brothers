@@ -14,6 +14,7 @@ import { auditActorForRole, useRole } from "@/lib/role";
 import { formatEur } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
+import { LiveConnectionLabel, useLiveEvents } from "@/lib/live-events";
 import { useApproveUnconfirmedManual } from "@/lib/approve-unconfirmed-manual";
 import { useSession } from "@/lib/session";
 import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
@@ -69,6 +70,7 @@ function ApiApprovalsPage() {
   const { session } = useSession();
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
+  useLiveEvents(["proposal", "approval"], approvals.reload);
   const approveUnconfirmedManual = useApproveUnconfirmedManual();
   const { refresh: refreshWaiting } = usePendingApprovals();
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
@@ -176,7 +178,10 @@ function ApiApprovalsPage() {
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
           <OpenDemoNote />
-          <h1 className="text-2xl font-semibold">{t("To approve")}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-semibold">{t("To approve")}</h1>
+            <LiveConnectionLabel />
+          </div>
           <p className="max-w-prose text-sm text-muted-foreground">
             {t("Every order the Buyer proposes waits here. Nothing is sent until a person approves it.")}
           </p>

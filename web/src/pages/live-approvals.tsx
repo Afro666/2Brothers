@@ -10,6 +10,7 @@ import { useT } from "@/lib/i18n";
 import { usePendingApprovals } from "@/lib/pending-approvals";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { LiveConnectionLabel, useLiveEvents } from "@/lib/live-events";
 import { useApproveUnconfirmedManual } from "@/lib/approve-unconfirmed-manual";
 import { LabelEvidence, type LabelCheck } from "@/components/purchasing/label-evidence";
 
@@ -191,10 +192,11 @@ export function LiveApprovalsPage() {
     if (!Array.isArray(result?.proposals)) throw new Error(t("Invalid proposal list."));
     return result.proposals.map((item) => parse(item, t));
   }, []);
+  useLiveEvents(["proposal", "approval"], proposals.reload);
   const approveUnconfirmedManual = useApproveUnconfirmedManual();
   return <AppShell activeId="approvals"><main className="mx-auto max-w-5xl space-y-5">
     <OpenDemoNote />
-    <h1 className="page-title">{t("To approve")}</h1>
+    <div className="flex items-center gap-3"><h1 className="page-title">{t("To approve")}</h1><LiveConnectionLabel /></div>
     <p className="max-w-[68ch] text-[15px] leading-[22px]">{t("Live demo proposals. A person confirms the exact basket and total before an order is recorded.")}</p>
     <Button variant="outline" onClick={proposals.reload}>{t("Refresh proposals")}</Button>
     {proposals.status === "loading" && <p>{t("Loading proposals…")}</p>}

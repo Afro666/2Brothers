@@ -38,6 +38,11 @@ import type {
 /** Who a decision is recorded as in the audit log. */
 export type AuditActor = AuditEvent["actor"];
 
+export interface LiveEvent {
+  kind: "proposal" | "approval" | "audit";
+  operation: string;
+}
+
 export interface Session {
   kind: "human" | "agent" | "token" | null;
   name: string;
@@ -338,6 +343,8 @@ export interface Api {
    * returns sample data from the mock. Absent on the mock itself.
    */
   readonly live?: ReadonlySet<keyof Api>;
+  /** Optional for simpler test adapters; the mock returns a no-op subscription. */
+  subscribeEvents?(onEvent: (event: LiveEvent) => void, onStatus?: (connected: boolean) => void): () => void;
   listApiTokens(): Promise<ApiToken[]>;
   createApiToken(input: { name: string; scopes: ApiTokenScope[] }): Promise<CreatedApiToken>;
   revokeApiToken(id: string): Promise<ApiToken>;
