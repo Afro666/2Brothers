@@ -181,7 +181,8 @@ def register(app, gw, principal, body) -> None:
         # `defaults` is what the engine uses for every field the kitchen has not set.
         defaults = {"service_level": base.service_level, "max_cover_days": base.max_cover_days,
                     "stockout_cap": base.stockout_cap, "budget_warning_order_eur": base.budget_warning_order_eur,
-                    "budget_warning_week_eur": base.budget_warning_week_eur}
+                    "budget_warning_week_eur": base.budget_warning_week_eur,
+                    "certainty_premium_max": base.certainty_premium_max}
         return {**_json(repo().settings.get(kitchen_id)), "defaults": _json(defaults)}
 
     @app.put(k + "/settings")
