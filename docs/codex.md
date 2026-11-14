@@ -32,7 +32,7 @@ Check: `git log origin/main --author=Maciej --format='%s | %(trailers:key=Co-aut
 
 Other sources agree with the split:
 
-- `agent/README.md:271`: "Codex implemented #20's upstream adapter, #21's MCP integration
+- `agent/README.md:329`: "Codex implemented #20's upstream adapter, #21's MCP integration
   and this loop using separate issue branches and Opus-reviewed PRs." These are PRs #45,
   #54 and #63, all in the 42.
 - Maciek's Codex session lists PRs #436, #455, #476, #493 and #527 as its own in a comment

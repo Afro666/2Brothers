@@ -150,6 +150,48 @@ is Nemotron's real reply, recorded live on 2026-11-14 in 2.2 s: 6, 5, 4, 3 and 4
 read right, and the half hidden Edam ("Valio Edam 17 %") is `UNMATCHED`.
 Tests: `agent/tests/test_shelf_service.py`, `gateway/tests/test_stock_photo.py`.
 
+## Token meter (#365)
+
+```powershell
+docker compose --env-file /opt/2brothers/.env -f /opt/2brothers/deploy/compose.yaml logs buyer | python -m agent.usage
+python -m agent.usage .local/usage.jsonl          # the same from a file; --json for JSON
+```
+
+How much Nemotron we use, from the `usage` field of the endpoint's own replies
+(`agent/usage.py`, `agent/model.py`). The client counts every model call per role:
+calls, failed calls, prompt tokens, completion tokens, reasoning tokens (they are a part
+of the completion tokens) and seconds. A call that was retried is one call; a failed
+call counts with no tokens. Roles: `buyer` (the tool loop), `vl_delivery_note` and
+`vl_shelf_count` (the photo readers).
+
+At the end of a run the worker and the CLIs write one line, `NEMOTRON_USAGE {json}`, to
+stderr (the container log), and to the file in `NEMOTRON_USAGE_LOG` when it is set. The
+line holds counts, the run kind and its status: no request text, no reply text, no key.
+`python -m agent.usage` sums those lines into a table per role and skips other log lines.
+The proposal the worker returns also has `buyer_usage`, the totals of that request
+(both attempts when the run was started again), next to `buyer_model`. The gateway
+passes the worker's answer on as it is, so the field is in the `POST /proposals` answer;
+no page shows it yet. `python -m agent ... --mock` prints the same totals as `usage`.
+
+Measured on 2026-11-14 with the live model, before any change to the loop's settings:
+
+| Role | Runs | Calls | Prompt tokens | Completion tokens | Of which reasoning | Model seconds |
+|---|---|---|---|---|---|---|
+| `buyer` | 12 requests | 50 | 534,312 | 26,733 | 20,567 | 70.7 |
+| `vl_delivery_note` | 2 photos | 2 | 2,670 | 376 | 0 | 3.1 |
+| `vl_shelf_count` | 2 photos | 2 | 4,148 | 359 | 0 | 3.1 |
+
+One Buyer request is about 4 model calls, 44,500 prompt tokens, 2,200 completion tokens
+and 6 seconds of model time. The prompt is large because every call sends the tool
+schemas and the search result again. The Buyer rows are six requests, twice each (milk,
+butter, cheese, cream, yoghurt), run on a laptop: the real worker, MCP tools and gateway
+code on an in-memory database with the full Valio catalog file, the live site's catalog
+search (read only) and Valio's API. The photo rows are the four fixture photos with
+`--live`. The Kitchen Week benchmark counts its own tokens (`env/llm.py`, the
+"tokens/episode" column in `env/README.md`); it does not write usage lines.
+
+Tests: `agent/tests/test_usage.py` (a fake transport, no model call).
+
 ## Internal worker (#279)
 
 `two-brothers-buyer-worker` serves an internal `/run` endpoint on port 8001.
@@ -160,7 +202,8 @@ is absent. Structured engine requests retain their existing path.
 The worker accepts only the server's agent token and configured
 `GATEWAY_KITCHEN_ID`; it is not published to the browser. It creates a stored
 need through the gateway, runs Nemotron through the seven existing MCP tools,
-and returns the READY proposal plus `buyer_run_id` and `buyer_model`. Every model
+and returns the READY proposal plus `buyer_run_id`, `buyer_model` and `buyer_usage`
+(the token meter above). Every model
 tool step is audited. No orders are placed and no human credential is supplied.
 
 For now a request must contain exactly one explicit positive quantity in L, KG

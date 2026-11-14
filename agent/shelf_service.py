@@ -22,6 +22,7 @@ from types import SimpleNamespace
 from fastapi import Request
 
 from agent.model import Nemotron
+from agent.usage import emit
 from agent.shelf import read_shelf
 from agent.vision import VisionError, image_part
 
@@ -125,6 +126,7 @@ class ShelfReader:
                 raise self.error(503, 'VISION_UNAVAILABLE') from None
             raise self.error(502, 'VISION_REPLY_INVALID') from None
         finally:
+            emit(getattr(model, 'meter', None), run='shelf')
             await model.close()
         return {'model': MODEL_NAME, 'rows': contract_rows(rows, products)}
 

@@ -209,11 +209,13 @@ def main(argv=None) -> int:
         if a.live:
             from dotenv import load_dotenv
             from agent.model import Nemotron
+            from agent.usage import emit
             load_dotenv(Path.cwd() / ".env", override=False)
             model = Nemotron()
             try:
                 return await receive(a.photo, order, model)
             finally:
+                emit(model.meter, run="delivery_note")
                 await model.close()
         recorded = a.photo.with_suffix(".reply.json")
         if not recorded.exists():

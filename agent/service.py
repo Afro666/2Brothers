@@ -13,6 +13,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 
 from agent.model import Nemotron
 from agent.runner import Buyer
+from agent.usage import emit
 from gateway.mcp_server import GatewayClient, build_server
 from store import agent_runs
 from store import buyer_context
@@ -80,7 +81,7 @@ class BuyerWorker:
             if row['state'] == 'READY':
                 return row['result']
             raise WorkerError(409, 'BUYER_RECONCILIATION_REQUIRED')
-        model, buyer = None, None
+        model, buyer, status = None, None, 'FAILED'
         async def execute():
             nonlocal model, buyer
             stored = await self.gateway.request('POST', f'/v1/kitchens/{kitchen_id}/needs', payload=need)
@@ -110,10 +111,16 @@ class BuyerWorker:
             if outcome.get('substitute_options'):
                 buyer_context.save_options(self.db, kitchen_id, result['proposal_id'], outcome['substitute_options'])
                 result['substitute_options'] = outcome['substitute_options']
-            return {**result, 'buyer_run_id': run_id, 'buyer_model': 'nemotron-3.5-super-vl'}
+            result = {**result, 'buyer_run_id': run_id, 'buyer_model': 'nemotron-3.5-super-vl'}
+            meter = getattr(model, 'meter', None)
+            if meter is not None:
+                # Model calls, tokens and seconds of this request, both attempts (agent/usage.py).
+                result['buyer_usage'] = meter.total()
+            return result
         try:
             result = await asyncio.wait_for(execute(), timeout=self.timeout)
             agent_runs.finish(self.db, row['_id'], state='READY', result=result)
+            status = 'READY'
             return result
         except asyncio.TimeoutError:
             agent_runs.finish(self.db, row['_id'], state='RECONCILE', result=None)
@@ -125,6 +132,7 @@ class BuyerWorker:
             raise WorkerError(503, 'BUYER_UNAVAILABLE', fallback_safe=buyer is None or not buyer.mutations) from None
         finally:
             if model is not None:
+                emit(getattr(model, 'meter', None), run='buyer', status=status)
                 await model.close()
 
 

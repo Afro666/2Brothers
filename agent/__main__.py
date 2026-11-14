@@ -16,6 +16,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 
 from agent.model import Nemotron
 from agent.runner import Buyer
+from agent.usage import emit
 from gateway.mcp_server import GatewayClient, build_server
 from gateway.mock_gateway import MockGateway
 
@@ -41,8 +42,10 @@ async def run(args):
                     await session.initialize()
                     result = await Buyer(model, session, gateway, **options).run(args.request)
         result["mode"] = "mock_gateway_live_nemotron" if args.mock else "live_gateway_live_nemotron"
+        result["usage"] = model.meter.total()
         return result
     finally:
+        emit(model.meter, run="buyer")
         await gateway.close()
         await model.close()
 

@@ -1,8 +1,11 @@
 """Small OpenAI-compatible Verda inference client with bounded read retries."""
 import asyncio
 import os
+import time
 
 import httpx
+
+from agent.usage import Meter
 
 
 class ModelError(RuntimeError):
@@ -19,6 +22,7 @@ class Nemotron:
             headers={"Authorization": "Bearer " + key}, transport=transport,
             timeout=90, follow_redirects=False, trust_env=False)
         self.sleep = sleep
+        self.meter = Meter()    # calls, tokens and seconds per role (agent/usage.py)
 
     async def close(self):
         await self.http.aclose()
@@ -27,7 +31,7 @@ class Nemotron:
         body = {"model": "nemotron-3.5-super-vl", "messages": messages,
                 "tools": tools, "tool_choice": "auto", "temperature": 0,
                 "max_tokens": 2048}
-        return await self._post(body)
+        return await self._post(body, "buyer")
 
     async def complete_json(self, messages, schema, name, *, max_tokens=2048):
         """One structured reply: the server constrains the output to `schema` (strict).
@@ -37,9 +41,19 @@ class Nemotron:
                 "response_format": {"type": "json_schema",
                                     "json_schema": {"name": name, "schema": schema, "strict": True}},
                 "chat_template_kwargs": {"enable_thinking": False}}
-        return await self._post(body)
+        return await self._post(body, "vl_" + name)
 
-    async def _post(self, body):
+    async def _post(self, body, role):
+        """One model call for `role`, metered: a failed call counts too, with no tokens."""
+        started, usage, ok = time.monotonic(), None, False
+        try:
+            message, usage = await self._send(body)
+            ok = True
+            return message
+        finally:
+            self.meter.record(role, usage, time.monotonic() - started, ok=ok)
+
+    async def _send(self, body):
         for attempt in range(3):
             try:
                 response = await self.http.post("chat/completions", json=body)
@@ -55,10 +69,12 @@ class Nemotron:
             if response.status_code != 200:
                 raise ModelError(f"Nemotron HTTP {response.status_code}")
             try:
-                message = response.json()["choices"][0]["message"]
+                reply = response.json()
+                message = reply["choices"][0]["message"]
                 if not isinstance(message, dict):
                     raise ValueError()
-                return {k: v for k, v in message.items() if k in ("role", "content", "tool_calls")}
+                return ({k: v for k, v in message.items() if k in ("role", "content", "tool_calls")},
+                        reply.get("usage"))
             except (ValueError, KeyError, IndexError, TypeError):
                 raise ModelError("Nemotron returned an invalid completion") from None
         raise AssertionError("unreachable")
