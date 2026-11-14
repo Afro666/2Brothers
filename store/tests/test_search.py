@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 import unittest
 
-from store.search import _reasons, allergen_codes, build_pipeline, parse_query, search_products
+from store.search import (ALL_WORDS_BOOST, FOOD_BOOST, HOME_BOOST, SIZE_BOOST, _reasons,
+                          allergen_codes, build_pipeline, home_category, parse_query,
+                          search_products)
 
 
 def compound(query="", filters=None, **kw):
@@ -92,6 +94,51 @@ class SearchQueryTests(unittest.TestCase):
         self.assertEqual(len(from_text["filter"]), 1)  # only the kitchen scope
         boosts = [c for c in from_text["should"] if "compound" in c]
         self.assertEqual(boosts[0]["compound"]["filter"][1]["range"]["path"], "net_content.value")
+
+    def test_food_and_the_home_category_rank_first_among_names_with_every_word(self):
+        # #1593: "milk" is in the names of hand wash and jugs too.
+        every_word = {"text": {"query": "milk", "path": ["names.en", "names.fi", "names.sv"],
+                               "fuzzy": {"maxEdits": 1, "prefixLength": 1}, "matchCriteria": "all"}}
+        plain = [c["compound"] for c in compound("milk")["should"] if "compound" in c]
+        self.assertEqual(len(plain), 1)  # no home given: only food before non-food
+        food = plain[0]
+        self.assertEqual((food["filter"], food["score"]), ([every_word], {"constant": {"value": FOOD_BOOST}}))
+        self.assertEqual(len(food["mustNot"]), 8)  # the measured non-food prefixes, no wider
+        self.assertIn({"range": {"path": "category", "gte": "63000", "lte": "63999"}}, food["mustNot"])
+        with_home = [c["compound"] for c in build_pipeline("milk", home="10400")[0]["$search"]
+                     ["compound"]["should"] if "compound" in c]
+        in_home = {"equals": {"path": "category", "value": "10400"}}
+        self.assertEqual(with_home[1], {"filter": [every_word, in_home],
+                                        "score": {"constant": {"value": HOME_BOOST}}})
+        self.assertIn(in_home, with_home[0]["mustNot"])  # one boost or the other, never both
+        # Both need every word, so a row with some of the words stays under ALL_WORDS_BOOST,
+        # and a size written in the query still outranks them (gateway/candidates.py).
+        self.assertLess(FOOD_BOOST, HOME_BOOST)
+        self.assertLess(HOME_BOOST, SIZE_BOOST)
+        self.assertLess(SIZE_BOOST, ALL_WORDS_BOOST)
+
+    def test_home_category_needs_three_times_the_runner_up(self):
+        class Products:
+            def __init__(self, buckets):
+                self.buckets, self.calls = buckets, []
+
+            def aggregate(self, pipeline):
+                self.calls.append(pipeline)
+                return [{"count": {"lowerBound": 9}, "facet": {"category": {"buckets": self.buckets}}}]
+
+        def home(buckets, query="milk"):
+            db = type("Db", (), {"products": Products(buckets)})()
+            return home_category(db, query), db.products.calls
+
+        milk, calls = home([{"_id": "10400", "count": 84}, {"_id": "10411", "count": 14}])
+        self.assertEqual(milk, "10400")
+        operator = calls[0][0]["$searchMeta"]["facet"]["operator"]["compound"]
+        self.assertEqual(operator["must"][0]["text"]["matchCriteria"], "all")
+        self.assertIn("mustNot", operator["filter"][0]["compound"])  # catalog rows only, no kitchen's own
+        self.assertIsNone(home([{"_id": "41710", "count": 19}, {"_id": "18750", "count": 9}])[0])
+        self.assertEqual(home([{"_id": "63001", "count": 15}])[0], "63001")  # the only category
+        self.assertIsNone(home([])[0])
+        self.assertEqual(home([{"_id": "10400", "count": 5}], query="1 l"), (None, []))  # no words: no call
 
     def test_search_sees_the_catalog_and_only_the_asking_kitchens_own_products(self):
         catalog = {"compound": {"must": [{"exists": {"path": "supplier_id"}}],
