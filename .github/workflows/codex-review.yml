@@ -21,6 +21,10 @@ concurrency:
 
 jobs:
   advisory-review:
+    # Disabled at Maciek's request: no extra API billing. Local ChatGPT reviews
+    # use .github/scripts/local_codex_review.py instead. Re-enabling Actions alone
+    # cannot make a model call; API use requires a separate explicit opt-in.
+    if: vars.CODEX_API_REVIEW_ENABLED == 'true'
     # Eligibility is checked against the live PR by prepare, including forks/drafts.
     # Avoid stale draft/head metadata in the triggering event payload.
     runs-on: ubuntu-latest
