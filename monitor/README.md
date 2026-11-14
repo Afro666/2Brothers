@@ -42,6 +42,14 @@ Context.dev notes: the REST API rejects the MCP-only `responseMode` field; a 429
 retried with `Retry-After` / backoff.
 # Core proposal enforcement (#358)
 
+Replacement enrichment (#368) records a second Context structured extraction
+from the pinned official Löfbergs Crescendo page. The committed recording has
+source URL, fetch time and Context request ID. It appears in the live inbox,
+with allergens explicitly unknown. Add `--live-enrichment` to the command below
+to refresh that page using credits. This is an additional product-page call
+to web/scrape, not a claim to have used a different REST endpoint or RASFF.
+It cannot override supplier pack sizing or the trusted catalog allergen policy.
+
 After recording notices, apply them to actual open proposals in one kitchen:
 
 ```powershell

@@ -8,7 +8,7 @@ from store.buyer_context import excluded_allergens, product
 from store.orders import get_offer
 
 
-def apply_notices(gateway, kitchen_id, notices):
+def apply_notices(gateway, kitchen_id, notices, *, live_enrichment=False):
     db, now = gateway.db, gateway.now()
     kitchen, proposals = recalls.context(db, kitchen_id)
     alerts = scan(notices, kitchen, now)
@@ -62,6 +62,12 @@ def apply_notices(gateway, kitchen_id, notices):
                 continue
             recalls.link(db, kitchen_id, proposal['_id'], replacement_proposal_id=replacement['proposal_id'],
                          recall_replan_error=None)
+            from monitor.enrichment import attach
+            try:
+                attach(gateway, kitchen_id, replacement, live=live_enrichment)
+            except (ValueError, RuntimeError):
+                gateway._audit(kitchen_id, 'replacement_enrichment_unknown', 'recall-monitor',
+                               proposal_id=replacement['proposal_id'])
             gateway._audit(kitchen_id, 'recall_replacement_proposed', 'recall-buyer',
                 proposal_id=proposal['_id'], replacement_proposal_id=replacement['proposal_id'],
                 expected_total=replacement['expected_total'], requires_human_approval=True)
@@ -82,9 +88,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fixture', required=True, type=Path)
     parser.add_argument('--kitchen-id', required=True)
+    parser.add_argument('--live-enrichment', action='store_true', help='Use Context credits for manufacturer evidence')
     args = parser.parse_args()
     rows = apply_notices(Gateway(get_db(), ValioClient()), args.kitchen_id,
-                         json.loads(args.fixture.read_text(encoding='utf-8'))['notices'])
+                         json.loads(args.fixture.read_text(encoding='utf-8'))['notices'], live_enrichment=args.live_enrichment)
     print(json.dumps(rows, default=str, ensure_ascii=False))
 
 

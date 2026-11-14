@@ -9,6 +9,8 @@ SOURCE = 'https://www.lofbergs.fi/kahvimme/suodatinkahvit/crescendo'
 FIXTURE = Path(__file__).parent / 'fixtures/crescendo.json'
 SCHEMA = {'type': 'object', 'required': ['name', 'brand', 'pack', 'origin', 'allergens'],
     'properties': {key: {'type': ['string', 'null']} for key in ('name', 'brand', 'pack', 'origin', 'allergens')}}
+SCHEMA['properties']['allergens']['description'] = 'Explicit allergen statement only; null if absent. Never infer from coffee purity or flavour words.'
+SCHEMA['properties']['origin']['description'] = 'Explicit bean origins; do not infer manufacturing country.'
 
 
 def validate(row):

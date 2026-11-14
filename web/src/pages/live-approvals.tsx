@@ -17,6 +17,8 @@ interface Proposal {
   order_id?: string;
   replacement_proposal_id?: string;
   recall_replan_error?: string;
+  product_evidence?: { product_id: string; source_url: string; checked_at: string; via: string;
+    pack: string | null; origin: string | null; allergens: string | null }[];
   recall_alerts?: { product_id: string; match: string; recall: { url: string; lot?: string; title?: string } }[];
   decision_summary?: { text?: string };
   lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
@@ -79,6 +81,12 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
     </p>)}
     {row.replacement_proposal_id && <p><a className="underline" href={`#proposal-${row.replacement_proposal_id}`}>Review replacement proposal {row.replacement_proposal_id}</a>. A fresh human approval is required.</p>}
     {row.recall_replan_error && <p>No complete safe replacement is available ({row.recall_replan_error}). The original remains blocked.</p>}
+    {row.product_evidence?.map(e => <div key={e.product_id} className="rounded border p-3 text-sm">
+      <p>Manufacturer evidence for {e.product_id} · checked {e.checked_at} · {e.via}</p>
+      <p>Page pack: {e.pack ?? "unknown"} · Bean/ingredient origins: {e.origin ?? "unknown"} · Allergen statement: {e.allergens ?? "unknown — use trusted catalog data"}</p>
+      <p>Informational page claims; the catalog and engine still control allergens and quantities.</p>
+      {/^https:\/\//.test(e.source_url) && <a className="underline" href={e.source_url} target="_blank" rel="noreferrer">Manufacturer source</a>}
+    </div>)}
     <p>{formatEur(mapMoney(row.total_ex_vat))} ex VAT · {formatEur(mapMoney(row.expected_total))} including VAT and delivery</p>
     {unknown && <p>Waiting for supplier stock confirmation. Approval is unavailable.</p>}
     {expired && pending && <p>This offer has expired. Ask the Buyer for a fresh proposal.</p>}
