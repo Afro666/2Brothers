@@ -15,6 +15,14 @@ spec.loader.exec_module(review)
 
 
 class ReviewSecurityTests(unittest.TestCase):
+    def test_redactor_preserves_words_and_scrubs_standalone_key_fragments(self):
+        words = 'task-runner disk-cache ask-user mask-value'
+        self.assertEqual(review.redact(words), words)
+        self.assertEqual(review.redact('x sk-abc...def "sk-proj-abc***xyz"'),
+                         'x [REDACTED] "[REDACTED]"')
+        self.assertEqual(review.redact('prefix-secret-value', 'secret-value'),
+                         'prefix-[REDACTED]')
+
     def test_missing_key_cannot_claim_a_model_review(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {}, clear=True):
             folder = Path(tmp)

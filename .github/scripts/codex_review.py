@@ -15,7 +15,7 @@ def gh(*args):
 def redact(text, key=''):
     if key:
         text = text.replace(key, '[REDACTED]')
-    return re.sub(r'sk-[A-Za-z0-9_.*-]+', '[REDACTED]', text)
+    return re.sub(r'(?<![A-Za-z0-9])sk-[A-Za-z0-9_.*-]+', '[REDACTED]', text)
 
 
 def prepare(folder):
