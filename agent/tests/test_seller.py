@@ -332,3 +332,37 @@ def test_a_valio_rest_ends_the_pass_with_supplier_busy_and_sends_nothing(w, monk
     assert [r["result"] for r in report] == ["SUPPLIER_BUSY"]
     assert report[0]["retry_after"] == 30
     assert w.db.supplier_offers.count_documents({}) == 0
+
+
+class MeteredModel(FakeModel):
+    """A fake with a meter, as agent/model.py has: one pick counts one call (#1197)."""
+
+    def __init__(self, answer):
+        super().__init__(answer)
+        from agent.usage import Meter
+        self.meter = Meter()
+
+    async def complete_json(self, messages, schema, name, *, max_tokens=2048, role=None):
+        self.meter.record(role, {"prompt_tokens": 800, "completion_tokens": 40}, 1.25)
+        return await super().complete_json(messages, schema, name, max_tokens=max_tokens, role=role)
+
+
+def test_the_offer_carries_what_the_model_did(w):
+    model = MeteredModel({"index": 1, "reason": "The same kind of drink, in stock for Monday."})
+    model.meter.record(seller.ROLE, {"prompt_tokens": 5}, 9.0)          # an earlier pick in the run
+    go(w, model=model, apply=True, limit=1)
+    trace = w.db.supplier_offers.find_one({})["model_trace"]
+    assert (trace["made_by"], trace["reader"], trace["model"]) == ("model", "seller", "nemotron-3.5-super-vl")
+    assert (trace["calls"], trace["prompt_tokens"], trace["seconds"]) == (1, 800, 1.25)   # this pick only
+    assert trace["thinking"] is False
+    assert trace["steps"] == [{"by": "code", "attempt": 1, "tool": "shortlist", "count": 4},
+                              {"by": "model", "attempt": 1, "tool": "pick", "code": "PICKED"}]
+    text = json.dumps(trace)
+    assert "drink" not in text and "K1" not in text and "quantity" not in text and "demand" not in text
+
+
+def test_a_rule_pick_has_a_rule_trace_without_a_model(w):
+    go(w, apply=True)
+    trace = w.db.supplier_offers.find_one({})["model_trace"]
+    assert (trace["made_by"], trace["model"], trace["thinking"], trace["calls"]) == ("rule", None, None, 0)
+    assert [s["by"] for s in trace["steps"]] == ["code", "code"]

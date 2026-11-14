@@ -312,8 +312,8 @@ a line:
 - `discount_tiers`: the tier with the highest `min_qty` at or below the line quantity, in
   the line's unit, sets the unit price. The line's `why` names the tier.
 - Approve is still one human yes and one order; the order stores `blocks`. A line with
-  unknown stock still returns 409 `STOCK_UNKNOWN`, so a block of a manual supplier cannot
-  be placed until a supplier confirmation exists.
+  unknown stock does not block it (2026-11-14): the order is placed and its
+  `supplier_must_confirm` names the suppliers that must still confirm.
 
 ## Recall list and "check now" (#358)
 

@@ -418,7 +418,7 @@ describe("ApprovalCard with options", () => {
     });
   });
 
-  it("keeps approval blocked while the order's stock is unconfirmed, whatever the option says", async () => {
+  it("lets a person approve an option whose order stock is unconfirmed, and says it waits", async () => {
     const user = userEvent.setup();
     const onApprove = vi.fn();
     const order = structuredClone(confirmedDemoOrder);
@@ -430,12 +430,13 @@ describe("ApprovalCard with options", () => {
         onApprove={onApprove}
       />,
     );
+    expect(screen.getByText(/wait for the supplier's stock confirmation/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: /^Choose option B/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     const yes = within(dialog).getByRole("button", { name: /^Yes, approve/ });
-    expect(yes).toBeDisabled();
+    expect(yes).toBeEnabled();
     await user.click(yes);
-    expect(onApprove).not.toHaveBeenCalled();
+    expect(onApprove).toHaveBeenCalledTimes(1);
   });
 });
 

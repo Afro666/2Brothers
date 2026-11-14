@@ -109,6 +109,7 @@ function mapEach<T>(list: Json[], what: string, idKey: string, map: (row: Json) 
  */
 export function createHttpApi(baseUrl: string): Api {
   let currentSession: Session | null = null;
+  const mock = createMockApi();
   const kitchen = `/v1/kitchens/${encodeURIComponent(import.meta.env.VITE_GATEWAY_KITCHEN_ID || "demo-kitchen")}`;
   const proposalPath = (id: string) => `${kitchen}/proposals/${encodeURIComponent(id)}`;
   const get = (path: string) => gatewayRequest(baseUrl, path);
@@ -188,7 +189,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen, mock.getProducts),
     ...createEventsHttp(baseUrl, kitchen, () => currentSession),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
@@ -349,7 +350,7 @@ export function createHttpApi(baseUrl: string): Api {
   } satisfies Partial<Api>;
 
   return {
-    ...createMockApi(),
+    ...mock,
     ...real,
     // Never the mock for what acts on real input: it would change a sample order, not the real
     // proposal.

@@ -1,0 +1,4 @@
+{
+  "role": "assistant",
+  "content": "{\"order_ref\": \"DEMO-1198\", \"delivery_date\": \"2026-11-16\", \"lines\": [{\"product_code\": \"463982\", \"description\": \"Kieku barn eggs L, 180 pcs\", \"quantity\": \"1\", \"unit\": \"KI\", \"lot\": \"K1411E\", \"best_before\": \"2026-12-05\", \"replaces\": \"none\"}, {\"product_code\": \"463335\", \"description\": \"Valio Eila 3% milk drink 1 L lactose free\", \"quantity\": \"40\", \"unit\": \"ST\", \"lot\": \"E1611M\", \"best_before\": \"2026-11-26\", \"replaces\": \"none\"}]}"
+}

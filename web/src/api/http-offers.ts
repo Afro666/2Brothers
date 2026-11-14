@@ -1,4 +1,5 @@
 import { type Json, object, rows, text } from "@/api/gateway-map";
+import { mapModelTrace } from "@/api/model-trace";
 import type { Api } from "@/api/types";
 import { ApiError } from "@/api/types";
 import type { SupplierOffer } from "@/types";
@@ -37,6 +38,7 @@ export function mapSupplierOffer(value: unknown): SupplierOffer {
     proposalId: optional(row.proposal_id),
     // Anything but an explicit true is unknown: the tile then asks for a label check.
     allergenDataKnown: row.allergen_data_known === true,
+    modelTrace: mapModelTrace(row.model_trace),
   };
 }
 

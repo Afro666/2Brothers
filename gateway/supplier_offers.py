@@ -21,6 +21,7 @@ import unicodedata
 
 from fastapi import Depends, Request
 
+from gateway import model_trace
 from gateway.service import GatewayError, _hash
 from gateway.suppliers import VALIO
 from gateway.supplier_routes import supplier_demand
@@ -58,7 +59,27 @@ def _out(doc: dict, today: date) -> dict:
                 "replaces_product_id", "replaces_product_name", "requested_date", "quantity", "unit",
                 "reason", "made_by", "created_at", "proposal_id", "decided_by", "decided_at")},
             # false: the catalog declares no allergens for the offered product (see `_allergens_ok`)
-            "allergen_data_known": doc.get("allergen_data_known") is True}
+            "allergen_data_known": doc.get("allergen_data_known") is True,
+            # What the selling agent's model did (#1197); null for an offer sent without one.
+            "model_trace": model_trace.stored(doc.get("model_trace"))}
+
+
+def _trace(body: dict, made_by: str) -> dict | None:
+    """The selling agent's trace, checked (#1197). It is the supplier's account of its own
+    agent: shown to a person, never read as a price, a quantity or a reason."""
+    if body.get("model_trace") is None:
+        return None
+    try:
+        trace = model_trace.clean(body["model_trace"])
+    except ValueError as exc:
+        raise GatewayError(422, "INVALID_REQUEST", str(exc)) from None
+    if trace["reader"] != "seller":
+        raise GatewayError(422, "INVALID_REQUEST", "model_trace.reader: seller")
+    if trace["made_by"] != ("rule" if made_by == "rule" else "model"):
+        raise GatewayError(422, "INVALID_REQUEST", "model_trace.made_by disagrees with made_by")
+    if any("query" in s for s in trace["steps"]):
+        raise GatewayError(422, "INVALID_REQUEST", "model_trace.steps.query: not on a seller step")
+    return trace
 
 
 def _name(row: dict | None, fallback: str) -> str:
@@ -135,6 +156,7 @@ def create(gw, supplier_id: str, body: dict, sender: str) -> dict:
     nothing and writes nothing in a kitchen's audit log."""
     today = gw.now().date()
     fields = _validated(body, today)
+    trace = _trace(body, fields["made_by"])     # not part of the payload: a retry's counts may differ
     key, payload_hash = body["idempotency_key"], _hash(fields)
     stored = offers.by_key(gw.db, supplier_id, key)
     if stored is not None:
@@ -173,7 +195,7 @@ def create(gw, supplier_id: str, body: dict, sender: str) -> dict:
         **fields, "product_name": _name(product, product_id),
         "replaces_product_name": _name(rows.get(fields["replaces_product_id"]), fields["replaces_product_id"]),
         "quantity": demand[0], "unit": demand[1], "status": offers.OPEN, "round": round_,
-        "allergen_data_known": product.get("allergen_data_known") is True,
+        "allergen_data_known": product.get("allergen_data_known") is True, "model_trace": trace,
         "idempotency_key": key, "payload_hash": payload_hash, "sent_by": sender,
         "created_at": gw.now().isoformat(), "proposal_id": None, "decided_by": None, "decided_at": None})
     _audit_received(gw, doc)

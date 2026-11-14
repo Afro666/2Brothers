@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useApi } from "@/api";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatNumber } from "@/lib/format";
@@ -99,6 +100,7 @@ function LinkSearch({
                 disabled={busy}
                 onClick={() => onChoose(product)}
               >
+                <ProductThumb en={product.names.en} fi={product.names.fi} brand={product.brand} size="sm" />
                 <span className="min-w-0 break-words">
                   {product.names.en}
                   {product.vendorName ? <span className="text-muted-foreground"> · {product.vendorName}</span> : null}
@@ -222,6 +224,7 @@ export function KitchenWords() {
                               )
                             }
                           >
+                            <ProductThumb en={s.productName} size="sm" className="size-6" />
                             {s.productName}
                           </Button>
                         ))}
@@ -257,15 +260,18 @@ export function KitchenWords() {
               <ul className="divide-y rounded-lg border">
                 {words.data.aliases.map((alias) => (
                   <li key={alias.phrase} className={`${row} p-3`}>
-                    <p className="min-w-0 break-words">
-                      <span className="font-medium">{alias.phrase}</span>
-                      <span aria-hidden="true"> → </span>
-                      <span className="sr-only">{t("goes to")}</span>
-                      {alias.productName}{" "}
-                      <span className="text-sm tabular-nums text-muted-foreground">
-                        {alias.uses === 1 ? t("used 1 time") : t("used {count} times", { count: formatNumber(alias.uses) })}
-                      </span>
-                    </p>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <ProductThumb en={alias.productName} size="sm" />
+                      <p className="min-w-0 break-words">
+                        <span className="font-medium">{alias.phrase}</span>
+                        <span aria-hidden="true"> → </span>
+                        <span className="sr-only">{t("goes to")}</span>
+                        {alias.productName}{" "}
+                        <span className="text-sm tabular-nums text-muted-foreground">
+                          {alias.uses === 1 ? t("used 1 time") : t("used {count} times", { count: formatNumber(alias.uses) })}
+                        </span>
+                      </p>
+                    </div>
                     <Button
                       variant="ghost"
                       size="sm"

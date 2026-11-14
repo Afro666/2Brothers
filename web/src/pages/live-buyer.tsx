@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
 import { gatewayRequest } from "@/api/http";
 import { mapMoney } from "@/api/map";
+import { mapModelTrace } from "@/api/model-trace";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { ChefRequestBox } from "@/components/purchasing/chef-request-box";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +21,7 @@ interface Proposal {
   expected_total: string;
   total_ex_vat: string;
   buyer_model?: string;
+  model_trace?: unknown;
   request?: { made_by?: string; buyer_down?: boolean; refusal?: { code?: string; allergens?: string[]; message?: string } };
   decision_summary?: { asked?: string; searched?: string; chosen?: string[]; left_out?: string[]; text?: string };
   mandate?: { verdict?: string; reasons?: string[] };
@@ -310,6 +313,7 @@ export function LiveBuyerRequests() {
             </CardHeader>
             <CardContent className="space-y-4 px-0">
               <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result, t)}</p>
+              <ModelTracePanel trace={mapModelTrace(result.model_trace)} />
               <p className="break-all font-mono text-[11px] text-muted-foreground">{result.proposal_id}</p>
               <Rejection row={result} />
             </CardContent>
@@ -322,6 +326,7 @@ export function LiveBuyerRequests() {
             </CardHeader>
             <CardContent className="space-y-4 px-0">
               <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result, t)}</p>
+              <ModelTracePanel trace={mapModelTrace(result.model_trace)} />
               <p className="break-all font-mono text-[11px] text-muted-foreground">{result.proposal_id}</p>
               <p className="text-xl font-bold">
                 {t("{exVat} ex VAT · {total} total", {

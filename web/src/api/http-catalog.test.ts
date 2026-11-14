@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createHttpApi } from "@/api/http";
 import { mapCatalogProduct } from "@/api/http-catalog";
+import { products } from "@/mocks/milk-case";
 
 const K = "/api/v1/kitchens/demo-kitchen";
 
@@ -152,6 +153,20 @@ describe("Products by code on the real gateway", () => {
     const found = await createHttpApi("/api").getProducts(["400001", "463335"]);
     expect(calls.map((call) => call.route)).toEqual([`GET ${K}/catalog/products?ids=400001,463335`]);
     expect(found.map((product) => product.id)).toEqual(["400001", "463335"]);
+  });
+
+  it("answers from the sample products while the gateway does not serve the route yet (#1172)", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const sample = products.arlaUht1l.id;
+    // A gateway without the route: FastAPI's own 404, no `error` envelope.
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 }));
+    const found = await createHttpApi("/api").getProducts([sample, "999999"]);
+    expect(found.map((product) => product.id)).toEqual([sample]);
+  });
+
+  it("still fails on a 404 the gateway names (the route is served)", async () => {
+    gateway({});
+    await expect(createHttpApi("/api").getProducts(["463335"])).rejects.toMatchObject({ code: "NO_ROUTE" });
   });
 
   it("does not call the gateway for no codes", async () => {

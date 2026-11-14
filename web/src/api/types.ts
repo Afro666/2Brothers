@@ -209,6 +209,27 @@ export interface DeliveryNoteLine {
   missing: number | null;
   baseUnit: string;
   lots: DeliveryLot[];
+  /** As stored on the order (#1198); null when the gateway does not say. */
+  orderQuantity: number | null;
+  orderUnit: string | null;
+  /** `missing` in the order unit. */
+  missingOrderQty: number | null;
+  /** EUR ex VAT per order unit, the order's own price. */
+  unitPrice: number | null;
+  /** The value of what did not come, computed by the gateway; null = unknown, never zero. */
+  claimEur: number | null;
+}
+
+/** One total to claim for the short and missing lines, computed by the gateway (#1198). */
+export interface DeliveryClaim {
+  totalEur: number;
+  lines: number;
+  /** Set only when every short line has the same order unit. */
+  quantity: number | null;
+  unit: string | null;
+  /** Lines that may be short but have no value; not in `totalEur`. */
+  notValued: number;
+  supplierName: string | null;
 }
 
 export interface DeliveryNoteOther extends DeliveryLot {
@@ -229,6 +250,8 @@ export interface DeliveryNoteRead {
   complete: boolean;
   lines: DeliveryNoteLine[];
   notOrdered: DeliveryNoteOther[];
+  /** null when the gateway sent no claim (an older gateway). */
+  claim: DeliveryClaim | null;
 }
 
 export type ProductTemperature = "ambient" | "chilled" | "frozen";
