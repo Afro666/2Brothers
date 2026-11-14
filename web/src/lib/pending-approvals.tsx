@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { useApi } from "@/api";
+import { useLiveEvents } from "@/lib/live-events";
 
 interface PendingApprovals {
   /** How many approvals wait for a person. null = not known (loading or the gateway failed): show no badge. */
@@ -45,6 +46,7 @@ export function PendingApprovalsProvider({
     };
   }, [api, version]);
   const refresh = useCallback(() => setVersion((value) => value + 1), []);
+  useLiveEvents(["proposal", "approval"], refresh);
   useEffect(() => {
     const timer = setInterval(refresh, intervalMs);
     return () => clearInterval(timer);

@@ -270,6 +270,9 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
   };
 
   return {
+    subscribeEvents() {
+      return () => {};
+    },
     ...createMockAuth(options.signedOut),
     ...createKitchenMock(recordAudit),
     ...createNotificationsMock(recordAudit),

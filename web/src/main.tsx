@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiProvider } from "@/api";
 import { LanguageProvider } from "@/lib/i18n";
 import { PendingApprovalsProvider } from "@/lib/pending-approvals";
+import { LiveEventsProvider } from "@/lib/live-events";
 import { ThemeProvider } from "@/lib/theme";
 import { createAppRouter } from "@/router";
 
@@ -22,12 +23,14 @@ createRoot(document.getElementById("root")!).render(
     <LanguageProvider>
       <ThemeProvider>
         <ApiProvider>
-          <PendingApprovalsProvider>
-            <TooltipProvider>
-              <RouterProvider router={router} />
-              <Toaster />
-            </TooltipProvider>
-          </PendingApprovalsProvider>
+          <LiveEventsProvider>
+            <PendingApprovalsProvider>
+              <TooltipProvider>
+                <RouterProvider router={router} />
+                <Toaster />
+              </TooltipProvider>
+            </PendingApprovalsProvider>
+          </LiveEventsProvider>
         </ApiProvider>
       </ThemeProvider>
     </LanguageProvider>
