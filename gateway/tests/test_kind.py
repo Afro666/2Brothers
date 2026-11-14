@@ -348,3 +348,25 @@ def test_a_failed_kinds_read_backs_off_and_an_old_snapshot_is_rebuilt(gateway, m
     clock[0] += service.KINDS_TTL
     gw._of_kind(rows, "cheese", {}, "50 kg cheese", "KG")
     assert len(calls) == 3                       # an old snapshot is rebuilt
+
+
+def test_a_product_added_to_the_catalog_counts_after_the_kinds_ttl(gateway):
+    """#1044: a catalog reload is seen by the kind rule once the snapshot is older than
+    KINDS_TTL, without a gateway restart."""
+    from gateway import service
+    _, gw = gateway
+    clock = [NOW]
+    gw.now = lambda: clock[0]
+    rows = scored(SAUCE[:1], 240)
+    gw._of_kind(rows, "yoghurt", {}, "50 kg yoghurt", "KG")
+    assert gw._kinds.categories("50 kg yoghurt") == ()
+    new = many("yo", "10700", [(f"{taste} yoghurt 1 kg", None)
+                               for taste in ("Natural", "Greek", "Vanilla", "Strawberry", "Turkish")])
+    gw.db.products.insert_many([{"_id": r["product_id"], **{k: v for k, v in r.items() if k != "product_id"}}
+                                for r in new])
+    clock[0] += service.KINDS_TTL / 2
+    gw._of_kind(rows, "yoghurt", {}, "50 kg yoghurt", "KG")
+    assert gw._kinds.categories("50 kg yoghurt") == ()      # a fresh snapshot is kept
+    clock[0] = NOW + service.KINDS_TTL
+    gw._of_kind(rows, "yoghurt", {}, "50 kg yoghurt", "KG")
+    assert gw._kinds.categories("50 kg yoghurt") == ("10700",)
