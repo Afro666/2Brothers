@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LanguageProvider } from "@/lib/i18n";
 import { PendingApprovalsProvider } from "@/lib/pending-approvals";
+import { LiveEventsProvider } from "@/lib/live-events";
 import { ThemeProvider } from "@/lib/theme";
 import { createAppRouter } from "@/router";
 
@@ -17,12 +18,14 @@ export function renderApp(path: string, api: Api = createMockApi()) {
     <LanguageProvider>
       <ThemeProvider>
         <ApiProvider api={api}>
-          <PendingApprovalsProvider>
-            <TooltipProvider>
-              <RouterProvider router={router} />
-              <Toaster />
-            </TooltipProvider>
-          </PendingApprovalsProvider>
+          <LiveEventsProvider>
+            <PendingApprovalsProvider>
+              <TooltipProvider>
+                <RouterProvider router={router} />
+                <Toaster />
+              </TooltipProvider>
+            </PendingApprovalsProvider>
+          </LiveEventsProvider>
         </ApiProvider>
       </ThemeProvider>
     </LanguageProvider>,

@@ -1,8 +1,9 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { mapKitchenSettings } from "@/api/map-planning";
 import { createMockApi } from "@/api/mock";
+import type { LiveEvent } from "@/api/types";
 import { renderApp } from "@/test/render";
 
 const row = {
@@ -13,6 +14,32 @@ const row = {
 beforeEach(() => vi.stubEnv("VITE_LIVE_BUYER", "true"));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const json = (body: unknown) => new Response(JSON.stringify(body));
+
+it("reloads proposals after an event without remounting an unchanged card", async () => {
+  let rows = [row];
+  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: rows })));
+  let publish: ((event: LiveEvent) => void) | undefined;
+  let report: ((connected: boolean) => void) | undefined;
+  const api = createMockApi();
+  api.subscribeEvents = (onEvent, onStatus) => {
+    publish = onEvent;
+    report = onStatus;
+    return () => {};
+  };
+  const user = userEvent.setup();
+  renderApp("/approvals", api);
+
+  expect(await screen.findByRole("heading", { name: "Proposal p1" })).toBeVisible();
+  await act(async () => { report?.(true); });
+  expect(screen.getByText("Live")).toHaveAttribute("title", "New proposals appear here without a refresh");
+  await user.click(screen.getByRole("button", { name: "Reject proposal" }));
+  expect(screen.getByRole("dialog", { name: "Confirm rejection" })).toBeVisible();
+
+  rows = [row, { ...row, proposal_id: "p2", offer_id: "o3" }];
+  await act(async () => { publish?.({ kind: "proposal", operation: "insert" }); });
+  expect(await screen.findByRole("heading", { name: "Proposal p2" })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: "Confirm rejection" })).toBeVisible();
+});
 
 it.each([
   ["on", "Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them."],

@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiProvider } from "@/api";
 import { createMockApi } from "@/api/mock";
+import type { LiveEvent } from "@/api/types";
+import { LiveEventsProvider } from "@/lib/live-events";
 import { PENDING_APPROVALS_REFRESH_MS, PendingApprovalsProvider, usePendingApprovals } from "@/lib/pending-approvals";
 import { renderApp } from "@/test/render";
 
@@ -112,5 +114,44 @@ describe("Waiting-approvals count", () => {
       });
       expect(screen.getByText("count: 2")).toBeInTheDocument();
     });
+  });
+
+  it("reloads the count after a proposal event", async () => {
+    vi.useFakeTimers();
+    try {
+      const base = createMockApi();
+      const pending = (await base.listApprovals()).filter((approval) => approval.status === "PENDING");
+      let shown = pending.slice(0, 1);
+      let publish: ((event: LiveEvent) => void) | undefined;
+      const api = {
+        ...base,
+        listApprovals: vi.fn(async () => structuredClone(shown)),
+        subscribeEvents(onEvent: (event: LiveEvent) => void) {
+          publish = onEvent;
+          return () => {};
+        },
+      };
+      function Count() {
+        const { count } = usePendingApprovals();
+        return <p>count: {String(count)}</p>;
+      }
+      render(
+        <ApiProvider api={api}>
+          <LiveEventsProvider>
+            <PendingApprovalsProvider><Count /></PendingApprovalsProvider>
+          </LiveEventsProvider>
+        </ApiProvider>,
+      );
+      await act(async () => {});
+      expect(screen.getByText("count: 1")).toBeInTheDocument();
+      shown = pending.slice(0, 2);
+      await act(async () => {
+        publish?.({ kind: "proposal", operation: "insert" });
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(screen.getByText("count: 2")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

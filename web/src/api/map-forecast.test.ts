@@ -50,6 +50,14 @@ const forecast = {
 };
 
 describe("mapForecastAccuracy", () => {
+  it("keeps engine-only history and marks the absent baseline unknown instead of zero", () => {
+    const withoutBaseline = { ...accuracy, methods: { ...accuracy.methods, "weekday-average": { total: nothing, weeks: [] } } };
+    const { kitchen } = mapForecastAccuracy(withoutBaseline, { lines: [] });
+    expect(kitchen.engine.wape).toBe(0.047);
+    expect(kitchen.baseline.wape).toBeNull();
+    expect(kitchen.weeks).toHaveLength(2);
+    expect(kitchen.weeks[0]).toMatchObject({ engine: 1000, actual: 990, baseline: null, baselineWape: null });
+  });
   it("maps both methods, week by week, and adds the weeks ahead from the forecast", () => {
     const { kitchen, products } = mapForecastAccuracy(accuracy, forecast);
 

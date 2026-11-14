@@ -144,6 +144,8 @@ export default {
   "Lines": "Rivit",
   "Lines known for this order": "Tälle tilaukselle tunnetut rivit",
   "Live demo proposals. A person confirms the exact basket and total before an order is recorded.": "Live-demon ehdotukset. Ihminen vahvistaa tarkan korin ja summan ennen tilauksen kirjaamista.",
+  "Live": "Reaaliaikainen",
+  "New proposals appear here without a refresh": "Uudet ehdotukset näkyvät täällä ilman sivun päivittämistä",
   "Loading approvals": "Ladataan hyväksyntöjä",
   "Loading order history": "Ladataan tilaushistoriaa",
   "Loading products…": "Ladataan tuotteita…",

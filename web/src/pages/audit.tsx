@@ -9,6 +9,7 @@ import { LoadingState } from "@/components/purchasing/loading-state";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAsync } from "@/lib/use-async";
+import { useLiveEvents } from "@/lib/live-events";
 import { useT } from "@/lib/i18n";
 import type { AuditEvent, AuditKind } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
@@ -17,6 +18,7 @@ export function AuditPage() {
   const t = useT();
   const api = useApi();
   const state = useAsync(() => api.listAudit());
+  useLiveEvents(["audit"], state.reload);
   const [order, setOrder] = useState("all");
   // `/audit?kind=search` chooses that kind (the Permissions page links here). Follows later
   // `?kind=` changes too (another link, back/forward) without remounting; unknown kinds mean "all".

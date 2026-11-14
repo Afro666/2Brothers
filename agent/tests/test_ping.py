@@ -8,13 +8,12 @@ from agent.model import Nemotron, provider_settings
 from agent.ping import check
 
 
-def test_provider_switch_selects_its_own_key_and_model():
-    base, model, key = provider_settings({'NEMOTRON_PROVIDER': 'nvidia', 'NVIDIA_API_KEY': 'private-nvidia', 'VERDA_INFERENCE_KEY': 'private-verda'})
-    assert base == 'https://integrate.api.nvidia.com/v1/'
-    assert model == 'nvidia/nemotron-3.5-super-vl-120b-a12b'
-    assert key == 'private-nvidia'
-    with pytest.raises(ValueError, match='NVIDIA_API_KEY is required'):
-        provider_settings({'NEMOTRON_PROVIDER': 'nvidia', 'VERDA_INFERENCE_KEY': 'private-verda'})
+def test_operator_can_correct_the_endpoint_and_model_without_changing_the_key():
+    base, model, key = provider_settings({'NEMOTRON_BASE_URL': 'https://nemotron.example/v1',
+                                          'NEMOTRON_MODEL': 'nemotron-serving-alias', 'VERDA_INFERENCE_KEY': 'private-verda'})
+    assert (base, model, key) == ('https://nemotron.example/v1/', 'nemotron-serving-alias', 'private-verda')
+    with pytest.raises(ValueError, match='VERDA_INFERENCE_KEY is required'):
+        provider_settings({})
 
 
 @pytest.mark.parametrize('url', ['http://public.example/v1', 'https://user:secret@example.test/v1',
@@ -50,6 +49,7 @@ def test_ping_does_not_retry_errors_or_expose_their_contents(monkeypatch):
         return httpx.Response(503, text='private-key upstream details')
     result = asyncio.run(check(transport=httpx.MockTransport(unavailable)))
     assert result['status'] == 'ERROR' and result['error'] == 'ModelError'
+    assert result['http_status'] == 503
     assert len(requests) == 1 and 'private-key' not in json.dumps(result)
 
 

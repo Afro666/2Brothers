@@ -93,7 +93,7 @@ def _rows(data) -> list[dict]:
     return out
 
 
-async def _image(request: Request) -> str:
+async def _image(request: Request, *, with_body=False):
     """The request's `image_base64`, checked: body and image size, base64, PNG or JPEG."""
     declared = request.headers.get("content-length", "")
     if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
@@ -120,7 +120,7 @@ async def _image(request: Request) -> str:
         raise _error("IMAGE_TOO_LARGE")
     if not image.startswith(MAGIC):
         raise _error("NOT_AN_IMAGE")
-    return encoded
+    return (encoded, data) if with_body else encoded
 
 
 def mount_stock_photo(app, gw, principal, shelf_worker=None) -> None:

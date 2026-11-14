@@ -38,6 +38,7 @@ The database is the one named in the URI, else `two_brothers`.
 | `audit_log` | `store.audit` | Insert-only and hash-chained. `_id` is the sequence number. |
 | `kitchen_stock`, `covers`, `orders_history`, `deliveries`, `forecasts`, `kitchens`, `sharing` | `store.history` | Time series and consent; see below. |
 | `suppliers`, `recipes`, `menu_plans` | `store.repository` | Kitchen data in the contract's data shapes; see below. Own products are rows in `products`. |
+| `brand_logos` | `store.brand_logos` | One row per catalog brand: what Context.dev said about its logo (`found` or `none`), written once by `python -m gateway.brand_logos`. `_id` is the brand name. |
 
 Money is `Decimal` in Python and `Decimal128` in Mongo; the wire format is a decimal
 string. `store.orders` refuses binary floats and the unknown-stock sentinels

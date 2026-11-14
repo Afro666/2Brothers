@@ -3,11 +3,13 @@ import { createOffersHttp } from "@/api/http-offers";
 import { createOnboardingHttp } from "@/api/http-onboarding";
 import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
 import { createShelfHttp } from "@/api/http-shelf";
+import { createMenuPhotoHttp } from "@/api/http-menu-photo";
 import { createDeliveryNoteHttp } from "@/api/http-delivery-note";
 import { createTrustHttp } from "@/api/http-trust";
 import { createUsageHttp } from "@/api/http-usage";
 import { createTokensHttp } from "@/api/http-tokens";
 import { createDeveloperHttp } from "@/api/http-developer";
+import { createEventsHttp } from "@/api/http-events";
 import {
   type Json,
   mapAddable,
@@ -38,6 +40,8 @@ function uuid(): string {
 }
 
 export const SIGNED_OUT_EVENT = "kitchen-buyer:signed-out";
+/** Sent after a successful sign-in, so the event stream that a 401/403 stopped opens again. */
+export const SIGNED_IN_EVENT = "kitchen-buyer:signed-in";
 
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
@@ -156,6 +160,7 @@ export function createHttpApi(baseUrl: string): Api {
     },
     async signIn(email, password) {
       currentSession = toSession((await post("/v1/auth/login", { email, password })) as Json);
+      window.dispatchEvent(new Event(SIGNED_IN_EVENT));
       return currentSession;
     },
     async signOut() {
@@ -173,12 +178,14 @@ export function createHttpApi(baseUrl: string): Api {
     ...createNutritionHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOnboardingHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createShelfHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createMenuPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeliveryNoteHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createUsageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createEventsHttp(baseUrl, kitchen, () => currentSession),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));

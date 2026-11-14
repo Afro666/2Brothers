@@ -522,7 +522,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | POST | `/stock-counts` | `kitchen:write` | Push a stock count (POS, inventory, manual). `null` means unknown, never zero. A repeat `idempotency_key` returns the stored answer. A repeat key while the first request is still storing returns 409 `IDEMPOTENCY_IN_PROGRESS`: try again. A store that fails releases the key, so the same key can be retried. |
 | GET | `/stock` | `kitchen:read` | Current stock and position (on hand + on order). Shape under "Body shapes: stock and demand". |
 | POST | `/stock/photo` | `kitchen:write` | Nemotron 3.5 Super VL reads a shelf photo into a count to confirm. Stores no count. Shape under "Count from a shelf photo". Served. |
-| POST | `/menu-photo` | `kitchen:write` + `kitchen:propose` | Nemotron 3.5 Super VL reads a photo of a week's menu into dishes matched to recipes, and a menu-plan proposal that waits for a person. Orders nothing. Shape under "Plan from a menu photo". Proposed; the gateway does not serve it yet (#1136). |
+| POST | `/menu-photo` | `kitchen:write` + `kitchen:propose` | Nemotron 3.5 Super VL reads a photo of a week's menu into dishes matched to recipes, and a menu-plan proposal that waits for a person. Orders nothing. Shape under "Plan from a menu photo". Served by `gateway/menu_photo.py` (#1154). |
 | GET | `/products`, `/products/{id}` | `kitchen:read` | Own products (not in a supplier catalog). Shape below. |
 | POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Create, change or delete an own product. |
 | GET | `/catalog/products?ids=` | `kitchen:read` | Product rows by code, for screens that hold product codes (recipes, orders). `ids` is 1 to 200 codes, comma-separated. Returns `{"products": [...]}` in the order asked, each in the product row shape of `search_products` (no `score`, no `match_reasons`). Covers the supplier catalogs and this kitchen's own products, never another kitchen's. A code that is not found is left out; it is not an error. Proposed; the gateway does not serve it yet. |
@@ -591,6 +591,9 @@ products, menu plans, stock counts, stock, demand, settings and sharing.
   `stock_counted`, `settings_changed`, `share_granted`, `share_revoked`.
 - `POST /stock/photo` writes no kitchen data. It leaves one audit entry per call:
   `stock_photo_read` or `stock_photo_failed` (see "Count from a shelf photo").
+- `POST /menu-photo` leaves the stored menu plan unchanged. It writes a
+  `menu_photo_read` or `menu_photo_failed` audit entry (see "Plan from a menu photo"),
+  plus the pending proposal when matched dishes need ingredients.
 - Gap: only `POST /stock-counts` replays a repeat `idempotency_key`. The supplier,
   recipe, product and menu-plan writes ignore the key, so a repeated create makes a
   second row.
@@ -1634,7 +1637,7 @@ nothing is stored. A person can always check the delivery by hand.
 
 ### Plan from a menu photo (#1136)
 
-Proposed; the gateway does not serve it yet (`gateway/menu_photo.py`, Maciek, #1136).
+Served by `gateway/menu_photo.py` (#1154, Maciek, #1136).
 The web Planner page builds its "Plan from a menu photo" panel against this section with
 the mock.
 
