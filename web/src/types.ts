@@ -447,8 +447,10 @@ export interface ForecastScore {
 export interface ForecastWeek {
   /** ISO `YYYY-Www`. */
   week: string;
-  /** null in a week that is not over: future weeks carry a forecast only. */
+  /** null in a week that is not over, or a past week with no stock count. */
   actual: number | null;
+  /** true for a week that is not over yet: it carries a forecast only. */
+  ahead: boolean;
   engine: number | null;
   baseline: number | null;
   engineWape: number | null;
