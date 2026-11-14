@@ -545,6 +545,48 @@ class Gateway:
         self.db.needs.insert_one(need)
         return {"need_id": need["_id"], **{k: need[k] for k in ("quantity", "unit", "requested_date", "text")}}
 
+    def tool_search(self, kitchen_id: str, query: str, filters: dict, limit: int,
+                    need_id: str | None = None) -> dict:
+        """Catalog search for the Buyer. With the stored need it becomes a shortlist the
+        Buyer can order from: only products sold in the need's measure (a request in litres
+        never gets chocolate), and products that can still arrive on the requested date
+        first. One availability call for the shortlist only, never for the whole catalog."""
+        search = self._search
+        if search is None:
+            from store.search import search_products as search
+        need = self.db.needs.find_one({"_id": need_id, "kitchen_id": kitchen_id}) if need_id else None
+        if need_id and need is None:
+            raise GatewayError(422, "INVALID_NEED", "unknown need_id")
+        if need is None:
+            return {"products": search(self.db, query, filters, limit)}
+        rows = search(self.db, query, filters, 50)
+        measure = need["unit"]
+        same = [r for r in rows if (r.get("net_content") or {}).get("unit") == measure]
+        filtered = bool(same) and measure in ("L", "KG")
+        if filtered:
+            rows = same
+        rows = rows[:max(limit, 20)]
+        arrival: dict[str, bool | None] = {}
+        try:
+            ids = [r["product_id"] for r in rows if str(r.get("supplier_id") or "sup-valio") == VALIO]
+            if ids:
+                requested = date.fromisoformat(need["requested_date"])
+                for product in self.valio.availability(ids, need["requested_date"])["products"]:
+                    lines = product.get("scheduleLines") or []
+                    day = lines[0].get("availableDate") if lines else None
+                    ok = (bool(lines) and product.get("cutoff_passed") is False and not product.get("salesBlock")
+                          and day is not None and date.fromisoformat(day) <= requested)
+                    arrival[product["productId"]] = ok
+        except Exception:
+            arrival = {}     # no live answer: the offer step still checks every product
+        for r in rows:
+            r["can_arrive"] = arrival.get(r["product_id"])
+        rows.sort(key=lambda r: 0 if r["can_arrive"] else (1 if r["can_arrive"] is None else 2))
+        return {"products": rows[:limit], "requested_date": need["requested_date"],
+                "measure": measure if filtered else None,
+                "note": "can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
+                        "prefer products with can_arrive true"}
+
     def tool_get_offer(self, kitchen_id: str, body: dict) -> dict:
         need = self.db.needs.find_one({"_id": body.get("need_id"), "kitchen_id": kitchen_id})
         if need is None:

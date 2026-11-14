@@ -157,6 +157,10 @@ class Buyer:
             if self.allergen_policy and any(not self.allergen_policy.allowed(self.catalog_lookup(pid))
                                            for pid in args['product_ids']):
                 raise PolicyError("Kitchen allergen rules refuse this product")
+        if name == 'search_products':
+            # Host-set, like the allergen filter: the gateway then returns only products in the
+            # need's measure and marks which can still arrive (a model cannot pick another need).
+            args['need_id'] = self.need_id
         if name == 'search_products' and self.allergen_policy:
             filters = args.setdefault('filters', {})
             filters['exclude_allergens'] = list(set(filters.get('exclude_allergens', [])) | set(self.allergen_policy.excluded))
