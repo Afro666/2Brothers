@@ -5,8 +5,9 @@ import unittest
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 
-from store.audit import (AuditConflict, append_event, append_event_new, canonical, entry_hash,
-                         list_events, verify_chain)
+from store import audit as audit_module
+from store.audit import (AuditConflict, append_event, append_event_new, canonical, chain_head,
+                         entry_hash, list_events, verify_chain)
 
 
 class FakeCursor(list):
@@ -26,6 +27,8 @@ class FakeAuditLog:
     def find_one(self, query=None, sort=None):
         if sort:
             return dict(max(self.docs, key=lambda d: d["_id"])) if self.docs else None
+        if "_id" in query:
+            return next((dict(d) for d in self.docs if d["_id"] == query["_id"]), None)
         wanted = query["event.event_id"]
         return next((dict(d) for d in self.docs if d["event"]["event_id"] == wanted), None)
 
@@ -48,9 +51,26 @@ class FakeAuditLog:
                           if all(d["event"].get(k.split(".")[1]) == v for k, v in query.items()))
 
 
+class FakeHead:
+    """The one head document: it moves forward only, like the real update with `$lt`."""
+
+    def __init__(self):
+        self.doc = None
+
+    def update_one(self, query, update, upsert=False):
+        if self.doc is None or self.doc["seq"] < query["seq"]["$lt"]:
+            self.doc = {"_id": query["_id"], **update["$set"]}
+        else:
+            raise DuplicateKeyError("the head is further on")
+
+    def find_one(self, query):
+        return dict(self.doc) if self.doc else None
+
+
 class FakeDb:
     def __init__(self, **kw):
         self.audit_log = FakeAuditLog(**kw)
+        self.audit_head = FakeHead()
 
 
 def event(n, **extra):
@@ -114,6 +134,47 @@ class AuditTests(unittest.TestCase):
             append_event(db, event(n))
         del db.audit_log.docs[1]
         self.assertEqual(verify_chain(db)["broken_at"], 3)
+
+    def test_entries_cut_from_the_end_break_the_chain(self):
+        # #1879: the chain alone verified a log that had lost its last rows.
+        db = FakeDb()
+        for n in range(5):
+            append_event(db, event(n))
+        self.assertEqual(verify_chain(db), {"ok": True, "length": 5, "broken_at": None})
+        del db.audit_log.docs[3:]
+        self.assertEqual(verify_chain(db), {"ok": False, "length": 3, "broken_at": 4})
+        # A new row in place of the old 4 and 5 links correctly, and is still not the log.
+        append_event(db, event("forged"))
+        self.assertEqual(verify_chain(db), {"ok": False, "length": 4, "broken_at": 5})
+
+    def test_a_rewritten_end_of_the_same_length_breaks_the_chain(self):
+        db = FakeDb()
+        for n in range(3):
+            append_event(db, event(n))
+        last = db.audit_log.docs[-1]
+        last["event"] = {"event_id": "e2", "type": "rewritten"}
+        last["hash"] = entry_hash(last)  # a careful forger recomputes the hash
+        self.assertEqual(verify_chain(db), {"ok": False, "length": 2, "broken_at": 3})
+
+    def test_a_log_from_before_the_head_verifies_and_gets_its_head_on_the_next_append(self):
+        db = FakeDb()
+        for n in range(3):
+            append_event(db, event(n))
+        db.audit_head.doc = None  # the live log today: entries, no head yet
+        self.assertEqual(verify_chain(db), {"ok": True, "length": 3, "broken_at": None})
+        self.assertIsNone(chain_head(db))
+        entry = append_event(db, event(3))
+        self.assertEqual(chain_head(db), {"seq": 4, "hash": entry["hash"], "at": entry["stored_at"]})
+        self.assertTrue(verify_chain(db)["ok"])
+
+    def test_the_head_never_moves_back_and_a_replay_does_not_move_it(self):
+        db = FakeDb(lose_races=1)        # a rival writer takes seq 1 and does not move the head
+        entry = append_event(db, event(1))
+        self.assertEqual((entry["seq"], chain_head(db)["seq"]), (2, 2))
+        audit_module._advance_head(db, db.audit_log.docs[0])  # the slow rival arrives late
+        self.assertEqual(chain_head(db)["seq"], 2)
+        append_event(db, event(1))       # exact replay
+        self.assertEqual(chain_head(db)["hash"], entry["hash"])
 
     def test_list_events_filters_by_run_and_order(self):
         db = FakeDb()

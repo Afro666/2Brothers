@@ -178,6 +178,14 @@ update and no delete. `watch_kitchen` covers `proposals`, `approvals` and `audit
 and carries only that kitchen's rows; on the free tier an insert arrived in
 about 0.03 s (five tries).
 
+The chain proves no row in the middle changed; the **head** proves the end is still
+there. `audit.append_event` moves `audit_head` (the newest `seq` and `hash`, one document,
+forward only) with every append, and `verify_chain` fails a log that stops before the
+head or has another hash at the head's `seq` (#1879). A log from before the head
+verifies as before and gets its head on the next append. `audit.chain_head(db)` gives
+`{seq, hash, at}` for the gateway to sign: the head sits in the same database, so only
+a signature shown outside it closes the gap for someone who can write there.
+
 ## Atlas facts (for the About page)
 
 ```python
