@@ -132,10 +132,6 @@ class LLMPolicyTest(unittest.TestCase):
         self.assertNotIn("sk-secret-test-value", json.dumps(policy.seen))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class VariantTest(unittest.TestCase):
     """#365: prompt variants run the same model with another system prompt; v3 adds the
     calculator's expected use to the observation, computed from the forecast only."""
@@ -169,3 +165,7 @@ class VariantTest(unittest.TestCase):
     def test_variants_are_policies(self):
         from env.llm import LLM_POLICIES
         self.assertTrue({"llm-nemotron-nothink-v2", "llm-nemotron-nothink-v3", "llm-nemotron-v3"} <= set(LLM_POLICIES))
+
+
+if __name__ == "__main__":
+    unittest.main()
