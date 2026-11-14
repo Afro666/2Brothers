@@ -118,6 +118,16 @@ def test_a_skill_whose_route_is_gone_is_not_listed(client):
     assert "/tools/place_order" not in client.get("/llms.txt", headers=PUBLIC).text
 
 
+def test_every_token_scope_is_described_on_the_card_and_in_llms_txt(client):
+    """The mock jury read `kitchen:write`: . in llms.txt: a scope a token can hold needs words."""
+    scopes = card(client).json()["securitySchemes"]["bearer"]["scopes"]
+    text = client.get("/llms.txt", headers=PUBLIC).text
+    for scope in tokens.SCOPES:
+        assert scopes[scope].strip(), scope
+        assert f"`{scope}`: {scopes[scope]}" in text, scope
+    assert "`: ." not in text and "`: ;" not in text
+
+
 def test_llms_txt_names_the_flow_the_rules_and_real_urls(client):
     text = client.get("/llms.txt", headers=PUBLIC).text
     for needle in ("Base URL: " + BASE, "Authorization: Bearer", "kitchen:read", "kitchen:propose",

@@ -34,6 +34,8 @@ K = "/v1/kitchens/{kitchen_id}"
 SCOPE_TEXT = {
     "kitchen:read": "search the catalog; read proposals, orders and the audit log of the token's kitchen",
     "kitchen:propose": "store a need, get an offer, simulate it and ask a person to approve it",
+    "kitchen:write": ("push stock counts and change the kitchen's own products, recipes, menu plans "
+                      "and suppliers (a POS or inventory system); it never approves or places an order"),
 }
 
 # (id, method, path, scope, name, description when there is no MCP tool of that name, tags)
@@ -136,7 +138,7 @@ async def describe(app: FastAPI, request: Request) -> dict:
         "skills": skills,
         "human_only": [{"id": hid, "method": method, "path": path}
                        for hid, method, path in HUMAN_ONLY if (method, path) in routes],
-        "scopes": {scope: SCOPE_TEXT.get(scope, "") for scope in tokens.SCOPES},
+        "scopes": {scope: SCOPE_TEXT[scope] for scope in tokens.SCOPES},   # a new scope needs its words
         "openapi": base + app.openapi_url if app.openapi_url else None,
         # The app serves its own Swagger page at /docs (#278), so look for the route, not docs_url.
         "docs": base + "/docs" if ("GET", "/docs") in routes else None,
