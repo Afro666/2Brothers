@@ -186,7 +186,7 @@ describe("mapAudit", () => {
         orderId: undefined,
         kind: "offer",
         actor: "agent",
-        summary: "Buyer called get_offer",
+        summary: "Buyer asked for an offer",
         reason: 'product_ids: ["900001"]; requested_date: 2026-11-20',
       },
       {
@@ -195,7 +195,7 @@ describe("mapAudit", () => {
         orderId: undefined,
         kind: "approval",
         actor: "agent",
-        summary: "request_approval failed",
+        summary: "Buyer asked for approval: failed",
         reason: "error: Rejected by buyer policy; reason_code: POLICY_VIOLATION",
       },
       {
@@ -226,6 +226,23 @@ describe("mapAudit", () => {
         reason: "No details recorded.",
       },
     ]);
+  });
+
+  it.each([
+    ["request_approval", "tool_call_started", undefined, "Buyer asked for approval"],
+    ["simulate_order", "tool_call_finished", { ok: true }, "Buyer simulated the order"],
+    ["simulate_order", "tool_call_finished", { error: "boom" }, "Buyer simulated the order: failed"],
+    ["mystery_tool", "tool_call_started", undefined, "Buyer called mystery_tool"],
+    ["mystery_tool", "tool_call_finished", { ok: true }, "mystery_tool finished"],
+    ["mystery_tool", "tool_call_finished", { error: "boom" }, "mystery_tool failed"],
+  ])("summarises tool %s (%s) in plain English", (tool, type, result, summary) => {
+    const [event] = mapAudit([{ event_id: "ev-t", tool, type, arguments: {}, result }]);
+    expect(event.summary).toBe(summary);
+  });
+
+  it("keeps an inherited property name as the raw kind", () => {
+    const [event] = mapAudit([{ event_id: "ev-c", kind: "constructor", actor: "aron" }]);
+    expect(event).toMatchObject({ kind: "other", summary: "constructor" });
   });
 
   it("gives an order its own steps and those of the proposal that placed it", () => {

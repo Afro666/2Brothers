@@ -292,7 +292,31 @@ const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   total_mismatch: { kind: "simulate", summary: "The total moved before placing: nothing was sent" },
   order_placed: { kind: "order", summary: "Order placed" },
   proposal_rejected: { kind: "approval", summary: "Proposal rejected" },
+  stock_photo_read: { kind: "stock", summary: "Shelf photo read by Nemotron VL" },
+  audit_demo_tamper: { kind: "other", summary: "Tamper demo: a line was changed" },
+  audit_demo_restore: { kind: "other", summary: "Tamper demo: the line was restored" },
+  option_chosen: { kind: "approval", summary: "A person chose an option" },
+  order_lookup: { kind: "order", summary: "A person looked up an order with an unknown send result" },
+  order_resolved: { kind: "order", summary: "A person resolved an unknown send" },
+  recall_check: { kind: "other", summary: "Recall check" },
+  demo_inbox_cleared: { kind: "other", summary: "Test proposals cleared before a demo" },
 };
+
+/** What the Buyer did with each tool, in plain English; an unknown tool keeps its raw name. */
+const TOOL_VERBS: Record<string, string> = {
+  search_products: "searched the catalog",
+  get_offer: "asked for an offer",
+  simulate_order: "simulated the order",
+  request_approval: "asked for approval",
+  place_order: "placed the order",
+  get_order_status: "checked the order status",
+};
+
+function toolSummary(tool: string, finished: boolean, failed: boolean): string {
+  const verb = Object.hasOwn(TOOL_VERBS, tool) ? TOOL_VERBS[tool] : undefined;
+  if (verb) return failed ? `Buyer ${verb}: failed` : `Buyer ${verb}`;
+  return !finished ? `Buyer called ${tool}` : failed ? `${tool} failed` : `${tool} finished`;
+}
 
 /** `expected_total: 148.76; verdict: NEEDS_APPROVAL`: the gateway's own values, as sent. */
 function describe(fields: unknown): string {
@@ -316,11 +340,7 @@ function mapAuditEvent(event: Json): AuditEvent {
       ...base,
       kind: TOOL_KINDS[event.tool] ?? "other",
       actor: "agent",
-      summary: !finished
-        ? `Buyer called ${event.tool}`
-        : error == null
-          ? `${event.tool} finished`
-          : `${event.tool} failed`,
+      summary: toolSummary(event.tool, finished, finished && error != null),
       reason: describe(finished ? event.result : event.arguments),
     };
   }
@@ -335,7 +355,7 @@ function mapAuditEvent(event: Json): AuditEvent {
     offer_id: _offer,
     ...rest
   } = event;
-  const known = typeof kind === "string" ? EVENT_KINDS[kind] : undefined;
+  const known = typeof kind === "string" && Object.hasOwn(EVENT_KINDS, kind) ? EVENT_KINDS[kind] : undefined;
   return {
     ...base,
     kind: known?.kind ?? "other",
