@@ -104,28 +104,40 @@ Each entry requires `productId`, `salesBlock`, and `scheduleLines`;
 - `scheduleLines` is empty when the product cannot currently be delivered on any
   date; otherwise the challenge returns exactly one line.
 - A line requires `salesBlock` and `salesUnit`. `availableAmount` may be absent
-  or null: that is unknown stock (see the sentinel rule below), never zero.
+  or null. Valio (challenge Discord, 14 Nov): "Empty = not available". So an absent
+  or null amount is not available, the same as zero. It is not unknown stock.
   `availableDate` may be absent or null. Its value is the earliest available date
   and can differ from the requested date.
 - `availableAmount` is expressed in `salesUnit`. Zero means unavailable.
-- Both `999999` and `9999999999` are unknown-stock sentinels for any product type,
-  including Terminal and Stock. Neither is a measured quantity. Missing or null
-  stock also means unknown, not zero.
+- An `availableAmount` of `999999` or more is a filler, not a measured quantity, for
+  any product type, Terminal and Stock. Valio (challenge Discord, 14 Nov): "Availability
+  ge 999999 means that we do not know the availability and our current logic allows
+  ordering any quantity." Seen live on 2026-11-14 (2,000 products, one date): fillers
+  `999999`, `666666666`, `9999999999`, `1999999999` and others, never below `999999`;
+  the largest measured amount was `68293`. Empty was `scheduleLines: []` (335 of 2,000);
+  an absent or null `availableAmount` was never seen.
+- So, in Valio's words: a filler is unknown stock (a person may still approve it, see
+  `POST /proposals/{id}/approve`); an empty answer (no schedule line, or an absent or
+  null amount) is not available; zero is not available.
 
 #### Gateway availability normalization
 
 The raw Valio API above does not provide the following derived flags. The gateway
-adapter normalizes each schedule line with a sentinel, missing or null amount to
+adapter normalizes each schedule line with a filler amount (`999999` or more) to
 `availableAmount: null`, `unknown_stock: true`, and `orderable: false`. This rule
 applies to both Terminal and Stock products even when their cutoff is in the
-future. Measured zero remains zero: unavailable, but not unknown.
+future. A missing or null amount becomes `availableAmount: 0`, `unknown_stock: false`,
+`orderable: false`: not available, never unknown. Measured zero remains zero:
+unavailable, but not unknown. A product with `scheduleLines: []` is left out of a quote
+("Valio cannot deliver it on any date").
 
 The adapter retains these products and schedule lines. UI and agent consumers
 must keep them visible in proposals, labelled as unconfirmed stock, rather than
 hide them because `orderable` is false. `orderable` describes confirmed upstream
 fulfilment for the requested deadline; it is not permission to show a proposal
-or consent to place an order. Supplier availability must be confirmed before
-placement; human approval alone does not confirm stock. Cutoff, delivery-date,
+or consent to place an order. Human approval does not confirm stock, but since
+2026-11-14 it is enough to place the order: the order names each supplier that must
+still confirm (`supplier_must_confirm`, see `POST /proposals/{id}/approve`). Cutoff, delivery-date,
 sales-block and other refusal guards still apply. A true flag likewise does not
 bypass the required human approval or the gateway's placement checks.
 
@@ -1444,7 +1456,7 @@ A part:
 | `why` | string | One deterministic sentence with the part's numbers. |
 | `lines` | array | `product_id`, `quantity`, `unit`, `unit_price`, `total`, `why`, `unknown_stock` (always `false`), `reason_codes`. Empty for `HOLD`. |
 
-- Unknown stock (a sentinel, missing or null) is never counted, in `now` or in `LATER`.
+- Unknown stock (a filler, 999999 or more) is never counted, in `now` or in `LATER`.
 - `partial_fill` is information: it has no `offer_id`, and it does not change the
   proposal's `lines` or `expected_total`. It cannot be approved or placed as it is.
   Its totals are ex VAT; a figure a person approves still comes from a simulation.
@@ -1533,7 +1545,8 @@ it records the order a person approved, with the same key as the offers.
   `iss` (`trusted-kitchen-buyer`), `type` (`order_receipt`), `sub` (the `order_id`),
   `kitchen_id`, `offer_id`, `offer_hash` (the signed offer the person approved),
   `currency` (`EUR`), `expected_total` (decimal string), `lines` (`product_id`,
-  `quantity`, `unit`), `approved_by` (the person, or
+  `quantity`, `unit`, `stock`: `"confirmed"` or `"unknown"`; an `"unknown"` line is one
+  its supplier in `supplier_must_confirm` must still confirm), `approved_by` (the person, or
   `"auto-approve (rule set by <person>)"`), `iat` (when the gateway recorded the order),
   `supplier_outcome`, `supplier_note` and `supplier_must_confirm`.
 - `supplier_outcome` is what the gateway knows about the supplier when it signs. Today
@@ -3161,7 +3174,7 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | Code | Kind | Meaning |
 |---|---|---|
 | `CLOSING_PASSED` | reason | `closingTime` is at or before now for this delivery. The product is left out; the code is on the mandate. |
-| `STOCK_UNKNOWN` | reason | availability is a sentinel (999999 or 9999999999), missing or null. A warning on approve: a person may still approve, the order then waits for the supplier (`supplier_must_confirm`). |
+| `STOCK_UNKNOWN` | reason | Valio's availability is a filler (999999 or more), or the supplier is a manual or csv price list. A missing, null or zero amount is not available, not unknown. A warning on approve: a person may still approve, the order then waits for the supplier (`supplier_must_confirm`). For each supplier with such lines the mandate reasons say "<supplier> must confirm stock for: <product names>." (`Valio` for Valio's lines). |
 | `PARTIAL_STOCK` | reason | less is available than needed |
 | `SUBSTITUTE_NEEDS_OK` | reason | a substitute changes the product; a human agrees |
 | `SUBSTITUTE_FAT_LEVEL` | reason | two lines of one plan have known fat levels more than 0.5 g per 100 g apart (fat-free and 3 % milk, S01). From the supplier record's `FAT` nutrient; unknown fat is never compared. On the mandate. |
