@@ -134,7 +134,8 @@ export function StockPage() {
       ...current,
       ...Object.fromEntries(read.map(([id, value]) => [id, { value, notCounted: false }])),
     }));
-    setFromPhoto(new Set(read.map(([id]) => id)));
+    // Keep the mark on drafts an earlier, unsaved photo filled: they are still unchecked model counts.
+    setFromPhoto((ids) => new Set([...ids, ...read.map(([id]) => id)]));
     setSaveError(null);
   }
 
