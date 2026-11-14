@@ -30,7 +30,7 @@ def messages(case, *, baseline=False, stage='after_feedback', fixture=None):
 
 
 async def run(args):
-    fixture_bytes = FIXTURE.read_bytes()
+    fixture_bytes = args.fixture.read_bytes()
     fixture = json.loads(fixture_bytes)
     report = {'fixture_sha256': hashlib.sha256(fixture_bytes).hexdigest(), 'mode': args.mode,
               'design': fixture['design'], 'runs': []}
@@ -73,6 +73,7 @@ async def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mode', choices=('baseline', 'current'), required=True)
+    parser.add_argument('--fixture', type=Path, default=FIXTURE)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--repeats', type=int, default=3)
     args = parser.parse_args()
