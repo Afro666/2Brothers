@@ -53,6 +53,19 @@ def _dec(value) -> Decimal | None:
     return None if value is None else Decimal(str(value))
 
 
+def _text(value) -> str | None:
+    return None if value is None else str(value)
+
+
+_LINE_NUMBERS = ("reliability", "carbon_kg_co2e_per_kg")
+
+
+def _line_out(line: dict) -> dict:
+    """A stored offer or order line as the API answers it: the two dataset values are numbers
+    (docs/contract.md), kept as text in Mongo because the store refuses a binary float (#570)."""
+    return {**line, **{key: float(line[key]) for key in _LINE_NUMBERS if line.get(key) is not None}}
+
+
 def _hash(payload: dict) -> str:
     return hashlib.sha256(canonical(payload).encode()).hexdigest()
 
@@ -187,7 +200,9 @@ class Gateway:
                     "unit": ln.unit, "unit_price": _money(ln.unit_price), "total": _money(ln.total),
                     "why": ln.why, "unknown_stock": ln.unknown_stock,
                     "reason_codes": list(ln.reason_codes),
-                    "reliability": ln.reliability, "carbon_kg_co2e_per_kg": ln.carbon,
+                    # Stored as text: the store refuses a binary float in an offer (#570).
+                    # _line_out turns both back into numbers for every answer.
+                    "reliability": _text(ln.reliability), "carbon_kg_co2e_per_kg": _text(ln.carbon),
                     "labels": list(ln.labels), **when.get(ln.product_id, unknown)}
 
         def money(x: Decimal | None) -> str | None:
@@ -324,8 +339,9 @@ class Gateway:
         result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
         result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []))
         blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
-        result['lines'] = [{**line, **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
+        result['lines'] = [{**_line_out(line), **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
                            for line in result['lines']]
+        result['blocks'] = _blocks_out(result, result['lines'])
         from monitor.labels import checks
         from store.products import get_products
         result['label_checks'] = checks(get_products(self.db,
@@ -501,7 +517,7 @@ class Gateway:
     def _order_out(order: dict) -> dict:
         return {"order_id": order["order_id"], "outcome": order["outcome"], "status": order["status"],
                 "expected_total": _money(Decimal(str(order["expected_total"]))),
-                "lines": order["lines"], "created_at": order["created_at"].isoformat()
+                "lines": [_line_out(ln) for ln in order["lines"]], "created_at": order["created_at"].isoformat()
                 if hasattr(order["created_at"], "isoformat") else order["created_at"]}
 
     def list_orders(self, kitchen_id: str) -> list[dict]:
@@ -740,8 +756,20 @@ def _addable_out(r: AddableRow) -> dict:
             "reason_codes": list(r.reason_codes), "why": r.why}
 
 
+def _blocks_out(sim: dict, lines: list[dict]) -> list[dict]:
+    """The supplier blocks (#73) with the lines as the API answers them: each block takes
+    its lines from `lines`, so a block line and a top-level line never differ."""
+    def ids(block: dict) -> set:
+        return {ln["product_id"] for ln in block["lines"]}
+    return [{**block, "lines": [ln for ln in lines if ln["product_id"] in ids(block)]}
+            for block in sim.get("blocks") or []]
+
+
 def offer_out(offer: dict) -> dict:
-    return {"offer_id": offer["offer_id"], "valid_until": offer["valid_until"], **offer["simulation"]}
+    sim = offer["simulation"]
+    lines = [_line_out(ln) for ln in sim["lines"]]
+    return {"offer_id": offer["offer_id"], "valid_until": offer["valid_until"], **sim,
+            "lines": lines, "blocks": _blocks_out(sim, lines)}
 
 
 __all__ = ["Gateway", "GatewayError", "offer_out", "asdict"]
