@@ -20,10 +20,11 @@ export function DeliveryNotePhoto({ order }: { order: Order }) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DeliveryNoteRead | null>(null);
   const [choices, setChoices] = useState<Record<number, boolean>>({});
+  const [catalogNames, setCatalogNames] = useState<Record<string, string>>({});
   useEffect(() => () => { revision.current += 1; }, []);
   const allowed = status === "signed-in" && session?.kind === "human" && (session.role === "approver" || session.role === "chef");
   const names = new Map(order.lines.map((line) => [line.product.id, line.product.names.en]));
-  const label = (id: string) => id === "unknown" ? t("unknown") : names.get(id) ?? id;
+  const label = (id: string) => id === "unknown" ? t("unknown") : names.get(id) ?? catalogNames[id] ?? id;
   const amount = (n: number | null, unit: string) => n == null ? t("unknown") : `${formatNumber(n)} ${unit}`;
   const statuses = { RECEIVED: t("Received"), SHORT: t("Short delivery"), MISSING: t("Missing"), UNKNOWN: t("unknown"),
     SUBSTITUTE: t("Substitute"), EXTRA: t("Not ordered"), UNREADABLE: t("Unreadable") };
@@ -40,7 +41,12 @@ export function DeliveryNotePhoto({ order }: { order: Order }) {
     setReading(true); setError(null); setResult(null); setChoices({});
     try {
       const answer = await api.readDeliveryNote(order.id, await downscalePhoto(file), session?.role === "chef" ? "chef" : "human");
-      if (revision.current === turn) setResult(answer);
+      if (revision.current !== turn) return;
+      setResult(answer);
+      const missing = [...new Set(answer.notOrdered.map((line) => line.productId))].filter((id) => id !== "unknown" && !names.has(id));
+      if (missing.length) void api.getProducts(missing).then((found) => {
+        if (revision.current === turn) setCatalogNames(Object.fromEntries(found.map((product) => [product.id, product.names.en])));
+      }, () => undefined);
     } catch (cause) {
       if (revision.current === turn) setError(cause instanceof Error ? cause.message : String(cause));
     } finally {

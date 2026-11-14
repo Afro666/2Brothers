@@ -20,6 +20,7 @@ describe("Delivery note on a placed order", () => {
     await user.upload(await screen.findByLabelText("Choose a delivery note photo", { selector: "input" }), file);
     expect(await screen.findByText("Ordered: 51 ST; received: 36 ST; missing: 15 ST")).toBeVisible();
     expect(screen.getByText(/L2611A/)).toHaveTextContent("best before: unknown");
+    expect(await screen.findByText("Valio Eila organic lactose free milk drink 1 L — Substitute")).toBeVisible();
     expect(screen.getByRole("button", { name: "Update counted stock" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "No, not received" }));
     const next = screen.getByRole("link", { name: "Update counted stock" });
@@ -28,6 +29,14 @@ describe("Delivery note on a placed order", () => {
     await user.click(next);
     expect(await screen.findByRole("heading", { level: 1, name: "Stock count" })).toBeVisible();
     expect(save).not.toHaveBeenCalled();
+  });
+  it("falls back to the product id when the catalog lookup fails", async () => {
+    const api = createMockApi();
+    vi.spyOn(api, "readDeliveryNote").mockResolvedValue(mapDeliveryNote(DELIVERY_NOTE, "ORD-1042"));
+    vi.spyOn(api, "getProducts").mockRejectedValue(new Error("NOT_SERVED"));
+    renderApp("/orders/ORD-1042", api);
+    await userEvent.upload(await screen.findByLabelText("Choose a delivery note photo", { selector: "input" }), new File(["photo"], "note.jpg", { type: "image/jpeg" }));
+    expect(await screen.findByText("462921 — Substitute")).toBeVisible();
   });
   it("keeps failed reads actionable without inventing a receipt", async () => {
     const api = createMockApi();
