@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 
 
 def gross_needs(menu_days: list[dict], recipes: dict[str, dict]) -> tuple[list[dict], list[str]]:
@@ -44,7 +44,9 @@ def gross_needs(menu_days: list[dict], recipes: dict[str, dict]) -> tuple[list[d
             note += f", {usable.normalize():f}% yield)" if usable != 100 else ")"
             parts[key].append(note)
     rows = [{"product_id": pid, "date": day, "unit": unit, "covers": covers[(pid, day, unit)],
-             "gross_need": total.quantize(Decimal("0.001")), "why": " + ".join(parts[(pid, day, unit)])}
+             "gross_need": (total.to_integral_value(rounding=ROUND_CEILING)
+                            if unit.upper() in ("PCS", "ST") else total.quantize(Decimal("0.001"))),
+             "why": " + ".join(parts[(pid, day, unit)])}
             for (pid, day, unit), total in sorted(need.items(), key=lambda kv: (kv[0][1], kv[0][0]))]
     return rows, problems
 
@@ -78,7 +80,10 @@ def net_needs(rows: list[dict], stock: dict[str, Decimal | None | tuple[str, Dec
             continue
         used = min(have, row["gross_need"])
         left[pid] = have - used
-        out.append({**row, "net_need": row["gross_need"] - used})
+        net = row["gross_need"] - used
+        if str(need_unit).upper() in ("PCS", "ST"):
+            net = net.to_integral_value(rounding=ROUND_CEILING)
+        out.append({**row, "net_need": net})
     return out
 
 
