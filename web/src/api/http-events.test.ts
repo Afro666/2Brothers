@@ -66,7 +66,7 @@ describe("HTTP event stream", () => {
     stop();
   });
 
-  it.each([401, 403, 503])("stops permanently after HTTP %s", async (status) => {
+  it.each([401, 403, 503])("stops after HTTP %s", async (status) => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status })));
     const onStatus = vi.fn();
@@ -76,6 +76,24 @@ describe("HTTP event stream", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(onStatus).toHaveBeenCalledWith(false);
     stop();
+  });
+
+  it.each([
+    [401, 2],
+    [403, 2],
+    [503, 1],
+  ])("after HTTP %s a sign-in leaves %s request(s) in total", async (status, calls) => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status })));
+    const stop = subscribe();
+    await vi.advanceTimersByTimeAsync(0);
+    window.dispatchEvent(new Event("kitchen-buyer:signed-in"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(calls);
+    stop();
+    window.dispatchEvent(new Event("kitchen-buyer:signed-in"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(calls);
   });
 
   it("stop aborts the request and prevents reconnects", async () => {

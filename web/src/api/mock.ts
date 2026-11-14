@@ -15,6 +15,7 @@ import { sampleReceipt } from "@/mocks/receipt";
 import { listBrandLogosMock } from "@/api/mock-brand-logos";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import { readShelfPhotoMock } from "@/api/mock-shelf";
+import { readMenuPhotoMock } from "@/api/mock-menu-photo";
 import { createMockAuth } from "@/api/mock-auth";
 import { createKitchenMock } from "@/api/mock-kitchen";
 import { createNotificationsMock } from "@/api/mock-notifications";
@@ -308,6 +309,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     ...createTokensMock(),
     getModelUsage: async () => modelUsageMock(),
     readShelfPhoto: readShelfPhotoMock,
+    readMenuPhoto: readMenuPhotoMock,
     async readDeliveryNote() {
       throw new ApiError("VISION_NOT_CONFIGURED", "Delivery note reading needs the live gateway. Check the delivery by hand.");
     },

@@ -20,6 +20,8 @@ import type { DemandLine, MenuPlanEntry, PlanProposal, Recipe } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { randomHex } from "@/lib/random-id";
 import { getLanguage, useT } from "@/lib/i18n";
+import { MenuPhotoPlan } from "@/components/purchasing/menu-photo-plan";
+import { auditActorForRole, useRole } from "@/lib/role";
 
 function todayIso(): string {
   const now = new Date();
@@ -218,6 +220,7 @@ export function PlannerPage() {
   const t = useT();
   const api = useApi();
   const navigate = useNavigate();
+  const { role } = useRole();
   const search = useSearch({ from: "/planner" });
   const week = displayedWeek(search.week);
   const dates = useMemo(() => weekDates(week), [week]);
@@ -394,6 +397,14 @@ export function PlannerPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             ) : null}
+            <MenuPhotoPlan
+              key={week}
+              from={dates[0]}
+              to={dates[6]}
+              requestedDate={requestedDate}
+              actor={auditActorForRole(role)}
+              disabled={!requestedDate}
+            />
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {dates.map((date) => {
                 const dayEntries = entries.filter((entry) => entry.date === date);
