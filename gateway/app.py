@@ -114,15 +114,20 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     def _audit_refusal(request: Request, who: Principal, code: str) -> None:
         """#853: the path's kitchen only when that kitchen exists (a caller cannot create log
         rows for made-up kitchens), else the caller's own; the same refusal (caller, code,
-        method, path) at most once a minute, so a loop cannot flood a kitchen's log."""
+        method, route template, kitchen) at most once a minute, so a loop cannot flood a
+        kitchen's log. #863: the template, not the raw path, so varied ids are one key."""
         named = request.path_params.get("kitchen_id")
         target = named if named and gw().db.kitchens.find_one({"_id": named}, {"_id": 1}) else kitchen(who)
-        key = (who.name, code, request.method, request.url.path, target)
+        route = getattr(request.scope.get("route"), "path", None) or request.url.path
+        key = (who.name, code, request.method, route, target)
         now = time.monotonic()
         if now - refusals_seen.get(key, -REFUSAL_WINDOW) < REFUSAL_WINDOW:
             return
         if len(refusals_seen) > 10_000:
-            refusals_seen.clear()
+            for stale in [k for k, t in refusals_seen.items() if now - t >= REFUSAL_WINDOW]:
+                del refusals_seen[stale]
+            if len(refusals_seen) > 10_000:
+                refusals_seen.clear()
         refusals_seen[key] = now
         gw()._audit(target, "refused", who.name, code=code, method=request.method, path=request.url.path)
 
