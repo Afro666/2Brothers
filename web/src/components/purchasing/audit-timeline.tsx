@@ -70,6 +70,11 @@ export function AuditTimeline({ events }: { events: AuditEvent[] }) {
                 {e.orderId ? <span className="font-mono"> · {e.orderId}</span> : null}
               </p>
               <p className="mt-0.5 text-sm font-semibold break-words">{e.summary}</p>
+              {e.actorName ? (
+                <p className="text-sm break-all" data-actor-name>
+                  By {e.actorName}
+                </p>
+              ) : null}
               <p className="text-sm break-words text-muted-foreground">{e.reason}</p>
             </div>
           </li>
