@@ -3,6 +3,7 @@
     python -m demo.record_demo                      # records, approves nothing
     python -m demo.record_demo --approve            # also takes the confirmed option and approves it
     python -m demo.record_demo --story offer --approve   # story A: Valio sees it first
+    python -m demo.record_demo --story nvidia            # the NVIDIA demo: five Nemotron jobs, approves nothing
     python -m demo.record_demo --base-url https://31-22-104-201.sslip.io --out demo/out
     DEMO_PASSWORD=... python -m demo.record_demo --email approver@kitchen.example   # a site with sign-in on
 
@@ -10,7 +11,7 @@ It drives a real browser through the live site, the way docs/demo.md says. Each 
 caption, so the video explains itself without sound. A step that fails is reported and
 skipped; the recording goes on.
 
-Two stories (`--story`):
+Three stories (`--story`):
 
 - `milk` (the default): the challenge's request (1,000 L of lactose-free milk), the proposal
   with its reasons, the approval inbox, the option that confirmed stock covers, the activity
@@ -21,6 +22,14 @@ Two stories (`--story`):
   kitchen's allergen rule refuses, the tamper check, the two discovery files and Valio's
   demand view. Without `--approve` it shows the tile and goes on: the receipt step then shows
   the newest order that has a receipt (or is skipped).
+- `nvidia` ("One model, five jobs, one buying loop, and it never sets a number"; docs/demo.md
+  "NVIDIA demo"): a menu photo read into a plan proposal, the Buyer's proposal for `--text`
+  and its "What Nemotron did" panel, Valio's offer tile (only shown), a shelf photo read into
+  counts (never saved), a delivery-note photo read against the newest order, the About page
+  model usage and the "How we improved its outputs" tables of docs/submission.md. It never
+  approves, never accepts the offer and never saves a count; `--approve` is refused. A beat
+  whose model did not answer says so in its caption (the parser or a rule answered) or is
+  skipped; it never claims Nemotron.
 
 When the site asks for a sign-in (GATEWAY_REQUIRE_LOGIN=true, deploy/README.md), give the
 account with `--email`; the password comes from the environment variable DEMO_PASSWORD, never
@@ -41,6 +50,11 @@ What it writes on the site:
   demo-kitchen --days 14` on the server), and approves that proposal: one order. With
   `--press-recall` it runs one recall check ("Check recalls now"); without it the panel is
   only shown.
+- `nvidia`: up to two proposals stay WAITING in demo-kitchen: the menu-photo plan proposal
+  (only when a matched dish needs an order) and the Buyer's proposal for `--text`. Nothing is
+  approved. The photo reads store nothing but one audit entry each. Clear the two proposals
+  after the recording with `python -m demo.clear_inbox --apply` on the server (a dry run
+  without `--apply` lists them first).
 """
 
 from __future__ import annotations
@@ -209,10 +223,13 @@ def _common(base: str) -> dict:
 
 
 def steps(base: str, text: str, needed_by: str, approve: bool, story: str = "milk",
-          press_recall: bool = False) -> list[tuple[str, str, object]]:
-    """`(name, caption, action)`; an action takes the page and may raise."""
+          press_recall: bool = False, photos: dict | None = None) -> list[tuple[str, str, object]]:
+    """`(name, caption, action)`; an action takes the page and may raise. An action that returns
+    a string replaces its caption with it (a beat whose model did not answer says so)."""
     if story == "offer":
         return offer_steps(base, needed_by, approve, press_recall)
+    if story == "nvidia":
+        return nvidia_steps(base, text, needed_by, photos)
     if story != "milk":
         raise ValueError(f"unknown story {story!r}")
     common = _common(base)
@@ -373,9 +390,198 @@ def offer_steps(base: str, needed_by: str, approve: bool, press_recall: bool) ->
     return plan
 
 
+REPO = Path(__file__).resolve().parents[1]
+NVIDIA_SENTENCE = "One model, five jobs, one buying loop, and it never sets a number."
+DEFAULT_PHOTOS = {
+    "menu": REPO / "demo" / "menu-photo.png",                       # demo/menu-photo.md
+    "shelf": REPO / "agent" / "fixtures" / "shelf" / "demo-shelf.png",  # docs/demo.md "Photo beat"
+    "note": None,                                                   # the prepared note comes with #1198
+}
+# Buttons the NVIDIA story must never press: each one decides, orders or writes stock.
+NEVER_PRESSED = ("Approve", "Yes, approve", "Choose option", "Make a proposal", "Save count", "Save week",
+                 "Propose order for this week", "Yes, received")
+TRACE_TITLE = "What Nemotron did"          # the panel of #1197
+
+NEWEST_ORDER_JS = """
+async (path) => {
+  try {
+    const answer = await fetch(path, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    if (!answer.ok) return null;
+    const body = await answer.json();
+    const rows = Array.isArray(body) ? body : (body.orders || []);
+    return rows.length && rows[0] && rows[0].order_id ? String(rows[0].order_id) : null;
+  } catch (error) {
+    return null;
+  }
+}
+"""
+
+
+def iso_week(day: str) -> str:
+    """`2026-11-16` -> `2026-W47`, the Planner's `week` value."""
+    year, week, _ = date.fromisoformat(day).isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+def improved_tables(submission: Path | None = None) -> list[list[list[str]]]:
+    """The tables of "How we improved its outputs" in docs/submission.md, as rows of cells.
+    Read from the file at run time, so the video shows the measured numbers, never a copy."""
+    source = (submission or REPO / "docs" / "submission.md").read_text(encoding="utf-8")
+    start = source.find("**How we improved its outputs.**")
+    if start < 0:
+        raise RuntimeError("docs/submission.md has no 'How we improved its outputs' part")
+    end = source.find("**Not built:**", start)
+    tables, current = [], []
+    for line in source[start:end if end > 0 else None].splitlines():
+        if line.startswith("|"):
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if not all(set(cell) <= set("-: ") for cell in cells):       # the |---| line
+                current.append(cells)
+        elif current:
+            tables.append(current)
+            current = []
+    if current:
+        tables.append(current)
+    if not tables:
+        raise RuntimeError("no table under 'How we improved its outputs' in docs/submission.md")
+    return tables
+
+
+def improved_html(tables: list[list[list[str]]]) -> str:
+    import html
+    parts = ["<!doctype html><meta charset='utf-8'><body style='margin:0;padding:32px 40px 120px;"
+             "font:16px/1.4 system-ui,sans-serif;background:#fff;color:#0f1513'>",
+             "<h1 style='font-size:24px;margin:0 0 4px'>How we improved its outputs</h1>",
+             "<p style='margin:0 0 20px;color:#555'>Measured, from docs/submission.md "
+             "(NVIDIA: Best Use of Nemotron)</p>"]
+    for table in tables:
+        parts.append("<table style='border-collapse:collapse;margin:0 0 24px'>")
+        for index, row in enumerate(table):
+            tag = "th" if index == 0 else "td"
+            cells = "".join(f"<{tag} style='border:1px solid #ccd;padding:6px 10px;text-align:left'>"
+                            f"{html.escape(cell)}</{tag}>" for cell in row)
+            parts.append(f"<tr>{cells}</tr>")
+        parts.append("</table>")
+    return "".join(parts) + "</body>"
+
+
+def _photo(photos: dict, key: str, issue: str | None = None) -> Path:
+    path = photos.get(key)
+    if path is None:
+        raise RuntimeError(f"after #{issue}: no prepared {key} photo yet (pass --{key}-photo)" if issue
+                           else f"no {key} photo given")
+    path = Path(path)
+    if not path.is_file():
+        raise RuntimeError(f"the {key} photo {path} is not there")
+    return path
+
+
+def _read_photo(page, section: str, input_label: str, photo: Path, busy: str, timeout: int = 120_000) -> None:
+    """Gives `photo` to the hidden file input of `section` and waits until the model's answer
+    (or the page's error) shows. An error raises with the page's own words: the beat is skipped,
+    it never claims a reading the model did not make."""
+    box = page.locator(section)
+    box.wait_for(timeout=20_000)
+    box.scroll_into_view_if_needed()
+    box.locator(f'input[type="file"][aria-label="{input_label}"]').set_input_files(str(photo))
+    page.wait_for_timeout(800)
+    box.get_by_text(busy, exact=False).wait_for(state="detached", timeout=timeout)
+    alert = box.get_by_role("alert")
+    if alert.count():
+        raise RuntimeError(f"the model did not answer: {alert.first.inner_text().strip()[:90]}")
+    page.wait_for_timeout(1500)
+
+
+def nvidia_steps(base: str, text: str, needed_by: str, photos: dict | None) -> list[tuple[str, str, object]]:
+    """The NVIDIA demo (docs/demo.md "NVIDIA demo"). Never approves, never accepts the offer,
+    never saves a count: the plan has no such step and no action presses a NEVER_PRESSED button."""
+    photos = {**DEFAULT_PHOTOS, **(photos or {})}
+
+    def intro(page):
+        page.goto(base + "/")
+        page.wait_for_timeout(1500)
+
+    def plan(page):
+        page.goto(f"{base}/planner?week={iso_week(needed_by)}")
+        _read_photo(page, '[aria-labelledby="menu-photo-title"]', "Choose a photo of the menu",
+                    _photo(photos, "menu"), "is reading the menu")
+
+    def buy(page):
+        _ask(page, base, text, needed_by)
+        page.get_by_text("Why this basket", exact=False).first.wait_for(timeout=120_000)
+        page.wait_for_timeout(2000)
+        if page.get_by_text("request parser", exact=False).count():
+            return ("The Buyer model did not answer, so the gateway's request parser made this proposal. "
+                    "The engine still set every number. This beat is not Nemotron.")
+        return None
+
+    def trace(page):
+        found = page.get_by_text(TRACE_TITLE, exact=False)
+        if not found.count():
+            raise RuntimeError(f"after #1197: no '{TRACE_TITLE}' panel on this proposal")
+        found.first.scroll_into_view_if_needed()
+        found.first.click()
+        page.wait_for_timeout(2500)
+
+    def sell(page):
+        page.goto(base + "/")
+        box = page.locator('[aria-labelledby="supplier-offer-title"]')
+        box.wait_for(timeout=15_000)
+        box.scroll_into_view_if_needed()
+        page.wait_for_timeout(1500)
+        if box.get_by_text("picked by rule", exact=False).count():
+            return ("Valio's offer: a rule picked this substitute, not a model (the model did not answer "
+                    "when the offer was made). No price and no quantity come from the supplier.")
+        return None
+
+    def count(page):
+        page.goto(base + "/stock")
+        _read_photo(page, '[aria-labelledby="shelf-photo-title"]', "Choose a photo of the shelf",
+                    _photo(photos, "shelf"), "is reading the photo")
+
+    def receive(page):
+        photo = _photo(photos, "note", issue="1198")
+        order_id = page.evaluate(NEWEST_ORDER_JS, f"/api/v1/kitchens/{KITCHEN_ID}/orders")
+        if not order_id:
+            raise RuntimeError("no order to check a delivery note against")
+        page.goto(f"{base}/orders/{order_id}")
+        _read_photo(page, '[aria-labelledby="delivery-note-title"]', "Choose a delivery note photo",
+                    photo, "Reading the delivery note")
+
+    def numbers(page):
+        page.goto(base + "/about")
+        heading = page.locator("#about-model")
+        heading.wait_for(timeout=20_000)
+        heading.scroll_into_view_if_needed()
+        page.wait_for_timeout(2500)
+
+    def improved(page):
+        page.set_content(improved_html(improved_tables()))
+        page.wait_for_timeout(2500)
+
+    return [
+        ("intro", f"{NVIDIA_SENTENCE} Nemotron 3.5 Super VL on Verda.", intro),
+        ("plan", "Plan: Nemotron VL reads a photo of next week's menu and matches each dish to a recipe. "
+                 "The engine sizes the order; the proposal waits for a person.", plan),
+        ("buy", "Buy: the Buyer turns a chef's sentence into catalog products with seven MCP tools. "
+                "It picks products; the engine sets every quantity and price.", buy),
+        ("trace", "What Nemotron did: each tool call, in order. It has no approve tool.", trace),
+        ("sell", "Sell: Valio's own selling agent, also Nemotron, picks a substitute before a shortage. "
+                 "The amount is the kitchen's own forecast.", sell),
+        ("count", "Count: Nemotron VL counts the shelf. Unknown is never zero: the hidden pack says "
+                  "'please count'. Nothing is saved until a person presses Save.", count),
+        ("receive", "Receive: Nemotron VL reads the delivery note. Plain code compares it with the order "
+                    "and finds the short and missing lines.", receive),
+        ("numbers", "Measured, not claimed: the Buyer's model calls, tokens and seconds for this kitchen, "
+                    "counted from each run.", numbers),
+        ("improved", "We measured first: thinking on where the model decides numbers, off where the engine "
+                     "does. It never sets a number.", improved),
+    ]
+
+
 def record(base: str, out: Path, text: str, needed_by: str, approve: bool, pause: float,
            email: str | None = None, password: str | None = None, story: str = "milk",
-           press_recall: bool = False) -> Path:
+           press_recall: bool = False, photos: dict | None = None) -> Path:
     from playwright.sync_api import sync_playwright   # optional tool, not an app dependency
 
     out.mkdir(parents=True, exist_ok=True)
@@ -396,11 +602,11 @@ def record(base: str, out: Path, text: str, needed_by: str, approve: bool, pause
                 page.evaluate(CAPTION_JS, "A person signs in. Only an approver's account can approve an order.")
                 page.wait_for_timeout(int(pause * 1000))
             print(f"ok    {'sign-in':9}" if asked else "      sign-in   the site is open: it asked for no sign-in")
-        for name, caption, action in steps(base, text, needed_by, approve, story, press_recall):
+        for name, caption, action in steps(base, text, needed_by, approve, story, press_recall, photos):
             started = time.time()
             try:
-                action(page)
-                page.evaluate(CAPTION_JS, caption)
+                said = action(page)
+                page.evaluate(CAPTION_JS, said if isinstance(said, str) and said.strip() else caption)
                 page.wait_for_timeout(int(pause * 1000))
                 print(f"ok    {name:9} {time.time() - started:5.1f} s")
             except Exception as error:   # a failed step must not lose the recording
@@ -425,8 +631,16 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base-url", default="https://31-22-104-201.sslip.io")
     parser.add_argument("--out", default="demo/out", help="folder for the .webm file (git-ignored)")
-    parser.add_argument("--story", choices=("milk", "offer"), default="milk",
-                        help="milk: the 1,000 L request (default); offer: story A, Valio's offer first")
+    parser.add_argument("--story", choices=("milk", "offer", "nvidia"), default="milk",
+                        help="milk: the 1,000 L request (default); offer: story A, Valio's offer first; "
+                             "nvidia: five Nemotron jobs, approves nothing (--approve is refused). It leaves "
+                             "up to two WAITING proposals in demo-kitchen (the menu-photo plan and the "
+                             "Buyer's proposal for --text); clear them with python -m demo.clear_inbox --apply")
+    parser.add_argument("--menu-photo", default=str(DEFAULT_PHOTOS["menu"]), help="--story nvidia: the menu photo")
+    parser.add_argument("--shelf-photo", default=str(DEFAULT_PHOTOS["shelf"]), help="--story nvidia: the shelf photo")
+    parser.add_argument("--note-photo", default=None,
+                        help="--story nvidia: the delivery-note photo (the prepared one comes with #1198); "
+                             "without it the receive beat is skipped")
     parser.add_argument("--text", default="1,000 L lactose-free milk by Monday", help="the milk story's request")
     parser.add_argument("--date", default=next_monday(date.today()).isoformat(),
                         help="needed-by date; pick one whose order cut-offs are still open")
@@ -440,14 +654,17 @@ def main(argv=None) -> None:
                         help="sign in as this account first (a site with sign-in on); "
                              "the password is read from the environment variable DEMO_PASSWORD")
     args = parser.parse_args(argv)
+    if args.story == "nvidia" and (args.approve or args.press_recall):
+        sys.exit("--story nvidia never approves and never runs a recall check: drop --approve and --press-recall")
     base = args.base_url.rstrip("/")
+    photos = {"menu": args.menu_photo, "shelf": args.shelf_photo, "note": args.note_photo}
     password = os.environ.get("DEMO_PASSWORD") or None
     problem = sign_in_problem(args.email, password, lambda: site_needs_sign_in(base))
     if problem:
         sys.exit(problem)
     try:
         path = record(base, Path(args.out), args.text, args.date, args.approve, args.pause,
-                      email=args.email, password=password, story=args.story, press_recall=args.press_recall)
+                      email=args.email, password=password, story=args.story, press_recall=args.press_recall, photos=photos)
     except ImportError:
         sys.exit("Playwright is not installed: pip install playwright && playwright install chromium")
     except RuntimeError as error:      # the sign-in was refused: nothing useful can be recorded
