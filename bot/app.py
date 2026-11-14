@@ -114,11 +114,27 @@ class Bot:
         self._adds: dict[str, list[dict]] = {}               # proposal -> its addable rows, until one is added
         self._shelves: dict[tuple[int, int], dict] = {}      # (chat, message) -> a shelf read to confirm
         self._lock = threading.Lock()
+        self._chat_locks: dict[int, threading.Lock] = {}     # chat -> held for one update at a time
         self._last_brief: dict = {}
+        self._groups: set[int] = set()                       # chats that are not private: no web_app buttons
         self.brief_times = brief_times if brief_times is not None else dict(BRIEF_TIMES)
 
     # ---- entry -------------------------------------------------------------------------
     def handle(self, update: dict) -> None:
+        """One update. Updates from one chat run one at a time, in the order they came (two fast
+        "+" taps are two steps); other chats run in parallel."""
+        message = (update.get("callback_query") or {}).get("message") or update.get("message") or {}
+        chat = (message.get("chat") or {}).get("id")
+        if chat is None:
+            return self._handle(update)
+        with self._chat_lock(chat):
+            self._handle(update)
+
+    def _chat_lock(self, chat: int) -> threading.Lock:
+        with self._lock:
+            return self._chat_locks.setdefault(chat, threading.Lock())
+
+    def _handle(self, update: dict) -> None:
         try:
             if "callback_query" in update:
                 self._callback(update["callback_query"])
@@ -129,8 +145,20 @@ class Bot:
         except Exception as exc:        # one bad update must not stop the bot; never the content
             print(f"bot: update failed: {type(exc).__name__}", file=sys.stderr, flush=True)
 
+    def _note_chat_type(self, chat_info: dict) -> None:
+        """Telegram allows web_app buttons only in private chats; remember which chats are groups."""
+        kind, chat = chat_info.get("type"), chat_info.get("id")
+        if chat is None or kind is None:
+            return
+        with self._lock:
+            if kind == "private":
+                self._groups.discard(chat)
+            else:
+                self._groups.add(chat)
+
     def _message(self, message: dict) -> None:
         chat = message["chat"]["id"]
+        self._note_chat_type(message["chat"])
         text = (message.get("text") or "").strip()
         if text.startswith("/start"):
             return self._start(chat, text, message)
@@ -347,7 +375,7 @@ class Bot:
         known = self.links.noted(f"summary:{chat}:{pid}")
         if known:
             url = f"{self.site_url}/approvals?proposal={pid}" if self.site_url and pid else None
-            message = render.summary(proposal, url, known.get("heard"))
+            message = render.summary(proposal, url, known.get("heard"), private=chat not in self._groups)
             self._edit_quietly(chat, known["id"], message)
         last = self.links.noted(f"brief:{chat}")
         if last:
@@ -380,6 +408,7 @@ class Bot:
     def _callback(self, query: dict) -> None:
         message = query.get("message") or {}
         chat, message_id = (message.get("chat") or {}).get("id"), message.get("message_id")
+        self._note_chat_type(message.get("chat") or {})
         parts = str(query.get("data") or "").split(":")
         if chat is None or not self.links.linked(chat) or parts[0] == "noop" or len(parts) < 3:
             self.tg.answer(query["id"])

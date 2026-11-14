@@ -105,6 +105,8 @@ export function ChefRequestBox({
               type="button"
               variant="outline"
               size="sm"
+              // 44 px for a thumb; a long example wraps inside its chip, so the page never scrolls sideways.
+              className="h-auto min-h-11 whitespace-normal text-left"
               disabled={pending}
               onClick={() => {
                 // The box gets the text the chip shows; the gateway parser reads Finnish too.

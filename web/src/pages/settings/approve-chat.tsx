@@ -49,6 +49,14 @@ export function desktopConfig(mcpUrl: string, token: string): string {
   );
 }
 
+/**
+ * The connector link (docs/contract.md, "Connector link", #1693): the gateway's MCP with the token
+ * in the path, pasted into Claude's Settings > Connectors > Add custom connector. No config file.
+ */
+export function connectorLink(origin: string, token: string): string {
+  return `${origin}/gateway/mcp/t/${token}`;
+}
+
 type Status = "active" | "expired" | "revoked";
 
 function statusOf(row: ApprovalToken, now: number): Status {
@@ -86,6 +94,7 @@ export function ApproveChatSection() {
   const [revoking, setRevoking] = useState(false);
   const secretRef = useRef<HTMLElement>(null);
   const configRef = useRef<HTMLElement>(null);
+  const linkRef = useRef<HTMLElement>(null);
 
   const origin = window.location.origin;
   const mcpUrl = `${origin}/gateway/mcp`;
@@ -193,6 +202,34 @@ export function ApproveChatSection() {
             <p className="mt-1 text-sm text-muted-foreground">
               {t("It works until {time}.", { time: formatDateTime(created.expiresAt) })}
             </p>
+            <div className="mt-4 min-w-0 space-y-3 border-t border-primary/30 pt-4">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 space-y-2">
+                  <h4 className="font-semibold">{t("Add it to Claude: no config file")}</h4>
+                  <code
+                    ref={linkRef}
+                    tabIndex={0}
+                    aria-label={t("Connector link")}
+                    className="block max-w-full rounded-md bg-background px-3 py-2 font-mono text-sm break-all"
+                  >
+                    {connectorLink(origin, created.token)}
+                  </code>
+                </div>
+                <CopyButton
+                  text={connectorLink(origin, created.token)}
+                  label={t("Copy connector link")}
+                  target={linkRef}
+                />
+              </div>
+              <ol className="list-decimal space-y-1 pl-5 text-sm">
+                <li>{t("In Claude (claude.ai or Claude Desktop), open Settings, then Connectors, then Add custom connector.")}</li>
+                <li>{t("Paste the link and press Add. There is nothing else to fill in.")}</li>
+                <li>{t("Ask Claude: what is waiting for my approval?")}</li>
+              </ol>
+              <p className="text-xs text-muted-foreground">
+                {t("The link holds your token. Paste it only into Claude's connector dialog. It stops working when the token expires or you revoke it.")}
+              </p>
+            </div>
           </section>
         ) : null}
 
@@ -233,7 +270,7 @@ export function ApproveChatSection() {
 
         <Card className="min-w-0 overflow-hidden">
           <CardHeader>
-            <CardTitle>{t("Use it in Claude Desktop")}</CardTitle>
+            <CardTitle>{t("Advanced: a Claude Desktop config file")}</CardTitle>
             <CardDescription>{t("Three steps. The token goes only into your own chat.")}</CardDescription>
           </CardHeader>
           <CardContent className="min-w-0 space-y-4 text-sm">
