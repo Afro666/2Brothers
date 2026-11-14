@@ -175,6 +175,15 @@ describe("language", () => {
     ).toThrow(/Conflicting Finnish translations/);
   });
 
+  it("keeps the first translation instead of throwing when the app itself collects the files", () => {
+    expect(
+      collectFinnishDictionaries(
+        { "a.ts": { default: { "Same text": "Hei" } }, "b.ts": { default: { "Same text": "Moi" } } },
+        "keep-first",
+      ),
+    ).toEqual({ "Same text": "Hei" });
+  });
+
   it("has a Finnish entry for every literal passed to t in translated files", () => {
     const files = import.meta.glob("../i18n/fi/*.ts", { eager: true }) as Record<
       string,
