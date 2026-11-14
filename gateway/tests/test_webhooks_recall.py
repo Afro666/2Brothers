@@ -110,6 +110,19 @@ def test_malformed_stored_alert_does_not_fail_the_check(env, receiver):
     assert by_id[good]["notice_url"]
 
 
+def test_found_counts_recipes_from_structured_data():
+    from gateway.recalls_view import _found
+    from monitor.recalls import _alert
+    kitchen = {"kitchen_id": "hotel", "stock": {}, "recipes": {COFFEE: ["Soup, Tomato"]}, "proposal": []}
+    alert = _alert({"url": "https://example.test/n"}, {"product_name": "x"},
+                   {"product_id": COFFEE}, ("possible", "why"), kitchen, NOW)
+    assert alert["where"] == ["in recipes: Soup, Tomato"]
+    assert _found(alert) == {"stock": False, "recipes": 1, "open_proposal": False}
+    # An alert stored before the structured evidence still reads from the text.
+    assert _found({"where": ["in stock: 2 KG", "in recipes: A, B"]}) == {
+        "stock": True, "recipes": 2, "open_proposal": False}
+
+
 def test_blocked_proposal_alert_names_its_case(env, receiver):
     client, _, _, proposal = env
     make(client)
