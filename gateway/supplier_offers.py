@@ -94,9 +94,9 @@ def _audit_once(gw, kitchen_id: str, kind: str, offer_id: str, actor: str, at: s
     """One audit line per offer and step: the event id is fixed, so a retry adds nothing.
     The webhook goes out only for the line this call appended, never for a replay."""
     event_id = f"{kind}:{offer_id}"
-    fresh = gw.db.audit_log.find_one({"event.event_id": event_id}) is None
-    audit.append_event(gw.db, {"event_id": event_id, "kind": kind, "actor": actor,
-                               "offer_id": offer_id, **data}, {"kitchen_id": kitchen_id, "at": at})
+    _, fresh = audit.append_event_new(
+        gw.db, {"event_id": event_id, "kind": kind, "actor": actor, "offer_id": offer_id, **data},
+        {"kitchen_id": kitchen_id, "at": at})
     if fresh:
         webhooks.dispatch(gw.db, kitchen_id, kind, {"offer_id": offer_id, **(offer or {}), **data})
 
