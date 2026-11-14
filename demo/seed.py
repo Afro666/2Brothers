@@ -36,6 +36,27 @@ VALIO = "sup-valio"
 MEAL = "lunch"
 
 
+# The demo kitchen's suppliers and own products. Terms are placeholders a user would set
+# (Valio's API has no order terms); the bakery is invented, with a manual price list.
+DEMO_SUPPLIERS = [
+    {"supplier_id": "sup-valio", "name": "Valio Aimo", "adapter": "valio_api", "terms": {
+        "free_delivery_threshold_eur": "300.00", "delivery_fee_eur": "25.00",
+        "order_days": ["MON", "TUE", "WED", "THU", "FRI"], "cutoff_time": "17:00", "lead_time_days": 1,
+        "discount_tiers": [{"product_id": "463335", "min_qty": "500", "unit": "ST", "unit_price_eur": "1.33"}]}},
+    {"supplier_id": "sup-bakery", "name": "Corner Bakery (demo)", "adapter": "manual", "terms": {
+        "free_delivery_threshold_eur": "80.00", "delivery_fee_eur": "12.00",
+        "order_days": ["TUE", "FRI"], "cutoff_time": "14:00", "lead_time_days": 1, "discount_tiers": []}},
+]
+DEMO_OWN_PRODUCTS = [
+    {"product_id": "own-rye-loaf", "name": "Rye sourdough loaf 800 g", "supplier_id": "sup-bakery", "unit": "ST",
+     "base_unit": "KG", "pack_size_in_base_units": "0.8", "unit_price_eur": "4.20",
+     "allergens": [{"code": "AW", "level": "CONTAINS"}], "allergen_data": "ENTERED"},
+    # No allergen data on purpose: the screens must show "unknown", never "free from".
+    {"product_id": "own-cinnamon-bun", "name": "Cinnamon bun", "supplier_id": "sup-bakery", "unit": "ST",
+     "unit_price_eur": "2.10", "allergen_data": "UNKNOWN"},
+]
+
+
 def _day(row: dict) -> date:
     return datetime.fromisoformat(row["ts"]["$date"].replace("Z", "")).date()
 
@@ -140,6 +161,14 @@ def load(db, data: dict) -> dict:
     for plan in data["menu_plans"]:
         repo.menu_plans.put(DEMO_ID, plan["week"], plan["days"])
     counts["recipes"], counts["menu_plans"] = len(data["recipes"]), len(data["menu_plans"])
+    if DEMO_ID in ids:
+        for supplier in DEMO_SUPPLIERS:
+            repo.suppliers.delete(DEMO_ID, supplier["supplier_id"])
+            repo.suppliers.create(DEMO_ID, supplier)
+        for product in DEMO_OWN_PRODUCTS:
+            repo.own_products.delete(DEMO_ID, product["product_id"])
+            repo.own_products.create(DEMO_ID, product)
+        counts["suppliers"], counts["own_products"] = len(DEMO_SUPPLIERS), len(DEMO_OWN_PRODUCTS)
     counts["sharing"] = len(seed_sharing(db, ids, VALIO))
     from store.buyer_context import seed_demo_policy
     if DEMO_ID in ids:
