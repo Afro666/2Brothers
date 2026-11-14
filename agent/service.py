@@ -239,6 +239,8 @@ def create_app(worker=None, shelf=None, delivery_note=None, menu_photo=None, buy
     mount_delivery_note(app, WorkerError, delivery_note)
     from agent.menu_photo_service import mount_menu_photo
     mount_menu_photo(app, WorkerError, menu_photo)
+    from agent.brief_service import mount_brief
+    mount_brief(app, WorkerError)
     from agent.buying_note_service import mount_buying_note
     mount_buying_note(app, WorkerError, buying_note)
     from agent.price_list_service import mount_price_list

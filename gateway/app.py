@@ -115,7 +115,7 @@ REFUSAL_WINDOW = 60.0          # seconds: one audit row per repeated refusal (#8
 
 
 def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None,
-               delivery_note_worker=None, menu_photo_worker=None, buying_note_worker=None, price_list_worker=None, explanation_worker=None, label_photo_worker=None) -> FastAPI:
+               delivery_note_worker=None, menu_photo_worker=None, buying_note_worker=None, price_list_worker=None, explanation_worker=None, label_photo_worker=None, brief_worker=None) -> FastAPI:
     from gateway.buyer_worker import Breaker
     buyer_breaker = Breaker()        # one per app: a timeout skips the model for 2 minutes
     app = FastAPI(
@@ -732,6 +732,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     mount_drift(app, gw, principal)
     from gateway.supplier_routes import mount_supplier   # the wholesaler's demand view (#33)
     mount_supplier(app, gw, principal)
+    from gateway.brief import mount_brief
+    mount_brief(app, gw, principal, brief_worker)
     from gateway.buying_note import mount_buying_note   # Nemotron's note for the supplier's planner (#1176)
     mount_buying_note(app, gw, principal, buying_note_worker)
     from gateway.nutrition_routes import mount_nutrition   # label nutrition per recipe, day and order
