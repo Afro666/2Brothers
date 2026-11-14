@@ -1,0 +1,1333 @@
+{
+  "fixture_sha256": "42dcc57c0707aa38410e9010c868960eb64ce058efe0d743fe621e33fef846d8",
+  "design": "Eight synthetic development cases frozen before calls. Three repeats per case/stage. Same live Nemotron endpoint, temperature 0, no orders. Exploratory development evidence, not held-out evaluation. All attempted iterations retained.",
+  "iterations": {
+    "baseline": {
+      "raw_sha256": "8e2dffff783e4d72b46718e6b78333fe67693267fd9769e6889fe6b9c156f69b",
+      "passed": 23,
+      "total": 36,
+      "by_case_stage": {
+        "equal-a/after_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-a/without_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-a/after_undo": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_feedback": {
+          "passed": 2,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            null,
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/without_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_undo": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "declined-cheaper/after_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "diet-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "delivery-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "partial-keeps-complement/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ]
+          ]
+        },
+        "explicit-intent-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "only-option/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        }
+      },
+      "mean_prompt_tokens": 809,
+      "median_model_seconds": 0.547,
+      "prompt_sha256": [
+        "136599bf7ebdcefcd8398542e1573888eff85b976f8b5442d1b31f8c82a4e012",
+        "49a9c56beedadad95498e0d911d41ff072a2018456ed25798a020368d86f9c7b",
+        "79aa807eea9fbc4f493698047c5118c8ea783a3ef32430aba072fbbc7f71febb",
+        "a1d9df4566769bdd940545823b21177977cfda096cdd219f75b2fd75cce34911",
+        "ad5ab3dc9617d90a35487bbafe4ca5b6188ff5903b42d67da7c7517c210ddd10",
+        "c649626a29b3191bfb22ee5f78a59665a6b5241bdb238b17038a0265250c0e4f",
+        "d899c460ca1a2f919e87d037399a8378b356f99c2563d5cdbf9603b833b9da53",
+        "ed8662685b99cd6d9fb0de2cb8f96efa9559b4530dd775986996d3696b084083",
+        "eeb9d605b73596c6ad71d94c50b2c29b547c883e6be511fa2dbfb168a873454a",
+        "fb9222163479a4708a14d8602ac1459ad5db3ea98857fa44abb8ccf953a1f984"
+      ]
+    },
+    "prompt_only": {
+      "raw_sha256": "e3d1627d0c63624b70a2e8c1820b6b3d20958cd3df9401ab656282fefc870ae2",
+      "passed": 24,
+      "total": 36,
+      "by_case_stage": {
+        "equal-a/after_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-a/without_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-a/after_undo": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/without_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_undo": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "declined-cheaper/after_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "diet-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "delivery-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "partial-keeps-complement/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ]
+          ]
+        },
+        "explicit-intent-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "only-option/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        }
+      },
+      "mean_prompt_tokens": 953,
+      "median_model_seconds": 0.547,
+      "prompt_sha256": [
+        "2011d8741b3d23a218485d18628f484b0fbdb0e8981a91a8d0068d7627acf404",
+        "343e3108fc9685559d53a7342b46cfcc142a0fa5d0975f0ad2365ea54caae6a6",
+        "36dedc0ac3b49c926f5a8489a3af7811b04e97449ecb16584b6a7cb09ad104e8",
+        "4cfd35cbc3d09450f49caa76d84f87875eb83b27321fe70283e4a1b319cf7639",
+        "690b71abb90cb7e9c6b939a8fb8b1ad13bb7c48402dcd15838c722c3ded9c9ad",
+        "6a1c6a11c2c3d6d201033e1256bdb2879c39b620d7ac9bd7562a90f71f9b9625",
+        "d5cfc7b1bb068f88ab1f11e5ced8b5a4cb213dd8ea13b5c1ad77f4389277579d",
+        "df0e4f124caf327e842b8025bb927929523edc53a500a6c69ff0301d6ed759e9",
+        "ee36e35daee2316113df79beff44930b2991ebc68e6996b8c6ea27e3c5a3f33a",
+        "f2aabe78759a21afd6bcf2454dbca5bb58df8e2ed4bfde56fa15de30c5d97e00"
+      ]
+    },
+    "row_flag_weak_priority": {
+      "raw_sha256": "203892ce9107b12c271f153fcc7938a6a7ae5522a44def787924b50aa43b0e18",
+      "passed": 24,
+      "total": 36,
+      "by_case_stage": {
+        "equal-a/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "equal-a/without_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-a/after_undo": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/without_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_undo": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "declined-cheaper/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "diet-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "delivery-wins/after_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1",
+              "p0"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "partial-keeps-complement/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1",
+              "p0"
+            ],
+            [
+              "p1",
+              "p0"
+            ],
+            [
+              "p1",
+              "p0"
+            ]
+          ]
+        },
+        "explicit-intent-wins/after_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "only-option/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        }
+      },
+      "mean_prompt_tokens": 963,
+      "median_model_seconds": 0.5934999999999999,
+      "prompt_sha256": [
+        "0cb0df7722c34a4932f1b8e3b1b415b9dddc3985752c1eb01c5542d47e6cb851",
+        "21fd3d8297d51d8b2ebb7db02a69e371184b78bbc6f6b7bbc85fa2defe1957dc",
+        "2a9b5bf10a3b38b9446029e09b7489fa1fde5226ec36e0e9a72c78b0b0b8cc9f",
+        "6e0a0833abf98b3666f42b2c82bbd872591f38daa630b9d3f96dbf095a83c9cd",
+        "9bfb1dd77a09d1e03b1d102b13ba873399867ca7384256e715401e14b4904190",
+        "c094e695eac8e141aeaeb32bd7e044ee296069edc92934f9b6cf0d50510dd900",
+        "e2ea5c80c7047e2cef0d0e7856532c46f5a7cca7f1aacbfde2127c1eb346d1ac",
+        "ea5d313fce7ef3b163783dca1f50f81ae741cbdd3e613229c0fa614b621440d7",
+        "f357aaf244bb240657b3170359fa4ef73f9b6da0d2f5b96c5d9d88efced62bc5",
+        "f57bff0b7478276e901aa272a39e30c3464cf391577136d4227b106ba81506ba"
+      ]
+    },
+    "row_flag_strict_priority": {
+      "raw_sha256": "1b9d57a9d8554ab0f32c3e1f763a65c430d4e154be60ad85ad4860ae920fd6e8",
+      "passed": 30,
+      "total": 36,
+      "by_case_stage": {
+        "equal-a/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "equal-a/without_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-a/after_undo": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/without_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_undo": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "declined-cheaper/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "diet-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "delivery-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "partial-keeps-complement/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1",
+              "p0"
+            ],
+            [
+              "p1",
+              "p0"
+            ],
+            [
+              "p1",
+              "p0"
+            ]
+          ]
+        },
+        "explicit-intent-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "only-option/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        }
+      },
+      "mean_prompt_tokens": 1057,
+      "median_model_seconds": 0.515,
+      "prompt_sha256": [
+        "275268250045bd4493617c4642d2a99f381c86dc68787c53ad3b6b3b2f8e733b",
+        "485f0c124ee152a5c247cce6e55d51b200014035620598686898d7f9d07848fe",
+        "4caf5ebc1292e0a438ab71b6157779855c74c8fb5ebb493421c2a17d68fa9f8f",
+        "62a9f6d1cc536f147dffe1f2862b0a7cf4d0bf5da13f639df5ba75cccbf2eeb2",
+        "73fa8c81297aa3ca900138ec06467d49aef5ab4dabd700a049e730c333eb30f0",
+        "b25aca79605a972b5de8bfb948f9bc830996a27584aa9238fa4f382461811b87",
+        "c7a4d570ee8d670fe9d63ae21d27e076ef6dff1e195f9435e0190b3daef2b415",
+        "dbfde38316d563a323dc9126009612df40ae25cfda21d8e2cd9e57f3a341804d",
+        "ebef22c5e6cb5e5fd551939266cb63f25b9587480a0441cd7aa585fb1f11a123",
+        "fd48168075979da2fa09d9194dad336e0a0550decf2fa897d51a08dabaa3a2de"
+      ]
+    },
+    "partial_stock_priority": {
+      "raw_sha256": "a6ab525eea53e1bc0afc3b41915e052471a655bf22bbb2f9022a28f0d02f1fdc",
+      "passed": 29,
+      "total": 36,
+      "by_case_stage": {
+        "equal-a/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "equal-a/without_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-a/after_undo": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/without_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_undo": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "declined-cheaper/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "diet-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "delivery-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "partial-keeps-complement/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ]
+          ]
+        },
+        "explicit-intent-wins/after_feedback": {
+          "passed": 2,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "only-option/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        }
+      },
+      "mean_prompt_tokens": 1102,
+      "median_model_seconds": 0.4845,
+      "prompt_sha256": [
+        "18af279e8fbba55d4f2000b0f4559bb886930d751f4f3c850c378ffef5ebf509",
+        "4d2f9a672119221d23c3d45494f2b156929b50150d77c1e843a3b350357a7076",
+        "4ee1d6a0f29539094d4751c2ecec1b75ade76ccd3caa44db2ca989a9584fff70",
+        "6427a2709c3efa5d6671020fda14152c5481b18c2a2e15e87d278724b0861443",
+        "851230922642afb7e7678484d82a70fcc0fbc6c591a718ca4899b83e88ebc525",
+        "8c05665ee28bb150c303c7ff501165b3ddf5ffbde725df39bbddc1b3e8eaec63",
+        "b039e7edffa523fb7a34b71448343d0e282622db803e68d81bf3a454d6a11621",
+        "bb4801a242452a52c295b47565a0bfb6baad49344a8ef067444a49b0702ee0a5",
+        "de7ac102b1f105c132979d6896c8d8acd9e855f33ebcaf1199259c1691d34e51",
+        "f57be8032b4c0833b67214b66582f24a854e5809b22541ee58ac277dc8506c3c"
+      ]
+    },
+    "alias_scoped_memory_final": {
+      "raw_sha256": "61d334d4fe6795fe978109c544575cce4ec2457881c6864824f6fc773ec34b11",
+      "passed": 30,
+      "total": 36,
+      "by_case_stage": {
+        "equal-a/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "equal-a/without_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-a/after_undo": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/without_feedback": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "equal-b/after_undo": {
+          "passed": 0,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "declined-cheaper/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ],
+            [
+              "p1"
+            ]
+          ]
+        },
+        "diet-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "delivery-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "partial-keeps-complement/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ],
+            [
+              "p0",
+              "p1"
+            ]
+          ]
+        },
+        "explicit-intent-wins/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        },
+        "only-option/after_feedback": {
+          "passed": 3,
+          "total": 3,
+          "picks": [
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ],
+            [
+              "p0"
+            ]
+          ]
+        }
+      },
+      "mean_prompt_tokens": 1088,
+      "median_model_seconds": 0.898,
+      "prompt_sha256": [
+        "18af279e8fbba55d4f2000b0f4559bb886930d751f4f3c850c378ffef5ebf509",
+        "4d2f9a672119221d23c3d45494f2b156929b50150d77c1e843a3b350357a7076",
+        "4ee1d6a0f29539094d4751c2ecec1b75ade76ccd3caa44db2ca989a9584fff70",
+        "6427a2709c3efa5d6671020fda14152c5481b18c2a2e15e87d278724b0861443",
+        "851230922642afb7e7678484d82a70fcc0fbc6c591a718ca4899b83e88ebc525",
+        "8c05665ee28bb150c303c7ff501165b3ddf5ffbde725df39bbddc1b3e8eaec63",
+        "b039e7edffa523fb7a34b71448343d0e282622db803e68d81bf3a454d6a11621",
+        "bb4801a242452a52c295b47565a0bfb6baad49344a8ef067444a49b0702ee0a5",
+        "f57be8032b4c0833b67214b66582f24a854e5809b22541ee58ac277dc8506c3c",
+        "f8e88f8bb89c1932922446d8ef72d78951da0b90a468f1a0bf60ff40edcb8276"
+      ]
+    }
+  },
+  "conclusion": "Final: all 24 after-feedback cases passed, including 9 avoidance cases and 15 safeguards. Six equal-a no-feedback/undo checks pass. Six equal-b no-feedback/undo checks still fail the frozen lower-index expectation, as at baseline: engine-selected p0 remains preferred despite reversed shortlist. Undo still restores the same pre-feedback output. This existing tie-break limitation is not fixed or hidden.",
+  "numeric_smoke": {
+    "strict_priority_before_partial_fix": {
+      "passed": 8,
+      "total": 9,
+      "by_case": {
+        "stock-01": {
+          "passed": 2,
+          "total": 3
+        },
+        "diet-01": {
+          "passed": 3,
+          "total": 3
+        },
+        "price-01": {
+          "passed": 3,
+          "total": 3
+        }
+      }
+    },
+    "after_partial_fix": {
+      "passed": 15,
+      "total": 15,
+      "by_case": {
+        "stock-01": {
+          "passed": 5,
+          "total": 5
+        },
+        "diet-01": {
+          "passed": 5,
+          "total": 5
+        },
+        "price-01": {
+          "passed": 5,
+          "total": 5
+        }
+      }
+    }
+  },
+  "iteration_notes": {
+    "prompt_only": "Did not correct original A failure.",
+    "row_flag_weak_priority": "Corrected avoidance but weakened delivery and explicit alias controls.",
+    "row_flag_strict_priority": "24/24 feedback checks; separate numeric smoke omitted useful partial stock once in three calls.",
+    "partial_stock_priority": "Numeric smoke 15/15; one explicit-alias choice failed.",
+    "alias_scoped_memory_final": "Explicit alias requests omit removal preferences from applicable memory (other facts retained). 24/24 feedback/safeguard cases; original undo passes. No further prompt change after numeric 15/15; alias memory filtering does not affect those non-alias inputs."
+  },
+  "integrated_final": {
+    "design": "9 live Nemotron calls; synthetic shortlist and in-memory feedback store; no live kitchen mutation or supplier/order calls",
+    "raw_feedback_rows": 9,
+    "raw_feedback_not_sent": true,
+    "unrelated_product_excluded": true,
+    "other_kitchen_excluded": true,
+    "refresh_after_60_seconds": true,
+    "undo_clears_memory": true,
+    "pick_key_changes_with_memory": true,
+    "orders": 0,
+    "stages": [
+      {
+        "stage": "before_feedback",
+        "memory_characters": 0,
+        "picks": [
+          [
+            "p0"
+          ],
+          [
+            "p0"
+          ],
+          [
+            "p0"
+          ]
+        ]
+      },
+      {
+        "stage": "after_three_removals",
+        "memory_characters": 417,
+        "picks": [
+          [
+            "p1"
+          ],
+          [
+            "p1"
+          ],
+          [
+            "p1"
+          ]
+        ]
+      },
+      {
+        "stage": "after_human_undo",
+        "memory_characters": 0,
+        "picks": [
+          [
+            "p0"
+          ],
+          [
+            "p0"
+          ],
+          [
+            "p0"
+          ]
+        ]
+      }
+    ]
+  }
+}

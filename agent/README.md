@@ -237,7 +237,7 @@ deadline, not streaming first-token instrumentation.
 
 Only product IDs are cached for ten minutes, scoped to kitchen, request, day,
 quantity/unit, allergen policy, eligible catalog shortlist and the compact kitchen
-memory hash and the current quote's selection evidence. Prices, stock,
+full system prompt hash (including kitchen memory) and the current quote's selection evidence. Prices, stock,
 offers and approval are never reused by this cache: every new request re-quotes and
 simulates live. The same idempotency key replays its original result as before.
 An identical choice already in flight does not start another model call; its
@@ -257,6 +257,40 @@ is checked before looking up a cached pick, so a changed summary cannot reuse th
 previous ten-minute product choice. Idempotent request replay stays exact. This
 changes context freshness, not Nemotron's weights or the engine's authority over
 quantities. It does not establish a latency guarantee during provider congestion.
+
+Repeated removals also produce a `kitchen_declined` flag beside each shortlist row,
+derived from the same active, relevant, bounded memory. An explicit alias request
+omits removal preferences from its pick memory, retaining other kinds of learned facts.
+The prompt applies that soft
+preference after product/explicit-alias fit, diet, delivery and confirmed coverage,
+and before price, prior orders and the index tie-break. It never removes a candidate
+in code: a declined product can still be needed for coverage or be the only suitable
+option. Disabling the fact removes the flag on the next memory refresh. Prompt
+revisions invalidate cached choices as well as changes to the memory itself.
+
+The focused development check is reproducible with the private Nemotron environment:
+
+```
+python -m agent.feedback_choice_bench --mode baseline --out .local/feedback-before.json
+python -m agent.feedback_choice_bench --mode current --out .local/feedback-after.json
+```
+
+Use a fresh output file for each run. The frozen eight-case fixture includes its old
+prompt; results include fixture and actual-prompt hashes. In three repeats per case,
+the final version passed 24/24 feedback-choice/safeguard checks (baseline 17/24).
+All nine avoidance checks and all fifteen diet/delivery/partial-stock/explicit-intent/
+only-option safeguards passed. The reported original case returns to its pre-feedback
+choice after undo. Six reversed-shortlist no-feedback/undo checks still fail the
+frozen lower-index expectation, as at baseline: the model prefers the original
+engine-selected product; this existing tie-break limitation is not hidden or fixed.
+Overall: 23/36 to 30/36, with mean prompt tokens 809 to 1,088. All attempted iterations,
+including unsuccessful drafts and their stock/alias misses, are in
+`agent/benchmarks/feedback-choice-v1-report.json`. The final stock/diet/unit-price
+smoke check passed 15/15 (five repeats per case). A separate real-model check of
+recorded synthetic removals through the memory module selected A before feedback,
+B after feedback, and A after undo in all three repeats at each stage.
+This is synthetic development evidence, not a guarantee on unseen requests, and no
+live kitchen history or orders are created by this check.
 
 The pick now also reads a structured need and exact-quote facts: confirmed/unknown/zero
 stock, coverage, price per proven base unit, sales-unit size and packs needed, arrival,
