@@ -54,18 +54,25 @@ def _tokens(name) -> list[str]:
     return [_norm(w) for w in _WORD.findall(str(name or "").lower())]
 
 
-def product_word(text: str) -> tuple[str, set[str]]:
-    """`(the product word, all product words)` of a request text; ("", set()) when none.
+def product_phrase(text: str) -> str:
+    """The product words of a request text, in the base form the catalog names use
+    ("1000 l laktoositonta maitoa maanantaiksi" -> "laktoositon maito"); "" when none.
 
-    The product words are what `gateway.parse.product_words` keeps, up to the first word
-    that starts a use or a wish ("cheese for pizza", "oat drink, barista type")."""
+    They are what `gateway.parse.product_words` keeps, up to the first word that starts a
+    use or a wish ("cheese for pizza", "oat drink, barista type")."""
     from gateway.parse import product_words
     low = (text or "")[:500].lower()
     cut = _CUT.search(low)
-    words = product_words(low[:cut.start()] if cut else low).split()
+    words = product_words(low[:cut.start()] if cut else low)
     if not words and cut:
-        words = product_words(low).split()
-    words = [_norm(w) for w in words if _WORD.fullmatch(w)]
+        words = product_words(low)
+    return " ".join(w for w in words.split() if _WORD.fullmatch(w))
+
+
+def product_word(text: str) -> tuple[str, set[str]]:
+    """`(the product word, all product words)` of a request text, plural to singular;
+    ("", set()) when none. The product word is the last word of `product_phrase`."""
+    words = [_norm(w) for w in product_phrase(text).split()]
     return (words[-1], set(words)) if words else ("", set())
 
 

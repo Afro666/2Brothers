@@ -412,11 +412,13 @@ class Gateway:
         """The search hits narrowed to the kind of product `text` names (gateway/kind.py,
         gateway/candidates.py `of_kind`). The word search returns 50 hits and "cheese" is in
         439 names, so the best hits of each category of that kind (three at most) are
-        searched too. It only narrows what a search found, and it never fails a search:
-        when the kind cannot be read, the rows come back as they are."""
+        searched too, with the person's own product words: a model's query can be a word
+        no name has ("voita" for butter found white icing). It only narrows what a search
+        found, and it never fails a search: when the kind cannot be read, the rows come
+        back as they are."""
         from gateway import catalog_search
         from gateway.candidates import SEARCH_LIMIT, of_kind
-        from gateway.kind import Kinds
+        from gateway.kind import Kinds, product_phrase
         filters = dict(filters or {})
         try:
             if self._kinds is None:
@@ -428,9 +430,10 @@ class Gateway:
         if not categories or filters.get("category") is not None:
             return rows
         merged, seen = list(rows), {r["product_id"] for r in rows}
+        words = product_phrase(text) or query
         for category in categories[:KIND_SEARCHES]:
             try:
-                more, _ = catalog_search.search(self.db, query, {**filters, "category": category},
+                more, _ = catalog_search.search(self.db, words, {**filters, "category": category},
                                                 SEARCH_LIMIT, kitchen_id, injected=self._search)
             except Exception:
                 log.warning("kind search failed: category=%s", category, exc_info=True)

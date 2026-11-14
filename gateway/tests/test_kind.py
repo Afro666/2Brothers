@@ -6,7 +6,7 @@ import mongomock
 import pytest
 
 from gateway.candidates import of_kind
-from gateway.kind import Kinds, product_word
+from gateway.kind import Kinds, product_phrase, product_word
 from gateway.app import create_app
 from gateway.service import Gateway
 from gateway.tests.test_gateway_app import AGENT, K, NOW, FakeValio
@@ -88,6 +88,12 @@ KINDS = Kinds(CATALOG)
 ])
 def test_the_product_word_is_the_last_word_of_the_product_phrase(text, word):
     assert product_word(text)[0] == word
+
+
+def test_the_product_phrase_is_in_the_base_form_of_the_catalog_names():
+    assert product_phrase("1000 l laktoositonta maitoa maanantaiksi") == "laktoositon maito"
+    assert product_phrase("25 kg grated cheese for pizza, not Edam") == "grated cheese"
+    assert product_phrase("by Monday") == ""
 
 
 @pytest.mark.parametrize("text,categories", [
@@ -245,6 +251,21 @@ def test_the_measure_filter_and_the_can_arrive_order_still_run_after_the_kind(ga
     assert "ch-litre" not in ids and found["measure"] == "KG"
     order = [0 if p["can_arrive"] else (1 if p["can_arrive"] is None else 2) for p in found["products"]]
     assert order == sorted(order)
+
+
+def test_the_kind_is_searched_with_the_persons_words_when_the_models_query_finds_nothing(gateway):
+    """Real model, 2026-11-14: for "20 kg voita keskiviikoksi" the model searched "voita".
+    No name has that word; the fuzzy search found white icing, and that was proposed."""
+    client, gw = gateway
+    inner = gw._search
+
+    def fuzzy(db, query, filters, limit, kitchen_id=None):
+        if query == "voita":      # the live search: "voita" is one edit from the Swedish "vita"
+            return [] if filters.get("category") else [dict(SAUCE[0], score=201)]
+        return inner(db, query, filters, limit, kitchen_id)
+    gw._search = fuzzy
+    found = shortlist(client, "20 kg voita keskiviikoksi", "KG", "voita")
+    assert found["products"] and {p["category"] for p in found["products"]} == {"10500"}
 
 
 def test_a_need_with_no_text_uses_the_query(gateway):
