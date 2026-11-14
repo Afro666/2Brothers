@@ -1243,6 +1243,9 @@ person approves it. Over MCP the tool `change_proposal` calls the same code
 
 The web's `ProposalChange` maps onto this body: `SET_QUANTITY` is one `lines` entry,
 `REMOVE_LINE` is one `lines` entry with `quantity: 0`, `ADD_LINE` is one `add` entry.
+The web client (`changeProposal` in `web/src/api/http.ts`) sends one change per call, with
+quantities as decimal strings and one `web-change:<uuid>` key per change (kept for a retry
+until it is answered). The approval card then reloads and approves the new `expected_total`.
 
 | Status | Code | When |
 |---|---|---|

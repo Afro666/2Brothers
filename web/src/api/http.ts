@@ -262,6 +262,31 @@ export function createHttpApi(baseUrl: string): Api {
         words.every((word) => product.names.en.toLocaleLowerCase().includes(word)),
       );
     },
+    async changeProposal(orderId, change, actor) {
+      // docs/contract.md "Changing a proposal": SET_QUANTITY and REMOVE_LINE are one `lines`
+      // entry (0 removes), ADD_LINE is one `add` entry. Quantities go as decimal strings.
+      const body: Json =
+        change.type === "ADD_LINE"
+          ? { add: [{ product_id: change.productId, quantity: String(change.quantity) }] }
+          : {
+              lines: [
+                {
+                  product_id: change.productId,
+                  quantity: change.type === "REMOVE_LINE" ? "0" : String(change.quantity),
+                },
+              ],
+            };
+      // One key per change, kept only until it is answered: a retry after a network failure
+      // repeats it, and making the same change again later is a new change.
+      const identity = `change:${orderId}:${JSON.stringify(body)}`;
+      const key = requestKeys.get(identity) ?? `web-change:${uuid()}`;
+      requestKeys.set(identity, key);
+      const answered = (await post(`${proposalPath(orderId)}/change`, { ...body, idempotency_key: key }, actor)) as Json;
+      requestKeys.delete(identity);
+      // The change is made: an unreadable audit log only loses who asked, never the new total.
+      const events = await auditEvents().catch(() => []);
+      return { order: mapOrder(answered, null), approval: mapApproval(answered, events) };
+    },
     async listOrders() {
       const [placed, list] = await Promise.all([get(`${kitchen}/orders`), proposals()]);
       return mapEach(rows(placed, "orders"), "order", "order_id", (order) =>
@@ -356,11 +381,6 @@ export function createHttpApi(baseUrl: string): Api {
   return {
     ...mock,
     ...real,
-    // Never the mock for what acts on real input: it would change a sample order, not the real
-    // proposal.
-    async changeProposal() {
-      throw new ApiError("NOT_SERVED", "The gateway cannot change a proposal yet. Reject it and ask the Buyer again");
-    },
     live: new Set(Object.keys(real) as (keyof Api)[]),
   };
 }
