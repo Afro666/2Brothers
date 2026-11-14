@@ -89,10 +89,12 @@ jobs:
             5. Write `verdict.txt` in the repo root with exactly one word: PASS or BLOCK.
 
       - name: Hand a blocked fix-agent PR to a human
-        if: always() && steps.facts.outputs.issues == 'no'
+        # Only a written BLOCK hands the PR over. A cancelled, timed-out or failed review
+        # (no verdict) leaves the PR open for a rerun (#40).
+        if: (success() || failure()) && steps.facts.outputs.issues == 'no'
         run: |
           v=$(tr -d '[:space:]' < verdict.txt 2>/dev/null || echo NONE)
-          [ "$v" = "PASS" ] && exit 0
+          [ "$v" = "BLOCK" ] || exit 0
           head=$(gh pr view "$PR" --json headRefName --jq .headRefName)
           issue=${head#ai-fix/}
           gh pr close "$PR" --comment "Opus review: $v. Closing this fix-agent PR; the issue goes back to a human (label todo)."
