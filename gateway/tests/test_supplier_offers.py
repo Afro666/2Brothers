@@ -237,6 +237,38 @@ def test_accept_when_nothing_can_be_delivered_leaves_the_offer_open(w):
     assert w.kinds() == ["supplier_offer_received"]
 
 
+def test_accept_after_a_rejected_proposal_asks_again_and_can_succeed(w):
+    """#928: a REJECTED first try must not answer every later accept."""
+    offer = w.offer().json()
+    url = f"{K1}/{offer['offer_id']}/accept"
+    product = next(p for p in w.fake.avail_data["products"] if p["productId"] == SUBS[0])
+    lines, product["scheduleLines"] = product["scheduleLines"], []
+    first = w.client.post(url, headers=HUMAN).json()
+    assert first["proposal_status"] == "REJECTED"
+    product["scheduleLines"] = lines                          # the stock is back
+    second = w.client.post(url, headers=HUMAN).json()
+    assert second["proposal_status"] == "READY" and second["proposal_id"] != first["proposal_id"]
+    assert second["offer"]["status"] == "ACCEPTED"
+    again = w.client.post(url, headers=HUMAN).json()          # a double click on the good one
+    assert again["proposal_id"] == second["proposal_id"]
+    assert w.db.proposals.count_documents({}) == 2
+    assert w.kinds() == ["supplier_offer_received", "supplier_offer_accepted"]
+
+
+def test_accept_stops_building_proposals_after_the_attempt_limit(w):
+    from gateway import supplier_offers
+    offer = w.offer().json()
+    url = f"{K1}/{offer['offer_id']}/accept"
+    for p in w.fake.avail_data["products"]:
+        if p["productId"] == SUBS[0]:
+            p["scheduleLines"] = []
+    seen = [w.client.post(url, headers=HUMAN).json() for _ in range(supplier_offers.ACCEPT_ATTEMPTS + 3)]
+    assert {out["proposal_status"] for out in seen} == {"REJECTED"}
+    assert w.db.proposals.count_documents({}) == supplier_offers.ACCEPT_ATTEMPTS
+    assert seen[-1]["proposal_id"] == seen[-2]["proposal_id"]
+    assert seen[-1]["offer"]["status"] == "OPEN"
+
+
 def test_accept_checks_the_kitchen_and_the_consent_again(w):
     offer = w.offer().json()
     other = f"/v1/kitchens/K2/supplier-offers/{offer['offer_id']}/accept"

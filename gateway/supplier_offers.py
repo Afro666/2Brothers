@@ -33,6 +33,7 @@ REASON_MAX = 300
 MADE_BY_MAX = 100
 DECLINE_REASON_MAX = 500
 OPEN_LIMIT = 3            # open offers per kitchen per supplier
+ACCEPT_ATTEMPTS = 5       # proposals built for one offer while each one comes back REJECTED
 _FIELDS = ("kitchen_id", "product_id", "replaces_product_id", "requested_date", "reason", "made_by",
            "idempotency_key")
 
@@ -195,6 +196,23 @@ def _open_or_refuse(gw, kitchen_id: str, offer_id: str, human: str | None, done:
     return doc, False
 
 
+def _proposal_key(gw, kitchen_id: str, offer_id: str) -> str:
+    """The idempotency key for the next proposal of this offer.
+
+    The first key is fixed, so a double click meets the same proposal. A proposal that came
+    back REJECTED (nothing could be delivered) must not answer every later accept (#928):
+    the next accept uses the next key and asks the supplier again. After `ACCEPT_ATTEMPTS`
+    rejected proposals the last key is used again, so one offer cannot fill the database.
+    """
+    key = f"offer:{offer_id}"
+    for attempt in range(2, ACCEPT_ATTEMPTS + 1):
+        stored = gw.db.proposals.find_one({"kitchen_id": kitchen_id, "idempotency_key": key}, {"status": 1})
+        if not stored or stored["status"] != "REJECTED":
+            return key
+        key = f"offer:{offer_id}:{attempt}"
+    return key
+
+
 def accept(gw, kitchen_id: str, offer_id: str, *, human: str | None) -> dict:
     """A person turns the offer into a normal proposal. The proposal first, with a fixed key,
     then the offer: a double click or a retry meets the same proposal."""
@@ -209,7 +227,7 @@ def accept(gw, kitchen_id: str, offer_id: str, *, human: str | None) -> dict:
     # The text is ours, built from catalog names. The supplier's reason is never part of it.
     proposal = gw.create_proposal(kitchen_id, {
         "product_ids": [doc["product_id"]], "quantity": doc["quantity"], "unit": doc["unit"],
-        "requested_date": doc["requested_date"], "idempotency_key": f"offer:{offer_id}",
+        "requested_date": doc["requested_date"], "idempotency_key": _proposal_key(gw, kitchen_id, offer_id),
         "text": f"Offer from {doc['supplier_name']}: {doc['product_name']} in place of "
                 f"{doc['replaces_product_name']}"}, human, auto_approve=False)
     if proposal["status"] == "REJECTED":        # nothing can be delivered: the offer stays open
