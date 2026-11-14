@@ -717,6 +717,58 @@ is excluded for substitutes and for restricted kitchens. An unrestricted
 kitchen's specifically requested original may remain visible as unknown for
 chef review. Own-product lookups remain scoped to that kitchen.
 
+### Partial fill: confirmed stock now, a plan for the rest (#288)
+
+A simulation (`get_offer`, `simulate_order`) and every proposal (create and detail)
+carry `partial_fill`. It is `null` when confirmed stock covers the need, or when no
+stock is confirmed for the requested date. Otherwise it is the engine's answer to
+"what happens to the rest?":
+
+```json
+{
+  "need": "1000", "measure": "L", "remaining": "949",
+  "reason_codes": ["PARTIAL_STOCK", "PACK_SIZE_DERIVED"],
+  "why": "Order 51 L now for 2026-11-16: 51 ST of Arla 1 L fat free, all the stock Valio confirms for that date, EUR 131.07 ex VAT. Hold the remaining 949 L until Valio confirms stock: no offer shows confirmed stock for a later delivery date.",
+  "now": {
+    "kind": "NOW", "quantity": "51", "measure": "L", "deliver_on": "2026-11-16",
+    "total_ex_vat": "131.07",
+    "why": "Order 51 L now for 2026-11-16: 51 ST of Arla 1 L fat free, all the stock Valio confirms for that date, EUR 131.07 ex VAT.",
+    "lines": [{"product_id": "462775", "quantity": "51", "unit": "ST", "unit_price": "2.57",
+               "total": "131.07", "why": "...", "unknown_stock": false, "reason_codes": ["PARTIAL_STOCK", "PACK_SIZE_DERIVED"]}]
+  },
+  "rest": [{
+    "kind": "HOLD", "quantity": "949", "measure": "L", "deliver_on": null, "total_ex_vat": null,
+    "why": "Hold the remaining 949 L until Valio confirms stock: no offer shows confirmed stock for a later delivery date.",
+    "lines": []
+  }]
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `need`, `remaining` | decimal string | The request, and the request minus what `now` covers, in `measure`. |
+| `why` | string | The sentence of `now`, then of each `rest` part, in order. Shown verbatim. |
+| `reason_codes` | string[] | `PARTIAL_STOCK` always, plus the codes of the lines. |
+| `now` | part | The stock the supplier confirms for the requested date, and nothing else. |
+| `rest` | part[] | One or two parts, in order: `LATER` (if any), then `HOLD` (if any). Their quantities add up to `remaining`. |
+
+A part:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `kind` | `NOW`, `LATER`, `HOLD` | `LATER`: the earliest later delivery date on which an offer shows confirmed stock and an open cut-off. `HOLD`: no confirmed stock covers it; it waits until the supplier confirms stock. |
+| `quantity`, `measure` | decimal string, string | What this part covers (or holds), in the request's measure. |
+| `deliver_on` | date or `null` | `null` for `HOLD`: no date is known. |
+| `total_ex_vat` | decimal string or `null` | Ex VAT, without fees. `null` for `HOLD`: unknown, never zero. |
+| `why` | string | One deterministic sentence with the part's numbers. |
+| `lines` | array | `product_id`, `quantity`, `unit`, `unit_price`, `total`, `why`, `unknown_stock` (always `false`), `reason_codes`. Empty for `HOLD`. |
+
+- Unknown stock (a sentinel, missing or null) is never counted, in `now` or in `LATER`.
+- `partial_fill` is information: it has no `offer_id`, and it does not change the
+  proposal's `lines` or `expected_total`. It cannot be approved or placed as it is.
+  Its totals are ex VAT; a figure a person approves still comes from a simulation.
+- The `LATER` part uses the first schedule line the supplier returns for each product.
+
 ### Supplier side
 
 **We call them (adapter contract).** Each supplier is one adapter with the same five
