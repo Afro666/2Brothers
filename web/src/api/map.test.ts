@@ -26,6 +26,14 @@ describe("gatewayRequest", () => {
     });
   });
 
+  it("reports Caddy's empty 429 as a rate limit", async () => {
+    vi.stubGlobal("fetch", async () => new Response(null, { status: 429 }));
+    await expect(gatewayRequest("http://gateway", "/x")).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      message: "Too many requests - wait a minute and try again.",
+    });
+  });
+
   it("reports an unreachable gateway", async () => {
     vi.stubGlobal("fetch", async () => {
       throw new TypeError("fetch failed");
