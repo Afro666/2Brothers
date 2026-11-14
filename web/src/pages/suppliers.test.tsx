@@ -1,11 +1,20 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { configure, getConfig, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
 
 describe("SuppliersPage", () => {
+  // Every findBy/waitFor here waits for a full-app render or the reload after a save.
+  // That takes well under 1 s alone, but more under a loaded full run, and Testing
+  // Library's default 1 s wait then fails the test (#647). Wait longer, in this file only.
+  let asyncUtilTimeout: number;
+  beforeAll(() => {
+    asyncUtilTimeout = getConfig().asyncUtilTimeout;
+    configure({ asyncUtilTimeout: 10_000 });
+  });
+  afterAll(() => configure({ asyncUtilTimeout }));
   beforeEach(() => localStorage.clear());
 
   it("shows the three suppliers and marks missing terms as not set", async () => {

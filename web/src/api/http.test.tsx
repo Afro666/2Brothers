@@ -91,6 +91,11 @@ describe("createHttpApi", () => {
         "getSupplierDrift",
         // Onboarding (api/http-onboarding.ts).
         "lookupKitchenBrand",
+        // The Trust page (api/http-trust.ts).
+        "listAuditChain",
+        "verifyAuditChain",
+        "tamperAuditRow",
+        "restoreAuditRow",
       ].sort(),
     );
     expect((await api.getMandate()).restaurant).toBeTruthy();

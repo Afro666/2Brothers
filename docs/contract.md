@@ -1109,7 +1109,7 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. Served (#662). |
 | GET | `/demand/shortage-risk?from=&to=` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability, or the availability is unknown. Served (#662). |
-| GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Today only a person's session passes: no token can hold `supplier:demand` yet. |
+| GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Only the server's unbound session passes: no token can hold `supplier:demand` yet, and a person signed in to a kitchen gets 403 `SCOPE_REQUIRED` (#599). |
 | POST | `/offers` | `supplier:read-orders` | Proactive offer to a kitchen (substitute, promotion). It shows up as a suggestion, never as an order. |
 
 A supplier only sees demand from kitchens whose `/sharing` consent names it.
@@ -1199,7 +1199,10 @@ The window is at most 14 days (422 `INVALID_REQUEST` otherwise):
 only the rows whose `risk` is not `OK` (so `SHORT` and `UNKNOWN`).
 
 Both routes: a kitchen token and the Buyer agent token get 403 `SCOPE_REQUIRED` (no
-token can hold `supplier:demand` yet). A signed-in person passes the scope check.
+token can hold `supplier:demand` yet). A person signed in to a kitchen also gets 403
+`SCOPE_REQUIRED` (#599): consent names the supplier, not other kitchens, so one kitchen's
+people never read another kitchen's demand. Until supplier accounts exist, only the
+server's unbound session (the demo's Valio view) passes.
 
 ### Trust: audit verification and the live event stream
 
@@ -1367,6 +1370,11 @@ A delivery is one JSON POST:
 | 404 | `WEBHOOK_NOT_FOUND` | No such webhook in this kitchen. |
 | 422 | `INVALID_REQUEST` | A bad URL, no event or an unknown event, or already 10 webhooks. |
 | 502 | `WEBHOOK_TEST_FAILED` | The test ping could not be sent. |
+
+Delivery resolves the receiver's host once, refuses it when any address is private,
+loopback or link-local, and connects to that checked address. The `Host` header and the
+TLS name (SNI and the certificate check) stay the host name, so a second DNS answer
+(DNS rebinding) can never redirect a delivery to an internal address (#562).
 
 Supplier-side events (`price.changed`, `demand.changed`) are not served yet.
 
@@ -1910,7 +1918,7 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | `EVENT_LINE` | reason | one-off demand, kept out of the base forecast |
 | `MOV_PADDED` | reason | lines pulled forward to reach free delivery |
 | `TOTAL_MISMATCH` | error | gateway total differs from the figure the human approved |
-| `STANDING_ORDER_DRIFT` | reason | standing order no longer matches usage |
+| `STANDING_ORDER_DRIFT` | reason | standing order no longer matches usage. The line's `numbers.propose_standing_order` is the suggested new one (demand x review days, in sales units); the why says it. A person changes the standing order, never the engine. |
 | `STOCK_COUNT_MISSING` | reason | kitchen stock count is empty |
 | `STOCKOUT_ADJUSTED` | reason | demand scaled up for days out of stock |
 | `POSITION_OK` | reason | on hand + on order is enough; no order now |

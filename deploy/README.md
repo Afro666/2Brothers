@@ -79,7 +79,8 @@ not the human token or upstream Valio key. No worker port is published.
 - A deploy always takes the newest commit on main and writes its sha to `/opt/2brothers.deployed`;
   a run that finds that commit already deployed does nothing. Merges that land back to back
   usually cause one restart instead of one each. The sha is written only after the gateway
-  answers `/health`.
+  answers `/health`. To redeploy the same commit (after editing `/opt/2brothers/.env`, or a
+  crashed container): "Run workflow" on the deploy action; a manual run always deploys.
 - Only what changed restarts: a web-only commit rebuilds the web image and leaves the gateway and
   the buyer running. While the gateway restarts, Caddy holds a request for up to 15 seconds
   instead of answering 502.

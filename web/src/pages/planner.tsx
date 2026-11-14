@@ -18,6 +18,7 @@ import { formatDate, formatEur, formatNumber } from "@/lib/format";
 import { isoWeekOf, weekDates } from "@/lib/week";
 import type { DemandLine, MenuPlanEntry, PlanProposal, Recipe } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
+import { randomHex } from "@/lib/random-id";
 
 function todayIso(): string {
   const now = new Date();
@@ -232,7 +233,7 @@ export function PlannerPage() {
       return;
     }
     const entry: MenuPlanEntry = {
-      id: dialog?.entry?.id ?? `draft-${Date.now()}`,
+      id: dialog?.entry?.id ?? `draft-${randomHex()}`,
       date: dialog?.date ?? dates[0],
       meal: meal.trim(),
       recipeId,

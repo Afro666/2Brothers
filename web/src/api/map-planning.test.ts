@@ -633,6 +633,9 @@ describe("auto-approve learning", () => {
       decisionsNeeded: 20,
       editRate: 0.333,
       maxEditRate: 0.1,
+      enabled: false,
+      limitEur: null,
+      setBy: null,
     });
   });
 

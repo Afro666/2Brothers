@@ -433,6 +433,12 @@ export interface AutoApproveLearning {
   /** Share of decisions a person edited, 0 to 1. null = not known yet, never shown as 0 %. */
   editRate: number | null;
   maxEditRate: number;
+  /** Whether an approver switched auto-approve on. Absent = not known (shown as off). */
+  enabled?: boolean;
+  /** The kitchen's limit in EUR, as the gateway sends it. Only with `enabled`. */
+  limitEur?: string | null;
+  /** Who switched it on. Only with `enabled`. */
+  setBy?: string | null;
 }
 
 /** A product the Buyer could add to this order, most useful first. */
