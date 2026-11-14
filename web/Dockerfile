@@ -22,4 +22,7 @@ RUN xcaddy build --with github.com/mholt/caddy-ratelimit@v0.1.0
 FROM docker.io/library/caddy:2-alpine
 COPY --from=caddy /usr/bin/caddy /usr/bin/caddy
 COPY Caddyfile /etc/caddy/Caddyfile
+# A Caddyfile that cannot start fails the build here, so a deploy never replaces the running
+# site with one that exits at once. The two values only have to be set; the real ones come at run time.
+RUN SITE_ADDRESS=:80 GATEWAY_HUMAN_TOKEN=build-check caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 COPY --from=build /app/dist /srv
