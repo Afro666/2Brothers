@@ -306,6 +306,20 @@ Response: `products`, best match first. Each row is the product row below plus
 **With `need_id` (string, optional).** The search becomes a shortlist for that stored
 need (#639):
 
+- Only products of the kind the need's `text` names stay (`gateway/kind.py`), when the
+  catalog shows that kind. The kind is a set of catalog categories, read from the
+  product word of the text (its last product word: "milk" in "lactose-free milk"): the
+  categories where at least half of the products (and at least 5) carry that word in
+  the English or Finnish name, as a word or as the end of a compound, and where the
+  word is not glued to one other word the text does not have ("ice cream", "condensed
+  milk", "peanut butter"). The best matches of up to three of those categories are
+  searched too, with the product words of the need's text (not the caller's query),
+  because the word search returns 50 rows at most. Rows that hold only
+  some of the query words are dropped when other rows hold all of them. Nothing is
+  narrowed when the catalog shows no such kind, when no row is of the kind, when no
+  row of the kind is sold in the need's measure, when `filters.category` is set, or
+  when the search was `"hybrid"`. A need with no text uses the query. This step runs
+  first; the two steps below run on what it keeps.
 - When the need's unit is `L` or `KG` and at least one match is sold in that measure
   (`net_content.unit`), only those products stay. Otherwise nothing is filtered.
 - Each product gets `can_arrive`: `true` when it can arrive by the need's date (stock
@@ -748,6 +762,10 @@ reference, the outcome before.
    kitchen_id}` to `BUYER_WORKER_URL/run` with the agent token, plus `event: true` when
    the request was an event. The worker keeps `event` on the need it stores, so every
    line gets `EVENT_LINE`. Its answer is returned as it is.
+   When the text names a delivery day ("by Monday", "maanantaiksi", "16.11.", an ISO
+   date), the gateway sends that day as `requested_date`, whatever the body says: a day
+   in the text wins over the date picked in a form, as it does for the parser below.
+   The body's `requested_date` is sent only when the text names no day.
    That answer is the proposal in the `GET /proposals/{id}` shape, plus three fields
    that only this answer has (a later `GET /proposals/{id}` does not have them):
    - `buyer_run_id`: the Buyer run that made the proposal; its audit steps carry it.
@@ -767,13 +785,15 @@ reference, the outcome before.
    makes a second one. The parser reads English and Finnish: a quantity with a unit, a
    delivery day and the product words. When the text names no day, it uses
    `requested_date` from the body (the date picked in a form); a day in the text wins. It
-   searches the catalog with the product words (50 matches), keeps up to 20 that fit the
-   asked measure (`gateway/candidates.py`), and the engine sizes the lines. It never guesses.
+   searches the catalog with the product words (50 matches), keeps the products of the
+   kind the words name (the rule of `search_products` with `need_id`), then up to 20 that
+   fit the asked measure (`gateway/candidates.py`), and the engine sizes the lines. It
+   never guesses.
 
 | Status | Code | When |
 |---|---|---|
 | 422 | `INVALID_REQUEST` | A required field is missing, or `quantity` is 0 or less. |
-| 422 | `CANNOT_READ_REQUEST` | The parser cannot read the text without guessing: no quantity with a unit, no delivery day, a day in the past, no product named, more than 500 characters. The message says what is missing. |
+| 422 | `CANNOT_READ_REQUEST` | The parser cannot read the text without guessing: no quantity with a unit, no delivery day, a day in the past, no product named, more than 500 characters. The message says what is missing. Also a text that asks for two products, which is a second quantity with a unit after "and", "ja", "sekä", "och", "&", "+" or a comma ("100 L cream and 50 kg cheese"): the message starts with `one product per request`. This one is answered before the Buyer worker is called; no model runs and no proposal is stored. A pack size is not a second product ("200 L milk in 1 l cartons"). |
 | 422 | `NO_PRODUCTS_FOUND` | The parser read the text, but no catalog product matches the product words. |
 | 409 | `KITCHEN_POLICY_INVALID` | The kitchen's `excluded_allergens` names an allergen nobody knows (a typo). Fails closed: no offer is made until a person fixes the setting. |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another request (for free text: another `text`). |
