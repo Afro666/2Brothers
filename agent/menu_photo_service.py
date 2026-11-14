@@ -7,7 +7,7 @@ import os
 
 from fastapi import Request
 
-from agent.menu_photo import INSTRUCTION, SCHEMA
+from agent.menu_photo import READ_INSTRUCTION, READ_SCHEMA
 from agent.model import Nemotron
 from agent.shelf_service import MAX_IMAGE_BYTES, MODEL_NAME, TIMEOUT, _Watched
 from agent.usage import emit
@@ -35,7 +35,10 @@ class MenuPhotoReader:
             raise self.error(503, 'VISION_NOT_CONFIGURED') from None
         watched = _Watched(model)
         try:
-            data = await asyncio.wait_for(read_image(watched, image, INSTRUCTION, SCHEMA, 'menu_photo'), self.timeout)
+            data = await asyncio.wait_for(read_image(watched, image, READ_INSTRUCTION, READ_SCHEMA, 'menu_photo'), self.timeout)
+            for dish in data['dishes']:
+                if dish['covers'] != 'unknown':
+                    dish['covers'] = int(dish['covers'])
         except asyncio.TimeoutError:
             raise self.error(504, 'VISION_TIMEOUT') from None
         except VisionError:
