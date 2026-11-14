@@ -2880,6 +2880,17 @@ Audit: `price_list_photo_read` (actor the person, `supplier_id`, the count of `R
 - `length` counts the entries checked up to the first broken one. The chain is one for
   all kitchens; `kitchen_entries` is how many entries belong to this kitchen.
 - `broken_at` is the `seq` of the first entry that was changed or removed, else null.
+- The end of the log is checked too (#1879). The store keeps the newest `seq` and `hash`
+  in a head document beside the log (`audit_head`), moved forward with every append. A
+  log that stops before the head answers `ok: false` with `broken_at` the first missing
+  `seq`; another hash at the head's `seq` answers `ok: false` with that `seq`. A log
+  from before the head is checked as before and gets its head with the next append.
+- **Proposed, not built (gateway and web):** the head sits in the same database, so it
+  does not stop someone who can write there. The gateway signs the head with the key of
+  the signed receipts and serves it, for example as `"head": {"seq": 412, "hash":
+  "...", "at": "...", "signature": "<compact JWS>"}` in this answer (from
+  `store.audit.chain_head`); the Trust page shows it, and a person who kept an earlier
+  signed head can check that the log still holds that entry.
 - `broken_kitchen_id` is the kitchen of the entry at `broken_at` when that entry itself
   was edited. It is null when the chain is intact, and when an entry is missing or
   relinked: then nobody can say whose entry it was.
