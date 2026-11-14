@@ -53,7 +53,7 @@ export function mapMenuPhoto(body: unknown): MenuPhotoRead {
   const reason = NO_PROPOSAL.find((known) => known === raw.no_proposal_reason) ?? null;
   return {
     model: raw.model,
-    durationMs: typeof raw.duration_ms === "number" ? raw.duration_ms : 0,
+    durationMs: typeof raw.duration_ms === "number" ? raw.duration_ms : null,
     from: typeof raw.from === "string" ? raw.from : "",
     to: typeof raw.to === "string" ? raw.to : "",
     dishes: rows(body, "dishes").map(mapMenuDish),

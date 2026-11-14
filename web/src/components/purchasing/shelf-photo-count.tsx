@@ -1,5 +1,5 @@
 import { Camera, ScanEye } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useApi } from "@/api";
 import type { AuditActor, ShelfPhotoRead, ShelfPhotoRow } from "@/api/types";
@@ -60,13 +60,18 @@ function RowLine({ row, name, onList }: { row: ShelfPhotoRow; name: string | nul
 }
 
 function summary(read: ShelfPhotoRead, filled: number, t: ReturnType<typeof useT>): string {
-  const seconds = (read.durationMs / 1000).toFixed(1);
   const byHand = read.rows.filter((row) => row.kind !== "COUNTED").length;
   const products = read.rows.length === 1
     ? t("{count} product", { count: read.rows.length })
     : t("{count} products", { count: read.rows.length });
   return [
-    t("{model} read {products} in {seconds} s.", { model: SHELF_MODEL_NAME, products, seconds }),
+    read.durationMs == null
+      ? t("{model} read {products}.", { model: SHELF_MODEL_NAME, products })
+      : t("{model} read {products} in {seconds} s.", {
+          model: SHELF_MODEL_NAME,
+          products,
+          seconds: (read.durationMs / 1000).toFixed(1),
+        }),
     filled === 1
       ? t("{filled} count filled in below; {byHand} to count by hand.", { filled, byHand })
       : t("{filled} counts filled in below; {byHand} to count by hand.", { filled, byHand }),
@@ -98,7 +103,14 @@ export function ShelfPhotoCount({
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ read: ShelfPhotoRead; filled: number } | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const names = new Map(items.map((item) => [item.productId, item.productName]));
+
+  // Revoke the object URL when the photo is replaced; the effect cleanup covers unmount.
+  useEffect(() => {
+    if (!photoUrl) return;
+    return () => URL.revokeObjectURL(photoUrl);
+  }, [photoUrl]);
 
   async function readPhoto(file: File | undefined) {
     if (!file || reading) return;
@@ -106,6 +118,7 @@ export function ShelfPhotoCount({
     setReading(true);
     setError(null);
     setResult(null);
+    if (file.type.startsWith("image/")) setPhotoUrl(URL.createObjectURL(file));
     try {
       const read = await api.readShelfPhoto(await downscalePhoto(file), actor);
       if (turn !== latest.current) return;
@@ -117,6 +130,20 @@ export function ShelfPhotoCount({
     } finally {
       if (turn === latest.current) setReading(false);
     }
+  }
+
+  async function readSample() {
+    if (reading || disabled) return;
+    let file: File;
+    try {
+      const response = await fetch(`${import.meta.env.BASE_URL}sample-shelf.png`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      file = new File([await response.blob()], "sample-shelf.png", { type: "image/png" });
+    } catch {
+      setError(t("The sample photo could not be loaded."));
+      return;
+    }
+    void readPhoto(file);
   }
 
   const input = (ref: React.RefObject<HTMLInputElement | null>, label: string, capture: boolean) => (
@@ -157,9 +184,16 @@ export function ShelfPhotoCount({
           <Button type="button" variant="outline" disabled={disabled || reading} onClick={() => picker.current?.click()}>
             {t("Choose a file")}
           </Button>
+          <Button type="button" variant="outline" disabled={disabled || reading} onClick={() => void readSample()}>
+            <ScanEye aria-hidden />
+            {t("Try with a sample shelf photo")}
+          </Button>
         </div>
         {input(camera, t("Take a photo of the shelf"), true)}
         {input(picker, t("Choose a photo of the shelf"), false)}
+        <p className="max-w-prose text-xs text-muted-foreground">
+          {t("A prepared photo of the demo kitchen's shelf. The model reads it now; nothing is saved until you press Save.")}
+        </p>
       </div>
       {reading || result ? (
         <p role="status" className="text-sm">
@@ -175,6 +209,9 @@ export function ShelfPhotoCount({
       ) : null}
       {result && result.read.rows.length === 0 ? (
         <p className="text-sm font-medium text-warning">{t("No product was seen on this photo. Count by hand.")}</p>
+      ) : null}
+      {photoUrl && (reading || result) ? (
+        <img src={photoUrl} alt={t("The photo that was read")} className="max-h-64 rounded-md border object-contain" />
       ) : null}
       {result && result.read.rows.length > 0 ? (
         <ul className="divide-y border-t" aria-label={t("What was read from the photo")}>

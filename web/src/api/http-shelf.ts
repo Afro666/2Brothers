@@ -48,7 +48,7 @@ export function mapShelfPhoto(body: unknown): ShelfPhotoRead {
   if (typeof raw.model !== "string" || !raw.model) invalid("the shelf photo model");
   return {
     model: raw.model,
-    durationMs: typeof raw.duration_ms === "number" ? raw.duration_ms : 0,
+    durationMs: typeof raw.duration_ms === "number" ? raw.duration_ms : null,
     rows: rows(body, "rows").map(mapRow),
   };
 }
