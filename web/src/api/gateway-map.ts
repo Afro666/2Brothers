@@ -1,5 +1,6 @@
 import { mapMoney } from "@/api/map";
 import { mapProposalOptions } from "@/api/map-options";
+import { SUPPLIER_ID } from "@/api/supplier-id";
 import { ApiError } from "@/api/types";
 import type {
   AddableProduct,
@@ -400,7 +401,7 @@ export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalR
       !block ||
       typeof block.supplier_id !== "string" ||
       !block.supplier_id ||
-      block.supplier_id === "sup-valio" ||
+      block.supplier_id === SUPPLIER_ID ||
       !Array.isArray(block.lines) ||
       !block.lines.some((line: Json | null) => line?.unknown_stock === true)
     ) {
