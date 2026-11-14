@@ -59,3 +59,30 @@ class Gw:
 def test_open_day_skips_a_day_whose_cut_off_has_passed():
     from demo.recall_demo import open_day
     assert open_day(Gw(), TODAY) == date(2026, 11, 17)
+
+
+class Down:
+    """Valio is down: every availability call raises."""
+    class valio:
+        @staticmethod
+        def availability(products, day):
+            raise ConnectionError("valio down")
+
+
+class AllPassed:
+    """Every day's cut-off has passed."""
+    class valio:
+        @staticmethod
+        def availability(products, day):
+            return {"products": [{"productId": COFFEE, "cutoff_passed": True,
+                                  "scheduleLines": [{"availableDate": day, "availableAmount": 50}]}]}
+
+
+def test_open_day_falls_back_to_next_monday_when_availability_raises():
+    from demo.recall_demo import open_day
+    assert open_day(Down(), TODAY) == next_monday(TODAY)
+
+
+def test_open_day_falls_back_to_next_monday_when_no_day_is_open():
+    from demo.recall_demo import open_day
+    assert open_day(AllPassed(), TODAY) == next_monday(TODAY)
