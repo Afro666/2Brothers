@@ -203,6 +203,13 @@
     padding: 0.375rem 0.625rem;
     background-image: repeating-linear-gradient(135deg, var(--warning-surface) 0 6px, transparent 6px 12px);
   }
+  /* Nothing here yet: a blank page of the order pad, ruled and waiting. */
+  .blank-slip {
+    border: 1px dashed var(--input);
+    border-radius: 2px;
+    background-color: var(--card);
+    background-image: repeating-linear-gradient(to bottom, transparent 0 27px, var(--border) 27px 28px);
+  }
   .stamp-mark {
     display: inline-flex;
     align-items: center;
