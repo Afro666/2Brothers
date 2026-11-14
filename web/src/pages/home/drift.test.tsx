@@ -1,9 +1,10 @@
 import { screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import { ApiError } from "@/api/types";
 import { renderApp } from "@/test/render";
+import type { DriftWarning } from "@/types";
 
 const DEMO_NOW = "2026-11-13T21:00:00%2B02:00";
 
@@ -65,5 +66,44 @@ describe("Standing-order drift tiles", () => {
         "Orders per guest are steady. Nothing to check before renewal.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("keeps both rows when one product creeps in portion and price", async () => {
+    const base: DriftWarning = {
+      productId: "P1",
+      productName: "Milk 1 l",
+      kind: "portion_creep",
+      change: 0.4,
+      unit: "ST",
+      qtyPer100: 14,
+      baselineQty: 10,
+      spendPer100: 20,
+      baselineSpend: 15,
+      baselineWeeks: 4,
+      why: "Portion why",
+    };
+    const api = {
+      ...createMockApi(),
+      getDrift: async () => ({
+        week: "2026-11-09",
+        warnings: [
+          base,
+          { ...base, kind: "cost_creep" as const, change: 0.3, why: "Cost why" },
+        ],
+      }),
+    };
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      renderApp(`/?now=${DEMO_NOW}`, api);
+
+      expect(await screen.findByText("Portion why")).toBeInTheDocument();
+      expect(screen.getByText("Cost why")).toBeInTheDocument();
+      const duplicateKey = errors.mock.calls.some((call) =>
+        call.some((arg) => String(arg).includes("same key")),
+      );
+      expect(duplicateKey).toBe(false);
+    } finally {
+      errors.mockRestore();
+    }
   });
 });

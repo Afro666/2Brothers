@@ -75,6 +75,18 @@ class TamperDemoTests(unittest.TestCase):
         trust.restore(self.db, "demo-kitchen")
         self.assertTrue(trust.verify(self.db, "demo-kitchen")["ok"])
 
+    def test_a_db_handle_without_tz_aware_works(self):
+        from datetime import datetime, timedelta, timezone
+        db = mongomock.MongoClient()["naive"]
+        seed(db)
+        trust.tamper(db, "demo-kitchen")
+        self.assertIsNone(db.audit_tamper_demo.find_one({})["tampered_at"].tzinfo)
+        self.assertFalse(trust.verify(db, "real-kitchen")["ok"])  # fresh: still broken
+        old = datetime.now(timezone.utc) - trust.TAMPER_TTL - timedelta(seconds=1)
+        db.audit_tamper_demo.update_one({"_id": "demo-kitchen"}, {"$set": {"tampered_at": old}})
+        self.assertTrue(trust.verify(db, "real-kitchen")["ok"])
+        self.assertIsNone(db.audit_tamper_demo.find_one({}))
+
     def test_a_removed_row_is_a_break_nobody_can_attribute(self):
         self.db.audit_log.delete_one({"_id": 2})
         result = trust.verify(self.db, "demo-kitchen")
@@ -132,6 +144,44 @@ class LiveTrustTests(unittest.TestCase):
             self.assertIsNone(next(events))  # quiet: a heartbeat, not a hang
         finally:
             events.close()
+
+
+class FakeStream:
+    def __init__(self, changes=()):
+        self.changes, self.alive, self.closed = list(changes), True, False
+
+    def try_next(self):
+        return self.changes.pop(0) if self.changes else None
+
+    def close(self):
+        self.closed, self.alive = True, False
+
+
+class FakeDb:
+    def __init__(self, stream):
+        self.stream = stream
+
+    def watch(self, pipeline, **kwargs):
+        return self.stream
+
+
+class WatchKitchenCloseTests(unittest.TestCase):
+    def test_close_before_first_next_closes_the_stream(self):
+        stream = FakeStream()
+        trust.watch_kitchen(FakeDb(stream), "demo-kitchen").close()
+        self.assertTrue(stream.closed)
+
+    def test_items_heartbeat_and_end_when_the_stream_dies(self):
+        stream = FakeStream([{"ns": {"coll": "proposals"}, "operationType": "insert",
+                              "fullDocument": {"_id": "p1"}}])
+        with trust.watch_kitchen(FakeDb(stream), "demo-kitchen") as events:
+            self.assertEqual(next(events), {"collection": "proposals", "operation": "insert",
+                                            "document": {"_id": "p1"}})
+            self.assertIsNone(next(events))
+            stream.alive = False
+            with self.assertRaises(StopIteration):
+                next(events)
+        self.assertTrue(stream.closed)
 
 
 if __name__ == "__main__":

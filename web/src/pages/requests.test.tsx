@@ -35,6 +35,18 @@ describe("RequestsPage", () => {
     );
   });
 
+  it("badges cut-off options as missing the date, not Better or Best", async () => {
+    await ask();
+
+    const proposal = await screen.findByRole("region", { name: "Proposal" });
+    await within(proposal).findByRole("heading", { name: "Other options" });
+    expect(within(proposal).getAllByText("Misses the date")).toHaveLength(2);
+    expect(within(proposal).getAllByRole("button", { name: "Cannot make this delivery" })).toHaveLength(2);
+    expect(within(proposal).queryByText("Better")).not.toBeInTheDocument();
+    expect(within(proposal).queryByText("Best")).not.toBeInTheDocument();
+    expect(within(proposal).getByText("Good")).toBeInTheDocument();
+  });
+
   it("keeps the typed text when the gateway cannot be reached", async () => {
     const failing = {
       ...createMockApi(),

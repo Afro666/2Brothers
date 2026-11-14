@@ -85,6 +85,26 @@ def test_real_buyer_worker_creates_ready_proposal_and_durable_audit_once(monkeyp
     asyncio.run(run())
 
 
+def test_invalid_allergen_code_fails_closed_before_any_buyer_run(monkeypatch):
+    async def run():
+        db, gateway = environment(monkeypatch)
+        db.kitchen_settings.insert_one({'_id': 'demo-kitchen', 'excluded_allergens': ['not-an-allergen']})
+        factory = AsyncMock(side_effect=AssertionError('model must not start'))
+        worker = BuyerWorker(db, gateway, model_factory=factory, now=lambda: NOW)
+        body = {'text': '51 L milk', 'requested_date': '2026-11-16', 'idempotency_key': 'bad-policy'}
+        try:
+            with pytest.raises(WorkerError) as caught:
+                await worker.run('demo-kitchen', body)
+            assert (caught.value.status, caught.value.code) == (503, 'KITCHEN_POLICY_INVALID')
+            assert caught.value.fallback_safe
+            factory.assert_not_called()
+            assert db.agent_runs.count_documents({}) == 0
+            assert db.needs.count_documents({}) == 0
+        finally:
+            await gateway.close()
+    asyncio.run(run())
+
+
 def test_timeout_never_restarts_an_ambiguous_run(monkeypatch):
     class Slow(ScriptedBuyer):
         async def complete(self, *args):

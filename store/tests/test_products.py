@@ -1,8 +1,9 @@
 """`flatten()` on synthetic records shaped like the real catalog. No Valio data here."""
 
 import unittest
+from unittest import mock
 
-from store.products import flatten, get_products
+from store.products import flatten, get_products, upsert_products
 
 try:
     import mongomock
@@ -220,6 +221,32 @@ class GetProductsTests(unittest.TestCase):
         self.assertEqual(self.ids(wanted), ["900001"])
         self.assertEqual(self.ids(wanted, kitchen_id="k1"), ["900001", "own-1"])
         self.assertEqual(self.ids(wanted, kitchen_id="k2"), ["900001", "own-2"])
+
+
+@unittest.skipUnless(mongomock, "install the test extra: pip install -e '.[test]'")
+class UpsertProductsTests(unittest.TestCase):
+    @staticmethod
+    def bulk_write(collection, requests, ordered=True):
+        # mongomock cannot run pymongo>=4.11's ReplaceOne in bulk_write: apply each one.
+        for op in requests:
+            collection.replace_one(op._filter, op._doc, upsert=op._upsert)
+
+    def setUp(self):
+        patcher = mock.patch.object(mongomock.Collection, "bulk_write", self.bulk_write)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_reload_drops_stale_fields_but_keeps_the_embedding(self):
+        db = mongomock.MongoClient()["test"]
+        upsert_products(db, [{"_id": "900001", "names": {"fi": "Maito"}, "labels": ["luomu"]}])
+        db.products.update_one({"_id": "900001"}, {"$set": {"embedding": [0.1, 0.2]}})
+        upsert_products(db, [{"_id": "900001", "names": {"fi": "Maito 2"}},
+                             {"_id": "900002", "names": {"fi": "Kerma"}}])
+        row = db.products.find_one({"_id": "900001"})
+        self.assertNotIn("labels", row)
+        self.assertEqual(row["names"], {"fi": "Maito 2"})
+        self.assertEqual(row["embedding"], [0.1, 0.2])
+        self.assertNotIn("embedding", db.products.find_one({"_id": "900002"}))
 
 
 if __name__ == "__main__":

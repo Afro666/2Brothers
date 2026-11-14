@@ -27,6 +27,11 @@ def test_phrasings(text, qty, unit, query, when):
     assert (r.quantity, r.unit, r.query, r.requested_date) == (qty, unit, query, when)
 
 
+def test_finnish_comma_is_a_decimal_mark():
+    assert parse_request("1,500 kg voita perjantaiksi", FRI).quantity == D("1.5")
+    assert parse_request("1,000 L lactose-free milk by Monday", FRI).quantity == D(1000)
+
+
 def test_same_weekday_means_next_week():
     assert parse_request("10 l milk by friday", FRI).requested_date == date(2026, 11, 20)
 
