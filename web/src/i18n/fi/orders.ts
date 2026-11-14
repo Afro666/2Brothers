@@ -244,6 +244,8 @@ export default {
   "Proposal {id} is held by a recall and cannot be approved.": "Ehdotus {id} on takaisinvedon pidossa, eikä sitä voi hyväksyä.",
   "Proposal {id} was not found.": "Ehdotusta {id} ei löytynyt.",
   "Proposed by the Buyer agent": "Ostaja-agentin ehdottama",
+  "Split into needs by Nemotron 3.5 Super VL, matched to products by rules": "Nemotron 3.5 Super VL jakoi tarpeiksi, säännöt valitsivat tuotteet",
+  "Matched to products by rules, not by the Buyer model": "Säännöt valitsivat tuotteet, ei ostajamalli",
   "Proposed by the Buyer agent ({model})": "Ostaja-agentin ehdottama ({model})",
   "Proposed by the gateway’s request parser, not the Buyer model": "Ehdotuksen teki yhdyskäytävän pyyntöjäsennin, ei Ostaja-malli",
   "Proposed now": "Nyt ehdotettu",
