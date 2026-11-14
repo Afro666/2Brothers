@@ -136,10 +136,12 @@ class ManualAdapter:
                 skipped.append((pid, f"no price entered for {name}"))   # unknown, never zero
                 continue
             content, unit = row.get("net_content"), row["base_unit"]
-            if content:
-                pack = PackInfo(unit, content["unit"], _dec(content["value"]), Decimal(1), derived=False)
-            elif unit == measure:
+            # A request in the sales unit itself (a changed proposal line, #1480) counts sales
+            # units, as pack_info does for Valio; else the net content converts L or KG.
+            if unit == measure:
                 pack = PackInfo(unit, unit, Decimal(1), Decimal(1), derived=False)
+            elif content:
+                pack = PackInfo(unit, content["unit"], _dec(content["value"]), Decimal(1), derived=False)
             else:
                 skipped.append((pid, f"pack size unknown: no {measure} per {unit} entered"))
                 continue
