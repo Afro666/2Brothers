@@ -7,7 +7,7 @@ note is shown. One failed line drops the whole note, and the page shows the tabl
 """
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import hashlib
 import json
 import os
@@ -33,6 +33,19 @@ MODEL_FIELDS = ("product_id", "product_name", "date", "unit", "demand", "kitchen
 VALUES = ("demand", "available", "shortage", "suggested_buy", "kitchens")
 
 
+def presentation_row(row: dict) -> dict:
+    """Round note facts only; the worker and checker receive this same copy."""
+    out = {k: row.get(k) for k in MODEL_FIELDS}
+    quantum = {"PCS": "1", "ST": "1", "KG": "0.1", "L": "0.1"}.get(row.get("unit"))
+    if quantum is not None:
+        for key in ("demand", "available", "shortage", "suggested_buy"):
+            if out[key] is not None:
+                rounded = Decimal(out[key]).quantize(Decimal(quantum), rounding=ROUND_HALF_UP)
+                text = format(rounded, "f") if rounded else "0"
+                out[key] = text.rstrip("0").rstrip(".") if "." in text else text
+    return out
+
+
 def error(code: str) -> GatewayError:
     return GatewayError(STATUS.get(code, 503), code if code in STATUS else "BUYING_NOTE_UNAVAILABLE",
                         "The buying note could not be written; the table below is complete")
@@ -45,7 +58,7 @@ def pick(rows: list[dict]) -> list[dict]:
                    key=lambda r: (-Decimal(r["shortage"]), r["date"], r["product_id"]))
     unknown = sorted((r for r in rows if r["risk"] == "UNKNOWN"),
                      key=lambda r: (-Decimal(r["demand"]), r["date"], r["product_id"]))
-    return [{"row": i, **{k: r.get(k) for k in MODEL_FIELDS}}
+    return [{"row": i, **presentation_row(r)}
             for i, r in enumerate((short + unknown)[:MAX_ROWS])]
 
 
