@@ -392,7 +392,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         limit = data.get("limit", 20)
         if not isinstance(limit, int) or not 1 <= limit <= 50:
             raise GatewayError(422, "INVALID_REQUEST", "limit: 1 to 50")
-        return {"products": search_products(gw().db, data.get("query") or "", data.get("filters") or {}, limit)}
+        return {"products": (gw()._search or search_products)(gw().db, data.get("query") or "", data.get("filters") or {}, limit)}
 
     @app.post("/tools/get_offer")
     async def get_offer(request: Request, who: Principal = Depends(principal)):

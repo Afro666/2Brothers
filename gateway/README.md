@@ -168,3 +168,16 @@ Roles: `approver` approves, rejects and manages tokens; `chef` asks; `viewer` re
 The first approver comes from the server `.env`: `DEMO_USER_EMAIL`, `DEMO_USER_PASSWORD`.
 Set `GATEWAY_REQUIRE_LOGIN=true` to switch off the shared human token: then only a signed-in
 person can approve (the open demo stops being open). The Buyer agent token is not affected.
+
+## Conformance kit (#286)
+
+Any agent builder can check a running gateway's trust rules with an agent-level token:
+
+    python -m gateway.conformance --base-url https://<host>/gateway --token <token> [--markdown | --json]
+
+Twelve live checks (no order is placed, no approval is opened): no token no access, the
+gateway sizes the order from the stored need and ignores a quantity from the model,
+`place_order` without a human approval is refused, an agent token cannot approve, reject
+or create tokens, no cancel or edit route exists, a kitchen token cannot read another
+kitchen, the MCP server exposes no approve tool. Exit code 1 on any FAIL. The offline
+golden scenarios S01-S13 are `python -m gateway.scenarios`.
