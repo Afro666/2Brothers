@@ -173,7 +173,7 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 
 | MCP tool | Method and path | Request / query fields | Success response fields |
 |---|---|---|---|
-| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object`, `limit: integer`, `need_id: string` (optional; see below) | `products: object[]`, `search: "text" \| "hybrid"`; with `need_id` also `requested_date`, `measure`, `note` |
+| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object`, `limit: integer`, `need_id: string` (optional; see below), `mode: "text" \| "hybrid"` (optional, HTTP only; see below) | `products: object[]`, `search: "text" \| "hybrid"`, `meaning_unavailable: true` (only when `mode: "hybrid"` fell back to words); with `need_id` also `requested_date`, `measure`, `note` |
 | `get_offer` | POST `/tools/get_offer` | `product_ids: string[]`, `requested_date: YYYY-MM-DD`, `need_id: string` | `offer_id`, `valid_until`, `lines: object[]`, `signature`, `offer_hash` |
 | `simulate_order` | POST `/tools/simulate_order` | `offer_id: string` | `offer_id`, `expected_total`, `currency`, `mandate: object`, `lines: object[]`, `signature`, `offer_hash` |
 | `place_order` | POST `/tools/place_order` | `offer_id`, `expected_total: decimal string`, `idempotency_key: string` | `order_id`, `outcome`, `status` |
@@ -364,6 +364,9 @@ authenticated caller, never from a request field.
 Response: `products`, best match first. Each row is the product row below plus
 `score` (number) and `match_reasons` (short strings, for example `"size 1 L matches"`,
 `"allergen data missing"`, `"size read from the name"`).
+Each row also has `matched_by`: `"words"` (found by the text search only), `"meaning"`
+(found by Atlas Vector Search only; it also has the reason `"similar meaning, no word match"`)
+or `"both"`. A `"text"` search answers `"words"` on every row.
 
 **With `need_id` (string, optional).** The search becomes a shortlist for that stored
 need (#639):
@@ -404,6 +407,17 @@ scope) apply to both sides. When the vector side cannot answer in 2 seconds, or 
 the gateway answers with the text search and says `"text"`: a search never fails because
 of it.
 
+**Search by meaning for one request (`mode`, #1382).** `mode: "hybrid"` runs the hybrid
+search for this one request, whatever `SEARCH_HYBRID` says; `mode: "text"` runs the text
+search only. Without `mode`, `SEARCH_HYBRID` decides, as before. Any other value is 422
+`INVALID_REQUEST`. `mode` is for the web Catalog page: it is ignored with a `need_id` (the
+Buyer's shortlist), and the MCP tool `search_products` never sends it, so the Buyer's
+searches do not change. When `mode: "hybrid"` cannot make the query vector (no key, the
+embedding service's limit of 3 new texts a minute, more than 2 seconds, the rest time after
+a failure), the answer is the text search with `search: "text"` and `meaning_unavailable: true`.
+A query asked before keeps its vector in the gateway's memory, so asking it again runs hybrid
+without a new embedding call.
+
 Product row (the catalog row from the shared repository, without the raw record):
 
 | Field | Type | Notes |
@@ -439,7 +453,9 @@ types in `web/src/api/`.
 The web Catalog page and screens that hold product codes use these rows: `searchProducts`
 posts `search_products` with `limit: 50` and only the filters the person set (`exclude_allergens`
 with `allergen_strictness`, `require_labels`, `temperature`), and does not call it for an empty
-query with no filter. `getProducts` reads `GET /v1/kitchens/{kitchen_id}/catalog/products?ids=`
+query with no filter. With the switch "Search by meaning (Atlas Vector Search)" on, it also
+sends `mode: "hybrid"`; with it off it sends no `mode`. Each row shows its `matched_by`, and
+`meaning_unavailable: true` shows a line that the words were used. `getProducts` reads `GET /v1/kitchens/{kitchen_id}/catalog/products?ids=`
 in groups of 200; while the gateway does not serve that route (a 404 with no `error` envelope,
 before #1172), it answers from the sample products as it did before. A named 404 is an error. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
 `allergen_data_known: false` is `allergens: null` (unknown), never an empty list.
