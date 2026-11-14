@@ -110,10 +110,10 @@ def feedback_rows(rows, entries):
 
 
 def choice_memory(entries, rows):
-    """An explicit alias request overrides remembered removal preferences for this pick."""
-    if any(row.get('alias') is True for row in rows):
-        return [f for f in entries if f.get('kind') != 'DECLINED_PRODUCT']
-    return entries
+    """An explicit alias request overrides remembered removal preferences for its own rows only."""
+    aliased = {str(row['product_id']) for row in rows if row.get('alias') is True}
+    return [f for f in entries if not (f.get('kind') == 'DECLINED_PRODUCT'
+                                       and str(f.get('product_id')) in aliased)]
 
 
 def checked_reason(reason, row, need=None):

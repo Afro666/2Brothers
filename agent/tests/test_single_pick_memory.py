@@ -186,3 +186,19 @@ def test_explicit_alias_ignores_removal_preference_but_keeps_other_memory(monkey
         entries = await model.memory_entries([{**rows[0], 'alias': False}], {})
         assert {e['kind'] for e in entries} == {'CORRECTION_RATIO', 'DECLINED_PRODUCT'}
     asyncio.run(run())
+
+
+def test_alias_request_keeps_declines_for_the_non_alias_fallback_rows(monkeypatch):
+    other = {**FACT, 'id': 'lf-other', 'product_id': 'other-milk', 'name': 'other milk'}
+    monkeypatch.setattr(single_pick, 'compute_facts', lambda *args: [FACT, other])
+
+    async def run():
+        model = single_pick.SinglePickModel(None, None, 'demo-kitchen',
+            {'text': NEED['text']}, 'need', [], today=NOW.date())
+        rows = [{'product_id': FACT['product_id'], 'alias': True},
+                {'product_id': 'other-milk', 'alias': False}]
+        entries = await model.memory_entries(rows, {})
+        assert [e['id'] for e in entries] == ['lf-other']
+        flagged = single_pick.feedback_rows(rows, entries)
+        assert [r['kitchen_declined'] for r in flagged] == [False, True]
+    asyncio.run(run())
