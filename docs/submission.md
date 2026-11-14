@@ -39,7 +39,7 @@ Live site: <https://31-22-104-201.sslip.io>. For agents:
 | A. Working end-to-end demo (30%) | Ask, live lookup, sized proposal, human approval, stored order, audit trail, on the live site | `gateway/README.md` ("HTTP gateway"), `deploy/compose.yaml` |
 | B. Matches what the buyer asked (20%) | The engine sizes each line from the stored need. The model picks products only. Each line has a `why` sentence. | `engine/README.md`, `docs/choices.md` |
 | C. Autonomy and controls (20%) | Approve is human-only. A moved price refuses the old yes (`TOTAL_MISMATCH`). Auto-approve exists, is off by default, and must be earned (4 weeks, 20 human decisions). Twelve live conformance checks. | `gateway/README.md` ("Earned auto-approve", "Conformance kit"), `gateway/conformance.py` |
-| D. Robustness to exceptions (15%) | 13 golden scenarios in one command: 11 PASS, 2 PARTIAL (table below). Unknown stock is never treated as stock. A recall blocks a proposal. | `gateway/scenarios.py`, `docs/scenarios.md`, `docs/recall-contract.md` |
+| D. Robustness to exceptions (15%) | 13 golden scenarios in one command: all 13 PASS (table below). Unknown stock is never treated as stock. A recall blocks a proposal. | `gateway/scenarios.py`, `docs/scenarios.md`, `docs/recall-contract.md` |
 | E. Openness and path to production (15%) | The same rules over MCP and OpenAPI. Public `llms.txt` and agent card. Scoped tokens, signed webhooks, one adapter per supplier. | `docs/byoa.md`, `gateway/discovery.py`, `gateway/suppliers.py` |
 
 **Optional features**
@@ -56,8 +56,8 @@ Live site: <https://31-22-104-201.sslip.io>. For agents:
 
 | Case | What | Layer | Result | Detail |
 |---|---|---|---|---|
-| S01 | Milk: split order, passed cut-off, unknown stock | gateway HTTP | **PARTIAL** | codes not emitted yet: SUBSTITUTE_FAT_LEVEL |
-| S02 | Partial stock, good-better-best | engine | **PARTIAL** | codes not emitted yet: SUBSTITUTE_NEEDS_OK |
+| S01 | Milk: split order, passed cut-off, unknown stock | gateway HTTP | **PASS** | lines = [('462775', '51'), ('463335', '949')]; total ex VAT (option B) = 1459.67 |
+| S02 | Partial stock, good-better-best | engine | **PASS** | lines = [('465138', '16')]; total = 1028.32 |
 | S03 | Allergen-safe substitute for a school | gateway HTTP | **PASS** | lines = [('468465', '60')]; total ex VAT = 70.20 |
 | S04 | Missing allergen data is not allergen-free | catalog (store.products) | **PASS** | 125 g allergen data known = False; 125 g says no allergens = False |
 | S05 | Above the budget warning (event order) | engine | **PASS** | lines = [('461423', '120')]; total = 2391.60 |
@@ -70,10 +70,10 @@ Live site: <https://31-22-104-201.sslip.io>. For agents:
 | S12 | Bad pack data (10 kg carrot sack) | engine | **PASS** | lines = [('460708', '5')]; total = 55.90 |
 | S13 | Duplicate send (idempotency) | gateway HTTP | **PASS** | replay with the same key returns the stored order = True; orders stored = 1 |
 
-11 PASS, 2 PARTIAL
+13 PASS
 
 **Not built:** an order sent to Valio (their API has no order endpoint,
-`gateway/README.md:104`). The two reason codes in the PARTIAL rows. A mandate as a
+`gateway/README.md:104`). A mandate as a
 verifiable credential (planned in `docs/plan.md`, not in the code).
 
 ## NVIDIA: Best Use of Nemotron
