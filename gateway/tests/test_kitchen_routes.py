@@ -168,3 +168,20 @@ def test_on_order_is_unknown_when_net_content_unit_differs_from_the_kitchen_unit
     db.products.update_one({"_id": "462775"}, {"$unset": {"net_content": ""}})
     item = {i["product_id"]: i for i in client.get(K + "/stock", headers=AGENT).json()["items"]}["462775"]
     assert item["on_order"] is None and item["on_order_known"] is False
+
+
+def test_demand_rows_day_bounds_follow_the_gateway_clock_timezone(env):
+    """#705: a forecast at 00:30 local (UTC+2) belongs to that local day, not the day before."""
+    from datetime import datetime, timedelta, timezone
+
+    from gateway.kitchen_routes import demand_rows
+    _, _, db = env
+    local = timezone(timedelta(hours=2))
+    meta = {"kitchen_id": "K1", "product_id": "469549"}
+    for day, need in ((16, 4.0), (17, 6.0)):
+        db.forecasts.insert_one({"ts": datetime(2026, 11, day, 0, 30, tzinfo=local), "meta": meta,
+                                 "need": need, "unit": "L"})
+    rows, _ = demand_rows(db, "K1", date(2026, 11, 16), date(2026, 11, 16), date(2026, 11, 14), local)
+    assert [(r["date"], r["gross_need"]) for r in rows] == [("2026-11-16", D("4.0"))]
+    utc_rows, _ = demand_rows(db, "K1", date(2026, 11, 16), date(2026, 11, 16), date(2026, 11, 14))
+    assert [(r["date"], r["gross_need"]) for r in utc_rows] == [("2026-11-16", D("6.0"))]   # 22:30 UTC on the 16th
