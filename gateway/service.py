@@ -783,7 +783,8 @@ class Gateway:
             if doc.get("approval_id"):
                 orders.decide_approval(self.db, doc["approval_id"], status="APPROVED", decided_by=human)
             # No upstream order endpoint: the order is placed in our gateway, waiting for the supplier.
-            order = orders.set_outcome(self.db, order["order_id"], outcome="CONFIRMED", status="SENT")
+            order = orders.set_outcome(self.db, order["order_id"], outcome="CONFIRMED", status="SENT",
+                                       **self._receipt(kitchen_id, order))
             self.db.proposals.update_one({"_id": proposal_id},
                                          {"$set": {"status": "APPROVED", "order_id": order["order_id"]}})
             self._audit(kitchen_id, "order_placed", human, proposal_id=proposal_id,
@@ -838,9 +839,25 @@ class Gateway:
             {'kitchen_id': kitchen_id, 'at': row['dismissed_at']})
         return result
 
+    def _receipt(self, kitchen_id: str, order: dict) -> dict:
+        """The signed receipt of a placed order (#290), as a field to store; {} when signing
+        fails. Signing is never a reason to fail an order a person approved."""
+        from gateway import signing
+        try:
+            return {"receipt": signing.sign_receipt(
+                self.db, order_id=order["order_id"], kitchen_id=kitchen_id, offer_id=order["offer_id"],
+                offer_hash=order.get("offer_hash"),
+                expected_total=_money(Decimal(str(order["expected_total"]))), lines=order["lines"],
+                approved_by=order["approved_by"],
+                supplier_must_confirm=order.get("supplier_must_confirm") or [], at=self.now())}
+        except Exception as exc:  # log the type only: never the key or the seed
+            log.warning("receipt signing failed: %s", type(exc).__name__)
+            return {}
+
     @staticmethod
     def _order_out(order: dict) -> dict:
         return {"order_id": order["order_id"], "outcome": order["outcome"], "status": order["status"],
+                "receipt": order.get("receipt"),     # signed order receipt (#290); null when not signed
                 # #631: suppliers whose stock nobody confirmed yet; a person calls them
                 "supplier_must_confirm": list(order.get("supplier_must_confirm") or []),
                 "expected_total": _money(Decimal(str(order["expected_total"]))),
