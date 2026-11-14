@@ -42,7 +42,7 @@ export function Tile({
           className={
             emphasis
               ? buttonVariants({ className: "w-full sm:w-auto" })
-              : "inline-flex items-center gap-1 text-sm font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
+              : "inline-flex min-h-11 items-center gap-1 text-sm font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
           }
         >
           {linkLabel}
