@@ -657,6 +657,15 @@ def test_a_message_that_cannot_be_edited_does_not_stop_the_change(bot):
     assert bot.tg.edits[-1]["id"] == 555 and "704 L" in bot.tg.edits[-1]["text"]
 
 
+def test_an_odd_stored_brief_does_not_stop_the_change(bot):
+    say(bot, "20 L oat drink")
+    chat = bot.tg.sent[0]["chat"]
+    bot.links.note(f"brief:{chat}", {"id": 1, "answer": "bad", "day": "x"})
+    press(bot, f"q:{PID}:0:0:+")
+    assert ("change", "463380", "704") in bot.gw.calls
+    assert bot.tg.edits[-1]["id"] == 555 and "704 L" in bot.tg.edits[-1]["text"]
+
+
 def test_brief_lines_are_short_for_a_phone_and_an_unread_label_is_said_plainly(bot):
     assert render.tidy("check for order a39ccb6d3ba6416ab4517a0eae53c0f1: SHORT 1") == "check for order a39ccb6d: SHORT 1"
     assert render.tidy("requested for 2026-11-16.") == "requested for Mon 16 Nov."
