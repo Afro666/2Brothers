@@ -6,6 +6,7 @@ import { createMockApi } from "@/api/mock";
 import { ApiError } from "@/api/types";
 import { ApprovalCard } from "@/components/purchasing/approval-card";
 import { CHOOSE_TIMEOUT_MS, OptionCompare } from "@/components/purchasing/option-compare";
+import { formatEur } from "@/lib/format";
 import { confirmedDemoApproval, confirmedDemoOrder, milkOptions } from "@/mocks/milk-case";
 import { renderApp } from "@/test/render";
 import type { ProposalOption } from "@/types";
@@ -20,10 +21,151 @@ function fact(letter: string, label: string) {
   return within(row(letter)).getByText(label).nextElementSibling as HTMLElement;
 }
 
+function optionToggle(letter: string) {
+  return within(row(letter)).getByRole("button", { name: new RegExp(`^Option ${letter}:`) });
+}
+
 /** Option A with confirmed stock: a basket a person may choose that the proposal does not hold yet. */
 const choosable: ProposalOption = { ...optionA, stockConfirmed: true, chosen: false };
 
 describe("OptionCompare", () => {
+  it("opens the chosen option by default", () => {
+    render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
+    expect(optionToggle("A")).toHaveAttribute("aria-expanded", "true");
+    expect(optionToggle("B")).toHaveAttribute("aria-expanded", "false");
+    expect(optionToggle("C")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /^Choose option A/ })).toBeVisible();
+  });
+
+  it("opens the recommended option by default when none is chosen", () => {
+    render(
+      <OptionCompare
+        options={[
+          { ...optionA, chosen: false, recommended: false },
+          { ...optionB, recommended: true },
+          optionC,
+        ]}
+        onChoose={vi.fn()}
+        onApprove={vi.fn()}
+      />,
+    );
+    expect(optionToggle("A")).toHaveAttribute("aria-expanded", "false");
+    expect(optionToggle("B")).toHaveAttribute("aria-expanded", "true");
+    expect(optionToggle("C")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens the first option by default when none is chosen or recommended", () => {
+    render(
+      <OptionCompare
+        options={milkOptions.map((option) => ({ ...option, chosen: false, recommended: false }))}
+        onChoose={vi.fn()}
+        onApprove={vi.fn()}
+      />,
+    );
+    expect(optionToggle("A")).toHaveAttribute("aria-expanded", "true");
+    expect(optionToggle("B")).toHaveAttribute("aria-expanded", "false");
+    expect(optionToggle("C")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens the recommended replacement when options are replaced without a chosen one", () => {
+    const { rerender } = render(<OptionCompare options={milkOptions} onChoose={vi.fn()} />);
+    rerender(
+      <OptionCompare
+        options={[
+          { ...optionA, id: "replacement-a", chosen: false, recommended: false },
+          { ...optionB, id: "replacement-b", chosen: false, recommended: true },
+        ]}
+        onChoose={vi.fn()}
+      />,
+    );
+    expect(optionToggle("A")).toHaveAttribute("aria-expanded", "false");
+    expect(optionToggle("B")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("opens an option when options arrive after an empty first render", () => {
+    const { rerender } = render(<OptionCompare options={[]} onChoose={vi.fn()} />);
+    expect(screen.queryByRole("listitem")).toBeNull();
+    rerender(
+      <OptionCompare
+        options={[
+          { ...optionA, chosen: false, recommended: false },
+          { ...optionC, chosen: false, recommended: false },
+        ]}
+        onChoose={vi.fn()}
+      />,
+    );
+    expect(optionToggle("A")).toHaveAttribute("aria-expanded", "true");
+    expect(optionToggle("B")).toHaveAttribute("aria-expanded", "false");
+    expect(fact("A", "Stock")).toBeVisible();
+  });
+
+  it("collapses an option to its title, unit price and blocked reason without a choose button", () => {
+    render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
+    const line = optionB.lines[0];
+    expect(optionToggle("B")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("heading", { name: /^Option B:/ })).toBeVisible();
+    expect(
+      within(optionToggle("B")).getByText(
+        line.unitPrice == null ? "unknown" : `${formatEur(line.unitPrice)} per ${line.unit}`,
+      ),
+    ).toBeVisible();
+    expect(within(row("B")).getByText("The order cut-off has passed.")).toBeVisible();
+    expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
+  });
+
+  it("opens and collapses an option independently by clicking its row", async () => {
+    const user = userEvent.setup();
+    render(<OptionCompare options={[optionA, { ...optionC, stockConfirmed: true }]} onChoose={vi.fn()} />);
+    const contentId = optionToggle("B").getAttribute("aria-controls") as string;
+    const content = document.getElementById(contentId) as HTMLElement;
+    expect(content).toBeInTheDocument();
+    expect(content).toHaveAttribute("hidden");
+    expect(content).not.toBeVisible();
+    expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
+    expect(within(screen.getByRole("list")).getAllByRole("listitem")).toHaveLength(2);
+    await user.click(optionToggle("B"));
+    expect(optionToggle("B")).toHaveAttribute("aria-expanded", "true");
+    expect(content).not.toHaveAttribute("hidden");
+    expect(content).toBeVisible();
+    expect(optionToggle("A")).toHaveAttribute("aria-expanded", "true");
+    expect(within(row("B")).getByRole("button", { name: /^Choose option B/ })).toBeVisible();
+    await user.click(optionToggle("B"));
+    expect(optionToggle("B")).toHaveAttribute("aria-expanded", "false");
+    expect(content).toHaveAttribute("hidden");
+    expect(content).not.toBeVisible();
+    expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
+  });
+
+  it("supports Enter and Space on the option row", async () => {
+    const user = userEvent.setup();
+    render(<OptionCompare options={[choosable]} onChoose={vi.fn()} />);
+    optionToggle("A").focus();
+    await user.keyboard("{Enter}");
+    expect(optionToggle("A")).toHaveAttribute("aria-expanded", "false");
+    await user.keyboard("{Enter}");
+    expect(optionToggle("A")).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard(" ");
+    expect(optionToggle("A")).toHaveAttribute("aria-expanded", "false");
+    await user.keyboard(" ");
+    expect(optionToggle("A")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /^Choose option A/ })).toBeVisible();
+  });
+
+  it("opens the newly chosen option after new props arrive", () => {
+    const unchanged = { ...optionA, chosen: false, recommended: false };
+    const { rerender } = render(<OptionCompare options={[unchanged, optionC]} onChoose={vi.fn()} />);
+    expect(optionToggle("B")).toHaveAttribute("aria-expanded", "false");
+    rerender(
+      <OptionCompare
+        options={[unchanged, { ...optionC, stockConfirmed: true, chosen: true }]}
+        onChoose={vi.fn()}
+        onApprove={vi.fn()}
+      />,
+    );
+    expect(optionToggle("B")).toHaveAttribute("aria-expanded", "true");
+    expect(within(row("B")).getByRole("button", { name: /^Choose option B/ })).toBeVisible();
+  });
+
   it("shows unknown values as unknown, never as zero and never as recommended", () => {
     const unknown: ProposalOption = {
       ...optionA,
@@ -48,20 +190,25 @@ describe("OptionCompare", () => {
       expect(fact("A", label)).toHaveTextContent(/^unknown$/);
     }
     expect(screen.queryByText("Recommended by the Buyer")).toBeNull();
-    expect(within(row("A")).queryByRole("button")).toBeNull();
+    expect(within(row("A")).getAllByRole("button")).toEqual([optionToggle("A")]);
     expect(within(row("A")).getByText(/Cannot be approved now: Stock is not confirmed/)).toBeVisible();
   });
 
-  it("shows a missed cut-off with its time and offers no approval for it", () => {
+  it("shows a missed cut-off with its time and offers no approval for it", async () => {
+    const user = userEvent.setup();
     render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
+    await user.click(optionToggle("B"));
     expect(fact("B", "Order cut-off")).toHaveTextContent(/^missed \(closed Thu,? 12 Nov,? 15:00\)$/);
     expect(fact("B", "Stock")).toHaveTextContent("confirmed");
     expect(within(row("B")).getByText(/Cannot be approved now: The order cut-off has passed/)).toBeVisible();
-    expect(within(row("B")).queryByRole("button")).toBeNull();
+    expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
   });
 
-  it("shows the milk story: price, total, labels, the engine's sentence and the API's recommendation", () => {
+  it("shows the milk story: price, total, labels, the engine's sentence and the API's recommendation", async () => {
+    const user = userEvent.setup();
     render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
+    await user.click(optionToggle("B"));
+    await user.click(optionToggle("C"));
     expect(fact("A", "Price ex VAT")).toHaveTextContent("€2.57 per L");
     expect(fact("A", "Total")).toHaveTextContent("€148.76 incl VAT");
     expect(fact("A", "Delivery reliability")).toHaveTextContent("97 %");
@@ -184,7 +331,7 @@ describe("OptionCompare", () => {
         onApprove={vi.fn()}
       />,
     );
-    expect(within(row("A")).queryByRole("button")).toBeNull();
+    expect(within(row("A")).getAllByRole("button")).toEqual([optionToggle("A")]);
     expect(within(row("B")).getByRole("button", { name: /^Choose option B/ })).toBeEnabled();
   });
 
@@ -289,12 +436,14 @@ describe("Approvals page: the milk options", () => {
     renderApp("/approvals", api);
 
     expect(await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ })).toBeVisible();
+    await user.click(optionToggle("B"));
+    await user.click(optionToggle("C"));
     expect(fact("A", "Stock")).toHaveTextContent(/^confirmed$/);
     expect(within(row("A")).getByRole("button", { name: /^Choose option A/ })).toBeEnabled();
     expect(fact("C", "Stock")).toHaveTextContent(/^unknown$/);
-    expect(within(row("C")).queryByRole("button")).toBeNull();
+    expect(within(row("C")).getAllByRole("button")).toEqual([optionToggle("C")]);
     expect(fact("B", "Order cut-off")).toHaveTextContent(/^missed/);
-    expect(within(row("B")).queryByRole("button")).toBeNull();
+    expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
 
     await user.click(screen.getByRole("button", { name: "Choose option A: approve €148.76 incl VAT" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
@@ -331,6 +480,8 @@ describe("Approvals page: the milk options", () => {
     api.chooseOption = vi.fn(() => Promise.reject(new ApiError("STOCK_UNKNOWN", "STOCK_UNKNOWN")));
     renderApp("/approvals", api);
 
+    await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ });
+    await user.click(optionToggle("C"));
     const choose = await screen.findByRole("button", { name: /^Choose option C/ });
     const initialLoads = listSpy.mock.calls.length;
     await user.click(choose);
