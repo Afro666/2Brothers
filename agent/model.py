@@ -12,6 +12,28 @@ class ModelError(RuntimeError):
     pass
 
 
+# The Buyer tool loop's model settings (#706), measured on 2026-11-14: agent/README.md,
+# "Buyer loop settings". Thinking is off: with thinking on, 5 of 346 model calls spent the
+# whole reply budget on reasoning and returned no tool call, so the run stopped.
+BUYER_THINKING = False
+BUYER_MAX_TOKENS = 2048
+
+
+def buyer_settings(environ=None) -> tuple[bool, int]:
+    """(thinking, reply budget) for the Buyer loop. The server can override the constants
+    with NEMOTRON_BUYER_THINKING (on/off) and NEMOTRON_BUYER_MAX_TOKENS (256 to 65536).
+    A value outside those is an error: the loop never runs on a setting nobody chose."""
+    environ = os.environ if environ is None else environ
+    thinking = (environ.get("NEMOTRON_BUYER_THINKING") or "").strip().lower()
+    if thinking not in ("", "on", "off"):
+        raise ValueError("NEMOTRON_BUYER_THINKING must be on or off")
+    budget = (environ.get("NEMOTRON_BUYER_MAX_TOKENS") or "").strip()
+    if budget and not (budget.isdecimal() and 256 <= int(budget) <= 65536):
+        raise ValueError("NEMOTRON_BUYER_MAX_TOKENS must be a whole number from 256 to 65536")
+    return (thinking == "on" if thinking else BUYER_THINKING,
+            int(budget) if budget else BUYER_MAX_TOKENS)
+
+
 class Nemotron:
     def __init__(self, *, transport=None, sleep=asyncio.sleep):
         key = os.environ.get("VERDA_INFERENCE_KEY", "")
@@ -22,6 +44,7 @@ class Nemotron:
             headers={"Authorization": "Bearer " + key}, transport=transport,
             timeout=90, follow_redirects=False, trust_env=False)
         self.sleep = sleep
+        self.thinking, self.max_tokens = buyer_settings()
         self.meter = Meter()    # calls, tokens and seconds per role (agent/usage.py)
 
     async def close(self):
@@ -30,7 +53,9 @@ class Nemotron:
     async def complete(self, messages, tools):
         body = {"model": "nemotron-3.5-super-vl", "messages": messages,
                 "tools": tools, "tool_choice": "auto", "temperature": 0,
-                "max_tokens": 2048}
+                "max_tokens": self.max_tokens,
+                # Always sent: the endpoint's default is thinking on (seen 2026-11-14).
+                "chat_template_kwargs": {"enable_thinking": self.thinking}}
         return await self._post(body, "buyer")
 
     async def complete_json(self, messages, schema, name, *, max_tokens=2048):

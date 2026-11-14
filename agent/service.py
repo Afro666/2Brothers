@@ -132,7 +132,8 @@ class BuyerWorker:
             raise WorkerError(503, 'BUYER_UNAVAILABLE', fallback_safe=buyer is None or not buyer.mutations) from None
         finally:
             if model is not None:
-                emit(getattr(model, 'meter', None), run='buyer', status=status)
+                emit(getattr(model, 'meter', None), run='buyer', status=status,
+                     thinking=getattr(model, 'thinking', None), max_tokens=getattr(model, 'max_tokens', None))
                 await model.close()
 
 

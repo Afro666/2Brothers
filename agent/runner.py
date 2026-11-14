@@ -32,6 +32,10 @@ Unknown stock is not measured stock. Never resend an ambiguous mutation.
 Use only the seven supplied tools. Finish after a pending approval or confirmed order.
 If a read-only call is rejected before dispatch, correct its arguments using the
 tool schema and trusted need/date. Policy checks still apply; never bypass them.
+After search_products, call get_offer ONCE: put the three best matching products that
+have can_arrive true (fewer when fewer match) together in one product_ids list. Do not ask
+for one offer per product. Then call simulate_order once with that offer_id, then
+request_approval with the same offer_id.
 """
 
 

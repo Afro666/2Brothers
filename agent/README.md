@@ -173,7 +173,8 @@ The proposal the worker returns also has `buyer_usage`, the totals of that reque
 passes the worker's answer on as it is, so the field is in the `POST /proposals` answer;
 no page shows it yet. `python -m agent ... --mock` prints the same totals as `usage`.
 
-Measured on 2026-11-14 with the live model, before any change to the loop's settings:
+Measured on 2026-11-14 with the live model, before the change to the loop's settings
+(the next section has the numbers after it):
 
 | Role | Runs | Calls | Prompt tokens | Completion tokens | Of which reasoning | Model seconds |
 |---|---|---|---|---|---|---|
@@ -191,6 +192,85 @@ search (read only) and Valio's API. The photo rows are the four fixture photos w
 "tokens/episode" column in `env/README.md`); it does not write usage lines.
 
 Tests: `agent/tests/test_usage.py` (a fake transport, no model call).
+
+## Buyer loop settings (#706, #882)
+
+The live tool loop runs Nemotron with **thinking off** and a **2,048 token** reply budget,
+temperature 0 (`BUYER_THINKING`, `BUYER_MAX_TOKENS` in `agent/model.py`). The request
+always says so (`chat_template_kwargs.enable_thinking`); the endpoint's own default is
+thinking on. The server can change both without a code change:
+`NEMOTRON_BUYER_THINKING=on|off` and `NEMOTRON_BUYER_MAX_TOKENS=256..65536` in the worker's
+environment. Another value stops the worker's model client with an error. Each usage line
+records the settings its run used (`thinking`, `max_tokens`). The photo readers keep their
+own settings (thinking off, strict JSON schema).
+
+The system prompt (`SYSTEM` in `agent/runner.py`) asks for one offer: the three best
+matching products with `can_arrive` true in one `get_offer`, then one `simulate_order`,
+then `request_approval`.
+
+Measured on 2026-11-14 with the live model. The method is the one in "Token meter": the
+real worker (with its one retry of a run that wrote nothing), MCP tools and gateway code
+on a laptop. Six requests (1,000 L and 200 L lactose-free milk, 60 kg butter, 40 kg Edam,
+120 L cooking cream, 80 kg natural yoghurt), each variant on the same requests, in turn.
+"Seconds" is the whole request on the laptop; "model seconds" is the time inside the model
+calls. Tokens are per request.
+
+| Variant | Runs | Finished | On the first attempt | Tool calls | Model calls | Prompt tokens | Completion tokens (reasoning) | Median seconds | Median model seconds |
+|---|---|---|---|---|---|---|---|---|---|
+| Before: thinking on (endpoint default), 2,048, old prompt | 24 | 24 | 20 | 4.2 | 4.3 | 45,735 | 2,251 (1,723) | 14.1 | 5.2 |
+| Thinking off, old prompt | 12 | 12 | 12 | 4.0 | 4.0 | 43,322 | 292 (0) | 12.0 | 2.5 |
+| Thinking on, one-offer prompt | 24 | 24 | 24 | 4.0 | 4.0 | 44,145 | 1,325 (968) | 10.2 | 4.0 |
+| Thinking on, 8,192, one-offer prompt | 12 | 12 | 12 | 4.0 | 4.0 | 43,765 | 1,443 (1,027) | 9.2 | 4.0 |
+| **Now: thinking off, 2,048, one-offer prompt** | 24 | 24 | 24 | 4.1 | 4.1 | 44,666 | 289 (0) | 8.8 | 2.3 |
+
+What the numbers say:
+
+- **Why runs stopped.** With thinking on and 2,048 tokens, 5 of 346 model calls (4 of 72
+  runs, all request sets) used the whole reply budget on reasoning and returned no tool
+  call (`finish_reason: length`). The loop then stops with "Model stopped", and the worker
+  starts the run again: 5 to 6 seconds more on the same request (17 against 12). When the
+  second attempt stops too, the deterministic parser answers. With thinking off this did
+  not happen in 261 calls. Of the 4 first attempts that failed before, 2 were this; the other 2 failed
+  outside the model (one catalog search, one substitute read).
+- **A larger budget is not the fix.** With 8,192 tokens one request ("400 pcs single-serve
+  fruit yoghurt") reasoned for 13,765 tokens and 24 seconds of model time. That is too
+  slow for a person who waits.
+- **The one-offer prompt makes the choice stable.** Before, the first `get_offer` had 1 to
+  5 products (18 once with thinking off) and the proposal changed between runs of the
+  same request (milk: three different baskets in four runs). Now it has 3 products every
+  time, and all four runs of each request gave the same products. With the new prompt,
+  thinking on gave the same products as thinking off in 23 of 24 runs.
+- **Tool rounds did not go down.** They were already one round per run (search, offer,
+  simulate, approval) in 20 of 24 runs before. The gain is fewer second attempts and
+  smaller offers: 14.1 to 8.8 seconds in the median, completion tokens down from 2,251 to
+  289 per request.
+
+A second set of six harder requests (Finnish text, gluten-free pasta, peanut butter for a
+kitchen that excludes peanuts, a barista oat drink, grated cheese "not Edam", single-serve
+yoghurt in pieces), 12 runs per variant: before 8 finished, thinking on with the new
+prompt 8, now 9 (and 9 of 12 in a second round). Known limits, both with thinking on and
+off: "peanut butter" in the peanut-free kitchen can end as a proposal for plain butter
+(thinking off: 5 of 5 runs; thinking on with 8,192 tokens: 2 of 3; thinking on with 2,048:
+0 of 4, it stopped). A person still approves it, but the product is wrong. The yoghurt in
+pieces never finished: the gateway cannot convert pieces for those products.
+
+The shipped code, run as it is on the first set (12 runs): 12 finished, all on the first
+attempt, 4.0 model calls, 43,541 prompt and 280 completion tokens per request, median 9.9
+seconds, median 2.5 model seconds. 10 of the 12 gave the same products as the table runs;
+2 differed in one product (milk and butter), so the choice is more stable, not fixed. A
+first check lost 1 of 12 requests to the test setup, not to the model: the live site
+restarted during a catalog search (every merge redeploys it), so the search now waits and
+tries again in the test setup.
+
+The Kitchen Week benchmark is a different job (the model sets the order quantities
+itself), and there thinking on is worth about EUR 5,000 a week (`env/README.md`). In the
+product the engine sets the quantities, and the model only picks products and the next
+tool; that is why thinking is on in the benchmark and off in the live loop.
+
+All the runs behind this section together: 184 Buyer requests, 832 model calls, 9.57
+million tokens (the meter's own count).
+
+Tests: `agent/tests/test_buyer_settings.py` pins the settings and the prompt lines.
 
 ## Internal worker (#279)
 
