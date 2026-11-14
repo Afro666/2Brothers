@@ -4,6 +4,7 @@
 - `tamper` / `restore`: a demo that edits one audit row of the synthetic demo kitchen,
   so a person can watch `verify` find the break, and then puts the exact row back.
   `store.audit` itself still has no update and no delete.
+- `chain_entries`: one kitchen's newest audit entries, oldest first, for the chain view.
 - `watch_kitchen`: a change stream over one kitchen's proposals, approvals and audit
   entries, for the gateway to send on as server-sent events.
 """
@@ -41,6 +42,12 @@ def verify(db, kitchen_id: str) -> dict:
             kitchen = (entry.get("server") or {}).get("kitchen_id")
     return {**result, "broken_kitchen_id": kitchen,
             "kitchen_entries": db.audit_log.count_documents({"server.kitchen_id": kitchen_id})}
+
+
+def chain_entries(db, kitchen_id: str, limit: int) -> list[dict]:
+    """This kitchen's newest `limit` audit entries as stored, oldest first."""
+    newest = db.audit_log.find({"server.kitchen_id": kitchen_id}).sort("_id", -1).limit(limit)
+    return list(reversed(list(newest)))
 
 
 def _put_back(db, saved: dict) -> None:
