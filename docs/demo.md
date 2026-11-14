@@ -2,8 +2,9 @@
 
 Status: story A, chosen by Aron on 2026-11-14 at 09:55 Helsinki: the offer tile comes first.
 The sponsor's own example, `1,000 L lactose-free milk by Monday`, is beat 2 to 4 (added
-after the mock jury of 14 Nov). Each beat ran on the live site on 14 Nov; the order of the
-beats below is new and was not rehearsed as one run yet.
+after the first mock jury of 14 Nov). After the second mock jury the taps, the on-screen
+labels and a shot list were added; the beats and their order did not change. Each beat ran
+on the live site on 14 Nov, but the beats were not rehearsed as one run in this order yet.
 Owner: Aron (presents). Site: `https://31-22-104-201.sslip.io`.
 
 Why this story: it shows the parts nobody else has (Valio's own agent, a refusal, an
@@ -40,7 +41,7 @@ fallback. On 14 Nov at 09:45 Helsinki the model endpoint did not answer for a wh
    restarts the site for some seconds: before you start, look at GitHub Actions; if a
    deploy runs, wait for it.
 4. **Open the tabs:** `/` (Home) on the phone, `/requests`, `/approvals`, `/orders`,
-   `/trust`, `/demand`, and a terminal in the repo for beat 8.
+   `/trust`, `/demand`, `/about`, and a terminal in the repo for beat 8.
 5. **The recall alert is stored.** Aron pressed "Check recalls now" on 14 Nov at 09:31: a
    live scrape (102 notices), the recalled coffee 461332 in stock (3.253 kg) and in three
    recipes. The panel shows it already. Do not press the button on stage: beat 6 only
@@ -48,20 +49,34 @@ fallback. On 14 Nov at 09:45 Helsinki the model endpoint did not answer for a wh
 6. **Make the outside agent's token before you start** if sign-in is on (it is off for
    judging): Settings, API & MCP tokens. With sign-in off, `--make-token` makes one.
 7. **Fallback video** open in a player, paused at 0:00 (see "If something fails").
-   Record it with `python -m demo.record_demo --story offer --approve`.
+   Record it with `python -m demo.record_demo --story offer --approve`. The recorder types
+   the same milk sentence, so step 8 counts for a recording too.
+8. **The pick cache: ten minutes.** The same request within ten minutes reuses the stored
+   pick (`store/buyer_picks.py:10-14` and `:40`: the key holds the kitchen, the typed text,
+   the day, the amount and the shortlist; a pick lives 600 seconds). The "What Nemotron
+   did" panel then shows no model call: the pick is a "Code:" step with the words "The rule
+   picked the first product" (`agent/service.py:134-137`,
+   `web/src/components/purchasing/model-trace-panel.tsx`). Beat 3 says "one model call",
+   so do one of these two:
+   - wait ten minutes between the last rehearsal (or recording) and the real run; or
+   - in rehearsal type `1000 litres of lactose-free milk for Monday`, and on stage type
+     `1,000 L lactose-free milk by Monday`. Both read as 1000 L of "lactose free milk" for
+     next Monday (`gateway/parse.py` `parse_request` and `agent/service.py` `parse_need`,
+     run on both sentences for this text). The typed text is part of the key, so the
+     second wording is a new pick. Keep the same day in the "Needed by" field.
 
 ## The script (story A: Valio sees it first)
 
 | Time | Beat | What you do | What you say | Criterion |
 |---|---|---|---|---|
 | 0:00 | 1. Valio sees it first | Home on the phone. Point at the open offer on the Home tile "Offer from Valio Aimo": the offered product, "in place of ..., which is predicted short on ...", the amount "from your own forecast", the sentence "written by Valio's selling agent (Nemotron 3.5 Super VL)". Read the product and the day from the tile. Press "Make a proposal": the card waits in the inbox. Do not approve it. | "This kitchen shares its forecast with Valio. Valio's own agent, Nemotron, saw that this product will run short, and offers a substitute before anyone orders. The supplier sends no price and no quantity: the amount is the kitchen's own forecast, and the price comes live from Valio when we ask. It is a normal proposal now, and it waits for a person." | B, E, bonus |
-| 0:25 | 2. The sponsor's request | `/requests`: type `1,000 L lactose-free milk by Monday`, press "Ask the agent". The card opens in `/approvals`: the products, the "why" of each line, the total, and the options. | "This is Valio's own example. A chef writes one sentence, not product codes. Valio does not have 1,000 litres confirmed in stock, so the card does not pretend: option A orders the confirmed litres now and holds the rest." | A, B |
-| 0:45 | 3. What Nemotron did | On the milk card, open the "What Nemotron did" panel. Folded it says "1 model call, ... s, thinking off". Unfolded, each step says "Model:" or "Code:", and the last line says "Quantities and prices: the engine. Approval: you." | "One model call. Nemotron picked the products from a shortlist. Code did every other step: the search, the offer, the check against the guards, the request for approval. The model sets no quantity and no price, and it has no approve tool." | A, C |
-| 1:05 | 4. A person decides | Press "Choose option A: approve EUR ... incl VAT" and confirm. Read the total from the screen. | "A suggestion never becomes an order by itself. I approve the exact total I see: if the price or the stock moves before the order is placed, this yes is refused." | A, C |
-| 1:25 | 5. Proof | `/orders`: open the milk order you just approved. Point at the block "Signed receipt" (approver, time, total). Then `/trust`: the heading "Audit log stored in MongoDB Atlas", press "Verify audit chain". | "An order that a person approves gets a signed receipt. Anyone can check it with our public key; change one number and the check fails. It also says plainly that Valio's test API has no order endpoint, so nothing was sent. And every step is in this log, in MongoDB Atlas, each line hashed with the one before." | C, E |
+| 0:25 | 2. The sponsor's request | `/requests`: type `1,000 L lactose-free milk by Monday`, press "Ask the agent". The card opens in `/approvals`, folded: the total, the chips, and the buttons "Inspect (... options)", "Reject" and "Approve ... incl VAT". Point at the label beside the heading "To approve": "Live" and "MongoDB Atlas change stream". Point at the chip "Over budget". | "This is Valio's own example. A chef writes one sentence, not product codes. New proposals reach this inbox without a refresh, over a MongoDB Atlas change stream. Valio does not have 1,000 litres confirmed in stock, so the card does not pretend: option A orders the confirmed litres now and holds the rest. 'Over budget' means the total is above this kitchen's own warning limit for one order. It is a warning, not a block: the money is the kitchen's, so a person decides, not the agent." | A, B |
+| 0:45 | 3. What Nemotron did | On the milk card, press "Inspect (... options)": the card unfolds. Scroll to the end of the open part and open the "What Nemotron did" panel. Folded it says "1 model call, ... s, thinking off". Unfolded, each step says "Model:" or "Code:", and the last line says "Quantities and prices: the engine. Approval: you." | "One model call. Nemotron picked the products from a shortlist. Code did every other step: the search, the offer, the check against the guards, the request for approval. The model sets no quantity and no price, and it has no approve tool." | A, C |
+| 1:05 | 4. A person decides | Three taps, in this order. 1: "Inspect (... options)" (already open after beat 3). 2: under "Your options", "Choose option A: approve ... incl VAT". 3: in the dialog "Approve this order?", "Yes, approve ...". If the main button already says option A, press it; else open Inspect first. Read the total from the screen. The card then says "Approved and recorded: ... Nothing is sent to the supplier." | "A suggestion never becomes an order by itself. I approve the exact total I see: if the price or the stock moves before the order is placed, this yes is refused." | A, C |
+| 1:25 | 5. Proof | `/orders`: open the milk order you just approved. Point at the block "Signed receipt": "Approved by", "Signed at", "Signed total", and under "Supplier" the words "Nothing sent to the supplier yet". Then `/trust` (the page "Tamper check"): point at the badge "Audit log stored in MongoDB Atlas", press "Verify audit chain", and point at the result line "Audit log intact: each of the ... entries carries the hash of the one before it". If a judge asks more about MongoDB: `/about`, the card "The data lives in MongoDB Atlas". | "An order that a person approves gets a signed receipt. Anyone can check it with our public key; change one number and the check fails. It also says plainly that Valio's test API has no order endpoint, so nothing was sent. And every step is in this log, in MongoDB Atlas, each line hashed with the one before." | C, E |
 | 1:50 | 6. A recall | `/approvals`, the recall panel. Point at the stored alert. Do not press "Check recalls now". | "The Finnish Food Authority recalled batches of this coffee. It is on our shelf and in three of our recipes. New orders leave it out, and a person checks the packs." | D |
 | 2:00 | 7. A rule the agent cannot break | `/requests`: type `15 kg peanut butter`, press "Ask the agent". | "This kitchen excludes peanuts. The request is refused in under a second, before any model runs, and nothing else is swapped in. An agent that 'helps' with plain butter would be worse than no agent." | C, D |
-| 2:20 | 8. Any agent | Terminal: `python -m demo.second_agent --make-token`. It prints ten lines. | "This is not our agent's door. An outside client reads our public agent card, connects over MCP, searches, gets an offer and asks for approval. Then it tries to approve its own proposal: 403. Only a person approves." | E |
+| 2:20 | 8. Any agent | Terminal: `python -m demo.second_agent --make-token`. It prints ten lines. Point at line 9: "the agent tries to approve its own proposal: HTTP 403 HUMAN_SESSION_REQUIRED". | "This is not our agent's door. An outside client reads our public agent card, connects over MCP, searches, gets an offer and asks for approval. Then it tries to approve its own proposal: 403. Only a person approves." | E |
 | 2:45 | 9. Close | `/demand`: the Valio planner view. | "Valio sees the demand of every kitchen that agreed to share, and which lines will be short. That is how its agent knew about the shortage on the tile. Open interface, a person signs, and every step is in a hash-chained log." | bonus |
 
 **The numbers of the milk beat come from the screen, not from this file.** Valio's stock
@@ -75,12 +90,47 @@ moves, so the confirmed litres and the total of option A change:
 - Today's values were not read for this text: reading them needs a live request, which
   writes a need and a proposal. Read them off the card in rehearsal and say those.
 
+**The taps on the milk card** (beat 3 and 4). Every card starts folded
+(`web/src/components/purchasing/approval-card.tsx:213-214`). The options and the "What
+Nemotron did" panel are inside the part that "Inspect (... options)" opens (`:713-742`,
+`:756`); the number in the label is the count of options on the card. The main button
+"Approve ... incl VAT" (`:790`) approves the option the card proposes now, marked "Proposed
+now" in the list. That can be another option than A, the one marked "Recommended by the
+Buyer" (issue #1866, open on 15 Nov; no open PR changed this button when this text was
+written: #1809, #1835 and #1854 touch the card for other things). So: if the main button
+already says option A, press it; else open Inspect first. When option A is not the one
+proposed, "Choose option A: ..." first loads the new options, and the dialog "Approve this
+order?" opens by itself after a moment (`web/src/components/purchasing/option-compare.tsx:121-130`,
+`:143-146`). Wait for it; do not press twice.
+
+**The chip "Over budget"** (beat 2). It shows when the order total is above the kitchen's
+budget warning for one order (`gateway/service.py:613-614`, `engine/offers.py:220-221`;
+the chip: `web/src/lib/proposal-checks.ts:103-105`). The limit is the kitchen's own setting
+(Settings, "Per order (ex VAT, €)"); the engine default is EUR 1,500
+(`engine/params.py:24`). It is a warning and never blocks: inside Inspect, "What to check"
+says "The total is above your kitchen's budget warning." and "A warning only. It does not
+block the order." (`web/src/api/gateway-map.ts:453-456`). If the chip is not on the card,
+skip its sentence.
+
+**Where MongoDB Atlas shows on screen.** Three places, all in beats that exist:
+
+- Beat 2, `/approvals`: beside the heading "To approve", the label "Live" and "MongoDB
+  Atlas change stream" (`web/src/lib/live-events.tsx:86-101`, `web/src/pages/approvals.tsx:235-236`).
+  It shows only while the live connection is up; if it is missing, skip its sentence.
+- Beat 5, `/trust`: the badge "Audit log stored in MongoDB Atlas" under the heading "Tamper
+  check", and the button "Verify audit chain" with its result line
+  (`web/src/pages/trust.tsx:124-136`, `:158`).
+- For questions and for the video, `/about`: the card "The data lives in MongoDB Atlas"
+  (`id="about-atlas"`, `web/src/components/purchasing/atlas-card.tsx:115`), with "Other
+  Atlas features in use" and the line "Change streams: ...".
+
 **Which path answers** (beat 2 and 3). The deployed Buyer makes one model call per request:
 Nemotron picks the products, and code makes every tool step (`deploy/compose.yaml:86`,
 `agent/service.py:65`, `agent/single_pick.py`; #1257). A pick that repeats within ten
 minutes comes from a cache: the panel then shows the pick as a "Code:" step and no model
-call (`agent/service.py:126-129`). So type the request once in rehearsal and once on
-stage, at least ten minutes apart, or say "the pick was cached" when the panel shows it.
+call (`agent/service.py:134-137`). So type the request once in rehearsal and once on
+stage, at least ten minutes apart, or use the second wording of "Before you go on stage",
+step 8. If the panel still shows it, say "the pick was cached".
 If the model does not answer, the card says "The Buyer model was not answering, so the
 gateway's request parser made this proposal": say that, and skip the sentence "one model
 call".
@@ -94,7 +144,29 @@ it.
 
 **Do not type** butter, eggs or salmon as a free request: those three still give the wrong
 kind of product (clarified butter, scrambled egg mix, salmon cubes). Cheese, cream, oat
-drink, chicken breast and lactose-free milk give the right kind.
+drink, chicken breast and lactose-free milk give the right kind. The one request in this
+file with one of those words is `15 kg peanut butter` in beat 7. Type it exactly so: the
+peanut rule refuses it before any product is picked, so no wrong product shows. No other
+beat types butter, eggs or salmon.
+
+## Shot list for the video
+
+For Tymon. Seven shots, in this order. The milk request, from the typed sentence to the
+approved order (shots 1 to 4), is inside the first 60 seconds. Each shot stays until its
+text can be read. The numbers come from the screen.
+
+1. `/requests`: the typed sentence `1,000 L lactose-free milk by Monday` in the box, and the button "Ask the agent".
+2. `/approvals`, the milk card with "Inspect (... options)" open: under "Your options", option A with its total, the confirmed litres, and the line "... waits for stock confirmation".
+3. The same card: the "What Nemotron did" panel open, with the "Model:" and "Code:" steps and the line "Quantities and prices: the engine. Approval: you."
+4. The same card: "Choose option A: approve ... incl VAT", the dialog "Approve this order?" with "Yes, approve ...", then the card with "Approved and recorded: ... Nothing is sent to the supplier."
+5. `/orders`, the milk order: the block "Signed receipt" with "Approved by", "Signed total", and under "Supplier" the words "Nothing sent to the supplier yet" and the note "Recorded by the gateway. Nothing was sent to the supplier: its API has no order endpoint. The supplier has not accepted this order."
+6. `/trust`: the badge "Audit log stored in MongoDB Atlas", the button "Verify audit chain", and the result line "Audit log intact: each of the ... entries carries the hash of the one before it".
+7. Terminal, `python -m demo.second_agent --make-token`: line 9, "the agent tries to approve its own proposal: HTTP 403 HUMAN_SESSION_REQUIRED", and the last line that starts with "RESULT:".
+
+The receipt's own claim is `supplier_outcome: NOT_SENT` (`gateway/signing.py:132`); the page
+shows it as "Nothing sent to the supplier yet" (`web/src/pages/order-detail.tsx:88-89`).
+Before the recording, mind the pick cache ("Before you go on stage", step 8): shot 3 must
+show a "Model:" pick step.
 
 ## NVIDIA demo: five Nemotron jobs in 90 seconds (#1196)
 
@@ -155,6 +227,11 @@ python -m demo.record_demo --story nvidia --note-photo PATH-TO-THE-PREPARED-NOTE
 
 The prepared note is `agent/fixtures/receiving/demo-note.png` (#1198); without `--note-photo`
 the receive beat is skipped. Record it as soon as `agent.ping` answers OK. The video goes to `demo/out/`.
+The recorder types `1,000 L lactose-free milk by Monday`. A run of the same sentence in the
+ten minutes before it gives a cached pick, and the "What Nemotron did" panel in the video
+then shows no model call. Wait ten minutes after the last milk request, then record; and
+wait ten minutes after a recording before the stage run (story A, "Before you go on
+stage", step 8).
 The recorder **never approves**: it refuses `--approve`, never accepts the offer and never
 presses "Save count". A beat whose model did not answer says so in its caption (the parser
 or a rule answered), or the step prints `SKIP` with the page's own words; record again when
