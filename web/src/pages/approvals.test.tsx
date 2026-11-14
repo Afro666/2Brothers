@@ -99,6 +99,20 @@ describe("ApprovalsPage", () => {
     expect(screen.getByRole("heading", { name: "Decided" })).toBeVisible();
   });
 
+  it("does not say 'already decided' after the linked proposal is approved on the page", async () => {
+    const user = userEvent.setup();
+    const { api } = renderApp("/approvals?proposal=APR-312", withConfirmedStock());
+
+    await user.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
+
+    expect(await screen.findByTestId("approval-toast")).toHaveTextContent("Approved: €148.76 incl VAT");
+    expect(await screen.findByRole("heading", { name: "Waiting for you (3)" })).toBeVisible();
+    expect((await api.getApproval("APR-312")).status).toBe("APPROVED");
+    expect(screen.queryByText("Proposal APR-312 has already been decided.")).toBeNull();
+  });
+
   it("hides the menu in Telegram and closes the Mini App two seconds after approval", async () => {
     const ready = vi.fn();
     const expand = vi.fn();
