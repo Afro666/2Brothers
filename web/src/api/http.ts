@@ -88,9 +88,8 @@ export function createHttpApi(baseUrl: string): Api {
         await post(
           `${proposalPath(decision.approvalId)}/approve`,
           {
-            // The gateway reads `expected_total`; docs/contract.md asks for `blocks`. Both say the same figure.
+            // docs/contract.md: the approve body is `{expected_total, idempotency_key}`.
             expected_total: total,
-            blocks: [{ supplier_id: "sup-valio", expected_total: total }],
             // The same person approving the same figure again replays the same order.
             idempotency_key: `web-approve:${decision.approvalId}:${total}`,
           },

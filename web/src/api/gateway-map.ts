@@ -119,8 +119,11 @@ function placedStatus(outcome: unknown): OrderStatus {
   return outcome === "NOT_SENT" || outcome === "SENT_READ_FAILED" ? outcome : "UNCONFIRMED";
 }
 
+/** docs/contract.md: only READY can be approved. PENDING is still being built; APPROVING/COMMITTING last while an approve runs. */
 function proposalStatus(status: unknown): OrderStatus {
-  if (status === "READY" || status === "APPROVING" || status === "PENDING") return "NEEDS_APPROVAL";
+  if (status === "READY") return "NEEDS_APPROVAL";
+  if (status === "PENDING" || status === "APPROVING" || status === "COMMITTING") return "IN_PROGRESS";
+  if (status === "BLOCKED_BY_RECALL") return "BLOCKED_BY_RECALL";
   // Approved, but the caller found no order row: nobody may assume it was placed.
   return status === "APPROVED" ? "UNCONFIRMED" : "REFUSED";
 }
@@ -149,6 +152,13 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item !== "") : [];
+}
+
+function approvalStatus(status: unknown): ApprovalRequest["status"] {
+  if (status === "APPROVED") return "APPROVED";
+  const order = proposalStatus(status);
+  if (order === "NEEDS_APPROVAL") return "PENDING";
+  return order === "IN_PROGRESS" || order === "BLOCKED_BY_RECALL" ? order : "REJECTED";
 }
 
 /**
@@ -187,12 +197,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
     reasons: reasons.length
       ? reasons
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],
-    status:
-      proposal.status === "APPROVED"
-        ? "APPROVED"
-        : proposalStatus(proposal.status) === "NEEDS_APPROVAL"
-          ? "PENDING"
-          : "REJECTED",
+    status: approvalStatus(proposal.status),
     options: mapProposalOptions(
       proposal.substitute_options,
       typeof proposal.offer_id === "string" ? proposal.offer_id : undefined,

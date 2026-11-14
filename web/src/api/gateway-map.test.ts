@@ -57,7 +57,10 @@ describe("mapApproval", () => {
 
   it.each([
     ["READY", "PENDING"],
-    ["APPROVING", "PENDING"],
+    ["PENDING", "IN_PROGRESS"],
+    ["APPROVING", "IN_PROGRESS"],
+    ["COMMITTING", "IN_PROGRESS"],
+    ["BLOCKED_BY_RECALL", "BLOCKED_BY_RECALL"],
     ["APPROVED", "APPROVED"],
     ["REJECTED", "REJECTED"],
     ["EXPIRED", "REJECTED"],
