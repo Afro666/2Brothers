@@ -1737,6 +1737,31 @@ name, a menu, a recipe, a price or a pack size. It is told to write no dates and
 product names (the answer shows both next to each line). A product name inside a line is not read for
 numbers, so the "1 l" of "Valio Eila 1 l" is not a quantity.
 
+The worker's model reply is validated against this strict internal shape:
+
+```json
+{
+  "lines": [
+    {
+      "row": 0,
+      "product_id": "462775",
+      "text": "Forecast 2400 L from 6 kitchens against 1700 L available: buy 700 L more.",
+      "numbers": ["2400", "6", "1700", "700"]
+    }
+  ]
+}
+```
+
+All four line fields are required and additional properties are rejected. There are
+at most eight lines; `text` is at most 240 characters and `numbers` at most six
+strings. Every number is a **string**, exactly as written in `text`, per `SCHEMA`.
+
+`row` is the zero-based index into the selected rows sent with this call, not a
+catalog index. The public `note` omits `row` and `numbers`. The model contributes
+only `product_id` and `text`: `product_id` must match the selected row, whose trusted
+data supplies the returned `product_id`, `product_name`, `date` and `risk`; only the
+validated `text` is copied from the model.
+
 Every line the model writes is checked by plain code before anyone sees it:
 
 - it names one input row (`row`), and its `product_id` is that row's;
