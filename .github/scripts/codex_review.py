@@ -93,6 +93,8 @@ def review(folder):
                                     text=True, capture_output=True, timeout=300)
             if result.returncode or not output.exists():
                 body = 'Unavailable: Codex CLI failed. No model review result is claimed.'
+                if 'Quota exceeded' in result.stderr or 'insufficient_quota' in result.stderr:
+                    body = 'Unavailable: OpenAI API quota is exhausted. Enable API credits/billing for the key\'s project before retrying. No model review ran.'
                 # This process receives only the OpenAI secret; redact its complete
                 # value and masked key-shaped fragments before exposing diagnostics.
                 print('Codex CLI failed (sanitized diagnostic):')
