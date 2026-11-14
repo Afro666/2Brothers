@@ -187,7 +187,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     async def _supplier_busy(_: Request, exc: ValioBusy) -> JSONResponse:
         return JSONResponse(status_code=503, headers={"Retry-After": str(exc.retry_after)},
                             content={"error": {"code": "SUPPLIER_BUSY", "message": str(exc),
-                                               "retry_after": exc.retry_after}})
+                                               "retry_after_s": exc.retry_after}})   # #1286
 
     @app.exception_handler(ValueError)
     async def _invalid(_: Request, exc: ValueError) -> JSONResponse:

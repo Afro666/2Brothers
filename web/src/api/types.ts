@@ -755,4 +755,11 @@ export class ApiError extends Error {
     this.details = details;
     this.status = status;
   }
+
+  /** Whole seconds to wait on a "busy, try again" error (`retry_after_s`, #1286), if the gateway sent it.
+   * shortcut: also reads `retry_after`, the SUPPLIER_BUSY name before #1286. Remove after one release. */
+  get retryAfterS(): number | undefined {
+    const seconds = this.details.retry_after_s ?? this.details.retry_after;
+    return typeof seconds === "number" && Number.isFinite(seconds) ? seconds : undefined;
+  }
 }
