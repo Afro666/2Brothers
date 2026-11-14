@@ -54,9 +54,11 @@ describe("ApprovalsPage", () => {
   afterEach(() => {
     delete window.Telegram;
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
-  it("puts a valid linked proposal first, open, and focused", async () => {
+  it("puts a valid linked proposal first, open, scrolled to and focused", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
     renderApp("/approvals?proposal=APR-312");
 
     const heading = await screen.findByRole("heading", { name: "Waiting for you (4)" });
@@ -65,6 +67,20 @@ describe("ApprovalsPage", () => {
     expect(heading.closest("section")?.querySelector('[id^="proposal-"]')).toBe(card);
     expect(within(card!).getByRole("button", { name: /Approve €148\.76 incl VAT/ })).toBeVisible();
     await waitFor(() => expect(card).toHaveFocus());
+    expect(scroll.mock.contexts).toContain(card);
+  });
+
+  it("keeps the normal inbox and says a linked proposal is held by a recall", async () => {
+    const api = createMockApi();
+    const listApprovals = api.listApprovals;
+    api.listApprovals = async () =>
+      (await listApprovals()).map((approval) =>
+        approval.id === "APR-312" ? { ...approval, status: "BLOCKED_BY_RECALL" as const } : approval,
+      );
+    renderApp("/approvals?proposal=APR-312", api);
+
+    expect(await screen.findByText("Proposal APR-312 is held by a recall and cannot be approved.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Held by a recall (1)" })).toBeVisible();
   });
 
   it("keeps the normal inbox and reports an unknown linked proposal", async () => {
@@ -131,19 +147,26 @@ describe("ApprovalsPage", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
-  it("does not close the Mini App after the page is gone", async () => {
+  it("does not close the Mini App after the page is gone, even after two quick approvals", async () => {
     const close = vi.fn();
     window.Telegram = { WebApp: { ready: vi.fn(), expand: vi.fn(), close } };
-    renderApp("/approvals?proposal=APR-312", withConfirmedStock());
+    const { api } = renderApp("/approvals?proposal=APR-312", withConfirmedStock());
+    const approved = async () => (await api.listApprovals()).filter(({ status }) => status === "APPROVED").length;
+    const approvedBefore = await approved();
 
     fireEvent.click(await screen.findByRole("button", { name: /Approve €148\.76 incl VAT/ }));
-    const dialog = screen.getByRole("dialog", { name: "Approve this order?" });
     vi.useFakeTimers();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Yes, approve €148.76" }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(screen.getByTestId("approval-toast")).toBeInTheDocument();
+    expect((await api.getApproval("APR-312")).status).toBe("APPROVED");
+    fireEvent.click(screen.getAllByRole("button", { name: /^Approve €/ })[0]);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^Yes, approve/ }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(await approved()).toBe(approvedBefore + 2);
     cleanup();
     vi.advanceTimersByTime(3000);
     expect(close).not.toHaveBeenCalled();

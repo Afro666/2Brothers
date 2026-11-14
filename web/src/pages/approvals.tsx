@@ -105,7 +105,10 @@ function ApiApprovalsPage() {
       }
       const telegram = getTelegramWebApp();
       // Inside Telegram the Mini App closes after the person has seen the result.
-      if (telegram) closeTimer.current = window.setTimeout(() => telegram.close(), 2000);
+      if (telegram) {
+        window.clearTimeout(closeTimer.current);
+        closeTimer.current = window.setTimeout(() => telegram.close(), 2000);
+      }
     } finally {
       // Also after a refusal: when the total moved, the card must show the new one before asking again.
       approvals.reload();
@@ -172,16 +175,14 @@ function ApiApprovalsPage() {
     card?.scrollIntoView({ block: "start" });
     card?.focus({ preventScroll: true });
   }, [linkedOrderId]);
-  const linkedDecided =
-    linked && linked.approval.status !== "PENDING" && linked.approval.status !== "BLOCKED_BY_RECALL";
   const linkedMessage =
-    proposal && approvals.status === "ready"
-      ? linkedDecided
-        ? t("Proposal {id} has already been decided.", { id: proposal })
-        : !linked
-          ? t("Proposal {id} was not found.", { id: proposal })
-          : undefined
-      : undefined;
+    !proposal || approvals.status !== "ready" || linkedPending
+      ? undefined
+      : !linked
+        ? t("Proposal {id} was not found.", { id: proposal })
+        : linked.approval.status === "BLOCKED_BY_RECALL"
+          ? t("Proposal {id} is held by a recall and cannot be approved.", { id: proposal })
+          : t("Proposal {id} has already been decided.", { id: proposal });
   const recallStatus: RecallStatus =
     recalls.status === "loading"
       ? { kind: "loading" }
