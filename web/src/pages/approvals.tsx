@@ -15,6 +15,7 @@ import { formatEur } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import { useSession } from "@/lib/session";
+import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
 import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
 import { LiveApprovalsPage } from "@/pages/live-approvals";
 
@@ -163,6 +164,7 @@ function ApiApprovalsPage() {
     <AppShell activeId="approvals">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
+          <OpenDemoNote />
           <h1 className="text-2xl font-semibold">{t("To approve")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             {t("Every order the Buyer proposes waits here. Nothing is sent until a person approves it.")}

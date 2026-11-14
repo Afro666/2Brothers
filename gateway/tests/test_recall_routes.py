@@ -418,3 +418,33 @@ def test_check_that_cannot_start_in_time_is_429_not_no_recalls(env, monkeypatch)
     assert "recall_check" not in kinds(db)
     assert client.get(K + "/recalls", headers=HUMAN).json()["last_check"] is None   # still unknown
     assert check(client).status_code == 200 and len(calls) == 2
+
+
+def test_recalled_product_on_the_shelf_alerts_with_no_proposal_to_hold(env):
+    """#358: the coffee is in stock and no open proposal holds it; the check still says so."""
+    from store.history import record_stock_count
+    client, db, gw, _ = env
+    db.proposals.delete_many({})
+    db.offers.delete_many({})
+    record_stock_count(db, "hotel", NOW - timedelta(days=1),
+                       [{"product_id": COFFEE, "unit": "KG", "on_hand": "3.253"}])
+    r = check(client)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    [alert] = out["alerts"]
+    assert alert["product_id"] == COFFEE and alert["match"] == "possible" and alert["status"] == "active"
+    assert alert["where"] == ["in stock: 3.253 KG"]
+    assert alert["proposals"] == []
+    assert alert["recall"]["url"].startswith("https://www.ruokavirasto.fi/")
+    assert alert["recall"]["date"] == "2026-03-06" and alert["recall"]["title"]
+    assert client.get(K + "/recalls", headers=AGENT).json() == out
+    [entry] = [e for e in list_events(db, kitchen_id="hotel") if e["event"].get("kind") == "recall_check"]
+    assert entry["event"]["alerts"] == [alert["event_id"]] and entry["event"]["proposals_held"] == []
+    assert db.proposals.count_documents({}) == 0 and db.orders.count_documents({}) == 0
+    # New orders leave it out.
+    later = client.post(K + "/proposals", headers=HUMAN, json={
+        "product_ids": [COFFEE], "quantity": "5", "unit": "KG", "requested_date": "2026-11-16",
+        "text": "hotel coffee", "idempotency_key": "after-the-alert"})
+    assert later.status_code in (200, 201), later.text
+    assert later.json()["excluded"] == [{"product_id": COFFEE, "reason": "BLOCKED_BY_RECALL"}]
+    assert verify_chain(db)["ok"]

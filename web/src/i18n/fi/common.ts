@@ -17,4 +17,7 @@ export default {
   "Sat": "la",
   "Sun": "su",
   "More languages will come here.": "Lisää kieliä on tulossa.",
+  "Open demo: everyone here is the demo approver.": "Avoin demo: jokainen täällä on demon hyväksyjä.",
+  "Sign-in with roles (approver, chef, viewer) is built and switched off for judging.":
+    "Kirjautuminen rooleineen (hyväksyjä, keittiömestari, katselija) on rakennettu ja kytketty pois arvioinnin ajaksi.",
 } satisfies Record<string, string>;

@@ -407,3 +407,15 @@ products. `engine/nutrition.py` reads it; two read-only routes use it:
 
 A product without a table is unknown, never zero; `complete` is false when anything is
 missing. A litre is counted as a kilo (density about 1). Stock on hand is in neither number.
+
+## What a kitchen calls things (aliases and unknown items)
+
+`gateway/memory.py`. A person links the kitchen's own phrase to one product:
+`PUT /v1/kitchens/{k}/aliases {"phrase": "house milk", "product_id": "463335"}` (a person who
+is not a viewer, or a `kitchen:write` token; never the Buyer). After that a request with that
+phrase goes to that product: the parser uses it without searching, and the Buyer's shortlist
+puts it first with `alias: true`. The allergen rule, cut-off and stock checks still apply.
+A request that matches nothing answers 422 `NO_PRODUCTS_FOUND` with `remembered: true`, and
+the phrase is kept with a count. `GET /v1/kitchens/{k}/aliases` returns `aliases` and
+`unknown_items`; linking an unknown phrase clears it; `DELETE .../aliases?phrase=` removes
+either. Nothing is invented for an unknown item: no product, price, unit or allergen.

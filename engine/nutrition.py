@@ -8,11 +8,13 @@ without label data is unknown, never zero: every total says how much of it is kn
 from __future__ import annotations
 
 from decimal import Decimal
+import re
 
 # GS1 nutrient codes -> our field names.
 CODES = {"ENER-E14": "kcal", "PRO-": "protein_g", "FAT": "fat_g", "FASAT": "saturated_fat_g",
          "CHOAVL": "carbs_g", "SUGAR-": "sugar_g", "FIBTG": "fibre_g", "SALTEQ": "salt_g"}
 FIELDS = tuple(CODES.values())
+MAX_PORTION_KCAL = Decimal(2500)
 KJ_PER_KCAL = Decimal("4.184")
 
 
@@ -44,15 +46,37 @@ def per_100(raw: dict | None) -> dict | None:
     return {"basis": basis, **out}
 
 
-def amount_in_basis(quantity: Decimal, unit: str, label: dict, net_content: dict | None) -> Decimal | None:
+_MULTIPACK = re.compile(r"(\d+)\s*x\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|cl|dl|l)\b", re.IGNORECASE)
+_TO_BASE = {"g": Decimal(1), "kg": Decimal(1000), "ml": Decimal(1), "cl": Decimal(10), "dl": Decimal(100),
+            "l": Decimal(1000)}
+SINGLE_PIECE_MAX = Decimal(2)      # kg or litres: above this a "piece" is a case, not one item
+
+
+def piece_amount(name: str | None, net_content: dict | None) -> Decimal | None:
+    """Grams or millilitres of ONE piece. "Rye bread 45x85g" is 45 pieces of 85 g: a piece is
+    85 g, not the 3.8 kg case. Without such a pattern, the product's net content is one piece
+    only when it is small (a 1 l carton, an 800 g loaf). Otherwise unknown: never the case."""
+    match = _MULTIPACK.search(name or "")
+    if match:
+        return Decimal(match.group(2).replace(",", ".")) * _TO_BASE[match.group(3).lower()]
+    if net_content and net_content.get("value") and net_content.get("unit") in ("KG", "L"):
+        value = Decimal(str(net_content["value"]))
+        if value <= SINGLE_PIECE_MAX:
+            return value * 1000
+    return None
+
+
+def amount_in_basis(quantity: Decimal, unit: str, label: dict, net_content: dict | None,
+                    name: str | None = None) -> Decimal | None:
     """`quantity` of a product in kitchen units (KG, L, PCS) as grams or millilitres of the
     label's basis. A litre is taken as a kilo and a kilo as a litre (density about 1, true
-    within a few percent for milk, cream, oil-free drinks); a piece needs the product's net
-    content. None when it cannot be known."""
+    within a few percent for milk, cream, oil-free drinks); a piece needs the weight of one
+    piece (`piece_amount`). None when it cannot be known."""
     if unit in ("KG", "L"):
         return quantity * 1000
-    if unit == "PCS" and net_content and net_content.get("value") and net_content.get("unit") in ("KG", "L"):
-        return quantity * Decimal(str(net_content["value"])) * 1000
+    if unit == "PCS":
+        piece = piece_amount(name, net_content)
+        return None if piece is None else quantity * piece
     return None
 
 
@@ -79,14 +103,17 @@ def recipe_portion(recipe: dict, products: dict[str, dict]) -> dict:
         product = products.get(pid) or {}
         label = per_100(product.get("raw"))
         amount = amount_in_basis(Decimal(str(item["qty_per_portion"])), item["unit"], label or {},
-                                 product.get("net_content")) if label else None
+                                 product.get("net_content"), product.get("name")) if label else None
         if label is None or amount is None:
             unknown.append(pid)
             continue
         _add(total, label, amount)
         known += 1
+    # A portion above 2,500 kcal is not a meal: a unit in the recipe or the pack data is wrong.
+    # Say so instead of showing the number as if it were true.
+    plausible = total.get("kcal", Decimal(0)) <= MAX_PORTION_KCAL
     return {"per_portion": _round(total), "known_ingredients": known, "unknown": unknown,
-            "complete": not unknown and known > 0}
+            "complete": not unknown and known > 0, "plausible": plausible}
 
 
 def menu_days(entries: list[dict], recipes: dict[str, dict], products: dict[str, dict]) -> list[dict]:
@@ -99,8 +126,8 @@ def menu_days(entries: list[dict], recipes: dict[str, dict], products: dict[str,
                                                    "kcal": Decimal(0), "protein_g": Decimal(0), "complete": True})
         portion = portions.get(str(entry.get("recipe_id")))
         covers = entry.get("covers")
-        if portion is None or covers is None or "kcal" not in portion["per_portion"]:
-            day["complete"] = False
+        if portion is None or covers is None or "kcal" not in portion["per_portion"] or not portion["plausible"]:
+            day["complete"] = False          # an implausible recipe is left out, never added up
             continue
         day["covers"] = max(day["covers"], int(covers))       # the busiest dish: the day's guests
         day["kcal"] += portion["per_portion"]["kcal"] * covers
@@ -129,7 +156,8 @@ def order_lines(lines: list[dict], products: dict[str, dict]) -> dict:
             unknown.append(pid)
             continue
         amount = amount_in_basis(Decimal(str(line["quantity"])) * Decimal(str(per)),
-                                 product.get("kitchen_unit") or "KG", label, product.get("net_content"))
+                                 product.get("kitchen_unit") or "KG", label, product.get("net_content"),
+                                 product.get("name"))
         if amount is None:
             unknown.append(pid)
             continue

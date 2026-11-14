@@ -220,7 +220,8 @@ def _where(pid: str, kitchen: dict) -> list:
     out = []
     if pid in (kitchen.get("stock") or {}):
         qty, unit = kitchen["stock"][pid]
-        out.append(f"in stock: {qty:g} {unit}")
+        # A product on the stock list that nobody counted: unknown, never "0".
+        out.append("on the stock list: amount not counted" if qty is None else f"in stock: {qty:g} {unit}")
     if pid in (kitchen.get("recipes") or {}):
         out.append("in recipes: " + ", ".join(kitchen["recipes"][pid]))
     if pid in (kitchen.get("proposal") or []):

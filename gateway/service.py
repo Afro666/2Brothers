@@ -480,7 +480,8 @@ class Gateway:
         for category in categories[:KIND_SEARCHES]:
             try:
                 more, _ = catalog_search.search(self.db, words, {**filters, "category": category},
-                                                SEARCH_LIMIT, kitchen_id, injected=self._search)
+                                                SEARCH_LIMIT, kitchen_id, injected=self._search,
+                                                hybrid_ok=False)     # inside one category: words are enough
             except Exception:
                 log.warning("kind search failed: category=%s", category, exc_info=True)
                 continue
@@ -506,8 +507,17 @@ class Gateway:
             parsed = parse_request(body["text"], self.now().date(), default_day)
         except ParseError as exc:
             raise GatewayError(422, "CANNOT_READ_REQUEST", str(exc)) from None
-        from gateway import catalog_search
+        from gateway import catalog_search, memory
         from gateway.candidates import SEARCH_LIMIT, pick_candidates
+        from store.products import get_product
+        known = memory.lookup(self.db, kitchen_id, parsed.query, count_use=True)
+        if known and get_product(self.db, known) is not None:
+            # The kitchen linked these words to one product: no search, no guess. The allergen
+            # rule, the cut-off and the stock checks apply to it in the quote like to any product.
+            read = {**body, "product_ids": [known], **{k: v for k, v in parsed.as_need().items() if k != "query"},
+                    "made_by": "parser", "query": parsed.query}
+            read.pop("refusal", None)
+            return read
         rows, _ = catalog_search.search(self.db, parsed.query, {}, SEARCH_LIMIT, kitchen_id,
                                         injected=self._search)
         # Keep the hits that can answer the request: the text search alone ranks chocolate
@@ -517,7 +527,9 @@ class Gateway:
         from gateway.refusal import excluded_request
         refusal = excluded_request(parsed.query, rows, self._allergen_rule(kitchen_id))
         if not ids and not refusal:
-            raise GatewayError(422, "NO_PRODUCTS_FOUND", f"no catalog product matches {parsed.query!r}")
+            memory.note_unknown(self.db, kitchen_id, parsed.query)     # remembered for a person to link or add
+            raise GatewayError(422, "NO_PRODUCTS_FOUND", f"no catalog product matches {parsed.query!r}",
+                               remembered=True)
         read = {**body, "product_ids": ids, **{k: v for k, v in parsed.as_need().items() if k != "query"},
                 "made_by": "parser", "query": parsed.query}
         read.pop("refusal", None)       # set here only, never by the client
@@ -1011,15 +1023,16 @@ class Gateway:
         # Text search, or text plus meaning when SEARCH_HYBRID is on (gateway/catalog_search.py).
         rows, kind = catalog_search.search(self.db, query, filters, 50, injected=self._search)
         measure = need["unit"]
-        if kind == "text":
-            # The kind of product the person named, from their own words, not the model's
-            # query: "50 kg cheese" gets cheese, never a cheese sauce (gateway/kind.py).
-            # A need stored with no text (an outside client): the query is all there is.
-            rows = self._of_kind(rows, query, filters, need["text"] or query, measure)
+        # The kind of product the person named, from their own words, not the model's
+        # query: "50 kg cheese" gets cheese, never a cheese sauce (gateway/kind.py). After
+        # a hybrid search too: its first hit for "cheese" was a cheddar cheese sauce.
+        # A need stored with no text (an outside client): the query is all there is.
+        rows = self._of_kind(rows, query, filters, need["text"] or query, measure)
         same = [r for r in rows if (r.get("net_content") or {}).get("unit") == measure]
         filtered = bool(same) and measure in ("L", "KG")
         if filtered:
             rows = same
+        rows = self._alias_first(kitchen_id, need["text"] or query, rows)
         rows = rows[:max(limit, 20)]
         arrival: dict[str, bool | None] = {}   # None: unknown (no answer or no cut-off time)
         try:
@@ -1044,6 +1057,25 @@ class Gateway:
                 "measure": measure if filtered else None, "search": kind,
                 "note": "can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
                         "prefer products with can_arrive true"}
+
+    def _alias_first(self, kitchen_id: str, words: str, rows: list[dict]) -> list[dict]:
+        """What this kitchen calls things (gateway/memory.py): when the request holds a phrase a
+        person linked to a product, that product leads the shortlist, marked `alias: true`.
+        The allergen rule, the cut-off and the stock checks still apply to it like to any other."""
+        from gateway import memory
+        from store.products import get_product
+        try:
+            pid = memory.lookup(self.db, kitchen_id, words, count_use=True)
+        except Exception:
+            return rows
+        if not pid:
+            return rows
+        row = next((r for r in rows if r.get("product_id") == pid), None)
+        if row is None:
+            row = get_product(self.db, pid)
+            if row is None:
+                return rows
+        return [{**row, "alias": True}] + [r for r in rows if r.get("product_id") != pid]
 
     def tool_get_offer(self, kitchen_id: str, body: dict) -> dict:
         need = self.db.needs.find_one({"_id": body.get("need_id"), "kitchen_id": kitchen_id})

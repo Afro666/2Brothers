@@ -212,8 +212,12 @@ We call two Context.dev endpoints.
 | `POST /v1/web/scrape`, same client | `monitor/enrichment.py`, `monitor/labels.py` | Reads one manufacturer page for a replacement product, and the Hyvää Suomesta producer register for a label check |
 | `POST /v1/brand/retrieve` | `gateway/onboarding.py:27` | A kitchen's email or website becomes its name, logo, colours and address for onboarding |
 
-**How the data drives the core flow.** The monitor matches a recall notice to the lines of
-an open proposal. An exact or possible match holds the proposal. The gateway then refuses
+**How the data drives the core flow.** The monitor matches a recall notice to what the
+kitchen has: its counted stock, its recipes and the lines of its open proposals
+(`store/recalls.py` `context`). A recalled product on the shelf gives an alert that says
+"in stock: 3.253 KG", also when no order holds it, and every later request leaves that
+product out with `BLOCKED_BY_RECALL`. An exact or possible match on an open proposal holds
+the proposal. The gateway then refuses
 the approval with 409 `BLOCKED_BY_RECALL` (`gateway/service.py`). A hold never expires
 by itself: a person checks the packs first (`docs/recall-contract.md`). The monitor also
 writes a separate replacement proposal with a live Valio quote; it never orders
@@ -273,8 +277,9 @@ sped the work up, so we state none here. No CI step runs Codex (#361).
 - [ ] Record the 3-minute demo. The fallback video: `python -m demo.record_demo --approve` (#295).
 - [ ] Server keys: `CONTEXT_DEV_API_KEY` (onboarding lookup, live recall check),
       `MONGODB_AI_API_KEY` (hybrid search), `GATEWAY_SIGNING_KEY` (#755).
-- [ ] Context.dev: on the server, run `python -m demo.recall_demo` before the recording, so
-      a proposal with the recalled coffee exists (`deploy/README.md`).
+- [ ] Context.dev: the demo kitchen has the recalled coffee 461332 in stock, so "Check
+      recalls now" gives the alert with no seed (`docs/demo.md`, "Recall beat").
+      `python -m demo.recall_demo` adds a held proposal only while Valio takes orders for it.
 - [ ] MongoDB: import the product vectors on the server and decide on `SEARCH_HYBRID`
       (#366). Until then the form says "vector search is built and off by default".
 - [ ] Codex: Maciek's three prompts, time estimates and the 90-second recording (#360).

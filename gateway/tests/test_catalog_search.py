@@ -74,6 +74,36 @@ def test_after_a_failure_hybrid_rests_for_a_while(monkeypatch):
     assert [c["hybrid"] for c in calls][-2:] == [True, False]         # tried again after the rest
 
 
+def test_a_query_whose_vector_is_kept_stays_hybrid_while_hybrid_rests(monkeypatch):
+    """Seen on the server on 2026-11-14: at the rate limit, a query asked seconds before
+    came back as text, although its vector was in memory and needed no new call."""
+    monkeypatch.setenv("SEARCH_HYBRID", "true")
+    calls = fake_store(monkeypatch)
+    embedded = []
+
+    def embed(texts, kind, post=None, sleep=None):
+        if len(embedded) >= 1:
+            raise embeddings.EmbeddingError("embedding request failed: rate-limited")
+        embedded.append(texts[0])
+        return [[0.0] * embeddings.EMBED_DIMENSIONS]
+    monkeypatch.setattr(embeddings, "embed", embed)
+    clock = {"t": 100.0}
+    now = lambda: clock["t"]
+    assert catalog_search.search(None, "plain yoghurt", {}, 20, now=now)[1] == "hybrid"
+    assert catalog_search.search(None, "oat drink", {}, 20, now=now)[1] == "text"        # the limit: hybrid rests
+    assert catalog_search.search(None, "rye bread", {}, 20, now=now)[1] == "text"        # no call while it rests
+    assert catalog_search.search(None, "Plain yoghurt ", {}, 20, now=now)[1] == "hybrid"  # its vector is kept
+    assert embedded == ["plain yoghurt"]
+    assert [c["hybrid"] for c in calls] == [True, True, False, False, True]
+
+
+def test_hybrid_can_be_switched_off_for_one_call(monkeypatch):
+    monkeypatch.setenv("SEARCH_HYBRID", "true")
+    calls = fake_store(monkeypatch)
+    assert catalog_search.search(None, "cheese", {"category": "10603"}, 20, hybrid_ok=False)[1] == "text"
+    assert [c["hybrid"] for c in calls] == [False]
+
+
 def test_a_bad_filter_is_still_an_error_not_a_fallback(monkeypatch):
     monkeypatch.setenv("SEARCH_HYBRID", "true")
     fake_store(monkeypatch, fail=ValueError("limit must be an integer from 1 to 50"))

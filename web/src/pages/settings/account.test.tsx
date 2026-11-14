@@ -9,6 +9,7 @@ describe("Account settings", () => {
   it("changes a valid password and shows a success toast", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
+    await api.signIn("buyer@demo.kitchen", "demo-kitchen-2026");
     renderApp("/settings/account", api);
     await user.type(await screen.findByLabelText("Current password"), "demo-kitchen-2026");
     await user.type(screen.getByLabelText("New password"), "new-demo-password");
@@ -47,7 +48,9 @@ describe("Account settings", () => {
 
   it("shows the gateway error when the current password is wrong", async () => {
     const user = userEvent.setup();
-    renderApp("/settings/account");
+    const api = createMockApi();
+    await api.signIn("buyer@demo.kitchen", "demo-kitchen-2026");
+    renderApp("/settings/account", api);
     await user.type(await screen.findByLabelText("Current password"), "not-the-password");
     await user.type(screen.getByLabelText("New password"), "new-demo-password");
     await user.type(screen.getByLabelText("Repeat new password"), "new-demo-password");

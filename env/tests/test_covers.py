@@ -89,8 +89,29 @@ class CoversTest(unittest.TestCase):
         self.assertEqual(select(rows)["hotel"], "current")
 
     def test_demo_uses_selected_model(self):
-        with patch.dict(SELECTED, hotel="ridge"):
+        with patch.dict(SELECTED, hotel="ridge"), patch("env.covers.missing_deps", return_value=[]):
             self.assertIsInstance(demo_forecaster(self.kitchen), RidgeCovers)
+
+    def test_demo_falls_back_to_current_when_the_covers_extra_is_missing(self):
+        """#1039: the demo/deploy install has only the base deps; a SELECTED model whose
+        packages are missing must not crash seeding halfway."""
+        real = __import__("importlib").util.find_spec
+        absent = lambda name, *a: None if name in ("numpy", "statsmodels", "holidays") else real(name, *a)  # noqa: E731
+        for name in ("ridge", "ets"):
+            with patch.dict(SELECTED, hotel=name), patch("env.covers.importlib.util.find_spec", absent), \
+                    self.assertLogs("env.covers", "WARNING") as logged:
+                model = demo_forecaster(self.kitchen)
+            self.assertIs(type(model), Current)
+            self.assertIn(".[covers]", logged.output[0])
+            self.assertGreater(model(self.start), 0)
+
+    def test_every_model_declares_deps_that_the_covers_extra_installs(self):
+        import re
+        extra = Path(__file__).resolve().parents[2].joinpath("pyproject.toml").read_text(encoding="utf-8")
+        covers = re.search(r"^covers = \[(.*)\]", extra, re.M).group(1)
+        for model in MODELS.values():
+            for dep in model.requires:
+                self.assertIn(f'"{dep}', covers, f"{model.name} needs {dep}: add it to the covers extra")
 
     def test_unknown_calendar_and_boolean_measurements(self):
         day = date(2026, 9, 1)

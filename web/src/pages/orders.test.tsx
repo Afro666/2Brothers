@@ -100,6 +100,7 @@ describe("orders pages", () => {
   it("records not_sent with a note and returns the proposal to the approval inbox", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
+    await api.signIn("buyer@demo.kitchen", "demo-kitchen-2026");
     const resolve = vi.spyOn(api, "resolveOrder");
     renderApp("/orders/ORD-1046", api);
 

@@ -573,6 +573,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     mount_supplier(app, gw, principal)
     from gateway.nutrition_routes import mount_nutrition   # label nutrition per recipe, day and order
     mount_nutrition(app, gw, principal)
+    from gateway.memory import mount_memory   # what a kitchen calls things: aliases, unknown items
+    mount_memory(app, gw, principal, body)
     from gateway.supplier_offers import mount_supplier_offers   # the selling agent's suggestions (#374)
     mount_supplier_offers(app, gw, principal, body)
 

@@ -28,7 +28,8 @@ shaky ones.
 4. **Open the tabs:** `/requests`, `/approvals` on a phone, `/audit`, `/llms.txt`, a
    terminal with the two commands of beat 5. For the photo beat: `/stock`, and
    `agent/fixtures/shelf/demo-shelf.png` on the device that shows it.
-5. **Recall beat only:** it is one-shot per recorded notice and needs data (see beat 4).
+5. **Recall beat only:** it is one-shot per recorded notice (see "Recall beat"). It needs
+   the coffee 461332 in the demo kitchen's stock (`/stock`; 3.253 kg on 14 Nov), no seed.
 6. **Have the fallback video open** in a player, paused at 0:00. Record it with
    `python -m demo.record_demo --approve` (about 75 seconds, captions, no sound; it sends the
    1,000 L request, takes option A and approves it; the file
@@ -63,9 +64,25 @@ APPROVED with one line of 698 ST of 463380 and an order id.
 | 0:00 | 1. The request | On `/requests` type: `1,000 L lactose-free milk by Monday`. Press "Ask the agent". | "This is the sentence from your challenge. No product codes." | A, B |
 | 0:15 | 2. The honest answer | The card appears (about 12 s). Read the "Why this basket" list. | "It checked 20 products with live Valio prices and stock. 12 cannot make Monday: their cut-off passed. Valio confirms stock for 698 litres only. The rest is on the cheapest milk, and the card says its stock is not confirmed. A chatbot would have promised 1,000 litres." | B, D |
 | 0:50 | 3. The human decides | Open `/approvals` on the phone. Show the total and the options. Press "Choose option A", then "Yes, approve". Open `/audit`. | "The agent can propose. It has no approve tool. I take the part Valio confirms: 698 litres now, 302 held, nothing ordered for it. I approve the exact total; if the price moves, the old yes is refused. Every step is in a hash-chained log." | C |
-| 1:30 | 4. An exception | The tamper check on `/trust`: "Verify audit chain" says Chain OK; "Run the tamper test" changes one line and the page says "Chain broken at line N"; restore, and it is OK again (live, checked 14 Nov). Or run `python -m gateway.scenarios` in the terminal. The recall hold is *not live yet* (#655 and the Context.dev key on the server). | "Nobody can edit the log quietly, not even us. And 13 golden cases with the correct decision all pass: a moved price, an allergen with missing data, a duplicate send." | D |
+| 1:30 | 4. An exception | The tamper check on `/trust`: "Verify audit chain" says Chain OK; "Run the tamper test" changes one line and the page says "Chain broken at line N"; restore, and it is OK again (live, checked 14 Nov). Or run `python -m gateway.scenarios` in the terminal. Or the recall beat below. | "Nobody can edit the log quietly, not even us. And 13 golden cases with the correct decision all pass: a moved price, an allergen with missing data, a duplicate send." | D |
 | 2:10 | 5. Any agent | In the terminal: `curl -s https://31-22-104-201.sslip.io/llms.txt \| head -20`, then the search call from `docs/byoa.md`. | "This is not our agent's private door. Any agent with a URL and a token can read the catalog, get an offer, simulate and propose. (To show it in 10 seconds: `python -m demo.second_agent --make-token`, an outside MCP client that reaches a waiting proposal and gets 403 when it tries to approve.) The agent card, the OpenAPI file and the MCP endpoint are public. Our conformance kit runs 12 trust checks against any gateway." | E |
 | 2:40 | 6. Close | Show the Valio side: role "Valio planner", Home. Then the kitchen's Home: the tile "Offer from Valio Aimo" (needs an open offer, see "Selling-agent beat"). | "The kitchen shares its forecast if it agrees. Valio sees demand before the orders arrive: 16 kitchens share, and 8 lines are short for Monday and Tuesday." (Numbers from 14 Nov; read them from the screen.) "Valio's own agent, also Nemotron, saw the washed potatoes run short and offered this kitchen another washed potato. It is a suggestion: I make a proposal from it, and that proposal still waits for my approval." | bonus |
+
+## Recall beat: the recalled coffee is on our shelf (#358)
+
+One-shot on the live kitchen: the first check records the alert, and it stays. Do not
+press the button in rehearsal there.
+
+| Step | What you do | What the judge sees | What you say |
+|---|---|---|---|
+| 1 | Open `/stock`. Point at Kulta Katriina coffee. | The coffee 461332 with 3.253 kg on hand. | "This kitchen has this coffee on the shelf." |
+| 2 | Open `/approvals`. Press "Check recalls now". Wait (the live scrape took 30 s on 14 Nov; a slow answer falls back to the recording and the panel says so). | The recall panel: "Kulta Katriina ... is recalled", the Food Authority notice "Suodatinkahvissa vierasesineriski" of 6 March 2026 with its link, "In stock: 3.253 KG", and "No open order holds it. New orders leave it out." | "Context.dev just read the Finnish Food Authority recall list. The recalled coffee is on our shelf; the kitchen knows before anyone orders it again." |
+| 3 | Optional: on `/requests` ask for `5 kg Kulta Katriina filter coffee`. | The coffee is left out with the reason `BLOCKED_BY_RECALL`. | "And the agent cannot order it. A person checks the packs first." |
+
+The alert needs no open proposal: the check matches the notices to the kitchen's stock and
+recipes too (`store/recalls.py` `context`). The hold of an open proposal and its replacement
+basket (`python -m demo.recall_demo`) need a product whose ordering is open at Valio; for the
+coffee it closed on 12 Nov, so that part is not shown this weekend.
 
 ## Photo beat: Nemotron VL counts a shelf (#373)
 
@@ -197,8 +214,8 @@ are planned, and none of them scores in three minutes.
 - [ ] Measure the manual webshop time (#295).
 - [ ] Buyer path through the web still fell back to the parser at 02:22 UTC on 14 Nov;
       confirm it says the Buyer model before rehearsal.
-- [ ] Recall beat: web wiring #655; `CONTEXT_DEV_API_KEY` on the server; seed with
-      `python -m demo.recall_demo` (see `deploy/README.md`). One-shot: do not press
+- [ ] Recall beat: `CONTEXT_DEV_API_KEY` on the server; the coffee 461332 in the demo
+      kitchen's stock (no seed needed, #358). One-shot: do not press
       "Check recalls now" in rehearsal on the live kitchen.
 - [x] Tamper check beat: live on `/trust` (#747, #818).
 - [x] Choose button on the option card (#403, #843): the big request can be approved.

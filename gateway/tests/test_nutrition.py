@@ -77,10 +77,37 @@ def test_window_planned_per_day_and_ordered_against_planned(env):
     db.proposals.insert_one({"_id": "p1", "kitchen_id": "demo-kitchen", "idempotency_key": "n1",
                              "request": {"requested_date": "2026-11-16"}})
     db.orders.insert_one({"_id": "o1", "kitchen_id": "demo-kitchen", "idempotency_key": "n1", "outcome": "CONFIRMED",
+                          "status": "SENT",
                           "proposal_id": "p1", "lines": [{"product_id": "469549", "quantity": "40", "unit": "ST"},
                                                          {"product_id": "462775", "quantity": "5", "unit": "ST"}]})
+    # Approved but never sent (failed): not incoming in the stock view, so not ordered here either.
+    db.orders.insert_one({"_id": "o2", "kitchen_id": "demo-kitchen", "idempotency_key": "n2", "outcome": "CONFIRMED",
+                          "status": "FAILED", "proposal_id": "p1",
+                          "lines": [{"product_id": "469549", "quantity": "100", "unit": "ST"}]})
     got = client.get(K + "/nutrition?from=2026-11-16&to=2026-11-22", headers=AGENT).json()
+    assert got["ordered"]["lines"] == 2                    # o1 only
     assert got["ordered"]["kcal"] == "18400"                # 40 L milk x 460 kcal
     assert got["ordered"]["known_lines"] == 1 and got["ordered"]["unknown"] == ["462775"]
     assert got["ordered_vs_planned"] == "0.37"
     assert client.get(K + "/nutrition?from=2026-11-16", headers=AGENT).status_code == 422
+
+
+def test_a_piece_is_one_item_not_the_case():
+    case = {"value": 3.825, "unit": "KG"}
+    assert nutrition.piece_amount("Vaasan Rye bread 45x85g", case) == D("85")        # one slice
+    assert nutrition.piece_amount("Arla portion milk 100x2 cl", {"value": 2.0, "unit": "L"}) == D("20")
+    assert nutrition.piece_amount("Valio milk 1 l", {"value": 1.0, "unit": "L"}) == D("1000")   # a carton
+    assert nutrition.piece_amount("Salmon fillet apx. 10 kg", {"value": 10.0, "unit": "KG"}) is None  # a case: unknown
+    bread = {"raw": label(240, 8, 2, 45, 1.1), "net_content": case, "name": "Vaasan Rye bread 45x85g"}
+    recipe = {"ingredients": [{"product_id": "b", "qty_per_portion": "1.5", "unit": "PCS"}]}
+    got = nutrition.recipe_portion(recipe, {"b": bread})
+    assert got["per_portion"]["kcal"] == D("306") and got["plausible"] is True       # 127.5 g, not 5.7 kg
+
+
+def test_an_impossible_portion_is_flagged_and_left_out_of_the_day():
+    huge = {"ingredients": [{"product_id": "o", "qty_per_portion": "5", "unit": "KG"}]}
+    got = nutrition.recipe_portion(huge, {"o": {"raw": OATS}})
+    assert got["plausible"] is False
+    days = nutrition.menu_days([{"date": "2026-11-16", "recipe_id": "huge", "covers": 10}],
+                               {"huge": huge}, {"o": {"raw": OATS}})
+    assert days[0]["kcal"] == D("0") and days[0]["complete"] is False

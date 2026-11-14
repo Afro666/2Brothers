@@ -17,6 +17,7 @@ from fastapi import Depends, Request
 
 from engine import nutrition
 from engine.menu_demand import weeks_between
+from gateway.kitchen_routes import incoming_orders_query
 from gateway.service import GatewayError
 
 
@@ -67,8 +68,9 @@ def window_nutrition(db, kitchen_id: str, start: date, end: date) -> dict:
     days = nutrition.menu_days(entries, recipes, products)
     planned = sum((d["kcal"] for d in days), Decimal(0))
 
-    # What was ordered for delivery in the window: approved orders, by their proposal's delivery day.
-    orders = list(db.orders.find({"kitchen_id": kitchen_id, "outcome": "CONFIRMED"}))
+    # What was ordered for delivery in the window: the orders the stock view counts as incoming
+    # (approved and sent), by their proposal's delivery day.
+    orders = list(db.orders.find(incoming_orders_query(kitchen_id)))
     delivery = {p["_id"]: (p.get("request") or {}).get("requested_date")
                 for p in db.proposals.find({"_id": {"$in": [o.get("proposal_id") for o in orders]}}, {"request": 1})}
     lines = [ln for o in orders if start.isoformat() <= str(delivery.get(o.get("proposal_id")) or "") <= end.isoformat()

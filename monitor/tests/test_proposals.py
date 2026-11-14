@@ -158,3 +158,31 @@ def test_shortfall_replacement_is_not_left_approvable():
     assert 'recall_replacement_proposed' not in kinds
     assert db.orders.count_documents({}) == 0
     assert verify_chain(db)['ok']
+
+
+def test_recalled_coffee_on_the_shelf_alerts_without_any_open_proposal():
+    from datetime import timedelta
+    from store.history import record_stock_count
+    db, gw, p = setup()
+    db.proposals.delete_many({})
+    db.offers.delete_many({})
+    record_stock_count(db, 'hotel', NOW - timedelta(days=1), [
+        {'product_id': '461332', 'unit': 'KG', 'on_hand': '3.253'},
+        {'product_id': '475842', 'unit': 'KG', 'on_hand': None}])
+    assert apply_notices(gw, 'hotel', NOTICES) == []       # nothing to hold
+    alerts = list(db.recall_alerts.find({'kitchen_id': 'hotel'}))
+    assert [(a['product_id'], a['match'], a['where']) for a in alerts] == [
+        ('461332', 'possible', ['in stock: 3.253 KG'])]
+    assert db.proposals.count_documents({}) == 0 and db.orders.count_documents({}) == 0
+    # The shelf alert blocks the next request for the coffee.
+    later = gw.create_proposal('hotel', {'product_ids': ['461332'], 'quantity': '5', 'unit': 'KG',
+        'requested_date': '2026-11-16', 'text': 'hotel coffee', 'idempotency_key': 'again'}, 'test')
+    assert later['lines'] == []
+    assert later['excluded'] == [{'product_id': '461332', 'reason': 'BLOCKED_BY_RECALL'}]
+
+
+def test_an_uncounted_product_on_the_stock_list_is_unknown_never_zero():
+    from monitor.recalls import _where
+    kitchen = {'stock': {'461332': (None, 'KG'), '475842': (3.253, 'KG')}, 'recipes': {'461332': ['Breakfast coffee']}}
+    assert _where('461332', kitchen) == ['on the stock list: amount not counted', 'in recipes: Breakfast coffee']
+    assert _where('475842', kitchen) == ['in stock: 3.253 KG']

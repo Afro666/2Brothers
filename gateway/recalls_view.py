@@ -3,7 +3,10 @@
 - GET  /v1/kitchens/{kitchen_id}/recalls        (`kitchen:read`)
 - POST /v1/kitchens/{kitchen_id}/recalls/check  (`kitchen:write`, body `idempotency_key`)
 
-Both are views. The matching is `monitor.recalls.scan`, the hold and the replacement
+Both are views. The kitchen that is matched is `store.recalls.context`: the products on its
+open proposals, in its counted stock and in its recipes. An alert for a product no open
+proposal holds has `proposals: []` and says in `where` why it matters ("in stock: 3.253 KG").
+The matching is `monitor.recalls.scan`, the hold and the replacement
 proposal are `monitor.proposals.apply_notices`, the alerts are the rows `store.recalls`
 keeps. This module adds three things: one bounded Context.dev call for the live notice
 list, the honest `last_check` (live or recording), and the audit entry of the check, which
