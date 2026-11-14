@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from pymongo import ReplaceOne
+from pymongo import UpdateOne
 
 VALIO_SUPPLIER_ID = "valio_aimo"
 NO_DECLARABLE_ALLERGENS = "X99"  # GS1: "does not contain declaration obligatory allergens"
@@ -145,17 +145,23 @@ def flatten(raw: dict, reliability: float | None = None, carbon: float | None = 
 
 
 def upsert_products(db, docs: list[dict], batch_size: int = 500) -> int:
-    """Insert or replace by `_id`, in batches. Running it again changes nothing."""
+    """Insert or update by `_id`, in batches. Running it again changes nothing.
+
+    Fields are set, not the row replaced, so a product keeps its `embedding`.
+    """
     for start in range(0, len(docs), batch_size):
         batch = docs[start:start + batch_size]
-        db.products.bulk_write(
-            [ReplaceOne({"_id": doc["_id"]}, doc, upsert=True) for doc in batch], ordered=False)
+        db.products.bulk_write([
+            UpdateOne({"_id": doc["_id"]},
+                      {"$set": {key: value for key, value in doc.items() if key != "_id"}},
+                      upsert=True) for doc in batch], ordered=False)
     return len(docs)
 
 
 def get_product(db, product_id: str, raw: bool = False) -> dict | None:
     """One product by code (a string). The bulky `raw` record only on request."""
-    doc = db.products.find_one({"_id": str(product_id)}, None if raw else {"raw": 0})
+    hidden = {"embedding": 0} if raw else {"raw": 0, "embedding": 0}
+    doc = db.products.find_one({"_id": str(product_id)}, hidden)
     if doc is not None:
         doc["product_id"] = doc.pop("_id")
     return doc
@@ -172,7 +178,8 @@ def get_products(db, product_ids: list[str], kitchen_id: str | None = None) -> l
     if kitchen_id is not None:
         scope.append({"kitchen_id": kitchen_id})
     found = {doc["_id"]: doc
-             for doc in db.products.find({"_id": {"$in": ids}, "$or": scope}, {"raw": 0})}
+             for doc in db.products.find({"_id": {"$in": ids}, "$or": scope},
+                                         {"raw": 0, "embedding": 0})}
     rows = []
     for product_id in ids:
         if product_id in found:

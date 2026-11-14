@@ -14,7 +14,10 @@ from pathlib import Path
 
 from store.db import ensure_indexes, get_db
 from store.products import flatten, upsert_products
-from store.search import ensure_search_index
+import os
+
+from store.embeddings import embed_products
+from store.search import ensure_search_index, ensure_vector_index
 
 PREFIX = "valio_aimo_junction26_"
 
@@ -53,6 +56,11 @@ def main() -> None:
     print(f"upserted {count} products; products in {db.name}: {db.products.count_documents({})}")
     print(f"data + indexes: {megabytes:.0f} MB of the 512 MB free tier")
     print(f"search index: {ensure_search_index(db)}")
+    if os.environ.get("NVIDIA_API_KEY"):
+        print(f"embedded {embed_products(db)} new or changed products")
+        print(f"vector index: {ensure_vector_index(db)}")
+    else:
+        print("embeddings skipped: NVIDIA_API_KEY is not set (hybrid search needs them)")
 
 
 if __name__ == "__main__":
