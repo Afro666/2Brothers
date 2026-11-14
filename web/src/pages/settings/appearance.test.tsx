@@ -65,7 +65,7 @@ describe("appearance settings", () => {
     expect(section.getByText("Sat 14.11.")).toBeInTheDocument();
     expect(section.getByText("Sun Mon Tue Wed Thu Fri Sat")).toBeInTheDocument();
     expect(formatEur(1947.5)).toBe("1\u00a0947,50\u00a0€");
-    expect(formatStock(1200, "KI")).toBe("1\u00a0200 KI");
+    expect(formatStock(1200, "KI")).toBe("1\u00a0200 cases");
     expect(formatDateTime("2026-11-14T10:30:00+02:00")).toBe("Sat 14.11., 10:30");
 
     await userEvent.click(section.getByRole("radio", { name: "Nov 14" }));

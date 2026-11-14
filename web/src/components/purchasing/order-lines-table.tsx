@@ -9,6 +9,7 @@ import {
   isLater,
   isPassed,
   isStockUnconfirmed,
+  peopleUnit,
 } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { ProductThumb } from "./product-thumb";
@@ -29,14 +30,14 @@ function lineFacts(line: OrderLine, now: Date) {
       product.baseUnitsPerSalesUnit == null
         ? null
         : formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit),
-    salesUnit: product.salesUnit,
-    quantity: `${formatNumber(line.quantity)} ${product.salesUnit}`,
+    salesUnit: peopleUnit(product.salesUnit, 1),
+    quantity: `${formatNumber(line.quantity)} ${peopleUnit(product.salesUnit, line.quantity)}`,
     lineTotal: line.lineTotal,
     unitPrice: formatEur(offer.priceExVat),
     comparison:
       offer.comparisonPrice == null || offer.comparisonUnit == null
         ? "unknown"
-        : `${formatEur(offer.comparisonPrice)} / ${offer.comparisonUnit}`,
+        : `${formatEur(offer.comparisonPrice)} / ${peopleUnit(offer.comparisonUnit, 1)}`,
     stock: formatOfferStock(offer),
     stockUnknown: isStockUnconfirmed(offer),
     available: formatDate(offer.availableDate),

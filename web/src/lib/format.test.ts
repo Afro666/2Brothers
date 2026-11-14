@@ -6,7 +6,7 @@ import { compareUrgency } from "@/components/purchasing/urgency-badge";
 
 import { updateLanguage } from "@/lib/i18n";
 
-import { formatAmount, formatEur, formatNumber, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
+import { formatAmount, formatEur, formatNumber, formatPack, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
 
 describe("stock sentinels", () => {
   it("treats both Valio sentinels and a missing value as unknown", () => {
@@ -20,7 +20,7 @@ describe("stock sentinels", () => {
   it("never prints the sentinel", () => {
     expect(formatStock(999999, "KI")).toBe("unknown");
     expect(formatStock(9999999999, "ST")).toBe("unknown");
-    expect(formatStock(51, "ST")).toBe("51 ST");
+    expect(formatStock(51, "ST")).toBe("51 pieces");
   });
 });
 
@@ -76,8 +76,25 @@ describe("amounts for people", () => {
   });
 
   it("gives whole pieces for counted units", () => {
-    expect(formatQuantity(87.341, "PCS")).toBe("87 pcs");
+    expect(formatQuantity(87.341, "PCS")).toBe("87 pieces");
     expect(formatQuantity("12.6", "BAG")).toBe("13 BAG");
+  });
+
+  it("uses plain unit words and the singular only for exactly one", () => {
+    expect(formatQuantity(1, "ST")).toBe("1 piece");
+    expect(formatQuantity(2, "ST")).toBe("2 pieces");
+    expect(formatQuantity(1, "PCS")).toBe("1 piece");
+    expect(formatQuantity(1, "KI")).toBe("1 case");
+    expect(formatQuantity(2, "KI")).toBe("2 cases");
+    expect(formatQuantity(1, "BOT")).toBe("1 bottle");
+    expect(formatQuantity(2, "PRK")).toBe("2 packs");
+    expect(formatQuantity(2, "NEW_UNIT")).toBe("2 NEW_UNIT");
+  });
+
+  it("writes pack contents as a sentence with the numbers unchanged", () => {
+    expect(formatPack("KI", 12, "KG")).toBe("1 case = 12 kg");
+    expect(formatPack("BOT", 0.75, "L")).toBe("1 bottle = 0.75 l");
+    expect(formatPack("PRK", 1, "ST")).toBe("1 pack = 1 piece");
   });
 
   it("keeps a text that is not a number as it is", () => {
@@ -85,7 +102,8 @@ describe("amounts for people", () => {
   });
 
   it("rounds a shortfall up, never down", () => {
-    expect(formatShortfall(1921.159, "PCS")).toBe("1,922 pcs");
+    expect(formatShortfall(1921.159, "PCS")).toBe("1,922 pieces");
+    expect(formatShortfall(0.1, "KI")).toBe("1 case");
     expect(formatShortfall(41.41, "KG")).toBe("41.5 kg");
     expect(formatShortfall(41.4, "KG")).toBe("41.4 kg");
   });
@@ -103,6 +121,10 @@ describe("number format follows the language until the person picks one", () => 
     updateLanguage("fi", false);
     expect(formatEur(2099.41)).toBe("2\u00a0099,41\u00a0€");
     expect(formatNumber(2099.41)).toBe("2\u00a0099,41");
+    expect(formatStock(1200, "KI")).toBe("1\u00a0200 laatikkoa");
+    expect(formatQuantity(1, "KI")).toBe("1 laatikko");
+    expect(formatQuantity(2, "BOT")).toBe("2 pulloa");
+    expect(formatPack("PRK", 2, "ST")).toBe("1 pakkaus = 2 kpl");
   });
 
   it("keeps a choice the person made", () => {

@@ -1,7 +1,8 @@
 import { ArrowDown, ExternalLink, ShieldAlert } from "lucide-react";
 
 import { ProductThumb } from "@/components/purchasing/product-thumb";
-import { formatDate, formatEur, formatNumber } from "@/lib/format";
+import { recallLots, recallSentence } from "@/components/purchasing/recall-panel";
+import { formatDate, formatEur, formatNumber, peopleUnit } from "@/lib/format";
 import { translate, useT, type TranslationVariables } from "@/lib/i18n";
 import { TONE_CLASSES } from "@/lib/tone";
 import { cn } from "@/lib/utils";
@@ -98,7 +99,7 @@ function RecallLine({ alert }: { alert: RecallAlert }) {
           <dd>{recall.date ? `${formatDate(recall.date)} ${recall.date.slice(0, 4)}` : t("unknown")}</dd>
           <dt className="text-muted-foreground">{t("Lot")}</dt>
           <dd className="break-words">
-            {recall.lot ?? <span className="text-warning">{t("not stated: every pack is in doubt")}</span>}
+            {recall.lot ? recallLots(recall.lot, t) : <span className="text-warning">{t("not stated: every pack is in doubt")}</span>}
           </dd>
           {recall.recalledProduct ? (
             <>
@@ -111,7 +112,7 @@ function RecallLine({ alert }: { alert: RecallAlert }) {
           ) : null}
         </dl>
         <p className="text-foreground">{t(MATCH_TEXT[alert.match])}</p>
-        <p className="text-foreground">{alert.nextStep}</p>
+        <p className="text-foreground">{recallSentence(alert.nextStep, t)}</p>
         {alert.status === "dismissed" ? (
           <p className="text-foreground">
             {t("Dismissed by {name}: {reason}", {
@@ -183,7 +184,7 @@ function Replacement({ alert }: { alert: RecallAlert }) {
           <li key={line.productId} className="flex items-center gap-2">
             <ProductThumb en={line.productName} size="sm" />
             <span className="min-w-0 break-words">
-              {formatNumber(line.quantity)} {line.unit} · {line.productName ?? t("Product name unknown")}{" "}
+              {formatNumber(line.quantity)} {peopleUnit(line.unit, line.quantity)} · {line.productName ?? t("Product name unknown")}{" "}
               <span className="text-muted-foreground">({line.productId})</span>
             </span>
           </li>

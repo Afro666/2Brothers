@@ -46,6 +46,13 @@ const RECALL_PATTERNS: [RegExp, string, string | null][] = [
 
 export const RECALL_SENTENCES = RECALL_PATTERNS.map(([, template]) => template);
 
+export function recallLots(lots: string, t: (text: string, vars?: TranslationVariables) => string): string {
+  const conjunction = lots.lastIndexOf(" ja ");
+  return conjunction < 0
+    ? lots
+    : t("{items} and {last}", { items: lots.slice(0, conjunction), last: lots.slice(conjunction + 4) });
+}
+
 /**
  * The sentences the recall monitor sends for `where` and `next_step` (monitor/recalls.py),
  * through the dictionary. The lists of names, dates and lots inside stay as sent, and a
@@ -54,7 +61,10 @@ export const RECALL_SENTENCES = RECALL_PATTERNS.map(([, template]) => template);
 export function recallSentence(text: string, t: (text: string, vars?: TranslationVariables) => string): string {
   for (const [pattern, template, name] of RECALL_PATTERNS) {
     const match = pattern.exec(text);
-    if (match) return t(template, match[1] == null || name == null ? undefined : { [name]: match[1] });
+    if (match) {
+      const value = match[1];
+      return t(template, value == null || name == null ? undefined : { [name]: name === "lots" ? recallLots(value, t) : value });
+    }
   }
   return text;
 }

@@ -85,7 +85,28 @@ export const CODE_LABELS: Record<string, CodeLabel> = {
     title: "Blocked by a recall",
     detail: "A product on this order matches a food recall. It cannot be approved.",
   },
+  proposal_explanation_failed: {
+    title: "Proposal explanation failed",
+    detail: "The Buyer could not explain this proposal. Check the order details before approving.",
+  },
+  kitchen_brief_read: {
+    title: "Kitchen brief read",
+    detail: "The Buyer read the kitchen's instructions and ordering rules.",
+  },
+  delivery_note_read: {
+    title: "Delivery note read",
+    detail: "The delivery note was read and compared with the order.",
+  },
+  EXPLANATION_UNAVAILABLE: {
+    title: "Explanation unavailable",
+    detail: "The Buyer could not explain this proposal. Check the order details before approving.",
+  },
 };
+
+/** #1591: a code a log step still sends raw ("kitchen_brief_read") as its plain title; other text as it is. */
+export function plainCode(text: string, t: (text: string) => string): string {
+  return Object.hasOwn(CODE_LABELS, text) ? t(CODE_LABELS[text].title) : text;
+}
 
 const CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
 

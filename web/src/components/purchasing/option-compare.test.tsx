@@ -6,7 +6,7 @@ import { createMockApi } from "@/api/mock";
 import { ApiError } from "@/api/types";
 import { ApprovalCard } from "@/components/purchasing/approval-card";
 import { CHOOSE_TIMEOUT_MS, OptionCompare } from "@/components/purchasing/option-compare";
-import { formatEur, formatNumber } from "@/lib/format";
+import { formatEur, formatNumber, peopleUnit } from "@/lib/format";
 import { confirmedDemoApproval, confirmedDemoOrder, milkOptions } from "@/mocks/milk-case";
 import { renderApp } from "@/test/render";
 import type { ProposalOption } from "@/types";
@@ -106,7 +106,7 @@ describe("OptionCompare", () => {
     expect(screen.getByRole("heading", { name: /^Option B:/ })).toBeVisible();
     expect(
       within(optionToggle("B")).getByText(
-        line.unitPrice == null ? "unknown" : `${formatEur(line.unitPrice)} per ${line.unit}`,
+        line.unitPrice == null ? "unknown" : `${formatEur(line.unitPrice)} per ${peopleUnit(line.unit, 1)}`,
       ),
     ).toBeVisible();
     expect(within(row("B")).getByText("The order cut-off has passed.")).toBeVisible();
@@ -116,8 +116,8 @@ describe("OptionCompare", () => {
   it("names the option heading and toggle by the title only, with price and blocked reason as description", () => {
     render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
     const line = optionB.lines[0];
-    const title = `Option B: ${formatNumber(line.quantity)} ${line.unit} ${line.productName ?? line.productId}`;
-    const price = line.unitPrice == null ? "unknown" : `${formatEur(line.unitPrice)} per ${line.unit}`;
+    const title = `Option B: ${formatNumber(line.quantity)} ${peopleUnit(line.unit, line.quantity)} ${line.productName ?? line.productId}`;
+    const price = line.unitPrice == null ? "unknown" : `${formatEur(line.unitPrice)} per ${peopleUnit(line.unit, 1)}`;
     expect(screen.getByRole("heading", { name: title })).toBeVisible();
     expect(optionToggle("B")).toHaveAccessibleName(title);
     expect(optionToggle("B")).toHaveAccessibleDescription(new RegExp(`${price}.*The order cut-off has passed\\.`));
@@ -260,7 +260,7 @@ describe("OptionCompare", () => {
     render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
     await user.click(optionToggle("B"));
     await user.click(optionToggle("C"));
-    expect(fact("A", "Price ex VAT")).toHaveTextContent("€2.57 per L");
+    expect(fact("A", "Price ex VAT")).toHaveTextContent("€2.57 per l");
     expect(fact("A", "Total")).toHaveTextContent("€148.76 incl VAT");
     expect(fact("A", "Delivery reliability")).toHaveTextContent("97 %");
     expect(fact("B", "Labels")).toHaveTextContent("Organic (EU)");
@@ -269,7 +269,7 @@ describe("OptionCompare", () => {
     expect(within(row("C")).getByText(optionC.tradeOff)).toBeVisible();
     expect(within(row("A")).getByText("Part now, the rest later")).toBeVisible();
     expect(within(row("A")).getByText("Recommended by the Buyer")).toBeVisible();
-    const held = within(row("A")).getByText("949 L waits for stock confirmation");
+    const held = within(row("A")).getByText("949 l waits for stock confirmation");
     expect(held).toBeVisible();
     expect(held).toHaveClass("hatch", "text-warning");
     expect(within(row("C")).queryByText("Recommended by the Buyer")).toBeNull();
@@ -509,7 +509,7 @@ describe("Approvals page: the milk options", () => {
     renderApp("/approvals", api);
 
     await user.click(await screen.findByRole("button", { name: "Inspect (3 options)" }));
-    expect(await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: /^Option A: 51 l Arla 1 L/ })).toBeVisible();
     await user.click(optionToggle("B"));
     await user.click(optionToggle("C"));
     expect(fact("A", "Stock")).toHaveTextContent(/^confirmed$/);
@@ -557,7 +557,7 @@ describe("Approvals page: the milk options", () => {
     renderApp("/approvals", api);
 
     await user.click(await screen.findByRole("button", { name: "Inspect (3 options)" }));
-    await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ });
+    await screen.findByRole("heading", { name: /^Option A: 51 l Arla 1 L/ });
     await user.click(optionToggle("C"));
     const choose = await screen.findByRole("button", { name: /^Choose option C/ });
     const initialLoads = listSpy.mock.calls.length;
@@ -565,7 +565,7 @@ describe("Approvals page: the milk options", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Stock is not confirmed for this option");
     await waitFor(() => expect(listSpy.mock.calls.length).toBeGreaterThan(initialLoads));
-    expect(screen.getByRole("heading", { name: /^Option A: 51 L Arla 1 L/ })).toBeVisible();
+    expect(screen.getByRole("heading", { name: /^Option A: 51 l Arla 1 L/ })).toBeVisible();
     expect(within(row("A")).getByText("Proposed now")).toBeVisible();
     expect(screen.queryByRole("dialog")).toBeNull();
   });

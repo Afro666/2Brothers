@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import { mapKitchenSettings } from "@/api/map-planning";
+import { EU_ALLERGENS } from "@/lib/allergens";
 import { renderApp } from "@/test/render";
 
 describe("Ordering engine settings", () => {
@@ -18,9 +19,9 @@ describe("Ordering engine settings", () => {
     expect(screen.getByLabelText("C — Nice to have")).toHaveValue(90);
     expect(screen.getByLabelText("Maximum scaling factor")).toHaveValue(1.8);
     expect(screen.getByLabelText("Per order (ex VAT, €)")).toHaveValue(1500);
-    expect(screen.getByRole("checkbox", { name: "AP Peanuts" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "AN Tree nuts" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "AS Sesame" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Peanuts (AP)" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Tree nuts (AN)" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Sesame (AS)" })).toBeChecked();
     expect(screen.getByRole("button", { name: "Save settings" })).toBeDisabled();
   });
 
@@ -65,6 +66,15 @@ describe("Ordering engine settings", () => {
     const sent = save.mock.calls[0][0].engineDefaults;
     expect(sent).toContain("serviceLevelPercent.C");
     expect(sent).not.toContain("serviceLevelPercent.B");
+  });
+
+  it("lists allergens by name in the same order as Kitchen settings", async () => {
+    renderApp("/settings/engine", createMockApi());
+
+    await screen.findByRole("checkbox", { name: "Peanuts (AP)" });
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes).toHaveLength(EU_ALLERGENS.length);
+    EU_ALLERGENS.forEach(({ code, name }, index) => expect(boxes[index]).toHaveAccessibleName(`${name} (${code})`));
   });
 
   it("saves a service level and writes an audit event", async () => {

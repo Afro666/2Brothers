@@ -147,8 +147,21 @@ describe("HomePage", () => {
     renderApp(`/?now=${DEMO_NOW}`, api);
 
     expect(await screen.findByText("Bread rolls")).toBeInTheDocument();
-    expect(screen.getByText("Bread rolls").closest("li")).toHaveTextContent("short by 1,922 pcs");
+    expect(screen.getByText("Bread rolls").closest("li")).toHaveTextContent("short by 1,922 pieces");
     expect(screen.getByText("Potatoes").closest("li")).toHaveTextContent("short by 41.5 kg");
+  });
+
+  it("uses plain words for raw audit step codes in Latest steps", async () => {
+    const api = createMockApi();
+    api.listAudit = async () => [
+      { id: "step-1", at: "2026-11-14T10:00:00Z", kind: "other", actor: "agent", summary: "kitchen_brief_read", reason: "" },
+      { id: "step-2", at: "2026-11-14T10:01:00Z", kind: "other", actor: "agent", summary: "proposal_explanation_failed", reason: "" },
+    ];
+    renderApp(`/?now=${DEMO_NOW}`, api);
+
+    expect(await screen.findByText("Kitchen brief read")).toBeInTheDocument();
+    expect(screen.getByText("Proposal explanation failed")).toBeInTheDocument();
+    expect(screen.queryByText(/kitchen_brief_read|proposal_explanation_failed/)).not.toBeInTheDocument();
   });
 });
 

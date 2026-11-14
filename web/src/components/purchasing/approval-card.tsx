@@ -30,6 +30,7 @@ import {
   formatStock,
   formatTime,
   isStockUnconfirmed,
+  peopleUnit,
 } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { splitChecks, statusChips } from "@/lib/proposal-checks";
@@ -919,7 +920,7 @@ function AddableRow({
             {item.product.id} · {t("{amount} ex VAT", { amount: t(formatEur(item.offer.priceExVat)) })} ·{" "}
             {t("Stock on hand")}{" "}
             {item.onHand == null ? t("not counted") : t(formatStock(item.onHand, item.product.salesUnit))} · {t("On order")}{" "}
-            {item.onOrder == null ? t("unknown") : `${formatNumber(item.onOrder)} ${item.product.salesUnit}`}
+            {item.onOrder == null ? t("unknown") : `${formatNumber(item.onOrder)} ${peopleUnit(item.product.salesUnit, item.onOrder)}`}
           </div>
           <p className="text-xs text-muted-foreground">{item.why}</p>
         </div>
@@ -934,7 +935,7 @@ function AddableRow({
         <label className="sr-only" htmlFor={id}>
           {t("Quantity for {product} ({unit})", {
             product: item.product.names.en,
-            unit: item.product.salesUnit,
+            unit: peopleUnit(item.product.salesUnit, Number(quantity)),
           })}
         </label>
         <Input
@@ -947,7 +948,7 @@ function AddableRow({
           onChange={(event) => setQuantity(event.target.value)}
           className="h-8 w-[4.5rem] px-2 text-right font-mono tabular-nums"
         />
-        <span className="font-mono text-xs text-muted-foreground">{item.product.salesUnit}</span>
+        <span className="max-w-16 text-xs leading-4 text-muted-foreground">{peopleUnit(item.product.salesUnit, Number(quantity))}</span>
         <Button
           type="submit"
           size="sm"

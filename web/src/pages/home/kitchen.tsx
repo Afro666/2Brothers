@@ -11,6 +11,7 @@ import { DecisionStrip } from "@/components/purchasing/decision-strip";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
+import { plainCode } from "@/lib/codes";
 import { nextCutoff } from "@/pages/home/cutoff";
 import { HOME_STOCK_ROWS, stockToCheck } from "@/pages/home/stock-rows";
 import { Tile, TileState } from "@/pages/home/tile";
@@ -200,7 +201,7 @@ export function AuditTile({ api }: { api: Api }) {
                   <time className="font-mono text-xs text-muted-foreground" dateTime={event.at ?? undefined}>
                     {formatDateTime(event.at)}
                   </time>
-                  <p>{event.summary}</p>
+                  <p>{plainCode(event.summary, t)}</p>
                 </li>
               ))}
           </ul>

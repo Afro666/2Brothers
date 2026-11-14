@@ -16,7 +16,7 @@ describe("RecallLines", () => {
     expect(within(section).getByText("Blocked by recall")).toBeInTheDocument();
     expect(within(section).getByText("Suodatinkahvissa vierasesineriski")).toBeInTheDocument();
     expect(within(section).getByText("Fri 6 Mar 2026")).toBeInTheDocument();
-    expect(within(section).getByText("23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027")).toBeInTheDocument();
+    expect(within(section).getByText("23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 and 5.9.2027")).toBeInTheDocument();
     expect(within(section).getByRole("link", { name: /Open the notice \(www\.ruokavirasto\.fi\)/ })).toHaveAttribute(
       "href",
       alert.recall.url,

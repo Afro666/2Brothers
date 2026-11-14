@@ -148,7 +148,7 @@ export function DataPrivacySection() {
                 const name = state.data.suppliers.find((row) => row.id === consent.supplierId)?.name ?? t("unknown supplier");
                 return <li key={consent.supplierId} className="flex items-start gap-3 py-4 first:pt-0 last:pb-0">
                   <Checkbox id={`sharing-${consent.supplierId}`} className="mt-0.5" checked={consent.shared} disabled={!canEdit || busySupplier !== null} onCheckedChange={(checked) => void changeSharing(consent.supplierId, checked === true)} />
-                  <div><Label htmlFor={`sharing-${consent.supplierId}`}>{t("Share forecast with {supplier}", { supplier: name })}</Label><p className="mt-1 text-sm text-muted-foreground">{consent.shared ? t("Sharing is on.") : t("Sharing is off.")} {t("Supplier ID:")} <span className="font-mono">{consent.supplierId}</span></p></div>
+                  <div><Label htmlFor={`sharing-${consent.supplierId}`}>{t("Share forecast with {supplier}", { supplier: name })}</Label><p className="mt-1 text-sm text-muted-foreground">{consent.shared ? t("Sharing is on.") : t("Sharing is off.")}</p></div>
                 </li>;
               })}
             </ul>

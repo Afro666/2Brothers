@@ -21,7 +21,7 @@ describe("recall sentences", () => {
     expect(recallSentence("on the stock list: amount not counted", fi)).toBe("Varastolistalla: määrää ei ole laskettu");
   });
 
-  it("translates the next step and keeps the lot list as sent", () => {
+  it("translates the next step and localizes the final lot conjunction", () => {
     expect(
       recallSentence(
         "Do not use it until checked. Check your packs: only 23.8.2027, 24.8.2027 ja 5.9.2027 are recalled.",
@@ -34,6 +34,12 @@ describe("recall sentences", () => {
     expect(recallSentence("A person checks whether this notice is about your product.", fi)).toBe(
       "Ihminen tarkistaa, koskeeko ilmoitus tuotettasi.",
     );
+    expect(
+      recallSentence(
+        "Do not use it until checked. Check your packs: only 1.9.2027 ja 5.9.2027 are recalled.",
+        (text, vars) => translate("en", text, vars),
+      ),
+    ).toBe("Do not use it until checked. Check your packs: only 1.9.2027 and 5.9.2027 are recalled.");
   });
 
   it("shows an unknown shape as sent, in both languages", () => {
@@ -53,7 +59,7 @@ describe("RecallPanel in Finnish", () => {
     localStorage.clear();
   });
 
-  it("shows the where lines and the next step in Finnish, and English as sent in English", () => {
+  it("shows the where lines and the next step in Finnish, and translates the date conjunction in English", () => {
     const unheld = { ...alert, orderId: null, replacement: null };
     const { unmount } = render(<LanguageProvider><RecallPanel status={{ kind: "ready", affecting: 0, lastCheck: null, unheld: [unheld] }} /></LanguageProvider>);
     expect(
@@ -66,7 +72,7 @@ describe("RecallPanel in Finnish", () => {
     expect(screen.getByText("In stock: 5.673 KG")).toBeInTheDocument();
     expect(screen.getByText("In recipes: breakfast_buffet")).toBeInTheDocument();
     expect(
-      screen.getByText("Do not use it until checked. Check your packs: only 23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027 are recalled."),
+      screen.getByText("Do not use it until checked. Check your packs: only 23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 and 5.9.2027 are recalled."),
     ).toBeInTheDocument();
   });
 
@@ -145,7 +151,7 @@ describe("RecallPanel, folded and unfolded", () => {
     expect(within(item).getByText("In recipes: breakfast_buffet")).toBeVisible();
     expect(within(item).getByText("No open order holds it. New orders leave it out.")).toBeVisible();
     expect(
-      within(item).getByText("Do not use it until checked. Check your packs: only 23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 ja 5.9.2027 are recalled."),
+      within(item).getByText("Do not use it until checked. Check your packs: only 23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 and 5.9.2027 are recalled."),
     ).toBeVisible();
     expect(within(box).getByText(/Powered by Context\.dev/)).toHaveTextContent("Powered by Context.dev /v1/web/scrape");
 
