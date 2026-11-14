@@ -8,6 +8,7 @@ import { LoadingState } from "@/components/purchasing/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 export function Tile({
   title,
@@ -29,20 +30,20 @@ export function Tile({
   footer?: ReactNode;
 }) {
   return (
-    <Card className={emphasis ? "docket md:col-span-2" : undefined}>
+    <Card className={cn("flex h-full flex-col", emphasis && "docket md:col-span-2")}>
       <CardHeader className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <CardTitle className="label-caps leading-4">{title}</CardTitle>
         {mark}
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-1 flex-col gap-4">
         {children}
         {footer ? <div className="border-t border-dashed border-input pt-4">{footer}</div> : null}
         <Link
           to={href}
           className={
             emphasis
-              ? buttonVariants({ className: "w-full sm:w-auto" })
-              : "inline-flex min-h-11 items-center gap-1 text-sm font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
+              ? buttonVariants({ className: "mt-auto w-full self-start sm:w-auto" })
+              : "mt-auto inline-flex min-h-11 items-center gap-1 self-start text-sm font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
           }
         >
           {linkLabel}

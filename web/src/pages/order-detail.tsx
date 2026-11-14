@@ -124,12 +124,12 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
         <TabsTrigger value="history">{t("History")}</TabsTrigger>
       </TabsList>
       <TabsContent value="lines">
-        <Card className="docket mx-auto w-full max-w-[34rem] gap-0 py-0">
+        <Card className="docket mx-auto w-full max-w-[34rem] gap-0 py-0 lg:mx-0">
           <div className="space-y-5 p-4 sm:p-6">
             <header className="space-y-2">
               <p className="label-caps">{t("Kitchen Buyer")}</p>
               {suppliers.length > 0 ? <p className="text-sm text-muted-foreground">{suppliers.join(" · ")}</p> : null}
-              <h2 className="text-[19px] leading-[25px] font-[650] [overflow-wrap:anywhere]">{title}</h2>
+              <h2 className="sr-only">{title}</h2>
               <p className="text-sm">
                 <span className="label-caps mr-2">{t("Delivery")}</span>
                 {order.withoutProposal && order.deliveryDate === null ? t("not recorded") : t(formatDate(order.deliveryDate))}
@@ -180,7 +180,7 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
               ) : null}
               <div className="flex items-baseline justify-between gap-4 border-t border-dashed border-input pt-3 text-base font-semibold">
                 <dt>{t("Total incl VAT")}</dt>
-                <dd className="text-right font-mono text-lg tabular-nums">
+                <dd className="ml-auto border-b-[3px] border-double border-foreground text-right font-mono text-xl font-bold tabular-nums">
                   {/* docs/contract.md: with a VAT unknown, `expected_total` is not a total incl VAT. */}
                   {order.withoutProposal && order.vat === null && order.inclVat === undefined
                     ? t("unknown")
@@ -196,7 +196,7 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
         </Card>
       </TabsContent>
       <TabsContent value="history">
-        <div className="mx-auto w-full max-w-[34rem]">
+        <div className="mx-auto w-full max-w-[34rem] lg:mx-0">
           <OrderHistory orderId={order.id} />
         </div>
       </TabsContent>
