@@ -2,6 +2,7 @@ import type { Api, AuditActor, AuditChainRow, ProductTemperature } from "@/api/t
 import { ApiError } from "@/api/types";
 import { GENESIS, KITCHEN_ID, mapChainCheck, rowHash, verifyRows } from "@/api/audit-chain";
 import { nameProducts } from "@/api/map";
+import { permissionsMock } from "@/api/mock-permissions";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
@@ -172,6 +173,7 @@ export function createMockApi(): MockApi {
     ...createPlanningMock(recordAudit),
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),
+    ...permissionsMock,
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
     },
