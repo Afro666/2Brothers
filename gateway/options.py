@@ -63,10 +63,8 @@ def _catalog_quote(gw, kitchen_id: str, request: dict) -> dict | None:
         query = parse_request(text, gw.now().date()).query
     except ParseError:
         return None
-    search = gw._search
-    if search is None:
-        from store.search import search_products as search
-    rows = search(gw.db, query, {}, SEARCH_LIMIT, kitchen_id=kitchen_id)
+    from gateway import catalog_search
+    rows, _ = catalog_search.search(gw.db, query, {}, SEARCH_LIMIT, kitchen_id, injected=gw._search)
     ids = list(dict.fromkeys([*request["product_ids"], *pick_candidates(rows, request["unit"])]))
     if set(ids) == set(request["product_ids"]):
         return None      # the catalog adds nothing to the basket already quoted

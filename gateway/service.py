@@ -390,11 +390,10 @@ class Gateway:
             parsed = parse_request(body["text"], self.now().date())
         except ParseError as exc:
             raise GatewayError(422, "CANNOT_READ_REQUEST", str(exc)) from None
-        search = self._search
-        if search is None:
-            from store.search import search_products as search
+        from gateway import catalog_search
         from gateway.candidates import SEARCH_LIMIT, pick_candidates
-        rows = search(self.db, parsed.query, {}, SEARCH_LIMIT, kitchen_id=kitchen_id)
+        rows, _ = catalog_search.search(self.db, parsed.query, {}, SEARCH_LIMIT, kitchen_id,
+                                        injected=self._search)
         # Keep the hits that can answer the request: the text search alone ranks chocolate
         # and bread mix above the milk for "lactose free milk".
         ids = pick_candidates(rows, parsed.as_need().get("unit") or "")
@@ -774,15 +773,15 @@ class Gateway:
         Buyer can order from: only products sold in the need's measure (a request in litres
         never gets chocolate), and products that can still arrive on the requested date
         first. One availability call for the shortlist only, never for the whole catalog."""
-        search = self._search
-        if search is None:
-            from store.search import search_products as search
+        from gateway import catalog_search
         need = self.db.needs.find_one({"_id": need_id, "kitchen_id": kitchen_id}) if need_id else None
         if need_id and need is None:
             raise GatewayError(422, "INVALID_NEED", "unknown need_id")
         if need is None:
-            return {"products": search(self.db, query, filters, limit)}
-        rows = search(self.db, query, filters, 50)
+            rows, kind = catalog_search.search(self.db, query, filters, limit, injected=self._search)
+            return {"products": rows, "search": kind}
+        # Text search, or text plus meaning when SEARCH_HYBRID is on (gateway/catalog_search.py).
+        rows, kind = catalog_search.search(self.db, query, filters, 50, injected=self._search)
         measure = need["unit"]
         same = [r for r in rows if (r.get("net_content") or {}).get("unit") == measure]
         filtered = bool(same) and measure in ("L", "KG")
@@ -809,7 +808,7 @@ class Gateway:
             r["can_arrive"] = arrival.get(r["product_id"])
         rows.sort(key=lambda r: 0 if r["can_arrive"] else (1 if r["can_arrive"] is None else 2))
         return {"products": rows[:limit], "requested_date": need["requested_date"],
-                "measure": measure if filtered else None,
+                "measure": measure if filtered else None, "search": kind,
                 "note": "can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
                         "prefer products with can_arrive true"}
 
