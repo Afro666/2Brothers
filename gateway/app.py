@@ -21,6 +21,9 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from gateway.service import Gateway, GatewayError
+from gateway.request_docs import (CreateNeedRequest, GetOfferRequest, PlaceOrderRequest,
+                                  RequestApprovalRequest, SearchProductsRequest,
+                                  SimulateOrderRequest, document_body)
 
 DEFAULT_KITCHEN = "demo-kitchen"
 
@@ -324,7 +327,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need('kitchen:read', kitchen_id)
         return gw().dismiss_recall(kitchen_id, event_id, await body(request), human=who.human)
 
-    @app.post(k + "/needs")
+    @app.post(k + "/needs", openapi_extra=document_body(CreateNeedRequest))
     async def create_need(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose", kitchen_id)
         return gw().create_need(kitchen_id, await body(request), who.name)
@@ -510,7 +513,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
             return who.kitchen_id
         return os.environ.get("GATEWAY_KITCHEN_ID", DEFAULT_KITCHEN)
 
-    @app.post("/tools/search_products")
+    @app.post("/tools/search_products", openapi_extra=document_body(SearchProductsRequest))
     async def search(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:read")
         data = await body(request)
@@ -522,22 +525,22 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
             raise GatewayError(422, "INVALID_REQUEST", "need_id must be a string")
         return gw().tool_search(kitchen(who), data.get("query") or "", data.get("filters") or {}, limit, need_id)
 
-    @app.post("/tools/get_offer")
+    @app.post("/tools/get_offer", openapi_extra=document_body(GetOfferRequest))
     async def get_offer(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose")
         return gw().tool_get_offer(kitchen(who), await body(request))
 
-    @app.post("/tools/simulate_order")
+    @app.post("/tools/simulate_order", openapi_extra=document_body(SimulateOrderRequest))
     async def simulate(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose")
         return gw().tool_simulate(kitchen(who), await body(request))
 
-    @app.post("/tools/request_approval")
+    @app.post("/tools/request_approval", openapi_extra=document_body(RequestApprovalRequest))
     async def request_approval(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose")
         return gw().tool_request_approval(kitchen(who), await body(request), who.name)
 
-    @app.post("/tools/place_order")
+    @app.post("/tools/place_order", openapi_extra=document_body(PlaceOrderRequest))
     async def place_order(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose")
         return gw().tool_place_order(kitchen(who), await body(request))
