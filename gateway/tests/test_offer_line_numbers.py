@@ -36,3 +36,10 @@ def test_approved_order_lines_answer_numbers_too(env):
     order = client.get(f"{K}/orders/{r.json()['order_id']}", headers=AGENT).json()
     assert order["lines"][0]["reliability"] == 1 and order["lines"][0]["carbon_kg_co2e_per_kg"] == 1.1
     assert not any(isinstance(v, float) for ln in db.orders.find_one({})["lines"] for v in ln.values())
+
+
+def test_short_order_with_an_alternative_and_a_partial_fill_is_stored(env):
+    client, _, db = env
+    db.products.update_many({}, {"$set": {"reliability": 0.9, "carbon_kg_co2e_per_kg": 1.1}})
+    p = milk(client, quantity="1000")
+    assert p["lines"] and all(ln["reliability"] == 0.9 for ln in p["lines"])
