@@ -3,7 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/api/types";
 import { gatewayRequest } from "@/api/http";
+import { createMockApi } from "@/api/mock";
 import { dropKeptAnswers, isUnreachable, useAsync } from "@/lib/use-async";
+import { confirmedDemoApproval } from "@/mocks/milk-case";
+
+const MOCK_DECISION = {
+  approvalId: confirmedDemoApproval.id,
+  approvalRef: confirmedDemoApproval.approvalRef,
+  expectedTotalExVat: confirmedDemoApproval.totalExVat,
+  expectedTotalInclVat: confirmedDemoApproval.totalInclVat,
+};
 
 describe("useAsync", () => {
   it("keeps the ready data while reloading, then shows the new data", async () => {
@@ -172,6 +181,24 @@ describe("useAsync", () => {
       await gatewayRequest("/api", "/v1/kitchens/demo-kitchen/proposals", { method: "POST", body: "{}" });
 
       const second = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "list" }));
+      expect(second.result.current.status).toBe("loading");
+    });
+
+    it("forgets every kept answer after a write to the mock api, and keeps them after a mock read", async () => {
+      const api = createMockApi();
+      const first = renderHook(() => useAsync(() => api.listOrders(), [], { keep: "orders" }));
+      await waitFor(() => expect(first.result.current.status).toBe("ready"));
+      first.unmount();
+
+      await api.listApprovals();
+      const never = () => new Promise<never>(() => {});
+      const kept = renderHook(() => useAsync(never, [], { keep: "orders" }));
+      expect(kept.result.current.status).toBe("ready");
+      kept.unmount();
+
+      await api.approve(MOCK_DECISION, "human");
+
+      const second = renderHook(() => useAsync(never, [], { keep: "orders" }));
       expect(second.result.current.status).toBe("loading");
     });
 
