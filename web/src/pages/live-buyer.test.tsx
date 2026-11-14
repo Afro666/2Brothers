@@ -50,6 +50,8 @@ async function fill() {
   const user = userEvent.setup();
   renderApp("/requests");
   await user.type(await screen.findByLabelText("What do you need?"), "51 L milk by Monday");
+  // The field starts with tomorrow's date: the test sets its own day.
+  await user.clear(screen.getByLabelText("Needed by"));
   await user.type(screen.getByLabelText("Needed by"), "2026-11-16");
   await user.click(screen.getByRole("button", { name: "Ask the agent" }));
   return user;
@@ -106,6 +108,21 @@ describe("live Buyer request page", () => {
     expect(await screen.findByRole("alert")).toBeVisible();
     expect(screen.queryByText("Proposal ready for human review")).toBeNull();
     expect(screen.queryByText(/undefined/)).toBeNull();
+  });
+
+  it("sends the sponsor's example in one press: the day field starts with tomorrow", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify(ready)));
+    vi.stubGlobal("fetch", fetch);
+    const user = userEvent.setup();
+    renderApp("/requests");
+    await user.click(await screen.findByRole("button", { name: "1,000 L lactose-free milk by Monday" }));
+    await user.click(screen.getByRole("button", { name: "Ask the agent" }));
+    expect(await screen.findByText("Proposal ready for human review")).toBeVisible();
+    const [, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    const sent = JSON.parse(init.body as string);
+    expect(sent.text).toBe("1,000 L lactose-free milk by Monday");
+    expect(sent.requested_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(Date.parse(sent.requested_date)).toBeGreaterThan(Date.now() - 24 * 60 * 60 * 1000);
   });
 
   it("shows no Covers box, because the gateway takes the sentence and the date only", async () => {

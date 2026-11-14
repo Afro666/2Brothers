@@ -73,10 +73,27 @@ export const STATUS_META: Record<OrderStatus, StatusMeta> = {
   },
 };
 
+/** A placed order whose receipt says the supplier got nothing: "Placed" alone would read as sent. */
+const RECORDED_NOT_SENT = {
+  ...STATUS_META.PLACED,
+  label: "Approved and recorded, not sent to the supplier",
+  meaning:
+    "A person approved this order and the gateway recorded it with a signed receipt. Nothing has been sent to the supplier yet.",
+};
+
 /** Order state as a badge; the tooltip (hover or keyboard focus) says what it means. */
-export function StatusBadge({ status, className }: { status: OrderStatus; className?: string }) {
+export function StatusBadge({
+  status,
+  className,
+  notSent = false,
+}: {
+  status: OrderStatus;
+  className?: string;
+  /** The signed receipt says nothing went to the supplier: one label for both facts. */
+  notSent?: boolean;
+}) {
   const t = useT();
-  const meta = STATUS_META[status];
+  const meta = status === "PLACED" && notSent ? RECORDED_NOT_SENT : STATUS_META[status];
   const Icon = meta.icon;
   return (
     <Tooltip>

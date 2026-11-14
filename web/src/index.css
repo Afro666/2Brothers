@@ -190,6 +190,13 @@
     font-size: 1.75rem;
     line-height: 1;
   }
+  /* The headline figure of a docket: one number you can read from across the pass. */
+  .docket-figure {
+    font-family: var(--font-stamp);
+    font-stretch: 75%;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+  }
   .docket {
     position: relative;
     border-radius: 2px;
