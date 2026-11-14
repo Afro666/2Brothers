@@ -29,7 +29,7 @@ const allergenName = (code: string, t: Translate) => (NAMES[code] ? t(NAMES[code
 export function labelErrorText(problem: unknown, t: Translate): string {
   const code = problem instanceof ApiError ? problem.code : "";
   const status = problem instanceof ApiError ? problem.status : undefined;
-  // api/http.ts reports every 429 as RATE_LIMITED; LABEL_PHOTO_BUSY is the gateway's own code.
+  // api/http.ts keeps LABEL_PHOTO_BUSY; a plain 429 (RATE_LIMITED) also means: wait, then try again.
   if (code === "LABEL_PHOTO_BUSY" || code === "RATE_LIMITED") return t("Another label is being read. Wait for it, then try again.");
   if (code === "VISION_NOT_CONFIGURED" || code === "VISION_UNAVAILABLE" || code === "VISION_TIMEOUT") {
     return t("The model is not answering right now. Read the label yourself, or try again later.");
