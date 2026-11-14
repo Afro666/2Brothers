@@ -3492,6 +3492,17 @@ JSON number, not a decimal string:
 | `SUPPLIER_LATE` | Supplier; `value` is nonnegative `mean_days_late`. | `mean_days_late` equals `value`, `on_time_rate` in `0..1`, `deliveries` integer; `mean_lead_time` and `sigma_lead_time` in days, nonnegative when known (else null). |
 | `SUPPLIER_SHORT` | Supplier; `value` is `fill_rate` in `0..1`. | None required. |
 
+For `SUPPLIER_LATE`, `on_time_rate` counts eligible deliveries with
+`days_late <= 0` as on time. `mean_days_late` is the arithmetic mean of positive
+`days_late` values (late deliveries only), or 0 when known deliveries contain no
+late case; early deliveries never subtract from lateness. Thus five deliveries,
+three exactly one day late and two on time, give `on_time_rate:0.4` and
+`mean_days_late:1`. `mean_lead_time` and `sigma_lead_time` use all eligible known
+actual lead times (`delivery_date - ordered_at` in local calendar days), including
+early arrivals; impossible negative actual lead times are excluded, not clamped.
+Sigma is population standard deviation. `deliveries`/`evidence.rows` count distinct
+eligible orders per supplier, not photo checks or line items.
+
 `evidence.rows` is a nonnegative integer; `from`, `to`, `last` and `since` are ISO dates.
 An unknown rate is omitted together with its fact, not emitted as zero. Code computes facts from
 trusted feedback windows and outcomes. `CORRECTION_RATIO` requires at least three relevant
