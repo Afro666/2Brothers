@@ -2914,11 +2914,12 @@ The Valio catalog and its API have no product photo (`synkkaData.medias[]` holds
 only, no URL). Photos from the web are not copied: that is a copyright risk. So a
 product shows one of two pictures, and both are honest about what they are:
 
-1. **A kind icon.** The web maps the product's `category` code to a kind (milk,
-   cheese, bread, fish, cleaning ...) and shows that kind's icon. The map is
-   `web/src/lib/product-kinds.json`, made once from the catalog names by
-   `scripts/product_kinds.py` (run it again when the catalog changes). A category
-   that is not in the map gets a neutral package icon. This needs no route.
+1. **A kind icon.** `ProductThumb`
+   (`web/src/components/purchasing/product-thumb.tsx`) uses
+   `web/src/lib/product-picture.ts` to read the product's English and Finnish names
+   and choose a Lucide icon on a tile tinted for its kind. These are icons, not
+   emoji, and represent only the kind, never an actual pack photo. A name matching
+   no rule gets the plain `Package` icon. This needs no route.
 2. **The brand logo, when it is known.** `brand` on the product row (from
    `synkkaData.brand`) is looked up with Context.dev and the answer is kept in
    MongoDB (`brand_logos`, through `store/`). The logo replaces the icon.
