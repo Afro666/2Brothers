@@ -11,6 +11,7 @@ mongomock = pytest.importorskip("mongomock")
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
+from engine.offers import plan_request  # noqa: E402
 from gateway.app import create_app  # noqa: E402
 from gateway.service import Gateway, GatewayError  # noqa: E402
 from gateway.valio_client import ValioClient  # noqa: E402
@@ -426,6 +427,35 @@ def test_offer_lines_carry_delivery_date_and_cut_off(env):
     assert line["available_date"] == "2026-11-16"
     assert line["cutoff_passed"] is False
     assert line["closing_time"].startswith("2026-11-15T")
+
+
+def test_no_cut_off_from_valio_is_null_on_the_offer_line_never_false(env):
+    """#547: Valio gives no closingTime for a product: its delivery facts say null for both
+    closing_time and cutoff_passed, never a safe-looking False."""
+    from datetime import date
+    from decimal import Decimal
+
+    client, fake, db = env
+    for product in fake.avail_data["products"]:
+        if product["productId"] == "462775":
+            product.pop("closingTime")
+    gw = Gateway(db, ValioClient("test-not-a-real-key", transport=fake.transport, ttl=0, now=lambda: NOW),
+                 now=lambda: NOW)
+    offers, skipped, tax, supplier_of, when = gw._offers(
+        "demo-kitchen", ["462775", "463335"], "L", date(2026, 11, 16))
+    assert when["462775"]["cutoff_passed"] is None
+    assert when["462775"]["closing_time"] is None
+    assert when["463335"]["cutoff_passed"] is False          # the known one stays known
+    # A line with no delivery facts at all shows them as unknown too.
+    plan = plan_request(Decimal("10"), "L", offers, date(2026, 11, 16))
+    sim = gw._simulate("demo-kitchen", plan, tax, skipped, supplier_of, {})
+    assert sim["lines"]
+    for line in sim["lines"] + [ln for b in sim["blocks"] for ln in b["lines"]]:
+        assert line["cutoff_passed"] is None and line["closing_time"] is None
+    # End to end, the engine does not promise a delivery it cannot time: the product is left out.
+    p = milk(client, quantity="1000")
+    assert "462775" not in [ln["product_id"] for ln in p["lines"]]
+    assert any(x["product_id"] == "462775" and "cut-off" in x["reason"] for x in p["excluded"])
 
 
 def test_api_docs_load_the_spec_relative_to_their_own_path(env):
