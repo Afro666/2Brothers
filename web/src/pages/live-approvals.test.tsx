@@ -12,6 +12,43 @@ beforeEach(() => vi.stubEnv("VITE_LIVE_BUYER", "true"));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const json = (body: unknown) => new Response(JSON.stringify(body));
 
+it("requires confirmation to close a recall-held proposal without dismissing its notice", async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ proposals: [{ ...row, status: "BLOCKED_BY_RECALL" }] }))
+    .mockResolvedValueOnce(json({ status: "REJECTED", proposal_id: "p1" }));
+  vi.stubGlobal("fetch", fetch);
+  const user = userEvent.setup();
+  renderApp("/approvals");
+  await user.click(await screen.findByRole("button", { name: "Reject proposal" }));
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("button", { name: /Approve .*149/ })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Confirm rejection" }));
+  expect((await screen.findAllByText("REJECTED")).length).toBeGreaterThan(0);
+  expect(fetch.mock.calls[1][0]).toBe("/api/v1/kitchens/demo-kitchen/proposals/p1/reject");
+  expect(fetch.mock.calls.some(c => String(c[0]).includes("/dismiss"))).toBe(false);
+});
+
+it("requires a pack-check reason before dismissal and keeps the original basket unapprovable", async () => {
+  const alert = { event_id: "recall1", product_id: "462775", match: "possible", recall: { url: "https://www.ruokavirasto.fi/notice", lot: "Lot 2027" } };
+  const held = { ...row, status: "BLOCKED_BY_RECALL", recall_alerts: [alert] };
+  const fetch = vi.fn().mockResolvedValueOnce(json({ proposals: [held] }))
+    .mockResolvedValueOnce(json({ event_id: "recall1", status: "dismissed" }))
+    .mockResolvedValueOnce(json({ proposals: [{ ...held, recall_alerts: [{ ...alert, status: "dismissed", dismiss_reason: "Checked packs; lot is absent" }] }] }));
+  vi.stubGlobal("fetch", fetch);
+  const user = userEvent.setup();
+  renderApp("/approvals");
+  await user.click(await screen.findByRole("button", { name: "Dismiss recall after checking packs" }));
+  const confirm = screen.getByRole("button", { name: /I checked the packs/ });
+  expect(confirm).toBeDisabled();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await user.type(screen.getByLabelText("Pack-check reason"), "Checked packs; lot is absent");
+  await user.click(confirm);
+  expect(await screen.findByText(/Recall dismissed for future quotes/)).toBeVisible();
+  expect(fetch.mock.calls[1][0]).toBe("/api/v1/kitchens/demo-kitchen/recalls/recall1/dismiss");
+  expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ reason: "Checked packs; lot is absent" });
+  expect(screen.queryByRole("button", { name: /Approve .*149/ })).toBeNull();
+  expect(screen.getByText(/already held basket stays blocked/)).toBeVisible();
+});
+
 it("shows a recall hold, lot and pending replacement without an approval action on the original", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [{ ...row, status: "BLOCKED_BY_RECALL",
     replacement_proposal_id: "replacement1", recall_alerts: [{ product_id: "462775", match: "possible",
