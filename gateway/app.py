@@ -235,6 +235,11 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         who.need("kitchen:read", kitchen_id)
         return gw().reject(kitchen_id, proposal_id, await body(request), human=who.human)
 
+    @app.post(k + "/recalls/{event_id}/dismiss")
+    async def dismiss_recall(kitchen_id: str, event_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need('kitchen:read', kitchen_id)
+        return gw().dismiss_recall(kitchen_id, event_id, await body(request), human=who.human)
+
     @app.post(k + "/needs")
     async def create_need(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose", kitchen_id)
