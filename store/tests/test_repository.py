@@ -168,6 +168,62 @@ class RepositoryTest(unittest.TestCase):
             with self.assertRaises((ValueError, TypeError), msg=bad):
                 self.repo.own_products.create("k1", {**good, **bad})
 
+    # Settings
+
+    def test_settings_change_only_the_fields_given(self):
+        self.assertEqual(self.repo.settings.get("k1"), {"excluded_allergens": None})  # unknown
+        settings, changed = self.repo.settings.put("k1", {
+            "service_level": {"A": "0.98", "B": "0.95"}, "max_cover_days": {"fish": 2},
+            "stockout_cap": "1.8", "budget_warning_order_eur": "1500.00",
+            "excluded_allergens": ["AP", "nuts"]})
+        self.assertEqual(settings["service_level"], {"A": Decimal("0.98"), "B": Decimal("0.95")})
+        self.assertEqual(sorted(changed), ["budget_warning_order_eur", "excluded_allergens",
+                                           "max_cover_days", "service_level", "stockout_cap"])
+        self.assertEqual(changed["excluded_allergens"], {"from": None, "to": ["AP", "nuts"]})
+
+        settings, changed = self.repo.settings.put("k1", {
+            "service_level": {"A": "0.99"}, "budget_warning_order_eur": None, "stockout_cap": "1.8"})
+        self.assertEqual(settings["service_level"], {"A": Decimal("0.99"), "B": Decimal("0.95")})
+        self.assertIsNone(settings["budget_warning_order_eur"])  # null: no warning
+        self.assertEqual(settings["excluded_allergens"], ["AP", "nuts"])  # the policy is kept
+        self.assertEqual(settings["max_cover_days"], {"fish": 2})
+        self.assertEqual(sorted(changed), ["budget_warning_order_eur", "service_level"])
+        self.assertEqual(changed["service_level"]["from"], {"A": Decimal("0.98"), "B": Decimal("0.95")})
+        self.assertEqual(self.repo.settings.get("k1"), settings)
+        self.assertEqual(self.repo.settings.put("k1", {})[1], {})
+        self.assertEqual(self.repo.settings.get("k2"), {"excluded_allergens": None})
+
+    def test_settings_are_stored_where_the_engine_and_the_buyer_read_them(self):
+        from engine.params import KitchenParams
+        from store.buyer_context import excluded_allergens
+        self.repo.settings.put("k1", {"service_level": {"C": "0.92"}, "max_cover_days": {"fish": 1},
+                                      "stockout_cap": "2", "budget_warning_week_eur": "6000",
+                                      "excluded_allergens": []})
+        db = self.repo.settings._coll.database
+        doc = db.kitchen_settings.find_one({"_id": "k1"})
+        self.assertEqual(sorted(doc), ["_id", "engine", "excluded_allergens"])
+        params = KitchenParams.from_dict(self.repo.settings.get("k1"))
+        self.assertEqual(params.service_level["C"], Decimal("0.92"))
+        self.assertEqual(params.service_level["A"], Decimal("0.975"))  # the default stays
+        self.assertEqual((params.cover_days("fish"), params.stockout_cap), (1, 2.0))
+        self.assertEqual(params.budget_warning_week_eur, Decimal("6000"))
+        self.assertEqual(excluded_allergens(db, "k1"), [])  # explicitly none, not unknown
+
+    def test_settings_validation(self):
+        for bad in ({"service_level": {"A": "97.5"}}, {"service_level": {"A": "1"}},
+                    {"service_level": {"A": "0"}}, {"service_level": {"D": "0.9"}},
+                    {"service_level": {"A": 0.975}}, {"service_level": "0.975"},
+                    {"max_cover_days": {"Dairy": 5}}, {"max_cover_days": {"fish": 0}},
+                    {"max_cover_days": {"fish": "2"}}, {"stockout_cap": "0.9"},
+                    {"stockout_cap": "4"}, {"stockout_cap": None},
+                    {"budget_warning_order_eur": "-1"}, {"budget_warning_week_eur": 6000.0},
+                    {"excluded_allergens": None}, {"excluded_allergens": "AP"},
+                    {"excluded_allergens": ["peanut butter"]}, {"excluded_allergens": [7]},
+                    {"auto_approve": True}):
+            with self.assertRaises((ValueError, TypeError), msg=bad):
+                self.repo.settings.put("k1", bad)
+        self.assertEqual(self.repo.settings.get("k1"), {"excluded_allergens": None})
+
     # Recipes
 
     def test_recipe_in_the_contract_shape(self):

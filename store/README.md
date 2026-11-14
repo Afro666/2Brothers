@@ -117,6 +117,11 @@ repo.own_products.create("k1", {"name": "Rye loaf 800 g", "unit": "ST", "supplie
                                 "unit_price_eur": "4.20"})   # allergen_data defaults to UNKNOWN
 ```
 
+`repo.settings.get("k1")` returns what the kitchen has set; `repo.settings.put("k1", changes)`
+changes only the fields given and returns `(settings, changed)`, where `changed` holds the
+value before and after for the audit entry. The allergen policy is `None` until a person
+sets it: unknown, not "none".
+
 `suppliers`, `recipes` and `own_products` have `create`, `get`, `list`, `update`, `delete`;
 `menu_plans` has `put` (replaces the week), `get`, `list`, `delete`. A supplier term that
 was never set is `None`: unknown, never zero.

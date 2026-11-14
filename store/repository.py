@@ -4,6 +4,8 @@
   term stays None (unknown, never zero) and no default comes from Valio.
 - recipes: `recipe_id`, `name`, `portions`, `ingredients`.
 - menu plans: one document per kitchen and ISO week, replaced as a whole.
+- kitchen settings: one document per kitchen; engine parameters under `engine`, the
+  allergen policy in `excluded_allergens`, as the gateway and the Buyer already read them.
 - own products: rows in `products` with `source: "own"`, in the common product row
   shape, so search covers them. They go in and out in the "Own product" shape.
 
@@ -24,12 +26,21 @@ from typing import Callable
 
 from bson.decimal128 import Decimal128
 
+from store.search import ALLERGENS
+
 ADAPTERS = ("valio_api", "manual", "csv")
 WEEKDAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
 MEALS = ("breakfast", "lunch", "dinner", "other")
 KITCHEN_UNITS = ("L", "KG", "PCS")
 SUPPLIER_TERMS = ("free_delivery_threshold_eur", "delivery_fee_eur", "order_days",
                   "cutoff_time", "lead_time_days", "discount_tiers")
+DEMAND_CLASSES = ("A", "B", "C")
+# The engine's categories (engine/params.py); another key would silently do nothing there.
+COVER_CATEGORIES = ("fresh_dairy", "vegetables", "meat", "fish", "frozen", "dry", "other")
+BUDGET_WARNINGS = ("budget_warning_order_eur", "budget_warning_week_eur")
+SETTINGS = ("service_level", "max_cover_days", "stockout_cap", *BUDGET_WARNINGS,
+            "excluded_allergens")
+_GS1_CODE = re.compile(r"[A-Z][A-Z0-9]{1,2}")
 _CLOCK = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 _WEEK = re.compile(r"\d{4}-W(0[1-9]|[1-4]\d|5[0-3])")
 
@@ -218,6 +229,50 @@ def own_product_out(row: dict | None) -> dict | None:
     }
 
 
+def settings_fields(data: dict) -> dict:
+    """Validate a kitchen settings body (docs/contract.md, "Kitchen settings").
+
+    Only the fields given come back: a field that is left out keeps its stored value.
+    """
+    unknown = set(data) - set(SETTINGS)
+    if unknown:
+        raise ValueError(f"unknown settings: {sorted(unknown)}")
+    out: dict = {}
+
+    def table(field: str, keys: tuple) -> dict:
+        value = data[field]
+        if not isinstance(value, dict) or set(value) - set(keys):
+            raise ValueError(f"{field} must be an object with keys from {keys}")
+        return value
+
+    if "service_level" in data:
+        levels = {key: _decimal(value, "service_level")
+                  for key, value in table("service_level", DEMAND_CLASSES).items()}
+        if any(level is None or not 0 < level < 1 for level in levels.values()):
+            raise ValueError("service_level is a fraction above 0 and below 1 (97.5 % is 0.975)")
+        out["service_level"] = levels
+    if "max_cover_days" in data:
+        out["max_cover_days"] = {key: _count(value, "max_cover_days", 1)
+                                 for key, value in table("max_cover_days", COVER_CATEGORIES).items()}
+    if "stockout_cap" in data:
+        cap = _decimal(data["stockout_cap"], "stockout_cap")
+        if cap is None or not 1 <= cap <= 3:
+            raise ValueError("stockout_cap must be from 1 to 3")
+        out["stockout_cap"] = float(cap)  # a factor, not money; the engine reads a float
+    for field in BUDGET_WARNINGS:
+        if field in data:
+            out[field] = _decimal(data[field], field)  # None: no warning
+    if "excluded_allergens" in data:
+        codes = data["excluded_allergens"]
+        if not isinstance(codes, list) or not all(
+                isinstance(code, str) and (code in ALLERGENS or _GS1_CODE.fullmatch(code))
+                for code in codes):
+            raise ValueError("excluded_allergens must be a list of GS1 codes or allergen names; "
+                             "[] means no exclusions")
+        out["excluded_allergens"] = codes
+    return out
+
+
 def _merge(current: dict, changes: dict, fixed: tuple) -> dict:
     """Changes over the current row. A nested object (supplier `terms`) merges one
     level deep, so changing one term does not wipe the others. `fixed` keys stay."""
@@ -293,6 +348,37 @@ class _MenuPlans:
         return self._coll.delete_one({"_id": f"{kitchen_id}:{week}"}).deleted_count == 1
 
 
+class _Settings:
+    """Kitchen settings. Stored as the gateway and the Buyer read them: engine
+    parameters under `engine`, the allergen policy in `excluded_allergens`."""
+
+    def __init__(self, coll):
+        self._coll = coll
+
+    def get(self, kitchen_id: str) -> dict:
+        """What the kitchen has set. A field that was never set is absent (the engine's
+        default applies), except `excluded_allergens`, which is None: unknown, not none."""
+        doc = _from_store(self._coll.find_one({"_id": kitchen_id}) or {})
+        policy = doc.get("excluded_allergens")
+        known = isinstance(policy, list) and all(isinstance(code, str) for code in policy)
+        return {**(doc.get("engine") or {}), "excluded_allergens": policy if known else None}
+
+    def put(self, kitchen_id: str, changes: dict) -> tuple[dict, dict]:
+        """Change the fields given and keep the rest. Returns `(settings, changed)`;
+        `changed` maps each field that moved to `{"from", "to"}`, for the audit entry
+        the caller writes."""
+        fields = settings_fields(changes)
+        before = self.get(kitchen_id)
+        after = _merge(before, fields, ())
+        changed = {field: {"from": before.get(field), "to": after[field]}
+                   for field in fields if before.get(field) != after[field]}
+        if changed:
+            update = {(field if field == "excluded_allergens" else f"engine.{field}"):
+                      _to_store(after[field]) for field in changed}
+            self._coll.update_one({"_id": kitchen_id}, {"$set": update}, upsert=True)
+        return after, changed
+
+
 class _OwnProducts:
     """Own products live in `products`; this keeps the CRUD the other collections have."""
 
@@ -330,7 +416,7 @@ class _OwnProducts:
 
 
 class Repository:
-    """Suppliers, own products, recipes and menu plans of a kitchen."""
+    """Suppliers, own products, recipes, menu plans and settings of a kitchen."""
 
     def __init__(self, db=None):
         db = db if db is not None else connect()
@@ -338,3 +424,4 @@ class Repository:
         self.recipes = _Collection(db["recipes"], "recipe_id", recipe_fields)
         self.menu_plans = _MenuPlans(db["menu_plans"])
         self.own_products = _OwnProducts(db["products"])
+        self.settings = _Settings(db["kitchen_settings"])
