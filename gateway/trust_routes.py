@@ -29,6 +29,7 @@ from decimal import Decimal
 import anyio
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from pymongo.errors import PyMongoError
 
 from gateway.service import GatewayError
@@ -297,12 +298,14 @@ def mount_trust(app: FastAPI, gw, principal, body) -> None:
     @app.post(k + "/audit/demo-tamper")
     async def audit_demo_tamper(kitchen_id: str, request: Request, who=Depends(principal)):
         who.need("kitchen:read", kitchen_id)
-        return demo_tamper(gw(), kitchen_id, await body(request), human=who.human)
+        data = await body(request)
+        return await run_in_threadpool(demo_tamper, gw(), kitchen_id, data, human=who.human)
 
     @app.post(k + "/audit/demo-restore")
     async def audit_demo_restore(kitchen_id: str, request: Request, who=Depends(principal)):
         who.need("kitchen:read", kitchen_id)
-        return demo_restore(gw(), kitchen_id, await body(request), human=who.human)
+        data = await body(request)
+        return await run_in_threadpool(demo_restore, gw(), kitchen_id, data, human=who.human)
 
     @app.get(k + "/events")
     def events(kitchen_id: str, who=Depends(principal)):
