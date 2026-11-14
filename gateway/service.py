@@ -748,7 +748,7 @@ class Gateway:
         if filtered:
             rows = same
         rows = rows[:max(limit, 20)]
-        arrival: dict[str, bool | None] = {}
+        arrival: dict[str, bool | None] = {}   # None: unknown (no answer or no cut-off time)
         try:
             # Catalog rows (source "valio") can be asked live; a kitchen's own products cannot.
             ids = [r["product_id"] for r in rows if r.get("source", "valio") != "own"]
@@ -757,9 +757,11 @@ class Gateway:
                 for product in self.valio.availability(ids, need["requested_date"])["products"]:
                     lines = product.get("scheduleLines") or []
                     day = lines[0].get("availableDate") if lines else None
-                    ok = (bool(lines) and product.get("cutoff_passed") is False and not product.get("salesBlock")
+                    cutoff = product.get("cutoff_passed")
+                    ok = (bool(lines) and cutoff is not True and not product.get("salesBlock")
                           and day is not None and date.fromisoformat(day) <= requested)
-                    arrival[product["productId"]] = ok
+                    # no closingTime from Valio: the cut-off is unknown, not passed
+                    arrival[product["productId"]] = None if ok and cutoff is None else ok
         except Exception:
             arrival = {}     # no live answer: the offer step still checks every product
         for r in rows:
