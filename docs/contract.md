@@ -536,6 +536,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | GET | `/forecast-accuracy?from=&to=` | `kitchen:read` | Past forecasts against what the kitchen really needed, per week. Shape under "Forecasts". |
 | GET | `/suppliers`, `/suppliers/{id}` | `kitchen:read` | Suppliers and their terms: free-delivery threshold, fee, order days, cut-off, lead time, discount tiers. User-set; demo values are placeholders. |
 | POST, PUT, DELETE | `/suppliers`, `/suppliers/{id}` | `kitchen:write` | Create, change or delete a supplier and its terms. |
+| POST | `/suppliers/{id}/price-list/photo` | `kitchen:write` | Read a photo of a manual supplier's price list into draft own products; writes nothing. Planned (#1174). Shape under "Read a supplier's price list from a photo". |
 | POST | `/needs` | `kitchen:propose` | Store a need (quantity, unit, date, optional `event`) before the Buyer runs. Answer: `need_id`. Shape under "Team gateway interfaces". |
 | POST | `/proposals` | `kitchen:propose` | Ask the Buyer: product codes with a quantity and a date, or free text ("1,000 L milk by Monday"). Returns the proposal in the `GET /proposals/{id}` shape, `status: READY` (or `REJECTED` when no line is left). Body, the free-text path and errors under "Creating a proposal". A demand window `from`/`to` is not a body yet. |
 | GET | `/proposals` | `kitchen:read` | `{"proposals": [...]}`, newest first, at most 100, each in the `GET /proposals/{id}` shape. |
@@ -1925,6 +1926,81 @@ the audit entry, and no proposal is made:
 A person can always plan the week by hand on the Planner page; no error blocks
 `PUT /menu-plans/{week}` or "Propose order for this week".
 
+### Read a supplier's price list from a photo (#1174)
+
+Planned. `POST /v1/kitchens/{kitchen_id}/suppliers/{supplier_id}/price-list/photo` reads
+one photo of a supplier's price list (paper, or a screenshot of a PDF) with Nemotron 3.5
+Super VL into **draft** own products. A person checks every row and saves it with the
+own-product routes (`POST /products`, `PUT /products/{id}`). **This route writes nothing**:
+no product, no price, no stock.
+
+- Scope `kitchen:write`. The Buyer agent token is refused (403 `SCOPE_REQUIRED`).
+- The supplier must be one of this kitchen's suppliers (404 `SUPPLIER_NOT_FOUND`) with
+  adapter `manual` or `csv` (422 `SUPPLIER_HAS_API`): Valio's prices come from its API.
+- One read per kitchen at a time (429 `PRICE_LIST_BUSY`). One model call of up to 75 s;
+  the gateway never retries it.
+- Image limits and body: those of `POST /stock/photo` (`{"image_base64": "..."}`).
+
+The model copies only what is printed: per row the product name, the price, the unit the
+price is for, the pack size, and per list the currency and the VAT note. Plain code reads
+those texts. The model never converts, completes or guesses.
+
+Answer:
+
+```json
+{
+  "model": "nemotron-3.5-super-vl", "duration_ms": 5200,
+  "supplier_id": "sup-bakery", "currency": "EUR", "vat": "INCLUDED",
+  "truncated": false,
+  "rows": [
+    {"name": "Rye sourdough loaf 800 g", "price_text": "4,40 €", "price_unit_text": "kpl",
+     "pack_text": "800 g", "status": "READ", "reasons": [],
+     "draft": {"name": "Rye sourdough loaf 800 g", "supplier_id": "sup-bakery", "unit": "ST",
+               "base_unit": "KG", "pack_size_in_base_units": "0.8", "unit_price_eur": "4.40",
+               "price_source": "price_list_photo", "allergen_data": "UNKNOWN", "allergens": []},
+     "match": {"product_id": "own-rye-loaf", "name": "Rye sourdough loaf 800 g",
+               "unit_price_eur": "4.20", "kind": "PRICE_CHANGED"}},
+    {"name": "Seed rolls", "price_text": "0,95", "price_unit_text": null, "pack_text": null,
+     "status": "PLEASE_CHECK", "reasons": ["PRICE_UNIT_MISSING"],
+     "draft": {"name": "Seed rolls", "supplier_id": "sup-bakery", "unit": null,
+               "base_unit": null, "pack_size_in_base_units": null, "unit_price_eur": null,
+               "price_source": "price_list_photo", "allergen_data": "UNKNOWN", "allergens": []},
+     "match": null}
+  ]
+}
+```
+
+| Field | Rule |
+|---|---|
+| `currency` | `EUR` when the list or the row prints `€` or `EUR`; else null. |
+| `vat` | `INCLUDED` (`sis. alv`, `incl. VAT`, `inkl. moms`), `EXCLUDED` (`alv 0 %`, `excl. VAT`, `+ alv`, `exkl. moms`) or null when the list does not say. Never assumed. |
+| `truncated` | True when the photo had more than 40 rows; only the first 40 are in `rows`. |
+| `rows[].name`, `price_text`, `price_unit_text`, `pack_text` | Copied as printed; null when not printed or unreadable. |
+| `rows[].status` | `READ` or `PLEASE_CHECK`. |
+| `rows[].reasons` | Why a row needs a person, below. Empty for `READ`. |
+| `rows[].draft` | An own-product body for `POST /products`, never sent by this route. `unit_price_eur` is null when the price cannot be trusted. `allergen_data` is always `UNKNOWN`: a price list says nothing safe about allergens. |
+| `rows[].match` | A suggestion only: an existing own product of this supplier with the same name (case and spaces ignored), its stored price, and `kind` `SAME` or `PRICE_CHANGED`. Null when none. The person picks; nothing is overwritten (`PUT` is the person's own action). |
+
+Reasons (`rows[].reasons`):
+
+| Reason | When | Price in the draft |
+|---|---|---|
+| `NAME_UNREADABLE` | No name was read. | empty |
+| `PRICE_UNREADABLE` | No price, or not a positive number (`2,50` is 2.50). | empty |
+| `PRICE_UNIT_MISSING` | The unit the price is for is not printed next to it. | empty |
+| `UNIT_UNKNOWN` | The printed unit is not one we know (`kpl`, `pcs`, `st` → `ST`; `kg` → `KG`; `l`, `ltr` → `L`; `ltk`, `laatikko`, `box` → `KI`; `pussi`, `bag` → `BAG`). | empty |
+| `CURRENCY_UNKNOWN` | Neither the row nor the list prints `€` or `EUR`. | empty |
+| `PACK_UNCLEAR` | A pack size is printed but cannot be read as g, kg, ml, cl, dl or l. | kept; pack fields empty |
+| `VAT_UNKNOWN` | The list does not say whether prices include VAT. | kept |
+
+Errors: those of `POST /stock/photo` (413, 422 `NOT_AN_IMAGE`, 502 `VISION_REPLY_INVALID`,
+503, 504), plus 404 `SUPPLIER_NOT_FOUND`, 422 `SUPPLIER_HAS_API` and 429
+`PRICE_LIST_BUSY`.
+
+Audit: `price_list_photo_read` (actor the person, `supplier_id`, the count of `READ` and
+`PLEASE_CHECK` rows, `truncated`, `duration_ms`) or `price_list_photo_failed` (`code`,
+`duration_ms`). Never the photo, the names or the prices.
+
 ### Trust: audit verification and the live event stream
 
 `GET /audit/verify` recomputes every hash of the audit chain:
@@ -2178,11 +2254,15 @@ strings in the stated unit.
   "base_unit": "KG",
   "pack_size_in_base_units": "0.8",
   "unit_price_eur": "4.20",
+  "price_source": "entered",
   "allergens": [{"code": "AW", "level": "CONTAINS"}],
   "allergen_data": "ENTERED"
 }
 ```
 
+- `price_source` is `entered` (typed in by a person, the default) or `price_list_photo`
+  (read from a photo of the supplier's price list and checked by a person, #1174). It
+  says where `unit_price_eur` came from; it never changes how the price is used.
 - `allergen_data` is `ENTERED` or `UNKNOWN`. An empty `allergens` list with `UNKNOWN`
   means unknown, never "free from".
 - Codes are the GS1 allergen codes the Valio catalog uses; `level` is `CONTAINS` or
