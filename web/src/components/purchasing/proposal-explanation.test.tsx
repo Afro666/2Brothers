@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -79,6 +79,8 @@ describe("the explanation at the top of the approval card (#1173)", () => {
     const shown = screen.getByRole("region", { name: "Short explanation" });
     expect(shown).toHaveTextContent(text.text);
     expect(shown).toHaveTextContent("Written by Nemotron 3.5 Super VL from the checked decision record");
+    // Nemotron wrote it: the NVIDIA mark sits next to "Written by".
+    expect(within(shown).getByTestId("nemotron-mark")).toBeInTheDocument();
     // Above the totals, below the title.
     const totals = screen.getByText("Total ex VAT").closest("dl")!;
     expect(shown.compareDocumentPosition(totals) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -104,6 +106,17 @@ describe("the explanation at the top of the approval card (#1173)", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(screen.getByText(/^Written by /)).toHaveTextContent("Nemotron 4.2 Super VL");
+  });
+
+  it("shows no NVIDIA mark when another model wrote the explanation", async () => {
+    const api = apiWith([{ ...text, model: "other-model-1" }]);
+    renderCard(api);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const shown = screen.getByRole("region", { name: "Short explanation" });
+    expect(shown).toHaveTextContent("Written by other-model-1");
+    expect(within(shown).queryByTestId("nemotron-mark")).toBeNull();
   });
 
   it("opens the full decision record from a folded card without duplicating it", async () => {

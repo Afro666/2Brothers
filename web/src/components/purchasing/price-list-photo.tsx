@@ -26,6 +26,7 @@ import { auditActorForRole, useRole } from "@/lib/role";
 import { downscalePhoto } from "@/lib/shelf-photo";
 import { TONE_CLASSES } from "@/lib/tone";
 import type { OwnProduct, Supplier } from "@/types";
+import { NemotronMark } from "@/components/nemotron-mark";
 
 /** The name people know; the gateway's `model` field is the id (`nemotron-3.5-super-vl`). */
 const MODEL_NAME = "Nemotron 3.5 Super VL";
@@ -302,6 +303,7 @@ function Summary({ read }: { read: PriceListRead }) {
   return (
     <div className="space-y-1 text-sm">
       <p>
+        <NemotronMark />
         {t("Read by {model} in {seconds} s: {count} rows, {check} to check.", {
           model: MODEL_NAME,
           seconds: (read.durationMs / 1000).toFixed(1),
@@ -456,7 +458,7 @@ export function PriceListPhoto({ supplier }: { supplier: Supplier }) {
           <DialogBody className="space-y-4">
             <div role="status" aria-live="polite">
               {reading ? (
-                <p className="text-sm">{t("{model} is reading the price list. This takes a few seconds.", { model: MODEL_NAME })}</p>
+                <p className="text-sm"><NemotronMark />{t("{model} is reading the price list. This takes a few seconds.", { model: MODEL_NAME })}</p>
               ) : null}
               {!reading && read ? <Summary read={read} /> : null}
               {savedCount > 0 ? (
