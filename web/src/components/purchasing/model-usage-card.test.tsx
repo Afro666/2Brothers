@@ -12,6 +12,7 @@ const NOTE =
 const usage: ModelUsage = {
   model: "nemotron-3.5-super-vl",
   runs: 14,
+  finishedRuns: 11,
   runsWithoutUsage: 5,
   modelCalls: 63,
   promptTokens: 371250,
@@ -55,6 +56,38 @@ describe("the model usage card on the About page", () => {
     expect(view.queryByText("No runs counted yet")).not.toBeInTheDocument();
   });
 
+  it("says in plain words how the runs ended and how many carry no count (#1801)", async () => {
+    renderApp(
+      "/about",
+      withUsage(async () => ({ ...usage, runs: 85, finishedRuns: 63, runsWithoutUsage: 42 })),
+    );
+    const view = await card();
+    expect(
+      await view.findByText(
+        "85 Buyer runs in all: 63 ended with a proposal, 22 did not (an error, a time limit, or still running).",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      view.getByText(
+        "42 runs carry no count: they ran before the meter, or they ended without a proposal before the count was kept for such runs.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves out the no-count sentence when every run carries a count", async () => {
+    renderApp(
+      "/about",
+      withUsage(async () => ({ ...usage, runs: 9, finishedRuns: 7, runsWithoutUsage: 0 })),
+    );
+    const view = await card();
+    expect(
+      await view.findByText(
+        "9 Buyer runs in all: 7 ended with a proposal, 2 did not (an error, a time limit, or still running).",
+      ),
+    ).toBeInTheDocument();
+    expect(view.queryByText(/carry no count/)).not.toBeInTheDocument();
+  });
+
   it("shows the mock's sample numbers by default", async () => {
     renderApp("/about");
     const view = await card();
@@ -67,6 +100,7 @@ describe("the model usage card on the About page", () => {
       {
         ...usage,
         runs: 0,
+        finishedRuns: 0,
         runsWithoutUsage: 0,
         modelCalls: 0,
         promptTokens: 0,
@@ -79,6 +113,7 @@ describe("the model usage card on the About page", () => {
       {
         ...usage,
         runs: 3,
+        finishedRuns: 3,
         runsWithoutUsage: 3,
         modelCalls: 0,
         promptTokens: 0,

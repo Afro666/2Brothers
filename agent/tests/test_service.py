@@ -111,6 +111,35 @@ def test_invalid_allergen_code_fails_closed_before_any_buyer_run(monkeypatch):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('how, code', [('error', 'BUYER_INCOMPLETE'), ('timeout', 'BUYER_TIMEOUT')])
+def test_a_run_that_fails_keeps_what_the_model_used(monkeypatch, how, code):
+    """#1801: a failed run was closed with no usage, so /model-usage lost its tokens."""
+    from agent.usage import Meter
+    class Failing(ScriptedBuyer):
+        def __init__(self):
+            super().__init__()
+            self.meter = Meter()
+        async def complete(self, *args):
+            self.meter.record('buyer', {'prompt_tokens': 900, 'completion_tokens': 30}, 1.5)
+            if how == 'timeout':
+                await asyncio.sleep(10)
+            raise RuntimeError('model endpoint broke')
+    async def run():
+        db, gateway = environment(monkeypatch)
+        worker = BuyerWorker(db, gateway, strategy="loop", model_factory=Failing, timeout=0.5 if how == 'timeout' else 20)
+        body = {'text': '51 L milk', 'requested_date': '2026-11-16', 'idempotency_key': 'fails-' + how}
+        try:
+            with pytest.raises(WorkerError) as caught:
+                await worker.run('demo-kitchen', body)
+            assert caught.value.code == code
+            row = db.agent_runs.find_one({})
+            assert row['state'] == 'RECONCILE' and row['result'] is None
+            assert row['usage']['calls'] >= 1 and row['usage']['prompt_tokens'] >= 900
+        finally:
+            await gateway.close()
+    asyncio.run(run())
+
+
 def test_timeout_never_restarts_an_ambiguous_run(monkeypatch):
     class Slow(ScriptedBuyer):
         async def complete(self, *args):
