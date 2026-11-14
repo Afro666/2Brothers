@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useRouterState } from "@tanstack/react-router";
 
 import { useApi } from "@/api";
@@ -22,7 +23,7 @@ export function HomePage() {
   const api = useApi();
   const { side } = useRole();
   const search = useRouterState({ select: (state) => state.location.searchStr });
-  const now = dashboardNow(search);
+  const now = useMemo(() => dashboardNow(search), [search]);
 
   return (
     <AppShell activeId="home">
