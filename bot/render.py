@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+import re
 from html import escape
 from zoneinfo import ZoneInfo
 
@@ -228,6 +229,17 @@ def waiting_suppliers(waiting: list[dict]) -> list[dict]:
     return list(found.values())
 
 
+_LONG_ID = re.compile(r"\b([0-9a-f]{8})[0-9a-f]{24}\b")
+_ISO_DAY = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+
+
+def tidy(text) -> str:
+    """A line of the gateway's brief, made short for a phone: a 32-character id becomes its
+    first 8, and a date like 2026-11-16 becomes "Mon 16 Nov". Nothing else changes."""
+    short = _LONG_ID.sub(lambda m: m.group(1), str(text or ""))
+    return escape(_ISO_DAY.sub(lambda m: day(m.group(0)), short))
+
+
 def brief(answer: dict, waiting: list[dict], today: str, approve_url: str | None = None) -> Message:
     """The morning or evening brief: what waits (products, suppliers, cost), what is urgent,
     one line per supplier, then the other things to know. `answer` is the gateway's brief,
@@ -244,7 +256,7 @@ def brief(answer: dict, waiting: list[dict], today: str, approve_url: str | None
         if all(s["total"] is not None for s in suppliers):
             head += f" · {money(sum(s['total'] for s in suppliers))}"
         out.append(f"<b>{head}</b>")
-    out += [f"<b>{escape(str(r.get('text') or ''))}</b>" for r in rows if r.get("urgent")]
+    out += [f"<b>{tidy(r.get('text'))}</b>" for r in rows if r.get("urgent")]
     if suppliers:
         out.append("")
         for s in suppliers:
@@ -257,7 +269,7 @@ def brief(answer: dict, waiting: list[dict], today: str, approve_url: str | None
     rest = [r for r in rows if not r.get("urgent") and not (suppliers and r.get("kind") == "WAITING_DRAFTS")]
     if rest:
         out.append("")
-        out += [escape(str(r.get("text") or "")) for r in rest]
+        out += [tidy(r.get("text")) for r in rest]
     if answer.get("made_by") in ("model", "mixed"):
         out.append("<i>Wording by the Buyer agent (Nemotron).</i>")
     buttons = [[{"text": "Open to approve", "web_app": {"url": approve_url}}]] if approve_url and suppliers else []
@@ -291,7 +303,10 @@ def shelf(answer: dict, saved: bool = False) -> Message:
     name_of = lambda r: escape(str(r.get("product_name") or r.get("label") or r.get("product_id")))   # noqa: E731
     out += [f"<code>{quantity(r.get('count'), r.get('unit')).ljust(width)}</code>  {name_of(r)}" for r in counted]
     out += [f"Count by hand: {name_of(r)}" for r in by_hand]
-    out += [f"Not recognised: \"{escape(str(r.get('label') or ''))}\"" for r in unknown]
+    for r in unknown:
+        label = str(r.get("label") or "").strip()
+        out.append("One pack with no label I can read." if label.lower() in ("", "unknown", "n/a", "none")
+                   else f"Not in this kitchen's products: \"{escape(label[:80])}\"")
     if saved:
         return Message("\n".join(out))
     seconds = answer.get("duration_ms")

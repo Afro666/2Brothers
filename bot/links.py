@@ -17,6 +17,9 @@ from pathlib import Path
 CODE_MINUTES = 30
 
 
+NOTES_KEPT = 200
+
+
 class Links:
     def __init__(self, path: str | os.PathLike | None = None, clock=time.time):
         self._path = Path(path or os.environ.get("BOT_DATA_DIR", ".bot")) / "links.json"
@@ -29,7 +32,8 @@ class Links:
         except (OSError, ValueError):
             data = {}
         return {"codes": dict(data.get("codes") or {}), "chats": dict(data.get("chats") or {}),
-                "briefs": list(data.get("briefs") or [])}
+                "briefs": list(data.get("briefs") or []),
+                "notes": dict(data.get("notes") or {})}
 
     def _write(self, data: dict) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,6 +77,20 @@ class Links:
             data["briefs"] = (sent + [slot])[-8:]
             self._write(data)
             return True
+
+    def note(self, key: str, value: dict) -> None:
+        """Remember which message shows what ("summary:<chat>:<proposal>", "brief:<chat>"), so a
+        change still updates it after a restart of the bot. The newest NOTES_KEPT are kept."""
+        with self._lock:
+            data = self._read()
+            data["notes"].pop(key, None)
+            data["notes"][key] = value
+            for old in list(data["notes"])[:-NOTES_KEPT]:
+                del data["notes"][old]
+            self._write(data)
+
+    def noted(self, key: str) -> dict | None:
+        return self._read()["notes"].get(key)
 
     def chats(self) -> list[int]:
         return [int(c) for c in self._read()["chats"]]

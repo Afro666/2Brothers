@@ -54,6 +54,11 @@ person opens it in Telegram and presses Start. Only linked chats get an answer.
 - `Add product` in a supplier's message: the first 6 rows of the proposal's addable list (counted
   products that are not on the order, most probable first), each with the engine's suggested
   quantity, or one lot when it has none. One press adds it; the gateway gives the new total.
+- A question ("what does active recall mean?") is not sent to the Buyer. The bot explains its own
+  words (recall, cut-off, stock not confirmed, supplier offer, delivery-note check) in plain code,
+  or says that it cannot answer. A text with a number is always read as an order.
+- After a change, the order's summary and the chat's last brief show the new numbers, also after a
+  restart of the bot: the message ids are kept in the bot's volume.
 - A photo of a shelf: Nemotron reads it (`POST /stock/photo`, which stores nothing) and the chat
   shows the count: counted rows, rows to count by hand, labels it did not recognise. `Save` sends
   only the counted rows to `POST /stock-counts`; `Discard` drops them. The bot never saves a count

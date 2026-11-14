@@ -497,7 +497,7 @@ def test_a_shelf_photo_shows_the_count_and_saves_nothing_by_itself(bot):
     assert lines[1] == "<code>6 L   </code>  Valio Eila 3 % milk drink 1 l"
     assert lines[2] == "<code>12 pcs</code>  Eggs M"
     assert lines[3] == "Count by hand: Valio Eila 10 L novobox"
-    assert lines[4] == 'Not recognised: "Arla &lt;b&gt;L&lt;/b&gt; m"'
+    assert lines[4] == 'Not in this kitchen\'s products: "Arla &lt;b&gt;L&lt;/b&gt; m"'
     assert lines[5] == "<i>Read by Nemotron in 4.2 s. Nothing is saved until you press Save.</i>"
     assert [b["text"] for b in shown["markup"]["inline_keyboard"][0]] == ["Save 2 counts", "Discard"]
 
@@ -612,3 +612,54 @@ def test_nothing_to_add_and_a_refused_add_are_said(bot):
 def test_add_works_after_a_restart_of_the_bot(bot):
     press(bot, f"d:{PID}:0:469549b")                                             # no list in memory
     assert ("addable", PID) in bot.gw.calls and ("add", "469549b", "12") in bot.gw.calls
+
+
+# ---- found in the first live test, 2026-11-14 ---------------------------------------------
+def test_a_question_is_explained_and_never_sent_to_the_buyer(bot):
+    say(bot, "what does it mean active recall?")
+    assert bot.gw.calls == []
+    assert bot.tg.sent[-1]["text"].startswith("<b>Active recall</b>: the Finnish Food Authority")
+    say(bot, "why is the sky blue")
+    assert bot.tg.sent[-1]["text"].startswith("I make orders and briefs") and bot.gw.calls == []
+    say(bot, "can I get 20 L oat drink for Monday?")             # a number: this is an order
+    say(bot, "what the menu needs")                              # not a question form
+    assert [c[0] for c in bot.gw.calls] == ["ask", "ask"]
+
+
+def test_a_change_updates_the_last_brief_and_the_summary_also_after_a_restart(bot, tmp_path):
+    say(bot, "20 L oat drink")
+    summary_id = bot.tg.sent[0]["id"]
+    say(bot, "/brief")
+    brief_id = [m for m in bot.tg.sent if m["text"].startswith("One moment: I am reading")][0]["id"]
+    again = Bot(FakeTelegram(), bot.gw, Links(tmp_path), site_url="https://site.example/", now=bot.now)   # restarted
+    press(again, f"q:{PID}:0:0:+")
+    edited = {e["id"]: e["text"] for e in again.tg.edits}
+    assert "EUR 2,100.00" in edited[summary_id]                  # the order's summary
+    assert "EUR 2,100.00" not in edited[brief_id]                # the brief adds up the blocks, not the fake total
+    assert edited[brief_id].startswith("Evening brief · Sat 14 Nov") and "Valio Aimo: 2 items" in edited[brief_id]
+    assert "<code>704 L" in edited[555]                          # and the supplier message itself
+
+
+def test_a_message_that_cannot_be_edited_does_not_stop_the_change(bot):
+    from bot.clients import TelegramError
+    say(bot, "20 L oat drink")
+    summary_id = bot.tg.sent[0]["id"]
+    real = bot.tg.edit
+
+    def edit(chat_id, message_id, text, markup=None):
+        if message_id == summary_id:
+            raise TelegramError("editMessageText: message is not modified")
+        real(chat_id, message_id, text, markup)
+
+    bot.tg.edit = edit
+    press(bot, f"q:{PID}:0:0:+")
+    assert ("change", "463380", "704") in bot.gw.calls
+    assert bot.tg.edits[-1]["id"] == 555 and "704 L" in bot.tg.edits[-1]["text"]
+
+
+def test_brief_lines_are_short_for_a_phone_and_an_unread_label_is_said_plainly(bot):
+    assert render.tidy("check for order a39ccb6d3ba6416ab4517a0eae53c0f1: SHORT 1") == "check for order a39ccb6d: SHORT 1"
+    assert render.tidy("requested for 2026-11-16.") == "requested for Mon 16 Nov."
+    assert render.tidy("3.253 KG <in> stock") == "3.253 KG &lt;in&gt; stock"
+    read = render.shelf({"duration_ms": 900, "rows": [{"row": "UNMATCHED", "label": "unknown"}]})
+    assert "One pack with no label I can read." in read.text and "unknown" not in read.text
