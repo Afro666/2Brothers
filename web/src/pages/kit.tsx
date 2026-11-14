@@ -35,6 +35,7 @@ import type { Order, OrderStatus, Urgency } from "@/types";
 
 const KIT_NAV = NAV_ITEMS.map((item) => ({
   ...item,
+  group: undefined, // the kit lists every component section, so its menu stays flat
   href: `#${item.id}`,
   count: item.id === "approvals" ? 1 : undefined,
 }));

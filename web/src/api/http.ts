@@ -12,9 +12,6 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
   } catch {
     throw new ApiError("NETWORK", "Could not reach the gateway.");
   }
-  if (response.status === 429) {
-    throw new ApiError("RATE_LIMITED", "Too many requests - wait a minute and try again.");
-  }
   let body: unknown;
   try {
     body = await response.json();
