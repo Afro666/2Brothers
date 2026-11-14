@@ -384,6 +384,8 @@ export interface KitchenSettings {
 export interface PermissionRow {
   action: string;
   auditKind: AuditKind;
+  /** The gateway rule that enforces it, when the gateway sends one. */
+  rule?: string;
 }
 
 /** What the Buyer decides alone, what a person signs off, and what the Buyer can never do. */
