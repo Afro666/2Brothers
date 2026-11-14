@@ -82,7 +82,8 @@ def match_delivery(order: dict, note: dict) -> dict:
         got_lines = by_code.get(pid, [])
         parts = [_base(_qty(ln["quantity"]), ln["unit"], units) for ln in got_lines]
         got = None if any(p is None for p in parts) else sum(parts, Decimal(0))
-        if got is None:
+        if got is None or want is None:
+            # Unreadable quantity, or an ordered unit the catalog lacks: unknown, never a crash.
             status, missing = "UNKNOWN", None
         elif not got_lines:
             # An unreadable code may be this product: unknown, never "missing".

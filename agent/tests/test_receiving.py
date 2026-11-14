@@ -69,6 +69,13 @@ def test_unreadable_code_makes_an_absent_line_unknown_not_missing():
     assert match_delivery(ORDER, reply)["lines"][0]["status"] == "MISSING"
 
 
+def test_ordered_unit_missing_from_catalog_is_unknown_not_a_crash():
+    order = deepcopy(ORDER)
+    order["lines"][0]["unit"] = "XX"
+    line = match_delivery(order, note("short"))["lines"][0]
+    assert (line["status"], line["ordered"], line["missing"]) == ("UNKNOWN", None, None)
+
+
 @pytest.mark.parametrize("content", [
     "not json",
     json.dumps({"order_ref": "x", "delivery_date": "2026-11-16"}),
