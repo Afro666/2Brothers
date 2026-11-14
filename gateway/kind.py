@@ -152,8 +152,10 @@ def _neighbours(names: list[list[str]], word: str) -> set[str] | None:
 # (category 10402, where Oatly, Alpro and the coconut milks are) whose name holds the plant.
 
 PLANT_DRINK_CATEGORY = "10402"
-# The plant, its words in English, Finnish and Swedish (a word, or the front of a compound),
-# and the catalog's English words for its drink. "" is any plant drink ("vegan milk").
+# The plant, its words in English, Finnish and Swedish (a whole word, or the front of a
+# compound with a drink word: "kaurajuoma"), and the catalog's English words for its drink.
+# "" is any plant drink ("vegan milk"). A form is never a prefix of another word: "peanut"
+# is not "pea" and "risotto" is not "ris" (#1761).
 PLANTS = {
     "almond": (("almond", "manteli", "mandel"), "almond drink"),
     "oat": (("oat", "kaura", "havre"), "oat drink"),
@@ -161,9 +163,14 @@ PLANTS = {
     "rice": (("rice", "riisi", "ris"), "rice drink"),
     "coconut": (("coconut", "kookos", "kokos"), "coconut"),
     "pea": (("pea", "herne", "ärt", "ärter"), "pea drink"),
-    "cashew": (("cashew", "cashewpähkinä", "cashewnöt"), "cashew drink"),
+    "cashew": (("cashew", "cashewpähkinä", "cashewnöt", "cashewnöts"), "cashew drink"),
     "hemp": (("hemp", "hamppu", "hampa"), "hemp drink"),
-    "hazelnut": (("hazelnut", "hasselpähkinä", "hasselnöt"), "hazelnut drink"),
+    "hazelnut": (("hazelnut", "hasselpähkinä", "hasselnöt", "hasselnöts"), "hazelnut drink"),
+    "peanut": (("peanut", "maapähkinä", "jordnöt", "jordnöts"), "peanut drink"),
+    "walnut": (("walnut", "saksanpähkinä", "valnöt", "valnöts"), "walnut drink"),
+    "pistachio": (("pistachio", "pistaasi", "pistaasipähkinä", "pistage", "pistasch"), "pistachio drink"),
+    "spelt": (("spelt", "speltti", "dinkel"), "spelt drink"),
+    "barley": (("barley", "ohra", "korn"), "barley drink"),
     "": (("plant", "vegan", "kasvi", "vegaani", "vegaaninen", "växt", "vegansk"), "drink"),
 }
 # Milk or drink in the three languages, with the Finnish case endings ("maitoa", "juomaa",
@@ -196,12 +203,18 @@ def plant_query(plant: str) -> str:
     return PLANTS[plant][1]
 
 
+def _is_form(word: str, form: str) -> bool:
+    """`word` is the plant word `form`, or a compound of it and a drink word
+    ("kaurajuoma", "havredryck"); never a longer word that only starts with it ("peanut")."""
+    return word == form or (word.startswith(form) and _is_drink_word(word[len(form):]))
+
+
 def _holds_plant(row: dict, plant: str) -> bool:
     forms = PLANTS[plant][0]
     names = row.get("names") if isinstance(row.get("names"), dict) else {}
     for name in names.values():
         for word in _PLANT_WORD.findall(str(name or "").lower()):
-            if any(word == form or word.startswith(form) for form in forms):
+            if any(_is_form(word, form) for form in forms):
                 return True
     return False
 
