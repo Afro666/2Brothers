@@ -69,6 +69,7 @@ class Bot:
         self._products: dict[str, dict] = {}                 # product_id -> {"name", "lot"}
         self._summaries: dict[tuple[int, str], int] = {}     # (chat, proposal) -> summary message id
         self._heard: dict[tuple[int, str], str] = {}
+        self._adds: dict[str, list[dict]] = {}               # proposal -> its addable rows, until one is added
         self._shelves: dict[tuple[int, int], dict] = {}      # (chat, message) -> a shelf read to confirm
         self._lock = threading.Lock()
         self.brief_times = brief_times if brief_times is not None else dict(BRIEF_TIMES)
@@ -322,19 +323,33 @@ class Bot:
         action, pid = parts[0], parts[1]
         try:
             index = int(parts[2])
-            line = int(parts[3]) if len(parts) > 3 else None
+            # The fourth part is a line number, or a product code after "Add product".
+            line = int(parts[3]) if len(parts) > 3 and action in ("l", "q") else None
+            if action == "d" and len(parts) < 4:
+                raise ValueError("product")
             proposal = self.gw.proposal(pid)
             blocks = render.blocks_of(proposal)
             if not 0 <= index < len(blocks):
                 raise GatewayError(409, "CHANGED", "This order has changed. Ask again to see it.")
             notice = None
-            mode, show_all = "view", False
+            mode, show_all, addable = "view", False, None
             if action == "c":
                 mode = "change"
             elif action == "a":
                 show_all = True
             elif action == "l":
                 mode = "line"
+            elif action == "p":
+                addable = self._addable(pid)
+                if not addable:
+                    self.tg.answer(query["id"], "Nothing to add: every counted product is on this order, "
+                                                "or the supplier gives no price.")
+                    return
+                mode = "add"
+            elif action == "d":
+                proposal, index = self._add(proposal, index, parts[3])
+                self._show_summary(chat, proposal)
+                notice = "Added."
             elif action == "q":
                 proposal, mode, notice = self._set_quantity(proposal, index, line, parts[4])
                 self._show_summary(chat, proposal)
@@ -346,12 +361,46 @@ class Bot:
             lines = blocks[index].get("lines") or []
             if mode == "line" and (line is None or not 0 <= line < len(lines)):
                 mode = "change"
-            shown = render.supplier_message(proposal, index, self._names(proposal), show_all, mode, line)
+            shown = render.supplier_message(proposal, index, self._names(proposal), show_all, mode, line, addable)
             self.tg.edit(chat, message_id, shown.text, shown.markup)
             self.tg.answer(query["id"], notice)
         except (GatewayError, ValueError, IndexError) as exc:
             text = exc.message if isinstance(exc, GatewayError) else "That button is out of date. Ask again to see the order."
             self.tg.answer(query["id"], text[:190])
+
+    def _addable(self, proposal_id: str) -> list[dict]:
+        """The gateway's addable rows, each with the quantity one press adds (`add_qty`).
+        Kept until the product is added: the list needs a live supplier quote."""
+        rows = self.gw.addable(proposal_id)[:render.ADD_ROWS]
+        lots = self.gw.products([str(r["product_id"]) for r in rows]) if rows else {}
+        found = []
+        for row in rows:
+            qty = render.add_quantity(row, (lots.get(str(row["product_id"])) or {}).get("lot"))
+            if qty:
+                found.append({**row, "add_qty": qty})
+        with self._lock:
+            self._products.update(lots)
+            self._adds[proposal_id] = found
+        return found
+
+    def _add(self, proposal: dict, index: int, product_id: str):
+        """Add one product from the addable list. The gateway quotes it live, rounds it and gives
+        the new total. Returns the new proposal and the supplier block that now holds the product."""
+        pid = proposal["proposal_id"]
+        with self._lock:
+            rows = self._adds.get(pid)
+        if rows is None:
+            rows = self._addable(pid)
+        row = next((r for r in rows if str(r["product_id"]) == product_id), None)
+        if row is None:
+            raise GatewayError(409, "NOT_ADDABLE", "This product can no longer be added. Press Add product again.")
+        changed = self.gw.add(pid, product_id, row["add_qty"])
+        with self._lock:
+            self._adds.pop(pid, None)
+        for i, block in enumerate(render.blocks_of(changed)):
+            if any(str(ln.get("product_id")) == product_id for ln in block.get("lines") or []):
+                return changed, i
+        return changed, min(index, max(len(render.blocks_of(changed)) - 1, 0))
 
     def _set_quantity(self, proposal: dict, index: int, line: int | None, how: str):
         """One step up or down (the product's lot size), or 0 to remove. The gateway does the

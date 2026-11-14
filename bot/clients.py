@@ -136,6 +136,16 @@ class Gateway:
                           json={"idempotency_key": f"tg-{uuid.uuid4().hex}",
                                 "lines": [{"product_id": product_id, "quantity": new_quantity}]})
 
+    def addable(self, proposal_id: str) -> list[dict]:
+        """What can be added to this proposal, most probable first: only rows that can be added."""
+        rows = self._call("GET", f"/proposals/{proposal_id}/addable").get("rows") or []
+        return [r for r in rows if r.get("addable") and r.get("product_id")]
+
+    def add(self, proposal_id: str, product_id: str, quantity: str) -> dict:
+        return self._call("POST", f"/proposals/{proposal_id}/change",
+                          json={"idempotency_key": f"tg-{uuid.uuid4().hex}",
+                                "add": [{"product_id": product_id, "quantity": quantity}]})
+
     def products(self, product_ids: list[str], lang: str = "en") -> dict[str, dict]:
         """product_id -> {"name", "lot"}. A product the gateway does not know is left out, never
         invented. `lot` is the step a quantity moves in (the engine rounds up to it)."""
