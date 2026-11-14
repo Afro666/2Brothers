@@ -698,7 +698,7 @@ reference, the outcome before.
 
 ### Creating a proposal
 
-`POST /v1/kitchens/{kitchen_id}/proposals` takes one of two bodies. Both need a nonempty
+`POST /v1/kitchens/{kitchen_id}/proposals` takes one of three bodies. All need a nonempty
 `idempotency_key`.
 
 **Structured body.** The caller names the products; the engine sizes every line.
@@ -744,6 +744,39 @@ The proposal's `request` object echoes what was quoted: `product_ids`, `quantity
   `product_ids`.
 - `query`: the product words the parser searched for. Only on `made_by: parser`.
 - `event`: `true`, only when the request was an event.
+
+**Menu-plan window body (#74, #701).** `from` and `to` and no `product_ids` and no
+`text`: one proposal for everything the menu plan needs in that window, net of counted
+stock. This is the Planner's "Propose order for this week".
+
+| Field | Type | Rule |
+|---|---|---|
+| `from`, `to` | `YYYY-MM-DD` | The window, both days included. `from` on or before `to`, at most 31 days apart, else 422 `INVALID_REQUEST`. |
+| `requested_date` | `YYYY-MM-DD`, optional | The delivery day to quote. Default: `from`. |
+
+The gateway reads the same rows as `GET /demand` for the window and sums the `net_need`
+per product. A product whose stock was never counted has no net need, so its full
+`gross_need` is used and the need says so; unknown stock is never read as zero stock, and
+never silently as "nothing needed". Each product is then sized by the engine for its own
+need and measure (`L`, `KG`, or pieces). The answer is a normal proposal (one total, the
+supplier `blocks`, one approval, signed) with these additions:
+
+- `request.made_by` is `menu_plan`; `request.window` is `{from, to}`; `request.problems`
+  are the menu entries that could not be counted (unknown recipe, no covers).
+- `request.needs`: one `{product_id, quantity, unit, stock_counted}` per product.
+  `stock_counted: false` means the stock was never counted and the full need is proposed.
+- `shortfalls`: one `{product_id, shortfall, unit}` per product the supplier cannot fully
+  cover for the date. A shortfall adds `PARTIAL_STOCK` to `mandate.reason_codes`.
+- `request.quantity` is the number of products and `request.unit` is `products`.
+
+| Status | Code | When |
+|---|---|---|
+| 422 | `NOTHING_NEEDED` | Counted stock covers the plan in this window. `error.problems` lists menu entries that could not be counted. |
+| 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another window. |
+
+Recall holds and the kitchen's `excluded_allergens` apply per product, as for any quote.
+Approve, reject, the live re-check (`TOTAL_MISMATCH`) and signing work as for any proposal.
+Earned auto-approve never applies while any line has unknown stock or a shortfall.
 
 ### Addable products
 
@@ -1754,6 +1787,62 @@ What the view adds to an alert:
 The web client maps snake_case to camelCase. One web `RecallAlert` per alert and
 proposal: `proposals[].proposal_id` becomes `orderId`, `replacement_proposal` becomes
 `replacementIdeas`, `quantity` becomes a number.
+
+### Richer kitchen facts (proposed, #435)
+
+Not served yet. These four facts are what the forecast and the recipes learn from; they
+are written down now so store, web and gateway use one shape. Quantities are decimal
+strings in kitchen units; `null` means unknown, never zero.
+
+**Covers per service.** `POST /v1/kitchens/{kitchen_id}/covers` (`kitchen:write`):
+
+```json
+{"idempotency_key": "covers-2026-11-16", "date": "2026-11-16", "source": "pos",
+ "services": [{"meal": "breakfast", "covers": 180}, {"meal": "lunch", "covers": 95},
+              {"meal": "dinner", "covers": null}]}
+```
+
+`meal` is `breakfast`, `lunch`, `dinner` or `other`. A `null` is a service that was not
+counted. The day's total is the sum of the counted services, with `complete: false` when
+any service is null.
+
+**Dish sales.** `POST /v1/kitchens/{kitchen_id}/dish-sales` (`kitchen:write`): what was
+really cooked, from the POS.
+
+```json
+{"idempotency_key": "sales-2026-11-16-lunch", "date": "2026-11-16", "meal": "lunch", "source": "pos",
+ "dishes": [{"recipe_id": "salmon-soup", "portions": 88}, {"recipe_id": "rice-pudding", "portions": 40}]}
+```
+
+Theoretical usage of a product on a day = the sum over dishes of `portions` x the
+recipe's `qty_per_portion` / yield.
+
+**Waste log.** `POST /v1/kitchens/{kitchen_id}/waste` (`kitchen:write`):
+
+```json
+{"idempotency_key": "waste-2026-11-16-1", "date": "2026-11-16",
+ "entries": [{"product_id": "469549", "quantity": "4", "unit": "L", "reason": "EXPIRED"},
+             {"recipe_id": "salmon-soup", "portions": 6, "reason": "OVERPRODUCTION"}]}
+```
+
+`reason` is `EXPIRED`, `OVERPRODUCTION`, `PLATE_WASTE`, `SPILL` or `OTHER`. An entry
+names a product with a quantity, or a recipe with portions.
+
+**Actual against theoretical usage.** `GET /v1/kitchens/{kitchen_id}/usage?from=&to=`
+(`kitchen:read`), one row per product:
+
+| Field | Type | Notes |
+|---|---|---|
+| `product_id`, `unit` | string | |
+| `actual` | decimal string or null | Opening count + deliveries - closing count. Null when either count is missing. |
+| `theoretical` | decimal string or null | From dish sales x recipes. Null when no dish sales were sent. |
+| `logged_waste` | decimal string | From the waste log, 0 when nothing was logged. |
+| `gap` | decimal string or null | `actual` - `theoretical` - `logged_waste`. Null when `actual` or `theoretical` is null. |
+| `gap_share` | decimal string or null | `gap` / `theoretical`. A lasting positive share means unlogged waste or a recipe that uses more than it says. |
+
+The engine may suggest a recipe correction (a new `qty_per_portion` or `yield_pct`) when
+`gap_share` stays above 10% for three weeks; a person accepts or declines it, and the
+decision is a feedback row. Nothing changes a recipe on its own.
 
 ## Daily weather and holiday signals
 
