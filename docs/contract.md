@@ -422,7 +422,12 @@ need (#639):
   and vegan; Finnish and Swedish too) before milk or drink, maito or juoma, mjölk or
   dryck, also as one compound ("kauramaitoa", "havremjölk"). Those plant drinks are
   searched with the catalog's words ("almond drink"), whatever language the text is in.
-  Cow's milk is never of that kind. When no plant drink of that plant is found, the
+  Plant or vegan without a plant ("vegan milk", "kasvimaito") is any of the catalog's
+  plant drinks. Coconut milk ("coconut milk 400 ml", "kookosmaitoa", "kokosmjölk") is also
+  the cooking product (the can for a curry) (#1748): of its kind are the coconut plant
+  drinks and any product, in any category, whose name holds coconut milk; it is searched
+  with "coconut milk" too. A coconut drink ("coconut drink", "kookosjuoma") is only the
+  plant drink. Cow's milk is never of that kind. When no plant drink of that plant is found, the
   shortlist is `products: []` with the reason in `note`, and the parser path answers 422
   `NO_PRODUCTS_FOUND` with the reason in the message. `get_offer` and the parser path's
   quote (there the text is the person's request; a body that names its own codes, such as
