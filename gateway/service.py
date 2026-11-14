@@ -353,6 +353,10 @@ class Gateway:
                     self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
                         'status': 'COMMITTING', 'approving_key': key},
                         {'$set': {'status': state}, '$unset': {'approving_key': ''}})
+                elif attempt.get('proposal_id') == proposal_id and attempt['outcome'] is None:
+                    # The attempt never ended: the send result is unknown. The proposal stays
+                    # held; a person resolves the order (gateway/resolve.py, #291).
+                    orders.set_outcome(self.db, attempt['order_id'], outcome='UNCONFIRMED', status=None)
             except Exception:
                 pass  # Cannot prove absence while the database is unavailable.
             raise
