@@ -179,7 +179,8 @@ def test_a_run_that_wrote_nothing_is_started_once_more(monkeypatch):
                                                          'idempotency_key': 'request-retry'})
             assert proposal['status'] == 'READY' and proposal['approval_id']
             assert db.proposals.count_documents({}) == 1 and db.needs.count_documents({}) == 1
-            assert db.audit_log.count_documents({'event.run_id': proposal['buyer_run_id'] + '-retry'}) == 8
+            assert proposal['buyer_run_id'].endswith('-retry')
+            assert db.audit_log.count_documents({'event.run_id': proposal['buyer_run_id']}) == 8
         finally:
             await gateway.close()
     asyncio.run(run())
