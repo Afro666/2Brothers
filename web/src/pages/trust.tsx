@@ -129,8 +129,8 @@ export function TrustPage() {
               {checking ? (
                 <p className="text-muted-foreground">{t("Loading audit lines")}</p>
               ) : checkError ? (
-                // When the lines failed too, the error and its retry are shown once, with the lines below.
-                rows.status === "error" ? null : <ErrorState message={plain(checkError, t)} onRetry={() => void verify()} />
+                // Shown once the lines are in: when they fail too, their error and its retry (below) stand for both.
+                rows.status === "ready" ? <ErrorState message={plain(checkError, t)} onRetry={() => void verify()} /> : null
               ) : check === null ? (
                 <p className="text-muted-foreground">{t("Not checked yet.")}</p>
               ) : (
