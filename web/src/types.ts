@@ -201,7 +201,7 @@ export interface ApprovalRequest {
   id: string;
   approvalRef: string | null;
   orderId: string;
-  requestedBy: string;
+  requestedBy: string | null;
   createdAt: string | null;
   /** One line: what the chef asked and what this order covers. */
   summary: string;

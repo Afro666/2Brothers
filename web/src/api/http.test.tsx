@@ -83,6 +83,7 @@ describe("createHttpApi", () => {
         "listAddableProducts",
         "listApprovals",
         "listAudit",
+        "subscribeEvents",
         "listOrders",
         "listRecalls",
         "checkRecalls",

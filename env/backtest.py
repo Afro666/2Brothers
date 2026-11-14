@@ -61,6 +61,10 @@ class WeekdayMA:
         values = self.past.get((pid, day.weekday()))
         return sum(values) / len(values) if values else 0.0
 
+    def has_history(self, pid, day):
+        """A measured zero is history; an empty weekday window is not a forecast."""
+        return bool(self.past.get((pid, day.weekday())))
+
 
 class MovingAverage:
     """Flat mean of the last 28 days."""

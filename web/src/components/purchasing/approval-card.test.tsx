@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ADD_SEARCH_DEBOUNCE_MS, ApprovalCard } from "@/components/purchasing/approval-card";
 import { mapApproval } from "@/api/gateway-map";
 import { ApiError } from "@/api/types";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { proposal } from "@/test/gateway-fixtures";
 import { approval, orders } from "@/mocks/milk-case";
 
@@ -16,6 +17,34 @@ const confirmedOrder = {
 };
 
 describe("ApprovalCard", () => {
+  it("shows who asked and when when both are known", () => {
+    render(<ApprovalCard request={approval} order={confirmedOrder} />);
+    expect(screen.getByText(
+      `1 line · delivery ${formatDate(approval.deliveryDate)} · asked by Head chef, ${formatDateTime(approval.createdAt)}`,
+    )).toBeVisible();
+  });
+
+  it("omits the request time when only the requester is known", () => {
+    render(<ApprovalCard request={{ ...approval, createdAt: null }} order={confirmedOrder} />);
+    expect(screen.getByText(
+      `1 line · delivery ${formatDate(approval.deliveryDate)} · asked by Head chef`,
+    )).toBeVisible();
+  });
+
+  it("omits unknown requester and request time instead of naming unknowns", () => {
+    render(<ApprovalCard request={{ ...approval, requestedBy: null, createdAt: null }} order={confirmedOrder} />);
+    const description = screen.getByText(`1 line · delivery ${formatDate(approval.deliveryDate)}`);
+    expect(description).toBeVisible();
+    expect(description).not.toHaveTextContent("unknown");
+  });
+
+  it("shows a known request time without an unknown requester", () => {
+    render(<ApprovalCard request={{ ...approval, requestedBy: null }} order={confirmedOrder} />);
+    expect(screen.getByText(
+      `1 line · delivery ${formatDate(approval.deliveryDate)} · ${formatDateTime(approval.createdAt)}`,
+    )).toBeVisible();
+  });
+
   it.each([false, true])("names suppliers that must confirm without changing Approve when stock is unconfirmed: %s", (unconfirmed) => {
     const order = structuredClone(confirmedOrder);
     if (unconfirmed) order.lines[0].offer.availableAmount = 999999;

@@ -394,6 +394,17 @@ const CHECK_CODES: Record<string, { rule: string; detail: string }> = {
   },
 };
 
+const WARNING_CODES: Record<string, { rule: string; detail: string }> = {
+  OVER_BUDGET_WARNING: {
+    rule: "The total is above your kitchen's budget warning.",
+    detail: "A warning only. It does not block the order.",
+  },
+  CERTAINTY_PREMIUM_HIGH: {
+    rule: "Confirmed stock costs more than your kitchen's allowed premium over the cheapest option, but it is needed to fill the order.",
+    detail: "A warning only. It does not block the order.",
+  },
+};
+
 export function mapSuppliersToConfirm(proposal: { blocks?: unknown }): ApprovalRequest["suppliersToConfirm"] {
   if (!Array.isArray(proposal.blocks)) return [];
   return proposal.blocks.flatMap((block) => {
@@ -434,9 +445,8 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
     ...Object.entries(CHECK_CODES)
       .filter(([code]) => codes.has(code))
       .map(([, reason]) => reason),
-    ...strings(mandate.warnings).map((rule) => ({
-      rule,
-      detail: "A warning. It does not block the order.",
+    ...strings(mandate.warnings).map((code) => ({
+      ...(WARNING_CODES[code] ?? { rule: code, detail: "A warning. It does not block the order." }),
       warning: true,
     })),
   ];
@@ -453,8 +463,8 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
     approvalRef: typeof proposal.approval_id === "string" && proposal.approval_id ? proposal.approval_id : null,
     // The approval's order is the proposal's basket; a placed order gets its own id in `listOrders`.
     orderId: id,
-    requestedBy: typeof created?.actor === "string" ? created.actor : "unknown",
-    createdAt: typeof created?.at === "string" ? created.at : null,
+    requestedBy: typeof created?.actor === "string" && created.actor ? created.actor : null,
+    createdAt: typeof created?.at === "string" && created.at ? created.at : null,
     summary:
       typeof request.text === "string" && request.text.trim()
         ? request.text.trim()
