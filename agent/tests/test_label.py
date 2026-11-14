@@ -56,6 +56,17 @@ def test_compounds_whose_head_is_another_food_do_not_match(word):
     assert code_of(word) is None
 
 
+@pytest.mark.parametrize('word', ['maltodekstriini', 'maltodextrin', 'maltodextrine', 'Maltodekstriiniä',
+                                  'maltitol', 'maltitoli', 'maltitolisiirappi'])
+def test_maltodextrin_and_maltitol_are_not_barley(word):
+    assert code_of(word) is None
+
+
+@pytest.mark.parametrize('word', ['malt', 'mallas', 'ohramallas', 'maltaat', 'mallasuute', 'maltextrakt'])
+def test_malt_is_still_barley(word):
+    assert code_of(word) == 'GB'
+
+
 def test_the_may_contain_phrase_is_not_read_as_an_allergen():
     for sentence, codes in (('Voi sisältää pieniä määriä maapähkinää ja seesaminsiemeniä.', ['AP', 'AS']),
                             ('Kan innehålla spår av mandel och hasselnötter.', ['SA', 'SH']),
