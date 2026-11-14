@@ -565,6 +565,16 @@ describe("mapOrder", () => {
     });
     expect(mapOrder(proposal, null).receipt).toBeUndefined();
   });
+
+  it("says when the demo seed placed the order; every other order has no placedBy", () => {
+    const seeded = mapOrder(null, { ...placedOrder, receipt: null, placed_by: "demo-seed" });
+    expect(seeded.placedBy).toBe("demo-seed");
+    expect(seeded.receipt).toBeNull();
+    expect(mapOrder(null, { ...placedOrder, placed_by: null }).placedBy).toBeUndefined();
+    expect(mapOrder(null, placedOrder).placedBy).toBeUndefined();
+    expect(mapOrder(null, { ...placedOrder, placed_by: "someone-else" }).placedBy).toBeUndefined();
+    expect(mapOrder(proposal, null).placedBy).toBeUndefined();
+  });
 });
 
 describe("mapAudit", () => {

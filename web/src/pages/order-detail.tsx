@@ -48,7 +48,7 @@ async function copyReceipt(jws: string) {
 }
 
 /** The signed receipt: claims decoded for display only. Anyone checks the signature with the public key. */
-function SignedReceipt({ receipt }: { receipt?: OrderReceipt | null }) {
+function SignedReceipt({ receipt, placedBy }: { receipt?: OrderReceipt | null; placedBy?: Order["placedBy"] }) {
   const t = useT();
   if (receipt === undefined) return null;
   return (
@@ -95,7 +95,9 @@ function SignedReceipt({ receipt }: { receipt?: OrderReceipt | null }) {
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
-          {t("No signed receipt (this order is from before receipts, or signing was not possible)")}
+          {placedBy === "demo-seed"
+            ? t("Placed by the demo seed for the delivery demo. No person approved it, so it has no signed receipt.")
+            : t("No signed receipt for this order")}
         </p>
       )}
     </section>
@@ -174,7 +176,7 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
               </div>
             </dl>
             <MovProgress mov={order.mov} />
-            <SignedReceipt receipt={order.receipt} />
+            <SignedReceipt receipt={order.receipt} placedBy={order.placedBy} />
           </div>
         </Card>
       </TabsContent>

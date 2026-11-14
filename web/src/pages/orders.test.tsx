@@ -164,7 +164,25 @@ describe("orders pages", () => {
     renderApp("/orders/ORD-1046");
 
     const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
-    expect(within(block).getByText("No signed receipt (this order is from before receipts, or signing was not possible)")).toBeVisible();
+    expect(within(block).getByText("No signed receipt for this order")).toBeVisible();
+    expect(within(block).queryByText(/demo seed/)).not.toBeInTheDocument();
+    expect(within(block).queryByRole("button", { name: "Copy receipt" })).not.toBeInTheDocument();
+    expect(within(block).queryByText("Signed", { selector: ".stamp" })).not.toBeInTheDocument();
+  });
+
+  it("says that the demo seed placed the delivery demo order, so it has no receipt (#1560)", async () => {
+    const api = createMockApi();
+    const order = await api.getOrder("ORD-1046");
+    vi.spyOn(api, "getOrder").mockResolvedValue({ ...order, receipt: null, placedBy: "demo-seed" });
+    renderApp("/orders/ORD-1046", api);
+
+    const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
+    expect(
+      within(block).getByText(
+        "Placed by the demo seed for the delivery demo. No person approved it, so it has no signed receipt.",
+      ),
+    ).toBeVisible();
+    expect(within(block).queryByText("No signed receipt for this order")).not.toBeInTheDocument();
     expect(within(block).queryByRole("button", { name: "Copy receipt" })).not.toBeInTheDocument();
     expect(within(block).queryByText("Signed", { selector: ".stamp" })).not.toBeInTheDocument();
   });
