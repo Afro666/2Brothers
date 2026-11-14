@@ -1,0 +1,15 @@
+# Speech-to-text image (#1331): Whisper on our own server. Build context is the repo root:
+#   docker build -f bot/Dockerfile.stt .
+# It holds no key. The model file is downloaded once, at the first start, into /models
+# (a named volume in deploy/compose.yaml), so a new image does not download it again.
+FROM docker.io/library/python:3.12-slim
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HF_HOME=/models
+# faster-whisper brings its own audio decoder (PyAV): no ffmpeg package is needed for OGG/Opus.
+RUN pip install --no-cache-dir "faster-whisper>=1.2,<2" "fastapi>=0.115,<1" "uvicorn>=0.30,<1" \
+    && useradd --system --uid 10001 --create-home app \
+    && mkdir /models && chown app /models
+COPY bot/__init__.py bot/stt_service.py ./bot/
+USER app
+EXPOSE 8002
+CMD ["python", "-m", "bot.stt_service"]

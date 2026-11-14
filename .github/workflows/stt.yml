@@ -1,0 +1,63 @@
+name: stt
+
+# The speech-to-text image (#1331) builds, starts and reads a real OGG/Opus voice clip,
+# the format Telegram sends. Runs only when the service or its image changes.
+# Not a required check: it downloads a model from a public hub.
+
+on:
+  pull_request:
+    paths:
+      - "bot/stt_service.py"
+      - "bot/Dockerfile.stt"
+      - ".github/workflows/stt.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stt-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -f bot/Dockerfile.stt -t stt-test .
+      - name: Make a voice clip the way Telegram sends it (OGG/Opus)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq espeak-ng ffmpeg
+          espeak-ng -v en-us -s 140 -w clip.wav "Twenty litres of milk for Monday"
+          ffmpeg -loglevel error -i clip.wav -c:a libopus -b:a 24k -ar 48000 -ac 1 clip.ogg
+          ffmpeg -loglevel error -f lavfi -i anullsrc=r=48000:cl=mono -t 3 -c:a libopus silence.ogg
+          ffmpeg -loglevel error -f lavfi -i anullsrc=r=48000:cl=mono -t 35 -c:a libopus long.ogg
+      - name: Start it with the smallest model and wait until the model is loaded
+        run: |
+          docker run -d --name stt -p 8002:8002 -e WHISPER_MODEL=tiny stt-test
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8002/health | grep -q '"ready":true'; then exit 0; fi
+            sleep 2
+          done
+          docker logs stt
+          exit 1
+      - name: A spoken request comes back as text
+        run: |
+          curl -fsS -X POST --data-binary @clip.ogg -H "Content-Type: audio/ogg" \
+            "http://localhost:8002/transcribe" | tee answer.json
+          python3 - <<'EOF'
+          import json
+          answer = json.load(open("answer.json"))
+          text = answer["text"].lower()
+          assert answer["language"] == "en", answer
+          assert 1.0 < answer["audio_seconds"] < 10.0, answer
+          # A synthetic voice and the smallest model: ask for the words, not for every letter.
+          assert "milk" in text and "monday" in text, answer
+          EOF
+      - name: Silence gives no text, and a clip over 30 seconds is refused
+        run: |
+          curl -fsS -X POST --data-binary @silence.ogg "http://localhost:8002/transcribe" | tee silence.json
+          python3 -c "import json; a = json.load(open('silence.json')); assert a['text'] == '', a"
+          code=$(curl -s -o long.json -w '%{http_code}' -X POST --data-binary @long.ogg "http://localhost:8002/transcribe")
+          cat long.json
+          test "$code" = "422"
+          grep -q AUDIO_TOO_LONG long.json
