@@ -84,3 +84,25 @@ def test_unknown_totals_are_not_zero_and_six_rows_maximum(source):
     for i in range(9):
         proposal(db,f'cutoff-{i}',closing=NOW+timedelta(minutes=i))
     assert len(collect(gw,'k','morning','en'))==6
+
+
+@pytest.mark.parametrize('lang',['en','fi'])
+def test_recalled_stock_with_unknown_count_is_reported(source,lang):
+    from store.history import record_stock_count
+    db,gw=source
+    record_stock_count(db,'k',NOW,[{'product_id':'milk','unit':'L','on_hand':None}])
+    db.recall_alerts.insert_one({'_id':'recall','kitchen_id':'k','product_id':'milk','status':'active'})
+    rows=collect(gw,'k','morning',lang)
+    assert len(rows)==1 and rows[0]['kind']=='RECALL' and rows[0]['numbers']==[]
+    assert checked_lines({'lines':[dict(text=rows[0]['variants'][0],kind='RECALL',
+                         ref_id='recall',numbers=[])]},rows,lang)[1]==1
+
+
+def test_unrelated_audit_traffic_cannot_hide_delivery_checks(source):
+    db,gw=source
+    db.orders.insert_one({'_id':'order','kitchen_id':'k','status':'SENT','outcome':'SENT'})
+    db.audit_log.insert_one({'server':{'kitchen_id':'k','at':NOW.isoformat()},
+        'event':{'kind':'delivery_note_read','order_id':'order','statuses':{'SHORT':2}}})
+    db.audit_log.insert_many([{'server':{'kitchen_id':'k','at':(NOW+timedelta(minutes=1)).isoformat()},
+        'event':{'kind':'kitchen_brief_read'}} for _ in range(1001)])
+    assert collect(gw,'k','evening','en')[0]['kind']=='DELIVERY_CHECK'

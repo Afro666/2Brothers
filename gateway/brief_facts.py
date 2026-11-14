@@ -111,18 +111,8 @@ def _total(block, simulation):
     if currency and str(currency).upper() != "EUR":
         return None
     amount = _dec(block.get("expected_total"))
-    if amount is not None:
-        return amount
-    lines = block.get("lines") or []
-    if not lines:
-        return None
-    values = []
-    for line in lines:
-        quantity, price = _dec(line.get("quantity")), _dec(line.get("unit_price"))
-        if quantity is None or price is None:
-            return None
-        values.append(quantity * price)
-    return sum(values, Decimal(0))
+    # Unit prices cannot reconstruct delivery fees or VAT: only the engine total is final.
+    return amount
 
 
 def _proposal_groups(snapshot, item):
@@ -203,6 +193,9 @@ def collect(gateway, kitchen, when, lang):
         if on_hand is not None and on_hand > 0:
             en = f"Active recall for {product}: {quantity + ' in stock' if quantity else 'positive stock is present'}."
             fi = f"Aktiivinen takaisinveto: {product}: {('varastossa ' + quantity) if quantity else 'varastosaldo on positiivinen'}."
+        elif pid in stock and on_hand is None:
+            en = f"Active recall for {product}: listed in stock, count unknown."
+            fi = f"Aktiivinen takaisinveto: {product} on varastossa, määrä ei tiedossa."
         elif pid in waiting_products:
             en = f"Active recall for {product}: the product is in an open proposal."
             fi = f"Aktiivinen takaisinveto: {product} on avoimessa ehdotuksessa."
@@ -267,7 +260,7 @@ def collect(gateway, kitchen, when, lang):
             _add(essential, 3, (entry.get("server") or {}).get("at"), ref_id,
                  _row("DELIVERY_CHECK", ref_id, False, en, fi, lang))
 
-    represented = {entry[2] for entry in sorted(essential)[:6] if entry[3]["kind"] == "CUTOFF"}
+    represented = {entry[2] for entry in sorted(essential, key=lambda e: e[:3])[:6] if entry[3]["kind"] == "CUTOFF"}
     grouped = {}
     for item in active_proposals:
         ref_id = _ref(item["proposal"])
@@ -307,4 +300,4 @@ def collect(gateway, kitchen, when, lang):
         _add(unconfirmed, 5, order.get("updated_at") or order.get("created_at"), ref_id,
              _row("UNCONFIRMED", ref_id, False, en, fi, lang))
 
-    return [entry[3] for entry in sorted(essential + waiting + unconfirmed)[:6]]
+    return [entry[3] for entry in sorted(essential + waiting + unconfirmed, key=lambda e: e[:3])[:6]]

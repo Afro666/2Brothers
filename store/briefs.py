@@ -49,7 +49,7 @@ def snapshot(db, kitchen):
     alerts = list(db.recall_alerts.find({"kitchen_id": kitchen, "status": {"$nin": ["dismissed", "resolved", "closed"]}})
                   .sort([("detected_at", -1), ("_id", -1)]).limit(200))
     context = recalls.context(db, kitchen)[0] if alerts else None
-    audit = list(db.audit_log.find({"server.kitchen_id": kitchen})
+    audit = list(db.audit_log.find({"server.kitchen_id": kitchen, 'event.kind': 'delivery_note_read'})
                  .sort([("server.at", -1), ("_id", -1)]).limit(1000))
 
     ids = {str(alert["product_id"]) for alert in alerts if alert.get("product_id") is not None}
