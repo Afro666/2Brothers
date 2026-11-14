@@ -2,7 +2,7 @@ import { Carrot, Cheese, Milk, Package } from "lucide-react";
 import { describe, expect, it } from "vitest";
 
 import { FALLBACK_PICTURE, pictureFor, TINTS } from "./product-picture";
-import { Potato } from "./product-icons";
+import { Beet, Butter, Cucumber, Mushroom, Onion, Pepper, Potato, Tomato } from "./product-icons";
 
 describe("pictureFor", () => {
   it("pictures English and Finnish potatoes as potatoes, keeping carrots distinct", () => {
@@ -12,6 +12,20 @@ describe("pictureFor", () => {
     }
     expect(pictureFor("Carrots, Finnish 10 kg").icon).toBe(Carrot);
     expect(pictureFor("", "Porkkana 10 kg").icon).toBe(Carrot);
+  });
+
+  it.each([
+    { en: "Butter", fi: "Voi", icon: Butter },
+    { en: "Mushroom", fi: "Herkkusieni", icon: Mushroom },
+    { en: "Yellow onion", fi: "Sipuli", icon: Onion },
+    { en: "Cucumber", fi: "Kurkku", icon: Cucumber },
+    { en: "Tomato", fi: "Tomaatti", icon: Tomato },
+    { en: "Bell pepper", fi: "Paprika", icon: Pepper },
+    { en: "Beetroot", fi: "Punajuuri", icon: Beet },
+    { en: "Carrot", fi: "Porkkana", icon: Carrot },
+  ])("$en and $fi use the correct pictogram", ({ en, fi, icon }) => {
+    expect(pictureFor(en).icon).toBe(icon);
+    expect(pictureFor("", fi).icon).toBe(icon);
   });
 
   it.each([

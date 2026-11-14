@@ -1,11 +1,11 @@
 import {
   Apple, Bacon, Banana, Bean, Beef, Candy, Carrot, Cheese, Cherry, Citrus, Coffee, Cookie, CookingPot,
   Croissant, CupSoda, Droplet, Drumstick, Egg, Fish, Flame, Flower, GlassWater, Grape, Ham, IceCreamCone,
-  Layers, Leaf, LeafyGreen, Milk, Nut, Package, Pencil, Pizza, Salad, Sandwich, SoapDispenserDroplet, Soup,
-  Sparkles, SprayCan, Sprout, UtensilsCrossed, Vegan, Wheat, Wine,
+  Layers, LeafyGreen, Milk, Nut, Package, Pencil, Pizza, Salad, Sandwich, SoapDispenserDroplet, Soup,
+  Sparkles, SprayCan, UtensilsCrossed, Vegan, Wheat, Wine,
   type LucideIcon,
 } from "lucide-react";
-import { Potato } from "./product-icons";
+import { Beet, Butter, Cucumber, Mushroom, Onion, Pepper, Potato, Tomato } from "./product-icons";
 
 /**
  * A generic picture for a catalog product, read from its English or Finnish name.
@@ -59,7 +59,7 @@ const RULES: Rule[] = [
   [IceCreamCone, "pink", "ice cream", ["ice cream", "sorbet", "gelato"], ["jäätelö", "sorbetti", "mehujää"]],
   [Nut, "stone", "nuts", ["peanut", "almond", "cashew", "hazelnut", "walnut", "pistachio", "nut mix", "nuts"], ["pähkinä", "manteli", "maapähkinä"]],
   [Cookie, "stone", "chocolate", ["chocolate", "cocoa", "praline"], ["suklaa", "kaakao"]],
-  [Milk, "amber", "butter", ["butter", "margarine", "spread", "ghee"], ["voi", "margariini", "levite"]],
+  [Butter, "amber", "butter", ["butter", "margarine", "spread", "ghee"], ["voi", "margariini", "levite"]],
   [Cheese, "amber", "cheese", ["cheese", "edam", "emmental", "gouda", "cheddar", "mozzarella", "parmesan", "feta", "brie", "halloumi", "mascarpone", "ricotta", "quark", "cottage"], ["juusto", "rahka", "raejuusto", "mozzarella"]],
   [Milk, "sky", "milk and cream", ["milk", "cream", "yoghurt", "yogurt", "kefir", "buttermilk", "creme fraiche", "crème fraîche", "sour cream", "skyr", "oat drink", "milk drink", "dairy"], ["maito", "kerma", "jogurtti", "kefiiri", "piimä", "viili", "smetana", "ranskankerma", "kaurajuoma", "maitojuoma", "skyr", "kermaviili"]],
   [Egg, "amber", "eggs", ["egg", "eggs"], ["kananmuna", "muna", "munat"]],
@@ -70,15 +70,16 @@ const RULES: Rule[] = [
   [Beef, "rose", "meat", ["beef", "pork", "lamb", "veal", "minced", "mince", "steak", "meat", "meatball", "reindeer", "elk", "venison", "fillet", "roast", "ribs", "entrecote", "sirloin", "brisket"], ["naudan", "nauta", "sika", "possu", "lammas", "jauheliha", "liha", "lihapulla", "poro", "hirvi", "paisti", "pihvi", "filee", "kylki", "fileepihvi", "jauhis"]],
   [Vegan, "green", "plant protein", ["tofu", "tempeh", "seitan", "soy", "pulled oats", "plant-based", "vegan"], ["tofu", "soija", "nyhtökaura", "härkis", "kasvis"]],
   [Potato, "stone", "potato", ["potato", "potatoes", "fries", "chips", "rosti", "rösti"], ["peruna", "perunat", "ranskalaiset", "sipsi", "lohkoperuna"]],
-  [Carrot, "orange", "carrot and roots", ["carrot", "beetroot", "parsnip", "turnip", "swede", "celeriac", "radish", "root"], ["porkkana", "punajuuri", "palsternakka", "nauris", "lanttu", "juuriselleri", "retiisi", "juures", "juurekset"]],
-  [Leaf, "green", "cucumber", ["cucumber", "gherkin", "pickle", "zucchini", "courgette"], ["kurkku", "kesäkurpitsa", "suolakurkku"]],
-  [Cherry, "rose", "tomato", ["tomato", "tomatoes", "passata", "ketchup"], ["tomaatti", "tomaatit", "ketsuppi", "tomaattimurska"]],
+  [Carrot, "orange", "carrot and parsnip", ["carrot", "parsnip"], ["porkkana", "palsternakka"]],
+  [Beet, "orange", "round roots", ["beetroot", "turnip", "swede", "celeriac", "radish", "root"], ["punajuuri", "nauris", "lanttu", "juuriselleri", "retiisi", "juures", "juurekset"]],
+  [Cucumber, "green", "cucumber", ["cucumber", "gherkin", "pickle", "zucchini", "courgette"], ["kurkku", "kesäkurpitsa", "suolakurkku"]],
+  [Tomato, "rose", "tomato", ["tomato", "tomatoes", "passata", "ketchup"], ["tomaatti", "tomaatit", "ketsuppi", "tomaattimurska"]],
   [Salad, "green", "salad and greens", ["lettuce", "salad", "spinach", "kale", "cabbage", "rucola", "arugula", "chard", "leek", "herb", "parsley", "dill", "basil", "coriander", "chive", "sprout", "iceberg", "romaine"], ["salaatti", "pinaatti", "lehtikaali", "kaali", "rucola", "purjo", "persilja", "tilli", "basilika", "korianteri", "ruohosipuli", "itu", "yrtti"]],
   [Coffee, "stone", "coffee and tea", ["coffee", "espresso", "tea", "cappuccino", "latte"], ["kahvi", "tee", "espresso", "suodatinkahvi"]],
   [LeafyGreen, "green", "broccoli and vegetables", ["broccoli", "cauliflower", "vegetable", "vegetables", "pea", "peas", "bean", "beans", "corn", "asparagus", "brussels", "wok mix", "edamame", "lentil", "chickpea"], ["parsakaali", "kukkakaali", "vihannes", "vihannekset", "herne", "herneet", "papu", "pavut", "maissi", "parsa", "ruusukaali", "linssi", "kikherne", "kasvissekoitus"]],
-  [Sprout, "violet", "onion and garlic", ["onion", "onions", "garlic", "shallot"], ["sipuli", "valkosipuli", "salottisipuli", "punasipuli"]],
-  [Flame, "rose", "pepper", ["bell pepper", "paprika", "chili", "chilli", "jalapeno", "jalapeño"], ["paprika", "chili", "jalapeno"]],
-  [Leaf, "stone", "mushroom", ["mushroom", "mushrooms", "champignon", "chanterelle", "porcini"], ["sieni", "sienet", "herkkusieni", "kantarelli", "suppilovahvero", "tatti"]],
+  [Onion, "violet", "onion and garlic", ["onion", "onions", "garlic", "shallot"], ["sipuli", "valkosipuli", "salottisipuli", "punasipuli"]],
+  [Pepper, "rose", "pepper", ["bell pepper", "paprika", "chili", "chilli", "jalapeno", "jalapeño"], ["paprika", "chili", "jalapeno"]],
+  [Mushroom, "stone", "mushroom", ["mushroom", "mushrooms", "champignon", "chanterelle", "porcini"], ["sieni", "sienet", "herkkusieni", "kantarelli", "suppilovahvero", "tatti"]],
   [Apple, "rose", "apple and pear", ["apple", "pear"], ["omena", "päärynä"]],
   [Banana, "amber", "banana", ["banana"], ["banaani"]],
   [Citrus, "orange", "citrus", ["orange", "lemon", "lime", "grapefruit", "mandarin", "clementine", "citrus"], ["appelsiini", "sitruuna", "lime", "greippi", "mandariini", "klementiini"]],
