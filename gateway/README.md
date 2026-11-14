@@ -211,6 +211,19 @@ golden scenarios S01-S13 are `python -m gateway.scenarios`.
 The aggregation needs Atlas or MongoDB 7; the tests replace it
 (`gateway/tests/test_drift_routes.py`).
 
+## Earned auto-approve (#299)
+
+Off by default. `GET /v1/kitchens/{k}/auto-approve` shows the setting and the learning
+progress (weeks, human decisions, edit rate). `PUT` with `{"enabled": true, "limit_eur": "500"}`
+works only for an approver and only after the learning period: 4 weeks, 20 human decisions,
+at most 10% of approved proposals edited (409 `LEARNING_PERIOD` before that; limit at most
+2,000 EUR). Then a routine proposal is approved without waiting: total under the limit, no
+warning, confirmed stock on every line, nothing excluded or short, and every product already
+on 3 human-approved, unedited orders. Substitutes, unknown stock, allergen or cut-off issues,
+recalls, events and new products always wait for a person. The order is recorded as
+`auto-approve (rule set by <person>)`, the audit entry `auto_approved` carries the evidence,
+and the same live re-check applies (a moved price still refuses). Auto-approvals never count
+as learning. `{"enabled": false}` switches it off at once.
 ## Onboarding lookup (#375)
 
 `POST /v1/onboarding/lookup` with `{"email": ...}` or `{"website": ...}` (a person's

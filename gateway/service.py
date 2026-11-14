@@ -326,7 +326,24 @@ class Gateway:
                     verdict=sim["mandate"]["verdict"])
         self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], summary=self._summary(request, sim)["text"])
-        return self._proposal_out(doc)
+        self._maybe_auto_approve(kitchen_id, doc, sim, request)
+        return self._proposal_out(self.db.proposals.find_one({"_id": doc["_id"]}) or doc)
+
+    def _maybe_auto_approve(self, kitchen_id: str, doc: dict, sim: dict, request: dict) -> None:
+        """Earned auto-approve (#299): off unless an approver switched it on after the learning
+        period. Any doubt, any error: the proposal simply waits for a person."""
+        try:
+            from gateway import autoapprove
+            ok, _, evidence = autoapprove.decide(self.db, kitchen_id, sim, request, self.now())
+            if not ok:
+                return
+            by = f"auto-approve (rule set by {evidence['rule_set_by']})"
+            self._audit(kitchen_id, "auto_approved", by, proposal_id=doc["_id"],
+                        expected_total=sim["expected_total"], evidence=evidence)
+            self.approve(kitchen_id, doc["_id"], {"expected_total": sim["expected_total"],
+                                                  "idempotency_key": "auto:" + doc["_id"]}, human=by)
+        except Exception:
+            return
 
     def _proposal_out(self, doc: dict) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
