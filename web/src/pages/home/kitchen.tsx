@@ -1,4 +1,4 @@
-import { formatDateTime, formatEur, formatNumber } from "@/lib/format";
+import { formatDateTime, formatEur, formatShortfall } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
 import type { Api } from "@/api/types";
 import type { ApprovalRequest, AuditEvent, DemandLine, StockItem, Supplier } from "@/types";
@@ -134,8 +134,8 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
                 <li key={item.productId} className="flex items-start justify-between gap-3 py-2">
                   <span className="min-w-0">{item.productName}</span>
                   <span className="text-right font-mono text-[13px] font-medium text-danger">
-                    short by {formatNumber((needed.get(item.productId) ?? 0) - item.onHand - (item.onOrder ?? 0))}{" "}
-                    {item.unit}
+                    short by{" "}
+                    {formatShortfall((needed.get(item.productId) ?? 0) - item.onHand - (item.onOrder ?? 0), item.unit)}
                     {item.onOrder === null ? " (on order unknown)" : ""}
                   </span>
                 </li>

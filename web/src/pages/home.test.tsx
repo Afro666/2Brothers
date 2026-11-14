@@ -107,6 +107,25 @@ describe("HomePage", () => {
     expect(screen.getByText("Uncounted milk").parentElement).toHaveTextContent("not counted");
     expect(screen.getByText("What needs you today.")).toBeInTheDocument();
   });
+
+  it("rounds shortfalls up: whole pieces, one decimal for weights", async () => {
+    const api = createMockApi();
+    const row = { onOrder: 0, countedAt: null, lastDelivery: null };
+    api.getStock = async () => [
+      { ...row, productId: "PCS-001", productName: "Bread rolls", unit: "PCS", onHand: 0 },
+      { ...row, productId: "KG-001", productName: "Potatoes", unit: "KG", onHand: 0 },
+    ];
+    const line = { date: "2026-11-13", why: "planned menu" };
+    api.getDemand = async () => [
+      { ...line, productId: "PCS-001", productName: "Bread rolls", unit: "PCS", need: 1921.159 },
+      { ...line, productId: "KG-001", productName: "Potatoes", unit: "KG", need: 41.41 },
+    ];
+    renderApp(`/?now=${DEMO_NOW}`, api);
+
+    expect(await screen.findByText("Bread rolls")).toBeInTheDocument();
+    expect(screen.getByText("Bread rolls").parentElement).toHaveTextContent("short by 1,922 PCS");
+    expect(screen.getByText("Potatoes").parentElement).toHaveTextContent("short by 41.5 KG");
+  });
 });
 
 describe("nextCutoff", () => {
