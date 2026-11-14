@@ -378,7 +378,7 @@ Every placed order carries `receipt`, signed with the same key: the order, its o
 lines, total, who approved, the time and the supplier outcome (`NOT_SENT`: Valio has no
 order endpoint, so the receipt never says a supplier accepted). Null when signing failed
 and for older orders. The order answer says the same beside `status` and `outcome`
-(#1768): `supplier_outcome: "NOT_SENT"` and `supplier_note`, so `SENT` / `CONFIRMED`
+(#1768): `supplier_outcome: "NOT_SENT"` and `supplier_note`, so `RECORDED` / `CONFIRMED`
 ("placed in our gateway") never read as "the supplier has it". Both are null once a
 person recorded that the supplier has the order (resolution `placed`). Check one order
 answer:

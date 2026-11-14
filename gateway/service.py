@@ -2034,7 +2034,7 @@ def _addable_out(r: AddableRow) -> dict:
 def _supplier_side(order: dict) -> dict:
     """What the supplier has of this order, in the receipt's own words (#1768).
 
-    `outcome: CONFIRMED, status: SENT` means "placed in our gateway". The gateway sends
+    `outcome: CONFIRMED, status: RECORDED` means "placed in our gateway". The gateway sends
     nothing (no upstream order endpoint), so the answer says that beside them. Null when a
     person recorded that the supplier has the order (resolution `placed`), and for every
     outcome that is not CONFIRMED: there the outcome itself says what is known.
