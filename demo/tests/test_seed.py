@@ -28,6 +28,18 @@ def test_past_forecasts_were_made_before_the_day(data):
     assert past and all(r["made_on"] <= r["date"] for r in past)
 
 
+def test_piece_forecasts_are_whole_and_follow_the_kitchens_covers(data):
+    for name in ('forecasts', 'baseline'):
+        pieces = [r for r in data[name] if r['unit'] in ('PCS', 'ST')]
+        assert pieces
+        assert all(r['need'] == int(r['need']) for r in pieces)
+    # Rye is 1-2 pieces per cover in the synthetic recipes, not a case per guest.
+    for row in data['forecasts']:
+        if row['product_id'] == '461578':
+            forecast_covers = int(row['why'].split(' covers forecast')[0])
+            assert 0 <= row['need'] <= 2 * forecast_covers + 2
+
+
 def test_baseline_has_no_first_week_placeholders(data):
     from demo.seed import START
     from datetime import timedelta
