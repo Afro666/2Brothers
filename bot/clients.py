@@ -5,6 +5,7 @@ public gateway API with a kitchen token, like any other agent. That token never 
 """
 from __future__ import annotations
 
+import base64
 import uuid
 
 import httpx
@@ -115,6 +116,15 @@ class Gateway:
     def brief(self, when: str, lang: str = "en") -> dict:
         """The kitchen's morning or evening brief (contract: #1332). A read: it makes no order."""
         return self._call("GET", "/brief", params={"when": when, "lang": lang})
+
+    def shelf_photo(self, image: bytes) -> dict:
+        """Nemotron reads one shelf photo into a count to confirm. The route stores nothing."""
+        return self._call("POST", "/stock/photo", json={"image_base64": base64.b64encode(image).decode("ascii")})
+
+    def save_counts(self, counts: list[dict], counted_at: str, key: str) -> dict:
+        """Store a count a person confirmed. The same key stores once."""
+        return self._call("POST", "/stock-counts", json={"idempotency_key": key, "counted_at": counted_at,
+                                                         "source": "manual", "counts": counts})
 
     def waiting(self) -> list[dict]:
         """The proposals that wait for a person's approval, newest first."""

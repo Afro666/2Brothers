@@ -56,6 +56,16 @@ class FakeGateway:
     def __init__(self, current=None, error=None):
         self.current, self.error, self.calls = current or proposal(), error, []
         self.brief_answer, self.waiting_list = None, None
+        self.shelf_answer = {"model": "nemotron-3.5-super-vl", "duration_ms": 4210, "saved": False, "rows": [
+            {"row": "COUNTED", "product_id": "463335", "product_name": "Valio Eila 3 % milk drink 1 l",
+             "label": "Valio Eila 3% 1L", "confidence": "high", "packs": 6, "pack_size": "1", "count": "6", "unit": "L"},
+            {"row": "COUNTED", "product_id": "400100", "product_name": "Eggs M", "label": "Eggs",
+             "confidence": "medium", "packs": 12, "pack_size": "1", "count": "12", "unit": "PCS"},
+            {"row": "PLEASE_COUNT", "product_id": "463038", "product_name": "Valio Eila 10 L novobox",
+             "label": "Valio Eila 10 L novobox", "confidence": "low", "packs": None, "pack_size": "10",
+             "count": None, "unit": "L"},
+            {"row": "UNMATCHED", "product_id": None, "product_name": None, "label": "Arla <b>L</b> m",
+             "confidence": "low", "packs": None, "pack_size": None, "count": None, "unit": None}]}
 
     def _answer(self, *call):
         self.calls.append(call)
@@ -83,6 +93,18 @@ class FakeGateway:
                 {"text": "Open supplier offer from Valio Aimo <b>for</b> 10.48 KG potato.", "kind": "SUPPLIER_OFFER",
                  "ref_id": "o1", "urgent": False},
                 {"text": "2 drafts wait.", "kind": "WAITING_DRAFTS", "ref_id": "w1", "urgent": False}]}
+
+    def shelf_photo(self, image):
+        self.calls.append(("shelf_photo", len(image)))
+        if self.error:
+            raise self.error
+        return self.shelf_answer
+
+    def save_counts(self, counts, counted_at, key):
+        self.calls.append(("save_counts", counts, counted_at, key))
+        if self.error:
+            raise self.error
+        return {"stock_count_id": "c1", "stored": len(counts)}
 
     def waiting(self):
         return self.waiting_list if self.waiting_list is not None else [self.current]
@@ -420,3 +442,85 @@ def test_a_failed_timed_brief_is_not_sent_twice(bot):
     bot.gw.error = None
     bot.tick()
     assert bot.tg.sent == []
+
+
+# ---- a shelf photo -----------------------------------------------------------------------
+def photo(bot, chat=7):
+    bot.handle({"message": {"chat": {"id": chat}, "photo": [
+        {"file_id": "small", "width": 90, "height": 60, "file_size": 1200},
+        {"file_id": "large", "width": 1280, "height": 960, "file_size": 180000},
+        {"file_id": "huge", "width": 4000, "height": 3000, "file_size": 9000000}]}})
+
+
+def test_a_shelf_photo_shows_the_count_and_saves_nothing_by_itself(bot):
+    photo(bot)
+    assert [c[0] for c in bot.gw.calls] == ["shelf_photo"]
+    shown = bot.tg.edits[-1]
+    lines = shown["text"].split("\n")
+    assert lines[0] == "<b>Shelf photo: 2 counted · 1 to count by hand</b>"
+    assert lines[1] == "<code>6 L   </code>  Valio Eila 3 % milk drink 1 l"
+    assert lines[2] == "<code>12 pcs</code>  Eggs M"
+    assert lines[3] == "Count by hand: Valio Eila 10 L novobox"
+    assert lines[4] == 'Not recognised: "Arla &lt;b&gt;L&lt;/b&gt; m"'
+    assert lines[5] == "<i>Read by Nemotron in 4.2 s. Nothing is saved until you press Save.</i>"
+    assert [b["text"] for b in shown["markup"]["inline_keyboard"][0]] == ["Save 2 counts", "Discard"]
+
+
+def test_save_stores_only_the_counted_rows_once(bot):
+    photo(bot)
+    message_id = bot.tg.edits[-1]["id"]
+    press(bot, "s:save:0", message_id)
+    saves = [c for c in bot.gw.calls if c[0] == "save_counts"]
+    assert len(saves) == 1
+    assert saves[0][1] == [{"product_id": "463335", "on_hand": "6", "unit": "L"},
+                           {"product_id": "400100", "on_hand": "12", "unit": "PCS"}]
+    assert saves[0][2] == "2026-11-14T16:00:00+02:00" and saves[0][3] == f"tg-shelf-7-{message_id}"
+    assert bot.tg.edits[-1]["text"].startswith("<b>Saved: 2 counts</b>") and bot.tg.edits[-1]["markup"] is None
+    press(bot, "s:save:0", message_id)                       # a second press
+    assert len([c for c in bot.gw.calls if c[0] == "save_counts"]) == 1
+    assert bot.tg.answers[-1] == "This photo is out of date. Send it again."
+
+
+def test_discard_saves_nothing(bot):
+    photo(bot)
+    press(bot, "s:drop:0", bot.tg.edits[-1]["id"])
+    assert bot.tg.edits[-1]["text"] == "Discarded. Nothing was saved."
+    assert not [c for c in bot.gw.calls if c[0] == "save_counts"]
+
+
+def test_a_failed_save_keeps_the_count_for_a_second_try(bot):
+    photo(bot)
+    message_id = bot.tg.edits[-1]["id"]
+    bot.gw.error = GatewayError(503, "STORE_UNAVAILABLE", "The store does not answer.")
+    press(bot, "s:save:0", message_id)
+    assert bot.tg.answers[-1] == "The store does not answer."
+    bot.gw.error = None
+    press(bot, "s:save:0", message_id)
+    assert bot.tg.answers[-1] == "Saved."
+
+
+def test_a_photo_with_nothing_counted_has_no_save_button(bot):
+    bot.gw.shelf_answer = {"duration_ms": 900, "rows": [bot.gw.shelf_answer["rows"][2]]}
+    photo(bot)
+    assert bot.tg.edits[-1]["markup"] is None
+    assert "<b>Shelf photo: 0 counted · 1 to count by hand</b>" in bot.tg.edits[-1]["text"]
+    assert "Nothing to save" in bot.tg.edits[-1]["text"]
+    bot.gw.shelf_answer = {"duration_ms": 900, "rows": []}
+    photo(bot)
+    assert bot.tg.edits[-1]["text"].startswith("<b>I see no product on this photo.</b>")
+
+
+def test_a_busy_read_and_a_photo_from_an_unlinked_chat(bot):
+    bot.gw.error = GatewayError(429, "STOCK_PHOTO_BUSY", "busy")
+    photo(bot)
+    assert bot.tg.edits[-1]["text"].startswith("Another photo is being read.")
+    bot.gw.error, before = None, len(bot.gw.calls)
+    photo(bot, chat=99)
+    assert bot.tg.sent[-1]["text"] == NOT_LINKED and len(bot.gw.calls) == before
+
+
+def test_the_largest_photo_that_fits_is_read(bot):
+    seen = []
+    bot.tg.download = lambda file_id, limit=0: seen.append(file_id) or b"JPEG"
+    photo(bot)
+    assert seen == ["large"]

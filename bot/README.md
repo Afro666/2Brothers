@@ -51,6 +51,10 @@ person opens it in Telegram and presses Start. Only linked chats get an answer.
   lines. Then one order message per supplier, 6 at most. The lines come from the gateway's brief
   route (#1332, wording by Nemotron, numbers checked there); the counts and totals are added up
   from the waiting proposals, and a total with an unknown part is not shown.
+- A photo of a shelf: Nemotron reads it (`POST /stock/photo`, which stores nothing) and the chat
+  shows the count: counted rows, rows to count by hand, labels it did not recognise. `Save` sends
+  only the counted rows to `POST /stock-counts`; `Discard` drops them. The bot never saves a count
+  by itself, and a read is kept in memory only: after a restart, send the photo again.
 - The same brief comes by itself at 07:00 and 16:00 Helsinki time to every linked chat
   (`BOT_BRIEF_TIMES`), once per slot also across a restart, and not later than 2 hours after its
   time. A brief with nothing in it makes no sound.

@@ -240,11 +240,53 @@ def brief(answer: dict, waiting: list[dict], today: str, approve_url: str | None
     return Message("\n".join(out), buttons)
 
 
+def shelf_counts(answer: dict) -> list[dict]:
+    """The rows a person may save: only COUNTED ones. Unknown is never a number."""
+    return [{"product_id": str(r["product_id"]), "on_hand": str(r["count"]), "unit": r.get("unit")}
+            for r in answer.get("rows") or []
+            if r.get("row") == "COUNTED" and r.get("product_id") and r.get("count") is not None]
+
+
+def shelf(answer: dict, saved: bool = False) -> Message:
+    """What Nemotron read on a shelf photo. Nothing is stored until the person presses Save."""
+    rows = answer.get("rows") or []
+    counted = [r for r in rows if r.get("row") == "COUNTED" and r.get("product_id") and r.get("count") is not None]
+    by_hand = [r for r in rows if r.get("row") == "PLEASE_COUNT"]
+    unknown = [r for r in rows if r.get("row") == "UNMATCHED"]
+    if not rows:
+        return Message("<b>I see no product on this photo.</b>\nTake it closer, with the labels to the camera.")
+    if saved:
+        head = f"Saved: {_plural(len(counted), 'count')}"
+    else:
+        parts = [f"{len(counted)} counted"]
+        if by_hand:
+            parts.append(f"{len(by_hand)} to count by hand")
+        head = "Shelf photo: " + " · ".join(parts)
+    out = [f"<b>{head}</b>"]
+    width = max((len(quantity(r.get("count"), r.get("unit"))) for r in counted), default=0)
+    name_of = lambda r: escape(str(r.get("product_name") or r.get("label") or r.get("product_id")))   # noqa: E731
+    out += [f"<code>{quantity(r.get('count'), r.get('unit')).ljust(width)}</code>  {name_of(r)}" for r in counted]
+    out += [f"Count by hand: {name_of(r)}" for r in by_hand]
+    out += [f"Not recognised: \"{escape(str(r.get('label') or ''))}\"" for r in unknown]
+    if saved:
+        return Message("\n".join(out))
+    seconds = answer.get("duration_ms")
+    took = f" in {int(seconds) / 1000:.1f} s" if isinstance(seconds, (int, float)) else ""
+    out.append(f"<i>Read by Nemotron{took}. " + ("Nothing is saved until you press Save.</i>" if counted
+                                                    else "Nothing to save: count these by hand.</i>"))
+    buttons = [[{"text": f"Save {_plural(len(counted), 'count')}", "callback_data": "s:save:0"},
+                {"text": "Discard", "callback_data": "s:drop:0"}]] if counted else []
+    return Message("\n".join(out), buttons)
+
+
 def refusal(code: str, message: str | None = None) -> str:
     """One plain sentence for an answer that is not a proposal."""
     known = {
         "CANNOT_READ_REQUEST": "I could not read that as an order. Say the product, the amount and the day, for example: 20 L oat drink for Monday.",
         "BUYER_UNAVAILABLE": "The Buyer does not answer now. Try again in a minute.",
         "RATE_LIMITED": "Too many requests in a short time. Try again in a minute.",
+        "STOCK_PHOTO_BUSY": "Another photo is being read. Send this one again when that answer is here.",
+        "VISION_TIMEOUT": "The photo took too long to read. Send it again.",
+        "NOT_AN_IMAGE": "I could not read that as a photo. Send it as a photo, not as a file.",
     }
     return known.get(code) or escape(message or "That did not work. Try again.")
