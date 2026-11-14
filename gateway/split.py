@@ -38,6 +38,8 @@ _MONTHS = {*MONTHS, "sept", *("january february march april june july august sep
 _COUNT = re.compile(r"(?<![\d.,:/-])(\d{1,5})\s+([a-zåäö][a-zåäö-]*)", re.I)
 _SEP = re.compile(r"(?:\s*(?:\b(?:and|ja|sekä|och|plus)\b|[&+,;]|\n)\s*)+$", re.I)
 _WORD = re.compile(r"[a-zåäö]+")
+_CLOCK_AFTER = {"am", "pm", "h"}
+_CLOCK_BEFORE = re.compile(r"\b(?:klo|kello|at)\s*$", re.I)
 _PERCENT = re.compile(r"\d+(?:[.,]\d+)?\s*%")
 
 ONE_DAY = "one delivery day per request: this text names more than one (ask for each day in its own request)"
@@ -76,6 +78,9 @@ def quantities(text: str) -> list[Quantity]:
             continue
         if word in WEEKDAYS or word in RELATIVE or word in _MONTHS:
             continue                                    # "17 nov": a date
+        if (word in _CLOCK_AFTER or (word == "o" and low.startswith("'clock", m.end(2)))
+                or _CLOCK_BEFORE.search(low[:m.start()])):
+            continue                                    # "10 am", "klo 10": a clock time
         if re.match(_PACK, word):
             continue                                    # "2 cartons": a pack count, not a product
         found.append(Quantity(_number(m.group(1), lang), "ST", m.start(), m.start() + len(m.group(1))))

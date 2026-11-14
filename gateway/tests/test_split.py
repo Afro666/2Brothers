@@ -36,6 +36,10 @@ def test_texts_with_several_products(text):
     "100 L milk, 40 guests, by 17 nov",
     "20 kg butter by 16.11.",
     "60 l milk tomorrow",
+    "1000 L milk, deliver 10 am Monday",
+    "1000 L maitoa, klo 10 mennessä maanantaiksi",
+    "1000 L milk, at 10 Monday",
+    "1000 L milk, deliver 10 o'clock Monday",
 ])
 def test_one_product_texts_stay_on_the_single_path(text):
     assert not several(text)
