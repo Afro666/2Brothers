@@ -201,6 +201,62 @@ describe("StockPage", () => {
     await waitFor(() => expect(screen.getAllByRole("textbox", { name: /count in/ })[0]).toBeEnabled());
   });
 
+  it("shows amounts in people's units without a separate Unit column", async () => {
+    renderApp("/stock", createMockApi());
+
+    const row = await screen.findByRole("row", { name: /Valio Eila 3 % milk/ });
+    expect(row).toHaveTextContent("463335 · l");
+    expect(row).toHaveTextContent("950 l");
+    expect(row).not.toHaveTextContent("950 L");
+    expect(screen.queryByRole("columnheader", { name: "Unit" })).not.toBeInTheDocument();
+  });
+
+  it("drops the Last delivery column when no row has one and says so once", async () => {
+    const api = createMockApi();
+    const rows = await api.getStock();
+    api.getStock = async () => rows.map((row) => ({ ...row, lastDelivery: null }));
+    renderApp("/stock", api);
+
+    expect(await screen.findByText("No delivery recorded yet")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Last delivery" })).not.toBeInTheDocument();
+    // The On order cell is unknown for four products: the only "unknown" words left are those.
+    const words = screen.getAllByRole("cell").map((node) => node.textContent);
+    expect(words.filter((word) => word === "unknown")).toHaveLength(4);
+    expect(words.filter((word) => word === "tuntematon")).toHaveLength(0);
+  });
+
+  it("writes no English unknown in the Finnish table", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    renderApp("/stock", createMockApi());
+
+    await screen.findByText(/ei laskettu: käsitellään tuntemattomina, ei nollina/);
+    expect(screen.getAllByRole("cell").map((node) => node.textContent)).not.toContain("unknown");
+  });
+
+  it("writes a missing last delivery in words when only some rows have none", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    const api = createMockApi();
+    const rows = await api.getStock();
+    api.getStock = async () => rows.map((row, index) => (index === 0 ? { ...row, lastDelivery: null } : row));
+    renderApp("/stock", api);
+
+    await screen.findByText(/ei laskettu: käsitellään tuntemattomina, ei nollina/);
+    const cells = screen.getAllByRole("cell").map((node) => node.textContent);
+    expect(cells.filter((cell) => cell === "tuntematon").length).toBeGreaterThan(0);
+    expect(cells).not.toContain("unknown");
+  });
+
+  it("puts the Save hint next to the button, at the bottom", async () => {
+    renderApp("/stock", createMockApi());
+
+    const button = await screen.findByRole("button", { name: "Save count" });
+    expect(button).toBeDisabled();
+    const hint = screen.getByText("Enter a count or mark the product as not counted.");
+    const row = hint.closest("div");
+    expect(row).toContainElement(button);
+    expect(row).toHaveClass("sticky");
+  });
+
   it("explains the page, not just the title", async () => {
     renderApp("/stock", createMockApi());
     expect(

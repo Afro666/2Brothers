@@ -14,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatAmount, formatDate, formatDateTime, formatTime } from "@/lib/format";
+import { formatAmount, formatDate, formatDateTime, formatTime, peopleUnit } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
@@ -102,8 +102,8 @@ function OnOrder({ item }: { item: StockItem }) {
   );
 }
 
-function countedAt(value: string | null): string {
-  return value != null && formatTime(value) === "00:00" ? formatDate(value) : formatDateTime(value);
+function countedAt(value: string, t: ReturnType<typeof useT>): string {
+  return t(formatTime(value) === "00:00" ? formatDate(value) : formatDateTime(value));
 }
 
 export function StockPage() {
@@ -122,6 +122,8 @@ export function StockPage() {
   const uncounted = rows.filter((row) => row.onHand == null).length;
   const { counts: pending, invalid: invalidCount } = touchedCounts(rows, drafts);
   const canSave = pending.length > 0 && invalidCount === 0 && !saving;
+  // A column where every row has no delivery says nothing; one line for the whole table does.
+  const deliveries = rows.filter((row) => row.lastDelivery != null).length;
 
   function updateDraft(productId: string, change: Partial<RowDraft>) {
     setDrafts((current) => {
@@ -148,6 +150,16 @@ export function StockPage() {
     setFromPhoto((ids) => new Set([...ids, ...read.map(([id]) => id)]));
     setSaveError(null);
   }
+
+  /** The one reason Save is off, next to the button. */
+  const saveHint =
+    invalidCount > 0
+      ? invalidCount === 1
+        ? t("Fix the count marked below before saving.")
+        : t("Fix the {count} counts marked below before saving.", { count: invalidCount })
+      : pending.length === 0
+        ? t("Enter a count or mark the product as not counted.")
+        : null;
 
   async function saveCounts() {
     if (pending.length === 0 || invalidCount > 0 || saving) return;
@@ -193,6 +205,8 @@ export function StockPage() {
                 : t("All {count} products counted", { count: rows.length })}
             </p>
 
+            {deliveries === 0 ? <p className="text-sm text-muted-foreground">{t("No delivery recorded yet")}</p> : null}
+
             <ShelfPhotoCount items={rows} actor={actor} disabled={saving} onCounts={fillFromPhoto} />
 
             <Card>
@@ -202,10 +216,9 @@ export function StockPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>{t("Product")}</TableHead>
-                        <TableHead>{t("Unit")}</TableHead>
                         <TableHead className="text-right">{t("On hand")}</TableHead>
                         <TableHead className="text-right">{t("On order")}</TableHead>
-                        <TableHead>{t("Last delivery")}</TableHead>
+                        {deliveries > 0 ? <TableHead>{t("Last delivery")}</TableHead> : null}
                         <TableHead>{t("Counted at")}</TableHead>
                         <TableHead>{t("Count")}</TableHead>
                         <TableHead>{t("Not counted")}</TableHead>
@@ -225,19 +238,20 @@ export function StockPage() {
                                 <ProductThumb en={item.productName} size="sm" />
                                 <div className="min-w-0">
                                   <div className="font-medium"><ProductLink productId={item.productId}>{item.productName}</ProductLink></div>
-                                  <div className="text-xs text-muted-foreground">{item.productId}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {item.productId} · {peopleUnit(item.unit)}
+                                  </div>
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell>{item.unit}</TableCell>
                             <TableCell className="text-right">
                               <OnHand item={item} />
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               <OnOrder item={item} />
                             </TableCell>
-                            <TableCell>{formatDate(item.lastDelivery)}</TableCell>
-                            <TableCell>{countedAt(item.countedAt)}</TableCell>
+                            {deliveries > 0 ? <TableCell>{item.lastDelivery == null ? t("unknown") : formatDate(item.lastDelivery)}</TableCell> : null}
+                            <TableCell>{item.countedAt == null ? t("unknown") : countedAt(item.countedAt, t)}</TableCell>
                             <TableCell>
                               <label className="flex items-center gap-2 text-xs font-medium" htmlFor={countId}>
                                 {t("Count")}
@@ -314,10 +328,14 @@ export function StockPage() {
                           <dd className="text-right tabular-nums">
                             <OnOrder item={item} />
                           </dd>
-                          <dt className="text-muted-foreground">{t("Last delivery")}</dt>
-                          <dd className="text-right">{formatDate(item.lastDelivery)}</dd>
+                          {deliveries > 0 ? (
+                            <>
+                              <dt className="text-muted-foreground">{t("Last delivery")}</dt>
+                              <dd className="text-right">{item.lastDelivery == null ? t("unknown") : formatDate(item.lastDelivery)}</dd>
+                            </>
+                          ) : null}
                           <dt className="text-muted-foreground">{t("Counted at")}</dt>
-                          <dd className="text-right">{countedAt(item.countedAt)}</dd>
+                          <dd className="text-right">{item.countedAt == null ? t("unknown") : countedAt(item.countedAt, t)}</dd>
                         </dl>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                           <label className="flex items-center gap-2 text-sm font-medium" htmlFor={countId}>
@@ -364,18 +382,15 @@ export function StockPage() {
               </CardContent>
             </Card>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="sticky bottom-0 flex flex-wrap items-center gap-3 bg-background/95 py-3">
               <Button onClick={saveCounts} disabled={!canSave} aria-busy={saving || undefined}>
                 {saving ? t("Saving count") : t("Save count")}
               </Button>
-              {pending.length === 0 && invalidCount === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("Enter a count or mark a product as not counted.")}</p>
-              ) : null}
-              {invalidCount > 0 ? (
-                <p className="text-sm font-medium text-destructive">
-                  {invalidCount === 1
-                    ? t("Fix the count marked below before saving.")
-                    : t("Fix the {count} counts marked below before saving.", { count: invalidCount })}
+              {saveHint ? (
+                <p
+                  className={cn("text-sm", invalidCount > 0 ? "font-medium text-destructive" : "text-muted-foreground")}
+                >
+                  {saveHint}
                 </p>
               ) : null}
             </div>
