@@ -120,6 +120,12 @@ function proposedBy(
     return by(t("The Buyer model was not answering, so the gateway’s request parser made this proposal"));
   if (row.status === "REJECTED" && row.request?.made_by === "parser")
     return by(t("Made by the fallback parser because the Buyer agent was not available"));
+  // A proposal from a list of needs (#1375): rules match each need; Nemotron only splits a free
+  // text into needs, and only then is it named.
+  if (row.request?.made_by === "list")
+    return mapModelTrace(row.model_trace)?.madeBy === "model"
+      ? by(t("Split into needs by Nemotron 3.5 Super VL, matched to products by rules"), true)
+      : by(t("Matched to products by rules, not by the Buyer model"));
   const model = text(row.buyer_model);
   if (model)
     return by(
