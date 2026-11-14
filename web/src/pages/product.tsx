@@ -81,7 +81,8 @@ const SOURCE_NAMES: Record<string, string> = {
 function plainSource(source: string, t: (text: string) => string): string {
   return source
     .split(" · ")
-    .map((part) => SOURCE_NAMES[part] ?? part)
+    // A field of the catalog this page has no words for is named by the catalog alone, never by the field.
+    .map((part) => SOURCE_NAMES[part] ?? (part.startsWith(`${CATALOG_SOURCE}, `) ? CATALOG_SOURCE : part))
     .map((part) => t(part))
     .join(" · ");
 }
@@ -203,17 +204,17 @@ function PriceStockVat({ page }: { page: ProductPage }) {
             <>{formatNumber(vatRate)} %</>
           )}
         </Fact>
-        <Fact label={t("Stock on {date}", { date: t(formatDate(live.date)) })} unknown={!stock || stock.unknown}>
-          {!stock || stock.unknown
+        <Fact label={t("Stock on {date}", { date: t(formatDate(live.date)) })} unknown={!stock || stock.unknown || stock.available == null}>
+          {!stock || stock.unknown || stock.available == null
             ? t("not confirmed; the approver checks it on the proposal")
             : stock.available === 0
               ? t("none available")
-              : `${formatNumber(stock.available ?? 0)} ${per}`}
+              : `${formatNumber(stock.available)} ${per}`}
         </Fact>
         {live.comparisonPrice != null && live.comparisonUnit ? (
           <Fact label={t("Unit price")}>{`${t(formatEur(live.comparisonPrice))} / ${perUnit(live.comparisonUnit)}`}</Fact>
         ) : null}
-        {stock?.closingTime ? (
+        {stock?.closingTime || stock?.cutoffPassed ? (
           <Fact label={t("Order by")}>
             {stock.cutoffPassed ? (
               <>
@@ -221,7 +222,7 @@ function PriceStockVat({ page }: { page: ProductPage }) {
                 {next ? <span className="block text-xs font-normal text-muted-foreground">{t("next: {when}", { when: t(formatDateTime(next.toISOString())) })}</span> : null}
               </>
             ) : (
-              t(formatDateTime(stock.closingTime))
+              t(formatDateTime(stock.closingTime ?? ""))
             )}
           </Fact>
         ) : null}
@@ -510,7 +511,7 @@ function ProductBody({ page }: { page: ProductPage }) {
         <Section id="allergens" title={t("Allergens")} source={page.allergens.source}>
           <Allergens allergens={page.allergens} />
         </Section>
-        <Section id="price" title={t("Price, stock and VAT")} source={page.vat.source}>
+        <Section id="price" title={t("Price, stock and VAT")} source={page.live === null ? page.vat.source : null}>
           <PriceStockVat page={page} />
         </Section>
       </Card>

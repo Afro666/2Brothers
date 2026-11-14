@@ -21,7 +21,6 @@ export default {
   "Valio price and availability API": "Valion hinta- ja saatavuusrajapinta",
   "Valio product data: allergen classification": "Valion tuotetiedot: allergeeniluokitus",
   "Valio product data: country of origin": "Valion tuotetiedot: alkuperämaa",
-  "Valio product data: {field}": "Valion tuotetiedot: {field}",
   "Valio product data: VAT": "Valion tuotetiedot: alv-koodi",
   "Live price": "Ajantasainen hinta",
   "Not for this product: its price comes from the supplier's price list.": "Ei tälle tuotteelle: hinta tulee toimittajan hinnastosta.",

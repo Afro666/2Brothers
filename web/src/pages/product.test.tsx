@@ -109,6 +109,52 @@ describe("product page", () => {
     expect(allergens.queryByText("zorbs")).toBeNull();
   });
 
+  it("keeps saying allergens are unknown when the catalog has no allergen data", async () => {
+    const api = createMockApi();
+    const get = api.getProductPage.bind(api);
+    api.getProductPage = async (...args) => {
+      const page = await get(...args);
+      return { ...page, allergens: { ...page.allergens, known: false, contains: [], mayContain: [], freeFrom: [] } };
+    };
+    renderApp("/catalog/464179", api);
+
+    await screen.findByRole("heading", { level: 1 });
+    const allergens = within(section("Allergens"));
+    expect(allergens.getByText(/Allergens not known/)).toBeInTheDocument();
+    expect(allergens.queryByText(/none/i)).toBeNull();
+  });
+
+  it("never shows an unconfirmed stock quantity as zero, and keeps a passed cut-off visible", async () => {
+    const api = createMockApi();
+    const get = api.getProductPage.bind(api);
+    api.getProductPage = async (...args) => {
+      const page = await get(...args);
+      const live = page.live!;
+      return { ...page, live: { ...live, stock: { ...live.stock!, unknown: false, available: null, cutoffPassed: true, closingTime: null } } };
+    };
+    renderApp("/catalog/464179", api);
+
+    await screen.findByRole("heading", { level: 1 });
+    const price = within(section("Price, stock and VAT"));
+    expect(price.getByText("not confirmed; the approver checks it on the proposal")).toBeInTheDocument();
+    expect(price.queryByText(/^0 /)).toBeNull();
+    expect(price.getByText("cut-off passed")).toBeInTheDocument();
+  });
+
+  it("names a catalog source field it has no words for by the catalog alone", async () => {
+    const api = createMockApi();
+    const get = api.getProductPage.bind(api);
+    api.getProductPage = async (...args) => {
+      const page = await get(...args);
+      return { ...page, allergens: { ...page.allergens, source: "Valio product data, storageConditions" } };
+    };
+    renderApp("/catalog/464179", api);
+
+    await screen.findByRole("heading", { level: 1 });
+    expect(within(section("Allergens")).getByText("Source: Valio product data")).toBeInTheDocument();
+    expect(screen.queryByText(/storageConditions/)).toBeNull();
+  });
+
   it("says when a code is no product", async () => {
     renderApp("/catalog/000000");
     expect(await screen.findByText("Product not found")).toBeInTheDocument();
