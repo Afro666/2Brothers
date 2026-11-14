@@ -54,6 +54,15 @@ describe("RecallLines", () => {
     expect(screen.queryByRole("link", { name: /Open the notice/ })).not.toBeInTheDocument();
   });
 
+  it.each(["javascript:alert(1)", "http://www.ruokavirasto.fi/x", "https://"])(
+    "shows a non-https or malformed notice URL as plain text without a link: %s",
+    (url) => {
+      render(<RecallLines alerts={[{ ...alert, recall: { ...alert.recall, url } }]} />);
+      expect(screen.getByText("source unknown")).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /Open the notice/ })).not.toBeInTheDocument();
+    },
+  );
+
   it("says a missing lot puts every pack in doubt, and a failed re-plan keeps approval locked", () => {
     const noLot: RecallAlert = {
       ...alert,
@@ -175,6 +184,22 @@ describe("RecallPanel", () => {
     render(<RecallPanel status={{ kind: "ready", affecting: 0, lastCheck: { ...check, liveError } }} />);
     expect(screen.getByText(new RegExp(message))).toBeInTheDocument();
     expect(screen.getByText(/Powered by Context.dev/)).toHaveTextContent("Powered by Context.dev /v1/web/scrape");
+  });
+
+  it.each([
+    ["https://www.ruokavirasto.fi/notice", true],
+    ["javascript:alert(1)", false],
+    ["http://www.ruokavirasto.fi/notice", false],
+  ])("links an unheld recall's notice title only when its URL is https: %s", (url, linked) => {
+    const unheld = { ...alert, recall: { ...alert.recall, url, title: "Notice title" } };
+    render(<RecallPanel status={{ kind: "ready", affecting: 0, lastCheck: check, unheld: [unheld] }} />);
+    const list = screen.getByRole("list", { name: "Recalled products in your kitchen" });
+    if (linked) {
+      expect(within(list).getByRole("link", { name: /Notice title/ })).toHaveAttribute("href", url);
+    } else {
+      expect(within(list).queryByRole("link")).not.toBeInTheDocument();
+      expect(within(list).getByText(/Notice title/)).toBeInTheDocument();
+    }
   });
 
   it("does not report a Context.dev failure for a recording without a live error", () => {
