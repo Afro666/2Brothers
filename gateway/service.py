@@ -271,6 +271,10 @@ class Gateway:
         blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
         result['lines'] = [{**line, **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
                            for line in result['lines']]
+        from monitor.labels import checks
+        from store.products import get_products
+        result['label_checks'] = checks(get_products(self.db,
+            [line['product_id'] for line in result['lines']], doc['kitchen_id']), now=self.now())
         return result
 
     def _summary(self, request: dict, sim: dict) -> dict:

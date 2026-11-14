@@ -136,6 +136,16 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         who.need("kitchen:read", kitchen_id)
         return {"proposals": gw().list_proposals(kitchen_id)}
 
+    @app.get(k + "/label-checks")
+    def label_checks(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need('kitchen:read', kitchen_id)
+        from monitor.labels import checks, verify, LABEL
+        from store.products import get_products
+        rows = get_products(gw().db, ['462535', '462576', '462775'], kitchen_id)
+        negative = verify({'product_id': 'synthetic-negative-control',
+            'vendor': 'Synthetic Unregistered Demo Producer Oy'}, LABEL, now=gw().now())
+        return {'checks': checks(rows, now=gw().now()), 'negative_control': {**negative, 'synthetic': True}}
+
     @app.get(k + "/proposals/{proposal_id}")
     def get_proposal(kitchen_id: str, proposal_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
