@@ -1,6 +1,16 @@
 import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
 import { createTrustHttp } from "@/api/http-trust";
-import { type Json, mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, rows } from "@/api/gateway-map";
+import {
+  type Json,
+  mapAddable,
+  mapApproval,
+  mapAudit,
+  mapOrder,
+  mapOrderResolution,
+  mapOrderResolutionResult,
+  mapPermissions,
+  rows,
+} from "@/api/gateway-map";
 import { mapMoney } from "@/api/map";
 import { mapDrift } from "@/api/map-drift";
 import { forecastWindow, mapForecastAccuracy } from "@/api/map-forecast";
@@ -8,6 +18,27 @@ import { createMockApi } from "@/api/mock";
 import type { Api, AuditActor, Session } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { formatEur } from "@/lib/format";
+import type { CurrentSession } from "@/types";
+
+function uuid(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function mapCurrentSession(value: unknown): CurrentSession {
+  const row = value as Record<string, unknown>;
+  return {
+    kind: row.kind === "human" || row.kind === "agent" || row.kind === "token" ? row.kind : null,
+    name: typeof row.name === "string" ? row.name : null,
+    role: typeof row.role === "string" ? row.role : null,
+    kitchenId: typeof row.kitchen_id === "string" ? row.kitchen_id : null,
+    canApprove: row.can_approve === true,
+    scopes: Array.isArray(row.scopes) ? row.scopes.filter((scope): scope is string => typeof scope === "string") : null,
+  };
+}
 
 export const SIGNED_OUT_EVENT = "kitchen-buyer:signed-out";
 
@@ -77,7 +108,7 @@ export function createHttpApi(baseUrl: string): Api {
   const get = (path: string) => gatewayRequest(baseUrl, path);
   // X-User names the acting role only while there is no signed-in account; with an account,
   // the gateway takes the person from the session cookie.
-  const post = (path: string, body: Json, actor?: AuditActor) =>
+  const post = (path: string, body: Json, actor?: AuditActor | string) =>
     gatewayRequest(baseUrl, path, {
       method: "POST",
       headers: actor && !currentSession?.email ? { "X-User": actor } : undefined,
@@ -101,6 +132,8 @@ export function createHttpApi(baseUrl: string): Api {
   };
   // One key per ask, kept after a failure: a new key could create a second proposal.
   const requestKeys = new Map<string, string>();
+  const resolutionKeys = new Map<string, string>();
+  const reopenedApprovals = new Map<string, string>();
 
   const real = {
     async getSession() {
@@ -139,6 +172,9 @@ export function createHttpApi(baseUrl: string): Api {
     getApproval: approval,
     async approve(decision, actor) {
       const total = decision.expectedTotalInclVat.toFixed(2);
+      const baseKey = `web-approve:${decision.approvalId}:${total}`;
+      const reopened = reopenedApprovals.get(decision.approvalId);
+      const approvalKey = reopened ? `${baseKey}:reopened:${reopened}` : baseKey;
       try {
         await post(
           `${proposalPath(decision.approvalId)}/approve`,
@@ -146,7 +182,7 @@ export function createHttpApi(baseUrl: string): Api {
             // docs/contract.md: the approve body is `{expected_total, idempotency_key}`.
             expected_total: total,
             // The same person approving the same figure again replays the same order.
-            idempotency_key: `web-approve:${decision.approvalId}:${total}`,
+            idempotency_key: approvalKey,
           },
           actor,
         );
@@ -198,6 +234,35 @@ export function createHttpApi(baseUrl: string): Api {
         proposal,
         typeof orderId === "string" ? ((await get(`${kitchen}/orders/${encodeURIComponent(orderId)}`)) as Json) : null,
       );
+    },
+    async getCurrentSession() {
+      return mapCurrentSession(await get("/v1/me"));
+    },
+    async getOrderResolution(orderId) {
+      return mapOrderResolution(await get(`${kitchen}/orders/${encodeURIComponent(orderId)}/resolution`));
+    },
+    async resolveOrder(orderId, resolution, actor) {
+      const reference = resolution.resolution === "placed" ? resolution.supplierOrderRef.trim() : null;
+      if (reference !== null && (!reference || reference.length > 200)) {
+        throw new ApiError("INVALID_REQUEST", "The supplier order reference must be 1 to 200 characters.");
+      }
+      const body: Json =
+        resolution.resolution === "placed"
+          ? { resolution: "placed", supplier_order_ref: resolution.supplierOrderRef.trim() }
+          : { resolution: "not_sent", note: resolution.note?.trim() ?? "" };
+      const identity = `${orderId}:${JSON.stringify(body)}`;
+      const idempotencyKey = resolutionKeys.get(identity) ?? uuid();
+      resolutionKeys.set(identity, idempotencyKey);
+      const result = await post(
+        `${kitchen}/orders/${encodeURIComponent(orderId)}/resolve`,
+        { ...body, idempotency_key: idempotencyKey },
+        actor,
+      );
+      const mapped = mapOrderResolutionResult(result);
+      if (mapped.outcome === "NOT_SENT" && mapped.proposalId) {
+        reopenedApprovals.set(mapped.proposalId, idempotencyKey);
+      }
+      return mapped;
     },
     async listAudit(filter) {
       return mapAudit(await auditEvents(), filter?.orderId);

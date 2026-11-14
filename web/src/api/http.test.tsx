@@ -52,8 +52,10 @@ describe("createHttpApi", () => {
         "approve",
         "changePassword",
         "getApproval",
+        "getCurrentSession",
         "getForecastAccuracy",
         "getOrder",
+        "getOrderResolution",
         "getPermissions",
         "getSession",
         "listAddableProducts",
@@ -61,6 +63,7 @@ describe("createHttpApi", () => {
         "listAudit",
         "listOrders",
         "reject",
+        "resolveOrder",
         "signIn",
         "signOut",
         "submitChefRequest",
@@ -319,6 +322,134 @@ describe("createHttpApi", () => {
     expect(await api.getOrder("prop-1")).toMatchObject({ id: "prop-1", status: "NEEDS_APPROVAL" });
     expect(await api.getOrder("ord-1")).toMatchObject({ id: "ord-1", status: "PLACED", totalExVat: 80 });
     await expect(api.getOrder("nope")).rejects.toMatchObject({ code: "NO_ROUTE" });
+  });
+
+  it("reads the current role and what is known about an unknown send", async () => {
+    const calls = gateway({
+      "GET /api/v1/me": () => ({
+        kind: "human",
+        name: "aron",
+        role: "approver",
+        kitchen_id: "demo-kitchen",
+        can_approve: true,
+        scopes: null,
+      }),
+      [`GET ${K}/orders/ord-unknown/resolution`]: () => ({
+        order_id: "ord-unknown",
+        proposal_id: "prop-1",
+        proposal_status: "COMMITTING",
+        idempotency_key: "approve-7",
+        payload_hash: "abc123",
+        offer_id: "offer-1",
+        supplier_id: "sup-valio",
+        approved_by: "aron",
+        outcome: "UNCONFIRMED",
+        status: null,
+        expected_total: "74.51",
+        lines: [proposal.lines[0]],
+        created_at: "2026-11-14T02:10:00+00:00",
+        updated_at: "2026-11-14T02:10:01+00:00",
+        resolvable: true,
+        resolution: null,
+      }),
+    });
+    const api = createHttpApi("/api");
+    expect(await api.getCurrentSession()).toEqual({
+      kind: "human",
+      name: "aron",
+      role: "approver",
+      kitchenId: "demo-kitchen",
+      canApprove: true,
+      scopes: null,
+    });
+    expect(await api.getOrderResolution("ord-unknown")).toMatchObject({
+      orderId: "ord-unknown",
+      proposalId: "prop-1",
+      idempotencyKey: "approve-7",
+      expectedTotal: 74.51,
+      approvedBy: "aron",
+      outcome: "UNCONFIRMED",
+      status: null,
+      resolvable: true,
+      resolution: null,
+      lines: [{ quantity: 40 }],
+    });
+    expect(calls.map((call) => call.route)).toEqual([
+      "GET /api/v1/me",
+      `GET ${K}/orders/ord-unknown/resolution`,
+    ]);
+  });
+
+  it("records placed and not_sent with their distinct request bodies, without resending", async () => {
+    const placedResult = {
+      order_id: "ord-unknown",
+      proposal_id: "prop-1",
+      proposal_status: "APPROVED",
+      outcome: "CONFIRMED",
+      status: "SENT",
+      resolution: {
+        resolution: "placed",
+        supplier_order_ref: "VAL-2026-00123",
+        note: "",
+        resolved_by: "aron",
+        resolved_at: "2026-11-14T02:31:00+00:00",
+        from_outcome: "UNCONFIRMED",
+      },
+    };
+    const calls = gateway({
+      [`POST ${K}/orders/ord-unknown/resolve`]: (_body) => placedResult,
+    });
+    const api = createHttpApi("/api");
+    expect(
+      await api.resolveOrder("ord-unknown", { resolution: "placed", supplierOrderRef: " VAL-2026-00123 " }, "aron"),
+    ).toMatchObject({ outcome: "CONFIRMED", resolution: { supplierOrderRef: "VAL-2026-00123" } });
+    await api.resolveOrder("ord-unknown", { resolution: "not_sent", note: " Valio has no such order " }, "aron");
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({
+      route: `POST ${K}/orders/ord-unknown/resolve`,
+      headers: { "X-User": "aron" },
+      body: { resolution: "placed", supplier_order_ref: "VAL-2026-00123" },
+    });
+    expect(calls[0].body.idempotency_key).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(calls[1].body).toEqual({
+      resolution: "not_sent",
+      note: "Valio has no such order",
+      idempotency_key: expect.any(String),
+    });
+    expect(calls.every((call) => !call.route.endsWith("/approve"))).toBe(true);
+  });
+
+  it("uses a fresh approval key after not_sent returns the proposal to the inbox", async () => {
+    const calls = gateway({
+      ...inbox(),
+      [`POST ${K}/orders/ord-unknown/resolve`]: () => ({
+        order_id: "ord-unknown",
+        proposal_id: "prop-1",
+        proposal_status: "READY",
+        outcome: "NOT_SENT",
+        status: null,
+        resolution: {
+          resolution: "not_sent",
+          supplier_order_ref: null,
+          note: "No such order",
+          resolved_by: "aron",
+          resolved_at: "2026-11-14T02:31:00+00:00",
+          from_outcome: "UNCONFIRMED",
+        },
+      }),
+      [`POST ${K}/proposals/prop-1/approve`]: () => placedOrder,
+    });
+    const api = createHttpApi("/api");
+    const decision = { approvalId: "prop-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 };
+    await api.approve(decision, "human");
+    const originalKey = calls.find((call) => call.route.endsWith("/approve"))!.body.idempotency_key;
+    await api.resolveOrder("ord-unknown", { resolution: "not_sent", note: "No such order" }, "aron");
+    await api.approve(decision, "human");
+    const approvalCalls = calls.filter((call) => call.route.endsWith("/approve"));
+    expect(approvalCalls[1].body.idempotency_key).not.toBe(originalKey);
+    expect(approvalCalls[1].body.idempotency_key).toContain(`${originalKey}:reopened:`);
   });
 
   it("reads the forecast check from the two forecast routes; nothing compared stays unknown", async () => {
