@@ -781,6 +781,10 @@ products, menu plans, stock counts, stock, demand, settings and sharing.
   `stock_counted`, `settings_changed`, `share_granted`, `share_revoked`.
 - `POST /stock/photo` writes no kitchen data. It leaves one audit entry per call:
   `stock_photo_read` or `stock_photo_failed` (see "Count from a shelf photo").
+- `POST /orders/{order_id}/delivery-note/photo` leaves stock counts and the order
+  unchanged. Each call records `delivery_note_read` or `delivery_note_failed`; see
+  [Check a delivery from a photo of its note](#check-a-delivery-from-a-photo-of-its-note-362)
+  for fields and the staged structured-result persistence change (#1304).
 - `POST /menu-photo` leaves the stored menu plan unchanged. It writes a
   `menu_photo_read` or `menu_photo_failed` audit entry (see "Plan from a menu photo"),
   plus the pending proposal when matched dishes need ingredients.
