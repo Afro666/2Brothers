@@ -17,7 +17,7 @@ interface Proposal {
   total_ex_vat: string;
   buyer_model?: string;
   request?: { made_by?: string };
-  decision_summary?: { asked?: string; searched?: string; chosen?: string[]; text?: string };
+  decision_summary?: { asked?: string; searched?: string; chosen?: string[]; left_out?: string[]; text?: string };
   mandate?: { verdict?: string; reasons?: string[] };
   lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
   substitute_options?: {
@@ -42,13 +42,13 @@ const validLine = (line: Proposal["lines"][number]) =>
 function proposal(value: unknown): Proposal {
   if (!value || typeof value !== "object") throw new Error("The Buyer returned an invalid proposal.");
   const row = value as Proposal;
+  const ready =
+    row.status === "READY" && Array.isArray(row.lines) && row.lines.length > 0 && row.lines.every(validLine);
+  const rejected = row.status === "REJECTED" && Array.isArray(row.lines) && row.lines.length === 0;
   if (
     typeof row.proposal_id !== "string" ||
     !row.proposal_id ||
-    row.status !== "READY" ||
-    !Array.isArray(row.lines) ||
-    !row.lines.length ||
-    !row.lines.every(validLine)
+    (!ready && !rejected)
   ) {
     throw new Error("The Buyer did not return a ready proposal. Check the existing request before trying again.");
   }
@@ -93,6 +93,8 @@ function productNames(row: Proposal) {
 }
 
 function proposedBy(row: Proposal) {
+  if (row.status === "REJECTED" && row.request?.made_by === "parser")
+    return "Made by the fallback parser because the Buyer agent was not available";
   const model = text(row.buyer_model);
   if (model)
     return `Proposed by the Buyer agent (${model === "nemotron-3.5-super-vl" ? "Nemotron 3.5 Super VL" : model})`;
@@ -170,6 +172,31 @@ function Decision({ row }: { row: Proposal }) {
   );
 }
 
+function Rejection({ row }: { row: Proposal }) {
+  const leftOut = texts(row.decision_summary?.left_out);
+  return (
+    <>
+      <section className="hatch space-y-3 break-words" role="status" aria-label="Nothing can be ordered">
+        <h2 className="label-caps">Nothing can be ordered</h2>
+        <p className="max-w-[68ch] text-[15px] leading-[22px]">
+          {text(row.decision_summary?.asked) ?? <span className="unknown-value">unknown</span>}
+        </p>
+        {leftOut?.length ? (
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {leftOut.map((reason, index) => (
+              <li key={index}>{reason}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm">Left-out reasons: <span className="unknown-value">unknown</span></p>
+        )}
+      </section>
+      <Decision row={row} />
+      <p className="border-t border-dashed border-input pt-3 text-sm">No order has been placed.</p>
+    </>
+  );
+}
+
 /** Real purchasing request path; other demo screens keep their existing API. */
 export function LiveBuyerRequests() {
   const keys = useRef(new Map<string, string>());
@@ -227,7 +254,19 @@ export function LiveBuyerRequests() {
             <LoadingState label="Buyer is checking the catalog and preparing your proposal" />
           </div>
         ) : null}
-        {result ? (
+        {result?.status === "REJECTED" ? (
+          <Card className="docket gap-4 p-4 sm:p-5">
+            <CardHeader className="px-0">
+              <CardTitle className="label-caps leading-4">Buyer decision</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 px-0">
+              <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result)}</p>
+              <p className="break-all font-mono text-[11px] text-muted-foreground">{result.proposal_id}</p>
+              <Rejection row={result} />
+            </CardContent>
+          </Card>
+        ) : null}
+        {result?.status === "READY" ? (
           <Card className="docket gap-4 p-4 sm:p-5">
             <CardHeader className="px-0">
               <CardTitle className="label-caps leading-4">Proposal ready for human review</CardTitle>

@@ -24,6 +24,28 @@ const summary = {
   text: `Asked: "1,000 L milk by Monday" (1000 L for 2026-11-16).\nChosen: ${chosen}\n${shortfall}`,
 };
 
+const rejected = {
+  proposal_id: "live-rejected-1",
+  status: "REJECTED",
+  expected_total: "0.00",
+  total_ex_vat: "0.00",
+  request: { made_by: "parser" },
+  decision_summary: {
+    asked: 'Asked: "1,000 L lactose-free milk by Monday" (1000 L for 2026-11-16).',
+    searched: "Checked 3 product(s) with Valio prices and stock for 2026-11-16: 462775, 462921, 463335.",
+    chosen: [],
+    left_out: [
+      "462775 left out: the supplier cut-off has passed for 2026-11-16.",
+      "462921 left out: pack size is unknown.",
+      "463335 left out: stock is unknown.",
+    ],
+    decide: ["Nothing can be ordered: no line passed the checks."],
+    text: 'Asked: "1,000 L lactose-free milk by Monday" (1000 L for 2026-11-16).\nChosen: nothing.\n462775 left out: the supplier cut-off has passed for 2026-11-16.\n462921 left out: pack size is unknown.\n463335 left out: stock is unknown.\nTo decide: Nothing can be ordered: no line passed the checks.',
+  },
+  mandate: { verdict: "REFUSED", reasons: ["No line passed the checks."] },
+  lines: [],
+};
+
 async function fill() {
   const user = userEvent.setup();
   renderApp("/requests");
@@ -180,5 +202,35 @@ describe("live Buyer request page", () => {
     await fill();
     expect(await screen.findByText(/Proposed by the gateway’s request parser/)).toBeVisible();
     expect(screen.getByText("No reasons given.")).toBeVisible();
+  });
+
+  it("explains why a rejected proposal has no orderable lines", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify(rejected)));
+    await fill();
+    const blocked = await screen.findByRole("status", { name: "Nothing can be ordered" });
+    expect(blocked).toHaveTextContent("Nothing can be ordered");
+    expect(within(blocked).getByText(rejected.decision_summary.asked)).toBeVisible();
+    for (const reason of rejected.decision_summary.left_out) {
+      expect(within(blocked).getByText(reason)).toBeVisible();
+    }
+    expect(screen.getByRole("region", { name: "What the guards said" })).toHaveTextContent("No line passed the checks.");
+    expect(screen.getByText("Made by the fallback parser because the Buyer agent was not available")).toBeVisible();
+    expect(screen.queryByText("Proposal ready for human review")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open live approval inbox" })).toBeNull();
+  });
+
+  it.each([
+    ["READY", []],
+    ["REJECTED", ready.lines],
+  ])("keeps the current error for a malformed %s proposal", async (status, lines) => {
+    vi.stubGlobal(
+      "fetch",
+      async () => new Response(JSON.stringify({ ...ready, status, lines })),
+    );
+    await fill();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The Buyer did not return a ready proposal. Check the existing request before trying again.",
+    );
+    expect(screen.queryByRole("status", { name: "Nothing can be ordered" })).toBeNull();
   });
 });
