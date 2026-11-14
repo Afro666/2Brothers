@@ -1,6 +1,6 @@
 import { type Json, decimal, object, rows, text } from "@/api/gateway-map";
 import { mapMoney } from "@/api/map";
-import { ApiError, type Draft, type StockCount } from "@/api/types";
+import { ApiError, type Draft, type OwnProductSaveExtras, type StockCount } from "@/api/types";
 import type {
   Allergen,
   AutoApproveLearning,
@@ -174,7 +174,7 @@ export function mapOwnProduct(body: unknown): OwnProduct {
  * takes the product's unit when that is L or KG, else the stored measure; with neither the
  * save is refused, because a measure would be a guess.
  */
-export function ownProductBody(product: Draft<OwnProduct>, stored: Json | null): Json {
+export function ownProductBody(product: Draft<OwnProduct> & OwnProductSaveExtras, stored: Json | null): Json {
   const body: Json = {
     name: product.name,
     supplier_id: product.supplierId,
@@ -182,10 +182,14 @@ export function ownProductBody(product: Draft<OwnProduct>, stored: Json | null):
     unit_price_eur: optionalDecimal(product.priceEur, "Price"),
     allergen_data: product.allergens == null ? "UNKNOWN" : "ENTERED",
     allergens: (product.allergens ?? []).map((allergen) => ({ code: allergen.code, level: allergen.presence })),
+    // Only a save from a price-list photo names the source; without it the gateway says `entered`.
+    ...(product.priceSource ? { price_source: product.priceSource } : {}),
   };
   if (product.packSize == null) return { ...body, base_unit: null, pack_size_in_base_units: null };
   if (stored && decimal(stored.pack_size_in_base_units, "pack_size_in_base_units") === product.packSize) return body;
-  const measure = product.unit === "L" || product.unit === "KG" ? product.unit : stored?.base_unit;
+  // A measure the person checked on a price-list row wins; else as before.
+  const measure =
+    product.baseUnit ?? (product.unit === "L" || product.unit === "KG" ? product.unit : stored?.base_unit);
   if (measure !== "L" && measure !== "KG") {
     throw new ApiError(
       "INVALID",

@@ -142,7 +142,7 @@ export function createPlanningMock(recordAudit: AuditRecorder): PlanningApi {
     async listOwnProducts() {
       return copy(ownProducts);
     },
-    async saveOwnProduct(product) {
+    async saveOwnProduct({ baseUnit: _measure, priceSource: _source, ...product }) {
       requiredName(product.name);
       return saveById(ownProducts, product, "OWN");
     },

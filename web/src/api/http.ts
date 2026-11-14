@@ -7,6 +7,7 @@ import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
 import { createBuyingNoteHttp } from "@/api/http-buying-note";
 import { createShelfHttp } from "@/api/http-shelf";
 import { createMenuPhotoHttp } from "@/api/http-menu-photo";
+import { createPriceListHttp } from "@/api/http-price-list";
 import { createDeliveryNoteHttp } from "@/api/http-delivery-note";
 import { createTrustHttp } from "@/api/http-trust";
 import { createUsageHttp } from "@/api/http-usage";
@@ -67,8 +68,12 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
   }
   if (response.status === 429) {
     // The gateway locks an account for five minutes after five wrong passwords: "wait a minute" would be wrong.
-    const locked = isLogin && (await response.json().catch(() => null))?.error?.code === "ACCOUNT_LOCKED";
-    if (locked) throw new ApiError("ACCOUNT_LOCKED", "Too many wrong passwords. Try again in five minutes.", {}, 429);
+    const code = (await response.json().catch(() => null))?.error?.code;
+    if (isLogin && code === "ACCOUNT_LOCKED") {
+      throw new ApiError("ACCOUNT_LOCKED", "Too many wrong passwords. Try again in five minutes.", {}, 429);
+    }
+    // One price-list read per kitchen at a time (#1174): "wait a minute" would be wrong too.
+    if (code === "PRICE_LIST_BUSY") throw new ApiError(code, "Another price list is being read.", {}, 429);
     throw new ApiError("RATE_LIMITED", "Too many requests - wait a minute and try again.");
   }
   let body: unknown;
@@ -186,6 +191,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createBrandLogosHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createShelfHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createMenuPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createPriceListHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeliveryNoteHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createUsageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
