@@ -83,6 +83,12 @@ def shortlist(client, text, query):
     ("20 l kaura juomaa", "oat"),
     ("20 l havremjölk till måndag", "oat"),           # Swedish
     ("20 l mandeldryck", "almond"),
+    ("20 L peanut milk", "peanut"), ("20 L walnut milk", "walnut"),   # #1761
+    ("20 L pistachio milk", "pistachio"), ("20 L hazelnut milk", "hazelnut"),
+    ("20 L spelt milk", "spelt"), ("20 L barley milk", "barley"),
+    ("20 l maapähkinämaitoa", "peanut"), ("20 l jordnötsdryck", "peanut"),
+    ("20 l jordnöt dryck", "peanut"), ("20 l ohramaitoa", "barley"),
+    ("20 l dinkeldryck", "spelt"),
 ])
 def test_a_plant_drink_is_read_in_english_finnish_and_swedish(text, plant):
     assert plant_drink(text) == plant
@@ -96,6 +102,16 @@ def test_a_plant_drink_is_read_in_english_finnish_and_swedish(text, plant):
 ])
 def test_cows_milk_and_other_words_are_not_a_plant_drink(text):
     assert plant_drink(text) is None
+
+
+def test_a_peanut_drink_is_never_a_pea_drink():
+    """#1761: a plant word is a whole word or a compound with a drink word, never a prefix."""
+    peanut = product("pn0", "10402", "Nutty Peanut drink 1L", "Nutty Maapähkinäjuoma 1L", unit="L")
+    rice = product("rs0", "10402", "Risotto style drink 1L", "Risotto juoma 1L", unit="L")
+    assert is_plant_drink(peanut, "peanut") and not is_plant_drink(peanut, "pea")
+    assert not is_plant_drink(rice, "rice")
+    pea = product("pe0", "10402", "Pea drink 1L", "Hernejuoma 1L", unit="L")
+    assert is_plant_drink(pea, "pea") and not is_plant_drink(pea, "peanut")
 
 
 def test_only_a_plant_drink_of_that_plant_is_that_kind():
