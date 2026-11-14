@@ -906,7 +906,7 @@ cutoff. Supplier-linked alternatives are considered before catalog fallback.
 | `stock_confirmed` | boolean | False if any line has unconfirmed stock. Approval cannot override it. |
 | `allergen_data_known` | boolean | False if any retained original line has unknown allergen data; never label it safe. |
 | `recommended` | boolean, optional | `true` on at most one option: the one the engine would take. Absent or `false` means not marked; the UI never infers it. |
-| `held` | object, optional | Only on a `confirmed` option: `{quantity, unit}` of the need that this option does not order. It waits until the supplier confirms stock. |
+| `held` | object, optional | Only on a `confirmed` option: `{quantity, unit}` of the need that this option does not order. It waits until the supplier confirms stock. Absent when confirmed stock covers the whole need. |
 
 Options use the same trusted need/date. A partial-stock option can combine the
 original and substitute products so the engine converts the gap by base unit,
@@ -920,7 +920,10 @@ the engine's `partial_fill` names a part the supplier confirms, the gateway offe
 as the first option: `source: "confirmed"`, its own stored and signed quote, `stock_confirmed:
 true`, `recommended: true`, and `held` for the rest. Its `why` says what is ordered now and
 what waits. It is the option a person can approve at once; the proposal's own basket cannot
-be placed while a line's stock is unconfirmed. The gateway answers at most three options:
+be placed while a line's stock is unconfirmed. When the proposal's own basket has no
+confirmed stock at all, the gateway looks in the catalog shortlist for the request text and
+offers confirmed stock from there; the `why` then says it was found in the catalog. A request
+without text gets no such search. The gateway answers at most three options:
 the confirmed one first, then the Buyer's, with tiers `good`, `better`, `best` in that order.
 
 **Choosing an option.** `POST /v1/kitchens/{kitchen_id}/proposals/{proposal_id}/choose-option`
