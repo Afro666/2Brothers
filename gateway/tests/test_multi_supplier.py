@@ -200,6 +200,8 @@ def test_switch_on_a_manual_block_can_be_approved_and_waits_for_the_supplier(env
     assert r.status_code == 200, r.text
     assert r.json()["supplier_must_confirm"] == ["sup-bakery"]
     assert db.orders.find_one({})["supplier_must_confirm"] == ["sup-bakery"]
+    placed = [e for e in client.get(K + "/audit", headers=HUMAN).json()["events"] if e["kind"] == "order_placed"]
+    assert [e["supplier_must_confirm"] for e in placed] == [["sup-bakery"]]     # #884
 
 
 def test_switch_on_still_refuses_unknown_valio_stock(env):
