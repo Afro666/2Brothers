@@ -36,6 +36,12 @@ function read(): KitchenBrandProfile | null {
   return profile;
 }
 
+/** A logo URL the app may show: only `https://` or an inline `data:image/`; anything else is no logo. */
+export function safeLogoUrl(url: string | null | undefined): string | null {
+  const value = url?.trim() ?? "";
+  return /^(https:\/\/|data:image\/)/i.test(value) ? value : null;
+}
+
 export function saveKitchenBrand(profile: KitchenBrandProfile) {
   const raw = JSON.stringify(profile);
   try {

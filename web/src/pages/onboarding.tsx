@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { saveKitchenBrand, useKitchenBrand } from "@/lib/kitchen-brand";
+import { safeLogoUrl, saveKitchenBrand, useKitchenBrand } from "@/lib/kitchen-brand";
 import type { FieldSource, KitchenBrandLookup, KitchenBrandProfile, KitchenType, LookedUpField } from "@/types";
 
 /** The endpoint the gateway calls for every brand field (docs/contract.md, "Onboarding lookup"). */
@@ -63,7 +63,7 @@ function originsOf(lookup: KitchenBrandLookup): Record<FieldKey, Origin> {
   const type = text(lookup.kitchenType, (value) => value);
   return {
     name: text(lookup.name, (value) => value),
-    logoUrl: text(lookup.logoUrl, (value) => value),
+    logoUrl: text(lookup.logoUrl, safeLogoUrl),
     colors: text(lookup.colors, (value) => value.filter((color) => HEX.test(color)).join(", ") || null),
     street: part("street"),
     postalCode: part("postalCode"),
@@ -184,7 +184,7 @@ function ProfileForm({
     const profile: KitchenBrandProfile = {
       domain: lookup?.domain ?? "",
       name: values.name.trim(),
-      logoUrl: orNull(values.logoUrl),
+      logoUrl: safeLogoUrl(values.logoUrl),
       colors,
       address: {
         street: orNull(values.street),
@@ -225,9 +225,9 @@ function ProfileForm({
               Logo
             </p>
             <div className="flex items-center gap-3">
-              {values.logoUrl ? (
+              {safeLogoUrl(values.logoUrl) ? (
                 <img
-                  src={values.logoUrl}
+                  src={safeLogoUrl(values.logoUrl) ?? undefined}
                   alt={`${values.name || "Kitchen"} logo`}
                   className="size-14 shrink-0 rounded-lg border object-contain"
                 />
@@ -341,9 +341,9 @@ function SavedProfile({ profile, onEdit }: { profile: KitchenBrandProfile; onEdi
     <Card aria-label="Saved kitchen profile">
       <CardHeader>
         <CardTitle className="flex items-center gap-3">
-          {profile.logoUrl ? (
+          {safeLogoUrl(profile.logoUrl) ? (
             <img
-              src={profile.logoUrl}
+              src={safeLogoUrl(profile.logoUrl) ?? undefined}
               alt={`${profile.name} logo`}
               className="size-10 rounded-lg border object-contain"
             />

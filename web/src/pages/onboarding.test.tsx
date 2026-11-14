@@ -6,6 +6,7 @@ import { createHttpApi } from "@/api/http";
 import { createMockApi } from "@/api/mock";
 import { domainOf, lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import type { Api } from "@/api/types";
+import { safeLogoUrl } from "@/lib/kitchen-brand";
 import { renderApp } from "@/test/render";
 
 const FROM_CONTEXT = /From your website via Context\.dev/;
@@ -38,6 +39,18 @@ describe("domainOf", () => {
     expect(lookup.logoUrl).toEqual({ value: null, source: null });
     expect(lookup.openingHours).toEqual({ value: null, source: null });
     expect(lookup.kitchenType.source?.endpoint).toBe("POST /v1/brand/retrieve");
+  });
+});
+
+describe("safeLogoUrl", () => {
+  it("keeps only https: and data:image/ logo URLs", () => {
+    expect(safeLogoUrl("https://cdn.example/logo.png")).toBe("https://cdn.example/logo.png");
+    expect(safeLogoUrl("data:image/png;base64,AAAA")).toBe("data:image/png;base64,AAAA");
+    expect(safeLogoUrl("http://cdn.example/logo.png")).toBeNull();
+    expect(safeLogoUrl("javascript:alert(1)")).toBeNull();
+    expect(safeLogoUrl("data:text/html,<b>x</b>")).toBeNull();
+    expect(safeLogoUrl("")).toBeNull();
+    expect(safeLogoUrl(null)).toBeNull();
   });
 });
 
@@ -161,5 +174,33 @@ describe("OnboardingPage", () => {
       logoUrl: null,
       kitchenType: null,
     });
+  });
+
+  it("never shows or saves a logo that is not https: or data:image/", async () => {
+    const mock = createMockApi();
+    const api: Api = {
+      ...mock,
+      lookupKitchenBrand: async (query) => {
+        const lookup = await mock.lookupKitchenBrand(query);
+        return { ...lookup, logoUrl: { ...lookup.logoUrl, value: "javascript:alert(1)" } };
+      },
+    };
+    const user = await lookUp("hotelkuusi.fi", api);
+    expect(await screen.findByLabelText("Kitchen name")).toHaveValue("Hotel Kuusi");
+    expect(within(field("logoUrl")).queryByRole("img")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm and save" }));
+    await screen.findByLabelText("Saved kitchen profile");
+    expect(JSON.parse(localStorage.getItem("kitchen-brand") ?? "null")).toMatchObject({ logoUrl: null });
+    expect(screen.queryByRole("img", { name: "Hotel Kuusi logo" })).not.toBeInTheDocument();
+  });
+
+  it("does not render an http: logo already in storage", async () => {
+    localStorage.setItem(
+      "kitchen-brand",
+      JSON.stringify({ domain: "x.fi", name: "Old Kitchen", logoUrl: "http://x.fi/logo.png", colors: [] }),
+    );
+    renderApp("/onboarding");
+    await screen.findByRole("heading", { level: 1, name: "Set up your kitchen" });
+    expect(screen.queryByRole("img", { name: "Old Kitchen logo" })).not.toBeInTheDocument();
   });
 });
