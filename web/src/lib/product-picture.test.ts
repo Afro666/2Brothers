@@ -1,6 +1,7 @@
+import { Cheese, Milk, Package } from "lucide-react";
 import { describe, expect, it } from "vitest";
 
-import { FALLBACK_PICTURE, pictureFor } from "./product-picture";
+import { FALLBACK_PICTURE, pictureFor, TINTS } from "./product-picture";
 
 describe("pictureFor", () => {
   it.each([
@@ -36,5 +37,16 @@ describe("pictureFor", () => {
   it("gives a plain parcel when no rule matches", () => {
     expect(pictureFor("RAPID SUPREME S50 XYZ")).toBe(FALLBACK_PICTURE);
     expect(pictureFor(null, undefined)).toBe(FALLBACK_PICTURE);
+  });
+
+  it("gives each kind a line icon and a tint, never an emoji", () => {
+    expect(pictureFor("Valio milk 1 l").icon).toBe(Milk);
+    expect(pictureFor("Valio Edam 17 % e1 kg slices").icon).toBe(Cheese);
+    expect(FALLBACK_PICTURE.icon).toBe(Package);
+    for (const name of ["milk", "salmon", "potato", "coffee", "napkin", "RAPID SUPREME S50 XYZ"]) {
+      const picture = pictureFor(name);
+      expect(TINTS[picture.tint]).toMatch(/dark:bg-/);
+      expect(picture).not.toHaveProperty("emoji");
+    }
   });
 });

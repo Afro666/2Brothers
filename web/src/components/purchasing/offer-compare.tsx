@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatEur, formatPack, isLater, isPassed } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { useT } from "@/lib/i18n";
 import type { OfferTier, SubstituteOption } from "@/types";
 
@@ -54,7 +55,8 @@ export function OfferCompare({
           <Card key={o.tier} className={cn("gap-4", o.recommended && "border-primary ring-1 ring-primary")}>
             <CardHeader>
               <div className="flex items-start justify-between gap-2">
-                <CardTitle className="leading-snug">{product.names.en}</CardTitle>
+                <ProductThumb en={product.names.en} fi={product.names.fi} brand={product.brand} size="md" />
+                <CardTitle className="min-w-0 flex-1 leading-snug break-words">{product.names.en}</CardTitle>
                 <span
                   className={cn(
                     "shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium",
