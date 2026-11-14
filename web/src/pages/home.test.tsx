@@ -1,8 +1,9 @@
 import { screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { mapAudit } from "@/api/gateway-map";
 import { createMockApi } from "@/api/mock";
+import { updateLanguage } from "@/lib/i18n";
 import type { Api } from "@/api/types";
 import type { Supplier } from "@/types";
 import { approval } from "@/mocks/milk-case";
@@ -173,6 +174,27 @@ describe("HomePage", () => {
     expect(await screen.findByText("Kitchen brief read")).toBeInTheDocument();
     expect(screen.getByText("No model sentence for a proposal")).toBeInTheDocument();
     expect(screen.queryByText(/kitchen_brief_read|proposal_explanation_failed/)).not.toBeInTheDocument();
+  });
+
+  describe("Latest steps in Finnish (#1776)", () => {
+    afterEach(() => {
+      updateLanguage("en", false);
+      localStorage.removeItem("purchasing-language");
+    });
+
+    it("shows the label of a gateway event in Finnish when the page is in Finnish", async () => {
+      updateLanguage("fi"); // stored too: the app reads the stored language when it mounts
+      const api = createMockApi();
+      api.listAudit = async () =>
+        mapAudit([
+          { event_id: "e-1", kind: "approval_token_revoked", actor: "operator-cli", at: "2026-11-14T14:57:50+00:00" },
+          { event_id: "e-2", kind: "settings_changed", actor: "aron", at: "2026-11-14T15:00:00+00:00" },
+        ]);
+      renderApp(`/?now=${DEMO_NOW}`, api);
+
+      expect(await screen.findByText("Henkilökohtainen hyväksyntätunnus kumottu")).toBeInTheDocument();
+      expect(screen.getByText("Asetuksia muutettu")).toBeInTheDocument();
+    });
   });
 
   it("shows gateway audit kinds as plain words in Latest steps, a new kind too (mock jury, 14 Nov)", async () => {

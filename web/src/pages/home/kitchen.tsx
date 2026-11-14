@@ -206,7 +206,7 @@ export function AuditTile({ api }: { api: Api }) {
                   <time className="font-mono text-xs text-muted-foreground" dateTime={event.at ?? undefined}>
                     {formatDateTime(event.at)}
                   </time>
-                  <p>{plainCode(event.summary, t)}</p>
+                  <p>{t(plainCode(event.summary, t))}</p>
                 </li>
               ))}
           </ul>

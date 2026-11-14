@@ -291,7 +291,7 @@ function AuditStepRow({
   const actorLabel = ACTOR_LABEL[event.actor] ? t(ACTOR_LABEL[event.actor]) : event.actor;
   const actorStyle = ACTOR_STYLE[event.actor] ?? ACTOR_STYLE.system;
   const person = event.actor === "chef" || event.actor === "human";
-  const summary = plainCode(event.summary, t);
+  const summary = t(plainCode(event.summary, t));
   return (
     <li
       className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-[8.5rem_6rem_minmax(0,1fr)] ${person ? "bg-muted/30" : ""}`}

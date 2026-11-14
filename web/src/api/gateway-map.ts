@@ -627,7 +627,13 @@ const TOOL_VERBS: Record<string, { started: string; done: string }> = {
   get_order_status: { started: "Buyer is checking the order status", done: "Buyer checked the order status" },
 };
 
-const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
+/**
+ * The plain label of each event kind the Python code writes to the audit log. A kind that
+ * `lib/codes.ts` names (`kitchen_brief_read`, ...) is not here: `plainCode` gives its title.
+ * `event-labels.test.ts` reads the kinds from the sources (#1776): a new kind needs a line
+ * here and a Finnish text in `i18n/fi/audit-events.ts`.
+ */
+export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   // #899: kinds added on 14 Nov, with a plain-English label each.
   stock_photo_read: { kind: "stock", summary: "Shelf photo read by Nemotron VL" },
   audit_demo_tamper: { kind: "other", summary: "Tamper demo: a line was changed" },
@@ -689,6 +695,20 @@ const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   recall_replacement_rejected: { kind: "approval", summary: "Replacement for a recalled product rejected" },
   replacement_enriched: { kind: "other", summary: "Replacement product details added" },
   replacement_enrichment_unknown: { kind: "other", summary: "Replacement product details not found" },
+  // #1776: the kinds the source scan found without a label.
+  suppliers_created: { kind: "settings", summary: "Supplier added" },
+  suppliers_changed: { kind: "settings", summary: "Supplier changed" },
+  suppliers_deleted: { kind: "settings", summary: "Supplier removed" },
+  recipes_created: { kind: "settings", summary: "Recipe added" },
+  recipes_changed: { kind: "settings", summary: "Recipe changed" },
+  recipes_deleted: { kind: "settings", summary: "Recipe removed" },
+  products_created: { kind: "settings", summary: "Own product added" },
+  products_changed: { kind: "settings", summary: "Own product changed" },
+  products_deleted: { kind: "settings", summary: "Own product removed" },
+  // These two rows and the recall alert carry a `type`, not a `kind`.
+  share_granted: { kind: "forecast_share", summary: "Forecast sharing with the supplier switched on" },
+  share_revoked: { kind: "forecast_share", summary: "Forecast sharing with the supplier switched off" },
+  "recall.alert": { kind: "other", summary: "Recall alert" },
 };
 
 const SNAKE_CASE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
@@ -810,7 +830,9 @@ function mapAuditEvent(event: Json): AuditEvent {
     offer_id: _offer,
     ...rest
   } = event;
-  const known = typeof kind === "string" && Object.hasOwn(EVENT_KINDS, kind) ? EVENT_KINDS[kind] : undefined;
+  // An older row has a `type` and no `kind` (`share_granted`, `recall.alert`): it names the step too.
+  const name = typeof kind === "string" ? kind : typeof rest.type === "string" ? rest.type : undefined;
+  const known = name !== undefined && Object.hasOwn(EVENT_KINDS, name) ? EVENT_KINDS[name] : undefined;
   const humanReason =
     typeof rest.summary === "string"
       ? rest.summary
@@ -837,7 +859,7 @@ function mapAuditEvent(event: Json): AuditEvent {
             : typeof actor === "string" && !actor.startsWith("token:")
               ? "human"
             : "system",
-    summary: known?.summary ?? (typeof kind === "string" ? kindWords(kind) : "Unknown step"),
+    summary: known?.summary ?? (name !== undefined ? kindWords(name) : "Unknown step"),
     reason: humanReason || (typeof kind === "string" && kind.startsWith("supplier_offer_") ? describe(rest) : ""),
     details: describe(details),
   };
