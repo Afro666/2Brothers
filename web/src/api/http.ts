@@ -33,10 +33,17 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
  * far; the routes the screens need (approvals, orders, audit by order, chef
  * requests, the product row) are proposed in a contract PR. Until they land,
  * every method says so instead of guessing a shape.
+ *
+ * Non-method properties stay `undefined`: `live` (the optional set of live
+ * methods) so pages fall back to the error state, and `then` so the object
+ * is never mistaken for a promise.
  */
+const NOT_METHODS = new Set<PropertyKey>(["live", "then"]);
+
 export function createHttpApi(_baseUrl: string): Api {
   return new Proxy({} as Api, {
-    get() {
+    get(_target, prop) {
+      if (typeof prop === "symbol" || NOT_METHODS.has(prop)) return undefined;
       return async () => {
         throw new ApiError("NOT_SERVED", "The gateway does not serve this yet.");
       };
