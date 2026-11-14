@@ -63,7 +63,10 @@ def env(monkeypatch):
         db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
     fake = FakeValio()
     valio = ValioClient("test-not-a-real-key", transport=fake.transport, ttl=0, now=lambda: NOW)
-    gw = Gateway(db, valio, now=lambda: NOW)
+    def search(db, query, filters, limit, kitchen_id=None):
+        return [{"product_id": pid} for pid in ("462775", "462921", "463335")] if "milk" in query or "maito" in query else []
+
+    gw = Gateway(db, valio, now=lambda: NOW, search=search)
     return TestClient(create_app(gw)), fake, db
 
 
@@ -260,3 +263,48 @@ def test_buyer_request_reaches_human_inbox_and_one_exact_order(env):
     events = client.get(K + '/audit', headers=HUMAN).json()['events']
     assert any(e['kind'] == 'order_placed' and e['actor'] == 'aron'
                and e['order_id'] == order['order_id'] for e in events)
+
+
+def test_free_text_uses_the_parser_and_the_engine(env):
+    client, _, _ = env
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "text": "1000 l laktoositonta maitoa maanantaiksi", "idempotency_key": "t1"})
+    assert r.status_code == 200, r.text
+    p = r.json()
+    assert p["request"]["made_by"] == "parser" and p["request"]["requested_date"] == "2026-11-16"
+    assert p["total_ex_vat"] == "1459.67"
+    again = client.post(K + "/proposals", headers=AGENT, json={
+        "text": "1000 l laktoositonta maitoa maanantaiksi", "idempotency_key": "t1"})
+    assert again.json()["proposal_id"] == p["proposal_id"]
+
+
+def test_unreadable_text_is_refused_with_a_reason(env):
+    client, _, _ = env
+    r = client.post(K + "/proposals", headers=AGENT, json={"text": "some milk please", "idempotency_key": "t2"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "CANNOT_READ_REQUEST"
+    r = client.post(K + "/proposals", headers=AGENT, json={"text": "10 kg unicorn by Monday", "idempotency_key": "t3"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "NO_PRODUCTS_FOUND"
+
+
+def test_parser_is_not_used_after_an_ambiguous_buyer_failure(monkeypatch):
+    """The Buyer may already have made a proposal: no second one from the parser."""
+    from gateway.service import GatewayError
+
+    async def ambiguous(kitchen_id, body):
+        raise GatewayError(503, "BUYER_RECONCILIATION_REQUIRED", "check first")
+
+    async def safe(kitchen_id, body):
+        raise GatewayError(504, "BUYER_TIMEOUT", "timed out before any write", fallback_safe=True)
+
+    monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
+    db = mongomock.MongoClient(tz_aware=True)["test"]
+    for pid, raw in RAW.items():
+        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
+    fake = FakeValio()
+    gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: NOW), now=lambda: NOW,
+                 search=lambda db, q, f, n, kitchen_id=None: [{"product_id": "462775"}])
+    body = {"text": "60 l milk by Monday", "idempotency_key": "b1"}
+    r = TestClient(create_app(gw, buyer_worker=ambiguous)).post(K + "/proposals", headers=AGENT, json=body)
+    assert r.status_code == 503 and db.proposals.count_documents({}) == 0
+    r = TestClient(create_app(gw, buyer_worker=safe)).post(K + "/proposals", headers=AGENT, json=body)
+    assert r.status_code == 200 and r.json()["request"]["made_by"] == "parser"

@@ -58,8 +58,10 @@ def _hash(payload: dict) -> str:
 
 
 class Gateway:
-    def __init__(self, db, valio, *, now: Callable[[], datetime] = lambda: datetime.now(timezone.utc)):
+    def __init__(self, db, valio, *, now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+                 search: Callable | None = None):
         self.db, self.valio, self.now = db, valio, now
+        self._search = search          # catalog search; default: store.search (Atlas Search)
         db.proposals.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
         db.orders.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
         db.approvals.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
@@ -181,12 +183,43 @@ class Gateway:
 
     # ---- kitchen side ---------------------------------------------------------------
 
+    def _from_text(self, kitchen_id: str, body: dict) -> dict:
+        """Free text and no product list: the deterministic parser (#276), the fallback
+        when the Nemotron Buyer is not running. It reads, searches and stops; the engine
+        still sizes every line and a person still approves."""
+        from gateway.parse import ParseError, parse_request
+        try:
+            parsed = parse_request(body["text"], self.now().date())
+        except ParseError as exc:
+            raise GatewayError(422, "CANNOT_READ_REQUEST", str(exc)) from None
+        search = self._search
+        if search is None:
+            from store.search import search_products as search
+        rows = search(self.db, parsed.query, {}, 8, kitchen_id=kitchen_id)
+        ids = [r["product_id"] for r in rows][:8]
+        if not ids:
+            raise GatewayError(422, "NO_PRODUCTS_FOUND", f"no catalog product matches {parsed.query!r}")
+        return {**body, "product_ids": ids, **{k: v for k, v in parsed.as_need().items() if k != "query"},
+                "made_by": "parser", "query": parsed.query}
+
     def create_proposal(self, kitchen_id: str, body: dict, actor: str) -> dict:
+        if body.get("text") and not body.get("product_ids"):
+            if not body.get("idempotency_key"):
+                raise GatewayError(422, "INVALID_REQUEST", "idempotency_key is required")
+            stored = self.db.proposals.find_one({"kitchen_id": kitchen_id, "idempotency_key": body["idempotency_key"]})
+            if stored:
+                if stored["request"].get("text") != body["text"]:
+                    raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
+                return self._proposal_out(stored)
+            body = self._from_text(kitchen_id, body)
         for field in ("product_ids", "quantity", "unit", "requested_date", "idempotency_key"):
             if not body.get(field):
                 raise GatewayError(422, "INVALID_REQUEST", f"{field} is required")
         request = {k: body[k] for k in ("product_ids", "quantity", "unit", "requested_date")}
         request["text"] = body.get("text") or ""
+        request["made_by"] = body.get("made_by") or "structured"
+        if body.get("query"):
+            request["query"] = body["query"]
         if body.get("event"):
             request["event"] = True       # one-off demand (S05): EVENT_LINE, kept out of the forecast
         key = body["idempotency_key"]
