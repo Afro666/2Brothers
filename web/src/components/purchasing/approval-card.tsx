@@ -198,6 +198,8 @@ export function ApprovalCard({
   const t = useT();
   // #1630: `totalInclVat` is the approve figure; incl VAT is `inclVat`, or unknown when a rate is.
   const inclVat = inclVatOf(request);
+  // #1738: the approve figure may hold a delivery fee; call it "incl VAT" only when it is the incl VAT total.
+  const approveIsInclVat = inclVat !== null && Math.abs(inclVat - request.totalInclVat) < 0.005;
   const [open, setOpen] = useState<"approve" | "reject" | null>(null);
   const [status, setStatus] = useState(request.status);
   const [reason, setReason] = useState("");
@@ -728,7 +730,7 @@ export function ApprovalCard({
                 <Check aria-hidden />
                 {stockMessage || approvalBlockedReason
                   ? t("Approve")
-                  : inclVat === null
+                  : !approveIsInclVat
                     ? t("Approve {amount}", { amount: formatEur(request.totalInclVat) })
                     : t("Approve {amount} incl VAT", { amount: formatEur(request.totalInclVat) })}
               </Button>
@@ -769,7 +771,7 @@ export function ApprovalCard({
           <DialogHeader>
             <DialogTitle>{t("Approve this order?")}</DialogTitle>
             <DialogDescription>
-              {inclVat === null
+              {!approveIsInclVat
                 ? t("You approve exactly {exVat} ex VAT, {amount} in all ({total}). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
                     exVat: formatEur(request.totalExVat),
                     amount: formatEur(request.totalInclVat),

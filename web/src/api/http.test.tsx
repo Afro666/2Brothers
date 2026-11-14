@@ -1235,8 +1235,9 @@ describe("the app on the gateway", () => {
     renderApp("/approvals", createHttpApi("/api"));
 
     expect(await screen.findByText("€91.20")).toBeVisible();
-    // The approve button keeps the exact figure a person approves.
-    expect(screen.getByRole("button", { name: /Approve €101\.10 incl VAT/ })).toBeVisible();
+    // The approve button keeps the exact figure a person approves, but does not call it incl VAT (#1738).
+    expect(screen.getByRole("button", { name: "Approve €101.10" })).toBeVisible();
+    expect(screen.queryByText(/€101\.10 incl VAT/)).toBeNull();
   });
 
   it("lets a person change the pcs of a READY proposal and then approve the new total", async () => {
