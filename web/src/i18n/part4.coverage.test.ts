@@ -12,7 +12,7 @@ import { DEMO_ERRORS, ELSEWHERE } from "@/pages/trust";
 import { DEMAND_CLASSES } from "@/pages/settings/engine";
 import { TYPES as KITCHEN_TYPES } from "@/pages/settings/kitchen";
 import { EVENTS as NOTIFICATION_EVENTS } from "@/pages/settings/notifications";
-import { GROUPS as PERMISSION_GROUPS } from "@/pages/settings/permissions";
+import { GROUPS as PERMISSION_GROUPS, PERMISSION_ACTIONS } from "@/pages/settings/permissions";
 import { SETTINGS_SECTIONS } from "@/pages/settings/sections";
 import { ROLE_DETAILS } from "@/pages/settings/team";
 import { SCOPES as TOKEN_SCOPES } from "@/pages/settings/tokens";
@@ -81,6 +81,7 @@ describe("part 4 Finnish coverage", () => {
       ...Object.values(ROLE_DETAILS),
       ...NOTIFICATION_EVENTS.flatMap((event) => [event.title, event.description]),
       ...PERMISSION_GROUPS.flatMap((group) => [group.title, group.description]),
+      ...PERMISSION_ACTIONS,
       ...DEMAND_CLASSES.map((demandClass) => demandClass.description),
       ...KITCHEN_TYPES.map((type) => type.label),
       ...TOKEN_SCOPES.flatMap((scope) => [scope.title, scope.description]),

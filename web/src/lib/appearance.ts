@@ -8,8 +8,8 @@ import { useSyncExternalStore } from "react";
 export const APPEARANCE_OPTIONS = {
   accent: ["herb", "blue", "plum", "clay", "teal"],
   density: ["comfortable", "compact"],
-  /** `comma` is 1,000.50 and `space` is 1 000,50. */
-  numberFormat: ["comma", "space"],
+  /** `comma` is 1,000.50 and `space` is 1 000,50. No choice: the language's own form. */
+  numberFormat: [null, "comma", "space"],
   /** 14 Nov, 14.11. or Nov 14. */
   dateFormat: ["dmy", "numeric", "mdy"],
   weekStartsMonday: [true, false],

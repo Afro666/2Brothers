@@ -7,7 +7,7 @@ import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatQuantity } from "@/lib/format";
-import { useT } from "@/lib/i18n";
+import { useLanguage, useT } from "@/lib/i18n";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
@@ -33,6 +33,7 @@ function supplierName(offer: SupplierOffer): string {
  */
 export function SupplierOfferTile({ api }: { api: Api }) {
   const t = useT();
+  const { language } = useLanguage();
   const state = useAsync(() => api.listSupplierOffers(), [api]);
   const { role } = useRole();
   const { session } = useSession();
@@ -104,10 +105,15 @@ export function SupplierOfferTile({ api }: { api: Api }) {
             {offer.reason || t("No reason given.")}
           </blockquote>
           <figcaption className="text-xs text-muted-foreground">
-            {t("written by {possessive} selling agent ({madeBy})", {
-              possessive: t(supplierName(offer) === "Valio Aimo" ? "Valio's" : "the supplier's"),
-              madeBy: t(madeByLabel(offer.madeBy)),
-            })}
+            {t(
+              language === "fi"
+                ? "written by {possessive} selling agent ({madeBy}) in English"
+                : "written by {possessive} selling agent ({madeBy})",
+              {
+                possessive: t(supplierName(offer) === "Valio Aimo" ? "Valio's" : "the supplier's"),
+                madeBy: t(madeByLabel(offer.madeBy)),
+              },
+            )}
             <NemotronMark when={isNemotron(offer.madeBy)} side="after" />
           </figcaption>
         </figure>

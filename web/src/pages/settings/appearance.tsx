@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ACCENT_HUES, type Appearance, setAppearance, useAppearance } from "@/lib/appearance";
 import { formatDate, formatEur } from "@/lib/format";
-import { useT } from "@/lib/i18n";
+import { useLanguage, useT } from "@/lib/i18n";
 import { SettingsSection } from "@/pages/settings/section";
 
 interface Option<T> {
@@ -30,7 +30,7 @@ const DENSITIES: Option<Appearance["density"]>[] = [
   { value: "comfortable", label: "Comfortable" },
   { value: "compact", label: "Compact" },
 ];
-const NUMBER_FORMATS: Option<Appearance["numberFormat"]>[] = [
+const NUMBER_FORMATS: Option<Exclude<Appearance["numberFormat"], null>>[] = [
   { value: "comma", label: "1,000.50" },
   { value: "space", label: "1 000,50" },
 ];
@@ -54,6 +54,7 @@ function Choice<T extends string>({
   onChange: (value: T) => void;
 }) {
   const id = useId();
+  const t = useT();
   return (
     <div role="radiogroup" aria-labelledby={id} className="space-y-1.5">
       <span id={id} className="block text-xs leading-none font-medium text-muted-foreground">
@@ -76,7 +77,7 @@ function Choice<T extends string>({
             {option.swatch ? (
               <span className="size-3 rounded-full" style={{ background: option.swatch }} aria-hidden />
             ) : null}
-            {option.label}
+            {t(option.label)}
           </label>
         ))}
       </div>
@@ -87,14 +88,15 @@ function Choice<T extends string>({
 /** Display choices for this browser. Each applies at once and is remembered (lib/appearance.ts). */
 export function AppearanceSection() {
   const t = useT();
+  const { language } = useLanguage();
   const appearance = useAppearance();
   const weekdays = (appearance.weekStartsMonday ? WEEKDAYS : [WEEKDAYS[6], ...WEEKDAYS.slice(0, 6)]).map((day) =>
     t(day),
   );
   return (
     <SettingsSection
-      title="Appearance"
-      description="How the app looks and how it writes numbers and dates. Kept in this browser."
+      title={t("Appearance")}
+      description={t("How the app looks and how it writes numbers and dates. Kept in this browser.")}
     >
       <Card>
         <CardContent className="space-y-5">
@@ -102,13 +104,13 @@ export function AppearanceSection() {
             <ThemePicker />
           </div>
           <Choice
-            label="Accent colour"
+            label={t("Accent colour")}
             value={appearance.accent}
             options={ACCENTS}
             onChange={(accent) => setAppearance({ accent })}
           />
           <Choice
-            label="Density"
+            label={t("Density")}
             value={appearance.density}
             options={DENSITIES}
             onChange={(density) => setAppearance({ density })}
@@ -122,13 +124,13 @@ export function AppearanceSection() {
       <Card>
         <CardContent className="space-y-5">
           <Choice
-            label="Number format"
-            value={appearance.numberFormat}
+            label={t("Number format")}
+            value={appearance.numberFormat ?? (language === "fi" ? "space" : "comma")}
             options={NUMBER_FORMATS}
             onChange={(numberFormat) => setAppearance({ numberFormat })}
           />
           <Choice
-            label="Date format"
+            label={t("Date format")}
             value={appearance.dateFormat}
             options={DATE_FORMATS}
             onChange={(dateFormat) => setAppearance({ dateFormat })}
@@ -139,17 +141,17 @@ export function AppearanceSection() {
               checked={appearance.weekStartsMonday}
               onCheckedChange={(checked) => setAppearance({ weekStartsMonday: checked === true })}
             />
-            <Label htmlFor="week-starts-monday">Week starts on Monday</Label>
+            <Label htmlFor="week-starts-monday">{t("Week starts on Monday")}</Label>
           </div>
           <p className="text-xs text-muted-foreground">
-            Planner and demand weeks are supplier weeks: they always run Monday to Sunday.
+            {t("Planner and demand weeks are supplier weeks: they always run Monday to Sunday.")}
           </p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t pt-4 text-sm">
-            <dt className="text-muted-foreground">Amount</dt>
+            <dt className="text-muted-foreground">{t("Amount")}</dt>
             <dd className="tabular-nums">{formatEur(1000.5)}</dd>
-            <dt className="text-muted-foreground">Date</dt>
+            <dt className="text-muted-foreground">{t("Date")}</dt>
             <dd>{formatDate("2026-11-14")}</dd>
-            <dt className="text-muted-foreground">Week</dt>
+            <dt className="text-muted-foreground">{t("Week")}</dt>
             <dd>{weekdays.join(" ")}</dd>
           </dl>
         </CardContent>

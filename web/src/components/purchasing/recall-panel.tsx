@@ -28,9 +28,34 @@ function plural(count: number, t: (text: string, vars?: TranslationVariables) =>
     : t("{count} recalls affect your open orders", { count });
 }
 
-/** "in stock: 3.253 KG" reads as a sentence start; the gateway's words are otherwise kept. */
-function sentence(line: string) {
-  return line.charAt(0).toUpperCase() + line.slice(1);
+/** Every sentence shape the monitor sends, with the text it becomes and the value to fill in. */
+const RECALL_PATTERNS: [RegExp, string, string | null][] = [
+  [/^in stock: (.+)$/, "In stock: {amount}", "amount"],
+  [/^on the stock list: amount not counted$/, "On the stock list: amount not counted", null],
+  [/^in recipes: (.+)$/, "In recipes: {names}", "names"],
+  [/^on the open purchase proposal$/, "On the open purchase proposal", null],
+  [/^Stop using it now\. Check your packs: only (.+) are recalled\.$/, "Stop using it now. Check your packs: only {lots} are recalled.", "lots"],
+  [/^Stop using it now\. Check your packs\.$/, "Stop using it now. Check your packs.", null],
+  [/^Do not use it until checked\. Check your packs: only (.+) are recalled\.$/, "Do not use it until checked. Check your packs: only {lots} are recalled.", "lots"],
+  [/^Do not use it until checked\. Check your packs\.$/, "Do not use it until checked. Check your packs.", null],
+  [/^Do not use it until checked\.$/, "Do not use it until checked.", null],
+  [/^A person checks whether this notice is about your product\.$/, "A person checks whether this notice is about your product.", null],
+];
+
+export const RECALL_SENTENCES = RECALL_PATTERNS.map(([, template]) => template);
+
+/**
+ * The sentences the recall monitor sends for `where` and `next_step` (monitor/recalls.py),
+ * through the dictionary. The lists of names, dates and lots inside stay as sent, and a
+ * shape not listed here is shown as sent.
+ */
+export function recallSentence(text: string, t: (text: string, vars?: TranslationVariables) => string): string {
+  for (const [pattern, template, name] of RECALL_PATTERNS) {
+    const match = pattern.exec(text);
+    if (match) return t(template, match[1] == null || name == null ? undefined : { [name]: match[1] });
+  }
+  // As before for a shape nobody listed: the gateway's words, starting with a capital.
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /**
@@ -66,7 +91,7 @@ function UnheldRecall({ alert }: { alert: RecallAlert }) {
       </p>
       {alert.where.map((line) => (
         <p key={line} className="font-medium [overflow-wrap:anywhere]">
-          {sentence(line)}
+          {recallSentence(line, t)}
         </p>
       ))}
       <p>
@@ -74,7 +99,9 @@ function UnheldRecall({ alert }: { alert: RecallAlert }) {
           ? t("No open order holds it.")
           : t("No open order holds it. New orders leave it out.")}
       </p>
-      {alert.nextStep ? <p className="text-muted-foreground [overflow-wrap:anywhere]">{alert.nextStep}</p> : null}
+      {alert.nextStep ? (
+        <p className="text-muted-foreground [overflow-wrap:anywhere]">{recallSentence(alert.nextStep, t)}</p>
+      ) : null}
     </li>
   );
 }

@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { getAppearance, loadAppearance, setAppearance } from "@/lib/appearance";
 
 import { compareUrgency } from "@/components/purchasing/urgency-badge";
 
-import { formatEur, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
+import { updateLanguage } from "@/lib/i18n";
+
+import { formatEur, formatNumber, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
 
 describe("stock sentinels", () => {
   it("treats both Valio sentinels and a missing value as unknown", () => {
@@ -73,4 +77,35 @@ describe("amounts for people", () => {
     expect(formatShortfall(41.41, "KG")).toBe("41.5 kg");
     expect(formatShortfall(41.4, "KG")).toBe("41.4 kg");
   });
+
+describe("number format follows the language until the person picks one", () => {
+  afterEach(() => {
+    updateLanguage("en", false);
+    loadAppearance();
+    localStorage.clear();
+  });
+
+  it("writes Finnish numbers and money when the language is Finnish and nothing was chosen", () => {
+    loadAppearance();
+    expect(getAppearance().numberFormat).toBeNull();
+    updateLanguage("fi", false);
+    expect(formatEur(2099.41)).toBe("2\u00a0099,41\u00a0€");
+    expect(formatNumber(2099.41)).toBe("2\u00a0099,41");
+  });
+
+  it("keeps a choice the person made", () => {
+    updateLanguage("fi", false);
+    setAppearance({ numberFormat: "comma" });
+    expect(formatEur(2099.41)).toBe("€2,099.41");
+    updateLanguage("en", false);
+    setAppearance({ numberFormat: "space" });
+    expect(formatEur(2099.41)).toBe("2\u00a0099,41\u00a0€");
+  });
+
+  it("leaves English as it was", () => {
+    loadAppearance();
+    expect(formatEur(2099.41)).toBe("€2,099.41");
+    expect(formatNumber(2099.41)).toBe("2,099.41");
+  });
+});
 });

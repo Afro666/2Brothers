@@ -12,6 +12,7 @@ import { RISK_META } from "@/components/purchasing/risk-badge";
 import { STATUS_META } from "@/components/purchasing/status-badge";
 import { URGENCY_META } from "@/components/purchasing/urgency-badge";
 import { collectFinnishDictionaries } from "@/lib/i18n";
+import { RECALL_SENTENCES } from "@/components/purchasing/recall-panel";
 
 const PART2_FILES = [
   "pages/requests.tsx",
@@ -61,6 +62,7 @@ describe("part 2 translations", () => {
       ...CHIP_TEXTS,
       ...Object.values(MATCH_TEXT),
       ...Object.values(REPLAN_ERROR_TEXT),
+      ...RECALL_SENTENCES,
       "The replacement order could not be prepared.",
       ...Object.values(MODEL_USAGE_LABELS),
       ...Object.values(ATLAS_LABELS),
