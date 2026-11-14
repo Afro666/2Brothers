@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hmac
 import os
+import time
 from decimal import InvalidOperation
 from typing import Any
 
@@ -78,6 +79,9 @@ def _env_principal(request: Request, token: str) -> Principal:
     raise GatewayError(401, "UNAUTHENTICATED", "a valid bearer token is required")
 
 
+REFUSAL_WINDOW = 60.0          # seconds: one audit row per repeated refusal (#853)
+
+
 def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     app = FastAPI(
         title="Trusted Kitchen Buyer gateway", version="0.1.0",
@@ -105,6 +109,23 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
             state["gw"] = Gateway(get_db(), ValioClient())
         return state["gw"]
 
+    refusals_seen: dict[tuple, float] = {}
+
+    def _audit_refusal(request: Request, who: Principal, code: str) -> None:
+        """#853: the path's kitchen only when that kitchen exists (a caller cannot create log
+        rows for made-up kitchens), else the caller's own; the same refusal (caller, code,
+        method, path) at most once a minute, so a loop cannot flood a kitchen's log."""
+        named = request.path_params.get("kitchen_id")
+        target = named if named and gw().db.kitchens.find_one({"_id": named}, {"_id": 1}) else kitchen(who)
+        key = (who.name, code, request.method, request.url.path, target)
+        now = time.monotonic()
+        if now - refusals_seen.get(key, -REFUSAL_WINDOW) < REFUSAL_WINDOW:
+            return
+        if len(refusals_seen) > 10_000:
+            refusals_seen.clear()
+        refusals_seen[key] = now
+        gw()._audit(target, "refused", who.name, code=code, method=request.method, path=request.url.path)
+
     @app.exception_handler(GatewayError)
     async def _error(request: Request, exc: GatewayError) -> JSONResponse:
         # #548: every refusal of a token or agent is audit evidence, also when a caller skips
@@ -112,8 +133,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         who = getattr(request.state, "who", None)
         if exc.status == 403 and who is not None and who.kind != "human":
             try:
-                gw()._audit(request.path_params.get("kitchen_id") or kitchen(who), "refused", who.name,
-                            code=exc.code, method=request.method, path=request.url.path)
+                _audit_refusal(request, who, exc.code)
             except Exception:
                 pass                # a failed audit write never turns a refusal into a 500
         return JSONResponse(status_code=exc.status,
