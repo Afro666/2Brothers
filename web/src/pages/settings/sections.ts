@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 
 import { AccountSection } from "@/pages/settings/account";
+import { ApproveChatSection } from "@/pages/settings/approve-chat";
 import { AppearanceSection } from "@/pages/settings/appearance";
 import { DataPrivacySection } from "@/pages/settings/data-privacy";
 import { DeveloperSection } from "@/pages/settings/developer";
@@ -22,6 +23,7 @@ export const SETTINGS_SECTIONS: { id: string; label: string; component: Componen
   { id: "team", label: "Team", component: TeamSection },
   { id: "permissions", label: "Permissions", component: PermissionsSection },
   { id: "tokens", label: "API & MCP tokens", component: TokensSection },
+  { id: "approve-chat", label: "Approve from chat", component: ApproveChatSection },
   { id: "notifications", label: "Notifications", component: NotificationsSection },
   { id: "developer", label: "Developer", component: DeveloperSection },
   { id: "data-privacy", label: "Data & privacy", component: DataPrivacySection },

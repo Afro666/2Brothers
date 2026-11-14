@@ -11,6 +11,7 @@ import { createDeliveryNoteHttp } from "@/api/http-delivery-note";
 import { createTrustHttp } from "@/api/http-trust";
 import { createUsageHttp } from "@/api/http-usage";
 import { createTokensHttp } from "@/api/http-tokens";
+import { createApprovalTokensHttp } from "@/api/http-approval-tokens";
 import { createDeveloperHttp } from "@/api/http-developer";
 import { createEventsHttp } from "@/api/http-events";
 import {
@@ -190,6 +191,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createUsageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createApprovalTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen, mock.getProducts),
     ...createEventsHttp(baseUrl, kitchen, () => currentSession),
