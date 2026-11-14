@@ -120,4 +120,17 @@ describe("number format follows the language until the person picks one", () => 
     expect(formatNumber(2099.41)).toBe("2,099.41");
   });
 });
+
+describe("formatAmount at the edges", () => {
+  it("carries a rounded weight into the next whole number and the thousands", () => {
+    expect(formatAmount(0.95, "KG")).toBe("1 KG");
+    expect(formatAmount(999.96, "KG")).toBe("1,000 KG");
+  });
+
+  it("keeps the sign of a negative amount", () => {
+    expect(formatAmount(-0.95, "KG")).toBe("-1 KG");
+    expect(formatAmount(-12.4, "PCS")).toBe("-12 PCS");
+    expect(formatAmount(-0.04, "L")).toBe("> -0.1 L");
+  });
+});
 });

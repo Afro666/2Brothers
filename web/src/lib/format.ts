@@ -61,9 +61,12 @@ const COUNTED_AMOUNT_UNITS = new Set(["PCS", "ST", "PC", "KPL", "CS", "BAG", "BO
 export function formatAmount(value: number, unit: string): string {
   const measured = !COUNTED_AMOUNT_UNITS.has(unit.toUpperCase());
   const step = measured ? 0.1 : 1;
-  if (value !== 0 && Math.abs(value) < step) return `< ${formatNumber(step)} ${unit}`;
-  const rounded = measured ? Math.round(value * 10) / 10 : Math.round(value);
-  return `${formatNumber(rounded)} ${unit}`;
+  // The size is rounded, the sign is kept: -0.95 KG is -1 KG, and a small negative is not "< 0.1".
+  const size = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (size !== 0 && size < step) return `${value < 0 ? "> -" : "< "}${formatNumber(step)} ${unit}`;
+  const rounded = measured ? Math.round(size * 10) / 10 : Math.round(size);
+  return `${sign}${formatNumber(rounded)} ${unit}`;
 }
 
 export function shortOrderId(id: string): string {
