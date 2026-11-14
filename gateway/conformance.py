@@ -141,13 +141,34 @@ class Kit:
         status, data = self.call("POST", "/tools/simulate_order", json={"offer_id": "conformance-unknown"})
         return status == 404 and self._code(data) == "OFFER_NOT_FOUND", f"HTTP {status} {self._code(data)}"
 
+    @staticmethod
+    def _rpc_result(response: httpx.Response, rpc_id) -> dict:
+        """The JSON-RPC result for rpc_id, from a plain JSON reply or a streamable-HTTP SSE stream."""
+        if response.headers.get("content-type", "").split(";")[0].strip().lower() != "text/event-stream":
+            return response.json()["result"]
+        events, lines = [], []
+        for line in response.text.splitlines() + [""]:
+            if line.startswith("data:"):
+                lines.append(line[5:].removeprefix(" "))
+            elif not line.strip() and lines:
+                events.append("\n".join(lines))
+                lines = []
+        for event in events:
+            try:
+                message = json.loads(event)
+            except ValueError:
+                continue
+            if isinstance(message, dict) and message.get("id") == rpc_id and "result" in message:
+                return message["result"]
+        raise ValueError(f"no JSON-RPC response with id {rpc_id!r} in the SSE stream")
+
     def c12(self):
         response = self.http.post("/mcp", headers={**self.auth, "Accept": "application/json, text/event-stream",
                                                    "Content-Type": "application/json", "MCP-Protocol-Version": "2025-06-18"},
                                   json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
         if response.status_code != 200:
             return None, f"/mcp not reachable with this token (HTTP {response.status_code})"
-        names = [t["name"] for t in response.json()["result"]["tools"]]
+        names = [t["name"] for t in self._rpc_result(response, 1)["tools"]]
         bad = [n for n in names if any(w in n for w in ("approve", "reject", "cancel"))]
         return not bad, f"{len(names)} MCP tools, none approves, rejects or cancels"
 
