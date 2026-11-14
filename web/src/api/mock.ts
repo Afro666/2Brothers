@@ -208,6 +208,15 @@ export function createMockApi(): MockApi {
       if (order.lines.some((line) => isUnknownStock(line.offer.availableAmount))) {
         throw new ApiError("STOCK_UNKNOWN", "Waiting for supplier stock confirmation.");
       }
+      const short = order.lines.find(
+        (line) => line.offer.availableAmount != null && line.quantity > line.offer.availableAmount,
+      );
+      if (short) {
+        throw new ApiError(
+          "PARTIAL_STOCK",
+          `Only ${short.offer.availableAmount} of ${short.product.id} in supplier stock; ${short.quantity} requested.`,
+        );
+      }
       demoOrders.set(order.id, { ...order, status: "PLACED" });
       const decided = decide(
         current, "APPROVED", actor, `Approved ${current.orderId}`,
