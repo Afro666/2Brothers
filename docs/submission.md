@@ -8,15 +8,21 @@ path in this repo or a live URL. Checked against `main` on 2026-11-14. A line ma
 
 - Trusted Kitchen Buyer: a purchasing agent that Valio Aimo can give to its kitchen customers.
 - A chef asks in plain words. The Buyer agent (Nemotron 3.5 Super VL) finds the products.
-- The gateway reads live Valio prices and stock. A deterministic engine sets every quantity.
-- A person approves every order. Every step is in a hash-chained audit log.
+- The gateway reads Valio's live price and availability API. A deterministic engine sets
+  every quantity.
+- A person approves every order: in the web, or from their own chat with a personal
+  approval token. Agent tokens never approve.
+- Every step is in a hash-chained audit log. Each offer and each order receipt is signed when
+  the signing key is available; a signing failure never blocks an order.
 - Any other agent can use the same gateway over MCP or REST with a kitchen token.
 
 Team 2Brothers: Aron (gateway, engine), Tymon (web, store), Maciek (agent, env, signals).
 
-Live site: <https://31-22-104-201.sslip.io>. For agents:
+Live site: <https://31-22-104-201.sslip.io>. Sign-in is off for judging: open it and use it.
+For agents:
 [`/llms.txt`](https://31-22-104-201.sslip.io/llms.txt),
 [`/.well-known/agent-card.json`](https://31-22-104-201.sslip.io/.well-known/agent-card.json),
+[`/api/.well-known/jwks.json`](https://31-22-104-201.sslip.io/api/.well-known/jwks.json),
 [`/gateway/openapi.json`](https://31-22-104-201.sslip.io/gateway/openapi.json),
 [`/api/docs`](https://31-22-104-201.sslip.io/api/docs).
 
@@ -24,45 +30,76 @@ Live site: <https://31-22-104-201.sslip.io>. For agents:
 
 **Core requirements**
 
-1. Product, price and availability lookup. Search is one Atlas Search index over 17,546
-   catalog products. Price and stock come live from Valio's challenge API.
-2. Inquiry to order on fixed prices. A request becomes a proposal with a 15-minute offer
-   snapshot. A person approves it. The order is then stored in our gateway. Valio's
-   challenge API has no order endpoint, so no order reaches Valio.
-3. Permissions and human approval. A kitchen token has scopes and can never approve.
-   Approval needs a person's session and the exact total the person saw.
+1. **Product, price and availability lookup.** Search runs over Valio's 17,546 catalog
+   products in MongoDB Atlas. Price and stock come live from Valio's challenge API: each
+   signed offer names its source, "Valio Aimo price and availability API, read at iat"
+   (`gateway/signing.py:106`). The Catalog page searches the live gateway; a failed call
+   is an error, never sample rows (#1216, #1172, #1535, `web/src/api/http-catalog.ts:184-210`).
+   Each product shows a picture: a kind icon from its name, or the brand logo when
+   Context.dev knows the brand. No product photo is copied from the web (#1246, #1247,
+   #1252, #1395).
+2. **Inquiry to order on fixed prices.** A request becomes a proposal with a 15-minute
+   signed offer snapshot. One request may name several products; it becomes one proposal
+   (#1474). A person can change the proposal before approving: set a quantity, remove a
+   line, add a product. Each change gets a fresh live quote and a new total (#1200, #1343).
+   A person approves the exact total. The order is then stored in our gateway, with a signed
+   receipt when signing works (`gateway/service.py:1359-1372`). Valio's challenge API has no
+   order endpoint, so no order reaches Valio.
+3. **Permissions and human approval.** Agent and kitchen tokens never approve. Over MCP
+   they do not even see the approve, reject or cancel tools. A person approves in the web
+   or from their own chat with a personal approval token: approve and reject only, never
+   propose, 8 hours by default, at most 24; every approve and reject made with it is
+   audited, with the token id (`gateway/approval_tokens.py:3-6`, `:21`, #1243, #1275, #1336).
+   Approval needs the exact total the person saw. A moved price refuses the old yes.
 
-**Rubric**
+**Unconfirmed stock.** Valio's API answers 999999 or more when stock is unknown. A person
+may still approve those lines. The order is sent and waits for the supplier: it lists the
+supplier in `supplier_must_confirm` (`gateway/service.py:1262-1290`), and the card says
+"Valio must confirm stock for: <products>" (`web/src/pages/live-approvals.tsx:116-118`,
+`web/src/components/purchasing/approval-card.tsx:226`, `:551`). Auto-approve never places
+unknown stock (#1221).
 
-| Criterion | What we show | Source |
+**Rubric** (our own criteria and weights; Valio published none). Each row says what a judge
+can see on the live site in under 2 minutes.
+
+| Criterion | What a judge sees, and where | Source |
 |---|---|---|
-| A. Working end-to-end demo (30%) | Ask, live lookup, sized proposal, human approval, stored order, audit trail, on the live site | `gateway/README.md` ("HTTP gateway"), `deploy/compose.yaml` |
-| B. Matches what the buyer asked (20%) | The engine sizes each line from the stored need. The model picks products only. Each line has a `why` sentence. | `engine/README.md`, `docs/choices.md` |
-| C. Autonomy and controls (20%) | Approve is human-only. A moved price refuses the old yes (`TOTAL_MISMATCH`). Auto-approve exists, is off by default, and must be earned (4 weeks, 20 human decisions). Twelve live conformance checks. | `gateway/README.md` ("Earned auto-approve", "Conformance kit"), `gateway/conformance.py` |
-| D. Robustness to exceptions (15%) | 13 golden scenarios in one command: all 13 PASS (table below). Unknown stock is never treated as stock. A recall blocks a proposal. | `gateway/scenarios.py`, `docs/scenarios.md`, `docs/recall-contract.md` |
-| E. Openness and path to production (15%) | The same rules over MCP and OpenAPI. Public `llms.txt` and agent card. Scoped tokens, signed offers and signed order receipts (one public key), signed webhooks, one adapter per supplier. An outside MCP client reaches a waiting proposal and gets 403 on approve (`python -m demo.second_agent`). | `docs/byoa.md`, `gateway/discovery.py`, `gateway/signing.py`, `gateway/suppliers.py`, `demo/second_agent.py` |
+| A. Working end-to-end demo (30%) | `/requests`: type `1,000 L lactose-free milk by Monday`, press "Ask the agent". The card opens in `/approvals` with live prices, each line's `why`, product names, and the total. Option A orders the confirmed stock now. "Approve", then "Yes, approve EUR ...". `/orders`: open the EUR 601.55 milk order of 14 Nov 13:32 UTC; its page shows the "Signed receipt". `/audit`: every step. | `docs/demo.md` (milk, "What was measured"), `gateway/README.md:100`, `web/src/pages/order-detail.tsx:58` |
+| B. Matches what the buyer asked (20%) | `/approvals`: each line shows its English and Finnish name, the brand when the catalog has one, a picture and a `why` sentence. The engine sizes each line; the model picks products only. Change a quantity, "Remove" a line or "Add products": the total is quoted again live. A request for several products is one proposal. | `gateway/product_names.py:1-6`, `engine/README.md`, `gateway/change.py`, `web/src/components/purchasing/approval-card.tsx:377`, `:462`, `:480`, #1435, #1343, #1474 |
+| C. Autonomy and controls (20%) | `/approvals`: the confirm dialog says "You approve exactly EUR ... If the price or stock moves before it is placed, the gateway refuses it". A card with unknown stock says Valio must confirm it. `/settings/approve-chat`: approving from chat needs a person's own account; the open demo cannot make a token. Auto-approve is off by default and must be earned (4 weeks, 20 human decisions, at most 10% edited, a limit up to EUR 2,000). | `approval-card.tsx:551`, `:643`, `web/src/pages/settings/approve-chat.tsx:145-151`, `gateway/approval_tokens.py:1`, `gateway/mcp_http.py:9`, `gateway/autoapprove.py:21-25`, `gateway/service.py:1262-1290` |
+| D. Robustness to exceptions (15%) | `/approvals`: the recall panel flags the coffee on the shelf (3.253 kg) as a possible match to a Finnish Food Authority recall (only some batch dates); new proposals leave it out. `/requests`: `15 kg peanut butter` is refused in gateway code before the Buyer agent runs (#974). 13 golden scenarios, all PASS (table below). | `gateway/service.py:355`, `:428` (`BLOCKED_BY_RECALL`), `docs/demo.md` "Recall beat", `docs/decisions.md` (#974), `gateway/scenarios.py` |
+| E. Openness and path to production (15%) | `/llms.txt`, `/.well-known/agent-card.json`, `/api/.well-known/jwks.json`, `/gateway/openapi.json` all answer. Home (`/`): the tile "Offer from Valio Aimo", written by Valio's selling agent; the supplier sets no price: the quantity is the kitchen's own forecast demand, and the gateway prices it. `/trust`: "Verify audit chain". An outside agent is refused: `/llms.txt` says agent tokens get 403 `HUMAN_SESSION_REQUIRED` on approve, and `python -m demo.second_agent` shows it (needs a local run; it creates one waiting proposal). | `gateway/discovery.py`, `gateway/signing.py:99`, `:118`, `gateway/supplier_offers.py:9-10`, `web/src/pages/home/offer.tsx:85`, `web/src/pages/trust.tsx:126`, `demo/second_agent.py`, `gateway/conformance.py:204-205` |
 
 **Optional features**
 
-- Sustainability and delivery reliability: each proposal line carries `reliability` and
-  `carbon_kg_co2e_per_kg` from Valio's datasets (`gateway/service.py`).
+- Sustainability and delivery reliability: each proposal line carries
+  `carbon_kg_co2e_per_kg`, and `reliability` where Valio's data has it
+  (`gateway/service.py:261`).
 - Substitution and exceptions: up to three engine-priced substitute baskets, each needs the
-  chef's approval (`agent/substitutes.py`, `agent/README.md`). Partial fill: order the
-  confirmed stock now, plan the rest (`engine/partial.py`). On the live site the 1,000 L
-  milk request shows this as option A, "Order the confirmed 698 L now. The other 302 L is
-  held until the supplier confirms stock"; a person chooses it and approves its exact total
-  (`gateway/options.py`, `docs/demo.md`).
+  chef's approval (`agent/substitutes.py:122-135`). Partial fill: order the confirmed stock
+  now, hold the rest (`engine/partial.py`, `gateway/options.py`). On the live site the
+  1,000 L milk request shows option A, "Order the confirmed ... L now"; a person chooses it
+  and approves its exact total (`docs/demo.md`).
 - Proactive selling agent: Valio's own agent reads the predicted shortages of the kitchens
-  that share their forecast, and offers a kitchen a substitute that can arrive. The offer is
-  a suggestion: no price and no quantity come from the supplier, and a person turns it into
-  a normal proposal (`agent/seller.py`, `gateway/supplier_offers.py`, `docs/contract.md`
-  "Supplier offers"). Run once on the live site on 2026-11-14.
-- Stock from a photo: Nemotron VL reads a shelf photo into counts that a person checks and
-  saves (`gateway/stock_photo.py`).
-- Traceability: insert-only audit log with a hash chain (`store/audit.py:129`). Recall
-  notices are matched by EAN, brand and lot (`monitor/README.md`).
+  that share their forecast. It offers a substitute that can arrive. Live on Home now: Rosamunda
+  washed potato in place of washed potato, predicted short on 16 Nov, made by
+  `nemotron-3.5-super-vl` (`GET /api/v1/kitchens/demo-kitchen/supplier-offers`, 14 Nov). A
+  person turns the offer into a normal proposal (`agent/seller.py`,
+  `gateway/supplier_offers.py`).
+- Recall check: "Check recalls now" on `/approvals` reads the Finnish Food Authority list
+  through Context.dev (102 notices listed, last live check 14 Nov 12:35 UTC). A match blocks
+  the product on every proposal (`web/src/components/purchasing/recall-panel.tsx:207`,
+  `gateway/service.py:355`, `GET /api/v1/kitchens/demo-kitchen/recalls`).
+- Trust protocol: each offer and each order receipt is a JWS (EdDSA) when the signing key is
+  available, checkable with the one public key at `/api/.well-known/jwks.json`. The receipt
+  names the offer hash, the exact total, the lines, the approver, and which lines Valio must
+  still confirm. It always says `supplier_outcome: NOT_SENT` (`gateway/signing.py:33`,
+  `:118`, `:132`).
+- Traceability: insert-only audit log, each line hashed with the one before
+  (`store/audit.py:96`). `/trust` checks the chain.
 
-**Golden scenarios.** Output of `python -m gateway.scenarios --markdown` on `main`, 2026-11-14:
+**Golden scenarios.** Output of `python -m gateway.scenarios --markdown` on commit 6aa6756,
+2026-11-14 16:11 UTC:
 
 | Case | What | Layer | Result | Detail |
 |---|---|---|---|---|
@@ -73,7 +110,7 @@ Live site: <https://31-22-104-201.sslip.io>. For agents:
 | S05 | Above the budget warning (event order) | engine | **PASS** | lines = [('461423', '120')]; total = 2391.60 |
 | S06 | Just under free delivery: pad with wanted lines | engine | **PASS** | add = [('469549', '30')]; total = 301.40 |
 | S07 | Price moved between quote and approval | gateway HTTP | **PASS** | old yes is refused = (409, 'TOTAL_MISMATCH'); orders placed on the old yes = 0 |
-| S08 | Standing-order drift | engine | **PASS** | this week qty = 40; proposing the standing order 200 -> 140: not built |
+| S08 | Standing-order drift | engine | **PASS** | this week qty = 40; proposed standing order = 140 |
 | S09 | Stock count missing: unknown sorts with urgent | engine | **PASS** | draft qty (sized as if empty) = 48; urgency top = True |
 | S10 | Demand hidden by a stock-out | engine | **PASS** | adjusted forecast L/week = 54.0; qty = 54 |
 | S11 | Inbound is not an emergency; the cover ceiling | engine | **PASS** | order now = 0; max within ceiling = 34 |
@@ -82,9 +119,17 @@ Live site: <https://31-22-104-201.sslip.io>. For agents:
 
 13 PASS
 
-**Not built:** an order sent to Valio (their API has no order endpoint,
-`gateway/README.md:104`). A mandate as a
-verifiable credential (planned in `docs/plan.md`, not in the code).
+**Not built:**
+
+- An order sent to Valio. Their challenge API has no order endpoint, so every order stays
+  in our gateway and its receipt says `NOT_SENT` (`gateway/README.md:108`,
+  `gateway/signing.py:33`).
+- A mandate as a verifiable credential (named in `docs/plan.md:33`, not in the code).
+- A personal approval token from the open demo: it needs a signed-in approver account
+  (`web/src/pages/settings/approve-chat.tsx:145-151`).
+- The last recorded conformance run on the server is 11 passed, 0 failed, 1 skipped
+  (`docs/demo.md:338`). The code now has 13 checks (`gateway/conformance.py:193-205`); they
+  were not re-run on the server for this text.
 
 ## NVIDIA: Best Use of Nemotron
 
