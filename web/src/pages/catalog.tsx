@@ -3,7 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { useApi } from "@/api";
-import type { ProductSearchFilters, ProductTemperature } from "@/api/types";
+import type { MatchedBy, ProductSearchFilters, ProductTemperature } from "@/api/types";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { LABEL_META } from "@/components/purchasing/chips";
 import { EmptyState } from "@/components/purchasing/empty-state";
@@ -38,6 +38,8 @@ interface CatalogSearch {
   strict: boolean;
   labels: ProductLabel[];
   temp: ProductTemperature | undefined;
+  /** The "Search by meaning" switch (#1382). */
+  meaning: boolean;
 }
 
 function csv(value: unknown): string[] {
@@ -61,6 +63,7 @@ function parseSearch(search: Record<string, unknown>): CatalogSearch {
     strict: search.strict === true || search.strict === "true",
     labels: csv(rawLabels).filter((value): value is ProductLabel => LABEL_OPTIONS.includes(value as ProductLabel)),
     temp,
+    meaning: search.meaning === true || search.meaning === "true",
   };
 }
 
@@ -70,6 +73,7 @@ function filtersOf(search: CatalogSearch): ProductSearchFilters {
     strictAllergens: search.strict || undefined,
     requiredLabels: search.labels.length > 0 ? search.labels : undefined,
     temperature: search.temp,
+    byMeaning: search.meaning || undefined,
   };
 }
 
@@ -80,6 +84,7 @@ export interface CatalogParams {
   strict?: true;
   labels?: string;
   temp?: ProductTemperature;
+  meaning?: true;
 }
 
 /** Empty params stay out of the URL, so a plain `/catalog` is a clean link. */
@@ -90,6 +95,7 @@ function toParams(search: CatalogSearch): CatalogParams {
     strict: search.strict || undefined,
     labels: search.labels.length > 0 ? search.labels.join(",") : undefined,
     temp: search.temp,
+    meaning: search.meaning || undefined,
   };
 }
 
@@ -101,6 +107,13 @@ export function validateCatalogSearch(search: Record<string, unknown>): CatalogP
 function toggle<T>(values: T[], value: T): T[] {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 }
+
+/** The mark on a row found by a search by meaning. */
+const MATCHED_BY_LABELS: Record<MatchedBy, string> = {
+  words: "By words",
+  meaning: "By meaning",
+  both: "By words and meaning",
+};
 
 type Update = (change: (current: CatalogSearch) => CatalogSearch) => void;
 
@@ -211,6 +224,18 @@ export function CatalogPage() {
           <div className="flex flex-wrap items-center gap-2">
             {/* Only when the gateway answers the search: the mock is not Atlas. */}
             {api.live?.has("searchProducts") ? <Badge variant="secondary">{t("Atlas Search")}</Badge> : null}
+            {api.live?.has("searchProducts") ? (
+              <div className="flex items-center gap-2 rounded-md border px-2 py-1">
+                <Checkbox
+                  id="catalog-meaning"
+                  checked={search.meaning}
+                  onCheckedChange={() => update((current) => ({ ...current, meaning: !current.meaning }))}
+                />
+                <Label htmlFor="catalog-meaning" className="text-sm font-normal">
+                  {t("Search by meaning (Atlas Vector Search)")}
+                </Label>
+              </div>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -286,10 +311,18 @@ export function CatalogPage() {
                     : t("{count} have no allergen data: unknown, not safe", { count: withoutData })}
                 </p>
               ) : null}
+              {active.meaning && currentResult.data?.meaningUnavailable ? (
+                <p className="text-sm text-muted-foreground">
+                  {t("Search by meaning is not available right now. These products match by words.")}
+                </p>
+              ) : null}
             </div>
             <ul className="grid gap-4 md:grid-cols-2">
               {results.map((product) => (
-                <li key={product.id} className="tabular-nums">
+                <li key={product.id} className="space-y-1 tabular-nums">
+                  {active.meaning && product.matchedBy ? (
+                    <Badge variant="outline">{t(MATCHED_BY_LABELS[product.matchedBy])}</Badge>
+                  ) : null}
                   <ProductCard product={product} />
                 </li>
               ))}

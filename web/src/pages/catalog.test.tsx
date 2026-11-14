@@ -229,4 +229,52 @@ describe("catalog page", () => {
     expect(screen.queryByRole("heading", { name: "Search the Valio Aimo catalog" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "No products match this search" })).not.toBeInTheDocument();
   });
+
+  describe("Search by meaning (#1382)", () => {
+    function meaningApi(unavailable = false) {
+      const base = createMockApi();
+      const asked: (boolean | undefined)[] = [];
+      const api = Object.assign(base, {
+        live: new Set(["searchProducts" as const]),
+        async searchProducts(query: string, filters: Parameters<typeof base.searchProducts>[1] = {}) {
+          asked.push(filters.byMeaning);
+          const rows = await createMockApi().searchProducts(query, { ...filters, byMeaning: undefined });
+          if (!filters.byMeaning) return rows;
+          if (unavailable) return Object.assign(rows.map((row) => ({ ...row, matchedBy: "words" as const })), { meaningUnavailable: true as const });
+          return rows.map((row, index) => ({ ...row, matchedBy: index === 0 ? ("meaning" as const) : ("both" as const) }));
+        },
+      });
+      return { api, asked };
+    }
+
+    it("is a switch next to the search field that marks each row by how it was found", async () => {
+      const user = userEvent.setup();
+      const { api, asked } = meaningApi();
+      const { router } = renderApp("/catalog?q=milk", api);
+      expect(await screen.findByText("5 products")).toBeInTheDocument();
+      expect(screen.queryByText("By meaning")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("checkbox", { name: "Search by meaning (Atlas Vector Search)" }));
+
+      expect(await screen.findByText("By meaning")).toBeInTheDocument();
+      expect(screen.getAllByText("By words and meaning")).toHaveLength(4);
+      expect(router.state.location.href).toBe("/catalog?q=milk&meaning=true");
+      expect(asked).toEqual([undefined, true]);
+    });
+
+    it("says so when the gateway used words instead", async () => {
+      const { api } = meaningApi(true);
+      renderApp("/catalog?q=milk&meaning=true", api);
+      expect(
+        await screen.findByText("Search by meaning is not available right now. These products match by words."),
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("By words")).toHaveLength(5);
+    });
+
+    it("is not shown on sample data: the mock is not Atlas", async () => {
+      renderApp("/catalog?q=milk");
+      await screen.findByText("5 products");
+      expect(screen.queryByRole("checkbox", { name: "Search by meaning (Atlas Vector Search)" })).not.toBeInTheDocument();
+    });
+  });
 });

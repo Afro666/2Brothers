@@ -138,6 +138,38 @@ describe("Catalog search on the real gateway", () => {
     await expect(createHttpApi("/api").searchProducts("milk")).rejects.toMatchObject({ code: "INVALID_REQUEST" });
   });
 
+  it("searches by meaning only when asked, and keeps how each row was found (#1382)", async () => {
+    const calls = gateway({
+      "POST /api/tools/search_products": () => ({
+        products: [
+          { ...MILK, matched_by: "meaning" },
+          { ...MILK, product_id: "463336", matched_by: "both" },
+          { ...MILK, product_id: "463337", matched_by: "something else" },
+        ],
+        search: "hybrid",
+      }),
+    });
+    const found = await createHttpApi("/api").searchProducts("dairy-free drink", { byMeaning: true });
+    await createHttpApi("/api").searchProducts("dairy-free drink");
+    expect(calls[0].body).toMatchObject({ query: "dairy-free drink", filters: {}, mode: "hybrid" });
+    expect(calls[1].body).not.toHaveProperty("mode");
+    expect(found.map((product) => product.matchedBy)).toEqual(["meaning", "both", undefined]);
+    expect(found.meaningUnavailable).toBeUndefined();
+  });
+
+  it("says when the gateway used words because the meaning search was not available", async () => {
+    gateway({
+      "POST /api/tools/search_products": () => ({
+        products: [{ ...MILK, matched_by: "words" }],
+        search: "text",
+        meaning_unavailable: true,
+      }),
+    });
+    const found = await createHttpApi("/api").searchProducts("dairy-free drink", { byMeaning: true });
+    expect(found.meaningUnavailable).toBe(true);
+    expect(found.map((product) => product.matchedBy)).toEqual(["words"]);
+  });
+
   it("skips a row that does not map and keeps the rest", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     gateway({ "POST /api/tools/search_products": () => ({ products: [{ names: {} }, MILK], search: "text" }) });

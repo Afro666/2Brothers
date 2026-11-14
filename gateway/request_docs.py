@@ -36,6 +36,7 @@ class SearchProductsRequest(RequestBody):
     filters: ProductFilters = Field(default_factory=ProductFilters)
     limit: int = Field(default=20, ge=1, le=50)
     need_id: Identifier | None = Field(default=None, description='Scopes results to the stored need and its delivery date.')
+    mode: Literal['text', 'hybrid'] | None = Field(default=None, description='"hybrid" adds Atlas Vector Search for this one request, whatever SEARCH_HYBRID says; ignored with need_id.')
 
 
 class CreateNeedRequest(RequestBody):

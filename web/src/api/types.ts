@@ -367,7 +367,24 @@ export interface ProductSearchFilters {
   requiredLabels?: ProductLabel[];
   /** A product with no temperature data never matches a temperature filter. */
   temperature?: ProductTemperature;
+  /**
+   * The Catalog page's "Search by meaning" switch: Atlas Vector Search with the words for
+   * this one search (`mode: "hybrid"`, docs/contract.md, #1382). Not a filter.
+   */
+  byMeaning?: boolean;
 }
+
+/** How a search row was found (`matched_by`). */
+export type MatchedBy = "words" | "meaning" | "both";
+
+/** A product found by a search: it may say how it was found. */
+export type SearchedProduct = Product & { matchedBy?: MatchedBy };
+
+/**
+ * Search rows, best first. `meaningUnavailable`: a search by meaning could not make the
+ * query vector, so the gateway answered with words.
+ */
+export type SearchedProducts = SearchedProduct[] & { meaningUnavailable?: true };
 
 /** What the agent proposes for one chef request. */
 export interface ChefProposal {
@@ -606,7 +623,7 @@ export interface Api {
   /** Demo only: puts the tampered line back. `seq` is null when nothing was tampered. */
   restoreAuditRow(): Promise<{ seq: number | null; restored: boolean }>;
   submitChefRequest(request: ChefRequest): Promise<ChefProposal>;
-  searchProducts(query: string, filters?: ProductSearchFilters): Promise<Product[]>;
+  searchProducts(query: string, filters?: ProductSearchFilters): Promise<SearchedProducts>;
   /** Catalog products by id; ids the catalog does not know are absent from the result. */
   getProducts(ids: ProductCode[]): Promise<Product[]>;
   getMandate(): Promise<Mandate>;

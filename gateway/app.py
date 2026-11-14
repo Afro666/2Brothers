@@ -669,7 +669,11 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         need_id = data.get("need_id")
         if need_id is not None and not isinstance(need_id, str):
             raise GatewayError(422, "INVALID_REQUEST", "need_id must be a string")
-        return gw().tool_search(kitchen(who), data.get("query") or "", data.get("filters") or {}, limit, need_id)
+        mode = data.get("mode")      # the Catalog page's "Search by meaning" switch (#1382)
+        if mode is not None and mode not in ("text", "hybrid"):
+            raise GatewayError(422, "INVALID_REQUEST", 'mode: "text" or "hybrid"')
+        return gw().tool_search(kitchen(who), data.get("query") or "", data.get("filters") or {}, limit,
+                                need_id, mode)
 
     @app.post("/tools/get_offer", openapi_extra=document_body(GetOfferRequest))
     async def get_offer(request: Request, who: Principal = Depends(principal)):
