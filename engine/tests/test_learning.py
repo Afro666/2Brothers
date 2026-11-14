@@ -315,6 +315,17 @@ def test_apply_ratio_uses_decimal_quantities_and_reports_the_plan_fields():
     assert "unit" not in info
 
 
+def test_apply_ratio_carries_the_unit_when_given():
+    rows = [feedback(offset) for offset in (10, 9, 8)]
+    fact = correction_ratio_fact(KITCHEN, PRODUCT, "Washed potato", rows, TODAY)
+    adjusted, info = apply_ratio("40", fact, unit="kg")
+
+    assert adjusted == Decimal("20")
+    assert info["unit"] == "kg"
+    assert info["from_qty"] == "40"
+    assert info["to_qty"] == "20"
+
+
 def test_apply_ratio_requires_an_active_applicable_correction():
     rows = [feedback(offset) for offset in (10, 9, 8)]
     fact = correction_ratio_fact(KITCHEN, PRODUCT, "Washed potato", rows, TODAY)

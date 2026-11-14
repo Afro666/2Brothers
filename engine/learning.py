@@ -394,8 +394,12 @@ def _decimal_string(value: Decimal) -> str:
     return text if text not in ("", "-0") else "0"
 
 
-def apply_ratio(need, fact) -> tuple[Decimal, dict | None]:
-    """Apply an active, in-band ratio and describe the adjustment for the plan line."""
+def apply_ratio(need, fact, unit=None) -> tuple[Decimal, dict | None]:
+    """Apply an active, in-band ratio and describe the adjustment for the plan line.
+
+    When ``unit`` is given it is carried into the info dict, as the contract's
+    ``learned`` object expects.
+    """
     need_value = _number(need)
     if need_value is None or not isinstance(fact, dict):
         return need, None
@@ -418,4 +422,6 @@ def apply_ratio(need, fact) -> tuple[Decimal, dict | None]:
         "ratio": ratio_value,
         "evidence": dict(evidence) if isinstance(evidence, dict) else evidence,
     }
+    if unit is not None:
+        info["unit"] = unit
     return adjusted, info
