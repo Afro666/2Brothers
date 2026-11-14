@@ -15,18 +15,14 @@ import { OrderResolutionPanel } from "@/components/purchasing/order-resolution-p
 import { StatusBadge } from "@/components/purchasing/status-badge";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatDate, formatDateTime, formatEur } from "@/lib/format";
+import { formatDate, formatDateTime, formatEur, shortOrderId } from "@/lib/format";
 import { getLanguage, translate, useT } from "@/lib/i18n";
+import { orderTitle } from "@/lib/order-title";
 import { useAsync } from "@/lib/use-async";
-import type { OrderReceipt } from "@/types";
+import type { Order, OrderReceipt, OrderStatus } from "@/types";
 import { supplierName } from "@/lib/supplier-name";
-
-/** A long order id (a 32-character hex id) is cut to its first 8 characters so the title fits a phone. */
-function shortOrderId(id: string): string {
-  return id.length > 12 ? `${id.slice(0, 8)}…` : id;
-}
 
 function OrderHistory({ orderId }: { orderId: string }) {
   const t = useT();
@@ -51,35 +47,41 @@ async function copyReceipt(jws: string) {
 }
 
 /** The signed receipt: claims decoded for display only. Anyone checks the signature with the public key. */
-function SignedReceipt({ receipt }: { receipt: OrderReceipt | null }) {
+function SignedReceipt({ receipt }: { receipt?: OrderReceipt | null }) {
   const t = useT();
+  if (receipt === undefined) return null;
   return (
-    <section aria-labelledby="receipt-heading" className="space-y-2 border-t pt-4">
-      <h3 id="receipt-heading" className="text-base font-semibold">
-        {t("Signed receipt")}
-      </h3>
+    <section aria-labelledby="receipt-heading" className="space-y-3 border-t border-dashed border-input pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 id="receipt-heading" className="text-base font-semibold">
+          {t("Signed receipt")}
+        </h3>
+        {receipt ? <span className="stamp stamp-mark text-sm text-success">{t("Signed")}</span> : null}
+      </div>
       {receipt ? (
         <>
           <p className="text-sm text-muted-foreground">{t("Signed by the gateway. Anyone can check it with the public key.")}</p>
-          <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-2">
             <div>
-              <dt className="text-muted-foreground">{t("Approved by")}</dt>
-              <dd className="break-words">{receipt.approvedBy ?? t("unknown")}</dd>
+              <dt className="label-caps">{t("Approved by")}</dt>
+              <dd className="break-words">
+                {receipt.approvedBy === "human" ? t("a person") : (receipt.approvedBy ?? t("unknown"))}
+              </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">{t("Signed at")}</dt>
-              <dd>{formatDateTime(receipt.signedAt)}</dd>
+              <dt className="label-caps">{t("Signed at")}</dt>
+              <dd>{t(formatDateTime(receipt.signedAt))}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">{t("Signed total")}</dt>
-              <dd>{formatEur(receipt.total)}</dd>
+              <dt className="label-caps">{t("Signed total")}</dt>
+              <dd className="font-mono">{t(formatEur(receipt.total))}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">{t("Supplier")}</dt>
+              <dt className="label-caps">{t("Supplier")}</dt>
               <dd className="break-words">
                 {receipt.supplierOutcome === "NOT_SENT"
                   ? t("Nothing sent to the supplier yet")
-                  : receipt.supplierOutcome ?? t("unknown")}
+                  : t(receipt.supplierOutcome ?? "unknown")}
               </dd>
             </div>
           </dl>
@@ -93,6 +95,92 @@ function SignedReceipt({ receipt }: { receipt: OrderReceipt | null }) {
         </p>
       )}
     </section>
+  );
+}
+
+export const placedStatuses = new Set<OrderStatus>(["PLACED", "NOT_SENT", "UNCONFIRMED", "SENT_READ_FAILED"]);
+
+function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Map<string, string> }) {
+  const t = useT();
+  const title = orderTitle(order, t);
+  const suppliers = Array.from(
+    new Set([
+      ...order.lines.map((line) => line.product.vendorName).filter((name) => name.length > 0),
+      ...order.supplierMustConfirm
+        .map((supplierId) => supplierNames.get(supplierId))
+        .filter((name): name is string => name !== undefined),
+    ]),
+  );
+  return (
+    <Tabs defaultValue="lines">
+      <TabsList>
+        <TabsTrigger value="lines">{t("Lines")}</TabsTrigger>
+        <TabsTrigger value="history">{t("History")}</TabsTrigger>
+      </TabsList>
+      <TabsContent value="lines">
+        <Card className="docket mx-auto w-full max-w-[34rem] gap-0 py-0">
+          <div className="space-y-5 p-4 sm:p-6">
+            <header className="space-y-2">
+              <p className="label-caps">{t("Kitchen Buyer")}</p>
+              {suppliers.length > 0 ? <p className="text-sm text-muted-foreground">{suppliers.join(" · ")}</p> : null}
+              <h2 className="text-[19px] leading-[25px] font-[650] [overflow-wrap:anywhere]">{title}</h2>
+              <p className="text-sm">
+                <span className="label-caps mr-2">{t("Delivery")}</span>
+                {t(formatDate(order.deliveryDate))}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="max-w-full font-mono text-xs break-all select-text text-muted-foreground" title={order.id}>
+                  {shortOrderId(order.id)}
+                </code>
+                <StatusBadge status={order.status} />
+                {placedStatuses.has(order.status) ? null : <UrgencyBadge urgency={order.urgency} />}
+              </div>
+              {order.supplierOrderRef ? (
+                <p className="text-sm [overflow-wrap:anywhere]">
+                  <span className="label-caps mr-2">{t("Supplier order reference")}</span>
+                  <span className="font-mono text-xs">{order.supplierOrderRef}</span>
+                </p>
+              ) : null}
+            </header>
+            <section aria-labelledby="order-lines-heading" className="space-y-3 border-t border-dashed border-input pt-4">
+              <h3 id="order-lines-heading" className="label-caps">
+                {t("Lines")}
+              </h3>
+              <OrderLinesTable lines={order.lines} now={new Date()} variant="receipt" />
+            </section>
+            <dl className="space-y-2 border-t border-dashed border-input pt-4 text-sm">
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-muted-foreground">{t("Total ex VAT")}</dt>
+                <dd className="text-right font-mono tabular-nums">{t(formatEur(order.totalExVat))}</dd>
+              </div>
+              {order.vat !== null ? (
+                <div className="flex items-baseline justify-between gap-4">
+                  <dt className="text-muted-foreground">{t("VAT")}</dt>
+                  <dd className="text-right font-mono tabular-nums">{t(formatEur(order.vat))}</dd>
+                </div>
+              ) : null}
+              {order.deliveryFee !== null && order.deliveryFee > 0 ? (
+                <div className="flex items-baseline justify-between gap-4">
+                  <dt className="text-muted-foreground">{t("Delivery fee")}</dt>
+                  <dd className="text-right font-mono tabular-nums">{t(formatEur(order.deliveryFee))}</dd>
+                </div>
+              ) : null}
+              <div className="flex items-baseline justify-between gap-4 border-t border-dashed border-input pt-3 text-base font-semibold">
+                <dt>{t("Total incl VAT")}</dt>
+                <dd className="text-right font-mono text-lg tabular-nums">{t(formatEur(order.totalInclVat))}</dd>
+              </div>
+            </dl>
+            <MovProgress mov={order.mov} />
+            <SignedReceipt receipt={order.receipt} />
+          </div>
+        </Card>
+      </TabsContent>
+      <TabsContent value="history">
+        <div className="mx-auto w-full max-w-[34rem]">
+          <OrderHistory orderId={order.id} />
+        </div>
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -110,8 +198,8 @@ export function OrderDetailPage() {
     <AppShell activeId="orders">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold" title={orderId}>
-            {t("Order {id}", { id: shortOrderId(orderId) })}
+          <h1 className="page-title [overflow-wrap:anywhere]">
+            {state.status === "ready" ? orderTitle(state.data, t) : t("Order")}
           </h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             {t("The lines, the totals and every step taken for this order.")}
@@ -135,51 +223,7 @@ export function OrderDetailPage() {
             {state.data.status === "UNCONFIRMED" || state.data.status === "SENT_READ_FAILED" ? (
               <OrderResolutionPanel order={state.data} onChanged={state.reload} />
             ) : null}
-            <Card>
-            <div className="space-y-4 px-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere]">{state.data.id}</h2>
-                <StatusBadge status={state.data.status} />
-                <UrgencyBadge urgency={state.data.urgency} />
-              </div>
-              <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-3">
-                <div>
-                  <dt className="text-muted-foreground">{t("Delivery")}</dt>
-                  <dd>{t(formatDate(state.data.deliveryDate))}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">{t("Total ex VAT")}</dt>
-                  <dd>{t(formatEur(state.data.totalExVat))}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">{t("Total incl VAT")}</dt>
-                  <dd>{formatEur(state.data.totalInclVat)}</dd>
-                </div>
-                {state.data.supplierOrderRef ? (
-                  <div className="sm:col-span-3">
-                    <dt className="text-muted-foreground">{t("Supplier order reference")}</dt>
-                    <dd className="break-all">{state.data.supplierOrderRef}</dd>
-                  </div>
-                ) : null}
-              </dl>
-              {state.data.receipt !== undefined ? <SignedReceipt receipt={state.data.receipt} /> : null}
-            </div>
-            <CardContent>
-              <Tabs defaultValue="lines">
-                <TabsList>
-                  <TabsTrigger value="lines">{t("Lines")}</TabsTrigger>
-                  <TabsTrigger value="history">{t("History")}</TabsTrigger>
-                </TabsList>
-                <TabsContent value="lines" className="space-y-5">
-                  <OrderLinesTable lines={state.data.lines} now={new Date()} />
-                  <MovProgress mov={state.data.mov} />
-                </TabsContent>
-                <TabsContent value="history">
-                  <OrderHistory orderId={state.data.id} />
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-            </Card>
+            <OrderDocket order={state.data} supplierNames={supplierNames} />
             {state.data.status === "PLACED" ? <DeliveryNotePhoto key={state.data.id} order={state.data} /> : null}
             {state.data.status === "PLACED" ? <LabelPhotoCheck key={`label-${state.data.id}`} order={state.data} /> : null}
           </>

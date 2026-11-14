@@ -200,6 +200,7 @@ const lineArla: OrderLine = {
   product: products.arlaUht1l,
   offer: offers.arlaUht1l,
   quantity: 51,
+  lineTotal: 131.07,
   why: "51 ST: all the stock that can arrive Mon 16 Nov. The need is 1,000 L, so the rest is split to a second order.",
 };
 
@@ -207,6 +208,7 @@ const lineEila3: OrderLine = {
   product: products.eila3pct1l,
   offer: offers.eila3pct1l,
   quantity: 950,
+  lineTotal: 1947.5,
   why: "950 ST: the other 949 L, rounded up to full cases of 5. The only other lactose-free milk whose cut-off has not passed.",
 };
 
@@ -215,6 +217,7 @@ const lineEilaOrganic: OrderLine = {
   product: products.eilaOrganic1l,
   offer: offers.eilaOrganic1l,
   quantity: 0,
+  lineTotal: 0,
   why: "Not ordered: cheaper per litre and organic, but the order cut-off for Monday passed on Thu 12 Nov 15:00.",
 };
 
@@ -231,6 +234,8 @@ export const orders = {
     lines: [lineArla],
     supplierMustConfirm: [],
     totalExVat: 131.07,
+    vat: 17.69,
+    deliveryFee: null,
     totalInclVat: 148.76,
     mov: { threshold: MOV_THRESHOLD, current: 131.07, deliveryFee: DELIVERY_FEE },
   },
@@ -242,6 +247,8 @@ export const orders = {
     lines: [lineEila3],
     supplierMustConfirm: [],
     totalExVat: 1947.5,
+    vat: 262.91,
+    deliveryFee: null,
     totalInclVat: 2210.41,
     // Same Monday delivery as ORD-1042: together they pass the threshold.
     mov: { threshold: MOV_THRESHOLD, current: 2078.57, deliveryFee: DELIVERY_FEE },

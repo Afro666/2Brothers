@@ -83,6 +83,7 @@ export const coffeeLine: OrderLine = {
   product: coffeeProducts.kultaKatriina,
   offer: coffeeOffers.kultaKatriina,
   quantity: 2,
+  lineTotal: 145.3,
   why: "2 KI (10 kg): the breakfast buffet's coffee for next week, rounded up to full cases.",
 };
 
@@ -91,6 +92,7 @@ export const coffeeReplacementLine: OrderLine = {
   product: coffeeProducts.lofbergsCrescendo,
   offer: coffeeOffers.lofbergsCrescendo,
   quantity: 2,
+  lineTotal: 129.6,
   why: "2 KI (12 kg): replaces the recalled Kulta Katriina; the same 10 kg need, rounded up to full 6 kg cases.",
 };
 
@@ -102,6 +104,8 @@ export const coffeeOrder: Order = {
   lines: [coffeeLine],
   supplierMustConfirm: [],
   totalExVat: 145.3,
+  vat: 19.62,
+  deliveryFee: null,
   totalInclVat: 164.92,
   mov: { threshold: 250, current: 145.3, deliveryFee: 29 }, // placeholders, as in the milk case
 };

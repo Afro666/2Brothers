@@ -165,10 +165,11 @@ function mapLine(row: Json, requestedDate: string): OrderLine {
   const id = text(row.product_id, "a line's product_id");
   const unit = text(row.unit, "a line's unit");
   return {
-    product: productOf(id, null, unit),
+    product: productOf(id, nullableText(row.product_name, "product_name"), unit),
     // Only `unknown_stock: false` is a confirmation. The amount in stock is not sent.
     offer: offerOf(id, unit, requestedDate, decimal(row.unit_price, "unit_price"), row.unknown_stock === false),
     quantity: mapMoney(row.quantity, "quantity"),
+    lineTotal: decimal(row.total, "line total"),
     why: typeof row.why === "string" && row.why ? row.why : "Not recorded with the order.",
   };
 }
@@ -215,6 +216,8 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     lines: source.lines.map((line) => mapLine(object(line, "an order line"), deliveryDate ?? "")),
     supplierMustConfirm: placed ? strings(placed.supplier_must_confirm) : [],
     totalExVat: proposal ? mapMoney(proposal.total_ex_vat, "total_ex_vat") : null,
+    vat: proposal ? decimal(proposal.vat, "vat") : null,
+    deliveryFee: proposal ? decimal(proposal.delivery_fee, "delivery_fee") : null,
     totalInclVat: mapMoney((placed ?? source).expected_total, "expected_total"),
     mov: proposal ? mapMov(proposal) : null,
     supplierOrderRef: placed ? resolutionRecord(placed.resolution)?.supplierOrderRef ?? null : null,
