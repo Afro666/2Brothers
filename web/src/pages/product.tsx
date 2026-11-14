@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { useApi } from "@/api";
 import type { NutrientKey, ProductPage, ProductPageAllergen, ProductPageSupplier, Texts } from "@/api/http-product-page";
+import { ALLERGEN_NAMES } from "@/api/http-catalog";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { LabelChip } from "@/components/purchasing/chips";
 import { EmptyState } from "@/components/purchasing/empty-state";
@@ -12,11 +13,13 @@ import { LoadingState } from "@/components/purchasing/loading-state";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { formatDate, formatDateTime, formatEur, formatNumber, formatPack, shortOrderId } from "@/lib/format";
+import { formatDate, formatDateTime, formatEur, formatNumber, formatPack, peopleUnit, shortOrderId } from "@/lib/format";
 import { useLanguage, useT } from "@/lib/i18n";
+import { nextCutoff } from "@/pages/home/cutoff";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
 import { cn } from "@/lib/utils";
+import type { Supplier } from "@/types";
 
 /** Texts the page builds at run time; the Finnish coverage test reads this list. */
 export const PRODUCT_PAGE_TEXTS = {
@@ -40,10 +43,53 @@ export const PRODUCT_PAGE_TEXTS = {
 
 const UNKNOWN = "font-medium text-warning";
 
+const CATALOG_SOURCE = "Valio product data";
+
+const WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+
+/** The supplier's next cut-off after `now`, from the order days and time the gateway sent. */
+export function nextOrderCutoff(supplier: Pick<ProductPageSupplier, "orderDays" | "cutoffTime">, now: Date): Date | null {
+  const orderDays = supplier.orderDays.map((day) => WEEKDAYS.indexOf(day) + 1).filter((day) => day > 0);
+  if (!supplier.cutoffTime || orderDays.length === 0) return null;
+  return nextCutoff({ orderDays, cutoffTime: supplier.cutoffTime } as Supplier, now);
+}
+
 /** The text in the reader's language, else English, else any language the catalog has. */
 function pick(texts: Texts, language: string): string | null {
   if (!texts) return null;
   return (language === "fi" ? texts.fi : undefined) ?? texts.en ?? texts.fi ?? texts.sv ?? null;
+}
+
+/** The name of an allergen code from the repo's table (as on the Catalog cards); a code in no table is named as such. */
+function allergenName(allergen: ProductPageAllergen, t: ReturnType<typeof useT>): string {
+  const name = Object.hasOwn(ALLERGEN_NAMES, allergen.code) ? ALLERGEN_NAMES[allergen.code] : null;
+  return name ? t(name) : t("Other allergen ({code})", { code: allergen.code });
+}
+
+/**
+ * Source labels name catalog fields ("Valio product data, vatCode"). Each known label gets plain
+ * words; another field of the same catalog is named by its value, never passed through raw.
+ */
+const SOURCE_NAMES: Record<string, string> = {
+  [CATALOG_SOURCE]: "Valio product data",
+  [`${CATALOG_SOURCE}, allergen classification`]: "Valio product data: allergen classification",
+  [`${CATALOG_SOURCE}, countryOfOrigin`]: "Valio product data: country of origin",
+  [`${CATALOG_SOURCE}, vatCode`]: "Valio product data: VAT",
+  [`${CATALOG_SOURCE}, nutritionalContent`]: "Valio product data: nutrition",
+};
+
+function plainSource(source: string, t: (text: string) => string): string {
+  return source
+    .split(" · ")
+    // A field of the catalog this page has no words for is named by the catalog alone, never by the field.
+    .map((part) => SOURCE_NAMES[part] ?? (part.startsWith(`${CATALOG_SOURCE}, `) ? CATALOG_SOURCE : part))
+    .map((part) => t(part))
+    .join(" · ");
+}
+
+/** "€27.22 / ST": the unit in words. */
+function perUnit(unit: string | null): string {
+  return unit ? peopleUnit(unit, 1) : "?";
 }
 
 function country(code: string | null, language: string): string | null {
@@ -63,7 +109,7 @@ function Section({ id, title, source, children }: { id: string; title: string; s
         {title}
       </h2>
       {children}
-      {source ? <p className="text-xs text-muted-foreground">{t("Source: {source}", { source })}</p> : null}
+      {source ? <p className="text-xs text-muted-foreground">{t("Source: {source}", { source: plainSource(source, t) })}</p> : null}
     </section>
   );
 }
@@ -98,7 +144,7 @@ function Allergens({ allergens }: { allergens: ProductPage["allergens"] }) {
         ) : (
           list.map((allergen) => (
             <span key={allergen.code} className={cn(CHIP, tone)}>
-              {allergen.name}
+              {allergenName(allergen, t)}
             </span>
           ))
         )}
@@ -107,8 +153,8 @@ function Allergens({ allergens }: { allergens: ProductPage["allergens"] }) {
   );
   return (
     <dl className="space-y-2">
-      {row(t("Contains"), allergens.contains, TONE_CLASSES.danger, allergens.noDeclarableAllergens ? t("No declarable allergens") : t("No allergen declared"))}
-      {row(t("May contain"), allergens.mayContain, cn(TONE_CLASSES.warning, "border-dashed"), t("No allergen declared"))}
+      {row(t("Contains"), allergens.contains, TONE_CLASSES.danger, allergens.noDeclarableAllergens ? t("No declarable allergens") : t("none declared"))}
+      {row(t("May contain"), allergens.mayContain, cn(TONE_CLASSES.warning, "border-dashed"), t("none declared"))}
       {row(t("Free from"), allergens.freeFrom, TONE_CLASSES.success, t("No claim"))}
     </dl>
   );
@@ -119,8 +165,11 @@ function PriceStockVat({ page }: { page: ProductPage }) {
   const { live, vat } = page;
   const vatRate = live?.taxRate ?? vat.rate ?? null; // Valio's live rate wins, as on the gateway (contract "VAT per product")
   const stock = live?.stock ?? null;
-  const per = live?.per ?? page.product.salesUnit;
-  const sources = [live?.source, vat.source].filter(Boolean).join(" · ");
+  const per = perUnit(live?.per ?? page.product.salesUnit);
+  const valio = page.suppliers.find((supplier) => supplier.adapter === "valio_api");
+  const next = stock?.cutoffPassed && stock.orderable !== false && valio ? nextOrderCutoff(valio, new Date()) : null;
+  const sources = [live?.source, vat.source].filter((item): item is string => !!item).join(" · ");
+  const sourcesText = t("Source: {source}", { source: plainSource(sources, t) });
   if (live === null) {
     return (
       <dl className="grid grid-cols-2 gap-3 text-sm tabular-nums">
@@ -152,26 +201,33 @@ function PriceStockVat({ page }: { page: ProductPage }) {
               <span className="block text-xs font-normal text-muted-foreground">{t("The catalog gives no VAT code for this product.")}</span>
             </>
           ) : (
-            <>
-              {formatNumber(vatRate)} %{vat.code ? <span className="text-xs text-muted-foreground"> · {vat.code}</span> : null}
-            </>
+            <>{formatNumber(vatRate)} %</>
           )}
         </Fact>
-        <Fact label={t("Valio stock on {date}", { date: t(formatDate(live.date)) })} unknown={!stock || stock.unknown}>
-          {!stock || stock.unknown
-            ? t("unknown: a person confirms")
+        <Fact label={t("Stock on {date}", { date: t(formatDate(live.date)) })} unknown={!stock || stock.unknown || stock.available == null}>
+          {!stock || stock.unknown || stock.available == null
+            ? t("not confirmed; the approver checks it on the proposal")
             : stock.available === 0
               ? t("none available")
-              : `${formatNumber(stock.available ?? 0)} ${per}`}
+              : `${formatNumber(stock.available)} ${per}`}
         </Fact>
         {live.comparisonPrice != null && live.comparisonUnit ? (
-          <Fact label={t("Unit price")}>{`${t(formatEur(live.comparisonPrice))} / ${live.comparisonUnit}`}</Fact>
+          <Fact label={t("Unit price")}>{`${t(formatEur(live.comparisonPrice))} / ${perUnit(live.comparisonUnit)}`}</Fact>
         ) : null}
-        {stock?.closingTime ? (
-          <Fact label={t("Order by")}>{stock.cutoffPassed ? t("cut-off passed") : t(formatDateTime(stock.closingTime))}</Fact>
+        {stock?.closingTime || stock?.cutoffPassed ? (
+          <Fact label={t("Order by")}>
+            {stock.cutoffPassed ? (
+              <>
+                {t("cut-off passed")}
+                {next ? <span className="block text-xs font-normal text-muted-foreground">{t("next: {when}", { when: t(formatDateTime(next.toISOString())) })}</span> : null}
+              </>
+            ) : (
+              t(formatDateTime(stock.closingTime ?? ""))
+            )}
+          </Fact>
         ) : null}
       </dl>
-      {sources ? <p className="text-xs text-muted-foreground">{t("Source: {source}", { source: sources })}</p> : null}
+      {sources ? <p className="text-xs text-muted-foreground">{sourcesText}</p> : null}
     </>
   );
 }
@@ -202,7 +258,7 @@ function Suppliers({ suppliers }: { suppliers: ProductPageSupplier[] }) {
               <td className="px-1 py-2">
                 <div className="font-medium break-words">{s.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {s.priceExVat == null ? t("price unknown") : `${t(formatEur(s.priceExVat))} / ${s.per ?? "?"}`}
+                  {s.priceExVat == null ? t("price unknown") : `${t(formatEur(s.priceExVat))} / ${perUnit(s.per)}`}
                   {s.netContent ? ` · ${formatNumber(s.netContent.value)} ${s.netContent.unit}` : ""}
                   {s.orderDays.length ? ` · ${days(s.orderDays, t)}` : ""}
                 </div>
@@ -220,7 +276,11 @@ function Suppliers({ suppliers }: { suppliers: ProductPageSupplier[] }) {
               <td className={cn("px-1 py-2 text-right", s.freeDeliveryThresholdEur == null && UNKNOWN)}>
                 {s.freeDeliveryThresholdEur == null ? t("unknown") : t(formatEur(s.freeDeliveryThresholdEur))}
                 {s.deliveryFeeEur != null ? (
-                  <div className="text-xs font-normal text-muted-foreground">{t("else {fee}", { fee: t(formatEur(s.deliveryFeeEur)) })}</div>
+                  <div className="text-xs font-normal text-muted-foreground">
+                    {s.freeDeliveryThresholdEur == null
+                      ? t("{fee} delivery fee", { fee: t(formatEur(s.deliveryFeeEur)) })
+                      : t("{fee} delivery under {threshold}", { fee: t(formatEur(s.deliveryFeeEur)), threshold: t(formatEur(s.freeDeliveryThresholdEur)) })}
+                  </div>
                 ) : null}
               </td>
             </tr>
@@ -443,12 +503,15 @@ function ProductBody({ page }: { page: ProductPage }) {
             <p className="text-muted-foreground">
               {[product.category, about?.producer ?? product.vendorName].filter(Boolean).join(" · ") || t("No description in the catalog.")}
             </p>
+            {page.supplierId ? (
+              <p className="text-xs text-muted-foreground">{t("Supplier id {id}", { id: page.supplierId })}</p>
+            ) : null}
           </div>
         </Section>
         <Section id="allergens" title={t("Allergens")} source={page.allergens.source}>
           <Allergens allergens={page.allergens} />
         </Section>
-        <Section id="price" title={t("Price, stock and VAT")}>
+        <Section id="price" title={t("Price, stock and VAT")} source={page.live === null ? page.vat.source : null}>
           <PriceStockVat page={page} />
         </Section>
       </Card>
