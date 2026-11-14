@@ -1303,13 +1303,14 @@ audit log.
 | 422 | `INVALID_REQUEST` | A field is missing or has the wrong type, the date is not a date or is in the past, `reason` is longer than 300 characters, or `product_id` equals `replaces_product_id`. |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. The same key with the same body answers the stored offer. |
 | 403 | `SHARING_REQUIRED` | The kitchen does not share its forecast with this supplier, or does not exist. |
-| 404 | `PRODUCT_NOT_FOUND` | `product_id` is not a catalog product of the supplier. |
+| 404 | `PRODUCT_NOT_FOUND` | `product_id` is not a catalog product of the supplier. Only Valio (`sup-valio`) has a catalog today; a kitchen's own product is never offered. |
 | 422 | `NO_SHORTAGE` | The supplier's shortage view has no `SHORT` row for `replaces_product_id` on that date with this kitchen in it. A supplier cannot push a product without a shortage behind it. |
-| 422 | `ALLERGEN_RULE` | The kitchen's allergen rule refuses the product, or the product's allergen data is not known. The answer does not name the kitchen's allergens. |
+| 422 | `ALLERGEN_RULE` | The kitchen's allergen rule refuses the product, or the product's allergen data is not known. The answer does not name the kitchen's allergens. A kitchen rule that names an unknown allergen is 409 `KITCHEN_POLICY_INVALID`: no offer until the kitchen fixes it. |
 | 409 | `OFFER_LIMIT` | The kitchen already has 3 open offers from this supplier. |
 
-One open offer per supplier, kitchen, offered product and date: a second one (another key)
-answers the first offer and stores nothing.
+One offer per supplier, kitchen, offered product and date: a later one (another key)
+answers the stored offer, whatever its status, and stores nothing. A "no thanks" is final:
+the supplier cannot ask again for the same product and day.
 
 **`GET /v1/kitchens/{kitchen_id}/supplier-offers`** answers `{"offers": [...]}` in the shape
 above: open offers first, then the newest, at most 50.
@@ -1329,6 +1330,8 @@ rule and recall holds apply) for `product_id`, the offer's `quantity` and `unit`
 
 - `offer` is the whole offer, as above.
 - A second accept (a double click) answers the same proposal; there is never a second one.
+- The proposal is never auto-approved, also when the kitchen switched earned auto-approve
+  on: a suggestion from a supplier always waits for a person in the inbox.
 - `proposal_status: "REJECTED"`: the supplier cannot deliver the product for that date
   after all. The offer stays `OPEN`; nothing waits in the inbox.
 - 404 `OFFER_NOT_FOUND`: no such offer in this kitchen. 409 `OFFER_NOT_OPEN`: the offer is
@@ -1341,6 +1344,13 @@ rule and recall holds apply) for `product_id`, the offer's `quantity` and `unit`
 `reason` (string, at most 500 characters). Only a person passes, as for accept. Answer: the
 offer, `status: "DECLINED"`. Declining a declined offer answers the same; an `ACCEPTED` or
 `EXPIRED` offer is 409 `OFFER_NOT_OPEN`.
+
+**Served** (`gateway/supplier_offers.py`, `store/supplier_offers.py`). Valio's selling agent
+is `agent/seller.py`: code builds a shortlist of at most 5 substitutes (same category and
+measure, confirmed stock for the kitchen's need, can arrive, passes the kitchen's allergen
+rule with known allergen data, not short itself), Nemotron 3.5 Super VL picks one entry and
+writes the reason, and a pick outside the shortlist means no offer. It runs on the server
+inside the gateway image (`python -m agent.seller --dry-run`, then `--apply`), not over HTTP.
 
 **Audit.** Each step is one entry in the kitchen's audit log, written once (a retry does
 not add a line): `supplier_offer_received` (actor `supplier:<supplier_id>`, with `offer_id`,
