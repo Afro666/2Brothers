@@ -2471,9 +2471,24 @@ webhooks per kitchen. Create and delete are audit entries (`webhook_created`,
 (the events one can subscribe to). These routes take no `idempotency_key`.
 
 Events: `proposal.ready`, `proposal.approved`, `proposal.rejected`, `order.placed`,
-`total_mismatch`, `recall.alert`. They come from the audit trail, so a webhook says what
-the audit log says. `ping` is sent only by `POST .../webhooks/{id}/test`; it is not a
-subscription.
+`total_mismatch`, `recall.alert`, and (planned, #1188) `supplier.offer`, `agent.refused`,
+`delivery.checked`. They come from the audit trail, so a webhook says what the audit log
+says. `ping` is sent only by `POST .../webhooks/{id}/test`; it is not a subscription. A
+webhook gets only the events it names; the web form ticks `proposal.ready` and
+`recall.alert` for a new webhook and offers the others unticked.
+
+Bodies (`data`) of the planned events and of the second `recall.alert` case. Each holds
+only fields of its audit entry:
+
+| Event | From the audit kind | `data` | Sent |
+|---|---|---|---|
+| `supplier.offer` | `supplier_offer_received`, `supplier_offer_accepted`, `supplier_offer_declined` (#374) | `step` (`RECEIVED`, `ACCEPTED`, `DECLINED`), `offer_id`, `supplier_id`, `product_id`, `replaces_product_id`, `requested_date`, `quantity`, `unit`; `proposal_id` when accepted. Never the supplier's reason text. | Once per offer and step, also when the offer is written by the selling agent's one-off command (`python -m agent.seller --apply`): that command waits for its deliveries before it exits. |
+| `agent.refused` | `refused` (#548) | `actor`, `code` (for example `HUMAN_SESSION_REQUIRED`), `method`, `route`: the route **pattern**, such as `/v1/kitchens/{kitchen_id}/approvals/{approval_id}/approve`, never the path with ids. | At most one delivery per webhook, actor and code a minute; more refusals in that minute stay in the audit log only. |
+| `delivery.checked` | `delivery_note_read` (#362) | `order_id`, `statuses` (count per line status), `complete`, `needs_approval` (substitute lines waiting for a person), `duration_ms`. Never the photo or the note's text. | Once per read. |
+| `recall.alert`, case `FOUND` (#1187) | the recall alert of a check (`POST /recalls/check`) | `case: "FOUND"`, `recall_event_id`, `product_id`, `product_name`, `match` (`exact`, `possible`, `review`), `found`: `{stock: true/false, recipes: <count>, open_proposal: true/false}`, `notice_url`, `next_step`. | When a check finds a recalled product in this kitchen's stock or recipes, also when no open proposal holds it. **Once per webhook and recall alert**: an alert stored before the webhook existed is sent at the next check; every later check sends nothing for it. A check inside the 60 s cooldown sends nothing. |
+
+The existing `recall.alert` for a blocked proposal (`recall_proposal_blocked`) keeps its
+body and gains `case: "PROPOSAL_BLOCKED"`.
 
 A delivery is one JSON POST:
 
