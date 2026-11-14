@@ -215,6 +215,12 @@ search_products(db, "", {"require_labels": ["EU_ORGANIC_FARMING"], "temperature"
   and the brand, and tolerates one typo.
 - Ranking: products with every query word in one name come first, then products of the
   size written in the query ("1 l", "500 g"), then plain relevance.
+- Among the names with every word, the query's home category comes first, then food
+  before non-food (#1593: "milk" is also in the names of hand wash and jugs). The home
+  category is the one with at least three times as many of those names as the next
+  (`home_category`: one extra count query per text search). Category codes have no
+  names, so non-food is a list of code prefixes measured on the catalog
+  (`NON_FOOD_PREFIXES`). A query for a non-food product still finds it.
 - `exclude_allergens` takes names or GS1 codes and removes CONTAINS and MAY_CONTAIN.
   Products without allergen data stay, with the reason `allergen data missing`;
   `allergen_strictness: "strict"` removes them too. A misspelt allergen is an error.

@@ -32,6 +32,31 @@ class SearchAcceptance(unittest.TestCase):
             self.assertNotIn("raw", row)
             self.assertIsInstance(row["product_id"], str)
 
+    def test_milk_gives_milk_first_not_hand_wash(self):
+        # #1593: two Palmolive hand washes ("Almond Milk", "Milk & Olive") were first.
+        rows = search_products(self.db, "milk", limit=5)
+        self.assertEqual([row["category"] for row in rows], ["10400"] * 5, [r["names"] for r in rows])
+        for row in rows:
+            self.assertIn("milk", row["names"]["en"].lower())
+            self.assertNotIn("hand wash", row["names"]["en"].lower())
+            self.assertIn("AM", row["allergens"]["contains"])
+        for query in ("lactose-free milk", "milk 1 l"):  # was chocolate first; was a jug first
+            self.assertEqual(search_products(self.db, query, limit=1)[0]["category"], "10400", query)
+
+    def test_a_non_food_query_still_finds_non_food(self):
+        rows = search_products(self.db, "hand wash", limit=5)
+        self.assertTrue(all("hand wash" in row["names"]["en"].lower() for row in rows))
+        cups = search_products(self.db, "coffee cup", limit=5)
+        self.assertTrue(all("cup" in row["names"]["en"].lower() for row in cups))
+
+    def test_a_row_with_some_of_the_words_stays_under_the_all_words_line(self):
+        from store.search import ALL_WORDS_BOOST
+        rows = search_products(self.db, "almond milk", limit=20)
+        some = [row for row in rows if not all(
+            word in " ".join(row["names"].values()).lower() for word in ("almond", "milk"))]
+        self.assertTrue(some)
+        self.assertTrue(all(row["score"] < ALL_WORDS_BOOST for row in some))
+
     def test_excluding_milk_removes_every_product_that_contains_it(self):
         self.assertTrue(any("AM" in row["allergens"]["contains"]
                             for row in search_products(self.db, "milk chocolate", limit=50)))
