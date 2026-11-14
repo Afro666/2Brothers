@@ -66,9 +66,12 @@ def apply_notices(gateway, kitchen_id, notices, *, live_enrichment=False):
             if needs is not None:
                 request.update(quantity=str(len(needs)), unit='products')
             replacement = gateway.create_proposal(kitchen_id, {**request,
-                'product_ids': basket, 'idempotency_key': 'recall-' + key}, 'recall-buyer', needs=needs)
+                'product_ids': basket, 'idempotency_key': 'recall-' + key}, 'recall-buyer',
+                auto_approve=False, needs=needs)
+            covered = {line['product_id'] for line in replacement['lines']}
             if (not replacement['lines'] or replacement.get('shortfall') not in ('0', '0.0', '0.00')
-                    or replacement.get('shortfalls')):
+                    or replacement.get('shortfalls')
+                    or (needs is not None and any(n['product_id'] not in covered for n in needs))):
                 recalls.link(db, kitchen_id, proposal['_id'], recall_replan_error='REPLACEMENT_SHORTFALL')
                 if recalls.reject_replacement(db, kitchen_id, replacement['proposal_id'],
                                               'recall replacement shortfall'):
@@ -101,7 +104,7 @@ def _needs(request, priced, swaps, safe):
     if request.get('needs'):
         rows = [(n, [n['product_id']]) for n in request['needs']]
     elif request.get('items'):
-        rows = [(item, [p for p in item.get('product_ids') or [] if p in priced] or item.get('product_ids') or [])
+        rows = [(item, sorted(item.get('product_ids') or [], key=lambda p: p not in priced))
                 for item in request['items'] if item.get('result', 'proposed') == 'proposed']
     else:
         return None

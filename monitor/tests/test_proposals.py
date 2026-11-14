@@ -226,3 +226,63 @@ def test_basket_replacement_keeps_each_lines_quantity_and_unit(kind):
     assert sorted((l['product_id'], l['quantity']) for l in replacement['lines']) == [('475842', '5'), ('M1', '7')]
     assert {(n['product_id'], n['quantity'], n['unit']) for n in replacement['request']['needs']} == {
         ('475842', '5', 'KG'), ('M1', '7', 'ST')}
+
+
+def test_replacement_never_attempts_auto_approval(monkeypatch):
+    db, gw, p = _basket_proposal('menu_plan')
+    called = []
+    monkeypatch.setattr('gateway.autoapprove.decide', lambda *args: called.append(True))
+    apply_notices(gw, 'hotel', NOTICES)
+    assert not called
+    original = gw.get_proposal('hotel', p['proposal_id'])
+    assert original.get('replacement_proposal_id')
+    assert db.orders.count_documents({}) == 0
+
+
+def test_a_missing_quote_cannot_be_accepted_as_a_complete_replacement():
+    db, gw, p = _basket_proposal('menu_plan')
+    offers = gw._offers
+    def partial_offers(*args, **kwargs):
+        rows, *rest = offers(*args, **kwargs)
+        return [row for row in rows if row.product_id != 'M1'], *rest
+    gw._offers = partial_offers
+    apply_notices(gw, 'hotel', NOTICES)
+    original = gw.get_proposal('hotel', p['proposal_id'])
+    assert original.get('recall_replan_error') == 'REPLACEMENT_SHORTFALL'
+    assert not original.get('replacement_proposal_id')
+
+
+def test_list_can_use_an_unpriced_safe_original_alternative(monkeypatch):
+    db, gw, p = _basket_proposal('list')
+    db.proposals.update_one({'_id': p['proposal_id']},
+                            {'$set': {'request.items.0.product_ids': ['461332', '475842']}})
+    monkeypatch.setattr('monitor.proposals.recalls.candidates', lambda *args: [])
+    apply_notices(gw, 'hotel', NOTICES)
+    original = gw.get_proposal('hotel', p['proposal_id'])
+    assert original.get('replacement_proposal_id')
+    replacement = gw.get_proposal('hotel', original['replacement_proposal_id'])
+    assert sorted((ln['product_id'], ln['quantity']) for ln in replacement['lines']) == [
+        ('475842', '5'), ('M1', '7')]
+
+
+def test_internal_needs_survive_a_duplicate_proposal_insert(monkeypatch):
+    from pymongo.errors import DuplicateKeyError
+    db, gw, _ = setup()
+    real_insert = mongomock.collection.Collection.insert_one
+    collided = []
+
+    def race(self, doc, *args, **kwargs):
+        if self.name == 'proposals' and doc.get('idempotency_key') == 'retry-needs' and not collided:
+            collided.append(True)
+            real_insert(self, doc, *args, **kwargs)
+            raise DuplicateKeyError('another request inserted the same proposal')
+        return real_insert(self, doc, *args, **kwargs)
+
+    monkeypatch.setattr(mongomock.collection.Collection, 'insert_one', race)
+    needs = [{'product_id': '475842', 'quantity': '7', 'unit': 'KG'}]
+    result = gw.create_proposal('hotel', {'product_ids': ['475842'], 'quantity': '1',
+        'unit': 'products', 'requested_date': '2026-11-16', 'idempotency_key': 'retry-needs'},
+        'recall-buyer', auto_approve=False, needs=needs)
+    assert result['request']['needs'] == needs
+    assert result['lines'][0]['quantity'] == '7'
+    assert db.proposals.count_documents({'idempotency_key': 'retry-needs'}) == 1
