@@ -90,6 +90,11 @@ def tamper(db, kitchen_id: str) -> dict:
     db.audit_tamper_demo.insert_one({"_id": kitchen_id, "original": entry,
                                      "tampered_at": datetime.now(timezone.utc)})
     db.audit_log.update_one({"_id": entry["_id"]}, {"$set": {"event.tampered": TAMPER_NOTE}})
+    if db.audit_tamper_demo.find_one({"_id": kitchen_id}) is None:
+        # A restore ran between the two writes and took the saved original: nothing could
+        # undo this edit later, so it is undone here.
+        db.audit_log.replace_one({"_id": entry["_id"]}, entry)
+        return {"seq": entry["seq"], "tampered": False}
     return {"seq": entry["seq"], "tampered": True}
 
 
