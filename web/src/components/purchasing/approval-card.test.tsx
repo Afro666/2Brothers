@@ -1,8 +1,8 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { ApprovalCard } from "@/components/purchasing/approval-card";
+import { ADD_SEARCH_DEBOUNCE_MS, ApprovalCard } from "@/components/purchasing/approval-card";
 import { approval, orders } from "@/mocks/milk-case";
 
 const confirmedOrder = {
@@ -13,6 +13,27 @@ const confirmedOrder = {
 };
 
 describe("ApprovalCard", () => {
+  it("searches addable products once the person stops typing", async () => {
+    const user = userEvent.setup();
+    const listAddableProducts = vi.fn().mockResolvedValue([]);
+    render(
+      <ApprovalCard
+        request={approval}
+        order={confirmedOrder}
+        onChangeProposal={vi.fn()}
+        listAddableProducts={listAddableProducts}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Show order lines" }));
+    await waitFor(() => expect(listAddableProducts).toHaveBeenCalledTimes(1));
+    listAddableProducts.mockClear();
+    await user.type(screen.getByLabelText("Search products"), "Arla 1 L");
+    expect(listAddableProducts).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, ADD_SEARCH_DEBOUNCE_MS * 2));
+    expect(listAddableProducts).toHaveBeenCalledTimes(1);
+    expect(listAddableProducts).toHaveBeenCalledWith("Arla 1 L");
+  });
+
   it.each([999999, 9999999999, undefined, null])("blocks unknown stock %s with a visible reason", async (amount) => {
     const user = userEvent.setup();
     const onApprove = vi.fn();
