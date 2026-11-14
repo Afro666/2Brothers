@@ -590,7 +590,8 @@ class Gateway:
         rows = rows[:max(limit, 20)]
         arrival: dict[str, bool | None] = {}
         try:
-            ids = [r["product_id"] for r in rows if str(r.get("supplier_id") or "sup-valio") == VALIO]
+            # Catalog rows (source "valio") can be asked live; a kitchen's own products cannot.
+            ids = [r["product_id"] for r in rows if r.get("source", "valio") != "own"]
             if ids:
                 requested = date.fromisoformat(need["requested_date"])
                 for product in self.valio.availability(ids, need["requested_date"])["products"]:

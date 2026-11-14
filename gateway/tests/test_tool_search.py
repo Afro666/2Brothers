@@ -6,7 +6,8 @@ from gateway.tests.test_gateway_app import AGENT, K, env  # noqa: F401 (fixture)
 CATALOG = [
     {"product_id": "choc", "net_content": {"value": 1.0, "unit": "KG"}},          # top text hit, wrong measure
     {"product_id": "462921", "net_content": {"value": 5.0, "unit": "L"}},         # litres, cut-off passed
-    {"product_id": "462775", "net_content": {"value": 1.0, "unit": "L"}},         # litres, can arrive
+    {"product_id": "462775", "net_content": {"value": 1.0, "unit": "L"}, "source": "valio",
+     "supplier_id": "valio_aimo"},                                                # as the real catalog rows are
     {"product_id": "463335", "net_content": {"value": 1.0, "unit": "L"}},         # litres, can arrive
 ]
 
