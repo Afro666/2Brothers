@@ -405,6 +405,30 @@ def test_limit_is_per_caller_and_x_user_is_not_an_identity(env, clock, monkeypat
     assert len(upstream["calls"]) == 3
 
 
+def test_visitors_behind_the_proxy_get_their_own_buckets(env, clock, monkeypatch):
+    _, upstream, db = env
+    monkeypatch.setenv("ONBOARDING_RATE_LIMIT", "1")
+    client = TestClient(create_app(Gateway(db, None)), client=("127.0.0.1", 50000))   # Caddy
+    one = {**HUMAN, "X-Forwarded-For": "203.0.113.1"}
+    two = {**HUMAN, "X-Forwarded-For": "6.6.6.6, 203.0.113.2"}    # Caddy appends the real one
+    assert client.post(URL, headers=one, json={"website": "a-kitchen.fi"}).status_code == 200
+    assert client.post(URL, headers=one, json={"website": "b-kitchen.fi"}).status_code == 429
+    assert client.post(URL, headers=two, json={"website": "c-kitchen.fi"}).status_code == 200
+    spoof = {**HUMAN, "X-Forwarded-For": "203.0.113.2, 203.0.113.1"}  # left entries are ignored
+    assert client.post(URL, headers=spoof, json={"website": "d-kitchen.fi"}).status_code == 429
+    assert len(upstream["calls"]) == 2
+
+
+def test_a_direct_public_client_is_keyed_by_its_own_address(env, clock, monkeypatch):
+    _, upstream, db = env
+    monkeypatch.setenv("ONBOARDING_RATE_LIMIT", "1")
+    client = TestClient(create_app(Gateway(db, None)), client=("8.8.8.8", 50000))  # TEST-NETs count as private
+    assert client.post(URL, headers=HUMAN, json={"website": "a-kitchen.fi"}).status_code == 200
+    forged = {**HUMAN, "X-Forwarded-For": "203.0.113.9"}      # not from the proxy: not trusted
+    assert client.post(URL, headers=forged, json={"website": "b-kitchen.fi"}).status_code == 429
+    assert len(upstream["calls"]) == 1
+
+
 def test_cache_and_limit_live_in_the_process_not_in_the_database(env, clock):
     client, upstream, db = env
     for _ in range(12):
