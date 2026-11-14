@@ -63,7 +63,7 @@ describe("orders pages", () => {
     const row = (await screen.findByText("Call Töölö Bakery to confirm")).closest("a")!;
     expect(within(row).getByText("Arla 1 L lactose free fat free UHT milk drink × 51 pieces")).toBeVisible();
     expect(within(row).getByText("Call Töölö Bakery to confirm")).toBeVisible();
-    expect(within(row).getByText("Placed", { selector: "[data-status='PLACED']" })).toBeVisible();
+    expect(within(row).getByText("Recorded", { selector: "[data-status='PLACED']" })).toBeVisible();
     expect(within(row).queryByText("Runs out before next delivery")).not.toBeInTheDocument();
   });
 
@@ -352,9 +352,9 @@ describe("orders pages", () => {
   it("says once that a recorded order was not sent to the supplier, on the page and in the list", async () => {
     renderApp("/orders/ORD-1042");
     expect(await screen.findByRole("heading", { level: 1, name: /Arla 1 L/ })).toBeVisible();
-    // The receipt of this order says NOT_SENT: the badge says both facts, never a bare "Placed".
+    // The receipt of this order says NOT_SENT: the badge says both facts, never a bare "Recorded".
     expect(screen.getByText("Approved and recorded, not sent to the supplier")).toBeVisible();
-    expect(screen.queryByText("Placed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recorded")).not.toBeInTheDocument();
   });
 
   it("order history says the same, and an order whose receipt says it was sent stays Placed", async () => {
@@ -367,7 +367,7 @@ describe("orders pages", () => {
     ];
     renderApp("/orders", api);
     expect(await screen.findByText("Approved and recorded, not sent to the supplier")).toBeVisible();
-    expect(screen.getAllByText("Placed")).toHaveLength(1);
+    expect(screen.getAllByText("Recorded")).toHaveLength(1);
   });
 
   it("omits urgency on a placed order but keeps it on a proposal", async () => {
@@ -378,7 +378,7 @@ describe("orders pages", () => {
 
   it("order history keeps urgency on a waiting proposal and omits it on a placed order", async () => {
     renderApp("/orders", createMockApi());
-    const placed = (await screen.findAllByText("Placed"))[0]!.closest("li")!;
+    const placed = (await screen.findAllByText("Recorded"))[0]!.closest("li")!;
     const waiting = screen.getAllByText("Needs approval")[0]!.closest("li")!;
     expect(placed.querySelector("[data-urgency]")).toBeNull();
     expect(waiting.querySelector("[data-urgency]")).not.toBeNull();
@@ -496,7 +496,7 @@ describe("orders pages", () => {
       "Buyer",
     );
     expect(await screen.findByText("VAL-2026-00123")).toBeVisible();
-    expect(await screen.findByText("Placed", { selector: "[data-status='PLACED']" })).toBeVisible();
+    expect(await screen.findByText("Recorded", { selector: "[data-status='PLACED']" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "It was placed" })).not.toBeInTheDocument();
   });
 
