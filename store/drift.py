@@ -113,10 +113,16 @@ def flag(row: dict, threshold: float = THRESHOLD) -> dict | None:
                f"{row['baseline_weeks']} weeks before (+{change:.0%}). "
                "Check portions before this order renews.")
     else:
+        # The amount may have moved too, under the threshold: say what it did, never "the same".
+        if qty is None:
+            amount = ". Check the price."
+        elif f"{abs(qty):.0%}" == "0%":  # what the text would show, so it never reads "went up 0%"
+            amount = " for the same amount. The price went up."
+        else:
+            amount = f", while the amount went {'up' if qty > 0 else 'down'} {abs(qty):.0%}. The price went up."
         why = (f"EUR {float(row['spend_per_100']):.2f} per 100 guests last week, "
                f"EUR {float(row['baseline_spend']):.2f} on average over the "
-               f"{row['baseline_weeks']} weeks before (+{change:.0%}) for the same amount. "
-               "The price went up.")
+               f"{row['baseline_weeks']} weeks before (+{change:.0%}){amount}")
     return {"product_id": str(row["product_id"]), "week": row["week"], "kind": kind,
             "change": round(change, 3), "unit": unit,
             "qty_per_100": round(float(row["qty_per_100"]), 2),

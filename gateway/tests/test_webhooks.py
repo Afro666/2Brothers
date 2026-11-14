@@ -140,7 +140,7 @@ def test_a_webhook_failure_does_not_fail_approve(env, receiver):
     receiver.status = TimeoutError("receiver is down")
     p = milk(client)
     r = approve(client, p)
-    assert r.status_code == 200 and r.json()["status"] == "SENT", r.text
+    assert r.status_code == 200 and r.json()["status"] == "RECORDED", r.text
     assert len(receiver.calls) == 6                               # 2 events, 3 attempts each
     log = client.get(f"{K}/webhooks/{hook['webhook_id']}/deliveries", headers=HUMAN).json()["deliveries"]
     assert {(d["status"], d["error"], d["ok"]) for d in log} == {(None, "TimeoutError", False)}

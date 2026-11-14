@@ -80,8 +80,11 @@ async def generate(gateway, kitchen, ident, payload, lease, actor, worker):
                 'source_hash': payload['source_hash'], 'duration_ms': round((time.monotonic()-started)*1000)}
     except Exception as exc:
         # Failure is optional UI enrichment, never an HTTP/card/approval failure.
-        logging.getLogger(__name__).warning('explanation generate failed proposal_id=%s code=%s error=%s',
-                                            ident, code, type(exc).__name__)
+        # The reason is one of our own fixed sentences or a status code, never model text (#1774).
+        reason = (f'worker status {exc.response.status_code}' if isinstance(exc, httpx.HTTPStatusError)
+                  else str(exc) if type(exc) is ValueError else '')
+        logging.getLogger(__name__).warning('explanation generate failed proposal_id=%s code=%s error=%s reason=%s',
+                                            ident, code, type(exc).__name__, reason)
     finally:
         try:
             await asyncio.to_thread(explanations.finish, gateway.db, lease, result, datetime.now(timezone.utc))

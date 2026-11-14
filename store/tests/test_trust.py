@@ -2,6 +2,7 @@
 
 import os
 import unittest
+from unittest import mock
 from uuid import uuid4
 
 from store import audit, trust
@@ -47,6 +48,22 @@ class TamperDemoTests(unittest.TestCase):
         self.assertEqual(list(self.db.audit_log.find().sort("_id", 1)), before)
         self.assertTrue(trust.verify(self.db, "demo-kitchen")["ok"])
         self.assertEqual(trust.restore(self.db, "demo-kitchen"), {"seq": None, "restored": False})
+
+    def test_a_restore_that_lands_inside_a_tamper_leaves_the_chain_whole(self):
+        # #1798: tamper is two writes (save the original, edit the row). A restore between
+        # them took the saved original, and the edit could never be undone.
+        before = list(self.db.audit_log.find().sort("_id", 1))
+        edit = self.db.audit_log.update_one
+
+        def restore_then_edit(*args, **kwargs):
+            self.assertEqual(trust.restore(self.db, "demo-kitchen"), {"seq": 3, "restored": True})
+            return edit(*args, **kwargs)
+
+        with mock.patch.object(self.db.audit_log, "update_one", restore_then_edit):
+            self.assertEqual(trust.tamper(self.db, "demo-kitchen"), {"seq": 3, "tampered": False})
+        self.assertEqual(list(self.db.audit_log.find().sort("_id", 1)), before)
+        self.assertTrue(trust.verify(self.db, "demo-kitchen")["ok"])
+        self.assertEqual(trust.tamper(self.db, "demo-kitchen"), {"seq": 3, "tampered": True})  # still works
 
     def test_only_the_synthetic_demo_kitchen_can_be_tampered(self):
         self.db.kitchens.insert_one({"_id": "other-demo", "synthetic": True})

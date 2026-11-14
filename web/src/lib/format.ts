@@ -151,9 +151,9 @@ const FINNISH_MONTHS = [
   "jouluk.",
 ];
 
-function dateText(date: Date): string {
+function dateText(date: Date, chosen?: "dmy" | "numeric" | "mdy"): string {
   const language = getLanguage();
-  const format = getAppearance().dateFormat;
+  const format = chosen ?? getAppearance().dateFormat;
   if (format === "numeric") return `${weekdayFmt[language].format(date)} ${dayMonthFmt.format(date)}`;
   if (language === "en") return dateFmt[format].format(date);
   const day = finnishDayFmt.format(date);
@@ -176,6 +176,11 @@ function toDate(value: string): Date {
 
 export function formatDate(value: string | null): string {
   return value == null ? "unknown" : dateText(toDate(value));
+}
+
+/** "Sun 15 Nov": the day in words under a native date field, whatever format the browser picks. */
+export function formatDayAndDate(value: string | null): string {
+  return value == null ? "unknown" : dateText(toDate(value), "dmy");
 }
 
 export function formatDateTime(value: string | null): string {

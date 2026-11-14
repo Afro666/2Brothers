@@ -607,7 +607,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       }
       const placed = current.resolution.resolution === "placed";
       current.outcome = placed ? "CONFIRMED" : "NOT_SENT";
-      current.status = placed ? "SENT" : null;
+      current.status = placed ? "RECORDED" : null;
       current.proposalStatus = placed ? "APPROVED" : "READY";
       demoOrders.set(orderId, {
         ...demoOrders.get(orderId)!,

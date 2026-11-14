@@ -1,13 +1,17 @@
 # Demo script: three minutes
 
-Status: story A, chosen by Aron on 2026-11-14 at 09:55 Helsinki. It replaces the milk
-request as the main demo. Every beat below ran on the live site on 14 Nov.
+Status: story A, chosen by Aron on 2026-11-14 at 09:55 Helsinki: the offer tile comes first.
+The sponsor's own example, `1,000 L lactose-free milk by Monday`, is beat 2 to 4 (added
+after the mock jury of 14 Nov). Each beat ran on the live site on 14 Nov; the order of the
+beats below is new and was not rehearsed as one run yet.
 Owner: Aron (presents). Site: `https://31-22-104-201.sslip.io`.
 
-Why this story: it shows the parts nobody else has (Valio's own agent, a live recall read,
-a refusal, an outside agent), and **no beat needs the Nemotron model at demo time**. The
-model makes the offer before the demo, and the seller has a `--no-model` fallback. On
-14 Nov at 09:45 Helsinki the model endpoint did not answer for a while; this story still works.
+Why this story: it shows the parts nobody else has (Valio's own agent, a refusal, an
+outside agent), and it runs the sponsor's own request from the sentence to the signed
+receipt. **One beat uses the Nemotron model live: the milk request (one model call).** When
+the model does not answer, the gateway's parser makes the proposal and the card says so;
+the story still works. The seller makes the offer before the demo and has a `--no-model`
+fallback. On 14 Nov at 09:45 Helsinki the model endpoint did not answer for a while.
 
 ## Before you go on stage
 
@@ -27,19 +31,20 @@ model makes the offer before the demo, and the seller has a `--no-model` fallbac
    first: a sensible substitute (same kind of food), `made_by` `nemotron-3.5-super-vl`. The
    model can take over a minute per answer (on 14 Nov: 67 s and 75 s). If it does not
    answer, add `--no-model` (a rule picks, `made_by: rule`); then do not say "Nemotron
-   picked it" on stage. The open offer at 14:45 Helsinki on 14 Nov: Rosamunda washed potato
-   in place of washed potato 1 kg, for Mon 16 Nov, 10.48 kg, picked by Nemotron.
+   picked it" on stage. The open offer changes with every round: read the product, the
+   date and the amount from the open offer on the Home tile, never from this file.
 2. **Clear the inbox.** On the server: `python -m demo.clear_inbox` lists the waiting
    proposals, `python -m demo.clear_inbox --apply` removes them (not a reject, so it is
-   not a person's decision). Then the card made from the offer is the only one.
+   not a person's decision). Then the offer's card and the milk card are the only ones.
 3. **No deploys while you present.** There is no deploy hold (Aron's choice). A merge
    restarts the site for some seconds: before you start, look at GitHub Actions; if a
    deploy runs, wait for it.
-4. **Open the tabs:** `/` (Home) on the phone, `/approvals`, `/requests`, `/demand`, and a
-   terminal in the repo for beat 5.
+4. **Open the tabs:** `/` (Home) on the phone, `/requests`, `/approvals`, `/orders`,
+   `/trust`, `/demand`, and a terminal in the repo for beat 8.
 5. **The recall alert is stored.** Aron pressed "Check recalls now" on 14 Nov at 09:31: a
    live scrape (102 notices), the recalled coffee 461332 in stock (3.253 kg) and in three
-   recipes. The panel shows it already; pressing again reads the list again (about 30 s).
+   recipes. The panel shows it already. Do not press the button on stage: beat 6 only
+   points at the stored alert.
 6. **Make the outside agent's token before you start** if sign-in is on (it is off for
    judging): Settings, API & MCP tokens. With sign-in off, `--make-token` makes one.
 7. **Fallback video** open in a player, paused at 0:00 (see "If something fails").
@@ -49,22 +54,47 @@ model makes the offer before the demo, and the seller has a `--no-model` fallbac
 
 | Time | Beat | What you do | What you say | Criterion |
 |---|---|---|---|---|
-| 0:00 | 1. Valio sees it first | Home on the phone. Point at the tile "Offer from Valio Aimo": the offered product, "in place of ..., which is predicted short on ...", the amount "from your own forecast", the sentence "written by Valio's selling agent (Nemotron 3.5 Super VL)". | "This kitchen shares its forecast with Valio. Valio's own agent, Nemotron, saw that salmon fillet will run short on Friday, and offers flounder fillet before anyone orders. The supplier sends no price and no quantity: the amount is the kitchen's own forecast, and the price comes live from Valio when we ask." | B, E, bonus |
-| 0:30 | 2. A person decides | Press "Make a proposal". The inbox opens with the new card: products, the "why" of each line, the total, what to check. Press "Approve", then "Yes, approve EUR ...". | "A suggestion never becomes an order by itself. It is a normal proposal now, sized by our engine, and it waits for a person. The agent has no approve tool. I approve the exact total I see: if the price moves, this yes is refused." | A, C |
-| 1:00 | 3. Proof | Order history, the new order: the block "Signed receipt" (approver, time, total). | "The gateway signs every offer and every order with one key. Anyone can check this receipt with the public key; change one number and the check fails. It also says plainly that Valio's test API has no order endpoint, so nothing was sent." | C, E |
-| 1:20 | 4. A recall, live | `/approvals`, the recall panel. Press "Check recalls now" (about 30 s; talk while it runs). | "Context.dev just read the Finnish Food Authority recall list, 102 notices. One matches: this coffee is recalled, and it is on our shelf, 3.2 kilos, and in three of our recipes. No order holds it, and new orders leave it out. The kitchen knows before anyone orders it again." | D, Context.dev |
-| 2:00 | 5. A rule the agent cannot break | `/requests`: type `15 kg peanut butter`, press "Ask the agent". | "This kitchen excludes peanuts. The request is refused in under a second, before any model runs, and nothing else is swapped in. An agent that 'helps' with plain butter would be worse than no agent." | C, D |
-| 2:20 | 6. Any agent | Terminal: `python -m demo.second_agent --make-token`. It prints ten lines. | "This is not our agent's door. An outside client reads our public agent card, connects over MCP, searches, gets an offer and asks for approval. Then it tries to approve its own proposal: 403. Only a person approves." | E |
-| 2:45 | 7. Close | `/demand`: the Valio planner view. | "Valio sees the demand of every kitchen that agreed to share, and which lines will be short. That is how its agent knew about the salmon. Open interface, a person signs, and every step is in a hash-chained log." | bonus |
+| 0:00 | 1. Valio sees it first | Home on the phone. Point at the open offer on the Home tile "Offer from Valio Aimo": the offered product, "in place of ..., which is predicted short on ...", the amount "from your own forecast", the sentence "written by Valio's selling agent (Nemotron 3.5 Super VL)". Read the product and the day from the tile. Press "Make a proposal": the card waits in the inbox. Do not approve it. | "This kitchen shares its forecast with Valio. Valio's own agent, Nemotron, saw that this product will run short, and offers a substitute before anyone orders. The supplier sends no price and no quantity: the amount is the kitchen's own forecast, and the price comes live from Valio when we ask. It is a normal proposal now, and it waits for a person." | B, E, bonus |
+| 0:25 | 2. The sponsor's request | `/requests`: type `1,000 L lactose-free milk by Monday`, press "Ask the agent". The card opens in `/approvals`: the products, the "why" of each line, the total, and the options. | "This is Valio's own example. A chef writes one sentence, not product codes. Valio does not have 1,000 litres confirmed in stock, so the card does not pretend: option A orders the confirmed litres now and holds the rest." | A, B |
+| 0:45 | 3. What Nemotron did | On the milk card, open the "What Nemotron did" panel. Folded it says "1 model call, ... s, thinking off". Unfolded, each step says "Model:" or "Code:", and the last line says "Quantities and prices: the engine. Approval: you." | "One model call. Nemotron picked the products from a shortlist. Code did every other step: the search, the offer, the check against the guards, the request for approval. The model sets no quantity and no price, and it has no approve tool." | A, C |
+| 1:05 | 4. A person decides | Press "Choose option A: approve EUR ... incl VAT" and confirm. Read the total from the screen. | "A suggestion never becomes an order by itself. I approve the exact total I see: if the price or the stock moves before the order is placed, this yes is refused." | A, C |
+| 1:25 | 5. Proof | `/orders`: open the milk order you just approved. Point at the block "Signed receipt" (approver, time, total). Then `/trust`: the heading "Audit log stored in MongoDB Atlas", press "Verify audit chain". | "An order that a person approves gets a signed receipt. Anyone can check it with our public key; change one number and the check fails. It also says plainly that Valio's test API has no order endpoint, so nothing was sent. And every step is in this log, in MongoDB Atlas, each line hashed with the one before." | C, E |
+| 1:50 | 6. A recall | `/approvals`, the recall panel. Point at the stored alert. Do not press "Check recalls now". | "The Finnish Food Authority recalled batches of this coffee. It is on our shelf and in three of our recipes. New orders leave it out, and a person checks the packs." | D |
+| 2:00 | 7. A rule the agent cannot break | `/requests`: type `15 kg peanut butter`, press "Ask the agent". | "This kitchen excludes peanuts. The request is refused in under a second, before any model runs, and nothing else is swapped in. An agent that 'helps' with plain butter would be worse than no agent." | C, D |
+| 2:20 | 8. Any agent | Terminal: `python -m demo.second_agent --make-token`. It prints ten lines. | "This is not our agent's door. An outside client reads our public agent card, connects over MCP, searches, gets an offer and asks for approval. Then it tries to approve its own proposal: 403. Only a person approves." | E |
+| 2:45 | 9. Close | `/demand`: the Valio planner view. | "Valio sees the demand of every kitchen that agreed to share, and which lines will be short. That is how its agent knew about the shortage on the tile. Open interface, a person signs, and every step is in a hash-chained log." | bonus |
+
+**The numbers of the milk beat come from the screen, not from this file.** Valio's stock
+moves, so the confirmed litres and the total of option A change:
+
+- An earlier run on 14 Nov had 698 L confirmed and 302 L held, and option A was
+  EUR 2,099.41 (this file before this change; the request was measured through the web,
+  see "What was measured").
+- A later live quote on 14 Nov had 51 L confirmed (`docs/submission.md`, "Buyer read
+  context").
+- Today's values were not read for this text: reading them needs a live request, which
+  writes a need and a proposal. Read them off the card in rehearsal and say those.
+
+**Which path answers** (beat 2 and 3). The deployed Buyer makes one model call per request:
+Nemotron picks the products, and code makes every tool step (`deploy/compose.yaml:86`,
+`agent/service.py:65`, `agent/single_pick.py`; #1257). A pick that repeats within ten
+minutes comes from a cache: the panel then shows the pick as a "Code:" step and no model
+call (`agent/service.py:126-129`). So type the request once in rehearsal and once on
+stage, at least ten minutes apart, or say "the pick was cached" when the panel shows it.
+If the model does not answer, the card says "The Buyer model was not answering, so the
+gateway's request parser made this proposal": say that, and skip the sentence "one model
+call".
+
+**The receipt beat opens an order a person approved**: the milk order of beat 4, or an
+older approved order if beat 4 failed. Never open the seeded delivery order (reference
+`DEMO-1198`, EUR 178.09, eggs, cherry tomato and milk drink) for this beat: the demo seed
+placed it, no person approved it, and it has no signed receipt by design (#1560, #1620).
+Only the "Delivery beat" below opens that order, and there the script says the seed placed
+it.
 
 **Do not type** butter, eggs or salmon as a free request: those three still give the wrong
 kind of product (clarified butter, scrambled egg mix, salmon cubes). Cheese, cream, oat
 drink, chicken breast and lactose-free milk give the right kind.
-
-**The sponsor's own example** (`1,000 L lactose-free milk by Monday`) still works end to
-end and is the answer if a judge asks for it: Option A "order the confirmed 698 L now, 302 L
-held", "Choose option A", approve EUR 2,099.41. It needs the Nemotron Buyer (or the parser
-fallback, which gives the same honest split).
 
 ## NVIDIA demo: five Nemotron jobs in 90 seconds (#1196)
 
@@ -97,8 +127,8 @@ does), **Why** (why it matters) and **Improved** (how we improved its outputs).
 3. **Clear the inbox** (story A step 2), so the new proposals are easy to find.
 4. **Photos on the laptop:** `demo/menu-photo.png` (beat 1), `agent/fixtures/shelf/demo-shelf.png`
    (beat 4), the prepared delivery note `agent/fixtures/receiving/demo-note.png` (beat 5).
-5. **Tabs:** `/planner` (next week), `/requests`, `/` (Home), `/stock`, the newest order in
-   `/orders`, `/about`, and `docs/submission.md` at "How we improved its outputs".
+5. **Tabs:** `/planner` (next week), `/requests`, `/` (Home), `/stock`, the demo delivery
+   order in `/orders` (reference `DEMO-1198`, see "Delivery beat"), `/about`, and `docs/submission.md` at "How we improved its outputs".
 
 ### The script
 
@@ -106,11 +136,11 @@ does), **Why** (why it matters) and **Improved** (how we improved its outputs).
 |---|---|---|---|---|---|
 | 0:00 | Open | Home. | "One model, five jobs, one buying loop, and it never sets a number. Nemotron 3.5 Super VL on Verda." | - | Model |
 | 0:05 | 1. Plan (#1136, #1140) | `/planner`, next week. "Plan from a menu photo", "Choose a file", `menu-photo.png`. Wait for "Nemotron 3.5 Super VL read ... dishes in ... s". | "The chef photographs next week's menu. Nemotron reads the dishes and the covers, and code matches each dish to a recipe. The engine sizes the ingredients. The proposal waits in the inbox." | The page says "The model is not answering right now. Plan the week by hand". Say: "The model is busy, so the chef plans by hand. Nothing is guessed." Press nothing more. | Core, Why |
-| 0:20 | 2. Buy | `/requests`: type `1,000 L lactose-free milk by Monday`, "Ask the agent". Open the "What Nemotron did" panel. | "A chef writes a sentence, not product codes. The Buyer calls seven MCP tools: search, offer, simulate, request approval and more. It picks the products. It has no approve tool, and the engine sets every quantity and price." | The card says "The Buyer model was not answering, so the gateway's request parser made this proposal". Say: "The model did not answer, so our parser made this one. Same engine, same numbers, no Nemotron." | Core, Model |
+| 0:20 | 2. Buy | `/requests`: type `1,000 L lactose-free milk by Monday`, "Ask the agent". Open the "What Nemotron did" panel. | "A chef writes a sentence, not product codes. One model call: Nemotron picks the products from a shortlist. Code does the search, the offer, the check and the request for approval, through the same audited MCP tools. The model has no approve tool, and the engine sets every quantity and price." | The card says "The Buyer model was not answering, so the gateway's request parser made this proposal". Say: "The model did not answer, so our parser made this one. Same engine, same numbers, no Nemotron." | Core, Model |
 | 0:40 | 3. Sell | Home: the tile "Offer from Valio Aimo". Point at "written by Valio's selling agent (Nemotron 3.5 Super VL)". Do **not** press "Make a proposal". | "Nemotron in a second role, on Valio's side. Code builds a shortlist of substitutes; the model picks one and writes why. No price and no quantity come from the supplier." | The tile says "picked by rule, not by a model". Say: "Today a rule picked this one: the model was busy when the offer was made." | Model |
 | 0:52 | 4. Count | `/stock`, "Count from a photo", "Choose a file", `demo-shelf.png`. Point at the five filled counts and the Edam "please count". | "Nemotron counts the shelf. Code turns packs into litres and kilos. The pack it cannot see well gets no number: unknown is never zero." Press "Save count" only if you decided to (see "Photo beat"). | The panel says "The photo was not read: ... You can still type the counts by hand." Say: "The model is busy; the counts are typed by hand." | Core, Why |
-| 1:05 | 5. Receive | The newest order in `/orders`, "Choose a delivery note photo", the prepared note. Point at the short and missing lines and the EUR to claim. | "Nemotron reads the delivery note. Plain code compares it with the order: this line is short, this one is missing. A person checks before stock changes." | The panel says "The note could not be read: ... Check the delivery by hand." Say: "The model is busy; the driver's note is checked by hand." | Core, Why |
-| 1:15 | Numbers | `/about`, the card "The Buyer agent runs on Nemotron 3.5 Super VL" (runs, model calls, prompt and completion tokens, model seconds). Then the table "How we improved its outputs" in `docs/submission.md`. | "Measured, not claimed. These are this kitchen's Buyer runs, counted from the endpoint's own usage field. And we measured before we tuned: thinking on is worth about 5,000 euro a week where the model decides numbers. In the product the engine decides them, so thinking is off: 289 completion tokens instead of 2,251, and every request finished on the first try." | The card counts only runs that happened. If it says "No runs counted yet", show the measured table only. | Model, Improved |
+| 1:05 | 5. Receive | The demo delivery order in `/orders` (reference `DEMO-1198`; its page says "Placed by the demo seed", and it has no signed receipt by design), "Choose a delivery note photo", the prepared note. Point at the short and missing lines and the EUR to claim. | "Nemotron reads the delivery note. Plain code compares it with the order: this line is short, this one is missing. A person checks before stock changes." | The panel says "The note could not be read: ... Check the delivery by hand." Say: "The model is busy; the driver's note is checked by hand." | Core, Why |
+| 1:15 | Numbers | `/about`, the card "The Buyer agent runs on Nemotron 3.5 Super VL" (runs, model calls, prompt and completion tokens, model seconds). Then the table "How we improved its outputs" in `docs/submission.md`. | "Measured, not claimed. These are this kitchen's Buyer runs, counted from the endpoint's own usage field. And we measured before we tuned: thinking on is worth about 5,000 euro a week where the model decides numbers. In the product the engine decides them, so thinking is off. On the old tool loop that cut 2,251 completion tokens to 289, and every request finished on the first try. Today the Buyer is one model call per request." | The card counts only runs that happened. If it says "No runs counted yet", show the measured table only. | Model, Improved |
 
 Two honest limits to say if asked: the About card counts the Buyer's runs only (the photo
 reads are counted in the container log, `python -m agent.usage`); and all photos are prepared
@@ -152,13 +182,18 @@ docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gate
 
 ## Recall beat: the recalled coffee is on our shelf (#358)
 
+In the three-minute script this is beat 6, about 10 seconds: point at the stored alert and
+say one sentence. It shows robustness (criterion D). The steps below are the long form,
+for a judge who asks. The recall list is read through Context.dev; that prize track was
+dropped (#1388), so the script does not sell it.
+
 One-shot on the live kitchen: the first check records the alert, and it stays. Do not
 press the button in rehearsal there.
 
 | Step | What you do | What the judge sees | What you say |
 |---|---|---|---|
 | 1 | Open `/stock`. Point at Kulta Katriina coffee. | The coffee 461332 with 3.253 kg on hand. | "This kitchen has this coffee on the shelf." |
-| 2 | Open `/approvals`. Press "Check recalls now". Wait (the live scrape took 30 s on 14 Nov; a slow answer falls back to the recording and the panel says so). | The recall panel: "Kulta Katriina ... is recalled", the Food Authority notice "Suodatinkahvissa vierasesineriski" of 6 March 2026 with its link, "In stock: 3.253 KG", and "No open order holds it. New orders leave it out." | "Context.dev just read the Finnish Food Authority recall list. The recalled coffee is on our shelf; the kitchen knows before anyone orders it again." |
+| 2 | Open `/approvals`. Press "Check recalls now". Wait (the live scrape took 30 s on 14 Nov; a slow answer falls back to the recording and the panel says so). | The recall panel: "Kulta Katriina ... is recalled", the Food Authority notice "Suodatinkahvissa vierasesineriski" of 6 March 2026 with its link, "In stock: 3.253 KG", and "No open order holds it. New orders leave it out." | "The Finnish Food Authority recalled batches of this coffee. It is on our shelf; the kitchen knows before anyone orders it again." |
 | 3 | Optional: on `/requests` ask for `5 kg Kulta Katriina filter coffee`. | The coffee is left out with the reason `BLOCKED_BY_RECALL`. | "And the agent cannot order it. A person checks the packs first." |
 
 The alert needs no open proposal: the check matches the notices to the kitchen's stock and
@@ -181,7 +216,7 @@ Barebells bar or a Göran's kebab) would give a `possible` alert of its own.
 ## Photo beat: Nemotron VL counts a shelf (#373)
 
 Live since 2026-11-14. This is the beat that shows the vision half of Nemotron 3.5 Super VL
-on the screen. It takes about 20 seconds. Put it after beat 3, or use it in place of beat 4.
+on the screen. It takes about 20 seconds. Put it after beat 5, or use it in place of beat 6.
 
 **Which photo.** Use `agent/fixtures/shelf/demo-shelf.png`. It is a synthetic photo
 (`agent/fixtures/shelf/make_demo_shelf.py`): six products of the demo kitchen's stock list,
@@ -238,13 +273,16 @@ model is configured" means `VERDA_INFERENCE_KEY` is missing in the `buyer` conta
 ## Delivery beat: the note is short, and the app says what to claim (#1198)
 
 **Not yet run on the live site.** The Verda model endpoint was overloaded on 14 Nov (#1135).
-Run it once in rehearsal before you put it on stage. Put it after beat 3 (the order and its
+Run it once in rehearsal before you put it on stage. Put it after beat 5 (the order and its
 receipt): order, delivery, check. About 20 seconds.
 
 **Which order.** A fixed demo order, reference `DEMO-1198`, made by `demo/delivery_order.py`
-(the seed places it too). It never changes, unlike the order beat 2 places. Three Valio lines
+(the seed places it too). It never changes, unlike the order beat 4 places. Three Valio lines
 at the catalog prices of 13 Nov, EUR 178.09 ex VAT. Its order page shows "Placed by the demo
-seed" where a signed receipt would be: no person approved it, so it has no receipt (#1560).
+seed" where a signed receipt would be: no person approved it, so it has no receipt (#1560,
+#1620). Say so when you open it: "the demo seed placed this order, so it has no receipt;
+an order a person approves has one". This is the only beat that opens this order. Never
+use it for the receipt beat (beat 5).
 
 | Product | Ordered | On the note | Status | To claim |
 |---|---|---|---|---|
@@ -342,16 +380,24 @@ with a pack or a number it was not given is dropped (#963).
 
 ## What was measured on the live site (2026-11-14)
 
-- Milk request through the web: answer in 12 s. Status READY, two lines: 698 ST of 463380
-  (stock confirmed) and 302 ST of 464237 (cheapest per litre, stock not confirmed).
-  EUR 2,242.30 ex VAT, EUR 2,545.01 total.
+- Milk request through the web, an earlier run on 14 Nov: answer in 12 s. Status READY, two
+  lines: 698 ST of 463380 (stock confirmed) and 302 ST of 464237 (cheapest per litre, stock
+  not confirmed). EUR 2,242.30 ex VAT, EUR 2,545.01 total. These are that run's numbers,
+  not today's: Valio's confirmed stock moved later that day (51 L, `docs/submission.md`
+  "Buyer read context").
 - The portion cups (463203, 7.55 EUR per litre) are left out with a reason: "confirmed in
   stock, but ... 5.8 times the cheapest". That is the certainty premium limit (#700).
 - `/llms.txt`, `/.well-known/agent-card.json`, `/gateway/openapi.json`: all answer 200.
-- Conformance kit on the server: 11 passed, 0 failed, 1 skipped (#609).
-- `python -m gateway.scenarios`: 13 PASS.
+- Conformance kit, run against the server: 11 checks passed, 0 failed, 1 skipped
+  (12 results in that run, #609). The kit has 13 checks now (C01 to C13,
+  `gateway/conformance.py`); they were not run against the server again for this text.
+- Golden scenarios, a different count: `python -m gateway.scenarios` runs 13 scenarios
+  (S01 to S13) on frozen test data, 13 PASS. They do not run against the live site.
 
-Time to order: the agent path is about 12 to 15 s plus two taps (our own runs). The manual
+Time to order: the agent path was about 12 to 15 s plus two taps (our own runs on the old
+tool loop). With one model call, three 200 L requests on the live site took 2.5 to 3.8 s
+(`agent/README.md` "Live measurements, 14 November 2026"); the 1,000 L request was not
+timed again. The manual
 webshop time is **an estimate, not a measurement** (Aron, 14 Nov): nobody timed it. Say it
 like this, also on the last slide: "By hand in a webshop this order is a search, a
 comparison of several products, a stock check and a basket: we estimate 5 to 10 minutes,
@@ -363,12 +409,18 @@ and it depends on the restaurant and the person. With the agent it is one senten
 - **The page does not load:** a deploy is running. Wait 20 s and reload (see step 3).
 - **No tile on Home:** the offer was used in rehearsal. Make a new one (step 1). If the
   seller prints only `NO_SUBSTITUTE` or `ALREADY_OFFERED`, there is no new shortage to offer
-  for: skip beat 1 and open on the sponsor's milk example instead.
+  for: skip beat 1 and start at beat 2, the sponsor's milk request.
 - **"Make a proposal" gives a REJECTED proposal:** nothing can be delivered for that date
   any more. The offer stays open. Say: "Valio's stock moved since the offer; the gateway
-  checks again and does not pretend", and go on with beat 3 on an older order.
-- **The recall check takes long:** it waits up to 45 s for Context.dev, then answers from
-  the recording and says so. Keep talking; the alert is already stored.
+  checks again and does not pretend", and go on with beat 2.
+- **The milk card says the parser made it:** the model did not answer. Say so, and go on:
+  the engine and the numbers are the same.
+- **Option A cannot be approved** (the total moved, or nothing is confirmed): say "the
+  gateway refuses a yes for an old total", and show beat 5 on an older order that a person
+  approved. Never on the seeded order `DEMO-1198`.
+- **The recall panel is empty:** the script does not press "Check recalls now". If you
+  must press it, the read takes about 30 s and waits up to 45 s, then answers from the
+  recording and says so.
 - **Nothing works:** play the fallback video and talk over it. Milk story:
   `demo/out/fallback-2026-11-14-final-with-approval.webm`. A story-A video comes from
   `python -m demo.record_demo --story offer --approve` (it uses up the open offer). The

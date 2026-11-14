@@ -677,9 +677,11 @@ Offline checks: `python -m unittest discover -s agent/tests -v`.
 
 ## Submission notes
 
-- Nemotron performs product discovery and selects the offer/simulation/approval
-  sequence through the seven MCP tools. All quantities and prices come from the
-  gateway and engine, not the model.
+- Nemotron picks the products in one model call (`agent/single_pick.py`, the deployed
+  default since #1257); code then runs search, offer, simulation and the approval request
+  through the same audited MCP tools. The older loop, where the model chose each of the
+  seven tools itself, is still in `agent/runner.py`. All quantities and prices come from
+  the gateway and engine, not the model.
 - Codex implemented #20's upstream adapter, #21's MCP integration and this loop
   using separate issue branches and Opus-reviewed PRs.
 - Improvements to the agent are enforced at runtime: independent policy checks,

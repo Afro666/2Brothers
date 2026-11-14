@@ -70,6 +70,29 @@ def test_every_order_answer_carries_the_same_receipt(env):
     assert one["receipt"] == listed["receipt"] == again["receipt"] == tool["receipt"] == order["receipt"]
 
 
+def test_every_order_answer_says_what_its_receipt_says_about_the_supplier(env):
+    """#1768: `status: SENT, outcome: CONFIRMED` alone reads as "the supplier has it"."""
+    client, _, _ = env
+    p, order = placed(client)
+    _, _, claims = check_receipt(order, client.get("/.well-known/jwks.json").json())
+    one = client.get(f"{K}/orders/{order['order_id']}", headers=HUMAN).json()
+    listed = client.get(K + "/orders", headers=HUMAN).json()["orders"][0]
+    tool = client.post("/tools/place_order", headers=AGENT, json={
+        "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"}).json()
+    status = client.get("/tools/get_order_status", headers=AGENT, params={"order_id": order["order_id"]}).json()
+    for answer in (order, one, listed, tool, status):
+        assert answer["supplier_outcome"] == claims["supplier_outcome"] == "NOT_SENT"
+        assert answer["supplier_note"] == claims["supplier_note"] == signing.NOT_SENT_NOTE
+
+
+def test_an_order_without_a_receipt_still_says_nothing_was_sent(env):
+    client, _, db = env
+    _, order = placed(client)
+    db.orders.update_one({"_id": order["order_id"]}, {"$unset": {"receipt": ""}})
+    one = client.get(f"{K}/orders/{order['order_id']}", headers=HUMAN).json()
+    assert one["receipt"] is None and one["supplier_outcome"] == "NOT_SENT"
+
+
 def test_a_changed_receipt_fails_verification(env):
     client, _, _ = env
     keys = client.get("/.well-known/jwks.json").json()

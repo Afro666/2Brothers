@@ -104,7 +104,7 @@ The milk flow, end to end:
 3. `POST .../approve` with the `expected_total` the person saw (human token + `X-User`
    only). The gateway re-reads live prices and stock: if anything moved, 409
    `TOTAL_MISMATCH` with the new total, and nothing is placed. Otherwise the attempt is
-   written first, then the order (outcome `CONFIRMED`, status `SENT`: placed in our
+   written first, then the order (outcome `CONFIRMED`, status `RECORDED`: placed in our
    gateway; Valio has no order endpoint). A replay returns the same order.
 4. `GET .../orders`, `GET .../audit`: the order and every step.
 
@@ -377,7 +377,11 @@ The public key is at `/.well-known/jwks.json` (no token). Check one offer:
 Every placed order carries `receipt`, signed with the same key: the order, its offer hash,
 lines, total, who approved, the time and the supplier outcome (`NOT_SENT`: Valio has no
 order endpoint, so the receipt never says a supplier accepted). Null when signing failed
-and for older orders. Check one order answer:
+and for older orders. The order answer says the same beside `status` and `outcome`
+(#1768): `supplier_outcome: "NOT_SENT"` and `supplier_note`, so `SENT` / `CONFIRMED`
+("placed in our gateway") never read as "the supplier has it". Both are null once a
+person recorded that the supplier has the order (resolution `placed`). Check one order
+answer:
 
     python -m gateway.verify_offer --base-url https://<host>/gateway --receipt order.json
 

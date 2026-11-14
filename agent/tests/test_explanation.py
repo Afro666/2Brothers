@@ -99,6 +99,33 @@ def test_shortfall_and_unknown_stock_are_both_required_in_one_warning():
         checked_reply(reply, payload['facts'])
 
 
+# Live, 14 Nov (#1774): both explanations for this product were refused in under 500 ms.
+GLUED = 'Oatly No Sugars Oat Drink 1,5% Fat 1L'
+
+
+@pytest.mark.parametrize('listed', [
+    ['698', '1,5', '1'],        # every printed number, as the prompt asks
+    ['698', '1,5%', '1L'],      # with the sign and the unit still on
+    ['698', '1.5', '1'],
+    ['698', '1,5'],             # only the numbers that stand alone
+])
+def test_a_number_glued_to_a_unit_in_a_product_name_does_not_refuse_the_reply(listed):
+    payload = context(PROPOSAL, {'milk': GLUED, 'cream': 'Cream'}, 'en')
+    reply = reply_for(payload)
+    reply['sentences'][0]['numbers'] = listed
+    assert GLUED in checked_reply(reply, payload['facts'])
+
+
+@pytest.mark.parametrize('listed', [['698', '1,5', '2'], ['698', '1,5', '1', '7'], ['699', '1,5', '1'],
+                                    ['698', '1,5', 'L'], ['698']])
+def test_a_wrong_number_list_is_still_refused_for_a_glued_name(listed):
+    payload = context(PROPOSAL, {'milk': GLUED, 'cream': 'Cream'}, 'en')
+    reply = reply_for(payload)
+    reply['sentences'][0]['numbers'] = listed
+    with pytest.raises(ValueError):
+        checked_reply(reply, payload['facts'])
+
+
 @pytest.mark.parametrize('timeout', [False, True])
 def test_writer_is_single_call_closes_client_and_uses_short_json_budget(timeout):
     payload = context(PROPOSAL, {'milk': 'Milk'}, 'en')

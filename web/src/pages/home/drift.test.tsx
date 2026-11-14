@@ -25,7 +25,7 @@ describe("Standing-order drift tiles", () => {
       screen.getByRole("link", { name: "Check the next order" }),
     ).toHaveAttribute("href", "/approvals");
     expect(
-      screen.getByText("MongoDB Atlas time-series aggregation over the earlier weeks of orders"),
+      screen.getByText("From your last 4 weeks of orders (MongoDB Atlas time-series aggregation)"),
     ).toBeInTheDocument();
   });
 
