@@ -64,6 +64,20 @@ def test_coffee_hold_replans_different_brand_without_ordering():
     assert verify_chain(db)['ok']
 
 
+def test_repeated_polls_keep_one_alert_per_event():
+    db, gw, p = setup()
+    apply_notices(gw, 'hotel', NOTICES)
+    first = db.proposals.find_one({'_id': p['proposal_id']})['recall_alerts']
+    assert first
+    apply_notices(gw, 'hotel', NOTICES)
+    # A later poll with a fresh snapshot of the same notice must not add a second entry.
+    from store import recalls
+    recalls.hold(db, 'hotel', p['proposal_id'], {**first[0], 'detected_at': 'later', 'where': 'elsewhere'})
+    alerts = db.proposals.find_one({'_id': p['proposal_id']})['recall_alerts']
+    assert len(alerts) == len(first)
+    assert len({a['event_id'] for a in alerts}) == len(alerts)
+
+
 @pytest.mark.parametrize('error', [ValueError('identity'), OSError('network down')])
 def test_failed_enrichment_still_audits_replacement(monkeypatch, error):
     import monitor.enrichment

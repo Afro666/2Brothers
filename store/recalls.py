@@ -32,7 +32,9 @@ def hold(db, kitchen_id, proposal_id, alert):
     if alert.get('status') == 'dismissed' or (current and current.get('status') == 'dismissed'):
         return False
     query = {'_id': proposal_id, 'kitchen_id': kitchen_id}
-    db.proposals.update_one(query, {'$addToSet': {'recall_alerts': alert}})
+    # One entry per event_id: a re-poll carries a new detected_at, so $addToSet would duplicate.
+    db.proposals.update_one({**query, 'recall_alerts.event_id': {'$ne': alert['event_id']}},
+        {'$push': {'recall_alerts': alert}})
     if alert['match'] == 'review':
         return False
     # Shares the approval state machine. COMMITTING is the order commit point;
