@@ -242,8 +242,6 @@ export default {
   "Per week": "Viikossa",
   "Placed": "Tilattu",
   "Powered by Context.dev": "Palvelun tarjoaa Context.dev",
-  "Prefer {tier}": "Suosi vaihtoehtoa {tier}",
-  "Preferred: {tier}. This preference has not changed or approved an order. Re-simulate the chosen basket before human approval.": "Suosikki: {tier}. Tämä valinta ei ole muuttanut tai hyväksynyt tilausta. Simuloi valittu kori uudelleen ennen ihmisen hyväksyntää.",
   "Preparing the proposal": "Valmistellaan ehdotusta",
   "Price": "Hinta",
   "Price ex VAT": "Hinta ilman alv",

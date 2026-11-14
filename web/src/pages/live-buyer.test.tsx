@@ -64,7 +64,7 @@ describe("live Buyer request page", () => {
     vi.unstubAllEnvs();
   });
 
-  it("shows engine-backed chef options as preferences without applying a mutation", async () => {
+  it("shows named chef options and the inbox link without preference controls", async () => {
     const fetch = vi.fn(
       async () =>
         new Response(
@@ -78,18 +78,19 @@ describe("live Buyer request page", () => {
                 stock_confirmed: false,
                 allergen_data_known: false,
                 requires_chef_approval: true,
-                lines: ready.lines,
+                lines: [{ ...ready.lines[0], product_id: "463335", product_name: "Oat drink 1 L", quantity: "120", unit: "L" }],
               },
             ],
           }),
         ),
     );
     vi.stubGlobal("fetch", fetch);
-    const user = await fill();
-    await user.click(await screen.findByRole("button", { name: "Prefer better" }));
+    await fill();
+    expect(await screen.findByText("120 L of Oat drink 1 L (463335)")).toBeVisible();
     expect(screen.getByText("Stock not confirmed")).toBeVisible();
     expect(screen.getByText("Allergen data unknown")).toBeVisible();
-    expect(screen.getByText(/This preference has not changed or approved an order/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open live approval inbox" })).toHaveAttribute("href", "/approvals");
+    expect(screen.queryByRole("button", { name: /Prefer/ })).toBeNull();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
@@ -160,6 +161,21 @@ describe("live Buyer request page", () => {
     await screen.findByText("Proposal ready for human review");
     const keys = fetch.mock.calls.map((call) => JSON.parse(call[1].body).idempotency_key);
     expect(keys[0]).toBe(keys[1]);
+  });
+
+  it("uses a new request key when the same request is sent after an answer", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(ready)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...ready, proposal_id: "live-2" })));
+    vi.stubGlobal("fetch", fetch);
+    const user = await fill();
+    await screen.findByText("live-1");
+    await user.click(screen.getByRole("button", { name: "Ask the agent" }));
+    await screen.findByText("live-2");
+    const keys = fetch.mock.calls.map((call) => JSON.parse(call[1].body).idempotency_key);
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).not.toBe(keys[0]);
   });
 
   it("shows unknown stock and does not link the live proposal to the mock inbox", async () => {

@@ -469,11 +469,14 @@ export function createHttpApi(baseUrl: string): Api {
       const proposal = (await get(proposalPath(String(receipt.proposal_id)))) as Json;
       // shortcut: the gateway's substitute baskets (several lines each) do not fit the one-product
       // SubstituteOption; pages/live-buyer.tsx shows them. Map them when the demo page needs them.
-      return {
+      const result = {
         order: mapOrder(proposal, null),
         substitutes: [],
         approval: proposal.approval_id == null ? null : mapApproval(proposal),
       };
+      // A valid answer: the same text sent again is a new request (#1818). A failure above keeps the key for the retry.
+      requestKeys.delete(identity);
+      return result;
     },
   } satisfies Partial<Api>;
 
