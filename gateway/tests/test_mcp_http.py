@@ -58,7 +58,7 @@ def test_tools_listed_without_approve(client):
     assert init(client)["serverInfo"]["name"] == "2Brothers purchasing gateway"
     tools = {t["name"] for t in rpc(client, "tools/list").json()["result"]["tools"]}
     assert tools == {"search_products", "get_offer", "simulate_order", "place_order",
-                     "request_approval", "get_order_status", "get_audit_log"}
+                     "request_approval", "get_order_status", "get_audit_log", "change_proposal"}
     assert not {t for t in tools if "approve" in t or "cancel" in t or "reject" in t}
 
 
@@ -93,3 +93,25 @@ def test_only_the_agent_token_gets_in(client, auth):
 def test_rest_api_still_works(client):
     assert client.get("/health").status_code == 200
     assert client.get(K + "/orders").status_code == 401
+
+
+def test_change_proposal_tool_changes_the_proposal_and_never_approves(client):
+    """#303: a quantity can be changed from chat; the person still approves the new total."""
+    init(client)
+    p = client.post(K + "/proposals", headers={"Authorization": AGENT}, json={
+        "product_ids": ["462775"], "quantity": "51", "unit": "L", "requested_date": "2026-11-16",
+        "idempotency_key": "mcp-change"}).json()
+    args = {"proposal_id": p["proposal_id"], "idempotency_key": "chat-1",
+            "lines": [{"product_id": "462775", "quantity": "40"}]}
+    result, out = call(client, "change_proposal", args)
+    assert not result.get("isError"), result
+    assert out["proposal_id"] == p["proposal_id"] and out["status"] == "READY"
+    assert [(ln["product_id"], ln["quantity"]) for ln in out["lines"]] == [("462775", "40")]
+    assert out["lines"][0]["why"].startswith("Quantity set by buyer-agent.")
+    assert out["expected_total"] != p["expected_total"]
+    _, again = call(client, "change_proposal", args)              # a replay, not a second change
+    assert again["offer_id"] == out["offer_id"]
+    refused, _ = call(client, "change_proposal", {**args, "lines": [{"product_id": "462775", "quantity": "-1"}]})
+    assert refused["isError"] is True
+    order = client.get(K + "/orders", headers={"Authorization": AGENT}).json()
+    assert order.get("orders", []) == []                           # nothing approved, nothing sent

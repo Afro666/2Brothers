@@ -139,8 +139,9 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 | `request_approval` | POST `/tools/request_approval` | `offer_id: string`, `idempotency_key: string` | `approval_id`, `status: PENDING` |
 | `get_order_status` | GET `/tools/get_order_status` | `order_id: string` | `order_id`, `status`, `outcome` |
 | `get_audit_log` | GET `/tools/get_audit_log` | `run_id: string` | `events: object[]` |
+| `change_proposal` | POST `/tools/change_proposal` | `proposal_id: string`, `idempotency_key: string`, `lines`, `add` (as "Changing a proposal") | the proposal in the `GET /proposals/{id}` shape |
 
-**Remote MCP (#280).** The same seven tools are also served over MCP streamable HTTP at
+**Remote MCP (#280).** The same eight tools are also served over MCP streamable HTTP at
 `POST /mcp` (stateless, JSON responses), same names, arguments and results as above.
 Two bearer tokens are accepted (`Authorization: Bearer <token>`): the agent token, and a
 kitchen API token (`tkb_...`, see "Kitchen API tokens") that holds `kitchen:propose`.
@@ -542,7 +543,8 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | GET | `/proposals/{id}/addable` | `kitchen:read` | What the buyer can add to this proposal, most probable first, and the lines that reach free delivery. Shape under "Addable products". |
 | POST | `/proposals/{id}/approve` | `kitchen:approve` (human, role `approver`) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN` (one exception: the kitchen setting `approve_unconfirmed_manual`, see "Kitchen settings"); a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
-| POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". Proposed; the gateway does not serve it yet. |
+| POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". |
+| POST | `/proposals/{id}/change` | `kitchen:propose` (a person or an agent) | Set a line's quantity (0 removes it) or add a product from the addable list. Re-quotes live; approves and sends nothing. Returns the proposal in the `GET /proposals/{id}` shape with a new `offer_id` and `expected_total`. Body and errors under "Changing a proposal". MCP tool `change_proposal`. |
 | GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. `receipt` is the signed order receipt or null ("Signed order receipt"). |
 | GET | `/orders/{id}/resolution` | `kitchen:approve` (human) | What our store knows about an order whose send result is unknown. Shape under "Resolving an unknown send". |
 | POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
@@ -915,6 +917,62 @@ person changes the proposal.
 | Status | Code | When |
 |---|---|---|
 | 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
+
+### Changing a proposal
+
+`POST /v1/kitchens/{kitchen_id}/proposals/{proposal_id}/change` (served, #303). Scope
+`kitchen:propose`: a person (approver or chef) or an agent may change a proposal; only a
+person approves it. Over MCP the tool `change_proposal` calls the same code
+(`POST /tools/change_proposal`, the same body plus `proposal_id`, for the token's kitchen).
+
+```json
+{"idempotency_key": "change-1",
+ "lines": [{"product_id": "462775", "quantity": "40"}, {"product_id": "463335", "quantity": "0"}],
+ "add": [{"product_id": "462921", "quantity": "8"}]}
+```
+
+- `lines`: products on the proposal. `quantity` (decimal string or number, 0 or more) is the
+  new quantity in the line's own sales unit (the line's `unit`). `0` removes the line. A
+  line that is not named keeps its quantity.
+- `add` (optional): products from the proposal's `GET .../addable` list with `addable: true`;
+  `quantity` above 0, in the row's `unit`.
+- At least one of the two is needed; a product is named once.
+- The gateway quotes the new basket live on the proposal's own path: a stored, signed
+  offer snapshot with `offer_hash`, the recall, allergen and mandate checks again. The
+  engine rounds each quantity up to the product's lot size. A line whose quantity was set
+  says so in its `why`: `"Quantity set by <actor>. ..."`; when rounded, `"Quantity set by
+  <actor>: 2.5 ST asked, rounded up to 3 ST (sold in steps of 1). ..."`, with
+  `LOT_SIZE_ROUNDED` in its `reason_codes`. A quantity above the confirmed stock is cut to
+  it, as on any proposal (`PARTIAL_STOCK`).
+- The answer is the proposal in the `GET /proposals/{id}` shape: the same `proposal_id`,
+  still `READY`, with a new `offer_id` and `expected_total`. Nothing is approved or sent. The
+  old total can no longer be approved: `/approve` with it is 409 `TOTAL_MISMATCH`.
+- The proposal's `request` becomes the changed basket (one need per product, in its sales
+  unit, `unit: "products"`, `changed_by`); the first request is kept as `original_request`.
+- Audit entry `proposal_changed`: `actor`, `proposal_id`, `from_offer_id`, `offer_id`,
+  `from_total`, `expected_total`, and `changes`: one
+  `{product_id, unit, from_qty, asked_qty, to_qty}` per named product (`to_qty` after
+  rounding; `0` for a removed line, `from_qty` `0` for an added one). A person's change is
+  also learning data (`qty_changed`, `line_removed`, `line_added`); an agent's is not.
+- A repeat with the same `idempotency_key` and body returns the proposal and quotes nothing.
+
+The web's `ProposalChange` maps onto this body: `SET_QUANTITY` is one `lines` entry,
+`REMOVE_LINE` is one `lines` entry with `quantity: 0`, `ADD_LINE` is one `add` entry.
+
+| Status | Code | When |
+|---|---|---|
+| 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
+| 404 | `LINE_NOT_FOUND` | A `lines` product is not on the proposal (add it with `add`). |
+| 409 | `NOT_PENDING` | The proposal is not `READY` (approved, rejected, held by a recall), or it changed during this call. |
+| 409 | `NOT_ADDABLE` | An `add` product is not on the addable list, or cannot be added (no price). |
+| 409 | `CLOSING_PASSED` | The cut-off of a line has passed. |
+| 409 | `LINE_UNAVAILABLE` | A product cannot be ordered now for another reason (a recall hold, an allergen rule, no stock date). |
+| 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. |
+| 422 | `EMPTY_PROPOSAL` | Every line would be removed: reject the proposal instead. |
+| 422 | `INVALID_REQUEST` | No `idempotency_key`, no line, a negative or non-numeric quantity, a product named twice, an `add` product already on the proposal. |
+| 403 | `ROLE_REQUIRED` / `SCOPE_REQUIRED` | A viewer, or a token without `kitchen:propose`. |
+
+After a refused change the proposal is unchanged: it keeps the basket it had.
 
 ### Forecasts
 
