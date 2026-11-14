@@ -21,6 +21,7 @@ import {
   supplierBody,
 } from "@/api/map-planning";
 import type { Api, AuditActor } from "@/api/types";
+import { randomHex } from "@/lib/random-id";
 
 type PlanningApi = Pick<
   Api,
@@ -77,9 +78,7 @@ export function createPlanningHttp(call: GatewayCall, kitchen: string): Planning
   const countKeys = new Map<string, string>();
   // One key per plan window, kept after a failure: a new key could create a second proposal.
   const planKeys = new Map<string, string>();
-  // getRandomValues, not randomUUID: it also works on a plain-HTTP address.
-  const newKey = () =>
-    Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) => value.toString(16).padStart(2, "0")).join("");
+  const newKey = () => randomHex(16);
 
   return {
     async listSuppliers() {

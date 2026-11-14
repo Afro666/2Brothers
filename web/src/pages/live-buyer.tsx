@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatEur } from "@/lib/format";
+import { randomHex } from "@/lib/random-id";
 import type { ChefRequest } from "@/types";
 
 interface Proposal {
@@ -211,10 +212,7 @@ export function LiveBuyerRequests() {
     // Preserve the key after a timeout/error: a new key could duplicate a proposal.
     let key = keys.current.get(identity);
     if (!key) {
-      // getRandomValues also works on the demo's plain-HTTP IP address.
-      key = Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) => value.toString(16).padStart(2, "0")).join(
-        "",
-      );
+      key = randomHex(16);
       keys.current.set(identity, key);
     }
     setPending(true);

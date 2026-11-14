@@ -8,6 +8,7 @@ import { createMockApi } from "@/api/mock";
 import type { Api, AuditActor, Session } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { formatEur } from "@/lib/format";
+import { randomHex } from "@/lib/random-id";
 
 export const SIGNED_OUT_EVENT = "kitchen-buyer:signed-out";
 
@@ -222,10 +223,7 @@ export function createHttpApi(baseUrl: string): Api {
     async submitChefRequest(request) {
       const ask = { text: request.text.trim(), requested_date: request.deliveryDate };
       const identity = JSON.stringify(ask);
-      // getRandomValues, not randomUUID: it also works on a plain-HTTP address.
-      const key =
-        requestKeys.get(identity) ??
-        Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) => value.toString(16).padStart(2, "0")).join("");
+      const key = requestKeys.get(identity) ?? randomHex(16);
       requestKeys.set(identity, key);
       const receipt = (await post(`${kitchen}/proposals`, { ...ask, idempotency_key: key })) as Json;
       // The Buyer answers with a short receipt; the stored proposal has the full basket.

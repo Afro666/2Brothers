@@ -2,6 +2,7 @@ import { mapChainCheck } from "@/api/audit-chain";
 import { type Json, mapAudit, object, rows, text } from "@/api/gateway-map";
 import type { Api, AuditChainRow } from "@/api/types";
 import { ApiError } from "@/api/types";
+import { randomHex } from "@/lib/random-id";
 
 /** The gateway request of api/http.ts: a path under the base URL, the parsed JSON back. */
 type GatewayCall = (path: string, init?: RequestInit) => Promise<unknown>;
@@ -10,10 +11,7 @@ type TrustApi = Pick<Api, "listAuditChain" | "verifyAuditChain" | "tamperAuditRo
 
 /** A new key per click: the gateway answers the stored result again for a repeated key. */
 function key(): string {
-  // getRandomValues, not randomUUID: it also works on a plain-HTTP address.
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) => value.toString(16).padStart(2, "0")).join(
-    "",
-  );
+  return randomHex(16);
 }
 
 function whole(value: unknown, what: string): number {
