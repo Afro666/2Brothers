@@ -201,7 +201,9 @@ describe("live Buyer request page", () => {
     const list = { ...ready, request: { ...(ready as { request?: object }).request, made_by: "list" } };
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ...list, model_trace: undefined })));
     await fill();
-    expect(await screen.findByText("Matched to products by rules, not by the Buyer model")).toBeVisible();
+    const rules = await screen.findByText("Matched to products by rules, not by the Buyer model");
+    expect(rules).toBeVisible();
+    expect(within(rules).queryByTestId("nemotron-mark")).not.toBeInTheDocument();
     expect(screen.queryByText(/Proposed by the Buyer agent/)).not.toBeInTheDocument();
   });
 
@@ -212,9 +214,9 @@ describe("live Buyer request page", () => {
     const list = { ...ready, request: { ...(ready as { request?: object }).request, made_by: "list" }, model_trace: trace };
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify(list)));
     await fill();
-    expect(
-      await screen.findByText("Split into needs by Nemotron 3.5 Super VL, matched to products by rules"),
-    ).toBeVisible();
+    const split = await screen.findByText("Split into needs by Nemotron 3.5 Super VL, matched to products by rules");
+    expect(split).toBeVisible();
+    expect(within(split).getByTestId("nemotron-mark")).toBeInTheDocument();
   });
 
   it("shows unknown, not a blank or a crash, when the summary and the mandate are absent", async () => {
