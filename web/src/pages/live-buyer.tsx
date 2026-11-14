@@ -297,7 +297,7 @@ export function LiveBuyerRequests() {
         </header>
         <Card>
           <CardContent>
-            <ChefRequestBox onSubmit={submit} />
+            <ChefRequestBox onSubmit={submit} withCovers={false} />
           </CardContent>
         </Card>
         {pending ? (

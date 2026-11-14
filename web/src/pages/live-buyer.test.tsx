@@ -108,6 +108,12 @@ describe("live Buyer request page", () => {
     expect(screen.queryByText(/undefined/)).toBeNull();
   });
 
+  it("shows no Covers box, because the gateway takes the sentence and the date only", async () => {
+    renderApp("/requests");
+    expect(await screen.findByLabelText("Needed by")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Covers")).not.toBeInTheDocument();
+  });
+
   it("sends the request to the real gateway without a browser key and shows exact returned figures", async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify(ready)));
     vi.stubGlobal("fetch", fetch);
