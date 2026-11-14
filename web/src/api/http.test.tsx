@@ -31,7 +31,7 @@ function gateway(routes: Record<string, Handler>) {
   return calls;
 }
 
-const inbox = (row = proposal) => ({
+const inbox = (row: Record<string, unknown> = proposal) => ({
   [`GET ${K}/proposals`]: () => ({ proposals: [row] }),
   [`GET ${K}/proposals/prop-1`]: () => row,
   [`GET ${K}/audit`]: () => ({ events: auditEvents }),
@@ -65,6 +65,7 @@ describe("createHttpApi", () => {
       [
         "approve",
         "changePassword",
+        "changeProposal",
         "chooseOption",
         "getApproval",
         "getForecastAccuracy",
@@ -149,11 +150,7 @@ describe("createHttpApi", () => {
     expect((await api.getMandate()).restaurant).toBeTruthy();
     expect((await api.listTeamMembers()).length).toBeGreaterThan(0);
     expect(calls).toEqual([]);
-    await expect(
-      api.changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
-    ).rejects.toMatchObject({
-      code: "NOT_SERVED",
-    });
+    expect(api.changeProposal).toBeTypeOf("function");
     expect(api.chooseOption).toBeTypeOf("function");
   });
 
@@ -199,6 +196,115 @@ describe("createHttpApi", () => {
         lines: [expect.objectContaining({ productName: "Oat drink 1 L" })],
       }),
     ]);
+  });
+
+  it.each([
+    {
+      change: { type: "SET_QUANTITY", productId: "900001", quantity: 2.5 },
+      field: "lines",
+      quantity: "2.5",
+    },
+    {
+      change: { type: "REMOVE_LINE", productId: "900001" },
+      field: "lines",
+      quantity: "0",
+    },
+    {
+      change: { type: "ADD_LINE", productId: "900001", quantity: 3 },
+      field: "add",
+      quantity: "3",
+    },
+  ] as const)("changes a proposal with $change.type and maps the new basket", async ({ change, field, quantity }) => {
+    const why = "Quantity set by human: 2.5 ST asked, rounded up to 3 ST (sold in steps of 1).";
+    const answered = {
+      ...proposal,
+      offer_id: "offer-2",
+      total_ex_vat: "86.40",
+      expected_total: "98.50",
+      lines: [{ ...proposal.lines[0], quantity: "3", why }],
+    };
+    const calls = gateway({ [`POST ${K}/proposals/prop-1/change`]: () => answered });
+
+    const result = await createHttpApi("/api").changeProposal("prop-1", change, "human");
+
+    expect(calls).toEqual([
+      expect.objectContaining({
+        route: `POST ${K}/proposals/prop-1/change`,
+        headers: expect.objectContaining({ "X-User": "human" }),
+        body: {
+          [field]: [{ product_id: "900001", quantity }],
+          idempotency_key: expect.stringMatching(/^web-change-proposal:/),
+        },
+      }),
+    ]);
+    expect(result.approval).toMatchObject({ id: "prop-1", totalExVat: 86.4, totalInclVat: 98.5 });
+    expect(result.order).toMatchObject({ totalExVat: 86.4, totalInclVat: 98.5 });
+    expect(result.order.lines[0].why).toBe(why);
+  });
+
+  it("uses a fresh idempotency key for every proposal change", async () => {
+    const calls = gateway({ [`POST ${K}/proposals/prop-1/change`]: () => proposal });
+    const api = createHttpApi("/api");
+
+    await api.changeProposal("prop-1", { type: "SET_QUANTITY", productId: "900001", quantity: 40 }, "human");
+    await api.changeProposal("prop-1", { type: "SET_QUANTITY", productId: "900001", quantity: 40 }, "human");
+
+    const keys = calls.map((call) => call.body.idempotency_key);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toMatch(/^web-change-proposal:/);
+    expect(keys[1]).toMatch(/^web-change-proposal:/);
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it("surfaces the gateway message when a proposal change is refused", async () => {
+    gateway({
+      [`POST ${K}/proposals/prop-1/change`]: () =>
+        error(409, "NOT_PENDING", { message: "Another buyer approved this proposal first." }),
+    });
+
+    await expect(
+      createHttpApi("/api").changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
+    ).rejects.toMatchObject({ code: "NOT_PENDING", message: "Another buyer approved this proposal first." });
+  });
+
+  it("changes then approves the returned offer's new total and approval reference", async () => {
+    const changed = {
+      ...proposal,
+      offer_id: "offer-2",
+      approval_id: "appr-2",
+      total_ex_vat: "96.00",
+      expected_total: "109.44",
+      substitute_options: [substituteOption("offer-2", { expected_total: "109.44" })],
+    };
+    const approved = { ...changed, status: "APPROVED", order_id: "ord-2" };
+    const calls = gateway({
+      ...inbox(approved),
+      [`POST ${K}/proposals/prop-1/change`]: () => changed,
+      [`POST ${K}/proposals/prop-1/approve`]: () => ({ ...placedOrder, order_id: "ord-2", expected_total: "109.44" }),
+    });
+    const api = createHttpApi("/api");
+
+    const result = await api.changeProposal(
+      "prop-1",
+      { type: "SET_QUANTITY", productId: "900001", quantity: 48 },
+      "human",
+    );
+    expect(result.approval.options).toEqual([expect.objectContaining({ id: "offer-2", chosen: true })]);
+    await api.approve(
+      {
+        approvalId: result.approval.id,
+        approvalRef: result.approval.approvalRef,
+        expectedTotalExVat: result.approval.totalExVat,
+        expectedTotalInclVat: result.approval.totalInclVat,
+      },
+      "human",
+    );
+
+    const approvalCall = calls.find((call) => call.route.endsWith("/approve"));
+    expect(approvalCall?.body).toEqual({
+      expected_total: "109.44",
+      idempotency_key: "web-approve:prop-1:109.44:appr-2",
+    });
   });
 
   it("repeats the key when a failed choice is retried, and uses a new one for every answered choice", async () => {
@@ -281,9 +387,6 @@ describe("createHttpApi", () => {
     const api = createHttpApi("/api");
     expect((api as unknown as { then?: unknown }).then).toBeUndefined();
     await expect(Promise.resolve(api)).resolves.toBe(api);
-    await expect(
-      api.changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
-    ).rejects.toMatchObject({ code: "NOT_SERVED" });
   });
 
   it("approves the exact total the person read, as that person, with no token from the browser", async () => {
@@ -747,7 +850,7 @@ describe("the app on the gateway", () => {
     expect(screen.queryByRole("button", { name: "Open menu" })).not.toBeInTheDocument();
   });
 
-  it("shows the real proposal read-only and, when the total moved, the new total before asking again", async () => {
+  it("shows an editable real proposal and, when the total moved, the new total before asking again", async () => {
     // As deployed: with the gateway Api, the Api-backed inbox is the live one.
     vi.stubEnv("VITE_LIVE_BUYER", "true");
     const user = userEvent.setup();
@@ -756,6 +859,7 @@ describe("the app on the gateway", () => {
       "GET /api/v1/me": () => ({ kind: "human", name: "Demo approver", role: "approver", can_approve: true }),
       [`GET ${K}/proposals`]: () => ({ proposals: [current] }),
       [`GET ${K}/proposals/prop-1`]: () => current,
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [] }),
       [`GET ${K}/audit`]: () => ({ events: auditEvents }),
       [`POST ${K}/proposals/prop-1/approve`]: () => {
         current = { ...proposal, total_ex_vat: "83.33", expected_total: "95.00" };
@@ -769,7 +873,7 @@ describe("the app on the gateway", () => {
     await user.click(await screen.findByRole("button", { name: "Show order lines" }));
     expect(screen.getAllByText("confirmed").length).toBeGreaterThan(0);
     expect(screen.getByText(/Free-delivery threshold and delivery fee unknown/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: /^Update/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Update/ })).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: /Approve €91\.20 incl VAT/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });

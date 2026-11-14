@@ -247,6 +247,18 @@ export function createHttpApi(baseUrl: string): Api {
       await post(`${proposalPath(approvalId)}/reject`, { reason, idempotency_key: `web-reject:${approvalId}` }, actor);
       return approval(approvalId);
     },
+    async changeProposal(orderId, change, actor) {
+      const line = {
+        product_id: change.productId,
+        quantity: change.type === "REMOVE_LINE" ? "0" : String(change.quantity),
+      };
+      const body =
+        change.type === "ADD_LINE"
+          ? { add: [line], idempotency_key: `web-change-proposal:${uuid()}` }
+          : { lines: [line], idempotency_key: `web-change-proposal:${uuid()}` };
+      const changed = (await post(`${proposalPath(orderId)}/change`, body, actor)) as Json;
+      return { order: mapOrder(changed, null), approval: mapApproval(changed) };
+    },
     async listAddableProducts(orderId, query = "") {
       const [proposal, addable] = await Promise.all([
         get(proposalPath(orderId)),
@@ -352,11 +364,6 @@ export function createHttpApi(baseUrl: string): Api {
   return {
     ...mock,
     ...real,
-    // Never the mock for what acts on real input: it would change a sample order, not the real
-    // proposal.
-    async changeProposal() {
-      throw new ApiError("NOT_SERVED", "The gateway cannot change a proposal yet. Reject it and ask the Buyer again");
-    },
     live: new Set(Object.keys(real) as (keyof Api)[]),
   };
 }

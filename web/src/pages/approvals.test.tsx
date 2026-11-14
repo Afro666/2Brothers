@@ -225,7 +225,9 @@ describe("ApprovalsPage", () => {
     renderApp("/approvals", createMockApi());
     await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("An order needs at least one line; reject it instead.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not change this proposal: An order needs at least one line; reject it instead. The proposal is unchanged.",
+    );
   });
 
   it("keeps rejection feedback with the reason", async () => {

@@ -89,6 +89,17 @@ function requestDescription(request: ApprovalRequest, t: ReturnType<typeof useT>
 /** Wait this long after the last keystroke before searching addable products. */
 export const ADD_SEARCH_DEBOUNCE_MS = 250;
 
+const CHANGE_ERRORS: Record<string, string> = {
+  NOT_PENDING: "This proposal is no longer waiting for approval. Refresh the page to see its current status.",
+  LINE_NOT_FOUND: "That product is not on this proposal. Add it as a new product instead.",
+  NOT_ADDABLE: "That product cannot be added to this proposal. Choose a product from the addable list.",
+  CLOSING_PASSED: "The order cut-off for this line has passed. Choose another product or reject the proposal.",
+  LINE_UNAVAILABLE:
+    "This product cannot be ordered now. It may be recalled, blocked by an allergen rule, or have no stock date.",
+  EMPTY_PROPOSAL: "Every line would be removed: reject the proposal instead.",
+  ROLE_REQUIRED: "Your role cannot change proposals. Ask a chef or approver to make this change.",
+};
+
 export function ApprovalCard({
   request,
   order,
@@ -124,6 +135,7 @@ export function ApprovalCard({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [changeError, setChangeError] = useState<string | null>(null);
   const [showOrder, setShowOrder] = useState(false);
   const [showDetails, setShowDetails] = useState(!folded);
   const [search, setSearch] = useState("");
@@ -156,7 +168,7 @@ export function ApprovalCard({
   async function changeProposal(change: ProposalChange) {
     if (!onChangeProposal) return;
     setBusy(true);
-    setError(null);
+    setChangeError(null);
     try {
       await onChangeProposal(change);
       // Drop the typed number so the input shows the line's real quantity.
@@ -167,7 +179,15 @@ export function ApprovalCard({
       });
       addables.reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setChangeError(
+        e instanceof ApiError && CHANGE_ERRORS[e.code]
+          ? t("Could not change this proposal. {reason} The proposal is unchanged.", {
+              reason: t(CHANGE_ERRORS[e.code]),
+            })
+          : t("Could not change this proposal: {message} The proposal is unchanged.", {
+              message: e instanceof Error ? e.message : String(e),
+            }),
+      );
     } finally {
       setBusy(false);
     }
@@ -297,6 +317,11 @@ export function ApprovalCard({
             </Button>
             {showOrder ? (
               <div className="space-y-4">
+                {changeError ? (
+                  <p role="alert" className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.danger)}>
+                    {changeError}
+                  </p>
+                ) : null}
                 {editing ? (
                   <ul className="divide-y">
                     {order.lines.map((line) => (
