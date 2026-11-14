@@ -1,6 +1,7 @@
 import { RefreshCw, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useT, type TranslationVariables } from "@/lib/i18n";
@@ -43,10 +44,13 @@ function UnheldRecall({ alert }: { alert: RecallAlert }) {
   const title = recall.title ?? t("Official recall notice");
   return (
     <li className="space-y-1 rounded-md border bg-background px-3 py-2 text-foreground">
-      <p className="font-semibold [overflow-wrap:anywhere]">
-        {alert.match === "review"
-          ? t("A recall notice may be about {product}.", { product })
-          : t("{product} is recalled.", { product })}
+      <p className="flex items-center gap-2 font-semibold">
+        <ProductThumb en={alert.productName} brand={alert.match === "review" ? null : recall.brand} size="sm" />
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          {alert.match === "review"
+            ? t("A recall notice may be about {product}.", { product })
+            : t("{product} is recalled.", { product })}
+        </span>
       </p>
       <p className="[overflow-wrap:anywhere]">
         {recall.date

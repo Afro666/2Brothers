@@ -3,12 +3,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { useApi } from "@/api";
 import type { DeliveryLot, DeliveryNoteRead } from "@/api/types";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
 import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { downscalePhoto } from "@/lib/shelf-photo";
-import type { Order } from "@/types";
+import type { Order, Product } from "@/types";
 
 export function DeliveryNotePhoto({ order }: { order: Order }) {
   const t = useT();
@@ -20,11 +21,16 @@ export function DeliveryNotePhoto({ order }: { order: Order }) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DeliveryNoteRead | null>(null);
   const [choices, setChoices] = useState<Record<number, boolean>>({});
-  const [catalogNames, setCatalogNames] = useState<Record<string, string>>({});
+  const [catalogProducts, setCatalogProducts] = useState<Record<string, Product>>({});
   useEffect(() => () => { revision.current += 1; }, []);
   const allowed = status === "signed-in" && session?.kind === "human" && (session.role === "approver" || session.role === "chef");
-  const names = new Map(order.lines.map((line) => [line.product.id, line.product.names.en]));
-  const label = (id: string) => id === "unknown" ? t("unknown") : names.get(id) ?? catalogNames[id] ?? id;
+  const products = new Map(order.lines.map((line) => [line.product.id, line.product]));
+  const productOf = (id: string): Product | undefined => products.get(id) ?? catalogProducts[id];
+  const label = (id: string) => id === "unknown" ? t("unknown") : productOf(id)?.names.en ?? id;
+  const thumb = (id: string) => {
+    const product = productOf(id);
+    return <ProductThumb en={product?.names.en} fi={product?.names.fi} brand={product?.brand} size="sm" />;
+  };
   const amount = (n: number | null, unit: string) => n == null ? t("unknown") : `${formatNumber(n)} ${unit}`;
   const statuses = { RECEIVED: t("Received"), SHORT: t("Short delivery"), MISSING: t("Missing"), UNKNOWN: t("unknown"),
     SUBSTITUTE: t("Substitute"), EXTRA: t("Not ordered"), UNREADABLE: t("Unreadable") };
@@ -43,9 +49,9 @@ export function DeliveryNotePhoto({ order }: { order: Order }) {
       const answer = await api.readDeliveryNote(order.id, await downscalePhoto(file), session?.role === "chef" ? "chef" : "human");
       if (revision.current !== turn) return;
       setResult(answer);
-      const missing = [...new Set(answer.notOrdered.map((line) => line.productId))].filter((id) => id !== "unknown" && !names.has(id));
+      const missing = [...new Set(answer.notOrdered.map((line) => line.productId))].filter((id) => id !== "unknown" && !products.has(id));
       if (missing.length) void api.getProducts(missing).then((found) => {
-        if (revision.current === turn) setCatalogNames(Object.fromEntries(found.map((product) => [product.id, product.names.en])));
+        if (revision.current === turn) setCatalogProducts(Object.fromEntries(found.map((product) => [product.id, product])));
       }, () => undefined);
     } catch (cause) {
       if (revision.current === turn) setError(cause instanceof Error ? cause.message : String(cause));
@@ -73,7 +79,7 @@ export function DeliveryNotePhoto({ order }: { order: Order }) {
       {!result.lines.length ? <p>{t("No order lines were read. Check the delivery by hand.")}</p> : null}
       <ul className="divide-y">
         {result.lines.map((line, i) => <li key={`${line.productId}-${i}`} className="space-y-1 py-3 text-sm">
-          <p className="font-semibold">{label(line.productId)} — {statuses[line.status]}</p>
+          <p className="flex items-center gap-2 font-semibold">{thumb(line.productId)}<span className="min-w-0 break-words">{label(line.productId)} — {statuses[line.status]}</span></p>
           <p>{t("Ordered: {ordered}; received: {received}; missing: {missing}", {
             ordered: amount(line.ordered, line.baseUnit), received: amount(line.received, line.baseUnit), missing: amount(line.missing, line.baseUnit),
           })}</p>
@@ -81,7 +87,7 @@ export function DeliveryNotePhoto({ order }: { order: Order }) {
         </li>)}
       </ul>
       {result.notOrdered.map((line, i) => <div key={i} className="space-y-2 rounded border border-warning/40 p-3 text-sm">
-        <p className="font-semibold">{label(line.productId)} — {statuses[line.status]}</p>
+        <p className="flex items-center gap-2 font-semibold">{thumb(line.productId)}<span className="min-w-0 break-words">{label(line.productId)} — {statuses[line.status]}</span></p>
         <p>{lotText(line)}</p>
         {line.needsApproval ? <fieldset className="space-y-2">
           <legend>{t("Was this substitute received for {product}?", { product: label(line.replaces) })}</legend>
