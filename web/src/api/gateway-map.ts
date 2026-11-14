@@ -406,6 +406,22 @@ const TOOL_KINDS: Record<string, AuditKind> = {
   get_order_status: "order",
 };
 
+/** #899: what the Buyer did, in plain words; an unknown tool keeps its raw name. */
+const TOOL_VERBS: Record<string, string> = {
+  search_products: "searched the catalog",
+  get_offer: "asked for an offer",
+  simulate_order: "simulated the order",
+  request_approval: "asked for approval",
+  place_order: "placed the order",
+  get_order_status: "checked the order status",
+};
+
+function toolSummary(tool: string, finished: boolean, failed: boolean): string {
+  const verb = Object.hasOwn(TOOL_VERBS, tool) ? TOOL_VERBS[tool] : undefined;
+  if (!verb) return !finished ? `Buyer called ${tool}` : failed ? `${tool} failed` : `${tool} finished`;
+  return !finished ? `Buyer ${verb}` : failed ? `Buyer ${verb}: failed` : `Buyer ${verb}: done`;
+}
+
 const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   proposal_created: { kind: "request", summary: "Proposal created" },
   approval_requested: { kind: "approval", summary: "Approval requested" },
@@ -415,6 +431,15 @@ const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   proposal_rejected: { kind: "approval", summary: "Proposal rejected" },
   // #548: a 403 to the agent or a kitchen API token; the details (code, method, path) are the reason.
   refused: { kind: "refused", summary: "Refused: the gateway said no (403)" },
+  // #899: kinds added on 14 Nov; the stored events keep their raw names.
+  stock_photo_read: { kind: "stock", summary: "Shelf photo read by Nemotron VL" },
+  audit_demo_tamper: { kind: "other", summary: "Tamper demo: a line was changed" },
+  audit_demo_restore: { kind: "other", summary: "Tamper demo: the line was restored" },
+  option_chosen: { kind: "approval", summary: "A person chose an option" },
+  order_lookup: { kind: "order", summary: "A person looked up an order with an unknown send result" },
+  order_resolved: { kind: "order", summary: "A person resolved an unknown send" },
+  recall_check: { kind: "other", summary: "Recall check" },
+  demo_inbox_cleared: { kind: "other", summary: "Test proposals cleared before a demo" },
 };
 
 /** `expected_total: 148.76; verdict: NEEDS_APPROVAL`: the gateway's own values, as sent. */
@@ -439,11 +464,7 @@ function mapAuditEvent(event: Json): AuditEvent {
       ...base,
       kind: TOOL_KINDS[event.tool] ?? "other",
       actor: "agent",
-      summary: !finished
-        ? `Buyer called ${event.tool}`
-        : error == null
-          ? `${event.tool} finished`
-          : `${event.tool} failed`,
+      summary: toolSummary(event.tool, finished, error != null),
       reason: describe(finished ? event.result : event.arguments),
     };
   }
@@ -458,7 +479,7 @@ function mapAuditEvent(event: Json): AuditEvent {
     offer_id: _offer,
     ...rest
   } = event;
-  const known = typeof kind === "string" ? EVENT_KINDS[kind] : undefined;
+  const known = typeof kind === "string" && Object.hasOwn(EVENT_KINDS, kind) ? EVENT_KINDS[kind] : undefined;
   return {
     ...base,
     kind: known?.kind ?? "other",

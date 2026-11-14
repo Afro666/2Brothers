@@ -324,7 +324,7 @@ describe("mapAudit", () => {
         orderId: undefined,
         kind: "offer",
         actor: "agent",
-        summary: "Buyer called get_offer",
+        summary: "Buyer asked for an offer",
         reason: 'product_ids: ["900001"]; requested_date: 2026-11-20',
       },
       {
@@ -333,7 +333,7 @@ describe("mapAudit", () => {
         orderId: undefined,
         kind: "approval",
         actor: "agent",
-        summary: "request_approval failed",
+        summary: "Buyer asked for approval: failed",
         reason: "error: Rejected by buyer policy; reason_code: POLICY_VIOLATION",
       },
       {
@@ -389,6 +389,41 @@ describe("mapAudit", () => {
       },
     ]);
     expect(mapAudit([{ ...refused, actor: "buyer-agent" }])[0].actor).toBe("agent");
+  });
+
+  it("gives the kinds added on 14 Nov and the tool steps plain-English summaries; unknown ones stay raw", () => {
+    const labels: Record<string, string> = {
+      stock_photo_read: "Shelf photo read by Nemotron VL",
+      audit_demo_tamper: "Tamper demo: a line was changed",
+      audit_demo_restore: "Tamper demo: the line was restored",
+      option_chosen: "A person chose an option",
+      order_lookup: "A person looked up an order with an unknown send result",
+      order_resolved: "A person resolved an unknown send",
+      recall_check: "Recall check",
+      demo_inbox_cleared: "Test proposals cleared before a demo",
+    };
+    const events = Object.keys(labels).map((kind, i) => ({ seq: i, event_id: `k-${i}`, kind, actor: "chef" }));
+    expect(mapAudit(events).map((event) => event.summary)).toEqual(Object.values(labels));
+    expect(mapAudit([{ seq: 1, event_id: "k-x", kind: "toString", actor: "chef" }])[0].summary).toBe("toString");
+
+    const tool = (name: string, type: string, result?: unknown) => ({ event_id: `${name}-${type}`, tool: name, type, result });
+    expect(
+      mapAudit([
+        tool("request_approval", "tool_call_started"),
+        tool("request_approval", "tool_call_finished", {}),
+        tool("simulate_order", "tool_call_finished", {}),
+        tool("brand_new_tool", "tool_call_started"),
+        tool("brand_new_tool", "tool_call_finished", {}),
+        tool("brand_new_tool", "tool_call_finished", { error: "x" }),
+      ]).map((event) => event.summary),
+    ).toEqual([
+      "Buyer asked for approval",
+      "Buyer asked for approval: done",
+      "Buyer simulated the order: done",
+      "Buyer called brand_new_tool",
+      "brand_new_tool finished",
+      "brand_new_tool failed",
+    ]);
   });
 
   it("gives an order its own steps and those of the proposal that placed it", () => {
