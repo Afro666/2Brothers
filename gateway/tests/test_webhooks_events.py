@@ -55,6 +55,18 @@ def test_refusals_are_one_delivery_a_minute_per_actor_and_code(env, receiver, mo
     assert receiver.events() == ["agent.refused"] * 3
 
 
+def test_a_refusal_with_a_concrete_path_as_route_sends_no_route(env, receiver):
+    client, _, db = env
+    make(client, ["agent.refused"])
+    webhooks.dispatch(db, "demo-kitchen", "refused",
+                      {"code": "HUMAN_SESSION_REQUIRED", "method": "POST",
+                       "route": "/v1/kitchens/demo-kitchen/proposals/p-1/approve"},
+                      actor="buyer-agent")
+    assert receiver.events() == ["agent.refused"]
+    data = json.loads(receiver.calls[0]["body"])["data"]
+    assert data["route"] is None and "p-1" not in json.dumps(data)
+
+
 def test_a_checked_delivery_sends_only_the_documented_counters(monkeypatch, receiver):
     client, _ = note_client(monkeypatch, FakeWorker())
     make(client, ["delivery.checked"])
