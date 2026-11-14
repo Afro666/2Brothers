@@ -34,7 +34,7 @@ describe("mapApproval", () => {
       id: "prop-1",
       approvalRef: "appr-1",
       orderId: "prop-1",
-      requestedBy: "buyer-agent",
+      requestedBy: "the Buyer agent",
       createdAt: "2026-11-14T10:00:00+00:00",
       summary: "50 L oat drink by Friday",
       lineCount: 1,
@@ -120,16 +120,34 @@ describe("mapApproval", () => {
     });
   });
 
-  it("keeps an unknown warning code as its rule", () => {
+  it("turns an unknown warning code into words, never the raw code (#1142)", () => {
     const withWarning = {
       ...proposal,
       mandate: { verdict: "NEEDS_APPROVAL", warnings: ["NEW_GATEWAY_WARNING"] },
     };
     expect(mapApproval(withWarning).reasons).toContainEqual({
-      rule: "NEW_GATEWAY_WARNING",
+      rule: "New gateway warning",
       detail: "A warning. It does not block the order.",
       warning: true,
     });
+  });
+
+  it("names Valio's selling agent for a supplier offer proposal", () => {
+    const offer = { ...proposal, request: { ...proposal.request, text: "Offer from Valio Aimo: Flounder in place of Salmon" } };
+    expect(mapApproval(offer).requestedBy).toBe("Valio's selling agent");
+    expect(
+      mapApproval(proposal, [{ kind: "proposal_created", proposal_id: "prop-1", actor: "supplier:sup-valio" }]).requestedBy,
+    ).toBe("Valio's selling agent");
+  });
+
+  it("keeps a person's name and puts no raw code in a gateway reason", () => {
+    const refused = {
+      ...proposal,
+      mandate: { verdict: "REFUSED", reasons: ["472710: ALLERGEN_RULE: the kitchen excludes AN"] },
+    };
+    const approval = mapApproval(refused, [{ kind: "proposal_created", proposal_id: "prop-1", actor: "chef@kitchen.example" }]);
+    expect(approval.requestedBy).toBe("chef@kitchen.example");
+    expect(approval.reasons[0].rule).toBe("472710: Excluded allergen: the kitchen excludes AN");
   });
 
   it("lists ALLERGEN_DATA_MISSING under what to check, from a line or the mandate", () => {

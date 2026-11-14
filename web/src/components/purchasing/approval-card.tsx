@@ -49,7 +49,7 @@ function requestDescription(request: ApprovalRequest, t: ReturnType<typeof useT>
   const values = {
     count: request.lineCount,
     date: formatDate(request.deliveryDate),
-    name: request.requestedBy ?? "",
+    name: request.requestedBy == null ? "" : t(request.requestedBy),
     created: request.createdAt == null ? "" : t(formatDateTime(request.createdAt)),
   };
   if (request.requestedBy != null && request.createdAt != null) {
