@@ -862,7 +862,7 @@ cutoff. Supplier-linked alternatives are considered before catalog fallback.
 | Field | Type | Meaning |
 |---|---|---|
 | `tier` | `good`, `better`, `best` | Presentation order; not a guarantee that an option is superior. Fewer choices are allowed. |
-| `source` | `original`, `supplier`, `catalog` | Requested basket, supplier link, or catalog fallback. |
+| `source` | `confirmed`, `original`, `supplier`, `catalog` | The confirmed part of a short order (below), requested basket, supplier link, or catalog fallback. |
 | `offer_id` | string | This option's stored engine offer; refresh if expired. |
 | `expected_total`, `currency` | decimal string, `EUR` | Exact simulated total for this basket. |
 | `lines` | offer-line array | Engine-owned `product_id`, decimal-string `quantity`, `unit`, `why`, `unknown_stock`. |
@@ -871,6 +871,7 @@ cutoff. Supplier-linked alternatives are considered before catalog fallback.
 | `stock_confirmed` | boolean | False if any line has unconfirmed stock. Approval cannot override it. |
 | `allergen_data_known` | boolean | False if any retained original line has unknown allergen data; never label it safe. |
 | `recommended` | boolean, optional | `true` on at most one option: the one the engine would take. Absent or `false` means not marked; the UI never infers it. |
+| `held` | object, optional | Only on a `confirmed` option: `{quantity, unit}` of the need that this option does not order. It waits until the supplier confirms stock. |
 
 Options use the same trusted need/date. A partial-stock option can combine the
 original and substitute products so the engine converts the gap by base unit,
@@ -879,7 +880,16 @@ excludes (cutoff, wrong unit, etc.) is not offered. Selecting a preference is no
 an applied edit: re-simulate the selected basket and obtain human approval to its
 exact total through the existing workflow before placement.
 
+**The confirmed part as an option.** When a proposal has a line with unconfirmed stock and
+the engine's `partial_fill` names a part the supplier confirms, the gateway offers that part
+as the first option: `source: "confirmed"`, its own stored and signed quote, `stock_confirmed:
+true`, `recommended: true`, and `held` for the rest. Its `why` says what is ordered now and
+what waits. It is the option a person can approve at once; the proposal's own basket cannot
+be placed while a line's stock is unconfirmed. The gateway answers at most three options:
+the confirmed one first, then the Buyer's, with tiers `good`, `better`, `best` in that order.
+
 **Choosing an option.** `POST /v1/kitchens/{kitchen_id}/proposals/{proposal_id}/choose-option`
+(served)
 
 ```json
 {"offer_id": "offer-7f3a", "idempotency_key": "choose-1"}
@@ -904,9 +914,16 @@ exact total through the existing workflow before placement.
 | 409 | `NOT_PENDING` | The proposal is no longer `READY` (approved, rejected, expired). |
 | 409 | `STOCK_UNKNOWN` | The fresh simulation cannot confirm the stock of a line. |
 | 409 | `CLOSING_PASSED` | The cut-off of a line has passed. |
+| 409 | `OPTION_UNAVAILABLE` | A product of the option cannot be ordered now for another reason (a recall hold, an allergen rule, no price). |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. |
 
 After a 409 the proposal is unchanged: it keeps the basket it had.
+
+A choice also replaces the proposal's `request` with the option's request, because the
+approval quotes the stored request again; the first request is kept as `original_request`.
+The audit entry `option_chosen` names the old and new `offer_id`, the new total and the
+`held` quantity. A repeat with the same `idempotency_key` and `offer_id` returns the proposal
+and quotes nothing.
 
 The trusted worker reads `kitchen_settings.excluded_allergens` through `store`:
 an explicit string array of supported allergen names/GS1 codes, including `[]`
