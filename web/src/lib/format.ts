@@ -207,7 +207,10 @@ export function formatPercent(fraction: number | null): string {
   return fraction == null ? "unknown" : `${Math.round(fraction * 100)} %`;
 }
 
-/** "KI 12 × 1 L": the pack a sales unit holds, from the catalog `units[]`. */
+/**
+ * "1 case = 3 l": the total content of one sales unit (see `Product.baseUnitsPerSalesUnit`),
+ * or "1 case (pack size unknown)" when it is null.
+ */
 export function formatPack(salesUnit: string, baseUnitsPerSalesUnit: number | null, baseUnit: string): string {
   if (baseUnitsPerSalesUnit == null) return `${peopleUnit(salesUnit, 1)} (${translate(getLanguage(), "pack size unknown")})`;
   // No measure (no net content, not sold by weight): the count is pieces.

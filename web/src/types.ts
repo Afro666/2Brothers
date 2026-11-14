@@ -44,7 +44,11 @@ export interface Product {
   salesUnit: string;
   /** The unit prices compare in (L or KG). */
   baseUnit: string;
-  /** Base units in one sales unit (1 for a 1 L carton sold per piece); null when not known. */
+  /**
+   * Total content of one sales unit in `baseUnit`: pieces × net content (L or KG), e.g. 3 for
+   * a case of 6 × 0.5 L. Without net content, the piece or kilo count when the base unit is
+   * ST/PCS/KG; null when not known. Not a piece count: do not use it for quantity maths.
+   */
   baseUnitsPerSalesUnit: number | null;
   units: PackUnit[];
   /** Fat % from nutrition data; null when not given. */
