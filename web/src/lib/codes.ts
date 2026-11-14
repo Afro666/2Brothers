@@ -117,3 +117,19 @@ export function plainReason(reason: string, names?: ReadonlyMap<string, string>)
   const name = names?.get(product) ?? product;
   return rest === undefined ? `${name}: ${label.title}. ${label.detail}` : `${name}: ${label.title}: ${rest}`;
 }
+
+/**
+ * A reason made by `plainReason` with its code title (and, for the short form, its detail)
+ * in the reader's language. A sentence the dictionary knows whole is translated whole.
+ */
+export function translateReason(reason: string, t: (text: string) => string): string {
+  const whole = t(reason);
+  if (whole !== reason) return whole;
+  for (const { title, detail } of Object.values(CODE_LABELS)) {
+    const short = `: ${title}. ${detail}`;
+    if (reason.endsWith(short)) return `${reason.slice(0, -short.length)}: ${t(title)}. ${t(detail)}`;
+    const at = reason.indexOf(`: ${title}: `);
+    if (at >= 0) return `${reason.slice(0, at)}: ${t(title)}: ${reason.slice(at + title.length + 4)}`;
+  }
+  return reason;
+}

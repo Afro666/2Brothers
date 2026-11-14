@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { CODE_LABELS, codeLabel, plainReason } from "@/lib/codes";
+import { CODE_LABELS, codeLabel, plainReason, translateReason } from "@/lib/codes";
+import fi from "@/i18n/fi/orders";
+import { collectFinnishDictionaries, translate } from "@/lib/i18n";
 
 describe("codeLabel", () => {
   it("gives the over-budget warning a plain title and says it does not block", () => {
@@ -71,5 +73,33 @@ describe("plainReason", () => {
     expect(plainReason("15 KG of the request cannot be covered for this date.")).toBe(
       "15 KG of the request cannot be covered for this date.",
     );
+  });
+});
+
+describe("translateReason", () => {
+  const fiT = (text: string) => translate("fi", text);
+
+  it("has a Finnish entry for every code title", () => {
+    const dictionary = collectFinnishDictionaries(
+      import.meta.glob("../i18n/fi/*.ts", { eager: true }) as Record<string, { default: Record<string, string> }>,
+    );
+    for (const { title } of Object.values(CODE_LABELS)) expect(dictionary[title], title).toBeTruthy();
+    expect(fi["Excluded allergen"]).toBe("Poissuljettu allergeeni");
+  });
+
+  it("shows the Finnish code title of a gateway reason", () => {
+    const reason = plainReason("472710: ALLERGEN_RULE: the kitchen excludes AN", new Map([["472710", "Peanut butter"]]));
+    expect(translateReason(reason, fiT)).toBe("Peanut butter: Poissuljettu allergeeni: the kitchen excludes AN");
+  });
+
+  it("translates the title of a code that stands alone", () => {
+    expect(translateReason(plainReason("461332: BLOCKED_BY_RECALL"), fiT)).toMatch(
+      /^461332: Estetty takaisinvedon vuoksi\. /,
+    );
+  });
+
+  it("keeps English as it is", () => {
+    const reason = plainReason("472710: ALLERGEN_RULE: the kitchen excludes AN");
+    expect(translateReason(reason, (text) => translate("en", text))).toBe(reason);
   });
 });
