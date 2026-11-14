@@ -92,7 +92,15 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         data = await body(request)
         if 'text' in data and 'product_ids' not in data:
             from gateway.buyer_worker import run_buyer
-            return await (buyer_worker or run_buyer)(kitchen_id, data)
+            try:
+                return await (buyer_worker or run_buyer)(kitchen_id, data)
+            except GatewayError as exc:
+                # Fall back to the deterministic parser (#276) only when the Buyer is not
+                # there at all. An ambiguous failure (it may have made a proposal) must be
+                # reconciled first, never answered with a second proposal.
+                not_configured = exc.code == "BUYER_UNAVAILABLE" and "fallback_safe" not in exc.extra
+                if not (not_configured or exc.extra.get("fallback_safe") is True):
+                    raise
         return gw().create_proposal(kitchen_id, data, who.name)
 
     @app.get(k + "/proposals")
