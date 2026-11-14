@@ -422,6 +422,24 @@ and quantities are decimal strings on the wire.
   `kitchen_id`, `principal`, its own timestamp). `hash` covers the whole entry and
   the previous entry's hash, so a changed or removed entry is detectable.
 
+### Gateway health
+
+Planned (#1188). `GET /health` is public (no token) and never calls Valio: monitors call
+it often. Answer:
+
+```json
+{"status": "ok", "valio_api": "live", "valio_reachable": true,
+ "valio_checked_at": "2026-11-14T13:40:02+00:00"}
+```
+
+- `valio_api`: `live` when the gateway talks to Valio's challenge API, `mock` when it runs
+  on a stand-in (tests, the web's mock gateway).
+- `valio_reachable`: from the last call to Valio that the gateway made anyway: `true`
+  when it answered, `false` when it failed (an HTTP error, a timeout, a 429), `null` when
+  no call was made since the gateway started. `valio_checked_at` is the time of that call,
+  or null.
+- Nothing else: no host name, key, status code or upstream error text.
+
 ### Agent audit ingestion
 
 POST `/audit/events` accepts `event_id`, `run_id`, `type`, `tool`, `arguments`,
