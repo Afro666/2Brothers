@@ -27,7 +27,7 @@ class MeteredBuyer(ScriptedBuyer):
 def run_worker(monkeypatch, model, key="trace-1"):
     async def go():
         db, gateway = environment(monkeypatch)
-        worker = BuyerWorker(db, gateway, model_factory=lambda: model, now=lambda: NOW)
+        worker = BuyerWorker(db, gateway, strategy="loop", model_factory=lambda: model, now=lambda: NOW)
         body = {"text": "51 L milk", "requested_date": "2026-11-16", "idempotency_key": key}
         try:
             proposal = await worker.run("demo-kitchen", body)

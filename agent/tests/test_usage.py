@@ -98,7 +98,7 @@ def test_worker_proposal_carries_the_run_usage_and_writes_one_usage_line(monkeyp
 
     async def run():
         db, gateway = environment(monkeypatch)
-        worker = BuyerWorker(db, gateway, model_factory=lambda: nemotron(monkeypatch, handler), now=lambda: NOW)
+        worker = BuyerWorker(db, gateway, strategy="loop", model_factory=lambda: nemotron(monkeypatch, handler), now=lambda: NOW)
         body = {"text": "51 L milk", "requested_date": "2026-11-16", "idempotency_key": "usage-1"}
         try:
             proposal = await worker.run("demo-kitchen", body)
