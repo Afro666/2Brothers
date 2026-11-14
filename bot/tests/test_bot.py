@@ -4,7 +4,7 @@ from datetime import datetime
 import pytest
 
 from bot import render
-from bot.app import NOT_LINKED, Bot, due_slot, parse_brief_times
+from bot.app import MAX_ADDS, NOT_LINKED, Bot, due_slot, parse_brief_times
 from bot.clients import GatewayError, SpeechError, TelegramError
 from bot.links import Links
 
@@ -612,3 +612,10 @@ def test_nothing_to_add_and_a_refused_add_are_said(bot):
 def test_add_works_after_a_restart_of_the_bot(bot):
     press(bot, f"d:{PID}:0:469549b")                                             # no list in memory
     assert ("addable", PID) in bot.gw.calls and ("add", "469549b", "12") in bot.gw.calls
+
+
+def test_the_addable_lists_in_memory_are_capped_oldest_dropped_first(bot):
+    for n in range(MAX_ADDS + 5):
+        bot._addable(f"prop-{n}")
+    assert len(bot._adds) == MAX_ADDS
+    assert "prop-0" not in bot._adds and f"prop-{MAX_ADDS + 4}" in bot._adds
