@@ -65,6 +65,40 @@ The gateway does not audit its own 403 answers; the agent-side refusals are the
 audit evidence. Add a case as one function in `CASES`; the test is
 `agent/tests/test_conformance.py`.
 
+## Delivery-note reader (#362)
+
+```powershell
+python -m agent.receiving agent/fixtures/receiving/short.png          # recorded reply, offline
+python -m agent.receiving PHOTO.png --live                            # Nemotron VL on Verda
+```
+
+Nemotron 3.5 Super VL reads a photo of the delivery note into a strict JSON schema
+(`agent/vision.py`, `NOTE_SCHEMA` in `agent/receiving.py`): code, product, quantity,
+unit, lot, best-before and `replaces`. The request uses `response_format: json_schema`
+(strict) with thinking off. A reply outside the schema is refused whole, never repaired.
+A field the model cannot read is the literal `"unknown"`.
+
+Plain code then matches the note to the placed order. Ordered lines become `RECEIVED`,
+`SHORT`, `MISSING` or `UNKNOWN`; lines not on the order become `SUBSTITUTE` (needs a
+person's OK), `EXTRA` or `UNREADABLE`. Units are converted only through the catalog's
+units. An unreadable product code makes an absent ordered line `UNKNOWN`, not `MISSING`.
+An unknown quantity gives an unknown stock, and the engine then asks for a count
+(`STOCK_COUNT_MISSING`) instead of using a guessed number.
+
+The two test photos are synthetic (`agent/fixtures/receiving/make_notes.py`); the
+`*.reply.json` files are Nemotron's real replies, recorded live on 2026-11-14:
+
+| Photo | Read by Nemotron VL | Result | Next milk suggestion |
+|---|---|---|---|
+| `complete.png` | 30 + 21 ST of 462775, one best-before smudged → `unknown` | `RECEIVED` 51 | 0 ST (stock 51) |
+| `short.png` | 36 ST of 462775, 2 KI of 462921 "replaces 462775" | `SHORT`, 15 ST missing; `SUBSTITUTE` 10 ST | 4 ST (stock 36) |
+
+The suggestion is `engine.replenish` with the demo kitchen numbers in
+`fixtures/receiving/order.json` (10 L/day, 3 days cover, safety 10 L).
+Not built yet: the gateway route that stores the receipt and the stock count, so the
+change shows on the live proposal (gateway and store, Aron's and Tymon's areas).
+Tests: `agent/tests/test_receiving.py` (offline, recorded replies).
+
 ## Internal worker (#279)
 
 `two-brothers-buyer-worker` serves an internal `/run` endpoint on port 8001.

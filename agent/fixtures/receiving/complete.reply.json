@@ -1,0 +1,4 @@
+{
+  "role": "assistant",
+  "content": "{\"order_ref\": \"ORD-DEMO-0001\", \"delivery_date\": \"2026-11-16\", \"lines\": [{\"product_code\": \"462775\", \"description\": \"Arla 1 L lactose free fat free UHT\", \"quantity\": \"30\", \"unit\": \"ST\", \"lot\": \"L2611A\", \"best_before\": \"2026-11-28\", \"replaces\": \"none\"}, {\"product_code\": \"462775\", \"description\": \"Arla 1 L lactose free fat free UHT\", \"quantity\": \"21\", \"unit\": \"ST\", \"lot\": \"L2611B\", \"best_before\": \"unknown\", \"replaces\": \"none\"}]}"
+}

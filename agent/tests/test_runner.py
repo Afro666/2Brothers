@@ -230,7 +230,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(buyer.events[0]["tool"], "invalid")
 
     async def test_read_schema_rejection_is_audited_and_corrected_to_approval(self):
-        invalid = tool("search_products", query="private-rejected-query")  # missing filters
+        invalid = tool("search_products", query="private-rejected-query", unexpected=1)  # not in the schema
         result, buyer, mock = await self.run_case([invalid] + milk_steps())
         self.assertEqual(result["status"], "SENT_FOR_APPROVAL")
         self.assertEqual(len(mock.events), 10)
@@ -349,7 +349,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
 
     async def test_rejected_read_in_a_batch_keeps_tool_results_paired(self):
-        invalid = tool("search_products", query="milk")
+        invalid = tool("search_products", query="milk", unexpected=1)
         valid = milk_steps()[0]
         batch = {"role": "assistant", "content": None, "tool_calls": [
             {**invalid["tool_calls"][0], "id": "bad-read"},
@@ -362,7 +362,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("products", json.loads(messages[-1]["content"]))
 
     async def test_read_policy_recovery_respects_step_and_call_limits(self):
-        invalid = tool("search_products", query="milk")
+        invalid = tool("search_products", query="milk", unexpected=1)
         result, buyer, mock = await self.run_case([invalid] * 3, max_steps=2)
         self.assertIn("Step limit", result["reason"])
         self.assertEqual(len(buyer.model.messages), 2)
@@ -393,7 +393,7 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
                 if request.url.path == "/audit/events" and self.events:
                     return httpx.Response(503, json={})
                 return super().__call__(request)
-        result, buyer, mock = await self.run_case([tool("search_products", query="milk")] + milk_steps(), FailSecondAudit())
+        result, buyer, mock = await self.run_case([tool("search_products", query="milk", unexpected=1)] + milk_steps(), FailSecondAudit())
         self.assertTrue(result["reconciliation_required"])
         self.assertEqual(len(buyer.model.messages), 1)
         self.assertFalse(any(r.url.path.startswith("/tools/") for r in mock.requests))
