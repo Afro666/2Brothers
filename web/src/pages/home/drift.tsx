@@ -34,7 +34,7 @@ function DriftList({
     <ul className="space-y-3 text-sm">
       {warnings.map((warning) => (
         <li
-          key={`${warning.kitchenId ?? ""}-${warning.productId}`}
+          key={`${warning.kitchenId ?? ""}-${warning.productId}-${warning.kind}`}
           className="space-y-1"
         >
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
