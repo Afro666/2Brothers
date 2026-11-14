@@ -182,7 +182,9 @@ def register(app, gw, principal, body) -> None:
         defaults = {"service_level": base.service_level, "max_cover_days": base.max_cover_days,
                     "stockout_cap": base.stockout_cap, "budget_warning_order_eur": base.budget_warning_order_eur,
                     "budget_warning_week_eur": base.budget_warning_week_eur,
-                    "certainty_premium_max": base.certainty_premium_max}
+                    "certainty_premium_max": base.certainty_premium_max,
+                    # off and none until a person sets them (#631, #380)
+                    "approve_unconfirmed_manual": False, "standing_orders": {}}
         return {**_json(repo().settings.get(kitchen_id)), "defaults": _json(defaults)}
 
     @app.put(k + "/settings")
