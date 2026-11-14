@@ -350,6 +350,8 @@ until an authorized human acts through the approval UI, outside these tools.
 
 `outcome` is `CONFIRMED`, `NOT_SENT`, `UNCONFIRMED` or `SENT_READ_FAILED`.
 Only `CONFIRMED` means an order is known to have been placed in our gateway.
+It does not mean a supplier has it: nothing is sent to a supplier (order `status`
+`RECORDED`, see "Order status").
 `NOT_SENT` may be retried explicitly; the other failure outcomes require status
 reconciliation or human intervention. All mutation requests carry stable
 idempotency keys: both `request_approval` and `place_order` require a nonempty
@@ -966,10 +968,16 @@ More proposal fields, defined in their own files (all optional and additive):
 - `label_checks`: producer-register checks for the proposal's own lines.
   [product-evidence-contract.md](product-evidence-contract.md).
 
-Order `status` is the supplier side of the order: `SENT`, `CONFIRMED`, `PARTIAL`,
+Order `status` is the supplier side of the order: `RECORDED`, `CONFIRMED`, `PARTIAL`,
 `REJECTED`, `UNCONFIRMED`. The order `outcome` is the gateway result from "Team gateway
 interfaces": `CONFIRMED`, `NOT_SENT`, `UNCONFIRMED`, `SENT_READ_FAILED`. An outcome of
 `NOT_SENT` means no order exists at the supplier, so it has no order `status`.
+
+`RECORDED` means: the gateway recorded the order and sent nothing to the supplier.
+Valio's challenge API has no order route, so every placed order is `RECORDED` (outcome
+`CONFIRMED`), the same fact as the signed receipt's `supplier_outcome: NOT_SENT`. A
+person tells the supplier. An order row stored as `SENT` before this rule (14 Nov) is
+answered as `RECORDED`: no order was ever sent. `SENT` is never answered.
 
 ### Resolving an unknown send
 
@@ -988,7 +996,8 @@ An attempt whose approval call failed after the attempt row was written is store
 place a duplicate.
 
 `GET /v1/kitchens/{kitchen_id}/orders/{order_id}/resolution` returns what is known.
-Each call writes an `order_lookup` audit entry.
+It changes nothing and writes no audit entry: a lookup is not an event (the order page
+reads it on every load). What a person decides is audited by the resolve call below.
 
 ```json
 {
@@ -1035,7 +1044,7 @@ What each resolution does:
 
 | `resolution` | Order | Proposal | Approval |
 |---|---|---|---|
-| `placed` | `outcome: CONFIRMED`, `status: SENT`, the reference stored | `APPROVED`, linked to this order | stays `APPROVED` |
+| `placed` | `outcome: CONFIRMED`, `status: RECORDED`, the reference stored | `APPROVED`, linked to this order | stays `APPROVED` |
 | `not_sent` | `outcome: NOT_SENT`, `status: null` | back to `READY` (or `BLOCKED_BY_RECALL` when a recall holds a line), so a person can decide again | a new `PENDING` approval replaces the used one |
 
 Neither resolution sends anything, and neither writes a second attempt row: the stored
@@ -1051,7 +1060,7 @@ Response (200), also returned by a repeat:
   "proposal_id": "5b2e...",
   "proposal_status": "APPROVED",
   "outcome": "CONFIRMED",
-  "status": "SENT",
+  "status": "RECORDED",
   "resolution": {
     "resolution": "placed",
     "supplier_order_ref": "VAL-2026-00123",
@@ -2117,7 +2126,7 @@ Response: `{"stock_count_id": "...", "stored": 2}`.
 | `product_id`, `unit` | string | |
 | `on_hand` | decimal string or null | The last count; null when never counted or counted as unknown. |
 | `counted_at` | timestamp or null | |
-| `on_order` | decimal string or null | Approved orders (outcome `CONFIRMED`, status `SENT`, `CONFIRMED` or `PARTIAL`) whose delivery day is today or later, in the kitchen's `unit`: quantity x `size_in_base_units` x `net_content`. An order without a known delivery day is not counted. Null when a line cannot be converted to the kitchen's unit. |
+| `on_order` | decimal string or null | Approved orders (outcome `CONFIRMED`, status `RECORDED`, `CONFIRMED` or `PARTIAL`) whose delivery day is today or later, in the kitchen's `unit`: quantity x `size_in_base_units` x `net_content`. An order without a known delivery day is not counted. Null when a line cannot be converted to the kitchen's unit. |
 | `on_order_known` | boolean | `false` when `on_order` is null (a line could not be converted). Never read a missing `on_order` as zero. |
 | `position` | decimal string or null | `on_hand` + `on_order`; null when `on_hand` or `on_order` is null. |
 | `next_delivery_date` | date or null | The earliest delivery day among the counted open orders. |
