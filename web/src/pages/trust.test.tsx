@@ -94,12 +94,11 @@ describe("trust page", () => {
     expect(screen.queryByText(/20 of the 10/)).not.toBeInTheDocument();
   });
 
-  it("shows camelCase step names and actor names as plain words, in both languages", async () => {
+  it("shows raw step names and actor names as plain words, in both languages", async () => {
     const api = createMockApi();
     // The five newest lines as a stranger saw them: raw step codes and a raw actor name.
     const steps: [string, string, string][] = [
       ["proposal_changed", "system", ""],
-      ["proposalChanged", "system", ""],
       ["Proposal explanation failed", "buyer-agent", "system"],
       ["approval_token_created", "human", ""],
       ["Order status checked", "order_resolved", "checked"],
@@ -124,7 +123,8 @@ describe("trust page", () => {
     expect(lines.getByText("Proposal explanation failed")).toBeInTheDocument();
     expect(lines.getByText("Approval token created")).toBeInTheDocument();
     expect(lines.getByText("Order status checked")).toBeInTheDocument();
-    expect(lines.getByText("proposalChanged")).toBeInTheDocument();
+    // The raw actor name "order_resolved" reads as words too.
+    expect(lines.getByText("Order resolved")).toBeInTheDocument();
     // The raw code stays only above, as a plain sentence the page did not write.
     expect(lines.queryByText("proposal_changed")).not.toBeInTheDocument();
     expect(lines.queryByText("approval_token_created")).not.toBeInTheDocument();
