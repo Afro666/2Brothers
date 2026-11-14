@@ -92,18 +92,18 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
     </div>)}
     <p>{formatEur(mapMoney(row.total_ex_vat))} ex VAT · {formatEur(mapMoney(row.expected_total))} including VAT and delivery</p>
     {unknown && <p>Waiting for supplier stock confirmation. Approval is unavailable.</p>}
-    {expired && pending && <p>This offer has expired. Ask the Buyer for a fresh proposal.</p>}
+    {expired && pending && <p>This offer has expired. You can review it here: the gateway rechecks price and stock before recording an order. Any change requires a fresh confirmation.</p>}
     {placed ? <p role="status">Order recorded: {placed.id} · {formatEur(mapMoney(placed.total))}. Recorded in our gateway; not submitted to Valio.</p> :
       row.status === "APPROVED" ? <p>Order recorded: {row.order_id ?? "reload to reconcile"}. Recorded in our gateway; not submitted to Valio.</p> :
       !pending ? <p>{rejected ? "REJECTED" : row.status}</p> : null}
     {error && <div role="alert">{error} Check the current proposal before repeating a decision. <Button onClick={reload}>Reload proposals</Button></div>}
     {pending && <div className="flex flex-wrap gap-3">
-      <Button disabled={busy || unknown || expired || !row.lines.length} onClick={() => setConfirm(true)}>Approve {formatEur(mapMoney(row.expected_total))}</Button>
+      <Button disabled={busy || unknown || !row.lines.length} onClick={() => setConfirm(true)}>Approve {formatEur(mapMoney(row.expected_total))}</Button>
       <Button variant="outline" disabled={busy} onClick={() => void decide(false)}>Reject proposal</Button>
     </div>}
     {confirm && pending && <div role="dialog" aria-label="Confirm approval" className="space-y-3 rounded border p-4">
       <p>Confirm this exact basket for {formatEur(mapMoney(row.expected_total))}? The gateway checks price and stock again.</p>
-      <Button disabled={busy || unknown || expired} onClick={() => void decide(true)}>Confirm and record order</Button>
+      <Button disabled={busy || unknown} onClick={() => void decide(true)}>Confirm and record order</Button>
       <Button variant="outline" disabled={busy} onClick={() => setConfirm(false)}>Cancel</Button>
     </div>}
   </article>;
