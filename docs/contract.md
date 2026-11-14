@@ -560,6 +560,8 @@ products, menu plans, stock counts, stock, demand, settings and sharing.
 - Every write is an audit entry: `suppliers_created`, `suppliers_changed`,
   `suppliers_deleted` (the same for `recipes_` and `products_`), `menu_plan_changed`,
   `stock_counted`, `settings_changed`, `share_granted`, `share_revoked`.
+- `POST /stock/photo` writes no kitchen data. It leaves one audit entry per call:
+  `stock_photo_read` or `stock_photo_failed` (see "Count from a shelf photo").
 - Gap: only `POST /stock-counts` replays a repeat `idempotency_key`. The supplier,
   recipe, product and menu-plan writes ignore the key, so a repeated create makes a
   second row.

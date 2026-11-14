@@ -26,7 +26,8 @@ shaky ones.
    gateway's request parser". If it does, the Nemotron Buyer fell back (see "If something
    fails"). Check once in rehearsal.
 4. **Open the tabs:** `/requests`, `/approvals` on a phone, `/audit`, `/llms.txt`, a
-   terminal with the two commands of beat 5.
+   terminal with the two commands of beat 5. For the photo beat: `/stock`, and
+   `agent/fixtures/shelf/demo-shelf.png` on the device that shows it.
 5. **Recall beat only:** it is one-shot per recorded notice and needs data (see beat 4).
 6. **Have the fallback video open** in a player, paused at 0:00. Record it with
    `python -m demo.record_demo --approve` (about one minute, captions, no sound; the file
@@ -63,6 +64,64 @@ approval on a request that confirmed stock covers:
 | 1:30 | 4. An exception | Show one: the recall hold (*not live in the web yet*, #655), or the tamper check on `/trust` (*mock data in gateway mode until the trust routes merge*). Until then: run `python -m gateway.scenarios` in the terminal. | "13 golden cases with the correct decision. All 13 pass. They include a moved price, an allergen with missing data, and a duplicate send." | D |
 | 2:10 | 5. Any agent | In the terminal: `curl -s https://31-22-104-201.sslip.io/llms.txt \| head -20`, then the search call from `docs/byoa.md`. | "This is not our agent's private door. Any agent with a URL and a token can read the catalog, get an offer, simulate and propose. The agent card, the OpenAPI file and the MCP endpoint are public. Our conformance kit runs 12 trust checks against any gateway." | E |
 | 2:40 | 6. Close | Show the Valio side: role "Valio planner", Home. | "The kitchen shares its forecast if it agrees. Valio sees demand before the orders arrive: 16 kitchens share, and 8 lines are short for Monday and Tuesday." (Numbers from 14 Nov; read them from the screen.) | bonus |
+
+## Photo beat: Nemotron VL counts a shelf (#373)
+
+Live since 2026-11-14. This is the beat that shows the vision half of Nemotron 3.5 Super VL
+on the screen. It takes about 20 seconds. Put it after beat 3, or use it in place of beat 4.
+
+**Which photo.** Use `agent/fixtures/shelf/demo-shelf.png`. It is a synthetic photo
+(`agent/fixtures/shelf/make_demo_shelf.py`): six products of the demo kitchen's stock list,
+with their catalog names printed on the packs. Copy it to the laptop or the phone before
+the demo. Do not use `agent/fixtures/shelf/shelf.png` on the live site: it shows milk the
+demo kitchen does not stock, so all five rows come back "please count" (measured, see below).
+A real phone photo of real packs was **not tested**. The label match is plain word overlap
+with the English catalog name (`agent/shelf.py`), so a Finnish label will mostly be
+"please count". That is safe, but it is not the demo. Say "a prepared test photo".
+
+**What you do.**
+
+1. Open `/stock` (menu: Kitchen, tab "Stock count").
+2. In "Count from a photo" press "Choose a file" and pick `demo-shelf.png`. On a phone,
+   "Count from a photo" opens the camera; "Choose a file" picks a stored photo.
+3. After about 3 seconds the panel says what Nemotron read, and five Count fields are
+   filled. Each one says "read from the photo by Nemotron 3.5 Super VL, check and save".
+4. Point at the last row: "Valio Edam 17 %", "please count", no number. The pack is half
+   hidden.
+5. Press "Save count" only if you want the demo kitchen's stock to change (see the warning).
+
+**What you say.** "Counting stock is the slowest job in a kitchen. Here Nemotron reads the
+shelf. It counted six cartons, five, four, three tubs and four packs. Code turns packs into
+litres and kilos: three tubs of 2 kg are 6 kg. The pack it could not see well has no
+number: unknown is never zero and never a guess. Nothing is saved until a person presses
+Save. After that, the next order proposal for the menu plan uses this stock."
+
+**Measured on the live site (2026-11-14, `demo-shelf.png` through `/api`).** HTTP 200 in
+2.7 s; the model part was 0.8 s (`duration_ms: 789`).
+
+| Product | On the photo | Nemotron | In the Count field |
+|---|---|---|---|
+| 463335 Valio Eila 3 % milk drink 1 l | 6 | 6, high | 6 L |
+| 464194 Valio whipping cream 1 l | 5 | 5, high | 5 L |
+| 464187 Keiju Rapeseed oil 1 l | 4 | 4, high | 4 L |
+| 462718 Valio Turkish cooking yoghurt 2 kg | 3 | 3, high | 6 KG |
+| 463437 Valio Eila butter 500 g | 4 | 4, high | 2 KG |
+| 462616 Valio Edam 1 kg (half hidden) | 1 | "Valio Edam 17 %", medium, no product match | please count |
+
+`shelf.png` through the same route: HTTP 200 in 2.8 s (model 1.2 s), five rows, all
+`UNMATCHED`. Both calls wrote nothing to stock (checked with `GET /stock` after them).
+
+The same photo through the page itself (headless Chrome, 390 px wide, "Choose a file"):
+1.9 s from the file to the filled fields; the page sent one 147 KB JPEG and nothing else.
+The model read "Valio Elia" for "Valio Eila" on two packs that time, and the match held.
+
+**Warning.** "Save count" changes the demo kitchen's real stock, and the plan proposal
+reads it. The save step was not run on the live site that night. Run the whole beat once
+in rehearsal and decide then if you press Save on stage.
+
+**If it fails.** The panel says why, and the counts can still be typed by hand. "no vision
+model is configured" means `VERDA_INFERENCE_KEY` is missing in the `buyer` container.
+"Too many requests": the route allows 10 photos a minute per address.
 
 ## What was measured on the live site (2026-11-14)
 
