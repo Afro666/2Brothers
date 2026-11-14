@@ -5,7 +5,7 @@ import pytest
 
 from bot import render
 from bot.app import NOT_LINKED, Bot, due_slot, parse_brief_times
-from bot.clients import GatewayError, SpeechError
+from bot.clients import GatewayError, SpeechError, TelegramError
 from bot.links import Links
 
 PID = "0bfc95fb26a047cc876f7a2f034c9762"
@@ -524,3 +524,12 @@ def test_the_largest_photo_that_fits_is_read(bot):
     bot.tg.download = lambda file_id, limit=0: seen.append(file_id) or b"JPEG"
     photo(bot)
     assert seen == ["large"]
+
+
+def test_a_failed_photo_download_says_so(bot):
+    def fail(file_id, limit=0):
+        raise TelegramError("getFile failed")
+    bot.tg.download = fail
+    photo(bot)
+    assert bot.tg.edits[-1]["text"] == "I could not fetch that photo. Send it again."
+    assert not [c for c in bot.gw.calls if c[0] == "shelf_photo"]

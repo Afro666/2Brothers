@@ -186,7 +186,12 @@ class Bot:
         status = self.tg.send(chat, "One moment: Nemotron is reading the shelf.", silent=True)
         self.tg.typing(chat)
         try:
-            answer = self.gw.shelf_photo(self.tg.download(best["file_id"], MAX_PHOTO_BYTES))
+            image = self.tg.download(best["file_id"], MAX_PHOTO_BYTES)
+        except TelegramError:
+            self.tg.edit(chat, status, "I could not fetch that photo. Send it again.")
+            return
+        try:
+            answer = self.gw.shelf_photo(image)
         except GatewayError as exc:
             self.tg.edit(chat, status, render.refusal(exc.code, exc.message))
             return
