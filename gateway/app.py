@@ -255,6 +255,19 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         who.need("kitchen:read", kitchen_id)
         return gw().get_order(kitchen_id, order_id)
 
+    # ---- unknown send (#291): a person records what happened; never a resend -------
+    @app.get(k + "/orders/{order_id}/resolution")
+    def order_resolution(kitchen_id: str, order_id: str, who: Principal = Depends(principal)):
+        from gateway import resolve
+        who.need("kitchen:read", kitchen_id)
+        return resolve.lookup(gw(), kitchen_id, order_id, human=who.human)
+
+    @app.post(k + "/orders/{order_id}/resolve")
+    async def resolve_order(kitchen_id: str, order_id: str, request: Request, who: Principal = Depends(principal)):
+        from gateway import resolve
+        who.need("kitchen:read", kitchen_id)
+        return resolve.resolve(gw(), kitchen_id, order_id, await body(request), human=who.human)
+
     @app.get(k + "/forecast-accuracy")
     def forecast_accuracy(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
@@ -285,6 +298,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     # ---- API tokens (#271): a person creates and revokes them; tokens never approve ----
     @app.post(k + "/tokens")
     async def create_token(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can create a token")
@@ -299,6 +313,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.get(k + "/tokens")
     def list_tokens(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can list tokens")
@@ -306,6 +321,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
 
     @app.delete(k + "/tokens/{token_id}")
     def revoke_token(kitchen_id: str, token_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
         from gateway import tokens
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can revoke a token")
@@ -436,6 +452,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         except AuditConflict:
             raise GatewayError(409, "IDEMPOTENCY_CONFLICT", "event_id reused with other content") from None
         return {"event_id": entry["event"]["event_id"], "stored": True}
+
+    # Standing-order drift (#377): kitchen and supplier views.
+    from gateway.drift_routes import mount_drift
+    mount_drift(app, gw, principal)
 
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp
