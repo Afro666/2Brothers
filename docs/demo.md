@@ -1,73 +1,65 @@
 # Demo script: three minutes
 
-Status: draft, written 2026-11-14 04:50 (Helsinki) from tests on the live site that night.
+Status: story A, chosen by Aron on 2026-11-14 at 09:55 Helsinki. It replaces the milk
+request as the main demo. Every beat below ran on the live site on 14 Nov.
 Owner: Aron (presents). Site: `https://31-22-104-201.sslip.io`.
 
-Each beat says what the site does **today**. A beat marked *not live yet* names the issue
-that makes it live. Do not show a beat that is not live: an honest three steps beat five
-shaky ones.
+Why this story: it shows the parts nobody else has (Valio's own agent, a live recall read,
+a refusal, an outside agent), and **no beat needs the Nemotron model at demo time**. The
+model makes the offer before the demo, and the seller has a `--no-model` fallback. On
+14 Nov at 09:45 Helsinki the model endpoint did not answer for a while; this story still works.
 
 ## Before you go on stage
 
-1. **Stop deploys.** Every merge to main redeploys and restarts the containers. On
-   2026-11-14 there were 46 deploys in one hour; pages refused connections for some
-   seconds and one Buyer request got a 502 (#660). One hour before the demo, on the server:
+1. **An open offer on Home.** The tile "Offer from Valio Aimo" needs an open offer. An
+   accepted or declined offer is final, so after a rehearsal make a new one. On the server:
 
    ```
-   touch /opt/2brothers.hold
+   cd /opt/2brothers
+   docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m agent.seller --dry-run --limit 1 --kitchen demo-kitchen --days 14
+   docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m agent.seller --apply --limit 1 --kitchen demo-kitchen --days 14
    ```
 
-   Remove the file after judging. Tell the team: no merges to main during the hold.
-2. **Pick the delivery date.** Many Valio products close their order cut-off days ahead
-   (on Saturday 14 Nov, 12 of 20 lactose-free milks had already closed for Monday 16 Nov).
-   Use a date for which the cut-offs are open, and run the request once in rehearsal with
-   that exact date. "By Monday" on Sunday morning will have fewer open products.
-3. **Check the Buyer path.** After the request, the card must not say "Proposed by the
-   gateway's request parser". If it does, the Nemotron Buyer fell back (see "If something
-   fails"). Check once in rehearsal.
-4. **Open the tabs:** `/requests`, `/approvals` on a phone, `/audit`, `/llms.txt`, a
-   terminal with the two commands of beat 5. For the photo beat: `/stock`, and
-   `agent/fixtures/shelf/demo-shelf.png` on the device that shows it.
-5. **Recall beat only:** it is one-shot per recorded notice (see "Recall beat"). It needs
-   the coffee 461332 in the demo kitchen's stock (`/stock`; 3.253 kg on 14 Nov), no seed.
-6. **Have the fallback video open** in a player, paused at 0:00. Record it with
-   `python -m demo.record_demo --approve` (about 75 seconds, captions, no sound; it sends the
-   1,000 L request, takes option A and approves it; the file
-   lands in `demo/out/`). Record again after any change to the demo path.
-   Story A ("Valio sees it first"): `python -m demo.record_demo --story offer --approve`.
-7. **Clear the inbox.** Test requests pile up: on 14 Nov the menu badge showed 24 waiting
-   proposals. On the server, through the gateway container:
-   `python -m demo.clear_inbox` lists them, `python -m demo.clear_inbox --apply` removes
-   them. It is not a reject, so it does not count as a person's decision.
-8. **Warm up.** Send one request before the live one. The Buyer model does not finish about
-   one run in three; the gateway then retries once (#735), and after that the parser answers.
+   Read the dry-run line first: a sensible substitute (same kind of food), `made_by`
+   `nemotron-3.5-super-vl`. If the model does not answer, add `--no-model` (a rule picks,
+   `made_by: rule`); then do not say "Nemotron picked it" on stage. The open offer on
+   14 Nov: flounder fillet in place of salmon fillet, for Fri 20 Nov, 12.226 kg.
+2. **Clear the inbox.** On the server: `python -m demo.clear_inbox` lists the waiting
+   proposals, `python -m demo.clear_inbox --apply` removes them (not a reject, so it is
+   not a person's decision). Then the card made from the offer is the only one.
+3. **No deploys while you present.** There is no deploy hold (Aron's choice). A merge
+   restarts the site for some seconds: before you start, look at GitHub Actions; if a
+   deploy runs, wait for it.
+4. **Open the tabs:** `/` (Home) on the phone, `/approvals`, `/requests`, `/demand`, and a
+   terminal in the repo for beat 5.
+5. **The recall alert is stored.** Aron pressed "Check recalls now" on 14 Nov at 09:31: a
+   live scrape (102 notices), the recalled coffee 461332 in stock (3.253 kg) and in three
+   recipes. The panel shows it already; pressing again reads the list again (about 30 s).
+6. **Make the outside agent's token before you start** if sign-in is on (it is off for
+   judging): Settings, API & MCP tokens. With sign-in off, `--make-token` makes one.
+7. **Fallback video** open in a player, paused at 0:00 (see "If something fails").
+   Record it with `python -m demo.record_demo --story offer --approve`.
 
-## One request, and a person can approve it
-
-A proposal with a line whose stock Valio does not report cannot be placed as it is: a
-person's yes is not stock confirmation. The 1,000 L milk proposal has such a line. Its card
-therefore shows options, and the first one is the part that Valio's stock confirms:
-"Order the confirmed 698 L now. The other 302 L is held until the supplier confirms stock;
-nothing is ordered for it." The button "Choose option A: approve EUR 2,099.41 incl VAT"
-takes that option and opens the approval dialog with the exact total (#775, #844, #843).
-
-Checked on the live site on 14 Nov at 04:10 UTC, on a 390 px wide screen: request, card in
-14 s from the Buyer (Nemotron 3.5 Super VL), Choose, "Yes, approve EUR 2,099.41", status
-APPROVED with one line of 698 ST of 463380 and an order id.
-
-- **Backup request:** `200 L lactose-free milk by Monday`. Confirmed stock covers all of it
-  (200 ST of 463380, EUR 601.55, 8.5 s), so its card has a plain Approve button.
-
-## The script
+## The script (story A: Valio sees it first)
 
 | Time | Beat | What you do | What you say | Criterion |
 |---|---|---|---|---|
-| 0:00 | 1. The request | On `/requests` type: `1,000 L lactose-free milk by Monday`. Press "Ask the agent". | "This is the sentence from your challenge. No product codes." | A, B |
-| 0:15 | 2. The honest answer | The card appears (about 12 s). Read the "Why this basket" list. | "It checked 20 products with live Valio prices and stock. 12 cannot make Monday: their cut-off passed. Valio confirms stock for 698 litres only. The rest is on the cheapest milk, and the card says its stock is not confirmed. A chatbot would have promised 1,000 litres." | B, D |
-| 0:50 | 3. The human decides | Open `/approvals` on the phone. Show the total and the options. Press "Choose option A", then "Yes, approve". Open `/audit`. | "The agent can propose. It has no approve tool. I take the part Valio confirms: 698 litres now, 302 held, nothing ordered for it. I approve the exact total; if the price moves, the old yes is refused. Every step is in a hash-chained log." | C |
-| 1:30 | 4. An exception | The tamper check on `/trust`: "Verify audit chain" says Chain OK; "Run the tamper test" changes one line and the page says "Chain broken at line N"; restore, and it is OK again (live, checked 14 Nov). Or run `python -m gateway.scenarios` in the terminal. Or the recall beat below. | "Nobody can edit the log quietly, not even us. And 13 golden cases with the correct decision all pass: a moved price, an allergen with missing data, a duplicate send." | D |
-| 2:10 | 5. Any agent | In the terminal: `curl -s https://31-22-104-201.sslip.io/llms.txt \| head -20`, then the search call from `docs/byoa.md`. | "This is not our agent's private door. Any agent with a URL and a token can read the catalog, get an offer, simulate and propose. (To show it in 10 seconds: `python -m demo.second_agent --make-token`, an outside MCP client that reaches a waiting proposal and gets 403 when it tries to approve.) The agent card, the OpenAPI file and the MCP endpoint are public. Our conformance kit runs 12 trust checks against any gateway." | E |
-| 2:40 | 6. Close | Show the Valio side: role "Valio planner", Home. Then the kitchen's Home: the tile "Offer from Valio Aimo" (needs an open offer, see "Selling-agent beat"). | "The kitchen shares its forecast if it agrees. Valio sees demand before the orders arrive: 16 kitchens share, and 8 lines are short for Monday and Tuesday." (Numbers from 14 Nov; read them from the screen.) "Valio's own agent, also Nemotron, saw the washed potatoes run short and offered this kitchen another washed potato. It is a suggestion: I make a proposal from it, and that proposal still waits for my approval." | bonus |
+| 0:00 | 1. Valio sees it first | Home on the phone. Point at the tile "Offer from Valio Aimo": the offered product, "in place of ..., which is predicted short on ...", the amount "from your own forecast", the sentence "written by Valio's selling agent (Nemotron 3.5 Super VL)". | "This kitchen shares its forecast with Valio. Valio's own agent, Nemotron, saw that salmon fillet will run short on Friday, and offers flounder fillet before anyone orders. The supplier sends no price and no quantity: the amount is the kitchen's own forecast, and the price comes live from Valio when we ask." | B, E, bonus |
+| 0:30 | 2. A person decides | Press "Make a proposal". The inbox opens with the new card: products, the "why" of each line, the total, what to check. Press "Approve", then "Yes, approve EUR ...". | "A suggestion never becomes an order by itself. It is a normal proposal now, sized by our engine, and it waits for a person. The agent has no approve tool. I approve the exact total I see: if the price moves, this yes is refused." | A, C |
+| 1:00 | 3. Proof | Order history, the new order: the block "Signed receipt" (approver, time, total). | "The gateway signs every offer and every order with one key. Anyone can check this receipt with the public key; change one number and the check fails. It also says plainly that Valio's test API has no order endpoint, so nothing was sent." | C, E |
+| 1:20 | 4. A recall, live | `/approvals`, the recall panel. Press "Check recalls now" (about 30 s; talk while it runs). | "Context.dev just read the Finnish Food Authority recall list, 102 notices. One matches: this coffee is recalled, and it is on our shelf, 3.2 kilos, and in three of our recipes. No order holds it, and new orders leave it out. The kitchen knows before anyone orders it again." | D, Context.dev |
+| 2:00 | 5. A rule the agent cannot break | `/requests`: type `15 kg peanut butter`, press "Ask the agent". | "This kitchen excludes peanuts. The request is refused in under a second, before any model runs, and nothing else is swapped in. An agent that 'helps' with plain butter would be worse than no agent." | C, D |
+| 2:20 | 6. Any agent | Terminal: `python -m demo.second_agent --make-token`. It prints ten lines. | "This is not our agent's door. An outside client reads our public agent card, connects over MCP, searches, gets an offer and asks for approval. Then it tries to approve its own proposal: 403. Only a person approves." | E |
+| 2:45 | 7. Close | `/demand`: the Valio planner view. | "Valio sees the demand of every kitchen that agreed to share, and which lines will be short. That is how its agent knew about the salmon. Open interface, a person signs, and every step is in a hash-chained log." | bonus |
+
+**Do not type** butter, eggs or salmon as a free request: those three still give the wrong
+kind of product (clarified butter, scrambled egg mix, salmon cubes). Cheese, cream, oat
+drink, chicken breast and lactose-free milk give the right kind.
+
+**The sponsor's own example** (`1,000 L lactose-free milk by Monday`) still works end to
+end and is the answer if a judge asks for it: Option A "order the confirmed 698 L now, 302 L
+held", "Choose option A", approve EUR 2,099.41. It needs the Nemotron Buyer (or the parser
+fallback, which gives the same honest split).
 
 ## Recall beat: the recalled coffee is on our shelf (#358)
 
@@ -194,14 +186,18 @@ the number on the last slide. Do not quote a number nobody measured.
 
 ## If something fails
 
-- **The page does not load:** a deploy is running. Wait 20 s and reload. This is why step 1
-  exists.
-- **"Proposed by the gateway's request parser":** the Buyer model did not finish; the
-  deterministic parser answered. The numbers are still the engine's and still correct. Say:
-  "the model is a convenience; the guards and the numbers do not depend on it". Then move on.
-- **The proposal is REJECTED with no lines:** every candidate missed its cut-off for that
-  date. Use the date you rehearsed with.
-- **Nothing works:** play the fallback video and talk over it.
+- **The page does not load:** a deploy is running. Wait 20 s and reload (see step 3).
+- **No tile on Home:** the offer was used in rehearsal. Make a new one (step 1). If the
+  seller prints only `NO_SUBSTITUTE` or `ALREADY_OFFERED`, there is no new shortage to offer
+  for: skip beat 1 and open on the sponsor's milk example instead.
+- **"Make a proposal" gives a REJECTED proposal:** nothing can be delivered for that date
+  any more. The offer stays open. Say: "Valio's stock moved since the offer; the gateway
+  checks again and does not pretend", and go on with beat 3 on an older order.
+- **The recall check takes long:** it waits up to 45 s for Context.dev, then answers from
+  the recording and says so. Keep talking; the alert is already stored.
+- **Nothing works:** play the fallback video and talk over it. Milk story:
+  `demo/out/fallback-2026-11-14-final-with-approval.webm`. A story-A video comes from
+  `python -m demo.record_demo --story offer --approve` (it uses up the open offer).
 
 ## Not in the demo
 

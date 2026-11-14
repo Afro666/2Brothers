@@ -106,15 +106,22 @@ def suggest(db, kitchen_id: str, phrase: str, *, injected=None) -> tuple[list[di
         if injected is not None:
             rows = injected(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id)
         else:
+            import time
             from gateway import catalog_search
             from store.search import search_products
+            text = (phrase or "").strip().lower()
+            resting = time.monotonic() < catalog_search._state["skip_until"] and text not in catalog_search._vectors
             try:
+                if resting:                # the embedding service rests after a failure: no new call
+                    raise RuntimeError("embedding cooldown")
                 rows = search_products(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id,
                                        hybrid=True, embedder=catalog_search._query_embedder())
                 how = "meaning"
             except ValueError:
                 return [], "words"
             except Exception:              # no key, limit, timeout, no index: words instead
+                if not resting:
+                    catalog_search._state["skip_until"] = time.monotonic() + catalog_search.COOLDOWN_S
                 rows = search_products(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id)
     except Exception:                      # the search itself failed: not "nothing found"
         return None, "words"

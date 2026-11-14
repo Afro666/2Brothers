@@ -32,8 +32,10 @@ describe("the kitchen's words", () => {
           times: 3,
           firstAsked: "2026-11-10T07:12:00+00:00",
           lastAsked: "2026-11-13T06:48:00+00:00",
+          suggestions: null,
+          suggestedBy: null,
         },
-        { phrase: "blue cheese", times: 1, firstAsked: null, lastAsked: null },
+        { phrase: "blue cheese", times: 1, firstAsked: null, lastAsked: null, suggestions: null, suggestedBy: null },
       ],
     });
   });
@@ -56,5 +58,17 @@ describe("the kitchen's words", () => {
 
   it("builds the PUT body", () => {
     expect(linkWordBody("  house milk ", "463335")).toEqual({ phrase: "house milk", product_id: "463335" });
+  });
+
+  it("maps nearest-product suggestions and keeps null as not looked up yet", () => {
+    const got = mapKitchenWords({ aliases: [], unknown_items: [
+      { phrase: "voi", times: 2, suggested_by: "meaning",
+        suggestions: [{ product_id: "463798", product_name: "Valio butter 200 g salted" }, { product_id: "x1" }, { bad: 1 }] },
+      { phrase: "kerma", times: 1, suggestions: null },
+    ] });
+    expect(got.unknownItems[0].suggestions).toEqual([
+      { productId: "463798", productName: "Valio butter 200 g salted" }, { productId: "x1", productName: "x1" }]);
+    expect(got.unknownItems[0].suggestedBy).toBe("meaning");
+    expect(got.unknownItems[1].suggestions).toBeNull();
   });
 });
