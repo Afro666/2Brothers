@@ -2470,6 +2470,40 @@ reached the Buyer worker):
 - Counts only: no request text, no reply text, no key.
 - Where it shows: the About page.
 
+### Atlas facts (proposed, #1393)
+
+`GET /v1/kitchens/{kitchen_id}/atlas` (`kitchen:read`) answers what MongoDB Atlas holds
+and runs for the product, read live. Proposed: the store function exists
+(`store.atlas.atlas_facts`); the gateway route is not built yet (#1383).
+
+```json
+{"mongodb_version": "8.0.37", "data_mb": 215, "products": 17548,
+ "vectors": [{"model": "voyage-4", "dimensions": 1024, "count": 17546}],
+ "search_indexes": [
+   {"name": "products_search", "type": "search", "status": "READY", "queryable": true},
+   {"name": "products_vector", "type": "vectorSearch", "status": "READY", "queryable": true}],
+ "time_series": [{"collection": "covers", "documents": 1780},
+                 {"collection": "orders_history", "documents": 1050}],
+ "audit_entries": 1487,
+ "change_stream_collections": ["proposals", "approvals", "audit_log"]}
+```
+
+- The numbers are for the whole database, the same for every kitchen: counts and index
+  states only. No address, no key, no document, no other kitchen's rows.
+- **Unknown is `null`, never zero.** Each top-level value except
+  `change_stream_collections` is `null` when it could not be read; the page then shows no
+  number for it. An empty list was read and is empty.
+- `data_mb`: data plus indexes, whole megabytes. `products`: rows the text search reads.
+- `vectors`: one row per embedding model and size, largest first. Two rows mean the
+  vectors are being replaced; the page shows both.
+- `search_indexes`: `type` is `search` (Atlas Search) or `vectorSearch` (Atlas Vector
+  Search); `status` is Atlas's own word (`READY`, `PENDING`, `BUILDING`, `FAILED`, ...).
+- `time_series`: the time-series collections behind forecasts and the drift aggregation.
+- `audit_entries`: the length of the hash-chained audit log, all kitchens.
+- `change_stream_collections`: the collections the live event stream (`/events`) watches.
+- The gateway keeps the answer for a minute. Never a 404 for a kitchen the session may read.
+- Where it shows: the About page (#1383, #1292).
+
 ### Standing-order drift
 
 `GET /v1/kitchens/{kitchen_id}/drift` answers `{"week": "2026-11-09", "warnings": [...]}`,
