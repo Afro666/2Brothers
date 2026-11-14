@@ -8,7 +8,7 @@ except ImportError:  # the `test` extra is not installed
     mongomock = None
 
 from store.search import (ALL_WORDS_BOOST, FOOD_BOOST, HOME_BOOST, SIZE_BOOST, TIE_ROOM, _reasons,
-                          allergen_codes, build_pipeline, home_category, parse_query,
+                          allergen_codes, build_pipeline, food_word_query, home_category, parse_query,
                           search_products)
 
 
@@ -189,6 +189,56 @@ class SearchQueryTests(unittest.TestCase):
             products.insert_many([dict(row) for row in fed])
             lists.append([row["_id"] for row in products.aggregate(pipeline[-2:])])
         self.assertEqual(lists, [["900009", "900001", "900002"]] * 3)  # which tied rows make the cut too
+
+    def test_a_food_word_query_puts_food_before_a_non_food_name_with_every_word(self):
+        # #1658: "almond milk" is only in the name of a hand wash; "milk" lives among the milks.
+        plain = build_pipeline("almond milk", home="63001")
+        food = build_pipeline("almond milk", home="63001", food_first=True)
+        should = food[0]["$search"]["compound"]["should"]
+        every_word = should[0]["compound"]
+        self.assertEqual(every_word["score"], {"constant": {"value": ALL_WORDS_BOOST}})
+        self.assertEqual(every_word["must"][0]["text"]["matchCriteria"], "all")
+        self.assertEqual(len(every_word["mustNot"]), 8)  # the non-food prefixes: no all-words boost
+        self.assertNotIn("63001", str(should))           # and no home boost for a non-food home
+        self.assertIn("63001", str(plain[0]["$search"]["compound"]["should"]))
+        self.assertEqual(build_pipeline("milk", home="10400", food_first=True)[0]["$search"]["compound"]
+                         ["should"][-1]["compound"]["score"], {"constant": {"value": HOME_BOOST}})
+        self.assertEqual(food[-3:-1], [{"$sort": {"_non_food": 1, "score": -1, "_id": 1}}, {"$limit": 20}])
+        self.assertEqual(plain[-2:], [{"$sort": {"score": -1, "_id": 1}}, {"$limit": 20}])
+        self.assertNotIn("_non_food", str(build_pipeline("", {"temperature": "frozen"}, food_first=True)))
+        if mongomock is None:
+            self.skipTest("install the test extra: pip install -e '.[test]'")
+        products = mongomock.MongoClient()["test"].products
+        products.insert_many([
+            {"_id": "900001", "category": "63001", "score": 94.8},   # the hand wash: best words
+            {"_id": "900002", "category": "41800", "score": 22.4},
+            {"_id": "900003", "category": "10402", "score": 11.2},
+            {"_id": "900004", "score": 30.0},                        # an own product without a category
+            {"_id": "900005", "category": "20033", "score": 12.0}])
+        rows = list(products.aggregate(build_pipeline("almond milk", limit=4, food_first=True)[-4:]))
+        self.assertEqual([row["_id"] for row in rows], ["900004", "900002", "900003", "900001"])
+        self.assertTrue(all("_non_food" not in row for row in rows))  # the sort key is not shown
+
+    def test_a_food_word_query_is_read_from_the_last_word(self):
+        class Products:
+            def __init__(self, homes):
+                self.homes, self.asked = homes, []
+
+            def aggregate(self, pipeline):
+                word = pipeline[0]["$searchMeta"]["facet"]["operator"]["compound"]["must"][0]["text"]["query"]
+                self.asked.append(word)
+                home = self.homes.get(word)
+                return [{"facet": {"category": {"buckets": [{"_id": home, "count": 9}] if home else []}}}]
+
+        db = type("Db", (), {"products": Products({"milk": "10400", "jug": "20033"})})()
+        self.assertTrue(food_word_query(db, "almond milk", "63001"))  # milk lives among the milks
+        self.assertFalse(food_word_query(db, "milk jug", "20033"))    # a jug is tableware
+        self.assertFalse(food_word_query(db, "hand wash", "63001"))   # "wash" has no home
+        self.assertEqual(db.products.asked, ["milk", "jug", "wash"])
+        self.assertTrue(food_word_query(db, "milk", "10400"))         # one word: the home is known
+        self.assertFalse(food_word_query(db, "cup", "64001"))
+        self.assertFalse(food_word_query(db, "cheese", None))
+        self.assertEqual(len(db.products.asked), 3)                   # no second count for one word
 
     def test_rows_never_carry_the_raw_record(self):
         pipeline = build_pipeline("milk", limit=5)

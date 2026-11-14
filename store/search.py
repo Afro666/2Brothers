@@ -143,13 +143,28 @@ def home_category(db, query: str) -> str | None:
     return None
 
 
+def food_word_query(db, text: str, home: str | None) -> bool:
+    """True when the query's last word is clearly at home in a food category (#1658).
+
+    "almond milk" asks for a food: "milk" has a home among the milks, though the only
+    name with both words is a hand wash. "milk jug" does not: a jug is tableware.
+    `home` is the home category of the whole text, reused when the text is one word.
+    """
+    words = text.split()
+    head = home if len(words) == 1 else home_category(db, words[-1])
+    return bool(head) and not str(head).startswith(NON_FOOD_PREFIXES)
+
+
 def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
-                   kitchen_id: str | None = None, home: str | None = None) -> list[dict]:
+                   kitchen_id: str | None = None, home: str | None = None,
+                   food_first: bool = False) -> list[dict]:
     """The aggregation pipeline for one search. Pure, so it can be tested offline.
 
     Catalog rows have no `kitchen_id`; an own product belongs to one kitchen. A search
     sees the catalog plus the asking kitchen's own products, never another kitchen's.
     `home` is the query's home category (`home_category`), when it has one.
+    `food_first` is for a query that asks for a food (`food_word_query`): a non-food row
+    gets no all-words and no home boost, and comes after every food row that was read.
     """
     filters = dict(filters or {})
     unknown = set(filters) - {"exclude_allergens", "allergen_strictness", "require_labels",
@@ -198,11 +213,19 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
         all_words = _all_words(text)
         not_food = [{"range": {"path": "category", "gte": f"{prefix}000", "lte": f"{prefix}999"}}
                     for prefix in NON_FOOD_PREFIXES]
+        every_word = {"text": {**all_words["text"], "score": {"constant": {"value": ALL_WORDS_BOOST}}}}
+        if food_first:
+            # A non-food name with every word stays under ALL_WORDS_BOOST, like a row with
+            # some of the words: gateway/candidates.py would hand the Buyer only that row.
+            every_word = {"compound": {"must": [all_words], "mustNot": list(not_food),
+                                       "score": {"constant": {"value": ALL_WORDS_BOOST}}}}
+            if home and str(home).startswith(NON_FOOD_PREFIXES):
+                home = None
         if home:
             not_food.append({"equals": {"path": "category", "value": str(home)}})  # it has its own boost
         compound["must"] = [{"text": {"query": text, "path": _TEXT_PATHS, "fuzzy": _FUZZY}}]
         compound["should"] += [
-            {"text": {**all_words["text"], "score": {"constant": {"value": ALL_WORDS_BOOST}}}},
+            every_word,
             {"compound": {"filter": [all_words], "mustNot": not_food,
                           "score": {"constant": {"value": FOOD_BOOST}}}},
             {"text": {"query": text, "path": _TEXT_PATHS}},  # exact words beat near misses
@@ -216,13 +239,21 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
         raise ValueError("give a query or at least one filter")
     compound["filter"].append(scope_clause)
     compound = {key: value for key, value in compound.items() if value}
+    order = [FIXED_ORDER, {"$limit": limit}]
+    if food_first and text:
+        # Words alone can still put the hand wash first (its name has the phrase), so food
+        # rows come first among the rows read: a sort key, not a score, which stays honest.
+        order = [{"$addFields": {"_non_food": {"$or": [
+                     {"$and": [{"$gte": ["$category", f"{prefix}000"]}, {"$lte": ["$category", f"{prefix}999"]}]}
+                     for prefix in NON_FOOD_PREFIXES]}}},  # the same ranges as in the search; no category: food
+                 {"$sort": {"_non_food": 1, **FIXED_ORDER["$sort"]}},
+                 {"$limit": limit}, {"$project": {"_non_food": 0}}]
     return [
         {"$search": {"index": INDEX_NAME, "compound": compound}},
         {"$limit": limit + TIE_ROOM},
         {"$project": {"raw": 0, "embedding": 0}},
         {"$addFields": {"score": {"$meta": "searchScore"}}},
-        FIXED_ORDER,
-        {"$limit": limit},
+        *order,
     ]
 
 
@@ -343,6 +374,8 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
     else:
         home = home_category(db, query) if text else None
         pipeline = build_pipeline(query, filters, limit, kitchen_id, home)
+        if text and food_word_query(db, text, home):
+            pipeline = build_pipeline(query, filters, limit, kitchen_id, home, food_first=True)
     filters = filters or {}
     size = (_size(filters["pack_size"]["value"], filters["pack_size"]["unit"])
             if filters.get("pack_size") else text_size)
