@@ -1,0 +1,18 @@
+{
+  "need_id": "fe7a620e8cb94c3480fab590a91c1bdc",
+  "offer_id": "3df8a4e606a1413cb622c4c594b9ebd8",
+  "verdict": "NEEDS_APPROVAL",
+  "reasons": [
+    "463203: confirmed in stock, but 7.54 EUR per L is 5.8 times the cheapest (1.30 EUR per L); the limit is 3 times",
+    "Some lines have stock Valio does not report: not confirmed until Valio confirms."
+  ],
+  "expected_total": "2545.01",
+  "excluded": [
+    {
+      "product_id": "463203",
+      "reason": "confirmed in stock, but 7.54 EUR per L is 5.8 times the cheapest (1.30 EUR per L); the limit is 3 times"
+    }
+  ],
+  "proposal_id": "0619d3c19a7b494d9d5a2b1e38795c29",
+  "status": "PENDING"
+}
