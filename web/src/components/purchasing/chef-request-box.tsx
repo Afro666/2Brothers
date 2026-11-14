@@ -10,7 +10,11 @@ import type { ChefRequest } from "@/types";
 
 /** Tomorrow in Helsinki, `YYYY-MM-DD`: "Needed by" starts with a day, so an example goes out in one press. */
 function tomorrow(): string {
-  return new Date(Date.now() + 24 * 60 * 60 * 1000).toLocaleDateString("en-CA", { timeZone: "Europe/Helsinki" });
+  // The calendar day in Helsinki first, then one day on: adding 24 hours is wrong on the two clock-change nights.
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Helsinki" });
+  const next = new Date(`${today}T12:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
 }
 
 /**
