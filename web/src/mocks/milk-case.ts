@@ -237,6 +237,7 @@ export const orders = {
     vat: 17.69,
     deliveryFee: null,
     totalInclVat: 148.76,
+    shortfall: { amount: 949, unit: "L" },
     mov: { threshold: MOV_THRESHOLD, current: 131.07, deliveryFee: DELIVERY_FEE },
   },
   needsApproval: {

@@ -413,6 +413,12 @@ describe("mapRecalls", () => {
 });
 
 describe("mapOrder", () => {
+  it("keeps the gateway's shortfall and unit for the partial-fill note", () => {
+    expect(mapOrder(proposal, placedOrder).shortfall).toEqual({ amount: 10, unit: "L" });
+    expect(mapOrder({ ...proposal, shortfall: "0" }, null).shortfall).toBeNull();
+    expect(mapOrder({ ...proposal, shortfall: null }, null).shortfall).toBeNull();
+  });
+
   it("carries the request text and the placed order's time, so repeated orders differ", () => {
     const order = mapOrder(proposal, placedOrder);
     expect(order.requestText).toBe("50 L oat drink by Friday");

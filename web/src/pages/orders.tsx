@@ -10,7 +10,7 @@ import { placedStatuses } from "@/lib/order-status";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDate, formatDateTime, formatEur, shortOrderId } from "@/lib/format";
+import { formatDate, formatDateTime, formatEur, formatQuantity } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { inclVatText } from "@/lib/vat";
 import { orderTitle } from "@/lib/order-title";
@@ -54,15 +54,16 @@ export function OrdersPage() {
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                           <span className="block font-semibold [overflow-wrap:anywhere]">{orderTitle(order, t)}</span>
-                          <code
-                            className="mt-1 block max-w-full font-mono text-xs break-all text-muted-foreground"
-                            title={order.id}
-                          >
-                            {shortOrderId(order.id)}
-                          </code>
                           {order.requestText ? (
                             <span className="mt-1 block text-sm [overflow-wrap:anywhere]">
                               {t("Asked: “{text}”", { text: order.requestText })}
+                            </span>
+                          ) : null}
+                          {order.shortfall ? (
+                            <span className="mt-1 block text-sm text-warning">
+                              {t("Partial fill: {shortfall} of the request cannot be covered for this date.", {
+                                shortfall: formatQuantity(order.shortfall.amount, order.shortfall.unit),
+                              })}
                             </span>
                           ) : null}
                           {order.createdAt ? (
@@ -72,8 +73,9 @@ export function OrdersPage() {
                           ) : null}
                         </div>
                         <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                          {t("Delivery {date} · {total}", {
+                          {t("Delivery {date} · {exVat} ex VAT · {total}", {
                             date: t(formatDate(order.deliveryDate)),
+                            exVat: t(formatEur(order.totalExVat)),
                             total: inclVatText(order, t, formatEur),
                           })}
                         </p>

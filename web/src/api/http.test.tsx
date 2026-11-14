@@ -1218,7 +1218,7 @@ describe("the app on the gateway", () => {
     });
     renderApp("/approvals", createHttpApi("/api"));
 
-    expect(await screen.findByText("incl VAT: unknown (Oat drink)")).toBeVisible();
+    expect(await screen.findByText("incl VAT unknown: no VAT rate for Oat drink")).toBeVisible();
     expect(screen.queryByText(/€80\.00 incl VAT/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Approve €80.00" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
