@@ -1,6 +1,7 @@
 import { type Json, decimal, object, rows, text } from "@/api/gateway-map";
 import type { Api, MatchedBy, ProductSearchFilters, SearchedProduct, SearchedProducts } from "@/api/types";
 import { ApiError } from "@/api/types";
+import { allergenEnglishName } from "@/lib/allergens";
 import type { Allergen, PackUnit, Product, ProductLabel } from "@/types";
 
 /** The gateway request of api/http.ts: a path under the base URL, the parsed JSON back. */
@@ -12,41 +13,6 @@ type CatalogApi = Pick<Api, "searchProducts" | "getProducts">;
 const SEARCH_LIMIT = 50;
 /** `GET /catalog/products?ids=` takes 1 to 200 codes. */
 const IDS_PER_CALL = 200;
-
-/** The gateway sends GS1 codes only; names from docs/contract.md "search_products". */
-const ALLERGEN_NAMES: Record<string, string> = {
-  AW: "Gluten",
-  AC: "Crustaceans",
-  AE: "Eggs",
-  AF: "Fish",
-  AP: "Peanuts",
-  AY: "Soy",
-  AM: "Milk",
-  AN: "Nuts",
-  BC: "Celery",
-  BM: "Mustard",
-  AS: "Sesame",
-  AU: "Sulphites",
-  NL: "Lupin",
-  UM: "Molluscs",
-  ML: "Lactose",
-  UW: "Wheat",
-  NR: "Rye",
-  GB: "Barley",
-  GO: "Oats",
-  GS: "Spelt",
-  GK: "Kamut",
-  SA: "Almonds",
-  SC: "Cashew nuts",
-  SH: "Hazelnuts",
-  SM: "Macadamia nuts",
-  SP: "Pecan nuts",
-  // The member codes as agent/label.py NAMES has them. A code that is not in that table (BP) has
-  // no name here on purpose: a guessed allergen name would be a wrong warning.
-  SR: "Brazil nuts",
-  ST: "Pistachio nuts",
-  SW: "Walnuts",
-};
 
 /** The labels the UI knows how to show (`ProductLabel`); other labels are left out. */
 const SHOWN_LABELS: readonly ProductLabel[] = ["EU_ORGANIC_FARMING", "GOODS_FROM_FINLAND_BLUE_SWAN", "FINNISH_HEART_SYMBOL"];
@@ -83,7 +49,7 @@ function allergensOf(row: Json): Allergen[] | null {
   if (row.allergen_data_known !== true) return null;
   const levels = object(row.allergens ?? {}, "product allergens");
   const of = (list: unknown, presence: Allergen["presence"], what: string) =>
-    codes(list, what).map((code): Allergen => ({ code, name: ALLERGEN_NAMES[code] ?? code, presence }));
+    codes(list, what).map((code): Allergen => ({ code, name: allergenEnglishName(code), presence }));
   return [
     ...of(levels.contains, "CONTAINS", "allergens.contains"),
     ...of(levels.may_contain, "MAY_CONTAIN", "allergens.may_contain"),
