@@ -218,7 +218,40 @@ search (read only) and Valio's API. The photo rows are the four fixture photos w
 
 Tests: `agent/tests/test_usage.py` (a fake transport, no model call).
 
-## Buyer loop settings (#706, #882)
+## One model pick per request (#1208)
+
+The live worker defaults to `NEMOTRON_BUYER_STRATEGY=single_pick`. Code searches the
+need-bound catalog and gets an engine offer, then Nemotron selects up to three
+indices from a compact shortlist with names, packs, arrival flags and quoted unit
+prices where known. It gets no tool definitions, audit history or full catalog
+documents. The model cannot set quantities or call a mutation. Reasons in the
+selection JSON are untrusted and are not shown as the offer's decision record.
+
+The existing Buyer runner still authorizes and audits every tool step. Code gets a
+fresh offer for the selected subset, simulates, assesses safe substitutes through
+the existing host planner, and requests human approval. It never approves or orders.
+One JSON model call, thinking off, 512 output tokens, a 20-second call deadline, no
+model retry. The whole worker has a 35-second bound; a safe timeout follows the
+existing explicit parser fallback and circuit breaker. This is a complete-call
+deadline, not streaming first-token instrumentation.
+
+Only product IDs are cached for ten minutes, scoped to kitchen, request, day,
+quantity/unit, allergen policy and the eligible catalog shortlist. Prices, stock,
+offers and approval are never reused by this cache: every new request re-quotes and
+simulates live. The same idempotency key replays its original result as before.
+An identical choice already in flight does not start another model call; its
+30-second lease expires after interruption. Cache failures cool down for five
+seconds. Pick calls are metered under `buyer_pick`; a cache hit uses zero calls.
+
+Set `NEMOTRON_BUYER_STRATEGY=loop` to retain the previous multi-turn implementation.
+The CLI tool agent still uses that audited loop. The legacy worker-mode tests set
+`strategy="loop"` explicitly; `test_single_pick.py` covers the new default, cache
+scope/expiry, live-price changes, concurrent selection and invalid model output.
+
+Live before/after latency and token measurements are recorded below once deployed;
+an uncongested benchmark is not proof of performance during provider queueing.
+
+## Legacy Buyer loop settings (#706, #882)
 
 The live tool loop runs Nemotron with **thinking off** and a **2,048 token** reply budget,
 temperature 0 (`BUYER_THINKING`, `BUYER_MAX_TOKENS` in `agent/model.py`). The request

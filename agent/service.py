@@ -59,8 +59,13 @@ def parse_need(body, *, today=None):
 
 
 class BuyerWorker:
-    def __init__(self, db, gateway, *, model_factory=Nemotron, timeout=150, now=None):
-        self.db, self.gateway, self.model_factory, self.timeout = db, gateway, model_factory, timeout
+    def __init__(self, db, gateway, *, model_factory=None, timeout=None, now=None, strategy=None):
+        self.strategy = strategy or os.environ.get('NEMOTRON_BUYER_STRATEGY', 'single_pick')
+        if self.strategy not in ('single_pick', 'loop'):
+            raise ValueError('invalid Buyer strategy')
+        self.db, self.gateway = db, gateway
+        self.model_factory = model_factory or (lambda: Nemotron(max_attempts=1))
+        self.timeout = timeout if timeout is not None else (35 if self.strategy == 'single_pick' else 150)
         self.now = now
 
     async def run(self, kitchen_id, body):
@@ -92,10 +97,16 @@ class BuyerWorker:
             # for approval). A run that wrote nothing is safe to start once more, under its own
             # run id so its audit steps stay separate. A run that wrote something is never repeated.
             steps = []
-            for attempt in (1, 2):
+            for attempt in ((1,) if self.strategy == 'single_pick' else (1, 2)):
                 run_id = row['_id'] if attempt == 1 else f"{row['_id']}-retry"
+                selected_model = model
+                if self.strategy == 'single_pick':
+                    from agent.single_pick import SinglePickModel
+                    clock = self.now() if self.now else datetime.now(ZoneInfo('Europe/Helsinki'))
+                    selected_model = SinglePickModel(model, self.db, kitchen_id, need, stored['need_id'],
+                                                    exclusions, today=clock.date())
                 async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
-                    buyer = Buyer(model, session, self.gateway, need_id=stored['need_id'],
+                    buyer = Buyer(selected_model, session, self.gateway, need_id=stored['need_id'],
                                   requested_date=need['requested_date'],
                                   run_id=run_id,
                                   max_steps=12, now=self.now,
@@ -104,6 +115,8 @@ class BuyerWorker:
                                   attempt=attempt)
                     outcome = await buyer.run(need['text'])
                 steps += buyer.trace
+                if getattr(selected_model, 'timed_out', False):
+                    raise WorkerError(504, 'BUYER_TIMEOUT', fallback_safe=not buyer.mutations)
                 if outcome['status'] == 'SENT_FOR_APPROVAL' or buyer.mutations:
                     break
             if outcome['status'] != 'SENT_FOR_APPROVAL':
