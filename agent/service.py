@@ -127,7 +127,7 @@ class BuyerWorker:
                 await model.close()
 
 
-def create_app(worker=None):
+def create_app(worker=None, shelf=None):
     state = {}
     @asynccontextmanager
     async def lifespan(app):
@@ -176,6 +176,10 @@ def create_app(worker=None):
             raise
         except Exception:
             raise WorkerError(503, 'BUYER_UNAVAILABLE') from None
+
+    # Snap the shelf (#373): POST /shelf reads a photo into a stock count to confirm.
+    from agent.shelf_service import mount_shelf
+    mount_shelf(app, WorkerError, shelf)
     return app
 
 

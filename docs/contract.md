@@ -488,7 +488,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 |---|---|---|---|
 | POST | `/stock-counts` | `kitchen:write` | Push a stock count (POS, inventory, manual). `null` means unknown, never zero. A repeat `idempotency_key` returns the stored answer. |
 | GET | `/stock` | `kitchen:read` | Current stock and position (on hand + on order). Shape under "Body shapes: stock and demand". |
-| POST | `/stock/photo` | `kitchen:write` | Nemotron 3.5 Super VL reads a shelf photo into a count to confirm. Stores no count. Shape under "Count from a shelf photo". Proposed; the gateway does not serve it yet. |
+| POST | `/stock/photo` | `kitchen:write` | Nemotron 3.5 Super VL reads a shelf photo into a count to confirm. Stores no count. Shape under "Count from a shelf photo". Served. |
 | GET | `/products`, `/products/{id}` | `kitchen:read` | Own products (not in a supplier catalog). Shape below. |
 | POST, PUT, DELETE | `/products`, `/products/{id}` | `kitchen:write` | Create, change or delete an own product. |
 | GET | `/catalog/products?ids=` | `kitchen:read` | Product rows by code, for screens that hold product codes (recipes, orders). `ids` is 1 to 200 codes, comma-separated. Returns `{"products": [...]}` in the order asked, each in the product row shape of `search_products` (no `score`, no `match_reasons`). Covers the supplier catalogs and this kitchen's own products, never another kitchen's. A code that is not found is left out; it is not an error. Proposed; the gateway does not serve it yet. |
@@ -1210,13 +1210,15 @@ server's unbound session (the demo's Valio view) passes.
 
 ### Count from a shelf photo (#373)
 
-Proposed; the gateway does not serve it yet.
+Served (`gateway/stock_photo.py`; the Buyer worker reads the photo at its internal
+`POST /shelf`, `agent/shelf_service.py`, because the model key lives in that container).
 
 `POST /v1/kitchens/{kitchen_id}/stock/photo` reads one photo of a shelf with Nemotron
 3.5 Super VL and answers a count to confirm. It writes nothing to stock: the person
 checks the numbers, and the web app then sends the usual `POST /stock-counts`. The only
-thing stored is one audit entry (`stock_photo_read`: who, how many rows, how long; never
-the image).
+thing stored is one audit entry (`stock_photo_read`: who, how many rows, how many of
+them counted, how long; or `stock_photo_failed` with the error code). The audit entry
+never holds the image or the text the model read.
 
 - Scope `kitchen:write`: a signed-in person who is not a `viewer`, or a kitchen API
   token with `kitchen:write`. The Buyer agent token is refused (403 `SCOPE_REQUIRED`).
@@ -1230,7 +1232,8 @@ the image).
 - The image is PNG or JPEG (decided from its first bytes, not from a header), at most
   4 MB after decoding. The whole request body is at most 6 MB. The web app scales a
   photo down to 1600 px on the long side and sends JPEG.
-- One model call. The gateway never retries it. The answer can take up to 60 seconds.
+- One call to the worker. The gateway never retries it. The worker stops the vision
+  call after 75 seconds (504 `VISION_TIMEOUT`); a normal read takes a few seconds.
 
 Answer:
 
@@ -1265,7 +1268,7 @@ Answer:
 | `rows[].confidence` | `high`, `medium`, `low` | The model's own word. |
 | `rows[].product_id`, `product_name` | string or null | The kitchen's product the label matches; both null for `UNMATCHED`. |
 | `rows[].packs` | integer or null | Packs the model counted. Null unless the row is `COUNTED`. |
-| `rows[].pack_size` | decimal string or null | Kitchen units in one pack (`net_content.value`; `"1"` for a product counted in `PCS`). Null when not known. |
+| `rows[].pack_size` | decimal string or null | Kitchen units in one pack (`net_content.value`; `"1"` for a product counted in `PCS`). Null when not known: no net content, a net content in another unit, or a product sold by weight. |
 | `rows[].count` | decimal string or null | `packs` x `pack_size`, in `unit`: the value for `on_hand` in `POST /stock-counts`. Null unless the row is `COUNTED`. |
 | `rows[].unit` | `L`, `KG`, `PCS` or null | The unit the kitchen counts this product in. Null for `UNMATCHED`. |
 
