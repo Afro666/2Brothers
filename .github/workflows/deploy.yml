@@ -14,6 +14,8 @@ on:
       - "store/**"
       - "agent/**"
       - "signals/**"
+      - "env/**"
+      - "demo/**"
       - "pyproject.toml"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
