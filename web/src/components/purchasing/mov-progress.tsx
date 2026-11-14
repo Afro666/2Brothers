@@ -8,7 +8,15 @@ import type { MovState } from "@/types";
  * The order against the free-delivery threshold (MOV). MOV is a threshold,
  * not a wall: below it the order can still go, and pays the delivery fee.
  */
-export function MovProgress({ mov, className }: { mov: MovState; className?: string }) {
+export function MovProgress({ mov, className }: { mov: MovState | null; className?: string }) {
+  if (mov == null) {
+    return (
+      <p className={cn("inline-flex items-center gap-1.5 text-sm text-muted-foreground", className)}>
+        <Truck className="size-4" aria-hidden />
+        Free-delivery threshold and delivery fee unknown: the supplier's terms are not set.
+      </p>
+    );
+  }
   const gap = Math.max(0, Math.round((mov.threshold - mov.current) * 100) / 100);
   const met = gap === 0;
   const pct = mov.threshold > 0 ? Math.min(100, (mov.current / mov.threshold) * 100) : 100;
@@ -20,7 +28,8 @@ export function MovProgress({ mov, className }: { mov: MovState; className?: str
           {met ? "Free delivery reached" : `${formatEur(gap)} to free delivery`}
         </span>
         <span className="text-muted-foreground tabular-nums">
-          {formatEur(mov.current)} of {formatEur(mov.threshold)} ex VAT
+          {/* Once reached, a gateway order knows the threshold only as "met", so it is not named. */}
+          {met ? formatEur(mov.current) : `${formatEur(mov.current)} of ${formatEur(mov.threshold)}`} ex VAT
         </span>
       </div>
       <div

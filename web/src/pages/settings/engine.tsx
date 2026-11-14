@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { useAsync } from "@/lib/use-async";
+import { SampleData } from "@/components/purchasing/sample-data";
 import { SettingsSection } from "@/pages/settings/section";
 import type { DemandClass, KitchenSettings } from "@/types";
 
@@ -89,6 +90,7 @@ export function EngineSection() {
       title="Ordering engine"
       description="How the Buyer sizes orders for this kitchen. A person still approves every order."
     >
+      <SampleData of="getKitchenSettings" />
       {state.status === "loading" ? <LoadingState label="Loading settings" /> : null}
       {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
       {state.status === "ready" && draft === null ? (

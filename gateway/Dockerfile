@@ -9,6 +9,7 @@ COPY engine ./engine
 COPY store ./store
 COPY agent ./agent
 COPY signals ./signals
+COPY monitor ./monitor
 # Demo data: docker compose exec gateway python -m demo.seed
 COPY env ./env
 COPY demo ./demo

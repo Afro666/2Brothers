@@ -70,7 +70,7 @@ def apply_notices(gateway, kitchen_id, notices, *, live_enrichment=False):
             from monitor.enrichment import attach
             try:
                 attach(gateway, kitchen_id, replacement, live=live_enrichment)
-            except (ValueError, RuntimeError):
+            except (ValueError, RuntimeError, OSError):
                 gateway._audit(kitchen_id, 'replacement_enrichment_unknown', 'recall-monitor',
                                proposal_id=replacement['proposal_id'])
             gateway._audit(kitchen_id, 'recall_replacement_proposed', 'recall-buyer',

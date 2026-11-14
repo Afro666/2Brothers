@@ -31,6 +31,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build the gateway image
         run: docker build -f gateway/Dockerfile -t gateway-test .
+      - name: Read public recall and verification evidence in the runtime image
+        run: >-
+          docker run --rm --workdir /tmp gateway-test python -c
+          "from monitor.labels import recording; from monitor.enrichment import evidence;
+          from monitor.proposals import apply_notices;
+          assert recording()['complete'] is True;
+          assert evidence()['product_id'] == '475842'"
       - name: Start it and check /health (no keys needed for /health)
         run: |
           docker run -d --name gw -p 8000:8000 gateway-test

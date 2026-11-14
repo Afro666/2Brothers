@@ -44,8 +44,8 @@ export interface Product {
   salesUnit: string;
   /** The unit prices compare in (L or KG). */
   baseUnit: string;
-  /** Base units in one sales unit (1 for a 1 L carton sold per piece). */
-  baseUnitsPerSalesUnit: number;
+  /** Base units in one sales unit (1 for a 1 L carton sold per piece); null when not known. */
+  baseUnitsPerSalesUnit: number | null;
   units: PackUnit[];
   /** Fat % from nutrition data; null when not given. */
   fatPercent: number | null;
@@ -66,12 +66,15 @@ export interface Offer {
   requestedDate: string;
   /** Catalog price per sales unit before tax; null when `error: true`. */
   priceExVat: number | null;
-  taxRatePercent: number;
+  /** null when the gateway sends only the order's VAT total. */
+  taxRatePercent: number | null;
   /** Price per comparison unit before tax, e.g. € per L. */
   comparisonPrice: number | null;
   comparisonUnit: "L" | "KG" | null;
-  /** In `salesUnit`. 999999 and 9999999999 are "unknown" sentinels. */
-  availableAmount: number;
+  /** In `salesUnit`. 999999, 9999999999 and null are "unknown". */
+  availableAmount: number | null;
+  /** The supplier confirmed stock for the ordered quantity, without saying how much there is. */
+  stockConfirmed?: boolean;
   salesUnit: string;
   /** Earliest date it can arrive; can be later than `requestedDate`. */
   availableDate: string | null;
@@ -117,11 +120,12 @@ export interface Order {
   id: string;
   status: OrderStatus;
   urgency: Urgency;
-  deliveryDate: string;
+  deliveryDate: string | null;
   lines: OrderLine[];
-  totalExVat: number;
+  totalExVat: number | null;
   totalInclVat: number;
-  mov: MovState;
+  /** null = the supplier's delivery terms are not known. */
+  mov: MovState | null;
 }
 
 /** One rule of the mandate that this order breaks or touches. */
@@ -135,7 +139,7 @@ export interface ApprovalRequest {
   id: string;
   orderId: string;
   requestedBy: string;
-  createdAt: string;
+  createdAt: string | null;
   /** One line: what the chef asked and what this order covers. */
   summary: string;
   lineCount: number;
@@ -221,11 +225,13 @@ export type AuditKind =
   | "order"
   | "stock"
   | "forecast_share"
-  | "settings";
+  | "settings"
+  | "other";
 
 export interface AuditEvent {
   id: string;
-  at: string;
+  /** null = the gateway did not record when. */
+  at: string | null;
   kind: AuditKind;
   actor: "chef" | "agent" | "gateway" | "human" | "valio" | "system";
   /** What happened, short. */

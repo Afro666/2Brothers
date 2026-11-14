@@ -16,7 +16,10 @@ SCHEMA['properties']['origin']['description'] = 'Explicit bean origins; do not i
 def validate(row):
     if not isinstance(row, dict) or row.get('source_url') != SOURCE or row.get('product_id') != '475842':
         raise ValueError('Unsupported manufacturer evidence')
-    if row.get('name', '').casefold() != 'crescendo' or row.get('brand', '').casefold() != 'löfbergs':
+    name, brand = row.get('name') or '', row.get('brand') or ''
+    if not isinstance(name, str) or not isinstance(brand, str):
+        raise ValueError('Manufacturer product identity did not match')
+    if name.casefold() != 'crescendo' or brand.casefold() != 'löfbergs':
         raise ValueError('Manufacturer product identity did not match')
     for key in ('pack', 'origin', 'allergens'):
         if row.get(key) is not None and (not isinstance(row[key], str) or len(row[key]) > 500):

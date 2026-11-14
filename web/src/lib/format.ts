@@ -11,6 +11,19 @@ export function isUnknownStock(amount: number | null | undefined): boolean {
   return amount == null || UNKNOWN_STOCK_SENTINELS.includes(amount);
 }
 
+type OfferStock = { availableAmount: number | null; stockConfirmed?: boolean; salesUnit: string };
+
+/** Stock is unconfirmed unless it is measured, or the supplier confirmed it without giving the amount. */
+export function isStockUnconfirmed(offer: OfferStock): boolean {
+  return isUnknownStock(offer.availableAmount) && !offer.stockConfirmed;
+}
+
+export function formatOfferStock(offer: OfferStock): string {
+  return isUnknownStock(offer.availableAmount) && offer.stockConfirmed
+    ? "confirmed"
+    : formatStock(offer.availableAmount, offer.salesUnit);
+}
+
 const TZ = "Europe/Helsinki";
 
 // The viewer picks the number and date format in Settings > Appearance.
@@ -92,6 +105,7 @@ export function formatPercent(fraction: number | null): string {
 }
 
 /** "KI 12 × 1 L": the pack a sales unit holds, from the catalog `units[]`. */
-export function formatPack(salesUnit: string, baseUnitsPerSalesUnit: number, baseUnit: string): string {
+export function formatPack(salesUnit: string, baseUnitsPerSalesUnit: number | null, baseUnit: string): string {
+  if (baseUnitsPerSalesUnit == null) return `${salesUnit} (pack size unknown)`;
   return `${salesUnit} = ${formatNumber(baseUnitsPerSalesUnit)} ${baseUnit}`;
 }

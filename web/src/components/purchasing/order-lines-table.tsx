@@ -4,11 +4,11 @@ import {
   formatDateTime,
   formatEur,
   formatNumber,
+  formatOfferStock,
   formatPack,
-  formatStock,
   isLater,
   isPassed,
-  isUnknownStock,
+  isStockUnconfirmed,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { OrderLine } from "@/types";
@@ -27,8 +27,8 @@ function lineFacts(line: OrderLine, now: Date) {
       offer.comparisonPrice == null || offer.comparisonUnit == null
         ? "unknown"
         : `${formatEur(offer.comparisonPrice)} / ${offer.comparisonUnit}`,
-    stock: formatStock(offer.availableAmount, offer.salesUnit),
-    stockUnknown: isUnknownStock(offer.availableAmount),
+    stock: formatOfferStock(offer),
+    stockUnknown: isStockUnconfirmed(offer),
     available: formatDate(offer.availableDate),
     late: isLater(offer.availableDate, offer.requestedDate),
     closing: formatDateTime(offer.closingTime),

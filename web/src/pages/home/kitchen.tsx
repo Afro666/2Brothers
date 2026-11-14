@@ -3,6 +3,7 @@ import { useAsync } from "@/lib/use-async";
 import type { Api } from "@/api/types";
 import type { ApprovalRequest, AuditEvent, DemandLine, StockItem, Supplier } from "@/types";
 
+import { SampleData } from "@/components/purchasing/sample-data";
 import { nextCutoff } from "@/pages/home/cutoff";
 import { Tile, TileState } from "@/pages/home/tile";
 
@@ -27,7 +28,7 @@ export function ApprovalTile({ api }: { api: Api }) {
       >
         {(approvals: ApprovalRequest[]) => {
           const pending = approvals.filter((approval) => approval.status === "PENDING");
-          const oldest = [...pending].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))[0];
+          const oldest = [...pending].sort((a, b) => Date.parse(a.createdAt ?? "") - Date.parse(b.createdAt ?? ""))[0];
           return pending.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing is waiting.</p>
           ) : (
@@ -47,6 +48,7 @@ export function CutoffTile({ api, now }: { api: Api; now: Date }) {
   const state = useAsync(() => api.listSuppliers(), [api]);
   return (
     <Tile title="Next order cut-offs" href="/suppliers" linkLabel="Review suppliers">
+      <SampleData of="listSuppliers" />
       <TileState
         status={state.status}
         error={state.error}
@@ -89,6 +91,7 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
   const state = useAsync(() => loadKitchenStock(api, now), [api, now.toISOString()]);
   return (
     <Tile title="Stock to check" href="/stock" linkLabel="Count stock">
+      <SampleData of="getStock" />
       <TileState
         status={state.status}
         error={state.error}
@@ -155,12 +158,14 @@ export function AuditTile({ api }: { api: Api }) {
       >
         {(events: AuditEvent[]) => (
           <ul className="space-y-3 text-sm">
+            {/* Newest first; a step with no recorded time keeps the order the API recorded it in. */}
             {[...events]
-              .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+              .reverse()
+              .sort((a, b) => (a.at && b.at ? Date.parse(b.at) - Date.parse(a.at) : 0))
               .slice(0, 5)
               .map((event) => (
                 <li key={event.id} className="space-y-1">
-                  <time className="text-xs text-muted-foreground" dateTime={event.at}>
+                  <time className="text-xs text-muted-foreground" dateTime={event.at ?? undefined}>
                     {formatDateTime(event.at)}
                   </time>
                   <p>{event.summary}</p>

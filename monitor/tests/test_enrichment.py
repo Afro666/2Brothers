@@ -20,3 +20,11 @@ def test_live_is_opt_in_and_identity_mismatch_is_refused():
     assert evidence(client=Wrong())['name'] == 'Crescendo'  # no call by default
     with pytest.raises(ValueError, match='identity'):
         evidence(live=True, client=Wrong())
+
+
+def test_live_null_identity_is_refused_not_crashed():
+    class Nulls:
+        def scrape_json(self, url, schema):
+            return {'name': None, 'brand': None}
+    with pytest.raises(ValueError, match='identity'):
+        evidence(live=True, client=Nulls())
