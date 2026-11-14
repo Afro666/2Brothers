@@ -380,7 +380,7 @@ export function createHttpApi(baseUrl: string): Api {
     async getOrder(id) {
       // The id is a proposal's or a placed order's. The proposals list says which, so the page
       // does not ask the proposal route for an order id and get a 404 on every order page.
-      const list = await proposals().catch(() => [] as Json[]);
+      const list = await proposals();
       const placedBy = list.find((row) => row.order_id === id);
       if (placedBy) {
         // A placed order: its basket is on the proposal that placed it.

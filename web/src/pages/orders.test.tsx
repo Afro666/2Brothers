@@ -229,6 +229,19 @@ describe("orders pages", () => {
     expect(screen.queryByText("Placed")).not.toBeInTheDocument();
   });
 
+  it("order history says the same, and an order whose receipt says it was sent stays Placed", async () => {
+    const api = createMockApi();
+    const all = await api.listOrders();
+    const sent = all.find((order) => order.receipt?.supplierOutcome === "NOT_SENT")!;
+    api.listOrders = async () => [
+      sent,
+      { ...sent, id: "ORD-SENT", receipt: { ...sent.receipt!, supplierOutcome: "CONFIRMED" } },
+    ];
+    renderApp("/orders", api);
+    expect(await screen.findByText("Approved and recorded, not sent to the supplier")).toBeVisible();
+    expect(screen.getAllByText("Placed")).toHaveLength(1);
+  });
+
   it("omits urgency on a placed order but keeps it on a proposal", async () => {
     renderApp("/orders/ORD-1042");
     expect(await screen.findByRole("heading", { level: 1, name: /Arla 1 L/ })).toBeVisible();
