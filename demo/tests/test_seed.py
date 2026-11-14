@@ -82,6 +82,9 @@ def test_load_and_prove_the_forecast(data, monkeypatch):
     engine, base = proof["methods"]["engine"]["total"], proof["methods"]["weekday-average"]["total"]
     assert engine["actual"] > 0 and engine["wape"] < base["wape"]
     assert len(proof["methods"]["engine"]["weeks"]) == 6
+    # Short and waste per unit, never one sum over kg, l and pieces (#1618).
+    assert engine["under"] is None and len(engine["by_unit"]) > 1
+    assert engine["under_eur"] is not None and engine["over_eur"] is not None
     ahead = gw.forecast(DEMO_ID, "2026-10-12", "2026-10-25")["lines"]
     assert ahead and all(line["made_on"] == "2026-10-12" for line in ahead)
 
@@ -92,3 +95,16 @@ def test_the_demo_kitchen_gets_a_standing_order_that_drifts():
     stock = [{"meta": {"kitchen_id": "demo-kitchen", "product_id": "463335"}, "used": 20.0}] * 28
     assert demo_standing_orders({"stock": stock}) == {"463335": "96"}          # 20 x 3 x 1.6
     assert demo_standing_orders({"stock": []}) == {}
+
+
+def test_each_menu_entry_has_the_meal_of_its_recipe(data):
+    """#1618: the breakfast buffet is breakfast, the hotel's main dish is dinner, never all lunch."""
+    meals = {(day["recipe_id"], day["meal"]) for plan in data["menu_plans"] for day in plan["days"]}
+    assert ("env-breakfast_buffet", "breakfast") in meals
+    assert {meal for recipe, meal in meals if recipe != "env-breakfast_buffet"} == {"dinner"}
+    from demo.seed import meal_of
+    from env.kitchens import TYPES
+    assert meal_of("oat_porridge", TYPES["hospital"]) == "breakfast"
+    assert meal_of("chicken_rice", TYPES["hospital"]) == "lunch"
+    assert meal_of("baked_salmon", TYPES["hotel"]) == "dinner"
+    assert meal_of("school_sides", TYPES["school"]) == "lunch"

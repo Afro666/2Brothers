@@ -9,6 +9,9 @@ python -m demo.seed                # loads into MONGODB_URI; safe to run again
 
 - 20 kitchens, history from Mon 2026-08-17 up to yesterday; `demo-kitchen` is a hotel.
 - 4 weeks ahead: menu plans and the engine's forecast, never actuals.
+- Each menu entry has the meal of its recipe (#1618): porridge and the buffet are breakfast,
+  the hotel's rotating main is dinner, the rest lunch. A database seeded before #1618 has every
+  entry at lunch: `python -m demo.fix_meals` (dry run), then `--apply`, changes only that field.
 - Every past week keeps the forecast as made the Monday before, for the engine and for a
   weekday-average baseline, so `GET /v1/kitchens/{k}/forecast-accuracy` can prove it.
 

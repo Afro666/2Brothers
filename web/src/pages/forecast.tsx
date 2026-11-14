@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAsync } from "@/lib/use-async";
+import { formatEur } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { weekRangeLabel } from "@/lib/week";
 import type { ForecastAccuracy, ForecastScore, ForecastSeries } from "@/types";
@@ -28,6 +29,8 @@ export const TILES: {
   label: string;
   hint: string;
   value: (score: ForecastScore, unit: string | null, t: ReturnType<typeof useT>) => string;
+  /** Short or waste over two or more units: one line per unit, never one sum (#1618). */
+  units?: "short" | "waste";
 }[] = [
   {
     label: "Weekly error (WAPE)",
@@ -47,14 +50,41 @@ export const TILES: {
   {
     label: "Short",
     hint: "Needed above the forecast.",
-    value: (score, unit, t) => formatQuantity(score.short, unit, t("unknown")),
+    value: (score, unit, t) => quantityOrEuros(score, "short", unit, t),
+    units: "short",
   },
   {
     label: "Waste",
     hint: "Forecast above the need.",
-    value: (score, unit, t) => formatQuantity(score.waste, unit, t("unknown")),
+    value: (score, unit, t) => quantityOrEuros(score, "waste", unit, t),
+    units: "waste",
   },
 ];
+
+/** One sum in one unit; over mixed units the euro value when every product has a price, else nothing. */
+function quantityOrEuros(score: ForecastScore, key: "short" | "waste", unit: string | null, t: ReturnType<typeof useT>) {
+  if (!score.byUnit) return formatQuantity(score[key], unit, t("unknown"));
+  const eur = key === "short" ? score.shortEur : score.wasteEur;
+  return eur == null ? "" : formatEur(eur);
+}
+
+function Figure({ score, unit, tile, main }: { score: ForecastScore; unit: string | null; tile: (typeof TILES)[number]; main: boolean }) {
+  const t = useT();
+  const value = tile.value(score, unit, t);
+  const lines = tile.units && score.byUnit ? score.byUnit.map((row) => formatQuantity(row[tile.units!], row.unit)) : [];
+  return (
+    <dd>
+      {value ? <span className={main ? "block text-2xl font-semibold" : "block text-sm font-medium"}>{value}</span> : null}
+      {lines.length ? (
+        <ul className={value ? "text-xs text-muted-foreground" : main ? "text-base font-semibold" : "text-sm font-medium"}>
+          {lines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
+    </dd>
+  );
+}
 
 /** What the kitchen needed over the past weeks; null when no week has an actual. */
 function needed(series: ForecastSeries): number | null {
@@ -117,9 +147,9 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
                   <h3 className="text-sm font-medium">{t(tile.label)}</h3>
                   <dl>
                     <dt className="text-xs text-muted-foreground">{t("Our engine")}</dt>
-                    <dd className="text-2xl font-semibold">{tile.value(series.engine, series.unit, t)}</dd>
+                    <Figure score={series.engine} unit={series.unit} tile={tile} main />
                     <dt className="mt-1 text-xs text-muted-foreground">{t("Weekday average")}</dt>
-                    <dd className="text-sm font-medium">{tile.value(series.baseline, series.unit, t)}</dd>
+                    <Figure score={series.baseline} unit={series.unit} tile={tile} main={false} />
                   </dl>
                   <p className="text-xs text-muted-foreground">{t(tile.hint)}</p>
                 </CardContent>

@@ -675,6 +675,18 @@ export interface ForecastScore {
   waste: number | null;
   /** Days a product would have run out when ordering to this forecast. */
   stockOutDays: number | null;
+  /** Short and waste per kitchen unit when the products have two or more units (#1618). */
+  byUnit?: ForecastUnitScore[];
+  /** Short and waste in EUR before VAT; null unless every product has a price. */
+  shortEur?: number | null;
+  wasteEur?: number | null;
+}
+
+/** Short and waste in one kitchen unit (docs/contract.md, "Forecasts", `by_unit`). */
+export interface ForecastUnitScore {
+  unit: string | null;
+  short: number;
+  waste: number;
 }
 
 export interface ForecastWeek {

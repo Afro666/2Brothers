@@ -1827,6 +1827,9 @@ class Gateway:
         d0, d1 = date.fromisoformat(start), date.fromisoformat(end)
         if d1 < d0 or (d1 - d0).days > 400:
             raise GatewayError(422, "INVALID_REQUEST", "from must be before to, at most 400 days")
+        from gateway.forecast_value import units_and_prices
+        # Short and waste per kitchen unit and in euros, never one sum over kg, l and pieces (#1618).
+        units, prices = units_and_prices(self.db, kitchen_id, d0, d1)
         out = {"kitchen_id": kitchen_id, "from": start, "to": end, "methods": {}}
         compared = {}
         for method, collection in (("engine", "forecasts"), ("weekday-average", "forecast_baseline")):
@@ -1841,7 +1844,8 @@ class Gateway:
             # already mapped to unknown by the web, never a perfect 0% baseline.
             pairs = ([row for row in candidates if (row[0], row[1]) in common]
                      if all(compared.values()) else candidates)
-            out["methods"][method] = {"total": accuracy(pairs), "weeks": accuracy_by_week(pairs)}
+            out["methods"][method] = {"total": accuracy(pairs, units, prices),
+                                      "weeks": accuracy_by_week(pairs, units, prices)}
         return out
 
     def forecast(self, kitchen_id: str, start: str, end: str) -> dict:
