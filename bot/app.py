@@ -404,6 +404,7 @@ class Bot:
             elif action == "d":
                 proposal, index = self._add(proposal, index, parts[3])
                 self._show_summary(chat, proposal)
+                blocks = render.blocks_of(proposal)       # the product may start a new supplier block
                 notice = "Added."
             elif action == "q":
                 proposal, mode, notice = self._set_quantity(proposal, index, line, parts[4])
