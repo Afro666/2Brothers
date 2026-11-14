@@ -28,7 +28,8 @@ class Links:
             data = json.loads(self._path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             data = {}
-        return {"codes": dict(data.get("codes") or {}), "chats": dict(data.get("chats") or {})}
+        return {"codes": dict(data.get("codes") or {}), "chats": dict(data.get("chats") or {}),
+                "briefs": list(data.get("briefs") or [])}
 
     def _write(self, data: dict) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -60,6 +61,18 @@ class Links:
 
     def linked(self, chat_id: int) -> bool:
         return str(chat_id) in self._read()["chats"]
+
+    def mark_sent(self, slot: str) -> bool:
+        """True the first time a brief slot ("2026-11-14 morning") is marked; False after that,
+        also across a restart."""
+        with self._lock:
+            data = self._read()
+            sent = data.get("briefs") or []
+            if slot in sent:
+                return False
+            data["briefs"] = (sent + [slot])[-8:]
+            self._write(data)
+            return True
 
     def chats(self) -> list[int]:
         return [int(c) for c in self._read()["chats"]]

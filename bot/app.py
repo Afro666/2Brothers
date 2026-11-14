@@ -20,9 +20,36 @@ from bot.links import Links
 
 HELP = ("Say or type what the kitchen needs, for example: <b>20 L oat drink for Monday</b>.\n"
         "/week makes the order for the menu plan: 7 days from the next working day.\n"
+        "/brief shows what waits and what is urgent. It also comes at 07:00 and 16:00.\n"
         "You approve on the approval card: press \"Open to approve\".")
 NOT_LINKED = "This chat is not linked to a kitchen yet. Ask the kitchen's admin for a link."
 MAX_VOICE_SECONDS = 30
+
+
+BRIEF_TIMES = {"morning": "07:00", "evening": "16:00"}      # the kitchen's time
+BRIEF_WINDOW = timedelta(hours=2)       # a bot that starts at 15:00 does not send the 07:00 brief
+
+
+def due_slot(now: datetime, times: dict[str, str]) -> str | None:
+    """The brief whose time has come: "morning", "evening" or None."""
+    for slot, clock in times.items():
+        try:
+            hour, minute = (int(part) for part in clock.split(":"))
+            start = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        except ValueError:
+            continue
+        if start <= now < start + BRIEF_WINDOW:
+            return slot
+    return None
+
+
+def parse_brief_times(text: str | None) -> dict[str, str]:
+    """BOT_BRIEF_TIMES: "07:00,16:00" (morning, evening); "off" sends no timed brief."""
+    if text is None or not text.strip():
+        return dict(BRIEF_TIMES)
+    if text.strip().lower() == "off":
+        return {}
+    return dict(zip(("morning", "evening"), (part.strip() for part in text.split(","))))
 
 
 class NotConfigured(Exception):
@@ -31,7 +58,8 @@ class NotConfigured(Exception):
 
 class Bot:
     def __init__(self, telegram: Telegram, gateway: Gateway, links: Links, speech: Speech | None = None,
-                 site_url: str | None = None, now=lambda: datetime.now(render.HELSINKI)):
+                 site_url: str | None = None, now=lambda: datetime.now(render.HELSINKI),
+                 brief_times: dict[str, str] | None = None):
         self.tg, self.gw, self.links, self.speech = telegram, gateway, links, speech
         self.site_url = site_url.rstrip("/") if site_url else None
         self.now = now
@@ -39,6 +67,7 @@ class Bot:
         self._summaries: dict[tuple[int, str], int] = {}     # (chat, proposal) -> summary message id
         self._heard: dict[tuple[int, str], str] = {}
         self._lock = threading.Lock()
+        self.brief_times = brief_times if brief_times is not None else dict(BRIEF_TIMES)
 
     # ---- entry -------------------------------------------------------------------------
     def handle(self, update: dict) -> None:
@@ -74,6 +103,8 @@ class Bot:
             self._order(chat, lambda: self.gw.plan(first.isoformat(), (first + timedelta(days=6)).isoformat(),
                                                    first.isoformat()),
                         f"One moment: I am adding up what the menu plan needs from {render.day(first.isoformat())}.")
+        elif text.split(" ")[0] == "/brief":
+            self._brief(chat, text.partition(" ")[2].strip().lower())
         elif text.startswith("/"):
             self.tg.send(chat, HELP)
         elif text:
@@ -136,6 +167,60 @@ class Bot:
         for index in range(len(render.blocks_of(proposal))):
             message = render.supplier_message(proposal, index, names)
             self.tg.send(chat, message.text, message.markup, silent=True)
+
+    # ---- the brief ---------------------------------------------------------------------
+    def _period(self, asked: str = "") -> str:
+        return asked if asked in ("morning", "evening") else "morning" if self.now().hour < 12 else "evening"
+
+    def _brief_messages(self, period: str) -> list[render.Message]:
+        """The brief, then one message per supplier order that waits (the same order message
+        as after a request, so its Change buttons work)."""
+        answer = self.gw.brief(period)
+        waiting = self.gw.waiting()
+        url = f"{self.site_url}/approvals" if self.site_url else None
+        messages = [render.brief(answer, waiting, self.now().date().isoformat(), url)]
+        orders = [(p, i) for p in waiting for i in range(len(render.blocks_of(p)))]
+        for proposal, index in orders[:render.BRIEF_ORDERS]:
+            messages.append(render.supplier_message(proposal, index, self._names(proposal)))
+        if len(orders) > render.BRIEF_ORDERS:
+            more = len(orders) - render.BRIEF_ORDERS
+            messages.append(render.Message(f"... and {more} more supplier order{'s' if more != 1 else ''}. "
+                                           "Open the approvals to see them."))
+        return messages
+
+    def _brief(self, chat: int, asked: str = "") -> None:
+        status = self.tg.send(chat, "One moment: I am reading the kitchen's day.", silent=True)
+        self.tg.typing(chat)
+        try:
+            messages = self._brief_messages(self._period(asked))
+        except GatewayError as exc:
+            self.tg.edit(chat, status, render.refusal(exc.code, exc.message))
+            return
+        self.tg.edit(chat, status, messages[0].text, messages[0].markup)
+        for message in messages[1:]:
+            self.tg.send(chat, message.text, message.markup, silent=True)
+
+    def tick(self) -> None:
+        """Called about twice a minute: sends the 07:00 and the 16:00 brief to every linked chat,
+        once per slot. The slot is marked before the send, so a restart or a failure never sends
+        it twice; a missed brief is still there with /brief."""
+        now = self.now()
+        slot = due_slot(now, self.brief_times)
+        if slot is None or not self.links.chats() or not self.links.mark_sent(f"{now.date().isoformat()} {slot}"):
+            return
+        try:
+            messages = self._brief_messages(slot)
+        except GatewayError as exc:
+            print(f"bot: the {slot} brief was not sent: {exc.code}", file=sys.stderr, flush=True)
+            return
+        quiet = len(messages) == 1 and "<b>" not in messages[0].text      # nothing urgent: no sound
+        for chat in self.links.chats():
+            try:
+                self.tg.send(chat, messages[0].text, messages[0].markup, silent=quiet)
+                for message in messages[1:]:
+                    self.tg.send(chat, message.text, message.markup, silent=True)
+            except TelegramError as exc:
+                print(f"bot: telegram: {exc}", file=sys.stderr, flush=True)
 
     def _show_summary(self, chat: int, proposal: dict) -> None:
         pid = proposal.get("proposal_id")
@@ -242,7 +327,8 @@ def build() -> Bot:
         raise NotConfigured(f"bot: not started: set {', '.join(missing)} (the key names are in .env.example)")
     gateway = Gateway(env["BOT_GATEWAY_URL"], env["BOT_KITCHEN_TOKEN"], env.get("BOT_KITCHEN_ID", "demo-kitchen"))
     speech = Speech(env["BOT_STT_URL"]) if env.get("BOT_STT_URL") else None
-    return Bot(Telegram(token), gateway, Links(), speech, env.get("BOT_SITE_URL"))
+    return Bot(Telegram(token), gateway, Links(), speech, env.get("BOT_SITE_URL"),
+               brief_times=parse_brief_times(env.get("BOT_BRIEF_TIMES")))
 
 
 def run(bot: Bot, stop: threading.Event | None = None) -> None:
@@ -250,6 +336,15 @@ def run(bot: Bot, stop: threading.Event | None = None) -> None:
     request that waits for the Buyer does not hold up another chat."""
     stop = stop or threading.Event()
     offset = None
+
+    def clock() -> None:
+        while not stop.wait(30):
+            try:
+                bot.tick()
+            except Exception as exc:        # the timer must outlive one bad brief; never the content
+                print(f"bot: brief timer: {type(exc).__name__}", file=sys.stderr, flush=True)
+
+    threading.Thread(target=clock, name="brief-timer", daemon=True).start()
     with ThreadPoolExecutor(max_workers=4) as pool:
         while not stop.is_set():
             try:

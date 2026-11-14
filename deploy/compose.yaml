@@ -140,6 +140,7 @@ services:
       # The public address of the site, for the "Open to approve" button (https://...).
       BOT_SITE_URL: ${BOT_SITE_URL:-}
       BOT_STT_URL: http://stt:8002
+      BOT_BRIEF_TIMES: ${BOT_BRIEF_TIMES:-}
     volumes:
       # The list of linked chats.
       - bot_data:/data
