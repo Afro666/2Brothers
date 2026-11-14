@@ -243,3 +243,40 @@ it("folds a proposal's lines behind Show details and keeps the total and decisio
   const panel = document.getElementById(hide.getAttribute("aria-controls")!)!;
   expect(within(panel).getByText(/Measured stock/)).toBeVisible();
 });
+
+it("shows each line's name with its kind picture and brand logo, and the code when the name is unknown (#1130)", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [{
+    ...row,
+    lines: [
+      { ...row.lines[0], product_name: "Valio Eila lactose-free milk 1 L", product_name_fi: "Valio Eila laktoositon maito 1 l", brand: "Valio" },
+      { product_id: "463335", quantity: "949", unit: "ST", why: "Not confirmed", unknown_stock: true,
+        product_name: null, product_name_fi: null, brand: null },
+    ],
+  }] })));
+  const user = userEvent.setup();
+  renderApp("/approvals", createMockApi());
+
+  await user.click(await screen.findByRole("button", { name: "Show details" }));
+  const lines = screen.getAllByTestId("proposal-line");
+  expect(lines).toHaveLength(2);
+  expect(lines[0]).toHaveTextContent("51 ST · Valio Eila lactose-free milk 1 L (462775) · Measured stock");
+  // The brand logo replaces the kind tile once the logo list answers.
+  await waitFor(() => expect(lines[0].querySelector('[data-logo="Valio"]')).not.toBeNull());
+  // No name: the code stays, and a neutral picture, never an invented kind or brand.
+  expect(lines[1]).toHaveTextContent("949 ST · 463335 · Not confirmed");
+  expect(lines[1].querySelector("[data-logo]")).toBeNull();
+  expect(lines[1].querySelector("[data-kind]")).not.toBeNull();
+});
+
+it("shows the milk kind picture from a line's names when the brand has no logo (#1130)", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [{
+    ...row,
+    lines: [{ ...row.lines[0], product_name: "Arla milk 1 L lactose free", product_name_fi: null, brand: "Arla" }],
+  }] })));
+  const user = userEvent.setup();
+  renderApp("/approvals", createMockApi());
+
+  await user.click(await screen.findByRole("button", { name: "Show details" }));
+  const [line] = screen.getAllByTestId("proposal-line");
+  expect(line.querySelector('[data-kind="milk and cream"]')).not.toBeNull();
+});

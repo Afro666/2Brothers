@@ -21,6 +21,11 @@ function row(value: unknown, what: string): Row {
   return value as Row;
 }
 
+/** A name field of a line (#1130): a nonempty string, else null (never invented). */
+function nameOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 function text(value: unknown, what: string): string {
   if (typeof value !== "string" || !value) invalid(`${what} must be a nonempty string`);
   return value as string;
@@ -37,7 +42,8 @@ function everyLine<T>(lines: Row[], read: (line: Row) => T | null): T[] | null {
  * Whatever the gateway does not send stays unknown (null, or false for stock), never zero.
  * `currentOfferId` is the proposal's own `offer_id`; `names` gives product names by id.
  *
- * Read from each line when present: `cutoff_passed` (offer line), `reason_codes`, `reliability`,
+ * Read from each line when present: `product_name`, `product_name_fi` and `brand` (#1130; the
+ * line's own name wins over `names`), `cutoff_passed` (offer line), `reason_codes`, `reliability`,
  * `carbon_kg_co2e_per_kg` and `labels` (#274, named as on the product row), and `unit_price`
  * (the gateway sends it per `unit`; the contract does not list it yet). Only an explicit `true`
  * from the gateway marks an option as recommended.
@@ -62,7 +68,9 @@ export function mapProposalOptions(
       const productId = text(line.product_id, "product_id");
       return {
         productId,
-        productName: names?.get(productId) ?? null,
+        productName: nameOrNull(line.product_name) ?? names?.get(productId) ?? null,
+        productNameFi: nameOrNull(line.product_name_fi),
+        brand: nameOrNull(line.brand),
         quantity: mapMoney(line.quantity, "quantity"),
         unit: text(line.unit, "unit"),
         unitPrice: line.unit_price == null ? null : mapMoney(line.unit_price, "unit_price"),
