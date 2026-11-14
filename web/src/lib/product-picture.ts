@@ -5,6 +5,7 @@ import {
   Sparkles, SprayCan, Sprout, UtensilsCrossed, Vegan, Wheat, Wine,
   type LucideIcon,
 } from "lucide-react";
+import { Potato } from "./product-icons";
 
 /**
  * A generic picture for a catalog product, read from its English or Finnish name.
@@ -68,7 +69,7 @@ const RULES: Rule[] = [
   [Bacon, "rose", "ham and bacon", ["ham", "bacon", "prosciutto"], ["kinkku", "pekoni"]],
   [Beef, "rose", "meat", ["beef", "pork", "lamb", "veal", "minced", "mince", "steak", "meat", "meatball", "reindeer", "elk", "venison", "fillet", "roast", "ribs", "entrecote", "sirloin", "brisket"], ["naudan", "nauta", "sika", "possu", "lammas", "jauheliha", "liha", "lihapulla", "poro", "hirvi", "paisti", "pihvi", "filee", "kylki", "fileepihvi", "jauhis"]],
   [Vegan, "green", "plant protein", ["tofu", "tempeh", "seitan", "soy", "pulled oats", "plant-based", "vegan"], ["tofu", "soija", "nyhtökaura", "härkis", "kasvis"]],
-  [Carrot, "stone", "potato", ["potato", "potatoes", "fries", "chips", "rosti", "rösti"], ["peruna", "perunat", "ranskalaiset", "sipsi", "lohkoperuna"]],
+  [Potato, "stone", "potato", ["potato", "potatoes", "fries", "chips", "rosti", "rösti"], ["peruna", "perunat", "ranskalaiset", "sipsi", "lohkoperuna"]],
   [Carrot, "orange", "carrot and roots", ["carrot", "beetroot", "parsnip", "turnip", "swede", "celeriac", "radish", "root"], ["porkkana", "punajuuri", "palsternakka", "nauris", "lanttu", "juuriselleri", "retiisi", "juures", "juurekset"]],
   [Leaf, "green", "cucumber", ["cucumber", "gherkin", "pickle", "zucchini", "courgette"], ["kurkku", "kesäkurpitsa", "suolakurkku"]],
   [Cherry, "rose", "tomato", ["tomato", "tomatoes", "passata", "ketchup"], ["tomaatti", "tomaatit", "ketsuppi", "tomaattimurska"]],
@@ -110,7 +111,8 @@ const escape = (word: string) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const COMPILED = RULES.map(([icon, tint, kind, en, fi]) => ({
   picture: { icon, tint, kind } satisfies ProductPicture,
   en: new RegExp(`(?:^|[^\\p{L}])(?:${en.map(escape).join("|")})(?:s|es)?(?![\\p{L}])`, "iu"),
-  fi: new RegExp(`(?:${fi.map(escape).join("|")})(?:t|a|ä)?(?![\\p{L}])`, "iu"),
+  // "porkkana" (carrot) ends in "kana" (chicken); it is not a poultry compound.
+  fi: new RegExp(`(?:${fi.map((word) => word === "kana" ? "(?<!pork)kana" : escape(word)).join("|")})(?:t|a|ä)?(?![\\p{L}])`, "iu"),
 }));
 
 /** The generic picture for a product, from its English and Finnish names. */
