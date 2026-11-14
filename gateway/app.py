@@ -25,8 +25,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from gateway.service import Gateway, GatewayError
 from gateway.valio_client import ValioBusy
-from gateway.request_docs import (CreateNeedRequest, GetOfferRequest, PlaceOrderRequest,
-                                  RequestApprovalRequest, SearchProductsRequest,
+from gateway.request_docs import (ChangeProposalRequest, CreateNeedRequest, GetOfferRequest,
+                                  PlaceOrderRequest, RequestApprovalRequest, SearchProductsRequest,
                                   SimulateOrderRequest, document_body)
 
 DEFAULT_KITCHEN = "demo-kitchen"
@@ -456,7 +456,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         from gateway import options
         return options.choose(gw(), kitchen_id, proposal_id, await body(request), human=who.human)
 
-    @app.post(k + "/proposals/{proposal_id}/change")
+    @app.post(k + "/proposals/{proposal_id}/change", openapi_extra=document_body(ChangeProposalRequest))
     async def change_proposal(kitchen_id: str, proposal_id: str, request: Request,
                               who: Principal = Depends(principal)):
         # A person or an agent may change a proposal (#303); only a person approves it.

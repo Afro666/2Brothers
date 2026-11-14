@@ -27,6 +27,8 @@ from store import orders
 
 MAX_LINES = 200
 MAX_QUANTITY = Decimal("1000000")
+MAX_NOTE = 200
+REASONS = ("TOO_MUCH", "TOO_LITTLE", "IN_STOCK", "MENU_CHANGED", "BUDGET", "OTHER")
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +37,18 @@ def _n(x: Decimal) -> str:
     return f"{x.normalize():f}"
 
 
-def _entries(body: dict, field: str) -> list[tuple[str, Decimal]]:
+def _number(value) -> str | None:
+    """A stored quantity as a decimal string; anything unreadable is unknown, not a failure."""
+    if value is None:
+        return None
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+    return _n(number) if number.is_finite() else None
+
+
+def _entries(body: dict, field: str) -> list[dict]:
     from gateway.service import GatewayError
     raw = body.get(field)
     if raw is None:
@@ -57,8 +70,66 @@ def _entries(body: dict, field: str) -> list[tuple[str, Decimal]]:
             raise GatewayError(422, "INVALID_REQUEST", f"{pid}: quantity must be 0 or more")
         if field == "add" and quantity == 0:
             raise GatewayError(422, "INVALID_REQUEST", f"{pid}: an added product needs a quantity above 0")
-        out.append((pid, quantity))
+        reason, note = entry.get("reason"), entry.get("note")
+        if reason is not None and (not isinstance(reason, str) or reason not in REASONS):
+            raise GatewayError(422, "INVALID_REQUEST", f"{pid}: reason must be one of {', '.join(REASONS)}")
+        if note is not None:
+            if not isinstance(note, str) or len(note) > MAX_NOTE:
+                raise GatewayError(422, "INVALID_REQUEST", f"{pid}: note must be at most {MAX_NOTE} characters")
+            if reason != "OTHER":
+                raise GatewayError(422, "INVALID_REQUEST", f"{pid}: note is only allowed with OTHER")
+        out.append({"product_id": pid, "quantity": quantity, "reason": reason, "note": note})
     return out
+
+
+def _hash_entry(entry: dict) -> list:
+    return [entry["product_id"], _n(entry["quantity"]), entry["reason"], entry["note"]]
+
+
+def _made_by(gw, doc: dict, request: dict) -> str | None:
+    """The contract's origin for the offer: menu plan, request or supplier offer."""
+    if request.get("made_by") == "menu_plan":
+        return "menu_plan"
+    if gw.db.supplier_offers.find_one(
+            {"kitchen_id": doc["kitchen_id"], "proposal_id": doc["_id"]}, {"_id": 1}):
+        return "supplier_offer"
+    return "request" if request.get("made_by") else None
+
+
+def _engine_quantity(gw, doc: dict, product_id: str) -> str | None:
+    """The engine's own quantity for this product in the proposal's ORIGINAL offer, in the
+    line's sales unit (the basis of from_qty/to_qty). A line that learning already adjusted
+    carries `unlearned_quantity` (#1305), which wins, so a correction never compounds."""
+    offer = orders.get_offer(gw.db, doc.get("original_offer_id") or doc["offer_id"])
+    total, found = Decimal(0), False
+    for line in ((offer or {}).get("simulation") or {}).get("lines") or []:
+        if str(line.get("product_id")) != product_id:
+            continue
+        quantity = line.get("unlearned_quantity", line.get("quantity"))
+        number = _number(quantity)
+        if number is None:
+            return None
+        total, found = total + Decimal(number), True
+    return _n(total) if found else None
+
+
+def _context(gw, doc: dict, product_id: str) -> dict:
+    """The server-read basis of one line, before this change re-quotes the offer.
+
+    `forecast_need` is the unlearned engine quantity, and only for a plan proposal: a typed
+    request's quantity is the person's own number, not a forecast, so it stays null and can
+    never train a correction (contract, "Changes and human feedback")."""
+    basis = doc.get("original_request") or doc["request"]
+    need = next((n for n in basis.get("needs") or []
+                 if str(n.get("product_id")) == product_id), None) or {}
+    requested_date = basis.get("requested_date")
+    if hasattr(requested_date, "isoformat"):
+        requested_date = requested_date.isoformat()
+    made_by = _made_by(gw, doc, basis)
+    return {"forecast_need": _engine_quantity(gw, doc, product_id) if made_by == "menu_plan" else None,
+            "stock_position": _number(need.get("stock_position")), "covers": need.get("covers"),
+            "requested_date": requested_date, "made_by": made_by,
+            "offer_id": doc["offer_id"]}
 
 
 def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, person: str | None) -> dict:
@@ -72,10 +143,11 @@ def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, per
     lines, add = _entries(body, "lines"), _entries(body, "add")
     if not lines and not add:
         raise GatewayError(422, "INVALID_REQUEST", "lines or add must name at least one product")
-    ids = [pid for pid, _ in lines + add]
+    entries = lines + add
+    ids = [entry["product_id"] for entry in entries]
     if len(ids) != len(set(ids)):
         raise GatewayError(422, "INVALID_REQUEST", "a product is named twice")
-    payload = _hash({"lines": [[p, _n(q)] for p, q in lines], "add": [[p, _n(q)] for p, q in add]})
+    payload = _hash({"lines": [_hash_entry(e) for e in lines], "add": [_hash_entry(e) for e in add]})
 
     doc = gw.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id})
     if doc is None:
@@ -90,6 +162,7 @@ def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, per
         raise GatewayError(409, "NOT_PENDING", f"proposal is {doc['status']}{held}")
     if any(a.get("match") in ("exact", "possible") for a in doc.get("recall_alerts") or []):
         raise GatewayError(409, "NOT_PENDING", "a recall holds this basket; review its replacement proposal")
+    contexts = {entry["product_id"]: _context(gw, doc, entry["product_id"]) for entry in entries}
 
     stored = orders.get_offer(gw.db, doc["offer_id"])
     before_total = stored["simulation"]["expected_total"]
@@ -97,22 +170,25 @@ def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, per
     for line in stored["simulation"]["lines"]:
         had, unit = current.get(line["product_id"], (Decimal(0), line["unit"]))
         current[line["product_id"]] = (had + Decimal(str(line["quantity"])), unit)
-    for pid, _ in lines:
+    for entry in lines:
+        pid = entry["product_id"]
         if pid not in current:
             raise GatewayError(404, "LINE_NOT_FOUND", f"{pid} is not on this proposal; add it with add")
     units = {}
     if add:
-        for pid, _ in add:
+        for entry in add:
+            pid = entry["product_id"]
             if pid in current:
                 raise GatewayError(422, "INVALID_REQUEST", f"{pid} is on the proposal already; set it with lines")
         rows = {r["product_id"]: r for r in gw.addable(kitchen_id, proposal_id)["rows"]}
-        for pid, _ in add:
+        for entry in add:
+            pid = entry["product_id"]
             row = rows.get(pid)
             if row is None or not row.get("addable"):
                 raise GatewayError(409, "NOT_ADDABLE", f"{pid} is not on this proposal's addable list")
             units[pid] = row["unit"]
 
-    asked = dict(lines)
+    asked = {entry["product_id"]: entry["quantity"] for entry in lines}
     needs = []
     for pid, (had, unit) in current.items():
         quantity = asked.get(pid, had)
@@ -121,8 +197,8 @@ def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, per
             if pid in asked:
                 need["set_by"] = actor
             needs.append(need)
-    needs += [{"product_id": pid, "quantity": _n(q), "unit": units[pid], "sales_unit": True, "set_by": actor}
-              for pid, q in add]
+    needs += [{"product_id": e["product_id"], "quantity": _n(e["quantity"]), "unit": units[e["product_id"]],
+               "sales_unit": True, "set_by": actor} for e in add]
     if not needs:
         raise GatewayError(422, "EMPTY_PROPOSAL", "a proposal needs at least one line; reject it instead")
 
@@ -150,6 +226,7 @@ def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, per
     changes = {"offer_id": fresh["offer_id"], "request": request}
     if "original_request" not in doc:
         changes["original_request"] = old
+        changes["original_offer_id"] = doc["offer_id"]     # the engine's own basis (#1302)
     claimed = gw.db.proposals.find_one_and_update(
         {"_id": proposal_id, "kitchen_id": kitchen_id, "status": "READY", "offer_id": doc["offer_id"]},
         {"$set": changes, "$push": {"changes": {"key": key, "payload_hash": payload, "by": actor,
@@ -159,7 +236,8 @@ def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, per
         raise GatewayError(409, "NOT_PENDING", "the proposal changed; look at it again")
 
     diff = []
-    for pid, quantity in lines + add:
+    for entry in entries:
+        pid, quantity = entry["product_id"], entry["quantity"]
         had, unit = current.get(pid, (Decimal(0), units.get(pid)))
         diff.append({"product_id": pid, "unit": unit, "from_qty": _n(had), "asked_qty": _n(quantity),
                      "to_qty": _n(got.get(pid, Decimal(0)))})
@@ -167,21 +245,26 @@ def change(gw, kitchen_id: str, proposal_id: str, body: dict, *, actor: str, per
               from_offer_id=doc["offer_id"], offer_id=fresh["offer_id"],
               from_total=before_total, expected_total=sim["expected_total"], changes=diff)
     if person:
-        _feedback(gw, kitchen_id, proposal_id, diff, person)
+        _feedback(gw, kitchen_id, proposal_id, diff, entries, contexts, person)
     return gw._proposal_out(gw.db.proposals.find_one({"_id": proposal_id}))
 
 
-def _feedback(gw, kitchen_id: str, proposal_id: str, diff: list[dict], person: str) -> None:
+def _feedback(gw, kitchen_id: str, proposal_id: str, diff: list[dict], entries: list[dict],
+              contexts: dict, person: str) -> None:
     """A person's change is learning data (store/feedback.py). Never fails the change."""
+    by_product = {entry["product_id"]: entry for entry in entries}
     rows = []
     for d in diff:
         before, after = Decimal(d["from_qty"]), Decimal(d["to_qty"])
         if before == after:
             continue
         kind = "line_added" if before == 0 else "line_removed" if after == 0 else "qty_changed"
+        entry = by_product[d["product_id"]]
         rows.append({"kind": kind, "product_id": d["product_id"], "unit": d["unit"],
                      "from_qty": None if kind == "line_added" else d["from_qty"],
-                     "to_qty": None if kind == "line_removed" else d["to_qty"]})
+                     "to_qty": None if kind == "line_removed" else d["to_qty"],
+                     "reason": entry["reason"], "note": entry["note"],
+                     "context": contexts[d["product_id"]]})
     try:
         from store.feedback import record_feedback
         record_feedback(gw.db, kitchen_id, proposal_id, rows, person)
