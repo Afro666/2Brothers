@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { CODE_LABELS, codeLabel, plainReason } from "@/lib/codes";
+import { CODE_LABELS, codeLabel, plainReason, translateReason } from "@/lib/codes";
+import { translate } from "@/lib/i18n";
 
 describe("codeLabel", () => {
   it("gives the over-budget warning a plain title and says it does not block", () => {
@@ -71,5 +72,31 @@ describe("plainReason", () => {
     expect(plainReason("15 KG of the request cannot be covered for this date.")).toBe(
       "15 KG of the request cannot be covered for this date.",
     );
+  });
+});
+
+describe("translateReason (#1169)", () => {
+  const fi = (text: string) => translate("fi", text);
+
+  it("has a Finnish entry for every code title", () => {
+    for (const { title } of Object.values(CODE_LABELS)) expect(fi(title), title).not.toBe(title);
+  });
+
+  it("shows the Finnish title for a gateway reason in Finnish mode", () => {
+    const names = new Map([["472710", "Kerma 1 L"]]);
+    const shown = translateReason(plainReason("472710: ALLERGEN_RULE: the kitchen excludes AN", names), fi);
+    expect(shown).toBe("Kerma 1 L: Poissuljettu allergeeni: the kitchen excludes AN");
+  });
+
+  it("translates the title and detail of a bare code reason", () => {
+    const shown = translateReason(plainReason("461332: BLOCKED_BY_RECALL"), fi);
+    expect(shown).toBe(`461332: ${fi("Blocked by a recall")}. ${fi(CODE_LABELS.BLOCKED_BY_RECALL.detail)}`);
+    expect(shown).not.toContain("Blocked by a recall");
+  });
+
+  it("leaves English and unknown sentences as they are", () => {
+    const reason = plainReason("472710: ALLERGEN_RULE: the kitchen excludes AN");
+    expect(translateReason(reason, (text) => translate("en", text))).toBe(reason);
+    expect(translateReason("Something else", fi)).toBe("Something else");
   });
 });
