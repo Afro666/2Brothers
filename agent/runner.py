@@ -12,6 +12,7 @@ from uuid import uuid4, uuid5, NAMESPACE_URL
 
 from jsonschema import validate, ValidationError
 
+from gateway import model_trace
 from gateway.mcp_server import GatewayError
 
 TOOLS = {"search_products", "get_offer", "simulate_order", "place_order",
@@ -99,7 +100,7 @@ def unpack(result):
 class Buyer:
     def __init__(self, model, session, audit_gateway, *, need_id, requested_date,
                  max_steps=12, run_id=None, trace_path=None, now=None, approval_lookup=None,
-                 catalog_lookup=None, allergen_policy=None, substitute_planner=None):
+                 catalog_lookup=None, allergen_policy=None, substitute_planner=None, attempt=1):
         if not 1 <= max_steps <= 30:
             raise ValueError("max_steps must be between 1 and 30")
         self.model, self.session, self.audit_gateway = model, session, audit_gateway
@@ -117,6 +118,30 @@ class Buyer:
         self.substitute_planner = substitute_planner
         self.offer_products, self.substitute_options, self.assessed_offers = {}, [], set()
         self.model_tool_calls = self.host_tool_calls = 0
+        # What the model did (#1197): counts and codes per tool call, never text.
+        self.attempt, self.trace = attempt, []
+
+    def record_step(self, name, args, result, *, by="model", code=None):
+        """One trace step: the tool, a safe summary of its arguments, the count or code back."""
+        result = result if isinstance(result, dict) else {}
+        args = args if isinstance(args, dict) else {}
+        lines = result.get("lines")
+        count = len(lines) if isinstance(lines, list) else None
+        products = None
+        if name == "search_products" and isinstance(result.get("products"), list):
+            count = len(result["products"])
+        if name == "get_offer" and isinstance(args.get("product_ids"), list):
+            products = len(args["product_ids"])
+        if code is None:
+            mandate = result.get("mandate")
+            if name == "simulate_order" and isinstance(mandate, dict):
+                code = mandate.get("verdict")
+            elif name == "place_order":
+                code = result.get("outcome")
+            elif name in ("request_approval", "get_order_status"):
+                code = result.get("status")
+        self.trace.append(model_trace.step(name, by=by, attempt=self.attempt, query=args.get("query"),
+                                           products=products, count=count, code=code))
 
     async def audit(self, event):
         record = {"event_id": str(uuid4()), "run_id": self.run_id, **event}
@@ -260,9 +285,11 @@ class Buyer:
             result = unpack(await self.session.call_tool(name, args))
             self.accept(name, args, result)
         except Exception:
+            self.record_step(name, args, {}, by='code', code='TOOL_FAILED')
             await self.audit({'type': 'tool_call_finished', 'tool': name, 'arguments': args,
                               'result': {'error': 'Substitute read failed'}})
             raise PolicyError('Substitute read failed') from None
+        self.record_step(name, args, result, by='code')
         summary = {'offer_id': result['offer_id']} if isinstance(result.get('offer_id'), str) else {}
         await self.audit({'type': 'tool_call_finished', 'tool': name, 'arguments': args, 'result': summary})
         return result
@@ -332,6 +359,12 @@ class Buyer:
                     await self.audit({"type": "tool_call_finished", "tool": name, "arguments": args, "result": summary})
                 except AuditError:
                     return self.final("CANNOT_FULFIL", "Audit unavailable; human reconciliation required", reconciliation_required=True)
+                if policy_rejected:
+                    self.record_step(name, args, {}, code=reason_code.value)
+                elif error:
+                    self.record_step(name, args, {}, code="TOOL_FAILED")
+                else:
+                    self.record_step(name, args, result)
                 if error:
                     if policy_rejected and name in READ_ONLY_TOOLS:
                         rejections += 1

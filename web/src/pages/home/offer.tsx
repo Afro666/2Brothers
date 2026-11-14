@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 
 import type { Api } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatQuantity } from "@/lib/format";
@@ -108,6 +109,7 @@ export function SupplierOfferTile({ api }: { api: Api }) {
             })}
           </figcaption>
         </figure>
+        <ModelTracePanel trace={offer.modelTrace} />
         {!offer.allergenDataKnown && (
           <p className="break-words text-sm font-medium">
             {t("The catalog has no allergen data for this product. Check the label before you approve.")}

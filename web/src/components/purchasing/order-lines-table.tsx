@@ -22,6 +22,7 @@ function lineFacts(line: OrderLine, now: Date) {
   return {
     code: product.id,
     name: product.names.en,
+    nameFi: product.names.fi,
     brand: product.brand,
     pack:
       product.baseUnitsPerSalesUnit == null
@@ -108,7 +109,7 @@ export function OrderLinesTable({ lines, now }: { lines: OrderLine[]; now: Date 
               <TableRow key={`${f.code}-main`} className="border-b-0">
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <ProductThumb en={f.name} brand={f.brand} size="sm" />
+                    <ProductThumb en={f.name} fi={f.nameFi} brand={f.brand} size="sm" />
                     <div>
                       <div className="font-medium">{f.name}</div>
                       <div className="text-xs text-muted-foreground">{f.code}</div>
@@ -146,13 +147,16 @@ export function OrderLinesTable({ lines, now }: { lines: OrderLine[]; now: Date 
         {facts.map((f) => (
           <li key={f.code} className="space-y-2 py-3">
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="flex min-w-0 items-start gap-2">
+                <ProductThumb en={f.name} fi={f.nameFi} brand={f.brand} size="sm" />
+                <div className="min-w-0">
                 <div className="font-medium">{f.name}</div>
                 <div className="text-xs text-muted-foreground">
                   {f.code} · {f.pack ?? t("{unit} (pack size unknown)", { unit: f.salesUnit })}
                 </div>
+                </div>
               </div>
-              <div className="text-right text-sm font-medium tabular-nums">{f.quantity}</div>
+              <div className="shrink-0 text-right text-sm font-medium tabular-nums">{f.quantity}</div>
             </div>
             <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
               <dt className="text-muted-foreground">{t("Unit price ex VAT")}</dt>

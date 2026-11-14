@@ -107,5 +107,7 @@ def mount_delivery_note(app, gw, principal, worker=None) -> None:
             counts[ln["status"]] = counts.get(ln["status"], 0) + 1
         # Who, which order, how many lines per status, how long. Never the image or the note's text.
         gw()._audit(kitchen_id, "delivery_note_read", who.name, order_id=order_id, model=MODEL_NAME,
-                    statuses=counts, complete=answer["complete"], duration_ms=duration_ms)
+                    statuses=counts, complete=answer["complete"],
+                    needs_approval=sum(1 for ln in answer["not_ordered"] if ln["needs_approval"]),
+                    duration_ms=duration_ms)
         return {"model": MODEL_NAME, "duration_ms": duration_ms, "saved": False, "order_id": order_id, **answer}
