@@ -108,9 +108,16 @@ describe("ForecastPage", () => {
     const user = userEvent.setup();
     renderApp("/forecast");
     await user.click(await screen.findByRole("combobox", { name: "Show" }));
-    await user.click(await screen.findByRole("option", { name: "Salmon fillet" }));
+    const option = await screen.findByRole("option", { name: "Salmon fillet" });
+    // Each product in the list has its picture; the picture is decorative, so the name is unchanged.
+    expect(option.querySelector('[data-kind="fish and seafood"]')).not.toBeNull();
+    await user.click(option);
 
-    expect(await screen.findByRole("heading", { level: 2, name: "Salmon fillet: the last 12 weeks" })).toBeVisible();
+    const heading = await screen.findByRole("heading", { level: 2, name: "Salmon fillet: the last 12 weeks" });
+    expect(heading).toBeVisible();
+    expect(heading.parentElement?.querySelector('[data-kind="fish and seafood"]')).not.toBeNull();
+    // The trigger shows the chosen product with its picture too.
+    expect(screen.getByRole("combobox", { name: "Show" }).querySelector('[data-kind="fish and seafood"]')).not.toBeNull();
     expect(tile("Waste")).toHaveTextContent("Our engine24 KGWeekday average72 KG");
     expect(screen.getByRole("img", { name: "Needed and predicted per week, in KG" })).toBeInTheDocument();
   });
