@@ -65,7 +65,7 @@ APPROVED with one line of 698 ST of 463380 and an order id.
 | 0:50 | 3. The human decides | Open `/approvals` on the phone. Show the total and the options. Press "Choose option A", then "Yes, approve". Open `/audit`. | "The agent can propose. It has no approve tool. I take the part Valio confirms: 698 litres now, 302 held, nothing ordered for it. I approve the exact total; if the price moves, the old yes is refused. Every step is in a hash-chained log." | C |
 | 1:30 | 4. An exception | The tamper check on `/trust`: "Verify audit chain" says Chain OK; "Run the tamper test" changes one line and the page says "Chain broken at line N"; restore, and it is OK again (live, checked 14 Nov). Or run `python -m gateway.scenarios` in the terminal. The recall hold is *not live yet* (#655 and the Context.dev key on the server). | "Nobody can edit the log quietly, not even us. And 13 golden cases with the correct decision all pass: a moved price, an allergen with missing data, a duplicate send." | D |
 | 2:10 | 5. Any agent | In the terminal: `curl -s https://31-22-104-201.sslip.io/llms.txt \| head -20`, then the search call from `docs/byoa.md`. | "This is not our agent's private door. Any agent with a URL and a token can read the catalog, get an offer, simulate and propose. The agent card, the OpenAPI file and the MCP endpoint are public. Our conformance kit runs 12 trust checks against any gateway." | E |
-| 2:40 | 6. Close | Show the Valio side: role "Valio planner", Home. | "The kitchen shares its forecast if it agrees. Valio sees demand before the orders arrive: 16 kitchens share, and 8 lines are short for Monday and Tuesday." (Numbers from 14 Nov; read them from the screen.) | bonus |
+| 2:40 | 6. Close | Show the Valio side: role "Valio planner", Home. Then the kitchen's Home: the tile "Offer from Valio Aimo" (needs an open offer, see "Selling-agent beat"). | "The kitchen shares its forecast if it agrees. Valio sees demand before the orders arrive: 16 kitchens share, and 8 lines are short for Monday and Tuesday." (Numbers from 14 Nov; read them from the screen.) "Valio's own agent, also Nemotron, saw the washed potatoes run short and offered this kitchen another washed potato. It is a suggestion: I make a proposal from it, and that proposal still waits for my approval." | bonus |
 
 ## Photo beat: Nemotron VL counts a shelf (#373)
 
@@ -123,6 +123,41 @@ in rehearsal and decide then if you press Save on stage.
 
 **If it fails.** The panel says why, and the counts can still be typed by hand. "no vision
 model is configured" means `VERDA_INFERENCE_KEY` is missing in the `buyer` container.
+
+## Selling-agent beat: Valio's agent offers a substitute (#374)
+
+**What it shows.** Nemotron in a second role, on the supplier's side. Code reads Valio's
+shortage view and builds a shortlist; the model picks one product and writes the reason;
+the gateway sets the quantity from the kitchen's own forecast. The kitchen sees a
+suggestion. A person makes a proposal from it, and the proposal waits in the inbox like
+any other.
+
+**Before the demo.** The tile shows only while an offer is open, and an accepted or
+declined offer is final. Make a new one on the server (`/opt/2brothers`); the dry run
+first, it sends nothing:
+
+    docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m agent.seller --dry-run --limit 1 --kitchen demo-kitchen
+    docker compose --env-file .env -f deploy/compose.yaml run --rm -T --no-deps gateway python -m agent.seller --apply --limit 1 --kitchen demo-kitchen
+
+The demo kitchen must share its forecast with Valio Aimo (`/suppliers`); without it the
+run prints `SHARING_REQUIRED` and sends nothing. A date whose order cut-off passed gives
+`NO_SUBSTITUTE` (on 14 Nov nothing could still arrive for Sunday 15 Nov).
+
+**Seen on the live site (2026-11-14, 04:40 UTC).** The run sent one offer: Rosamunda
+washed potato (460643) in place of washed potato 1 kg (460478), predicted short on Monday
+16 Nov, 10.48 kg from the demo kitchen's forecast, picked by `nemotron-3.5-super-vl`. On a
+390 px screen the tile showed the product, what it replaces, the quantity, the model's
+sentence with its author, and "The catalog has no allergen data for this product. Check
+the label before you approve." "Make a proposal" opened the inbox with a new card, "Offer
+from Valio Aimo: POTATO ROSAMUNDA WASHED in place of POTATO WASHED 1KG", EUR 37.13 incl
+VAT, waiting; nothing was approved. The audit log has `supplier_offer_received` (actor
+`supplier:sup-valio`), `proposal_created` and `supplier_offer_accepted`.
+
+**What went wrong first, so you know.** The first server run gave no offer: the catalog
+has no allergen data for vegetables and potatoes, and the shortlist refused them all
+(fixed in #952). And the model's first sentence said "the same 1kg pack size" about a
+potato that is sold by weight; the model now gets how a product is sold, and a reason
+with a pack or a number it was not given is dropped (#963).
 
 ## What was measured on the live site (2026-11-14)
 
