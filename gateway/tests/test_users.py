@@ -195,3 +195,45 @@ def test_command_line_refuses_to_remove_the_last_approver(env, monkeypatch, caps
     users.create_user(db, "boss@example.com", PW, name="Boss", role="approver", kitchen_id="demo-kitchen")
     assert users.main(["remove", "--email", "aron@example.com"]) == 0   # not the last one now
     assert db.users.find_one({"_id": "aron@example.com"}) is None
+
+
+def test_an_all_kitchens_account_reads_the_suppliers_view_like_the_open_demo_person(env, monkeypatch, capsys):
+    """With sign-in on, a kitchen's account is refused the supplier's pages (#599). The stage
+    account is made with `--kitchen all`: the same reach as the open demo's person, signed in."""
+    import getpass
+
+    import store.db
+    client, _, db = env
+    monkeypatch.setenv("GATEWAY_REQUIRE_LOGIN", "true")
+    monkeypatch.setattr(store.db, "get_db", lambda *a, **k: db)
+    people(db)
+    supplier = "/v1/suppliers/sup-valio/demand?from=2026-11-16&to=2026-11-16"
+    assert sign_in(client, "aron@example.com").status_code == 200
+    assert client.get(supplier).status_code == 403                     # bound to demo-kitchen
+
+    typed = iter(["stage password 1", "stage password 1"])
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": next(typed))
+    assert users.main(["add", "--email", "stage@example.com", "--role", "approver", "--kitchen", "all"]) == 0
+    assert "created stage@example.com approver all" in capsys.readouterr().out
+    assert db.users.find_one({"_id": "stage@example.com"})["kitchen_id"] is None
+    assert users.main(["list"]) == 0 and "stage@example.com approver all" in capsys.readouterr().out
+
+    r = sign_in(client, "stage@example.com", "stage password 1")
+    assert r.status_code == 200 and r.json()["kitchen_id"] is None
+    me = client.get("/v1/me").json()
+    assert me["name"] == "stage@example.com" and me["can_approve"] is True and me["kitchen_id"] is None
+    assert client.get(supplier).status_code == 200
+    assert client.get(K + "/proposals").status_code == 200
+    # Its sign-in is in the default kitchen's log, under its own email.
+    from store.audit import list_events
+    assert [e["event"]["actor"] for e in list_events(db, kitchen_id="demo-kitchen")
+            if e["event"]["kind"] == "signed_in"][-1] == "stage@example.com"
+
+    # A viewer with every kitchen still only reads.
+    typed = iter(["judge password 1", "judge password 1"])
+    assert users.main(["add", "--email", "judge@example.com", "--role", "viewer", "--kitchen", "all"]) == 0
+    assert sign_in(client, "judge@example.com", "judge password 1").status_code == 200
+    assert client.get(supplier).status_code == 200
+    assert client.post(K + "/proposals", json=REQUEST).status_code == 403
+    # The last all-kitchens approver cannot be removed by accident either.
+    assert users.main(["remove", "--email", "stage@example.com"]) == 1
