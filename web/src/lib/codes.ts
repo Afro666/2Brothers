@@ -108,9 +108,27 @@ export function codeLabel(code: string): CodeLabel {
  * A gateway reason like "472710: ALLERGEN_RULE: the kitchen excludes AN" with the code in
  * plain words and, when known, the product name for its id. Other sentences stay as they are.
  */
-export function plainReason(reason: string, names?: ReadonlyMap<string, string>): string {
+export function plainReason(
+  reason: string,
+  names?: ReadonlyMap<string, string>,
+  translate: (text: string) => string = (text) => text,
+): string {
   const match = /^([^:]+): ([A-Z][A-Z0-9_]+): (.*)$/s.exec(reason);
-  if (!match || !CODE.test(match[2])) return reason;
+  if (!match || !CODE.test(match[2])) return translate(reason);
   const [, product, code, rest] = match;
-  return `${names?.get(product) ?? product}: ${codeLabel(code).title}: ${rest}`;
+  return `${names?.get(product) ?? product}: ${translate(codeLabel(code).title)}: ${rest}`;
+}
+
+/**
+ * A reason line for the screen: the whole line when the dictionary has it, else a line
+ * built by `plainReason` ("<product>: <code title>: <rest>") with only the title translated.
+ */
+export function translateReason(rule: string, translate: (text: string) => string): string {
+  const whole = translate(rule);
+  if (whole !== rule) return whole;
+  for (const { title } of Object.values(CODE_LABELS)) {
+    const at = rule.indexOf(`: ${title}: `);
+    if (at > 0) return `${rule.slice(0, at)}: ${translate(title)}: ${rule.slice(at + title.length + 4)}`;
+  }
+  return whole;
 }
