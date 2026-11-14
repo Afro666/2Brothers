@@ -52,7 +52,7 @@ const BUILT_WITH = [
     title: "MongoDB Atlas: the only database",
     rows: [
       {
-        text: "Product search over 17,546 products in English, Finnish and Swedish, one typo allowed, allergens excluded (Atlas Search)",
+        text: "Product search in English, Finnish and Swedish, one typo allowed, allergens excluded (Atlas Search)",
         link: "Search the catalog",
         to: "/catalog",
       },
@@ -72,7 +72,10 @@ const BUILT_WITH = [
         to: "/trust",
       },
       {
-        text: "Search by meaning: 17,546 product vectors, joined with the text search by $rankFusion (Atlas Vector Search)",
+        // The counts are live in the Atlas card further down: no number is repeated here.
+        text: "Search by meaning, joined with the text search by $rankFusion (Atlas Vector Search)",
+        link: "See the live Atlas numbers",
+        href: "#about-atlas",
       },
     ],
   },
@@ -174,6 +177,11 @@ export function AboutPage() {
                           >
                             {t(row.link)}
                           </Link>
+                        )}
+                        {"href" in row && (
+                          <a href={row.href} className="font-medium text-primary underline underline-offset-4">
+                            {t(row.link)}
+                          </a>
                         )}
                       </li>
                     ))}
