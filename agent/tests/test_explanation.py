@@ -25,7 +25,8 @@ def test_synthetic_fixture_has_valid_bound_claims():
 def reply_for(payload):
     facts = payload['facts']
     chosen = [f for f in facts if f.get('required')]
-    chosen = [next(f for f in facts if f['kind'] == 'chosen')] + chosen
+    if not any(f['kind'] == 'chosen' for f in chosen):
+        chosen = [next(f for f in facts if f['kind'] == 'chosen')] + chosen
     return {'sentences': [{'fact_id': f['fact_id'], 'kind': f['kind'], 'product_id': f['product_id'],
         'text': f['forms'][0], 'numbers': numbers(f['forms'][0], payload['language'])} for f in chosen]}
 
@@ -76,6 +77,24 @@ def test_finnish_numeric_formatting_and_english_grouping_keep_value():
     reply['sentences'][0]['text'] = reply['sentences'][0]['text'].replace('1000.50', '1,000.50')
     reply['sentences'][0]['numbers'] = ['1,000.50']
     assert '1000.50' in checked_reply(reply, payload['facts'])
+
+
+def test_dotted_product_names_are_literal_text_not_invalid_decimals():
+    payload = context(PROPOSAL, {'milk': 'Milk 12.3.4'}, 'en')
+    assert 'Milk 12.3.4' in checked_reply(reply_for(payload), payload['facts'])
+
+
+def test_shortfall_and_unknown_stock_are_both_required_in_one_warning():
+    p = deepcopy(PROPOSAL)
+    p['lines'][1]['unknown_stock'] = True
+    p['shortfall'], p['measure'] = '15', 'L'
+    payload = context(p, {'milk': 'Milk', 'cream': 'Cream'}, 'en')
+    text = checked_reply(reply_for(payload), payload['facts'])
+    assert 'unconfirmed for Cream' in text and '15 L cannot be covered' in text
+    reply = reply_for(payload)
+    reply['sentences'][1]['text'] = reply['sentences'][1]['text'].replace('; 15 L cannot be covered for this date', '')
+    with pytest.raises(ValueError):
+        checked_reply(reply, payload['facts'])
 
 
 @pytest.mark.parametrize('timeout', [False, True])

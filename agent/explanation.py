@@ -1,6 +1,6 @@
 """Checked sentence composition: quantities and claims stay bound to their source fact."""
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from jsonschema import validate
 
@@ -13,14 +13,20 @@ SCHEMA = {'type': 'object', 'additionalProperties': False, 'required': ['sentenc
             'numbers': {'type': 'array', 'maxItems': 50, 'items': {'type': 'string', 'maxLength': 80}}}}}}}
 
 # A normalized comparison accepts Finnish decimal commas/grouping, never number words.
-NUMBER = re.compile(r'(?<!\w)\d+(?:[ \u00a0]\d{3})*(?:[.,]\d+)*(?!\w)')
+NUMBER = re.compile(r'(?<!\w)\d+(?:[ \u00a0]\d{3})*(?:(?:,\d{3})+(?:\.\d+)?|[.,]\d+)?(?!\w)')
 
 
 def numeric(value, language='en'):
     value = value.replace(' ', '').replace('\u00a0', '')
     if language == 'en' and re.fullmatch(r'\d{1,3}(?:,\d{3})+(?:\.\d+)?', value):
         value = value.replace(',', '')
-    return format(Decimal(value.replace(',', '.')).normalize(), 'f')
+    try:
+        number = Decimal(value.replace(',', '.'))
+        if not number.is_finite():
+            raise ValueError('nonfinite explanation number')
+        return format(number.normalize(), 'f')
+    except InvalidOperation:
+        raise ValueError('invalid explanation number') from None
 
 
 def normalized(text, language='en'):

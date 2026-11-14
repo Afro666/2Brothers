@@ -16,7 +16,8 @@ MODEL = 'nemotron-3.5-super-vl'
 
 def source(gateway, proposal, language):
     ids = [l['product_id'] for l in proposal.get('lines', [])] + [l['product_id'] for l in proposal.get('excluded', [])]
-    names = {p['product_id']: (p.get('names') or {}).get('en') for p in get_products(gateway.db, ids, proposal['kitchen_id'])}
+    names = {p['product_id']: ((p.get('names') or {}).get(language) or (p.get('names') or {}).get('en'))
+             for p in get_products(gateway.db, ids, proposal['kitchen_id'])}
     return context(proposal, names, language)
 
 
@@ -32,7 +33,7 @@ async def read_worker(kitchen, payload):
 
 
 def eligible(proposal, now):
-    if proposal['status'] not in ('READY', 'REJECTED'):
+    if proposal['status'] != 'READY':
         return False
     until = proposal['valid_until']
     if isinstance(until, str):
@@ -67,8 +68,10 @@ async def generate(gateway, kitchen, ident, payload, lease, actor, worker):
     try:
         raw = await asyncio.wait_for((worker or read_worker)(kitchen, payload), 20)
         text = checked_reply({'sentences': raw['sentences']}, payload['facts'], payload['language'])
-        current = {**gateway.get_proposal(kitchen, ident), 'kitchen_id': kitchen}
-        if not eligible(current, gateway.now()) or source(gateway, current, payload['language'])['source_hash'] != payload['source_hash']:
+        def current_matches():
+            current = {**gateway.get_proposal(kitchen, ident), 'kitchen_id': kitchen}
+            return eligible(current, gateway.now()) and source(gateway, current, payload['language'])['source_hash'] == payload['source_hash']
+        if not await asyncio.to_thread(current_matches):
             code = 'EXPLANATION_STALE'
         else:
             count = len(raw['sentences'])
@@ -79,12 +82,12 @@ async def generate(gateway, kitchen, ident, payload, lease, actor, worker):
         pass
     finally:
         try:
-            explanations.finish(gateway.db, lease, result, datetime.now(timezone.utc))
+            await asyncio.to_thread(explanations.finish, gateway.db, lease, result, datetime.now(timezone.utc))
         except Exception:
             # An interrupted/unavailable store leaves a bounded lease, recoverable later.
             result = None
         try:
-            gateway._audit(kitchen, 'proposal_explanation_ready' if result else 'proposal_explanation_failed', actor,
+            await asyncio.to_thread(gateway._audit, kitchen, 'proposal_explanation_ready' if result else 'proposal_explanation_failed', actor,
                 proposal_id=ident, source_hash=payload['source_hash'], language=payload['language'], model=MODEL,
                 duration_ms=round((time.monotonic()-started)*1000), sentence_count=count,
                 **({} if result else {'code': code}))
