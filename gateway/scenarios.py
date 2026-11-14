@@ -30,7 +30,8 @@ from pathlib import Path
 import sys
 from typing import Callable
 
-from engine import Item, KitchenParams, Offer, allergen_codes, pack_info, plan_request, replenish, stockout_adjusted
+from engine import (Item, KitchenParams, Offer, Wanted, allergen_codes, pack_info, pad_to_free_delivery,
+                    plan_request, replenish, stockout_adjusted)
 from engine.quantity import cover_limit
 from engine.urgency import Urgency
 
@@ -208,8 +209,16 @@ def s05() -> Result:
 
 
 def s06() -> Result:
-    return Result("S06", "Just under free delivery: pad with wanted lines", "-", "NOT BUILT",
-                  problems=["MOV padding with lines the engine wants (MOV_PADDED): no issue yet"])
+    r = Result("S06", "Just under free delivery: pad with wanted lines", "engine")
+    milk = Wanted("469549", "Valio semi skimmed milk 1 l ESL", D(30), "ST", D("1.00"))
+    carrot = Wanted("460708", "Carrot 10 kg sack", D(1), "ST", D("11.18"))
+    pad = pad_to_free_delivery(D("271.40"), threshold=D(300), fee=D(25), wanted=[carrot, milk])
+    r.expect("add", [(w.product_id, f"{w.quantity.normalize():f}") for w in pad.add], [("469549", "30")])
+    r.expect("total", f"{pad.total:f}", "301.40")
+    r.expect("saves fee", f"{pad.saves_fee:f}", "25")
+    r.codes(pad.reason_codes, ["MOV_PADDED"])
+    r.checks.append("also suggested on GET /proposals/{id}/addable as mov_padding")
+    return r.finish()
 
 
 def s07() -> Result:

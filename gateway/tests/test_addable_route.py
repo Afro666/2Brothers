@@ -59,3 +59,17 @@ def test_no_token_no_access(env):  # noqa: F811
     client, _, _ = env
     p = milk(client)
     assert client.get(f"{K}/proposals/{p['proposal_id']}/addable").status_code == 401
+
+
+def test_mov_padding_suggests_wanted_lines_to_reach_free_delivery(env):  # noqa: F811
+    client, _, db = env
+    db.suppliers.insert_one({"kitchen_id": "demo-kitchen", "adapter": "valio_api",
+                             "terms": {"free_delivery_threshold_eur": "200", "delivery_fee_eur": "25"}})
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "51", "unit": "L", "requested_date": "2026-11-16",
+        "idempotency_key": "pad1"})
+    p = r.json()                                   # 51 x 2.57 = 131.07: 68.93 under free delivery
+    stock(db, "462921", "L", Decimal(0), 10)       # the engine wants 8 KI (87.76)
+    pad = client.get(f"{K}/proposals/{p['proposal_id']}/addable", headers=AGENT).json()["mov_padding"]
+    assert pad["add"] == [{"product_id": "462921", "quantity": "8", "unit": "KI", "value": "87.76"}]
+    assert pad["saves_fee"] == "25.00" and pad["reason_codes"] == ["MOV_PADDED"]
