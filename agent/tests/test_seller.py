@@ -146,6 +146,24 @@ def test_a_kitchen_that_does_not_share_gets_nothing_and_every_kitchen_gets_one(w
     assert w.db.supplier_offers.count_documents({}) == 2
 
 
+def test_a_refused_offer_does_not_use_up_the_limit(w, monkeypatch):
+    from gateway import supplier_offers
+    from gateway.service import GatewayError
+    real, refused = supplier_offers.create, []
+
+    def create(gw, supplier_id, body, sent_by):
+        if not refused:
+            refused.append(body["kitchen_id"])
+            raise GatewayError(409, "OFFER_LIMIT", "too many open offers")
+        return real(gw, supplier_id, body, sent_by)
+
+    monkeypatch.setattr(supplier_offers, "create", create)
+    report = go(w, kitchen=None, apply=True, limit=1)
+    assert [r["result"] for r in report] == ["OFFER_LIMIT", "OPEN"]
+    assert report[1]["kitchen_id"] != refused[0]
+    assert w.db.supplier_offers.count_documents({}) == 1
+
+
 def test_cli_stops_before_any_work_when_the_model_key_is_missing(monkeypatch):
     monkeypatch.delenv("VERDA_INFERENCE_KEY", raising=False)
     monkeypatch.delenv("MONGODB_URI", raising=False)
