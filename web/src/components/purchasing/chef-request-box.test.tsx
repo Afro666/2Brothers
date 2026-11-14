@@ -28,4 +28,16 @@ describe("ChefRequestBox examples", () => {
     expect(box).toHaveFocus();
     expect(onSubmit).not.toHaveBeenCalled();
   });
+
+  it("in Finnish the box gets the Finnish text the chip shows", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    try {
+      const user = userEvent.setup();
+      renderBox();
+      await user.click(screen.getByRole("button", { name: "100 litraa kermaa torstaiksi" }));
+      expect(screen.getByRole("textbox", { name: /./ })).toHaveValue("100 litraa kermaa torstaiksi");
+    } finally {
+      localStorage.removeItem("purchasing-language");
+    }
+  });
 });

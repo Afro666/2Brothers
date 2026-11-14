@@ -95,7 +95,8 @@ export function ChefRequestBox({
               size="sm"
               disabled={pending}
               onClick={() => {
-                setText(example);
+                // The box gets the text the chip shows; the gateway parser reads Finnish too.
+                setText(t(example));
                 textRef.current?.focus();
               }}
             >

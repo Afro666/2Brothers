@@ -36,6 +36,12 @@ describe("RecallLines", () => {
     expect(link).toHaveAttribute("href", "#proposal-ORD-1045-R");
   });
 
+  it("puts a decorative picture next to the recalled product and each replacement line", () => {
+    const { container } = render(<RecallLines alerts={[alert]} />);
+    const pictures = container.querySelectorAll("[aria-hidden][data-kind], [aria-hidden][data-logo]");
+    expect(pictures.length).toBe(1 + (alert.replacement?.lines.length ?? 0));
+  });
+
   it.each([
     ["https://ruokavirasto.fi@evil.example/x", "evil.example"],
     ["https://foodsupplier.example/notice", "foodsupplier.example"],

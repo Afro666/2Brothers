@@ -124,6 +124,9 @@ describe("createHttpApi", () => {
         "getSupplierDrift",
         // Onboarding (api/http-onboarding.ts).
         "lookupKitchenBrand",
+        // Catalog search and products by code (api/http-catalog.ts).
+        "searchProducts",
+        "getProducts",
         // The Trust page (api/http-trust.ts).
         "listAuditChain",
         "verifyAuditChain",
@@ -144,7 +147,7 @@ describe("createHttpApi", () => {
       ].sort(),
     );
     expect((await api.getMandate()).restaurant).toBeTruthy();
-    expect((await api.searchProducts("milk")).length).toBeGreaterThan(0);
+    expect((await api.listTeamMembers()).length).toBeGreaterThan(0);
     expect(calls).toEqual([]);
     await expect(
       api.changeProposal("prop-1", { type: "REMOVE_LINE", productId: "900001" }, "human"),
@@ -781,8 +784,21 @@ describe("the app on the gateway", () => {
     gateway({
       "GET /api/v1/me": () => ({ kind: "human", name: "Demo approver", role: "approver", can_approve: true }),
     });
-    renderApp("/catalog", createHttpApi("/api"));
+    // Every screen in SCREEN_DATA is on the gateway now: take one method out of `live` to see the mark.
+    const api = createHttpApi("/api");
+    const live = new Set(api.live);
+    live.delete("searchProducts");
+    renderApp("/catalog", { ...api, live });
     expect(await screen.findByText("Sample data")).toBeVisible();
+  });
+
+  it("shows the Catalog page on the gateway without the Sample data mark", async () => {
+    gateway({
+      "GET /api/v1/me": () => ({ kind: "human", name: "Demo approver", role: "approver", can_approve: true }),
+    });
+    renderApp("/catalog", createHttpApi("/api"));
+    expect(await screen.findByText("Atlas Search")).toBeVisible();
+    expect(screen.queryByText("Sample data")).not.toBeInTheDocument();
   });
 
   it("gives a real Set for live, so the Trust page shows the gateway's error instead of crashing", async () => {

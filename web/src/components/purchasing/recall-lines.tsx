@@ -1,5 +1,6 @@
 import { ArrowDown, ExternalLink, ShieldAlert } from "lucide-react";
 
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { formatDate, formatEur, formatNumber } from "@/lib/format";
 import { translate, useT, type TranslationVariables } from "@/lib/i18n";
 import { TONE_CLASSES } from "@/lib/tone";
@@ -82,8 +83,11 @@ function RecallLine({ alert }: { alert: RecallAlert }) {
           <span className="font-semibold">{blocked ? t("Blocked by recall") : t("Recall to check")}</span>
           <span className={cn(BADGE, "border-current")}>{alert.match}</span>
         </div>
-        <div className="font-medium break-words text-foreground">
-          {alert.productName ?? t("Product name unknown")} <span className="text-muted-foreground">({alert.productId})</span>
+        <div className="flex items-center gap-2 font-medium text-foreground">
+          <ProductThumb en={alert.productName} brand={alert.match === "review" ? null : recall.brand} size="sm" />
+          <span className="min-w-0 break-words">
+            {alert.productName ?? t("Product name unknown")} <span className="text-muted-foreground">({alert.productId})</span>
+          </span>
         </div>
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-foreground">
           <dt className="text-muted-foreground">{t("Notice")}</dt>
@@ -152,11 +156,18 @@ function Replacement({ alert }: { alert: RecallAlert }) {
         </p>
         <p className="text-foreground">{reason ? `${t(reason)} ` : ""}{t("Approval of the held order stays locked.")}</p>
         {alert.replacementIdeas.length > 0 ? (
-          <p className="text-foreground">
-            {t("Ideas from other brands: {ideas}", {
-              ideas: alert.replacementIdeas.map((idea) => idea.name ?? idea.productId).join("; "),
-            })}
-          </p>
+          <div className="flex items-start gap-2">
+            <span className="flex shrink-0 -space-x-2">
+              {alert.replacementIdeas.map((idea, n) => (
+                <ProductThumb key={`${idea.productId}-${n}`} en={idea.name} brand={idea.brand} size="sm" className="ring-2 ring-background" />
+              ))}
+            </span>
+            <p className="min-w-0 break-words text-foreground">
+              {t("Ideas from other brands: {ideas}", {
+                ideas: alert.replacementIdeas.map((idea) => idea.name ?? idea.productId).join("; "),
+              })}
+            </p>
+          </div>
         ) : null}
       </div>
     );
@@ -169,9 +180,12 @@ function Replacement({ alert }: { alert: RecallAlert }) {
       </div>
       <ul className="space-y-1 text-foreground">
         {replacement.lines.map((line) => (
-          <li key={line.productId} className="break-words">
-            {formatNumber(line.quantity)} {line.unit} · {line.productName ?? t("Product name unknown")}{" "}
-            <span className="text-muted-foreground">({line.productId})</span>
+          <li key={line.productId} className="flex items-center gap-2">
+            <ProductThumb en={line.productName} size="sm" />
+            <span className="min-w-0 break-words">
+              {formatNumber(line.quantity)} {line.unit} · {line.productName ?? t("Product name unknown")}{" "}
+              <span className="text-muted-foreground">({line.productId})</span>
+            </span>
           </li>
         ))}
       </ul>

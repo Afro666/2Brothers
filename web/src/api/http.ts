@@ -1,4 +1,5 @@
 import { createBrandLogosHttp } from "@/api/http-brand-logos";
+import { createCatalogHttp } from "@/api/http-catalog";
 import { createNutritionHttp } from "@/api/http-nutrition";
 import { createOffersHttp } from "@/api/http-offers";
 import { createOnboardingHttp } from "@/api/http-onboarding";
@@ -99,9 +100,9 @@ function mapEach<T>(list: Json[], what: string, idKey: string, map: (row: Json) 
 }
 
 /**
- * Hybrid: the order flow (proposals, approve and reject, orders, audit) and the planning
- * screens (api/http-planning.ts) talk to the real gateway; every other method still answers
- * from the mock, and `live` says which is which.
+ * Hybrid: the order flow (proposals, approve and reject, orders, audit), the catalog search
+ * (api/http-catalog.ts) and the planning screens (api/http-planning.ts) talk to the real
+ * gateway; every other method still answers from the mock, and `live` says which is which.
  *
  * No Authorization header is sent: in production the web server adds the gateway's human
  * token (web/Caddyfile).
@@ -187,6 +188,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createEventsHttp(baseUrl, kitchen, () => currentSession),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);

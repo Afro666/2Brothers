@@ -297,6 +297,68 @@ million tokens (the meter's own count).
 
 Tests: `agent/tests/test_buyer_settings.py` pins the settings and the prompt lines.
 
+## Allergen label from a photo (#1175)
+
+`POST /v1/kitchens/{k}/orders/{order_id}/label/photo` with `{image_base64, product_id}`
+(contract: "Check a package's allergen label from a photo"). Nemotron VL copies the
+label's product name, EAN, the words emphasised as allergens, and the "may contain"
+sentence, as printed (`agent/label_service.py`).
+
+Plain code (`agent/label.py`) then does the rest:
+- It maps each word to a GS1 code with a fixed Finnish, Swedish and English table. The
+  table holds whole words and safe word starts only: `kookosmaito` is not milk, and
+  `munakoiso` is not egg.
+- It removes the "may contain" phrase first, because `voi sisältää` starts with `voi`,
+  which alone means butter. The live read of the demo label found exactly that.
+- It compares the result with the kitchen's rule (CONTAINS and MAY_CONTAIN alike) and
+  with the catalog row, in both directions.
+- It checks that the label is the delivered product, by EAN, or by name when the
+  product has no GTIN.
+
+An unknown word, a missing statement, or a possibly different product is PLEASE_CHECK.
+There is no green outcome: "agrees" still says to read the label yourself. Nothing is
+stored, so "unknown" in the catalog stays unknown.
+
+Measured on 2026-11-14 with the live endpoint and `demo/label-photo.png`:
+- **Time and tokens:** 0.4 s, about 1,600 tokens.
+- **Read:** wheat, milk and egg as contains; peanuts and sesame as may contain.
+- **Product:** confirmed by name.
+- **Outcome:** `EXCLUDED_ALLERGEN`, because the demo kitchen excludes peanuts.
+
+The recorded reply is `agent/fixtures/label/demo.reply.json`.
+
+## Price list from a photo (#1174)
+
+`POST /v1/kitchens/{k}/suppliers/{s}/price-list/photo` (contract: "Read a supplier's
+price list from a photo"), for manual suppliers such as the demo's Corner Bakery.
+Nemotron VL copies per row the printed name, price, the unit the price is for, and the
+pack size, plus the list's currency and VAT note (`agent/price_list_service.py`).
+
+Plain code (`agent/price_list.py`) reads those texts into draft own products:
+- `2,50` is 2.50;
+- the unit codes come from a fixed table (`kpl` → ST, `ltk` → KI, `pussi` → BAG, and so on);
+- pack sizes are read as g, kg, ml, cl, dl or l;
+- the currency is EUR only if `€` or `EUR` is printed;
+- VAT is never assumed.
+
+Anything uncertain is PLEASE_CHECK with a reason, and an uncertain price stays empty. A
+name match with an existing product is a suggestion with both prices, never an overwrite.
+The route writes nothing; a person saves each row with `POST /products`, and the saved
+row keeps `price_source: price_list_photo`.
+
+Measured on 2026-11-14 with the live endpoint and `demo/price-list-photo.png` (8 rows):
+
+| What | Result |
+|---|---|
+| Time | 1.1 s |
+| Tokens | about 2,200 |
+| Rows READ | 7 |
+| PLEASE_CHECK | 1 ("Seed rolls": no unit printed, so the price stays empty) |
+| Rye loaf | price changed, 4.20 → 4.40 |
+| Cinnamon bun | same price |
+
+The recorded reply is `agent/fixtures/price_list/demo.reply.json`.
+
 ## Buying note for Valio's planner (#1176)
 
 `GET /v1/suppliers/{id}/demand/buying-note` (contract: "Buying note for the supplier's

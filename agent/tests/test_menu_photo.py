@@ -44,7 +44,7 @@ def test_integral_json_number_keeps_printed_covers():
 
 
 def test_reader_uses_one_schema_constrained_photo_call():
-    model = RecordedModel({'content': json.dumps({'dishes': [{'day': 'Monday', 'dish': 'Salmon soup', 'covers': 120}]})})
+    model = RecordedModel({'content': json.dumps({'dishes': [{'day': 'Monday', 'dish': 'Salmon soup', 'covers': '120'}]})})
     model.close = lambda: asyncio.sleep(0)
     result = asyncio.run(MenuPhotoReader(WorkerError, model_factory=lambda: model).read(PHOTO))
     assert result['dishes'][0]['covers'] == 120
@@ -53,13 +53,20 @@ def test_reader_uses_one_schema_constrained_photo_call():
     assert message[1]['type'] == 'image_url' and message[1]['image_url']['url'].startswith('data:image/png;base64,')
 
 
-@pytest.mark.parametrize('covers', [True, -1, None, '120'])
+@pytest.mark.parametrize('covers', [True, -1, None, '120.0', '120 covers', 'one hundred', '123456789'])
 def test_invalid_model_fields_are_refused_whole(covers):
     model = RecordedModel({'content': json.dumps({'dishes': [{'day': 'Monday', 'dish': 'Salmon soup', 'covers': covers}]})})
     model.close = lambda: asyncio.sleep(0)
     with pytest.raises(WorkerError) as err:
         asyncio.run(MenuPhotoReader(WorkerError, model_factory=lambda: model).read(PHOTO))
     assert err.value.code == 'VISION_REPLY_INVALID'
+
+
+def test_worker_preserves_unknown_covers_without_guessing():
+    model = RecordedModel({'content': json.dumps({'dishes': [{'day': 'Monday', 'dish': 'Salmon soup', 'covers': 'unknown'}]})})
+    model.close = lambda: asyncio.sleep(0)
+    result = asyncio.run(MenuPhotoReader(WorkerError, model_factory=lambda: model).read(PHOTO))
+    assert result['dishes'][0]['covers'] == 'unknown'
 
 
 def test_worker_auth_and_kitchen_scope(monkeypatch):
