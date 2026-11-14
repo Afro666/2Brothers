@@ -604,6 +604,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     from gateway.onboarding import mount_onboarding
     mount_onboarding(app, principal, body)
 
+    # Brand logos (product pictures): reads the brand_logos rows; never calls Context.dev.
+    from gateway.brand_logos import mount_brand_logos
+    mount_brand_logos(app, gw, principal)
+
     # Recall list and "check now" (#358): views over the monitor's holds and replacements.
     from gateway.recalls_view import mount_recalls
     mount_recalls(app, gw, principal, body)
