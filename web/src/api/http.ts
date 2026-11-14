@@ -1,4 +1,5 @@
 import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
+import { createTrustHttp } from "@/api/http-trust";
 import { type Json, mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, rows } from "@/api/gateway-map";
 import { mapMoney } from "@/api/map";
 import { mapDrift } from "@/api/map-drift";
@@ -130,6 +131,7 @@ export function createHttpApi(baseUrl: string): Api {
       await post("/v1/auth/change-password", { current_password: current, new_password: next });
     },
     ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));
