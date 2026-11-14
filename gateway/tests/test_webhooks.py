@@ -85,7 +85,9 @@ def test_approve_sends_approved_and_placed_and_a_moved_price_sends_total_mismatc
     client, fake, _ = env
     make(client, list(webhooks.EVENTS))
     p = milk(client)
-    fake.bump("462775", 9.99)
+    # 3.57 is 2.55 times the cheapest milk: inside the certainty premium limit (engine/premium.py),
+    # so the basket keeps its product and only the total moves.
+    fake.bump("462775", 3.57)
     assert approve(client, p).status_code == 409
     assert receiver.events() == ["proposal.ready", "total_mismatch"]
     fresh = client.get(f"{K}/proposals/{p['proposal_id']}", headers=HUMAN).json()
