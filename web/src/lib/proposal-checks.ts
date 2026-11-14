@@ -1,4 +1,4 @@
-import type { LeftOutProduct } from "@/components/purchasing/proposal-lines";
+import type { LeftOutProduct, ProductCheck } from "@/components/purchasing/proposal-lines";
 import { isPassed, isStockUnconfirmed } from "@/lib/format";
 import type { Tone } from "@/lib/tone";
 import type { ApprovalRequest, MandateReason, Order, OrderLine } from "@/types";
@@ -10,7 +10,7 @@ const NAMED_CODE = /\((\d{4,})\)$/;
 
 export interface SplitChecks {
   /** Sentences about one product of the order, by product id: shown on that row. */
-  perLine: Map<string, string[]>;
+  perLine: Map<string, ProductCheck[]>;
   /** Products a reason names that are not on the order: the engine left them out. */
   leftOut: LeftOutProduct[];
   /** Reasons about the whole proposal. */
@@ -30,7 +30,7 @@ function lineFor(prefix: string, lines: OrderLine[]): OrderLine | undefined {
  * product reads "<id or name>: <sentence>" (gateway/service.py, lib/codes.ts plainReason).
  */
 export function splitChecks(reasons: MandateReason[], lines: OrderLine[]): SplitChecks {
-  const perLine = new Map<string, string[]>();
+  const perLine = new Map<string, ProductCheck[]>();
   const leftOut: LeftOutProduct[] = [];
   const general: MandateReason[] = [];
   for (const reason of reasons) {
@@ -39,10 +39,10 @@ export function splitChecks(reasons: MandateReason[], lines: OrderLine[]): Split
     const rest = match?.[2].trim();
     const line = prefix && rest ? lineFor(prefix, lines) : undefined;
     if (line && rest) {
-      const text = reason.detail ? `${rest} ${reason.detail}` : rest;
-      perLine.set(line.product.id, [...(perLine.get(line.product.id) ?? []), text]);
+      const check: ProductCheck = { text: rest, detail: reason.detail };
+      perLine.set(line.product.id, [...(perLine.get(line.product.id) ?? []), check]);
     } else if (prefix && rest && (PRODUCT_CODE.test(prefix) || NAMED_CODE.test(prefix))) {
-      leftOut.push({ product: prefix, reason: reason.detail ? `${rest} ${reason.detail}` : rest });
+      leftOut.push({ product: prefix, reason: rest, detail: reason.detail });
     } else {
       general.push(reason);
     }

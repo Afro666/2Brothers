@@ -39,6 +39,19 @@ export interface LineEditing {
 export interface LeftOutProduct {
   product: string;
   reason: string;
+  /** The reason's untranslated detail sentence ("" when none). */
+  detail: string;
+}
+
+/** One per-product "What to check" sentence and its detail, both untranslated. */
+export interface ProductCheck {
+  text: string;
+  detail: string;
+}
+
+/** A check as the reader's language shows it: sentence, then its detail. */
+function checkText({ text, detail }: ProductCheck, t: T): string {
+  return detail ? `${t(text)} ${t(detail)}` : t(text);
 }
 
 type T = ReturnType<typeof useT>;
@@ -169,7 +182,7 @@ export function ProposalLines({
   now: Date;
   /** Who confirms unknown stock ("Valio", or a manual supplier). */
   confirmBy: string;
-  checks: ReadonlyMap<string, string[]>;
+  checks: ReadonlyMap<string, ProductCheck[]>;
   leftOut?: LeftOutProduct[];
   editing?: LineEditing;
 }) {
@@ -234,9 +247,9 @@ export function ProposalLines({
                     </div>
                   </div>
                   {notes.map((note) => (
-                    <div key={note} className="mt-0.5 flex items-start gap-1 pl-10 text-xs leading-4 text-warning">
+                    <div key={`${note.text}-${note.detail}`} className="mt-0.5 flex items-start gap-1 pl-10 text-xs leading-4 text-warning">
                       <TriangleAlert className="mt-px size-3 shrink-0" aria-hidden />
-                      <span className="[overflow-wrap:anywhere]">{note}</span>
+                      <span className="[overflow-wrap:anywhere]">{checkText(note, t)}</span>
                     </div>
                   ))}
                 </div>
@@ -328,9 +341,9 @@ export function ProposalLines({
           <h5 className="label-caps">{t("Left out of this order ({count})", { count: leftOut.length })}</h5>
           <ul className="divide-y divide-dashed divide-input text-xs">
             {leftOut.map((item) => (
-              <li key={`${item.product}-${item.reason}`} className="flex flex-wrap gap-x-2 py-1">
+              <li key={`${item.product}-${item.reason}-${item.detail}`} className="flex flex-wrap gap-x-2 py-1">
                 <span className="font-medium [overflow-wrap:anywhere]">{item.product}</span>
-                <span className="text-muted-foreground [overflow-wrap:anywhere]">{item.reason}</span>
+                <span className="text-muted-foreground [overflow-wrap:anywhere]">{checkText({ text: item.reason, detail: item.detail }, t)}</span>
               </li>
             ))}
           </ul>

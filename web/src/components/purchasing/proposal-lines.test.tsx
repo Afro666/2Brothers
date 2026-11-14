@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApprovalCard } from "@/components/purchasing/approval-card";
 import { ProposalLines } from "@/components/purchasing/proposal-lines";
 import { formatDateTime, formatEur } from "@/lib/format";
+import { LanguageProvider } from "@/lib/i18n";
 import { splitChecks, statusChips } from "@/lib/proposal-checks";
 import { MOCK_NOW } from "@/mocks/milk-case";
 import { menuPlanApproval, menuPlanLines, menuPlanOrder } from "@/mocks/menu-plan-case";
@@ -145,18 +146,49 @@ describe("splitChecks: What to check, per product", () => {
       ],
       menuPlanLines,
     );
-    expect(perLine.get("404933")).toEqual(["order cut-off has passed"]);
-    expect(perLine.get("405322")).toEqual(["not available for this date"]);
-    expect(perLine.get("404151")).toEqual(["Allergen rule: the kitchen excludes AN"]);
-    expect(perLine.get("405418")).toEqual(["label checked"]);
+    expect(perLine.get("404933")).toEqual([{ text: "order cut-off has passed", detail: "" }]);
+    expect(perLine.get("405322")).toEqual([{ text: "not available for this date", detail: "" }]);
+    expect(perLine.get("404151")).toEqual([{ text: "Allergen rule: the kitchen excludes AN", detail: "" }]);
+    expect(perLine.get("405418")).toEqual([{ text: "label checked", detail: "" }]);
     expect(leftOut).toEqual([
-      { product: "463132", reason: "order cut-off has passed" },
-      { product: "463335", reason: "order cut-off has passed" },
+      { product: "463132", reason: "order cut-off has passed", detail: "" },
+      { product: "463335", reason: "order cut-off has passed", detail: "" },
     ]);
     expect(general.map((reason) => reason.rule)).toEqual([
       "The total is above your kitchen's budget warning.",
       expect.stringMatching(/^Valio must confirm stock for: /),
     ]);
+  });
+
+  it("in Finnish translates a per-product reason's detail on its row and in the left-out list", () => {
+    const detail = "A warning only. It does not block the order.";
+    const finnish = "Tämä on vain varoitus. Se ei estä tilausta.";
+    const { perLine, leftOut } = splitChecks(
+      [
+        { rule: "404933: order cut-off has passed", detail },
+        { rule: "463132: order cut-off has passed", detail },
+      ],
+      menuPlanLines,
+    );
+    localStorage.setItem("purchasing-language", "fi");
+    try {
+      render(
+        <LanguageProvider>
+          <ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={perLine} leftOut={leftOut} />
+        </LanguageProvider>,
+      );
+      const hasFinnish = (content: string, element: Element | null) =>
+        element?.tagName === "SPAN" && content.includes(finnish);
+      const row = rowOf(byId("404933").product.names.en);
+      expect(within(row).getByText(hasFinnish)).toBeInTheDocument();
+      const list = screen.getByRole("region");
+      expect(within(list).getByText(hasFinnish)).toBeInTheDocument();
+      expect(screen.queryByText((content) => content.includes(detail))).not.toBeInTheDocument();
+    } finally {
+      localStorage.removeItem("purchasing-language");
+      // The provider keeps the language in memory; mounting it again reads English back.
+      render(<LanguageProvider>{null}</LanguageProvider>);
+    }
   });
 
   it("names the status chips most serious first", () => {
