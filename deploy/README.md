@@ -132,6 +132,14 @@ Default is the open demo: anyone with the link is the demo person and can approv
    ```
 
    `--role` is `approver`, `chef` (may ask for orders) or `viewer` (reads only). `python -m gateway.users list` shows the accounts, `remove --email` deletes one.
+5. The account for the stage. An account belongs to one kitchen, and a kitchen's account is
+   refused Valio's pages (Demand, the Valio view on Home: "a kitchen's session cannot read a
+   supplier's view"). The approver from step 3 is such an account. For the demo, make one
+   approver with `--kitchen all`: it sees what the open demo's person sees, behind a sign-in.
+
+   ```
+   docker compose --env-file .env -f deploy/compose.yaml run --rm --no-deps gateway python -m gateway.users add --email <stage email> --role approver --kitchen all
+   ```
 
 What changes: the web needs a signed-in person; only an approver can approve, reject, make
 API tokens or change settings. What does not change: the Buyer worker (its own agent token),
@@ -140,3 +148,66 @@ by a signed-in approver (Settings > API & MCP tokens), not by an open call to `/
 
 Off again, in under a minute: set `GATEWAY_REQUIRE_LOGIN=false` in `.env` and run the same
 `up -d gateway` command. Accounts stay; the open demo is back.
+
+### Checked end to end on 2026-11-14
+
+Run on a laptop, not on the server: this compose file with Caddy over HTTPS (its own local
+certificate), a local MongoDB with search (`mongodb/mongodb-atlas-local`), the real Valio
+key and the real Buyer worker, `GATEWAY_REQUIRE_LOGIN=true`, and Chromium at 390 px.
+
+Works:
+
+- A visitor without a session gets the sign-in page on every screen; `/api/*` answers 401.
+  A request with the old shared human token, or with a made-up `X-User`, also gets 401.
+- The first sign-in with `DEMO_USER_EMAIL` and `DEMO_USER_PASSWORD` makes the approver and
+  opens Home. The cookie is `HttpOnly`, `Secure`, `SameSite=Strict`, 12 hours.
+- The approver asks "200 L lactose-free milk by Monday" (the Buyer worker answers: it uses
+  its own agent token), sees it under To approve, approves it. The activity log and the
+  order's History tab say "Order placed, By <the approver's email>".
+- A chef can ask for an order (200); Approve and Reject are greyed out with "Your account
+  cannot approve or reject orders."; the API answers 403 `ROLE_REQUIRED` on approve, reject
+  and tokens. A viewer reads every screen; asking shows "a viewer can read, not change or
+  ask" (403). No screen crashes for either.
+- Sign out (in the menu at phone width) ends the session on the server. A session that
+  ends while a page is open sends the person to the sign-in page at the next call.
+- A wrong password says "wrong email or password". Two typos do not lock the account. Five
+  wrong passwords lock it for five minutes, and the page says so.
+- A token made under Settings > API & MCP tokens works on `/gateway/*` and on `/gateway/mcp`,
+  and gets 403 `HUMAN_SESSION_REQUIRED` on approve, reject and making a token. The refusal is
+  in the activity log. The same token on `/api/*` gets 401.
+- Public with sign-in on: `/llms.txt`, `/.well-known/agent-card.json`, `/api/openapi.json`,
+  `/gateway/openapi.json`, `/api/docs`, `/api/.well-known/jwks.json`, `/api/ping`.
+- Off again (`GATEWAY_REQUIRE_LOGIN=false`, `up -d gateway`): only the gateway restarts,
+  the open demo is back, accounts and tokens stay. On again: the same accounts work.
+- The accounts command: `add` (viewer, chef, approver, `--kitchen all`), `list`; a short
+  password is refused.
+
+Not checked, or different from the server:
+
+- Not run on the server itself, and not against Atlas: the search index was a local one.
+- The accounts command was fed its password from a pipe. Typing it in a real terminal over
+  SSH (the hidden prompt) was not tried.
+- A proposal the Buyer worker makes says "asked by buyer-agent" in the inbox, not the person
+  who typed the request. The approval names the person.
+- The log names a person by email, not by display name.
+- Anyone who knows an account's email can lock it for five minutes with five wrong
+  passwords, again and again. Use an email for the stage account that is not on a slide.
+  If it happens on stage: switch sign-in off (below), or wait five minutes.
+- Change password, webhooks and the Finnish texts were not tried with sign-in on.
+
+The morning of the demo, in this order:
+
+1. Server: add the three lines to `.env`, run the `up -d gateway` command (steps 1 and 2).
+2. Browser: open the site, sign in with the `.env` email and password (step 3).
+3. Server: make the stage approver with `--kitchen all` (step 5) and one viewer for the
+   judges (step 4). `python -m gateway.users list` must show both.
+4. Laptop: `python -m demo.rehearsal --email <stage email>` (it asks for the password, or
+   reads `REHEARSAL_PASSWORD`). All rows must be OK. With a kitchen's account instead, the
+   row "Valio demand view" fails: that is the refusal from step 5, not a fault.
+5. Browser, as the stage approver: Settings > API & MCP tokens, make a token with read and
+   propose. Then `KITCHEN_TOKEN=<that token> python -m demo.second_agent`. `--make-token`
+   does not work with sign-in on; it says so.
+6. The fallback video: `DEMO_PASSWORD=<password> python -m demo.record_demo --email <stage email> --approve`.
+7. Sign out, sign in as the viewer, and look at To approve: the buttons must be grey.
+8. If anything is wrong: `GATEWAY_REQUIRE_LOGIN=false`, the same `up -d gateway` command,
+   and run `python -m demo.rehearsal` without `--email`.
