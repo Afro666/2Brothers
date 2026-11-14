@@ -13,6 +13,9 @@ export const MACROS: [keyof NutrientValues, string][] = [
   ["saltG", "salt {amount} g"],
 ];
 
+/** Thumbnails shown before the missing-nutrition text; the rest become a "+N" chip. */
+const MAX_THUMBS = 3;
+
 /**
  * One portion's energy and macros under a recipe, from the products' own nutrition tables.
  * A value the labels do not give is left out, never shown as 0. Loading and a failed call are
@@ -37,10 +40,16 @@ export function RecipeNutritionLine({ recipe }: { recipe: Recipe }) {
   const missing =
     nutrition.unknown.length > 0 ? (
       <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-        <span className="flex shrink-0 gap-0.5">
-          {nutrition.unknown.map((product) => (
+        <span className="flex shrink-0 items-center gap-0.5">
+          {nutrition.unknown.slice(0, MAX_THUMBS).map((product) => (
             <ProductThumb key={product.productId} en={product.productName} size="sm" className="size-5" />
           ))}
+          {nutrition.unknown.length > MAX_THUMBS ? (
+            // The text after it names every product, so a screen reader skips the count.
+            <span aria-hidden data-more className="rounded-full bg-muted px-1.5 text-[0.65rem] leading-5">
+              +{nutrition.unknown.length - MAX_THUMBS}
+            </span>
+          ) : null}
         </span>
         <span className="min-w-0 break-words">
           {t("No nutrition table: {products}", {
