@@ -70,6 +70,7 @@ class Bot:
         self._summaries: dict[tuple[int, str], int] = {}     # (chat, proposal) -> summary message id
         self._heard: dict[tuple[int, str], str] = {}
         self._shelves: dict[tuple[int, int], dict] = {}      # (chat, message) -> a shelf read to confirm
+        self._chat_types: dict[int, str] = {}                # chat -> "private", "group", "supergroup", ...
         self._lock = threading.Lock()
         self.brief_times = brief_times if brief_times is not None else dict(BRIEF_TIMES)
 
@@ -85,7 +86,23 @@ class Bot:
         except Exception as exc:        # one bad update must not stop the bot; never the content
             print(f"bot: update failed: {type(exc).__name__}", file=sys.stderr, flush=True)
 
+    def _remember_type(self, chat_info: dict) -> None:
+        if chat_info.get("id") is not None and chat_info.get("type"):
+            with self._lock:
+                self._chat_types[chat_info["id"]] = chat_info["type"]
+
+    def _markup(self, chat: int, markup: dict | None) -> dict | None:
+        """Telegram allows inline `web_app` buttons only in private chats: elsewhere the whole
+        send fails. Outside a private chat they become plain `url` buttons. A chat whose type
+        is not known yet is private when its id is positive (group ids are negative)."""
+        private = self._chat_types.get(chat, "private" if chat > 0 else "group") == "private"
+        if private or not markup:
+            return markup
+        return {"inline_keyboard": [[{"text": b["text"], "url": b["web_app"]["url"]} if "web_app" in b else b
+                                     for b in row] for row in markup["inline_keyboard"]]}
+
     def _message(self, message: dict) -> None:
+        self._remember_type(message["chat"])
         chat = message["chat"]["id"]
         text = (message.get("text") or "").strip()
         if text.startswith("/start"):
@@ -252,7 +269,7 @@ class Bot:
         except GatewayError as exc:
             self.tg.edit(chat, status, render.refusal(exc.code, exc.message))
             return
-        self.tg.edit(chat, status, messages[0].text, messages[0].markup)
+        self.tg.edit(chat, status, messages[0].text, self._markup(chat, messages[0].markup))
         for message in messages[1:]:
             self.tg.send(chat, message.text, message.markup, silent=True)
 
@@ -272,7 +289,7 @@ class Bot:
         quiet = len(messages) == 1 and "<b>" not in messages[0].text      # nothing urgent: no sound
         for chat in self.links.chats():
             try:
-                self.tg.send(chat, messages[0].text, messages[0].markup, silent=quiet)
+                self.tg.send(chat, messages[0].text, self._markup(chat, messages[0].markup), silent=quiet)
                 for message in messages[1:]:
                     self.tg.send(chat, message.text, message.markup, silent=True)
             except TelegramError as exc:
@@ -285,7 +302,7 @@ class Bot:
             return          # after a restart the summary is not known: the PO message is still right
         url = f"{self.site_url}/approvals?proposal={pid}" if self.site_url and pid else None
         message = render.summary(proposal, url, self._heard.get((chat, pid)))
-        self.tg.edit(chat, message_id, message.text, message.markup)
+        self.tg.edit(chat, message_id, message.text, self._markup(chat, message.markup))
 
     def _names(self, proposal: dict) -> dict[str, str]:
         ids = [str(ln["product_id"]) for b in render.blocks_of(proposal) for ln in b.get("lines") or []]
@@ -299,6 +316,7 @@ class Bot:
     # ---- buttons -----------------------------------------------------------------------
     def _callback(self, query: dict) -> None:
         message = query.get("message") or {}
+        self._remember_type(message.get("chat") or {})
         chat, message_id = (message.get("chat") or {}).get("id"), message.get("message_id")
         parts = str(query.get("data") or "").split(":")
         if chat is None or not self.links.linked(chat) or parts[0] == "noop" or len(parts) < 3:
