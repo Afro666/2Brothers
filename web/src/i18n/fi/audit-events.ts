@@ -1,9 +1,7 @@
 /** The Finnish text of each audit event label in `api/gateway-map.ts` EVENT_KINDS (#1776). */
 const dictionary: Record<string, string> = {
-  "Personal approval token created": "Henkilökohtainen hyväksyntätunniste luotu",
-  "Personal approval token revoked": "Henkilökohtainen hyväksyntätunniste poistettu käytöstä",
-  "API token created": "API-tunniste luotu",
-  "API token revoked": "API-tunniste poistettu käytöstä",
+  "API token created": "API-tunnus luotu",
+  "API token revoked": "API-tunnus kumottu",
   "Webhook added": "Webhook lisätty",
   "Auto-approve setting changed": "Automaattisen hyväksynnän asetus muutettu",
   "Settings changed": "Asetuksia muutettu",
@@ -32,7 +30,6 @@ const dictionary: Record<string, string> = {
   "Label photo could not be read": "Etiketin kuvaa ei voitu lukea",
   "Delivery note could not be read": "Lähetyslistaa ei voitu lukea",
   "Delivery result saved": "Toimituksen tulos tallennettu",
-  "Proposal changed": "Ehdotusta muutettu",
   "Proposal explanation written": "Ehdotuksen selitys kirjoitettu",
   "Approved automatically, inside the kitchen's limit": "Hyväksytty automaattisesti keittiön rajan sisällä",
   "Not approved automatically: a person decides": "Ei hyväksytty automaattisesti: ihminen päättää",
@@ -52,8 +49,6 @@ const dictionary: Record<string, string> = {
   "Tamper demo: a line was changed": "Peukalointidemo: riviä muutettiin",
   "Tamper demo: the line was restored": "Peukalointidemo: rivi palautettiin",
   "A person chose an option": "Ihminen valitsi vaihtoehdon",
-  "A person looked up an order with an unknown send result":
-    "Ihminen tarkisti tilauksen, jonka lähetyksen tulos ei ole tiedossa",
   "A person resolved an unknown send": "Ihminen ratkaisi tuntemattoman lähetyksen",
   "Recall check": "Takaisinvetojen tarkistus",
   "Test proposals cleared before a demo": "Testiehdotukset poistettu ennen demoa",

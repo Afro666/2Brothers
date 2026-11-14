@@ -168,29 +168,32 @@ describe("HomePage", () => {
 
   describe("Latest steps from the gateway's own events (#1776)", () => {
     const raw = [
-      { event_id: "e-1", kind: "approval_token_created", actor: "operator-cli", at: "2026-11-14T14:57:50+00:00" },
-      { event_id: "e-2", kind: "proposal_changed", actor: "token:testing", at: "2026-11-14T15:00:00+00:00" },
+      { event_id: "e-1", kind: "approval_token_revoked", actor: "operator-cli", at: "2026-11-14T14:57:50+00:00" },
+      { event_id: "e-2", kind: "settings_changed", actor: "aron", at: "2026-11-14T15:00:00+00:00" },
     ];
-    afterEach(() => updateLanguage("en", false));
+    afterEach(() => {
+      updateLanguage("en", false);
+      localStorage.removeItem("purchasing-language");
+    });
 
     it("shows a plain label, never the raw event name", async () => {
       const api = createMockApi();
       api.listAudit = async () => mapAudit(raw);
       renderApp(`/?now=${DEMO_NOW}`, api);
 
-      expect(await screen.findByText("Personal approval token created")).toBeInTheDocument();
-      expect(screen.getByText("Proposal changed")).toBeInTheDocument();
-      expect(screen.queryByText(/approval_token_created|proposal_changed/)).not.toBeInTheDocument();
+      expect(await screen.findByText("Approval token revoked")).toBeInTheDocument();
+      expect(screen.getByText("Settings changed")).toBeInTheDocument();
+      expect(screen.queryByText(/approval_token_revoked|settings_changed/)).not.toBeInTheDocument();
     });
 
     it("shows the label in Finnish when the page is in Finnish", async () => {
-      updateLanguage("fi", false);
+      updateLanguage("fi"); // stored too: the app reads the stored language when it mounts
       const api = createMockApi();
       api.listAudit = async () => mapAudit(raw);
       renderApp(`/?now=${DEMO_NOW}`, api);
 
-      expect(await screen.findByText("Henkilökohtainen hyväksyntätunniste luotu")).toBeInTheDocument();
-      expect(screen.getByText("Ehdotusta muutettu")).toBeInTheDocument();
+      expect(await screen.findByText("Hyväksyntätunnus kumottu")).toBeInTheDocument();
+      expect(screen.getByText("Asetuksia muutettu")).toBeInTheDocument();
     });
   });
 });

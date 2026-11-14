@@ -634,8 +634,8 @@ const TOOL_VERBS: Record<string, { started: string; done: string }> = {
  */
 export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   // #1776: every kind the gateway, the recall monitor and the demo scripts write.
-  approval_token_created: { kind: "settings", summary: "Personal approval token created" },
-  approval_token_revoked: { kind: "settings", summary: "Personal approval token revoked" },
+  approval_token_created: { kind: "settings", summary: "Approval token created" },
+  approval_token_revoked: { kind: "settings", summary: "Approval token revoked" },
   token_created: { kind: "settings", summary: "API token created" },
   token_revoked: { kind: "settings", summary: "API token revoked" },
   webhook_created: { kind: "settings", summary: "Webhook added" },
