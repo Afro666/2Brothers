@@ -284,6 +284,28 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
             raise GatewayError(422, "INVALID_REQUEST", "from and to (YYYY-MM-DD) are required")
         return gw().forecast(kitchen_id, q["from"], q["to"])
 
+    # ---- earned auto-approve (#299): off by default, only after the learning period ----
+    @app.get(k + "/auto-approve")
+    def auto_approve_status(kitchen_id: str, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
+        from gateway import autoapprove
+        return autoapprove.status(gw().db, kitchen_id, gw().now())
+
+    @app.put(k + "/auto-approve")
+    async def auto_approve_set(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
+        from gateway import autoapprove
+        if not who.human:
+            raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only an approver can change auto-approve")
+        data = await body(request)
+        try:
+            out = autoapprove.configure(gw().db, kitchen_id, enabled=data.get("enabled"),
+                                        limit_eur=data.get("limit_eur"), person=who.human, now=gw().now())
+        except autoapprove.AutoApproveError as exc:
+            raise GatewayError(exc.status, exc.code, str(exc)) from None
+        gw()._audit(kitchen_id, "auto_approve_changed", who.human, enabled=out["enabled"], limit_eur=out["limit_eur"])
+        return autoapprove.status(gw().db, kitchen_id, gw().now())
+
     @app.get(k + "/permissions")
     def permissions_matrix(kitchen_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
