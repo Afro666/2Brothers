@@ -63,8 +63,27 @@ describe("live Buyer request page", () => {
     vi.stubGlobal("fetch", fetch);
     const user = await fill();
     await user.click(await screen.findByRole("button", { name: "Prefer better" }));
+    expect(screen.getByText("Stock not confirmed")).toBeVisible();
+    expect(screen.getByText("Allergen data unknown")).toBeVisible();
     expect(screen.getByText(/This preference has not changed or approved an order/)).toBeVisible();
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a substitute option with a malformed line", async () => {
+    const option = {
+      tier: "good",
+      expected_total: "100.00",
+      why: "Cheaper substitute.",
+      stock_confirmed: true,
+      allergen_data_known: true,
+      requires_chef_approval: true,
+      lines: [{ product_id: "462775" }],
+    };
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ...ready, substitute_options: [option] })));
+    await fill();
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(screen.queryByText("Proposal ready for human review")).toBeNull();
+    expect(screen.queryByText(/undefined/)).toBeNull();
   });
 
   it("sends the request to the real gateway without a browser key and shows exact returned figures", async () => {
