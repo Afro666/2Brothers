@@ -1,6 +1,7 @@
 import type { Api, AuditActor, ProductTemperature } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { nameProducts } from "@/api/map";
+import { permissionsMock } from "@/api/mock-permissions";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
@@ -153,6 +154,7 @@ export function createMockApi(): MockApi {
     ...createPlanningMock(recordAudit),
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),
+    ...permissionsMock,
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
     },

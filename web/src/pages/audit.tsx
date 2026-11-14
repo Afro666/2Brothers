@@ -1,3 +1,4 @@
+import { useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { useApi } from "@/api";
@@ -16,7 +17,12 @@ export function AuditPage() {
   const api = useApi();
   const state = useAsync(() => api.listAudit());
   const [order, setOrder] = useState("all");
-  const [kind, setKind] = useState("all");
+  // `/audit?kind=search` opens with that kind chosen (the Permissions page links here). Read once:
+  // the route has no typed search, and the filters below are local state.
+  const linkedKind = (useSearch({ strict: false }) as { kind?: unknown }).kind;
+  const [kind, setKind] = useState(
+    typeof linkedKind === "string" && Object.hasOwn(KIND_META, linkedKind) ? linkedKind : "all",
+  );
   const [actor, setActor] = useState("all");
 
   const events = state.status === "ready" ? state.data : [];

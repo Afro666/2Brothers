@@ -22,6 +22,8 @@ import type {
   SubstituteOption,
   KitchenSettings,
   ForecastAccuracy,
+  BuyerPermissions,
+  AutoApproveLearning,
 } from "@/types";
 
 /** Who a decision is recorded as in the audit log. */
@@ -108,6 +110,9 @@ export interface Api {
   saveKitchenSettings(settings: KitchenSettings, actor: AuditActor): Promise<KitchenSettings>;
   /** Predicted against actual for the last 12 full weeks, and the forecast for this week and the 3 after. */
   getForecastAccuracy(): Promise<ForecastAccuracy>;
+  getPermissions(): Promise<BuyerPermissions>;
+  /** Progress only. There is no method to switch auto-approve on: a person approves every order. */
+  getAutoApproveLearning(): Promise<AutoApproveLearning>;
 }
 
 /** A gateway error: `code` is the contract's error code, e.g. `TOTAL_MISMATCH`. */
