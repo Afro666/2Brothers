@@ -75,6 +75,13 @@ def _row(pid, sales, base, units, lot=0.01):
             "units": [{"unitId": u, "sizeInBaseUnits": s} for u, s in units]}
 
 
+def _with_fat(row, grams):
+    """The fat level as docs/scenarios.md names it (fat free, 3 %), as a nutrient row."""
+    row["synkkaData"] = {"nutritionalContent": [
+        {"id": "FAT", "value": grams, "unit": "GRM", "basisQuantity": 100.0, "basisQuantityUnit": "GRM"}]}
+    return row
+
+
 def _offer(pid, name, product, price, cmp, cmp_unit, available, cutoff_passed, measure=None, allergen_data_known=True):
     pack = pack_info(product, price=D(price), comparison_price=D(cmp) if cmp else None,
                      comparison_unit=cmp_unit, measure=measure)
@@ -90,9 +97,9 @@ class _Gateway:
     """The real FastAPI app on a test database with the recorded Valio answers."""
 
     RAW = {
-        "462775": _row("462775", "ST", "ST", [("KI", 12.0), ("ST", 1.0)]),
+        "462775": _with_fat(_row("462775", "ST", "ST", [("KI", 12.0), ("ST", 1.0)]), 0.0),   # fat free
         "462921": _row("462921", "KI", "ST", [("KI", 5.0), ("ST", 1.0)]),
-        "463335": _row("463335", "ST", "ST", [("KI", 5.0), ("ST", 1.0)]),
+        "463335": _with_fat(_row("463335", "ST", "ST", [("KI", 5.0), ("ST", 1.0)]), 3.0),   # Eila 3 %
     }
 
     def __init__(self):
