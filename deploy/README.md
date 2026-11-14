@@ -11,6 +11,11 @@ The stack is two containers. `web` is Caddy: it serves the built web app and is 
 thing reachable from outside. `gateway` is the FastAPI gateway (`gateway/Dockerfile`),
 reached only through Caddy. MongoDB stays on Atlas.
 
+`stt` is the speech-to-text service for the Telegram bot (#1331): Whisper, on this server,
+reached only inside the compose network. Its first start downloads the model (about 0.5 GB
+for `small`) into the `stt_models` volume. Check it on the server:
+`docker compose -f deploy/compose.yaml exec stt python -m bot.stt_service --check <audio file>`.
+
 | Path | Who | Protection |
 |---|---|---|
 | `/api/ping` | monitors | none; answers `{"status":"ok"}` |
