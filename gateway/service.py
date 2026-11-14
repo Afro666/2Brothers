@@ -919,10 +919,13 @@ class Gateway:
                 "idempotency_key": body.get("idempotency_key")}
 
     def create_proposal(self, kitchen_id: str, body: dict, actor: str, *, auto_approve: bool = True,
-                        read: dict | None = None, plan_entries=None, menu_photo=None) -> dict:
+                        read: dict | None = None, plan_entries=None, menu_photo=None,
+                        needs: list[dict] | None = None) -> dict:
         """`auto_approve=False`: this proposal always waits for a person, whatever the kitchen's
         auto-approve rule says (a proposal made from a supplier's offer, #374).
-        `read`: what `_from_text` already made of this free text (`refuse_excluded`)."""
+        `read`: what `_from_text` already made of this free text (`refuse_excluded`).
+        `needs`: internal callers only (the recall replan, #1482): each line's own
+        `{product_id, quantity, unit}`, so a structured body is not sized as "N products"."""
         if body.get("needs") is not None:
             return self._create_list(kitchen_id, body, actor, auto_approve=auto_approve)    # #1375
         original_body = body
@@ -964,6 +967,8 @@ class Gateway:
         request["made_by"] = "menu_plan" if planned else ("parser" if parsed else "structured")
         if planned:
             request.update({key: body[key] for key in ("needs", "window", "problems")})
+        elif needs:
+            request["needs"] = needs
         if parsed and body.get("query"):
             request["query"] = body["query"]
         if parsed and body.get("refusal"):
@@ -981,7 +986,8 @@ class Gateway:
         return self._store_proposal(
             kitchen_id, request, key, _hash(request), actor, auto_approve=auto_approve, menu_photo=menu_photo,
             retry=lambda: self.create_proposal(kitchen_id, original_body, actor, auto_approve=auto_approve,
-                                               read=read, plan_entries=plan_entries, menu_photo=menu_photo))
+                                               read=read, plan_entries=plan_entries, menu_photo=menu_photo,
+                                               needs=needs))
 
     def _store_proposal(self, kitchen_id: str, request: dict, key: str, payload_hash: str, actor: str, *,
                         auto_approve: bool, retry: Callable[[], dict], menu_photo=None) -> dict:
