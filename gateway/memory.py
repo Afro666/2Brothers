@@ -105,16 +105,23 @@ def suggest(db, kitchen_id: str, phrase: str, *, injected=None) -> tuple[list[di
         if injected is not None:
             rows = injected(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id)
         else:
+            import time
             from gateway import catalog_search
             from store.search import search_products
-            try:
-                rows = search_products(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id,
-                                       hybrid=True, embedder=catalog_search._query_embedder())
-                how = "meaning"
-            except ValueError:
-                return [], "words"
-            except Exception:              # no key, limit, timeout, no index: words instead
+            resting = (time.monotonic() < catalog_search._state["skip_until"]
+                       and phrase.strip().lower() not in catalog_search._vectors)
+            if resting:                    # embedding service rests after a failure: words only
                 rows = search_products(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id)
+            else:
+                try:
+                    rows = search_products(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id,
+                                           hybrid=True, embedder=catalog_search._query_embedder())
+                    how = "meaning"
+                except ValueError:
+                    return [], "words"
+                except Exception:          # no key, limit, timeout, no index: words instead
+                    catalog_search._state["skip_until"] = time.monotonic() + catalog_search.COOLDOWN_S
+                    rows = search_products(db, phrase, {}, SUGGESTIONS, kitchen_id=kitchen_id)
     except Exception:
         return [], "words"
     ids = [str(r["product_id"]) for r in rows[:SUGGESTIONS] if r.get("product_id")]

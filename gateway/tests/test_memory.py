@@ -112,10 +112,42 @@ def test_meaning_search_falls_back_to_words_and_a_limit_per_call(monkeypatch):
             raise RuntimeError("429 over the free tier")
         return [{"product_id": "p1"}]
     monkeypatch.setattr(store.search, "search_products", fake)
+    from gateway import catalog_search
+    catalog_search.reset()
     found, how = memory.suggest(db, "k", "voi")
     assert how == "words" and found == [{"product_id": "p1", "product_name": "Valio butter 500 g"}]
     assert calls == [True, False]
+    catalog_search.reset()
     for i in range(5):
         memory.note_unknown(db, "k", f"word {i}")
     rows = memory.list_unknown(db, "k", with_suggestions=True)
     assert sum(1 for r in rows if r["suggestions"] is not None) == memory.NEW_SUGGESTIONS_PER_CALL
+
+
+def test_suggestions_rest_the_embedder_after_a_failure(monkeypatch):
+    import mongomock
+    import store.search
+    from gateway import catalog_search
+    db = mongomock.MongoClient(tz_aware=True)["t"]
+    calls = []
+
+    def fake(db, phrase, filters, limit, kitchen_id=None, hybrid=False, embedder=None):
+        calls.append(hybrid)
+        if hybrid:
+            raise RuntimeError("embedding service down")
+        return []
+    monkeypatch.setattr(store.search, "search_products", fake)
+    catalog_search.reset()
+    try:
+        assert memory.suggest(db, "k", "voi")[1] == "words"
+        assert calls == [True, False]                      # one failed embedding call
+        calls.clear()
+        for phrase in ("maito", "kerma", "juusto"):
+            assert memory.suggest(db, "k", phrase)[1] == "words"
+        assert calls == [False, False, False]              # cooldown: no embedder at all
+        catalog_search._state["skip_until"] = 0.0          # cooldown over
+        calls.clear()
+        memory.suggest(db, "k", "maito")
+        assert calls == [True, False]
+    finally:
+        catalog_search.reset()
