@@ -99,6 +99,9 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
   const [error, setError] = useState<string>();
   const [placed, setPlaced] = useState<{ id: string; total: string }>();
   const [rejected, setRejected] = useState(false);
+  // Lines and evidence fold away so a long inbox stays short on a phone (#1142).
+  const [showDetails, setShowDetails] = useState(false);
+  const detailsId = useId();
   const { refresh: refreshWaiting } = usePendingApprovals();
   const suppliersToConfirm = mapSuppliersToConfirm(row);
   const unknown = row.lines.some(l => l.unknown_stock);
@@ -136,8 +139,6 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
   return <article id={`proposal-${row.proposal_id}`} className="docket space-y-4 rounded-sm border bg-card p-4 text-card-foreground sm:p-5" aria-label={t("Proposal {id}", { id: row.proposal_id })}>
     <h2 className="text-[19px] leading-[25px] font-[650]">{t("Proposal {id}", { id: row.proposal_id })}</h2>
     {typeof row.decision_summary?.text === "string" && <p className="max-w-[68ch] text-[15px] leading-[22px] whitespace-pre-line">{row.decision_summary.text}</p>}
-    <ul className="divide-y">{row.lines.map(l => <li key={l.product_id} className="py-2 font-mono text-[13px]">{l.quantity} {l.unit} · {l.product_id} · {l.why}</li>)}</ul>
-    {row.label_checks?.map(c => <LabelEvidence key={`${c.product_id}-${c.label}`} check={c} />)}
     {row.recall_alerts?.map((alert, index) => <RecallNotice key={alert.event_id ?? index} alert={alert} reload={reload} />)}
     {row.replacement_proposal_id && <p><a className="underline" href={`#proposal-${row.replacement_proposal_id}`}>{t("Review replacement proposal {id}", { id: row.replacement_proposal_id })}</a>. {t("A fresh human approval is required.")}</p>}
     {row.recall_replan_error && <p>{t("No complete safe replacement is available ({code}). The original remains blocked.", { code: row.recall_replan_error })}</p>}
@@ -149,12 +150,21 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
         </p>)}
       </div>
     </section>}
-    {row.product_evidence?.map(e => <div key={e.product_id} className="rounded border p-3 text-sm">
-      <p>{t("Manufacturer evidence for {id} · checked {date} · {via}", { id: e.product_id, date: e.checked_at, via: e.via })}</p>
-      <p>{t("Page pack:")} {e.pack ?? <span className="unknown-value">{t("unknown")}</span>} · {t("Bean/ingredient origins:")} {e.origin ?? <span className="unknown-value">{t("unknown")}</span>} · {t("Allergen statement:")} {e.allergens ?? <><span className="unknown-value">{t("unknown")}</span> — {t("use trusted catalog data")}</>}</p>
-      <p>{t("Informational page claims; the catalog and engine still control allergens and quantities.")}</p>
-      {/^https:\/\//.test(e.source_url) && <a className="underline" href={e.source_url} target="_blank" rel="noreferrer">{t("Manufacturer source")}</a>}
-    </div>)}
+    <div className="space-y-3">
+      <Button type="button" variant="outline" aria-expanded={showDetails} aria-controls={detailsId} onClick={() => setShowDetails(shown => !shown)}>
+        {showDetails ? t("Hide details") : t("Show details")}
+      </Button>
+      <div id={detailsId} className="space-y-4" hidden={!showDetails}>{showDetails && <>
+        <ul className="divide-y">{row.lines.map(l => <li key={l.product_id} className="py-2 font-mono text-[13px]">{l.quantity} {l.unit} · {l.product_id} · {l.why}</li>)}</ul>
+        {row.label_checks?.map(c => <LabelEvidence key={`${c.product_id}-${c.label}`} check={c} />)}
+        {row.product_evidence?.map(e => <div key={e.product_id} className="rounded border p-3 text-sm">
+          <p>{t("Manufacturer evidence for {id} · checked {date} · {via}", { id: e.product_id, date: e.checked_at, via: e.via })}</p>
+          <p>{t("Page pack:")} {e.pack ?? <span className="unknown-value">{t("unknown")}</span>} · {t("Bean/ingredient origins:")} {e.origin ?? <span className="unknown-value">{t("unknown")}</span>} · {t("Allergen statement:")} {e.allergens ?? <><span className="unknown-value">{t("unknown")}</span> — {t("use trusted catalog data")}</>}</p>
+          <p>{t("Informational page claims; the catalog and engine still control allergens and quantities.")}</p>
+          {/^https:\/\//.test(e.source_url) && <a className="underline" href={e.source_url} target="_blank" rel="noreferrer">{t("Manufacturer source")}</a>}
+        </div>)}
+      </>}</div>
+    </div>
     <p className="text-xl font-bold">{t("{exVat} ex VAT · {total} including VAT and delivery", { exVat: formatEur(mapMoney(row.total_ex_vat)), total: formatEur(mapMoney(row.expected_total)) })}</p>
     {unknown && <p><span className="unknown-value">{t("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")}</span></p>}
     {expired && pending && <p>{t("This offer has expired. You can review it here: the gateway rechecks price and stock before recording an order. Any change requires a fresh confirmation.")}</p>}

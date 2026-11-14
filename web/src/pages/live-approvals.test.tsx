@@ -211,3 +211,24 @@ it("drops the waiting-approvals badge right after a live rejection, without navi
   await user.click(screen.getByRole("button", { name: "Confirm rejection" }));
   await waitFor(() => expect(orders()).toHaveAttribute("aria-description", `${pending.length - 1} waiting`));
 });
+
+it("folds a proposal's lines behind Show details and keeps the total and decision visible (#1142)", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [row] })));
+  const user = userEvent.setup();
+  renderApp("/approvals", createMockApi());
+
+  expect(await screen.findByRole("heading", { name: "Proposal p1" })).toBeVisible();
+  expect(screen.getByText(/including VAT and delivery/)).toBeVisible();
+  expect(screen.getByRole("button", { name: /^Approve/ })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Reject proposal" })).toBeVisible();
+  expect(screen.queryByText(/Measured stock/)).not.toBeInTheDocument();
+
+  const toggle = screen.getByRole("button", { name: "Show details" });
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  toggle.focus();
+  await user.keyboard("{Enter}");
+  const hide = screen.getByRole("button", { name: "Hide details" });
+  expect(hide).toHaveAttribute("aria-expanded", "true");
+  const panel = document.getElementById(hide.getAttribute("aria-controls")!)!;
+  expect(within(panel).getByText(/Measured stock/)).toBeVisible();
+});

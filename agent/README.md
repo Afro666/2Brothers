@@ -297,6 +297,36 @@ million tokens (the meter's own count).
 
 Tests: `agent/tests/test_buyer_settings.py` pins the settings and the prompt lines.
 
+## Allergen label from a photo (#1175)
+
+`POST /v1/kitchens/{k}/orders/{order_id}/label/photo` with `{image_base64, product_id}`
+(contract: "Check a package's allergen label from a photo"). Nemotron VL copies the
+label's product name, EAN, the words emphasised as allergens, and the "may contain"
+sentence, as printed (`agent/label_service.py`).
+
+Plain code (`agent/label.py`) then does the rest:
+- It maps each word to a GS1 code with a fixed Finnish, Swedish and English table. The
+  table holds whole words and safe word starts only: `kookosmaito` is not milk, and
+  `munakoiso` is not egg.
+- It removes the "may contain" phrase first, because `voi sisältää` starts with `voi`,
+  which alone means butter. The live read of the demo label found exactly that.
+- It compares the result with the kitchen's rule (CONTAINS and MAY_CONTAIN alike) and
+  with the catalog row, in both directions.
+- It checks that the label is the delivered product, by EAN, or by name when the
+  product has no GTIN.
+
+An unknown word, a missing statement, or a possibly different product is PLEASE_CHECK.
+There is no green outcome: "agrees" still says to read the label yourself. Nothing is
+stored, so "unknown" in the catalog stays unknown.
+
+Measured on 2026-11-14 with the live endpoint and `demo/label-photo.png`:
+- **Time and tokens:** 0.4 s, about 1,600 tokens.
+- **Read:** wheat, milk and egg as contains; peanuts and sesame as may contain.
+- **Product:** confirmed by name.
+- **Outcome:** `EXCLUDED_ALLERGEN`, because the demo kitchen excludes peanuts.
+
+The recorded reply is `agent/fixtures/label/demo.reply.json`.
+
 ## Price list from a photo (#1174)
 
 `POST /v1/kitchens/{k}/suppliers/{s}/price-list/photo` (contract: "Read a supplier's

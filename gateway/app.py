@@ -14,9 +14,9 @@ import hmac
 import os
 import time
 from decimal import InvalidOperation
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -86,7 +86,7 @@ REFUSAL_WINDOW = 60.0          # seconds: one audit row per repeated refusal (#8
 
 
 def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None,
-               delivery_note_worker=None, menu_photo_worker=None, buying_note_worker=None, price_list_worker=None) -> FastAPI:
+               delivery_note_worker=None, menu_photo_worker=None, buying_note_worker=None, price_list_worker=None, explanation_worker=None, label_photo_worker=None) -> FastAPI:
     from gateway.buyer_worker import Breaker
     buyer_breaker = Breaker()        # one per app: a timeout skips the model for 2 minutes
     app = FastAPI(
@@ -307,9 +307,18 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         return {'checks': checks(rows, now=gw().now()), 'negative_control': {**negative, 'synthetic': True}}
 
     @app.get(k + "/proposals/{proposal_id}")
-    def get_proposal(kitchen_id: str, proposal_id: str, who: Principal = Depends(principal)):
+    def get_proposal(kitchen_id: str, proposal_id: str, background_tasks: BackgroundTasks,
+                     explanation_language: Literal['en', 'fi'] | None = None, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
-        return gw().get_proposal(kitchen_id, proposal_id)
+        proposal = gw().get_proposal(kitchen_id, proposal_id)
+        if explanation_language is not None:
+            from gateway.explanations import enrich
+            try:
+                return enrich(gw(), kitchen_id, proposal, explanation_language, background_tasks,
+                              who.name, explanation_worker)
+            except Exception:
+                return {**proposal, 'explanation': None}
+        return proposal
 
     @app.get(k + "/proposals/{proposal_id}/addable")
     def addable(kitchen_id: str, proposal_id: str, who: Principal = Depends(principal)):
@@ -650,6 +659,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     mount_menu_photo(app, gw, principal, menu_photo_worker)
     from gateway.price_list_photo import mount_price_list_photo   # a supplier's price list from a photo (#1174)
     mount_price_list_photo(app, gw, principal, price_list_worker)
+    from gateway.label_photo import mount_label_photo   # a package's allergen label from a photo (#1175)
+    mount_label_photo(app, gw, principal, label_photo_worker)
 
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp

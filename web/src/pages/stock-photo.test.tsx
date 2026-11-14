@@ -83,9 +83,9 @@ describe("StockPage: count from a photo", () => {
 
     const list = await screen.findByRole("list", { name: "What was read from the photo" });
     expect(within(list).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-      "7 LArla lactose-free milk7 packs x 1 L. Read on the pack: “Arla lactose free 1L” (high confidence)",
-      "please countValio Eila 3 % milkRead on the pack: “Valio Eila 3% 1L” (low confidence)",
-      "please countNo product on your stock list matchesRead on the pack: “Arla L m” (low confidence)",
+      "7 L🥛Arla lactose-free milk7 packs x 1 L. Read on the pack: “Arla lactose free 1L” (high confidence)",
+      "please count🥛Valio Eila 3 % milkRead on the pack: “Valio Eila 3% 1L” (low confidence)",
+      "please count📦No product on your stock list matchesRead on the pack: “Arla L m” (low confidence)",
     ]);
     expect(count("Valio Eila 3 % milk")).toHaveValue("");
     expect(screen.getAllByText(MARK)).toHaveLength(2); // only the Arla row
