@@ -18,7 +18,7 @@ class GuardTests(unittest.TestCase):
             orders.save_offer(None, {"lines": [{"unit_price": 2.57}]})
         with self.assertRaises(TypeError):
             orders.record_attempt(None, kitchen_id="k1", idempotency_key="k", offer_id="o",
-                                  expected_total=149.02, lines=[], payload_hash="h")
+                                  expected_total=149.02, lines=[])
 
     def test_stock_sentinels_are_never_stored(self):
         for sentinel in (999999, 9999999999, Decimal("999999")):
@@ -44,7 +44,8 @@ class IdempotencyTests(unittest.TestCase):
 
     def attempt(self, **over):
         args = dict(kitchen_id="k1", idempotency_key="key-1", offer_id="o1",
-                    expected_total="149.02", lines=[], payload_hash="h1")
+                    expected_total="149.02",
+                    lines=[{"product_id": "000001", "quantity": "2"}])
         return orders.record_attempt(self.db, **{**args, **over})
 
     def approval(self, **over):
@@ -60,8 +61,13 @@ class IdempotencyTests(unittest.TestCase):
         self.assertEqual(replay["order_id"], order["order_id"])
         self.assertNotEqual(other["order_id"], order["order_id"])
         self.assertIsNone(order["status"])
-        with self.assertRaises(orders.IdempotencyConflict):
-            self.attempt(payload_hash="h2")
+        self.assertFalse(self.attempt(payload_hash="ignored")[1])  # a caller's hash is ignored
+        for changed in ({"expected_total": "149.03"}, {"offer_id": "o2"},
+                        {"lines": [{"product_id": "000001", "quantity": "3"}]},
+                        {"lines": []}, {"proposal_id": "p2"}):
+            with self.assertRaises(orders.IdempotencyConflict):
+                self.attempt(**changed)
+        self.assertEqual(len(orders.list_orders(self.db, "k1")), 1)
 
     def test_approval_replay_must_carry_the_same_payload(self):
         approval, created = self.approval()
