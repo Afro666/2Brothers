@@ -18,12 +18,15 @@ Contract: docs/contract.md, "Chef substitute choices".
 
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 
 from store import orders
 
 TIERS = ("good", "better", "best")
 CONFIRMED = "confirmed"
+
+log = logging.getLogger(__name__)
 
 
 def merged(doc: dict) -> list[dict]:
@@ -46,7 +49,8 @@ def attach_confirmed(gw, kitchen_id: str, proposal_id: str, request: dict, sim: 
             gw.db.proposals.update_one({"_id": proposal_id, "kitchen_id": kitchen_id},
                                        {"$set": {"confirmed_option": option}})
     except Exception:
-        return
+        log.warning("confirmed-stock option failed: kitchen_id=%s proposal_id=%s",
+                    kitchen_id, proposal_id, exc_info=True)
 
 
 def _catalog_quote(gw, kitchen_id: str, request: dict) -> dict | None:

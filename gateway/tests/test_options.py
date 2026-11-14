@@ -198,3 +198,23 @@ def test_no_text_means_no_catalog_search(env):
     client, _, _ = env
     p = buyer_proposal(client, ["463335"], text="")
     assert p["substitute_options"] == []
+
+
+def test_a_failing_confirmed_option_logs_a_warning_and_the_proposal_is_still_made(env, monkeypatch, caplog):
+    import logging
+
+    from gateway import options
+
+    def boom(*args, **kwargs):
+        raise KeyError("requested_date")
+
+    monkeypatch.setattr(options, "_confirmed_option", boom)
+    client, _, _ = env
+    with caplog.at_level(logging.WARNING, logger="gateway.options"):
+        p = milk(client, quantity="1000")
+    assert p["proposal_id"]
+    assert [o for o in p["substitute_options"] if o["source"] == "confirmed"] == []
+    records = [r for r in caplog.records if r.name == "gateway.options"]
+    assert len(records) == 1 and records[0].levelno == logging.WARNING
+    assert records[0].exc_info and records[0].exc_info[0] is KeyError
+    assert p["proposal_id"] in records[0].getMessage()
