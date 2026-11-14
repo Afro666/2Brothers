@@ -15,7 +15,7 @@ def gh(*args):
 def redact(text, key=''):
     if key:
         text = text.replace(key, '[REDACTED]')
-    return re.sub(r'sk-[A-Za-z0-9_-]{12,}', '[REDACTED]', text)
+    return re.sub(r'sk-[A-Za-z0-9_.*-]+', '[REDACTED]', text)
 
 
 def prepare(folder):
@@ -80,7 +80,10 @@ def review(folder):
                                     text=True, capture_output=True, timeout=300)
             if result.returncode or not output.exists():
                 body = 'Unavailable: Codex CLI failed. No model review result is claimed.'
-                print('Codex CLI failed; raw diagnostics suppressed to protect credentials.')
+                # This process receives only the OpenAI secret; redact its complete
+                # value and masked key-shaped fragments before exposing diagnostics.
+                print('Codex CLI failed (sanitized diagnostic):')
+                print(redact(result.stderr, key)[-2000:])
             else:
                 body = redact(output.read_text(encoding='utf-8'), key).strip()[:12_000]
                 if not body:
