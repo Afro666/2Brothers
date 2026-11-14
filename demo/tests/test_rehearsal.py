@@ -1,6 +1,7 @@
 """The rehearsal check against a fake site: all green, a broken forecast is a FAIL."""
 
 from datetime import date
+import json
 
 import httpx
 
@@ -62,3 +63,35 @@ def test_a_dropped_connection_is_tried_once_more():
     check.retry_wait = 0
     check.check("Gateway answers", check.gateway)
     assert check.rows[0][1] == "OK" and calls["n"] == 2
+
+
+def _buyer_site(first_error):
+    posts = []
+
+    def handler(request):
+        if request.method == "POST":
+            posts.append(request)
+            if len(posts) == 1:
+                raise first_error
+            return httpx.Response(200, json={"status": "READY", "buyer_model": "nemotron", "lines": [{}]})
+        return httpx.Response(404, json={})
+    return posts, httpx.Client(base_url="https://site.test", transport=httpx.MockTransport(handler))
+
+
+def test_a_timed_out_buyer_post_is_not_sent_again():
+    posts, client = _buyer_site(httpx.ReadTimeout("slow"))
+    check = Rehearsal("https://site.test", client=client, today=TODAY)
+    check.retry_wait = 0
+    rows = check.run(with_buyer=True)
+    assert len(posts) == 1
+    assert {name: s for name, s, _ in rows}["Buyer makes a proposal"] == "FAIL"
+
+
+def test_a_retried_buyer_post_keeps_its_idempotency_key():
+    posts, client = _buyer_site(httpx.ConnectError("refused"))
+    check = Rehearsal("https://site.test", client=client, today=TODAY)
+    check.retry_wait = 0
+    check.check("Buyer makes a proposal", check.buyer, retry_on=httpx.ConnectError)
+    keys = [json.loads(p.content)["idempotency_key"] for p in posts]
+    assert len(keys) == 2 and keys[0] == keys[1]
+    assert check.rows[0][1] == "OK"
