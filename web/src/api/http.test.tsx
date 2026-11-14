@@ -439,6 +439,21 @@ describe("createHttpApi", () => {
     expect(await api.getSession()).toBeNull();
   });
 
+  it("says a locked account must wait five minutes, not the one minute of a rate limit", async () => {
+    gateway({
+      "POST /api/v1/auth/login": () => error(429, "ACCOUNT_LOCKED", { message: "too many wrong passwords" }),
+      "GET /api/v1/me": () => error(429, "ACCOUNT_LOCKED"),
+    });
+    const api = createHttpApi("/api");
+    await expect(api.signIn("buyer@example.com", "demo-kitchen-2026")).rejects.toMatchObject({
+      code: "ACCOUNT_LOCKED",
+      message: "Too many wrong passwords. Try again in five minutes.",
+      status: 429,
+    });
+    // Any other 429 stays the rate limit, whatever code it names.
+    await expect(api.getSession()).rejects.toMatchObject({ code: "RATE_LIMITED" });
+  });
+
   it("clears the local account when logout fails", async () => {
     const approved = { ...proposal, status: "APPROVED", order_id: "ord-1" };
     const calls = gateway({

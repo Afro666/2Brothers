@@ -482,6 +482,8 @@ const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   order_resolved: { kind: "order", summary: "A person resolved an unknown send" },
   recall_check: { kind: "other", summary: "Recall check" },
   demo_inbox_cleared: { kind: "other", summary: "Test proposals cleared before a demo" },
+  signed_in: { kind: "other", summary: "Signed in" },
+  password_changed: { kind: "settings", summary: "Password changed" },
   proposal_created: { kind: "request", summary: "Proposal created" },
   approval_requested: { kind: "approval", summary: "Approval requested" },
   decision_summary: { kind: "mandate_check", summary: "Decision summary" },
@@ -543,6 +545,8 @@ function mapAuditEvent(event: Json): AuditEvent {
   const known = typeof kind === "string" ? EVENT_KINDS[kind] : undefined;
   return {
     ...base,
+    // With sign-in on, the gateway's actor is the account's email: the log says who, not only "a person".
+    ...(typeof actor === "string" && actor.includes("@") && !actor.includes(":") ? { actorName: actor } : {}),
     kind: known?.kind ?? "other",
     actor:
       actor === "buyer-agent"

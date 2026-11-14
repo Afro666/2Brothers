@@ -302,6 +302,8 @@ export interface AuditEvent {
   at: string | null;
   kind: AuditKind;
   actor: "chef" | "agent" | "gateway" | "human" | "valio" | "system";
+  /** The signed-in account that took the step (its email), when the gateway names one. */
+  actorName?: string;
   /** What happened, short. */
   summary: string;
   /** Why, in the words of the engine, the gateway or the human. */

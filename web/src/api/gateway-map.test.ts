@@ -430,6 +430,23 @@ describe("mapAudit", () => {
     expect(mapAudit([{ ...refused, actor: "buyer-agent" }])[0].actor).toBe("agent");
   });
 
+  it("names the signed-in account that took a step, and no one for the open demo or a token", () => {
+    const placed = { seq: 12, event_id: "ev-12", kind: "order_placed", at: "2026-11-14T08:00:00+00:00", order_id: "ord-1" };
+    expect(mapAudit([{ ...placed, actor: "approver@example.test" }])[0]).toMatchObject({
+      actor: "human",
+      actorName: "approver@example.test",
+      summary: "Order placed",
+    });
+    for (const actor of ["demo-visitor", "approver", "buyer-agent", "token:a@b.c", "supplier:valio@x"]) {
+      expect(mapAudit([{ ...placed, actor }])[0]).not.toHaveProperty("actorName");
+    }
+  });
+
+  it("says a sign-in in plain words", () => {
+    const step = mapAudit([{ seq: 1, event_id: "ev-1", kind: "signed_in", actor: "chef@example.test", at: null }])[0];
+    expect(step).toMatchObject({ kind: "other", summary: "Signed in", actorName: "chef@example.test" });
+  });
+
   it("gives an order its own steps and those of the proposal that placed it", () => {
     expect(mapAudit(auditEvents, "ord-1").map((event) => event.id)).toEqual(["ev-3", "ev-4"]);
     expect(mapAudit(auditEvents, "prop-1").map((event) => event.id)).toEqual(["ev-3", "ev-4"]);

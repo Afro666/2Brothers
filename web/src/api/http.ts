@@ -56,6 +56,9 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
     window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
   }
   if (response.status === 429) {
+    // The gateway locks an account for five minutes after five wrong passwords: "wait a minute" would be wrong.
+    const locked = isLogin && (await response.json().catch(() => null))?.error?.code === "ACCOUNT_LOCKED";
+    if (locked) throw new ApiError("ACCOUNT_LOCKED", "Too many wrong passwords. Try again in five minutes.", {}, 429);
     throw new ApiError("RATE_LIMITED", "Too many requests - wait a minute and try again.");
   }
   let body: unknown;
