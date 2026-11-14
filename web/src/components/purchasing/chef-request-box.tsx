@@ -15,9 +15,12 @@ import type { ChefRequest } from "@/types";
 export function ChefRequestBox({
   initial,
   onSubmit,
+  withCovers = true,
 }: {
   initial?: Partial<ChefRequest>;
   onSubmit?: (request: ChefRequest) => void | Promise<void>;
+  /** false where covers are not sent on (the live Buyer takes the sentence and the date): no box that does nothing. */
+  withCovers?: boolean;
 }) {
   const t = useT();
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -105,19 +108,21 @@ export function ChefRequestBox({
           ))}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor={coversId} className="label-caps text-[11px] leading-4 font-semibold">{t("Covers")}</Label>
-          <Input
-            id={coversId}
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={covers}
-            onChange={(e) => setCovers(e.target.value)}
-            placeholder={t("e.g. 180")}
-          />
-        </div>
+      <div className={withCovers ? "grid grid-cols-2 gap-3" : "grid gap-3 sm:max-w-xs"}>
+        {withCovers ? (
+          <div className="space-y-2">
+            <Label htmlFor={coversId} className="label-caps text-[11px] leading-4 font-semibold">{t("Covers")}</Label>
+            <Input
+              id={coversId}
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={covers}
+              onChange={(e) => setCovers(e.target.value)}
+              placeholder={t("e.g. 180")}
+            />
+          </div>
+        ) : null}
         <div className="space-y-2">
           <Label htmlFor={dateId} className="label-caps text-[11px] leading-4 font-semibold">{t("Needed by")}</Label>
           <Input id={dateId} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
