@@ -644,7 +644,8 @@ describe("mapAudit", () => {
         orderId: undefined,
         kind: "other",
         actor: "human",
-        summary: "something_new",
+        // An unknown snake_case kind reads as words, never as the raw code (mock jury, 14 Nov).
+        summary: "Something new",
         reason: "",
         details: "No details recorded.",
         groupIds: [],
