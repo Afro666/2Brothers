@@ -356,11 +356,13 @@ describe("mapOrder", () => {
       urgency: "UNKNOWN",
       deliveryDate: "2026-11-20",
       totalExVat: 80,
+      vat: 11.2,
+      deliveryFee: null,
       totalInclVat: 91.2,
       mov: null,
     });
     expect(order.lines).toHaveLength(1);
-    expect(order.lines[0]).toMatchObject({ quantity: 40, why: "40 ST of oat drink = 40 L, confirmed in stock." });
+    expect(order.lines[0]).toMatchObject({ quantity: 40, lineTotal: 80, why: "40 ST of oat drink = 40 L, confirmed in stock." });
     expect(order.lines[0].product).toMatchObject({
       id: "900001",
       names: { en: "900001" },
@@ -376,6 +378,19 @@ describe("mapOrder", () => {
       closingTime: null,
       availableDate: null,
     });
+  });
+
+  it("keeps the line's product name and the order's delivery fee", () => {
+    const order = mapOrder(
+      {
+        ...proposal,
+        delivery_fee: "4.50",
+        lines: [{ ...proposal.lines[0], product_name: "Oat drink 1 L" }],
+      },
+      null,
+    );
+    expect(order.deliveryFee).toBe(4.5);
+    expect(order.lines[0]!.product.names.en).toBe("Oat drink 1 L");
   });
 
   it.each([true, undefined, "false"])("treats unknown_stock %j as not confirmed", (unknown_stock) => {

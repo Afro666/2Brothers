@@ -22,7 +22,7 @@ describe("application routes", () => {
     ["/requests", "Request an order"],
     ["/approvals", "To approve"],
     ["/orders", "Order history"],
-    ["/orders/ORD-1", "Order ORD-1"],
+    ["/orders/ORD-1", "Order"],
     ["/audit", "Activity log"],
     ["/catalog", "Products"],
     ["/stock", "Stock count"],
