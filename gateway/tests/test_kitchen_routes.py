@@ -97,5 +97,6 @@ def test_settings_and_sharing_are_an_approvers_and_audited(env):
     shared = client.put(K + "/sharing", headers=HUMAN, json=share)
     assert shared.status_code == 200, shared.text
     assert shared.json()["sharing"][0]["share_forecast"] is True
-    kinds = [e["kind"] for e in client.get(K + "/audit", headers=AGENT).json()["events"]]
-    assert "settings_changed" in kinds
+    events = client.get(K + "/audit", headers=AGENT).json()["events"]
+    assert "settings_changed" in [e.get("kind") for e in events]
+    assert "share_granted" in [e.get("type") for e in events]
