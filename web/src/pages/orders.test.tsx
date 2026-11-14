@@ -221,6 +221,14 @@ describe("orders pages", () => {
     expect(screen.getByText("Total incl VAT").nextElementSibling).toHaveTextContent("€999.99");
   });
 
+  it("says once that a recorded order was not sent to the supplier, on the page and in the list", async () => {
+    renderApp("/orders/ORD-1042");
+    expect(await screen.findByRole("heading", { level: 1, name: /Arla 1 L/ })).toBeVisible();
+    // The receipt of this order says NOT_SENT: the badge says both facts, never a bare "Placed".
+    expect(screen.getByText("Approved and recorded, not sent to the supplier")).toBeVisible();
+    expect(screen.queryByText("Placed")).not.toBeInTheDocument();
+  });
+
   it("omits urgency on a placed order but keeps it on a proposal", async () => {
     renderApp("/orders/ORD-1042");
     expect(await screen.findByRole("heading", { level: 1, name: /Arla 1 L/ })).toBeVisible();

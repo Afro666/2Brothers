@@ -378,14 +378,21 @@ export function createHttpApi(baseUrl: string): Api {
       );
     },
     async getOrder(id) {
+      // The id is a proposal's or a placed order's. The proposals list says which, so the page
+      // does not ask the proposal route for an order id and get a 404 on every order page.
+      const list = await proposals().catch(() => [] as Json[]);
+      const placedBy = list.find((row) => row.order_id === id);
+      if (placedBy) {
+        // A placed order: its basket is on the proposal that placed it.
+        return mapOrder(placedBy, (await get(`${kitchen}/orders/${encodeURIComponent(id)}`)) as Json);
+      }
       let proposal: Json;
       try {
         proposal = (await get(proposalPath(id))) as Json;
       } catch (error) {
         if (!(error instanceof ApiError && error.code === "PROPOSAL_NOT_FOUND")) throw error;
-        // Not a proposal id, so a placed order: its basket is on the proposal that placed it.
-        const [placed, list] = await Promise.all([get(`${kitchen}/orders/${encodeURIComponent(id)}`), proposals()]);
-        return mapOrder(list.find((row) => row.order_id === id) ?? null, placed as Json);
+        // Not on the list and not a proposal: an order whose proposal the list no longer holds.
+        return mapOrder(null, (await get(`${kitchen}/orders/${encodeURIComponent(id)}`)) as Json);
       }
       const orderId = proposal.order_id;
       return mapOrder(
