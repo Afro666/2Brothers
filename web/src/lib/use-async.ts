@@ -19,6 +19,8 @@ export function isUnreachable(error: unknown): boolean {
 const kept = new Map<string, unknown>();
 /** Counts the drops, so a load that began before a drop does not put its older answer back. */
 let drops = 0;
+/** The newest load per key: an older load that answers late neither replaces nor forgets its answer. */
+const newest = new Map<string, number>();
 
 /**
  * Forgets every kept answer. Called before every write, on every live event and on sign-out
@@ -65,10 +67,13 @@ export function useAsync<T>(
       return { status: "loading", data: null, error: null };
     });
     const dropsAtStart = drops;
+    const mine = keep === undefined ? 0 : (newest.get(keep) ?? 0) + 1;
+    if (keep !== undefined) newest.set(keep, mine);
+    const current = () => keep !== undefined && drops === dropsAtStart && newest.get(keep) === mine;
     const run = (attemptsLeft: number) => {
       load()
         .then((data) => {
-          if (keep !== undefined && drops === dropsAtStart) kept.set(keep, data);
+          if (keep !== undefined && current()) kept.set(keep, data);
           if (active) setState({ status: "ready", data, error: null });
         })
         .catch((error: unknown) => {
@@ -77,7 +82,7 @@ export function useAsync<T>(
             timer = setTimeout(() => run(attemptsLeft - 1), RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - attemptsLeft]);
             return;
           }
-          if (keep !== undefined) kept.delete(keep);
+          if (keep !== undefined && current()) kept.delete(keep);
           setState({ status: "error", data: null, error: error instanceof Error ? error : new Error(String(error)) });
         });
     };

@@ -3,6 +3,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useR
 
 import { useApi } from "@/api";
 import { SIGNED_OUT_EVENT } from "@/api/http";
+import { dropKeptAnswers } from "@/lib/use-async";
 import { ApiError, type Session } from "@/api/types";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
@@ -70,6 +71,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    // Also for an api that signs out without a gateway write (the mock): nothing kept outlives the session.
+    dropKeptAnswers();
     try {
       await api.signOut();
     } catch {

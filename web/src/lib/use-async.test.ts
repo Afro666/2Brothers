@@ -201,6 +201,35 @@ describe("useAsync", () => {
       expect(second.result.current.status).toBe("loading");
     });
 
+    it("lets only the newest load for a key change the kept answer", async () => {
+      let answerOld: (value: string) => void = () => {};
+      const old = renderHook(() =>
+        useAsync(() => new Promise<string>((resolve) => (answerOld = resolve)), [], { keep: "list" }),
+      );
+      old.unmount();
+      const newer = renderHook(() => useAsync(() => Promise.resolve("newer"), [], { keep: "list" }));
+      await waitFor(() => expect(newer.result.current.data).toBe("newer"));
+      newer.unmount();
+      await act(async () => answerOld("older, answered late"));
+
+      const next = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "list" }));
+      expect(next.result.current.data).toBe("newer");
+    });
+
+    it("forgets the kept answers when a request is answered 401", async () => {
+      const first = renderHook(() => useAsync(() => Promise.resolve("first"), [], { keep: "list" }));
+      await waitFor(() => expect(first.result.current.status).toBe("ready"));
+      first.unmount();
+
+      vi.stubGlobal("fetch", () =>
+        Promise.resolve(new Response(JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "Sign in." } }), { status: 401 })),
+      );
+      await expect(gatewayRequest("/api", "/v1/kitchens/demo-kitchen/orders")).rejects.toBeTruthy();
+
+      const second = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "list" }));
+      expect(second.result.current.status).toBe("loading");
+    });
+
     it("shows the error and forgets the kept answer when the new load fails", async () => {
       const first = renderHook(() => useAsync(() => Promise.resolve("first"), [], { keep: "list" }));
       await waitFor(() => expect(first.result.current.status).toBe("ready"));
