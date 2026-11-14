@@ -5,7 +5,7 @@ import type { Api } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatQuantity } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { useSession } from "@/lib/session";
@@ -94,7 +94,7 @@ export function SupplierOfferTile({ api }: { api: Api }) {
             <time dateTime={offer.requestedDate}>{formatDate(offer.requestedDate)}</time>
           </p>
           <p className="font-mono text-[13px] tabular-nums text-muted-foreground">
-            {t("{quantity} {unit}, from your own forecast", { quantity: offer.quantity, unit: offer.unit })}
+            {t("{amount}, from your own forecast", { amount: formatQuantity(offer.quantity, offer.unit) })}
           </p>
         </div>
         <figure className="space-y-1 border-l-2 border-border pl-3">

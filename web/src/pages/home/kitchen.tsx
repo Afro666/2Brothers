@@ -1,11 +1,15 @@
 import { formatDateTime, formatEur, formatShortfall } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
+import { Link } from "@tanstack/react-router";
+
 import type { Api } from "@/api/types";
 import type { ApprovalRequest, AuditEvent, DemandLine, StockItem, Supplier } from "@/types";
 
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
 import { nextCutoff } from "@/pages/home/cutoff";
+import { HOME_STOCK_ROWS, stockToCheck } from "@/pages/home/stock-rows";
 import { Tile, TileState } from "@/pages/home/tile";
 
 function loadKitchenStock(api: Api, now: Date): Promise<{ stock: StockItem[]; demand: DemandLine[] }> {
@@ -106,51 +110,41 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
         empty={false}
       >
         {({ stock, demand }: { stock: StockItem[]; demand: DemandLine[] }) => {
-          const needed = new Map<string, number>();
-          for (const line of demand) needed.set(line.productId, (needed.get(line.productId) ?? 0) + line.need);
-          const unknown = stock.filter((item) => item.onHand === null);
-          const countedIds = new Set(stock.map((item) => item.productId));
-          const uncounted = demand
-            .filter((line) => !countedIds.has(line.productId))
-            .filter(
-              (line, index, lines) => lines.findIndex((candidate) => candidate.productId === line.productId) === index,
-            );
-          const short = stock.filter(
-            (item): item is StockItem & { onHand: number } =>
-              // On order unknown: the count alone decides, and the row says so.
-              item.onHand !== null && (needed.get(item.productId) ?? 0) > item.onHand + (item.onOrder ?? 0),
-          );
-          return unknown.length + uncounted.length + short.length === 0 ? (
+          const rows = stockToCheck(stock, demand);
+          const more = rows.length - HOME_STOCK_ROWS;
+          return rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("Stock covers the next 7 days.")}</p>
           ) : (
-            <ul className="divide-y text-sm">
-              {unknown.map((item) => (
-                <li key={item.productId} className="flex items-start justify-between gap-3 py-2">
-                  <span className="min-w-0">{item.productName}</span>
-                  <span className="unknown-value">{t("not counted")}</span>
-                </li>
-              ))}
-              {uncounted.map((item) => (
-                <li key={item.productId} className="flex items-start justify-between gap-3 py-2">
-                  <span className="min-w-0">{item.productName}</span>
-                  <span className="unknown-value">{t("not counted")}</span>
-                </li>
-              ))}
-              {short.map((item) => (
-                <li key={item.productId} className="flex items-start justify-between gap-3 py-2">
-                  <span className="min-w-0">{item.productName}</span>
-                  <span className="text-right font-mono text-[13px] font-medium text-danger">
-                    {t("short by {amount}", {
-                      amount: formatShortfall(
-                        (needed.get(item.productId) ?? 0) - item.onHand - (item.onOrder ?? 0),
-                        item.unit,
-                      ),
-                    })}
-                    {item.onOrder === null ? t(" (on order unknown)") : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="divide-y text-sm">
+                {rows.slice(0, HOME_STOCK_ROWS).map((row) => (
+                  <li key={row.productId} className="flex items-center justify-between gap-3 py-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <ProductThumb size="sm" en={row.productName} />
+                      <span className="min-w-0">{row.productName}</span>
+                    </span>
+                    {row.kind === "short" ? (
+                      <span className="shrink-0 text-right font-mono text-[13px] font-medium text-danger">
+                        <span className="whitespace-nowrap">
+                          {t("short by {amount}", { amount: formatShortfall(row.shortfall, row.unit) })}
+                        </span>
+                        {row.onOrderUnknown ? <span className="block">{t(" (on order unknown)")}</span> : null}
+                      </span>
+                    ) : (
+                      <span className="unknown-value">{t("not counted")}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {more > 0 ? (
+                <Link
+                  to="/stock"
+                  className="block w-fit text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-foreground"
+                >
+                  {t("+{count} more", { count: more })}
+                </Link>
+              ) : null}
+            </>
           );
         }}
       </TileState>

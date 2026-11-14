@@ -32,7 +32,7 @@ export function ProductCard({ product, className }: { product: Product; classNam
   return (
     <Card className={cn("gap-4", className)}>
       <CardHeader className="flex flex-row items-start gap-3">
-        <ProductThumb en={product.names.en} fi={product.names.fi} size="lg" />
+        <ProductThumb en={product.names.en} fi={product.names.fi} brand={product.brand} size="lg" />
         <div className="min-w-0 flex-1 space-y-1.5">
           <CardTitle className="leading-snug break-words">{product.names.en}</CardTitle>
           <CardDescription>

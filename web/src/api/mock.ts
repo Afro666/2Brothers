@@ -12,6 +12,7 @@ import { forecastAccuracyMock } from "@/api/mock-forecast";
 import { createRecallMock } from "@/api/mock-recalls";
 import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
 import { sampleReceipt } from "@/mocks/receipt";
+import { listBrandLogosMock } from "@/api/mock-brand-logos";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import { readShelfPhotoMock } from "@/api/mock-shelf";
 import { readMenuPhotoMock } from "@/api/mock-menu-photo";
@@ -304,6 +305,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       recordAudit: (event) => audit.push({ ...event, id: `EV-${audit.length + 1}`, at: new Date().toISOString() }),
     }),
     lookupKitchenBrand: lookupKitchenBrandMock,
+    listBrandLogos: listBrandLogosMock,
     ...createTokensMock(),
     getModelUsage: async () => modelUsageMock(),
     readShelfPhoto: readShelfPhotoMock,

@@ -244,7 +244,8 @@ async def run(gw, *, today: date, apply: bool, limit: int = 3, kitchen: str | No
             entry = {"kitchen_id": kitchen_id, "date": row["date"], "short_product_id": row["product_id"],
                      "short_product": row["product_name"], "kitchen_needs": part["demand"], "unit": row["unit"]}
             report.append(entry)
-            key = f"seller:{kitchen_id}:{row['product_id']}:{row['date']}"
+            round_ = store.round_of(gw.db, kitchen_id)        # a demo reset starts a new round
+            key = f"seller:{kitchen_id}:{row['product_id']}:{row['date']}" + (f":r{round_}" if round_ else "")
             if store.by_key(gw.db, supplier_id, key) is not None:
                 entry["result"] = "ALREADY_OFFERED"
                 done.add((kitchen_id, row["product_id"]))

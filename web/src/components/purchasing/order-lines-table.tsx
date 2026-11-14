@@ -22,6 +22,7 @@ function lineFacts(line: OrderLine, now: Date) {
   return {
     code: product.id,
     name: product.names.en,
+    brand: product.brand,
     pack:
       product.baseUnitsPerSalesUnit == null
         ? null
@@ -107,7 +108,7 @@ export function OrderLinesTable({ lines, now }: { lines: OrderLine[]; now: Date 
               <TableRow key={`${f.code}-main`} className="border-b-0">
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <ProductThumb en={f.name} size="sm" />
+                    <ProductThumb en={f.name} brand={f.brand} size="sm" />
                     <div>
                       <div className="font-medium">{f.name}</div>
                       <div className="text-xs text-muted-foreground">{f.code}</div>

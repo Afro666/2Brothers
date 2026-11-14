@@ -23,7 +23,7 @@ describe("SupplierOfferTile", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Mon 16 Nov").tagName).toBe("TIME");
     expect(screen.getByText("Mon 16 Nov")).toHaveAttribute("datetime", sampleSupplierOffer.requestedDate);
-    expect(screen.getByText(/42 L, from your own forecast/)).toBeInTheDocument();
+    expect(screen.getByText(/42 l, from your own forecast/)).toBeInTheDocument();
     expect(screen.getByText(sampleSupplierOffer.reason)).toBeInTheDocument();
     expect(screen.getByText(/written by Valio's selling agent \(\s*Nemotron 3.5 Super VL\)/)).toBeInTheDocument();
     expect(screen.getByText(/This is a suggestion, not an order/)).toBeInTheDocument();

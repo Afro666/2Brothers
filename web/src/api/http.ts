@@ -1,3 +1,4 @@
+import { createBrandLogosHttp } from "@/api/http-brand-logos";
 import { createNutritionHttp } from "@/api/http-nutrition";
 import { createOffersHttp } from "@/api/http-offers";
 import { createOnboardingHttp } from "@/api/http-onboarding";
@@ -177,6 +178,7 @@ export function createHttpApi(baseUrl: string): Api {
     ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createNutritionHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOnboardingHttp((path, init) => gatewayRequest(baseUrl, path, init)),
+    ...createBrandLogosHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createShelfHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createMenuPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createDeliveryNoteHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),

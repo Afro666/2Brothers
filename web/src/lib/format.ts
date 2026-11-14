@@ -49,15 +49,33 @@ export function formatNumber(value: number): string {
 /** Units a kitchen weighs or measures; every other unit (PCS, ST, KI, ...) is counted. */
 const MEASURED_UNITS = new Set(["KG", "G", "L", "DL", "CL", "ML"]);
 
+/** Units in the letters people write: "kg", "l", "pcs". Other units stay as the catalog has them. */
+const PEOPLE_UNITS: Record<string, string> = { KG: "kg", G: "g", L: "l", DL: "dl", CL: "cl", ML: "ml", PCS: "pcs" };
+
+function peopleUnit(unit: string): string {
+  return PEOPLE_UNITS[unit.toUpperCase()] ?? unit;
+}
+
 /**
  * A shortfall rounded up, so it is never understated: a whole number for counted
- * units, at most one decimal for weights and volumes. "1,922 PCS", "41.5 KG".
+ * units, at most one decimal for weights and volumes. "1,922 pcs", "41.5 kg".
  */
 export function formatShortfall(amount: number, unit: string): string {
   const step = MEASURED_UNITS.has(unit.toUpperCase()) ? 10 : 1;
   // The small epsilon keeps float noise (41.4 * 10 = 413.99...) from rounding up a step.
   const rounded = Math.ceil(amount * step - 1e-9) / step;
-  return `${formatNumber(rounded)} ${unit}`;
+  return `${formatNumber(rounded)} ${peopleUnit(unit)}`;
+}
+
+/**
+ * An amount for people, rounded to the nearest step: one decimal for weights and volumes,
+ * whole pieces for counted units. "12.226 KG" reads "12.2 kg". A text that is not a number stays.
+ */
+export function formatQuantity(amount: number | string, unit: string): string {
+  const value = typeof amount === "number" ? amount : Number(amount);
+  if (typeof amount === "string" && (!amount.trim() || !Number.isFinite(value))) return `${amount} ${peopleUnit(unit)}`;
+  const step = MEASURED_UNITS.has(unit.toUpperCase()) ? 10 : 1;
+  return `${formatNumber(Math.round(value * step) / step)} ${peopleUnit(unit)}`;
 }
 
 /** Stock in sales units, or "unknown" for a sentinel / missing value. */

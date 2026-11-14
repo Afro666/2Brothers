@@ -37,6 +37,11 @@ export function HomePage() {
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="page-title">Kitchen Buyer</h1>
+            <p className="mt-1 max-w-prose text-sm">
+              {t(
+                "A purchasing agent for professional kitchens: it proposes orders from live Valio prices and stock; a person approves every order.",
+              )}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
               {side === "kitchen" ? t("What needs you today.") : t("Where demand may outrun supply.")}
             </p>
