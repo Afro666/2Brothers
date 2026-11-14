@@ -8,6 +8,9 @@ import { TONE_CLASSES } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import type { OfferTier, ProposalOption } from "@/types";
 
+/** How long to wait for the re-simulated options before freeing the buttons again. */
+export const CHOOSE_TIMEOUT_MS = 5000;
+
 const TIER_ORDER: OfferTier[] = ["good", "better", "best"];
 const BADGE = "rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap";
 
@@ -64,6 +67,17 @@ export function OptionCompare({
     setAwaiting(null);
     if (chosen && !blockedReason(chosen)) onApprove?.();
   }, [awaiting, options, onApprove]);
+
+  // If the reload after choosing fails or brings back the same options, free the
+  // buttons after a while and say so, so the person can try again.
+  useEffect(() => {
+    if (!awaiting) return;
+    const timer = setTimeout(() => {
+      setAwaiting(null);
+      setError("Could not load the updated options. Nothing was approved. Please try again.");
+    }, CHOOSE_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [awaiting]);
 
   async function choose(option: ProposalOption) {
     if (option.chosen) return onApprove?.();

@@ -69,7 +69,7 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
     );
   }
 
-  const past = series.weeks.filter((week) => week.actual != null).length;
+  const past = series.weeks.filter((week) => !week.ahead).length;
   return (
     <>
       {data.products ? (
@@ -97,7 +97,7 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
         </h2>
         <ul className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {TILES.map((tile) => (
-            <li key={tile.label}>
+            <li key={tile.label} className="last:odd:col-span-2 lg:last:odd:col-span-1">
               <Card className="h-full gap-0 py-4">
                 <CardContent className="space-y-1 px-4">
                   <h3 className="text-sm font-medium">{tile.label}</h3>
@@ -143,17 +143,17 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
               <TableBody>
                 {series.weeks.map((week) => {
                   // A future week has nothing to compare with yet; any other gap is unknown.
-                  const missing = week.actual == null ? "not yet" : "unknown";
+                  const missing = week.ahead ? "not yet" : "unknown";
                   return (
                     <TableRow key={week.week} data-week={week.week}>
                       <TableCell>
                         Week {Number(week.week.slice(6))}
                         <span className="block text-xs text-muted-foreground">
-                          {week.actual == null ? "Forecast only" : weekRangeLabel(week.week)}
+                          {week.ahead ? "Forecast only" : weekRangeLabel(week.week)}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatQuantity(week.actual, series.unit, "not yet")}
+                        {formatQuantity(week.actual, series.unit, missing)}
                       </TableCell>
                       <TableCell className="text-right">{formatQuantity(week.engine, series.unit)}</TableCell>
                       <TableCell className="text-right">{formatQuantity(week.baseline, series.unit)}</TableCell>

@@ -124,6 +124,36 @@ audit entries. A token with `kitchen:propose` can also drive `/mcp`:
 
     claude mcp add --transport http kitchen-buyer https://<host>/api/mcp --header "Authorization: Bearer tkb_..."
 
+## Webhooks (#277)
+
+An approver registers a receiver for one kitchen:
+`POST /v1/kitchens/{k}/webhooks {"url": "https://example.com/hook", "events": ["order.placed"]}`.
+The answer carries the `secret` (`whsec_...`) once; `GET .../webhooks` never shows it.
+`DELETE .../webhooks/{id}` removes the hook and its log. At most 10 hooks per kitchen.
+Create and delete are audit entries.
+
+Events: `proposal.ready`, `proposal.approved`, `proposal.rejected`, `order.placed`,
+`total_mismatch`, `recall.alert`. They come from the audit trail (`Gateway._audit`), so a
+webhook says what the audit log says.
+
+A delivery is a JSON POST: `{"id", "event", "kitchen_id", "at", "data"}` with the headers
+`X-TKB-Event`, `X-TKB-Delivery` and `X-TKB-Signature: sha256=<hex>`. The signature is the
+HMAC-SHA256 of the raw body with the hook secret. Check it before you trust the body:
+
+    expected = "sha256=" + hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    ok = hmac.compare_digest(expected, request.headers["X-TKB-Signature"])
+
+Any 2xx answer is a success. Otherwise the gateway tries again: at most 3 attempts, 3 seconds
+each, with a short backoff. Deliveries run in a background thread; a receiver that is slow or
+down never delays or fails an order. `POST .../webhooks/{id}/test` sends one signed `ping`;
+`GET .../webhooks/{id}/deliveries` shows the last 50 deliveries (event, attempts, status code,
+never a body).
+
+The URL must be `https`. Private, loopback and link-local addresses and internal host names
+are refused, at registration and again at delivery time; redirects are not followed. For a
+receiver on your own machine set `GATEWAY_WEBHOOKS_DEV=true`: then `http://localhost` and
+`http://127.0.0.1` are allowed. Never set it in production.
+
 ## Sign-in (#270)
 
 `POST /v1/auth/login {email, password}` sets an httpOnly, SameSite=Strict session cookie

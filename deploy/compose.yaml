@@ -50,7 +50,8 @@ services:
     command: ["two-brothers-buyer-worker"]
     restart: unless-stopped
     environment:
-      VERDA_INFERENCE_KEY: ${VERDA_INFERENCE_KEY:?set VERDA_INFERENCE_KEY in .env}
+      # Optional: without it only this worker fails (503 BUYER_UNAVAILABLE), not the deploy.
+      VERDA_INFERENCE_KEY: ${VERDA_INFERENCE_KEY:-}
       MONGODB_URI: ${MONGODB_URI:?set MONGODB_URI in .env}
       GATEWAY_AGENT_TOKEN: ${GATEWAY_AGENT_TOKEN:?set GATEWAY_AGENT_TOKEN in .env}
       GATEWAY_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}

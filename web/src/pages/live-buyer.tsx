@@ -31,6 +31,14 @@ interface Proposal {
   }[];
 }
 
+const validLine = (line: Proposal["lines"][number]) =>
+  Boolean(line) &&
+  typeof line.product_id === "string" &&
+  typeof line.quantity === "string" &&
+  typeof line.unit === "string" &&
+  typeof line.why === "string" &&
+  typeof line.unknown_stock === "boolean";
+
 function proposal(value: unknown): Proposal {
   if (!value || typeof value !== "object") throw new Error("The Buyer returned an invalid proposal.");
   const row = value as Proposal;
@@ -40,15 +48,7 @@ function proposal(value: unknown): Proposal {
     row.status !== "READY" ||
     !Array.isArray(row.lines) ||
     !row.lines.length ||
-    row.lines.some(
-      (line) =>
-        !line ||
-        typeof line.product_id !== "string" ||
-        typeof line.quantity !== "string" ||
-        typeof line.unit !== "string" ||
-        typeof line.why !== "string" ||
-        typeof line.unknown_stock !== "boolean",
-    )
+    !row.lines.every(validLine)
   ) {
     throw new Error("The Buyer did not return a ready proposal. Check the existing request before trying again.");
   }
@@ -63,7 +63,10 @@ function proposal(value: unknown): Proposal {
         !["good", "better", "best"].includes(option.tier) ||
         typeof option.why !== "string" ||
         option.requires_chef_approval !== true ||
-        !Array.isArray(option.lines)
+        typeof option.stock_confirmed !== "boolean" ||
+        typeof option.allergen_data_known !== "boolean" ||
+        !Array.isArray(option.lines) ||
+        !option.lines.every(validLine)
       )
         throw new Error("Invalid substitute choice.");
       mapMoney(option.expected_total);
@@ -258,6 +261,8 @@ export function LiveBuyerRequests() {
                           .map((line) => `${line.quantity} ${line.unit} of ${product(line.product_id)}`)
                           .join("; ")}
                       </p>
+                      {option.stock_confirmed ? null : <p className="text-warning">Stock not confirmed</p>}
+                      {option.allergen_data_known ? null : <p className="text-warning">Allergen data unknown</p>}
                       <Button
                         variant="outline"
                         aria-pressed={preferred === option.tier}

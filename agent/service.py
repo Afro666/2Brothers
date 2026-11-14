@@ -63,6 +63,12 @@ class BuyerWorker:
         key = body.get('idempotency_key')
         if not isinstance(key, str) or not 1 <= len(key.strip()) <= 200:
             raise WorkerError(422, 'MISSING_IDEMPOTENCY_KEY')
+        exclusions = buyer_context.excluded_allergens(self.db, kitchen_id)
+        try:
+            policy = AllergenPolicy(tuple(exclusions)) if exclusions is not None else None
+        except ValueError:
+            # A misspelt allergen code must never silently widen what is safe: fail closed.
+            raise WorkerError(503, 'KITCHEN_POLICY_INVALID', fallback_safe=True) from None
         try:
             row, created = agent_runs.claim(self.db, kitchen_id, key, need)
         except IdempotencyConflict:
@@ -76,8 +82,6 @@ class BuyerWorker:
             nonlocal model, buyer
             stored = await self.gateway.request('POST', f'/v1/kitchens/{kitchen_id}/needs', payload=need)
             model = self.model_factory()
-            exclusions = buyer_context.excluded_allergens(self.db, kitchen_id)
-            policy = AllergenPolicy(tuple(exclusions)) if exclusions is not None else None
             lookup = lambda pid: buyer_context.product(self.db, kitchen_id, pid)
             async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
                 buyer = Buyer(model, session, self.gateway, need_id=stored['need_id'],
