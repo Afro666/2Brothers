@@ -395,12 +395,13 @@ export function PriceListPhoto({ supplier }: { supplier: Supplier }) {
           next[index] = { ok: true, text: t("Saved: the new price of {name}.", { name: existing.name }) };
         } else {
           const packSize = positive(form.packSize);
-          const unit = form.unit.trim();
+          // The rest of the app matches units upper-cased (KG, ST, L), however they were typed.
+          const unit = form.unit.trim().toUpperCase();
           await api.saveOwnProduct({
             name: form.name.trim(),
             unit,
             packSize,
-            baseUnit: packSize == null ? null : form.baseUnit || (unit.toUpperCase() as "KG" | "L"),
+            baseUnit: packSize == null ? null : form.baseUnit || (unit as "KG" | "L"),
             priceEur: price,
             supplierId: supplier.id,
             // A price list says nothing safe about allergens: unknown, never "free from".

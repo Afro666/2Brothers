@@ -147,6 +147,23 @@ describe("SuppliersPage: add own products from a photo of the price list", () =>
     expect(stored.some((product) => product.name === "Karelian pies")).toBe(false);
   });
 
+  it("sends a unit typed in lower case upper-cased", async () => {
+    const user = userEvent.setup();
+    const { api, save } = quickApi();
+    renderApp("/suppliers", api);
+    const dialog = await upload(user);
+    await dialog.findAllByTestId("price-list-row");
+
+    const unit = row(dialog, "Oat sourdough loaf").getByLabelText("Unit");
+    await user.clear(unit);
+    await user.type(unit, " kg ");
+    await user.click(dialog.getByRole("button", { name: "Save checked rows" }));
+
+    await waitFor(() =>
+      expect(save.mock.calls.find(([product]) => product.name === "Oat sourdough loaf")?.[0]).toMatchObject({ unit: "KG" }),
+    );
+  });
+
   it("shows a refused row's own error and goes on with the next row", async () => {
     const user = userEvent.setup();
     const { api, save } = quickApi();
