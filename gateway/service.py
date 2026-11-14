@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 import hashlib
 from typing import Callable
 from uuid import uuid4
@@ -79,8 +79,15 @@ class Gateway:
     def _standing_orders(self, kitchen_id: str) -> dict[str, Decimal]:
         """Per product: the standing order per delivery, in sales units (#380, S08)."""
         doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}, {"standing_orders": 1}) or {}
-        return {pid: _dec(qty) for pid, qty in (doc.get("standing_orders") or {}).items()
-                if _dec(qty) is not None}
+        out = {}
+        for pid, qty in (doc.get("standing_orders") or {}).items():
+            try:
+                value = _dec(qty)
+            except (InvalidOperation, ValueError, TypeError):
+                continue                   # nothing validates the map on write yet: skip bad values
+            if value is not None and value.is_finite() and value > 0:
+                out[pid] = value
+        return out
 
     def _terms(self, kitchen_id: str) -> dict:
         doc = self.db.suppliers.find_one({"kitchen_id": kitchen_id, "adapter": "valio_api"}) or {}

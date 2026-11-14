@@ -94,3 +94,15 @@ def test_standing_order_close_to_the_need_is_no_drift(env):  # noqa: F811
     stock(db, "462921", "L", Decimal(0), 10)
     organic = client.get(f"{K}/proposals/{p['proposal_id']}/addable", headers=AGENT).json()["rows"][0]
     assert "STANDING_ORDER_DRIFT" not in organic["reason_codes"]
+
+
+def test_malformed_standing_order_is_skipped_not_a_500(env):  # noqa: F811
+    """#415: a non-numeric standing order must not break the whole addable list."""
+    client, _, db = env
+    p = milk(client)
+    db.kitchen_settings.insert_one({"_id": "demo-kitchen", "standing_orders": {"462921": "abc", "777": "5"}})
+    stock(db, "462921", "L", Decimal(0), 10)
+    r = client.get(f"{K}/proposals/{p['proposal_id']}/addable", headers=AGENT)
+    assert r.status_code == 200
+    organic = next(row for row in r.json()["rows"] if row["product_id"] == "462921")
+    assert "STANDING_ORDER_DRIFT" not in organic["reason_codes"]
