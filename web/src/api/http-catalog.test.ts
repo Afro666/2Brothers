@@ -250,7 +250,7 @@ describe("mapCatalogProduct", () => {
 
   it.each([
     ["no net content, counted", { base_unit: "ST", net_content: null }, "KI", 6, "1 case = 6 pieces", ""],
-    ["no net content, a box code", { base_unit: "RAS", net_content: null }, "KI", 12, "1 case = 12 pieces", ""],
+    ["no net content, a box code: unknown, not pieces", { base_unit: "RAS", net_content: null }, "KI", 12, "case (pack size unknown)", ""],
     ["no net content, sold by weight", { base_unit: "KG", net_content: null }, "KI", 6, "1 case = 6 kg", "KG"],
     ["10 x 0.24 kg", { base_unit: "ST", net_content: { value: 0.24, unit: "KG" } }, "KI", 10, "1 case = 2.4 kg", "KG"],
     ["a case of one 2.25 kg base unit", { base_unit: "KI", net_content: { value: 2.25, unit: "KG" } }, "KI", 1, "1 case = 2.25 kg", "KG"],
