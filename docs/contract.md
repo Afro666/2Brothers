@@ -1346,7 +1346,7 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. Served (#662). |
 | GET | `/demand/shortage-risk?from=&to=` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability, or the availability is unknown. Served (#662). |
-| GET | `/demand/buying-note?from=&to=&lang=` | `supplier:demand` | A short note for the supplier's planner, written by Nemotron from the shortage-risk rows; every number checked against its row. Planned (#1176). Shape under "Buying note for the supplier's planner". |
+| GET | `/demand/buying-note?from=&to=&lang=` | `supplier:demand` | A short note for the supplier's planner, written by Nemotron from the shortage-risk rows; every number checked against its row. Served (#1176). Shape under "Buying note for the supplier's planner". |
 | GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Only the server's unbound session passes: no token can hold `supplier:demand` yet, and a person signed in to a kitchen gets 403 `SCOPE_REQUIRED` (#599). |
 | POST | `/offers` | `supplier:offers` | A substitute offered to one kitchen before a predicted shortage. It shows up as a suggestion, never as an order. Shape under "Supplier offers". |
 
@@ -1445,7 +1445,9 @@ server's unbound session (the demo's Valio view) passes.
 
 ### Buying note for the supplier's planner (#1176)
 
-Planned. `GET /v1/suppliers/{supplier_id}/demand/buying-note?from=&to=&lang=` turns the
+Served by `gateway/buying_note.py` (#1176); the model call is made by the Buyer worker
+(`agent/buying_note_service.py`, internal `POST /buying-note`), which holds the model key.
+`GET /v1/suppliers/{supplier_id}/demand/buying-note?from=&to=&lang=` turns the
 shortage-risk rows of the same window into a short note for the supplier's planner,
 written by Nemotron 3.5 Super VL. Same scope, window rules and 403s as
 `shortage-risk` above. `lang` is `en` (default) or `fi`; anything else is 422
@@ -1456,7 +1458,8 @@ largest `shortage`, then `UNKNOWN` rows by the largest `demand`, at most 8. The 
 for each row only `product_id`, `product_name`, `date`, `unit`, `demand`, `kitchens`,
 `available`, `shortage`, `suggested_buy` and `risk`: never `by_kitchen`, a kitchen
 name, a menu, a recipe, a price or a pack size. It is told to write no dates and no
-product names (the answer shows both next to each line).
+product names (the answer shows both next to each line). A product name inside a line is not read for
+numbers, so the "1 l" of "Valio Eila 1 l" is not a quantity.
 
 Every line the model writes is checked by plain code before anyone sees it:
 
@@ -1495,7 +1498,8 @@ Answer:
 - No `SHORT` or `UNKNOWN` row in the window: `note` is `[]`, `rows_used` is 0, and no
   model call is made.
 - `dropped` is null, or one of `ROW_UNKNOWN`, `PRODUCT_MISMATCH`, `ROW_REPEATED`,
-  `NUMBER_NOT_IN_ROW`, `NUMBERS_LIST_MISMATCH`, `GAP_FOR_UNKNOWN`, `NUMBER_WORD`.
+  `NUMBER_NOT_IN_ROW`, `NUMBERS_LIST_MISMATCH`, `GAP_FOR_UNKNOWN`, `NUMBER_WORD`, or
+  `REPLY_INVALID` (the model's reply did not match its schema at all).
 - The answer is cached for 5 minutes by supplier, window, language and the input rows,
   so a page refresh makes no new model call (`cached: true`). One supplier's note is
   never served to another.

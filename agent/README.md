@@ -297,6 +297,35 @@ million tokens (the meter's own count).
 
 Tests: `agent/tests/test_buyer_settings.py` pins the settings and the prompt lines.
 
+## Buying note for Valio's planner (#1176)
+
+`GET /v1/suppliers/{id}/demand/buying-note` (contract: "Buying note for the supplier's
+planner"). The gateway picks at most 8 shortage-risk rows (largest shortage first, then
+unknown availability). This worker (`agent/buying_note.py`, `agent/buying_note_service.py`)
+makes one Nemotron call, thinking off, with structured output: one line per row, and the
+numbers each line uses. The model sees only the row facts: never the kitchens' names or
+menus.
+
+`gateway/claim_check.py` then checks every line against its own row:
+- each number belongs to that row's values, read in the note's language;
+- no number words;
+- an unknown availability is never written as a gap.
+
+One failed line drops the whole note, and the planner page shows the table only. The
+same checker is meant for #1173 (the proposal explanation).
+
+Measured on 2026-11-14 with the live endpoint and the three rows in
+`agent/fixtures/buying_note/rows.json`:
+
+| | English | Finnish |
+|---|---|---|
+| Tokens | about 850 | about 870 |
+| Time | 0.7 s to 11 s (the first call was the slow one) | 0.6 s to 4 s |
+| Passed the check | yes, first try | yes, first try |
+
+The recorded replies are in `en.reply.json` and `fi.reply.json` next to the rows. The
+tests replay them, so no test needs the model.
+
 ## Internal worker (#279)
 
 `two-brothers-buyer-worker` serves an internal `/run` endpoint on port 8001.
