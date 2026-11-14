@@ -762,9 +762,7 @@ export function ApprovalCard({
                 <Check aria-hidden />
                 {stockMessage || approvalBlockedReason
                   ? t("Approve")
-                  : inclVat === null
-                    ? t("Approve {amount}", { amount: formatEur(request.totalInclVat) })
-                    : t("Approve {amount} incl VAT", { amount: formatEur(request.totalInclVat) })}
+                  : t("Approve {amount}", { amount: formatEur(request.totalInclVat) })}
               </Button>
             ) : null}
           </>
@@ -803,16 +801,12 @@ export function ApprovalCard({
           <DialogHeader>
             <DialogTitle>{t("Approve this order?")}</DialogTitle>
             <DialogDescription>
-              {inclVat === null
-                ? t("You approve exactly {exVat} ex VAT, {amount} in all ({total}). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
-                    exVat: formatEur(request.totalExVat),
-                    amount: formatEur(request.totalInclVat),
-                    total: inclVatText(request, t, formatEur),
-                  })
-                : t("You approve exactly {exVat} ex VAT ({inclVat} incl VAT). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
-                    exVat: formatEur(request.totalExVat),
-                    inclVat: formatEur(request.totalInclVat),
-                  })}
+              {/* #1738: the approve figure may hold a delivery fee, so it is never called incl VAT. */}
+              {t("You approve exactly {exVat} ex VAT, {amount} in all ({total}). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
+                exVat: formatEur(request.totalExVat),
+                amount: formatEur(request.totalInclVat),
+                total: inclVatText(request, t, formatEur),
+              })}
             </DialogDescription>
           </DialogHeader>
           {waitingNotice ? <p className="hatch text-sm text-warning">{waitingNotice}</p> : null}

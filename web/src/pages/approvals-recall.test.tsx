@@ -25,7 +25,7 @@ describe("ApprovalsPage recalls", () => {
 
     const panel = await screen.findByRole("region", { name: "Food recalls" });
     expect(within(panel).getByRole("status")).toHaveTextContent("Recalls not checked yet.");
-    expect(within(coffeeCard()).getByRole("button", { name: /Approve €164\.92 incl VAT/ })).toBeEnabled();
+    expect(within(coffeeCard()).getByRole("button", { name: /Approve €164\.92/ })).toBeEnabled();
 
     await user.click(within(panel).getByRole("button", { name: "Check recalls now" }));
 
@@ -47,7 +47,7 @@ describe("ApprovalsPage recalls", () => {
     const replacement = replacementCard();
     expect(replacement).toHaveAttribute("id", "proposal-ORD-1045-R");
     expect(replacement).toHaveAttribute("tabindex", "-1");
-    expect(await within(replacement).findByRole("button", { name: /Approve €147\.10 incl VAT/ })).toBeEnabled();
+    expect(await within(replacement).findByRole("button", { name: /Approve €147\.10/ })).toBeEnabled();
     await user.click(within(card).getByRole("link", { name: /Review replacement order/ }));
     expect(replacement).toHaveFocus();
     expect((await api.getOrder("ORD-1045")).lines.map((line) => line.product.id)).toEqual(["461332"]);
@@ -99,10 +99,10 @@ describe("ApprovalsPage recalls", () => {
 
     expect(await screen.findByText("Replacement coffee for the recalled breakfast order")).toBeInTheDocument();
     const replacement = replacementCard();
-    await user.click(within(replacement).getByRole("button", { name: /Approve €147\.10 incl VAT/ }));
+    await user.click(within(replacement).getByRole("button", { name: /Approve €147\.10/ }));
 
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
-    expect(dialog).toHaveTextContent("You approve exactly €129.60 ex VAT (€147.10 incl VAT).");
+    expect(dialog).toHaveTextContent("You approve exactly €129.60 ex VAT, €147.10 in all (€147.10 incl VAT).");
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €147.10" }));
 
     await waitFor(() => {
