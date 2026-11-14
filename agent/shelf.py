@@ -81,7 +81,19 @@ def count_rows(reply: dict, products: list[dict]) -> list[dict]:
     return rows
 
 
-def stock_count_body(rows: list[dict], products: list[dict], confirmed: dict[str, int],
+def confirm_all(rows: list[dict]) -> dict[str, int | None]:
+    """{product_id: packs} as if a person confirmed every COUNTED row. Two COUNTED rows for one
+    product (two shelves, two label spellings) add up; any PLEASE_COUNT row for it makes it
+    unknown (None), never a partial number."""
+    confirmed: dict[str, int | None] = {}
+    unsure = {r["product_id"] for r in rows if r["status"] == "PLEASE_COUNT"}
+    for r in rows:
+        if r["status"] == "COUNTED":
+            confirmed[r["product_id"]] = confirmed.get(r["product_id"], 0) + r["packs"]
+    return {pid: None if pid in unsure else n for pid, n in confirmed.items()}
+
+
+def stock_count_body(rows: list[dict], products: list[dict], confirmed: dict[str, int | None],
                      counted_at: datetime, idempotency_key: str) -> dict:
     """The POST /stock-counts body. `confirmed` = {product_id: packs a person confirmed}.
     A product the person did not confirm is sent as null: unknown, never zero."""
@@ -154,7 +166,7 @@ def main(argv=None) -> int:
         return 2
     if a.confirm_all:
         from datetime import timezone
-        confirmed = {r["product_id"]: r["packs"] for r in rows if r["status"] == "COUNTED"}
+        confirmed = confirm_all(rows)
         now = datetime.now(timezone.utc).replace(microsecond=0)
         body = stock_count_body(rows, products, confirmed, now, f"shelf-{a.photo.stem}-{now:%Y%m%dT%H%M%S}")
         print(json.dumps(body, indent=2))
