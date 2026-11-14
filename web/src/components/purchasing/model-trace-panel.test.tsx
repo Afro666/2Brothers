@@ -53,6 +53,17 @@ describe("ModelTracePanel", () => {
     expect(screen.getByText("Quantities and prices: the engine. Approval: you.")).toBeInTheDocument();
   });
 
+  it("says when a search found its products by meaning after the words found nothing (#1384)", async () => {
+    show({
+      ...BUYER,
+      steps: [{ by: "code", attempt: 1, tool: "search_products", query: "talon maito", count: 3, code: "MEANING_FALLBACK" }],
+    });
+    await userEvent.click(screen.getByText("4 model calls, 6.2 s, thinking off"));
+    expect(screen.getByRole("listitem")).toHaveTextContent(
+      "Code: Searched the catalog for “talon maito”: 3 products — found by meaning (Atlas Vector Search) after the word search found nothing",
+    );
+  });
+
   it("says the parser answered and shows no model steps", () => {
     show({ ...BUYER, made_by: "rule", reader: "parser", model: null, thinking: null, calls: 0, seconds: 0, attempts: 0, steps: [] });
     expect(screen.getByText("The gateway’s request parser answered. No model ran.")).toBeVisible();

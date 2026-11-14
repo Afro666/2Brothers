@@ -255,3 +255,53 @@ def test_the_mcp_tool_never_sends_mode():
     source = inspect.getsource(mcp_server.build_server)
     tool = source[source.index("async def search_products"):source.index("async def get_offer")]
     assert not re.search(r"\bmode\b", tool)      # model_dump is fine; a `mode` key is not
+
+
+# ---- the meaning search alone: the Buyer's fallback when the words find nothing (#1384) ----
+
+def test_meaning_runs_the_vector_search_with_the_same_filters_whatever_the_switch_says(monkeypatch):
+    calls = fake_store(monkeypatch)
+    monkeypatch.setattr(embeddings, "embed", lambda texts, kind, post=None, sleep=None: (
+        [[0.0] * embeddings.EMBED_DIMENSIONS]))
+    filters = {"exclude_allergens": ["milk"], "allergen_strictness": "strict"}
+    rows = catalog_search.meaning(None, "talon maito", filters, 50, "k1")
+    assert rows == [{"product_id": "462775"}]
+    assert calls == [{"query": "talon maito", "hybrid": True, "limit": 50, "kitchen_id": "k1"}]
+
+
+@pytest.mark.parametrize("failure", [
+    embeddings.EmbeddingError("embedding request failed: rate-limited"),
+    TimeoutError("slow"),
+    RuntimeError("no such index: products_vector"),
+])
+def test_meaning_says_it_cannot_run_and_then_rests(monkeypatch, failure):
+    calls = fake_store(monkeypatch, fail=failure)
+    clock = {"t": 100.0}
+    with pytest.raises(catalog_search.MeaningUnavailable):
+        catalog_search.meaning(None, "talon maito", {}, 50, now=lambda: clock["t"])
+    with pytest.raises(catalog_search.MeaningUnavailable):
+        catalog_search.meaning(None, "other words", {}, 50, now=lambda: clock["t"])
+    assert len(calls) == 1                                 # no second embedding call while it rests
+
+
+def test_meaning_keeps_a_bad_filter_an_error(monkeypatch):
+    fake_store(monkeypatch, fail=ValueError("unknown allergen: 'peanutz'"))
+    with pytest.raises(ValueError):
+        catalog_search.meaning(None, "talon maito", {"exclude_allergens": ["peanutz"]}, 50)
+
+
+def test_meaning_with_no_words_finds_nothing_and_embeds_nothing(monkeypatch):
+    calls = fake_store(monkeypatch)
+    assert catalog_search.meaning(None, "  ", {}, 50) == [] and calls == []
+
+
+def test_meaning_uses_the_gateways_injected_one(monkeypatch):
+    calls = fake_store(monkeypatch)
+    rows = catalog_search.meaning("db", "maito", {}, 8, "k1",
+                                  injected=lambda db, q, f, n, kitchen_id=None: [{"product_id": q}])
+    assert (rows, calls) == ([{"product_id": "maito"}], [])
+
+    def slow(db, q, f, n, kitchen_id=None):
+        raise TimeoutError("slow")
+    with pytest.raises(catalog_search.MeaningUnavailable):
+        catalog_search.meaning("db", "maito", {}, 8, injected=slow)

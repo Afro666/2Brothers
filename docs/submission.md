@@ -94,6 +94,9 @@ endpoint (`agent/model.py:43`, `agent/model.py:54`). We did not train or fine-tu
 **What it does.** It is the Buyer agent. It reads the chef's request and calls seven MCP
 tools: search, offer, simulate, request approval, place order, order status and audit log
 (`gateway/mcp_server.py:83`, `agent/runner.py`). It chooses the products and the next step.
+When its search words find no product (a typo, a Finnish phrase), the search tool runs
+Atlas Vector Search once with the same allergen filters, and the proposal says "found by
+meaning" (`gateway/service.py` `_meaning_fallback`, #1384).
 It never sets a quantity, a price or a total, and it has no approve tool. The deployed
 gateway sends free-text requests to it (`deploy/compose.yaml:41`, `agent/service.py`). The
 vision side reads a delivery-note photo and a shelf photo into a strict JSON schema
@@ -183,7 +186,8 @@ database size, the time-series collections, the audit chain length and the chang
 collections. A part that cannot be read shows "unknown", never zero. Under it is the
 measured comparison of words against hybrid (`$rankFusion`) on 10 searches: better on 6,
 equal on 2, slightly worse on 2 (`web/src/data/atlas-search-comparison.json`, with its
-source). The Buyer searches by words on stage; the Catalog page can search by meaning.
+source). The Buyer searches by words on stage, and by meaning only when the words find
+nothing; the Catalog page can search by meaning.
 
 | Atlas feature | What we use it for | Source |
 |---|---|---|
@@ -206,6 +210,9 @@ hybrid search with `$rankFusion` are on `main` (`store/search.py`, `store/embedd
 --export-from ... --out ...`, then `--import-from`). The gateway uses hybrid search only
 with `SEARCH_HYBRID=true` and falls back to the text search on any failure; the tool
 answer says which one ran (`gateway/catalog_search.py`). It is off by default.
+The Buyer's search uses Atlas Vector Search on its own when the words find nothing, with
+the same hard filters, and says `search: "meaning-fallback"` (`gateway/catalog_search.py`
+`meaning`, #1384).
 
 **Also served by the gateway:** the tamper check and the change stream. `GET
 /v1/kitchens/{k}/audit/verify` walks the hash chain, and the Trust page runs a tamper test

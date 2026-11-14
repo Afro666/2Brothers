@@ -25,7 +25,7 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from gateway import options, product_names
-from gateway.decision import decision_summary
+from gateway.decision import FOUND_BY_MEANING, decision_summary
 from gateway.partial_fill import partial_out
 from gateway.suppliers import VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers
 from store import audit, orders, recalls, supplier_offers
@@ -86,9 +86,13 @@ def _hash(payload: dict) -> str:
 
 class Gateway:
     def __init__(self, db, valio, *, now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-                 search: Callable | None = None):
+                 search: Callable | None = None, meaning: Callable | None = None):
         self.db, self.valio, self.now = db, valio, now
         self._search = search          # catalog search; default: store.search (Atlas Search)
+        # The Buyer's meaning search when the words find nothing (#1384); default: Atlas Vector
+        # Search, but only with the default word search: an injected word search and no
+        # injected meaning search (tests, offline runs) means no fallback.
+        self._meaning = meaning
         self._kinds = None             # gateway/kind.py, read from the catalog on first use
         self._kinds_at = None          # when the snapshot was read (rebuilt after KINDS_TTL)
         self._kinds_failed_at = None   # when the last read failed (no new read for KINDS_RETRY)
@@ -1087,6 +1091,12 @@ class Gateway:
                     "search": "text", "note": need["refusal"]["message"]}
         # Text search, or text plus meaning when SEARCH_HYBRID is on (gateway/catalog_search.py).
         rows, kind = catalog_search.search(self.db, query, filters, 50, injected=self._search)
+        found_by_meaning: set[str] = set()
+        fallback_note = None
+        if not rows:
+            # #1384: no word hit, so Atlas Vector Search once, with the same query and filters.
+            rows, fallback_note = self._meaning_fallback(kitchen_id, query, filters)
+            found_by_meaning = {r["product_id"] for r in rows}
         measure = need["unit"]
         # The kind of product the person named, from their own words, not the model's
         # query: "50 kg cheese" gets cheese, never a cheese sauce (gateway/kind.py). After
@@ -1118,10 +1128,69 @@ class Gateway:
         for r in rows:
             r["can_arrive"] = arrival.get(r["product_id"])
         rows.sort(key=lambda r: 0 if r["can_arrive"] else (1 if r["can_arrive"] is None else 2))
-        return {"products": _matched_by(rows[:limit]), "requested_date": need["requested_date"],
-                "measure": measure if filtered else None, "search": kind,
-                "note": "can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
-                        "prefer products with can_arrive true"}
+        rows = rows[:limit]
+        note = ("can_arrive false: the order cut-off for this date has passed or it cannot be delivered; "
+                "prefer products with can_arrive true")
+        shown = {r["product_id"] for r in rows} & found_by_meaning
+        if shown:
+            kind = "meaning-fallback"
+            note = (f"{FOUND_BY_MEANING}; check that each product is what was asked. " + note)
+            # Kept with the need, so the offer and the proposal can say it (tool_get_offer).
+            self.db.needs.update_one({"_id": need["_id"]}, {"$addToSet": {"meaning_ids": {"$each": sorted(shown)}}})
+        elif fallback_note and not rows:
+            note = fallback_note
+        return {"products": _matched_by(rows), "requested_date": need["requested_date"],
+                "measure": measure if filtered else None, "search": kind, "note": note}
+
+    def _meaning_fallback(self, kitchen_id: str, query: str, filters: dict) -> tuple[list[dict], str | None]:
+        """#1384: the rows Atlas Vector Search finds for a query the words do not answer, and a
+        note when there are none. It never runs in place of products the allergen filter
+        removed, and it drops what the allergen rule refuses even when the vector side's
+        pre-filter does not (the group rule: almonds excluded also excludes "tree nuts")."""
+        from gateway import catalog_search
+        if self._search is not None and self._meaning is None:
+            return [], None                    # offline: an injected word search, no meaning search
+        allergen_keys = ("exclude_allergens", "allergen_strictness")
+        if any(filters.get(key) for key in allergen_keys):
+            unfiltered = {k: v for k, v in filters.items() if k not in allergen_keys}
+            try:
+                hits, _ = catalog_search.search(self.db, query, unfiltered, 1, injected=self._search,
+                                                hybrid_ok=False)
+            except Exception:
+                hits = [{}]                    # cannot tell: never risk a replacement
+            if hits:
+                return [], ("the allergen filter removes every product these words find; "
+                            "nothing else is proposed in their place")
+        try:
+            rows = catalog_search.meaning(self.db, query, filters, 50, injected=self._meaning)
+        except catalog_search.MeaningUnavailable:
+            log.warning("meaning fallback could not run")
+            return [], ("no product matches these words, and the meaning search could not run now "
+                        "(Atlas Vector Search needs a new query vector); try other words")
+        for r in rows:
+            r.setdefault("matched_by", "meaning")     # no word hit: every row is by meaning (#1382)
+        return self._allergen_safe(kitchen_id, filters, rows), None
+
+    def _allergen_safe(self, kitchen_id: str, filters: dict, rows: list[dict]) -> list[dict]:
+        """The rows no excluded allergen refuses: the caller's filter and the kitchen's rule, each
+        with the group rule (store/allergen_groups.py). Strict, or a kitchen rule: undeclared
+        counts too, and unknown allergen data is never safe."""
+        from store.allergen_groups import excluded_allergen_codes
+        rule = set(self._allergen_rule(kitchen_id))
+        codes = set(excluded_allergen_codes(filters.get("exclude_allergens"))) | rule
+        if not codes:
+            return rows
+        strict = filters.get("allergen_strictness") == "strict" or bool(rule)
+        levels = ("contains", "may_contain") + (("undeclared",) if strict else ())
+        safe = []
+        for r in rows:
+            allergens = r.get("allergens") or {}
+            if any(codes & set(allergens.get(level) or ()) for level in levels):
+                continue
+            if strict and r.get("allergen_data_known") is False:
+                continue
+            safe.append(r)
+        return safe
 
     def _alias_first(self, kitchen_id: str, words: str, rows: list[dict],
                      measure: str | None = None) -> list[dict]:
@@ -1160,6 +1229,8 @@ class Gateway:
                    "requested_date": need["requested_date"], "text": need["text"], "need_id": need["_id"]}
         if need.get("event"):
             request["event"] = True
+        if not need.get("refusal") and set(ids) & set(need.get("meaning_ids") or ()):
+            request["search"] = "meaning-fallback"     # the proposal says it (#1384)
         if need.get("refusal"):
             # Quote the refused products the person named, not the ones the caller picked.
             request["product_ids"] = need["refusal"]["product_ids"]

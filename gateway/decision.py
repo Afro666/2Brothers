@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from gateway.suppliers import VALIO
 
+# #1384: a product the Buyer's search found by meaning only, because the words found nothing.
+FOUND_BY_MEANING = "found by meaning (Atlas Vector Search) after the word search found nothing"
+
 
 def _supplier_of(sim: dict) -> dict:
     """product_id -> supplier name, from the proposal's supplier blocks (#73).
@@ -40,6 +43,8 @@ def decision_summary(request: dict, sim: dict, names: dict | None = None) -> dic
     ids = list(request.get("product_ids") or [])
     searched = (f"Checked {len(ids)} product(s) with {source} for "
                 f"{request.get('requested_date')}: {', '.join(ids)}.")
+    if request.get("search") == "meaning-fallback":
+        searched += f" {FOUND_BY_MEANING[0].upper()}{FOUND_BY_MEANING[1:]}."
 
     chosen = [f"{ln['quantity']} {ln['unit']} of {_name(ln['product_id'], names)}, "
               f"EUR {ln['total']} ex VAT: {ln['why']}" for ln in sim.get("lines") or []]
