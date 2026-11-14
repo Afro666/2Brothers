@@ -264,6 +264,13 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         who.need("kitchen:read", kitchen_id)
         return gw().reject(kitchen_id, proposal_id, await body(request), human=who.human)
 
+    @app.post(k + "/proposals/{proposal_id}/choose-option")
+    async def choose_option(kitchen_id: str, proposal_id: str, request: Request,
+                            who: Principal = Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
+        from gateway import options
+        return options.choose(gw(), kitchen_id, proposal_id, await body(request), human=who.human)
+
     @app.post(k + "/recalls/{event_id}/dismiss")
     async def dismiss_recall(kitchen_id: str, event_id: str, request: Request, who: Principal = Depends(principal)):
         who.need('kitchen:read', kitchen_id)
