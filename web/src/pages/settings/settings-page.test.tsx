@@ -28,6 +28,7 @@ describe("settings area", () => {
       "Developer",
       "Data & privacy",
       "Ordering engine",
+      "What the tool learned",
     ]);
     expect(links[3]).toHaveAttribute("href", "/settings/team");
   });

@@ -572,4 +572,12 @@ export default {
   "Delivery {date} · {exVat} ex VAT · {total}": "Toimitus {date} · {exVat} ilman alv · {total}",
   "Approved: {exVat} ex VAT, {total}. The order may now be sent.": "Hyväksytty: {exVat} ilman alv, {total}. Tilauksen voi nyt lähettää.",
   "You approve exactly {exVat} ex VAT, {amount} in all ({total}). If the price or stock moves before it is placed, the gateway refuses it and asks again.": "Hyväksyt tasan {exVat} ilman alv, yhteensä {amount} ({total}). Jos hinta tai varasto muuttuu ennen tilaamista, yhdyskäytävä hylkää sen ja pyytää uuden hyväksynnän.",
+  "Learned from your changes": "Opittu muutoksistasi",
+  "Quantity change": "Määrän muutos",
+  "The Buyer adjusted this quantity using changes people made in this kitchen.": "Ostaja muutti tätä määrää keittiössä tehtyjen muutosten perusteella.",
+  "{count} changes, last on {date}": "{count} muutosta, viimeisin {date}",
+  "Use the forecast instead": "Käytä sen sijaan ennustetta",
+  "Switching off…": "Poistetaan käytöstä…",
+  "Could not use the forecast instead: {message}": "Ennusteen käyttäminen epäonnistui: {message}",
+  "Only an approver can switch off learned facts.": "Vain hyväksyjä voi poistaa opittuja faktoja käytöstä.",
 } satisfies Record<string, string>;
