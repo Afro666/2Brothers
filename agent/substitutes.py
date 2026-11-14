@@ -1,5 +1,6 @@
 """Deterministic chef choices from supplier links, then catalog search."""
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from store.allergen_groups import excluded_allergen_codes
 
 
@@ -25,6 +26,31 @@ class AllergenPolicy:
         # The requested product may remain visible as unknown in a kitchen with
         # no restrictions. A proposed substitute always needs known allergen data.
         return product.get('allergen_data_known') is True or (not self.excluded and not substitute)
+
+
+def _amounts(lines):
+    """Sum line quantities per unit, e.g. '698 ST' or '16 KI + 84 ST'."""
+    totals = {}
+    for line in lines:
+        unit = line.get('unit') or ''
+        try:
+            qty = Decimal(str(line['quantity']))
+        except (InvalidOperation, KeyError, TypeError):
+            return None
+        totals[unit] = totals.get(unit, Decimal(0)) + qty
+    return ' + '.join(f'{qty.normalize():f} {unit}'.strip() for unit, qty in totals.items())
+
+
+def _original_basket_reason(lines):
+    """The Buyer's own basket with some stock unconfirmed: say which part is which."""
+    confirmed = [line for line in lines if line.get('unknown_stock') is False]
+    waiting = [line for line in lines if line.get('unknown_stock') is not False]
+    have, wait = _amounts(confirmed), _amounts(waiting)
+    if have is None or wait is None:
+        return "The Buyer's basket as proposed; part of it waits for stock confirmation."
+    if not confirmed:
+        return f"The Buyer's basket as proposed: {wait} waits for stock confirmation."
+    return f"The Buyer's basket as proposed: {have} confirmed, {wait} waits for stock confirmation."
 
 
 class SubstitutePlanner:
@@ -53,10 +79,13 @@ class SubstitutePlanner:
             tier = ('good', 'better', 'best')[len(options)]
             unknown = any(line.get('unknown_stock') is not False for line in lines)
             allergens_known = all(self.lookup(line['product_id']).get('allergen_data_known') is True for line in lines)
-            reason = ('Requested product, confirmed portion only.' if source == 'original'
-                      else 'Supplier-linked substitute sized by the engine.' if source == 'supplier'
-                      else 'Catalog alternative sized by the engine.')
-            if unknown:
+            if source == 'original' and unknown:
+                reason = _original_basket_reason(lines)
+            else:
+                reason = ('Requested product, confirmed portion only.' if source == 'original'
+                          else 'Supplier-linked substitute sized by the engine.' if source == 'supplier'
+                          else 'Catalog alternative sized by the engine.')
+            if unknown and source != 'original':
                 reason += ' Supplier stock still needs confirmation.'
             if not allergens_known:
                 reason += ' Allergen data is unknown; chef review required.'
