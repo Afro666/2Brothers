@@ -38,6 +38,7 @@ model makes the offer before the demo, and the seller has a `--no-model` fallbac
 6. **Make the outside agent's token before you start** if sign-in is on (it is off for
    judging): Settings, API & MCP tokens. With sign-in off, `--make-token` makes one.
 7. **Fallback video** open in a player, paused at 0:00 (see "If something fails").
+   Record it with `python -m demo.record_demo --story offer --approve`.
 
 ## The script (story A: Valio sees it first)
 
