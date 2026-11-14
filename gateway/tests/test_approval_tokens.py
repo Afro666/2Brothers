@@ -607,12 +607,15 @@ def test_path_token_is_masked_in_every_uvicorn_and_gateway_log_line(mcp_env, cap
         logging.getLogger("uvicorn.access").info('%s - "%s %s HTTP/%s" %d', "1.2.3.4", "POST", f"/mcp/t/{token}", "1.1", 200)
         logging.getLogger("uvicorn.error").info(f"error at /gateway/mcp/t/{token}/")
         logging.getLogger("gateway").info("seen %s", f"/mcp/t/{token}")
+        logging.getLogger("gateway.app").info(f"child saw /mcp/t/{token}")  # propagates past logger filters (#1710)
         rpc_path(client, token, "tools/list", {})
     assert caplog.records
     for record in caplog.records:
         assert token[8:] not in record.getMessage()
     access = [r for r in caplog.records if r.name == "uvicorn.access"][0]
     assert isinstance(access.args, tuple) and len(access.args) == 5 and access.args[2] == f"/mcp/t/{token[:8]}..."
+    child = [r for r in caplog.records if r.name == "gateway.app"][0]
+    assert child.getMessage() == f"child saw /mcp/t/{token[:8]}..."
 
 
 # ---- operator CLI -----------------------------------------------------------------------
