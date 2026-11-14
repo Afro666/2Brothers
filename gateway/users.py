@@ -149,3 +149,57 @@ def change_password(db, email: str, current: str, new: str, keep_token: str | No
     db.users.update_one({"_id": email}, {"$set": {"salt": salt, "password": _digest(_check_password(new), salt)}})
     keep = _sha(keep_token) if keep_token else None
     db.sessions.delete_many({"email": email, "_id": {"$ne": keep}})
+
+
+# ---- command line (#270): accounts are made on the server, passwords are typed, never passed ----
+
+def main(argv=None) -> int:
+    """python -m gateway.users add --email a@b.c --role approver   (asks for the password twice)
+    python -m gateway.users list
+    python -m gateway.users remove --email a@b.c"""
+    import argparse
+    import getpass
+
+    parser = argparse.ArgumentParser(description="Accounts for the gateway sign-in.")
+    sub = parser.add_subparsers(dest="command", required=True)
+    add = sub.add_parser("add", help="create an account; the password is typed, not an argument")
+    add.add_argument("--email", required=True)
+    add.add_argument("--name", default=None)
+    add.add_argument("--role", choices=ROLES, default="viewer")
+    add.add_argument("--kitchen", default="demo-kitchen")
+    sub.add_parser("list", help="emails, roles and kitchens (never passwords)")
+    remove = sub.add_parser("remove", help="delete an account and end its sessions")
+    remove.add_argument("--email", required=True)
+    args = parser.parse_args(argv)
+
+    from store.db import get_db
+    db = get_db()
+    if args.command == "list":
+        for user in db.users.find({}, {"name": 1, "role": 1, "kitchen_id": 1}).sort("_id", 1):
+            print(user["_id"], user["role"], user["kitchen_id"], user.get("name") or "")
+        return 0
+    email = args.email.strip().lower()
+    if args.command == "remove":
+        gone = db.users.delete_one({"_id": email}).deleted_count
+        db.sessions.delete_many({"email": email})
+        print("removed" if gone else "no such account")
+        return 0 if gone else 1
+    if db.users.find_one({"_id": email}):
+        print("this email already has an account; remove it first to set a new password")
+        return 1
+    first = getpass.getpass("Password (at least 10 characters): ")
+    if first != getpass.getpass("Again: "):
+        print("the two passwords differ; nothing was created")
+        return 1
+    try:
+        user = create_user(db, email, first, name=args.name or email, role=args.role, kitchen_id=args.kitchen)
+    except AuthError as exc:
+        print(str(exc))
+        return 1
+    print("created", user["email"], user["role"], user["kitchen_id"])
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())

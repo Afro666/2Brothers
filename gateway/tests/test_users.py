@@ -160,3 +160,22 @@ def test_an_approver_cannot_manage_tokens_of_another_kitchen(env):
     assert client.get(other).status_code == 403
     assert client.delete(other + "/any").status_code == 403
     assert db.api_tokens.count_documents({}) == 0
+
+
+def test_command_line_adds_lists_and_removes_accounts(env, monkeypatch, capsys):
+    import getpass
+
+    import store.db
+    client, _, db = env
+    monkeypatch.setattr(store.db, "get_db", lambda *a, **k: db)
+    typed = iter(["judge password 1", "judge password 1"])
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": next(typed))
+    assert users.main(["add", "--email", "Judge@Example.com", "--role", "viewer"]) == 0
+    assert db.users.find_one({"_id": "judge@example.com"})["role"] == "viewer"
+    assert "judge password 1" not in capsys.readouterr().out          # never printed
+    assert sign_in(client, "judge@example.com", "judge password 1").status_code == 200
+    assert users.main(["list"]) == 0 and "judge@example.com viewer demo-kitchen" in capsys.readouterr().out
+    typed = iter(["one password 12", "another password"])
+    assert users.main(["add", "--email", "x@example.com"]) == 1          # the two passwords differ
+    assert users.main(["remove", "--email", "judge@example.com"]) == 0
+    assert client.get("/v1/me").status_code == 401                      # its session ended
