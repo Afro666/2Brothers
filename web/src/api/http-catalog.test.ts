@@ -293,6 +293,17 @@ describe("mapCatalogProduct", () => {
     expect(mapCatalogProduct({ ...MILK, source: "valio", unit_price_eur: null }).priceExVat).toBeUndefined();
   });
 
+  // Every member code against the repo's own table (agent/label.py NAMES): a swap here is a wrong warning.
+  it.each([
+    ["NR", "Rye"], ["GB", "Barley"], ["GS", "Spelt"], ["GK", "Kamut"], ["GO", "Oats"], ["UW", "Wheat"],
+    ["SA", "Almonds"], ["SC", "Cashew nuts"], ["SH", "Hazelnuts"], ["SM", "Macadamia nuts"],
+    ["SP", "Pecan nuts"], ["SR", "Brazil nuts"], ["ST", "Pistachio nuts"], ["SW", "Walnuts"],
+  ])("names allergen code %s as %s", (code, name) => {
+    expect(mapCatalogProduct({ ...MILK, allergens: { contains: [code], may_contain: [] } }).allergens).toEqual([
+      { code, name, presence: "CONTAINS" },
+    ]);
+  });
+
   it("names the individual allergen codes sent by the catalog", () => {
     // The names are the ones in agent/label.py NAMES. BP is not in that table: it keeps its code
     // (the card then says "Other allergen (BP)"), because a guessed name would be a wrong warning.
