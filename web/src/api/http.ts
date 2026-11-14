@@ -1,3 +1,4 @@
+import { createNutritionHttp } from "@/api/http-nutrition";
 import { createOffersHttp } from "@/api/http-offers";
 import { createOnboardingHttp } from "@/api/http-onboarding";
 import { createPlanningHttp, SUPPLIER_ID } from "@/api/http-planning";
@@ -168,6 +169,7 @@ export function createHttpApi(baseUrl: string): Api {
       await post("/v1/auth/change-password", { current_password: current, new_password: next });
     },
     ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createNutritionHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOnboardingHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createShelfHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),

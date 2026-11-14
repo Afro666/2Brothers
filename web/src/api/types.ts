@@ -218,6 +218,78 @@ export interface ModelUsage {
   modelSeconds: number;
 }
 
+/** The label nutrients of one portion. null means the labels do not say: unknown, never zero. */
+export interface NutrientValues {
+  kcal: number | null;
+  proteinG: number | null;
+  fatG: number | null;
+  saturatedFatG: number | null;
+  carbsG: number | null;
+  sugarG: number | null;
+  fibreG: number | null;
+  saltG: number | null;
+}
+
+/** `GET /recipes/{id}/nutrition`: one portion as eaten, from the products' own nutrition tables. */
+export interface RecipeNutrition {
+  recipeId: string;
+  name: string;
+  perPortion: NutrientValues;
+  /** Ingredients the numbers count. */
+  knownIngredients: number;
+  /** Ingredients with no nutrition table or no amount that converts: they are not in the numbers. */
+  unknown: { productId: string; productName: string }[];
+  complete: boolean;
+  /** false when the gateway says the numbers cannot be right (a unit mistake in the recipe). */
+  plausible: boolean;
+  source: string;
+}
+
+export interface NutritionDay {
+  date: string;
+  covers: number;
+  kcal: number | null;
+  proteinG: number | null;
+  kcalPerCover: number | null;
+  complete: boolean;
+}
+
+/** `GET /nutrition?from=&to=`: planned energy per menu day, and what the approved orders contain. */
+export interface KitchenNutrition {
+  from: string;
+  to: string;
+  days: NutritionDay[];
+  planned: { kcal: number | null; complete: boolean };
+  /** `lines` 0 means nothing is ordered for the window; `kcal` null means no line could be counted. */
+  ordered: { kcal: number | null; lines: number; knownLines: number; unknown: string[] };
+  /** Ordered energy as a fraction of the planned energy; null when either is unknown. */
+  orderedVsPlanned: number | null;
+  note: string;
+}
+
+/** A phrase a person linked to one product. */
+export interface KitchenAlias {
+  phrase: string;
+  productId: string;
+  productName: string;
+  setBy: string | null;
+  uses: number;
+}
+
+/** A phrase from a request that matched no product. */
+export interface UnknownWord {
+  phrase: string;
+  times: number;
+  firstAsked: string | null;
+  lastAsked: string | null;
+}
+
+/** `GET /aliases`. */
+export interface KitchenWords {
+  aliases: KitchenAlias[];
+  unknownItems: UnknownWord[];
+}
+
 /** Everything the screens ask the gateway for. Mock and HTTP both implement it. */
 export interface Api {
   /**
@@ -297,6 +369,16 @@ export interface Api {
   deleteRecipe(id: string): Promise<void>;
   /** `week` is ISO `YYYY-Www`. */
   getMenuPlan(week: string): Promise<MenuPlanEntry[]>;
+  /** One portion of a recipe from the label data. Fails with `NOT_FOUND` for an unknown recipe. */
+  getRecipeNutrition(recipeId: string): Promise<RecipeNutrition>;
+  /** Planned and ordered energy, `from` and `to` inclusive (`YYYY-MM-DD`). */
+  getNutrition(from: string, to: string): Promise<KitchenNutrition>;
+  /** The kitchen's own names for products, and the words of requests that matched nothing. */
+  getKitchenWords(): Promise<KitchenWords>;
+  /** Links a phrase to one product; a request that uses the phrase then goes to that product. */
+  linkWord(phrase: string, productId: string): Promise<void>;
+  /** Removes an own name, or forgets a word that matched nothing. */
+  forgetWord(phrase: string): Promise<void>;
   /** Replaces the whole week. */
   saveMenuPlan(week: string, entries: Draft<MenuPlanEntry>[]): Promise<MenuPlanEntry[]>;
   getStock(): Promise<StockItem[]>;
