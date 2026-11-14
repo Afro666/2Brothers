@@ -181,6 +181,14 @@ describe("orders pages", () => {
     expect(screen.queryByText("Runs out before next delivery", { selector: "[data-urgency]" })).not.toBeInTheDocument();
   });
 
+  it("order history keeps urgency on a waiting proposal and omits it on a placed order", async () => {
+    renderApp("/orders", createMockApi());
+    const placed = (await screen.findAllByText("Placed"))[0]!.closest("li")!;
+    const waiting = screen.getAllByText("Needs approval")[0]!.closest("li")!;
+    expect(placed.querySelector("[data-urgency]")).toBeNull();
+    expect(waiting.querySelector("[data-urgency]")).not.toBeNull();
+  });
+
   it("keeps urgency on a proposal", async () => {
     renderApp("/orders/ORD-1043");
     expect(await screen.findByRole("heading", { level: 1, name: /Valio Eila/ })).toBeVisible();

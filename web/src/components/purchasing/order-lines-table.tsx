@@ -54,7 +54,7 @@ function PackText({ f }: { f: Facts }) {
   return (
     <>
       {f.pack ?? f.salesUnit}
-      {f.pack == null ? <span className="unknown-value ml-2 whitespace-normal">{t("pack size not in the catalog")}</span> : null}
+      {f.pack == null ? <> <span className="unknown-value whitespace-normal">{t("pack size not in the catalog")}</span></> : null}
     </>
   );
 }
@@ -101,7 +101,7 @@ function ReceiptLines({ facts }: { facts: Facts[] }) {
             <div className="min-w-0">
               <div className="font-medium [overflow-wrap:anywhere]">{f.name}</div>
               <div className="mt-1 font-mono text-xs leading-5 break-words text-muted-foreground">
-                {f.name !== f.code ? <span className="mr-2">{f.code}</span> : null}
+                {f.name !== f.code ? <>{f.code} · </> : null}
                 <PackText f={f} />
               </div>
             </div>

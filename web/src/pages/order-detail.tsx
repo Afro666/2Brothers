@@ -97,7 +97,7 @@ function SignedReceipt({ receipt }: { receipt?: OrderReceipt | null }) {
   );
 }
 
-const placedStatuses = new Set<OrderStatus>(["PLACED", "NOT_SENT", "UNCONFIRMED", "SENT_READ_FAILED"]);
+export const placedStatuses = new Set<OrderStatus>(["PLACED", "NOT_SENT", "UNCONFIRMED", "SENT_READ_FAILED"]);
 
 function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Map<string, string> }) {
   const t = useT();

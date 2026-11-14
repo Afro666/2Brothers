@@ -6,6 +6,8 @@ import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { StatusBadge } from "@/components/purchasing/status-badge";
+import { placedStatuses } from "@/pages/order-detail";
+import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatEur, shortOrderId } from "@/lib/format";
@@ -67,6 +69,7 @@ export function OrdersPage() {
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <StatusBadge status={order.status} />
+                        {placedStatuses.has(order.status) ? null : <UrgencyBadge urgency={order.urgency} />}
                         {order.supplierMustConfirm.map((supplierId) => (
                           <Badge
                             key={supplierId}
