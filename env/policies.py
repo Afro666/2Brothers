@@ -70,8 +70,52 @@ def reference(state, today, delivery, forecast, unavailable=None, demand=None) -
     return lines
 
 
+def newsvendor(state, today, delivery, forecast, unavailable=None, demand=None,
+               price_per_cover: float = 4.0) -> dict:
+    """Same projection as `reference`, but the safety level per product comes from the
+    cost of being wrong (engine.newsvendor, #432) instead of a fixed service level:
+    one unit short costs the guests it would have fed; one unit too many costs what
+    expires, or little when the product keeps."""
+    from engine.newsvendor import cost_over, critical_ratio
+    from statistics import NormalDist
+    kitchen = state.kitchen
+    blocked = unavailable or (lambda pid, day: False)
+    lines = {}
+    for pid in kitchen.products:
+        product = PRODUCTS[pid]
+        if blocked(pid, delivery):
+            continue
+        following = next_delivery(kitchen, delivery) or delivery + timedelta(days=7)
+        while blocked(pid, following):
+            following = next_delivery(kitchen, following) or following + timedelta(days=7)
+        period = [delivery + timedelta(days=i) for i in range((following - delivery).days)]
+        if demand is None:
+            use = lambda d, pid=pid: forecast(d) * kitchen.usage_per_cover(d).get(pid, 0.0)  # noqa: E731
+        else:
+            use = lambda d, pid=pid: demand(pid, d)  # noqa: E731
+        per_day = [use(d) for d in period]
+        total = sum(per_day)
+        if total <= 0:
+            continue
+        unmet, left = project(state, pid, today, period[-1], use)
+        gap = sum(unmet[d] for d in period)
+        # One kitchen unit short: the guests it feeds, at the weight lost_covers gives the class.
+        per_cover = max(kitchen.usage_per_cover(d).get(pid, 0.0) for d in period) or 1e-9
+        weight = 1.0 if product.abc == "A" else 0.25
+        short = price_per_cover * weight / per_cover
+        over = cost_over(product.price / product.pack, len(period), product.shelf_life)
+        z = NormalDist().inv_cdf(critical_ratio(short, over))
+        safety = z * CV * math.sqrt(sum(u * u for u in per_day))
+        qty = gap + max(0.0, safety - left)
+        cap = sum(use(delivery + timedelta(days=i)) for i in range(product.shelf_life))
+        units = round_to_pack(pid, min(qty, cap))
+        if units:
+            lines[pid] = units
+    return lines
+
+
 def do_nothing(state, today, delivery, forecast) -> dict:
     return {}
 
 
-POLICIES = {"reference": reference, "do-nothing": do_nothing}
+POLICIES = {"reference": reference, "newsvendor": newsvendor, "do-nothing": do_nothing}

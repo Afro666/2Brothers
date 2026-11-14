@@ -69,3 +69,22 @@ Valio supply shortages: off (off isolates forecast error; `--shortages` keeps th
 | slow | 135 | weekday-ma4 | 19.4% | +2.1% | 470 | 36750 | 35064 |
 | slow | 135 | ma28 | 19.4% | +2.1% | 1345 | 101560 | 36641 |
 | slow | 135 | croston-sba | 28.0% | +20.5% | 1231 | 85829 | 44165 |
+
+## Ordering rule: fixed service level vs newsvendor (#432)
+
+`python -m env.newsvendor_backtest` (20 kitchens, 12 weeks, same forecast and same guests;
+cost = lost covers x 4 EUR + waste EUR). The newsvendor rule sets each product's safety
+level from the cost of being wrong (`engine/newsvendor.py`): a unit short costs the guests
+it feeds, a unit too many costs what expires.
+
+| seed | rule | lost covers | waste EUR | total cost EUR |
+|---|---|---|---|---|
+| 1 | reference | 1716 | 19907 | 26773 |
+| 1 | newsvendor | 1563 | 16543 | 22794 |
+| 2 | reference | 1204 | 16117 | 20933 |
+| 2 | newsvendor | 974 | 13282 | 17178 |
+| 3 | reference | 1499 | 17868 | 23863 |
+| 3 | newsvendor | 1308 | 14977 | 20210 |
+
+Mean total cost: 23,856 EUR -> 20,061 EUR (-15.9%), lower on every seed, with fewer lost
+covers and less waste at the same time.
