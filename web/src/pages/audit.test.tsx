@@ -27,6 +27,23 @@ describe("audit page", () => {
     expect(screen.getByText("3 requests, 8 steps")).toBeInTheDocument();
   });
 
+  it.each([999, 1000])("describes the gateway limit at %i steps", async (count) => {
+    const api = createMockApi();
+    api.listAudit = async () => Array.from({ length: count }, (_, index) => ({
+      id: `event-${index}`,
+      at: new Date(Date.UTC(2026, 10, 14, 0, 0, index)).toISOString(),
+      kind: "other" as const,
+      actor: "system" as const,
+      summary: `Step ${index}`,
+      reason: "",
+    }));
+    renderApp("/audit", api);
+
+    expect(await screen.findByText(
+      count === 1000 ? "1000 requests, the newest 1,000 steps" : "999 requests, 999 steps",
+    )).toBeInTheDocument();
+  });
+
   it("names products instead of showing their ids", async () => {
     renderApp("/audit");
     expect(

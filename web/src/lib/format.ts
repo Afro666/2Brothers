@@ -56,6 +56,16 @@ export function formatNumber(value: number): string {
   return num[numberFormat()].format(value);
 }
 
+const COUNTED_AMOUNT_UNITS = new Set(["PCS", "ST", "PC", "KPL", "CS", "BAG", "BOX", "PACK", "KI"]);
+
+export function formatAmount(value: number, unit: string): string {
+  const measured = !COUNTED_AMOUNT_UNITS.has(unit.toUpperCase());
+  const step = measured ? 0.1 : 1;
+  if (value !== 0 && Math.abs(value) < step) return `< ${formatNumber(step)} ${unit}`;
+  const rounded = measured ? Math.round(value * 10) / 10 : Math.round(value);
+  return `${formatNumber(rounded)} ${unit}`;
+}
+
 export function shortOrderId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 8)}…` : id;
 }

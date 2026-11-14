@@ -6,7 +6,7 @@ import { compareUrgency } from "@/components/purchasing/urgency-badge";
 
 import { updateLanguage } from "@/lib/i18n";
 
-import { formatEur, formatNumber, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
+import { formatAmount, formatEur, formatNumber, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
 
 describe("stock sentinels", () => {
   it("treats both Valio sentinels and a missing value as unknown", () => {
@@ -44,6 +44,18 @@ describe("money", () => {
   it("formats euros and says when a price is missing", () => {
     expect(formatEur(1947.5)).toBe("€1,947.50");
     expect(formatEur(null)).toBe("price unknown");
+  });
+});
+
+describe("demand and stock amounts", () => {
+  it("rounds counted and measured units, keeps thousands and never loses a tiny amount", () => {
+    expect(formatAmount(6024.083, "PCS")).toBe("6,024 PCS");
+    expect(formatAmount(12.26, "KG")).toBe("12.3 KG");
+    expect(formatAmount(1987.64, "L")).toBe("1,987.6 L");
+    expect(formatAmount(0.4, "BOX")).toBe("< 1 BOX");
+    expect(formatAmount(0.04, "ML")).toBe("< 0.1 ML");
+    expect(formatAmount(2.26, "UNKNOWN")).toBe("2.3 UNKNOWN");
+    expect(formatAmount(0, "PCS")).toBe("0 PCS");
   });
 });
 
