@@ -53,12 +53,18 @@ class KitchenParams:
                                      f"(exclusive), got {v}")
             changes["service_level"] = {**base.service_level, **levels}
         if "max_cover_days" in data:
-            changes["max_cover_days"] = {**base.max_cover_days,
-                                         **{k: int(v) for k, v in data["max_cover_days"].items()}}
+            cover = {k: int(v) for k, v in data["max_cover_days"].items()}
+            for k, v in cover.items():
+                if k not in base.max_cover_days:
+                    raise ValueError(f"max_cover_days key {k!r} is not a category; use one of "
+                                     f"{', '.join(base.max_cover_days)}")
+                if v < 1:
+                    raise ValueError(f"max_cover_days for {k} must be at least 1, got {v}")
+            changes["max_cover_days"] = {**base.max_cover_days, **cover}
         if "stockout_cap" in data:
             cap = float(data["stockout_cap"])
-            if cap < 1:
-                raise ValueError("stockout_cap must be at least 1")
+            if not 1 <= cap <= 3:
+                raise ValueError(f"stockout_cap must be from 1 to 3, got {cap}")
             changes["stockout_cap"] = cap
         for key in ("budget_warning_order_eur", "budget_warning_week_eur"):
             if key in data:
