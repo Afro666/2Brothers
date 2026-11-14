@@ -227,6 +227,8 @@ export interface Api {
   listWebhooks(): Promise<{ webhooks: Webhook[]; events: string[] }>;
   createWebhook(input: { url: string; events: string[] }, actor: AuditActor): Promise<CreatedWebhook>;
   testWebhook(id: string, actor: AuditActor): Promise<WebhookDelivery>;
+  /** Remove the webhook and its delivery log (approver only). */
+  deleteWebhook(id: string, actor: AuditActor): Promise<void>;
   getGatewayHealth(): Promise<GatewayHealth>;
   listRecentApiCalls(): Promise<RecentApiCall[]>;
   requestKitchenDeletion(confirmation: string, actor: AuditActor): Promise<KitchenDeletionRequest>;

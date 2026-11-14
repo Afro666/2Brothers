@@ -2,7 +2,7 @@ import { type Json, object } from "@/api/gateway-map";
 import { ApiError, type Api, type Webhook, type WebhookDelivery } from "@/api/types";
 
 type GatewayCall = (path: string, init?: RequestInit) => Promise<unknown>;
-type DeveloperHttp = Pick<Api, "listWebhooks" | "createWebhook" | "testWebhook" | "getGatewayHealth">;
+type DeveloperHttp = Pick<Api, "listWebhooks" | "createWebhook" | "testWebhook" | "deleteWebhook" | "getGatewayHealth">;
 
 function nullableText(value: unknown): string | null {
   return typeof value === "string" && value ? value : null;
@@ -67,6 +67,12 @@ export function createDeveloperHttp(call: GatewayCall, kitchen: string): Develop
         headers: { "X-User": actor },
         body: JSON.stringify({}),
       }));
+    },
+    async deleteWebhook(id, actor) {
+      await call(`${kitchen}/webhooks/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { "X-User": actor },
+      });
     },
     async getGatewayHealth() {
       const body = object(await call("/health"), "gateway health");
