@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ApprovalCard } from "@/components/purchasing/approval-card";
@@ -199,6 +199,9 @@ describe("RecallPanel", () => {
   ])("links an unheld recall's notice title only when its URL is https: %s", (url, linked) => {
     const unheld = { ...alert, recall: { ...alert.recall, url, title: "Notice title" } };
     render(<RecallPanel status={{ kind: "ready", affecting: 0, lastCheck: check, unheld: [unheld] }} />);
+    // Folded by default: the notice is behind "Details".
+    expect(screen.queryByRole("list", { name: "Recalled products in your kitchen" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
     const list = screen.getByRole("list", { name: "Recalled products in your kitchen" });
     if (linked) {
       expect(within(list).getByRole("link", { name: /Notice title/ })).toHaveAttribute("href", url);

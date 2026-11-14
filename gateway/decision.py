@@ -58,7 +58,10 @@ def decision_summary(request: dict, sim: dict, names: dict | None = None) -> dic
     if not sim.get("lines"):
         totals = "Nothing is ordered, so there is no total."
     else:
-        totals = (f"Total EUR {sim['expected_total']} (EUR {sim['total_ex_vat']} ex VAT + VAT EUR {sim['vat']}"
+        vat = (f"VAT EUR {sim['vat']}" if sim.get("vat") is not None else
+               "VAT unknown for " + ", ".join(_name(pid, names) for pid in sim.get("vat_unknown") or [])
+               + ", so no total incl VAT")
+        totals = (f"Total EUR {sim['expected_total']} (EUR {sim['total_ex_vat']} ex VAT + {vat}"
                   + (f" + delivery EUR {fee}" if fee is not None else "; delivery fee unknown: supplier terms not set")
                   + ").")
     alt = sim.get("alternative")

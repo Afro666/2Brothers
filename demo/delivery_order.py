@@ -10,8 +10,10 @@ the prices in `env/catalog.py` (Valio catalog prices read on 2026-11-13), refere
 DEMO-1198. The idempotency key makes it one order per database: a second run finds it.
 
 The order has no proposal and so no delivery day: the stock screens never count it as
-on order. It is marked `approved_by: demo-seed` and has one audit entry,
-`demo_delivery_order_placed`. Nothing is sent to Valio.
+on order. It is marked `placed_by: demo-seed` and has no `approved_by`: no person approved
+it, so it has no signed receipt and it earns nothing for auto-approve (#1560; an order
+stored earlier with `approved_by: demo-seed` is read the same, `gateway/seeded.py`). It has
+one audit entry, `demo_delivery_order_placed`. Nothing is sent to Valio.
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ from uuid import uuid4
 from bson.decimal128 import Decimal128
 
 from env.catalog import PRODUCTS
+from gateway.seeded import SEED
 
 KITCHEN = "demo-kitchen"
 KEY = "demo-delivery-beat-1198"
@@ -60,12 +63,12 @@ def place(db) -> dict:
     total = sum((Decimal(ln["total"]) for ln in rows), Decimal(0))
     order, created = orders.record_attempt(
         db, kitchen_id=KITCHEN, idempotency_key=KEY, offer_id=KEY, expected_total=Decimal128(f"{total:f}"),
-        lines=rows, approved_by="demo-seed", reference=REFERENCE, supplier_id=SUPPLIER["supplier_id"],
+        lines=rows, placed_by=SEED, reference=REFERENCE, supplier_id=SUPPLIER["supplier_id"],
         blocks=[{**SUPPLIER, "product_ids": [ln["product_id"] for ln in rows]}], supplier_must_confirm=[])
     if not created:
         return order
     order = orders.set_outcome(db, order["order_id"], outcome="CONFIRMED", status="SENT")
-    audit.append_event(db, {"event_id": uuid4().hex, "kind": "demo_delivery_order_placed", "actor": "demo-seed",
+    audit.append_event(db, {"event_id": uuid4().hex, "kind": "demo_delivery_order_placed", "actor": SEED,
                             "order_id": order["order_id"], "reference": REFERENCE, "expected_total": f"{total:f}"},
                        {"kitchen_id": KITCHEN, "at": datetime.now(timezone.utc).isoformat()})
     return order

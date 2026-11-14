@@ -18,6 +18,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+from gateway.seeded import is_seed, placed_by
+
 WEEKS_NEEDED = 4
 DECISIONS_NEEDED = 20
 MAX_EDIT_RATE = 0.10
@@ -40,7 +42,8 @@ def _aware(value):
 
 
 def _human(decided_by: str | None) -> bool:
-    return bool(decided_by) and not str(decided_by).startswith("auto-approve")
+    """A person's name. Not the auto-approve rule, and not the demo seed (#1560)."""
+    return bool(decided_by) and not str(decided_by).startswith("auto-approve") and not is_seed(decided_by)
 
 
 def learning(db, kitchen_id: str, now: datetime) -> dict:
@@ -103,7 +106,7 @@ def _trusted_products(db, kitchen_id: str) -> set[str]:
     counts: dict[str, int] = {}
     bad: set[str] = set()
     for order in db.orders.find({"kitchen_id": kitchen_id, "outcome": "CONFIRMED"}):
-        if not _human(order.get("approved_by")):
+        if placed_by(order) or not _human(order.get("approved_by")):
             continue
         for line in order.get("lines", []):
             pid = line.get("product_id")

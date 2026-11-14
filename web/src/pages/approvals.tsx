@@ -85,6 +85,8 @@ function ApiApprovalsPage() {
   const recalls = useAsync(() => loadRecalls(api), [api]);
   const closeTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(closeTimer.current), []);
+  // Decided here: the toast says so, the "already decided" line is only for a link that was stale.
+  const decidedHere = useRef(new Set<string>());
 
   // An Api that cannot change a proposal shows it read-only (the gateway serves the change, #303).
   const canEdit = !api.live || api.live.has("changeProposal");
@@ -92,6 +94,7 @@ function ApiApprovalsPage() {
   async function approve(decision: ApprovalDecision): Promise<void> {
     try {
       const decided = await api.approve(decision, actor);
+      decidedHere.current.add(decision.approvalId);
       const answeredOrder = await api.getOrder(decided.orderId).catch(() => null);
       const waitingFor = answeredOrder?.supplierMustConfirm ?? [];
       if (waitingFor.length > 0) {
@@ -118,6 +121,7 @@ function ApiApprovalsPage() {
 
   async function reject(approvalId: string, reason: string): Promise<void> {
     await api.reject(approvalId, reason, actor);
+    decidedHere.current.add(approvalId);
     toast.success(t("Rejected. The reason goes back to the Buyer."), { testId: "approval-toast" });
     approvals.reload();
     refreshWaiting();
@@ -182,7 +186,9 @@ function ApiApprovalsPage() {
         ? t("Proposal {id} was not found.", { id: proposal })
         : linked.approval.status === "BLOCKED_BY_RECALL"
           ? t("Proposal {id} is held by a recall and cannot be approved.", { id: proposal })
-          : t("Proposal {id} has already been decided.", { id: proposal });
+          : decidedHere.current.has(linked.approval.id)
+            ? undefined
+            : t("Proposal {id} has already been decided.", { id: proposal });
   const recallStatus: RecallStatus =
     recalls.status === "loading"
       ? { kind: "loading" }

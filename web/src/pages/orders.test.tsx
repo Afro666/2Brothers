@@ -164,7 +164,25 @@ describe("orders pages", () => {
     renderApp("/orders/ORD-1046");
 
     const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
-    expect(within(block).getByText("No signed receipt (this order is from before receipts, or signing was not possible)")).toBeVisible();
+    expect(within(block).getByText("No signed receipt for this order")).toBeVisible();
+    expect(within(block).queryByText(/demo seed/)).not.toBeInTheDocument();
+    expect(within(block).queryByRole("button", { name: "Copy receipt" })).not.toBeInTheDocument();
+    expect(within(block).queryByText("Signed", { selector: ".stamp" })).not.toBeInTheDocument();
+  });
+
+  it("says that the demo seed placed the delivery demo order, so it has no receipt (#1560)", async () => {
+    const api = createMockApi();
+    const order = await api.getOrder("ORD-1046");
+    vi.spyOn(api, "getOrder").mockResolvedValue({ ...order, receipt: null, placedBy: "demo-seed" });
+    renderApp("/orders/ORD-1046", api);
+
+    const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
+    expect(
+      within(block).getByText(
+        "Placed by the demo seed for the delivery demo. No person approved it, so it has no signed receipt.",
+      ),
+    ).toBeVisible();
+    expect(within(block).queryByText("No signed receipt for this order")).not.toBeInTheDocument();
     expect(within(block).queryByRole("button", { name: "Copy receipt" })).not.toBeInTheDocument();
     expect(within(block).queryByText("Signed", { selector: ".stamp" })).not.toBeInTheDocument();
   });
@@ -219,6 +237,27 @@ describe("orders pages", () => {
     expect(screen.getByText("VAT").nextElementSibling).toHaveTextContent("€2.00");
     expect(screen.getByText("Delivery fee").nextElementSibling).toHaveTextContent("€3.00");
     expect(screen.getByText("Total incl VAT").nextElementSibling).toHaveTextContent("€999.99");
+  });
+
+  it("says once that a recorded order was not sent to the supplier, on the page and in the list", async () => {
+    renderApp("/orders/ORD-1042");
+    expect(await screen.findByRole("heading", { level: 1, name: /Arla 1 L/ })).toBeVisible();
+    // The receipt of this order says NOT_SENT: the badge says both facts, never a bare "Placed".
+    expect(screen.getByText("Approved and recorded, not sent to the supplier")).toBeVisible();
+    expect(screen.queryByText("Placed")).not.toBeInTheDocument();
+  });
+
+  it("order history says the same, and an order whose receipt says it was sent stays Placed", async () => {
+    const api = createMockApi();
+    const all = await api.listOrders();
+    const sent = all.find((order) => order.receipt?.supplierOutcome === "NOT_SENT")!;
+    api.listOrders = async () => [
+      sent,
+      { ...sent, id: "ORD-SENT", receipt: { ...sent.receipt!, supplierOutcome: "CONFIRMED" } },
+    ];
+    renderApp("/orders", api);
+    expect(await screen.findByText("Approved and recorded, not sent to the supplier")).toBeVisible();
+    expect(screen.getAllByText("Placed")).toHaveLength(1);
   });
 
   it("omits urgency on a placed order but keeps it on a proposal", async () => {

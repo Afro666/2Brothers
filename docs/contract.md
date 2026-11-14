@@ -444,6 +444,9 @@ Buyer's shortlist), and the MCP tool `search_products` never sends it, so the Bu
 searches do not change. When `mode: "hybrid"` cannot make the query vector (no key, the
 embedding service's limit of 3 new texts a minute, more than 2 seconds, the rest time after
 a failure), the answer is the text search with `search: "text"` and `meaning_unavailable: true`.
+The Catalog page rests on its own: its failed embedding call never sends the Buyer's search to
+words. It also leaves the last new embedding call of each minute to the Buyer, so after 2 new
+texts in a minute it answers with words (#1452).
 A query asked before keeps its vector in the gateway's memory, so asking it again runs hybrid
 without a new embedding call.
 
@@ -809,6 +812,8 @@ Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email, or
 | GET | `/catalog/products/{product_id}?date=` | `kitchen:read` | One product's page: what it is, allergens, nutrition, storage, origin, VAT, the live Valio price and stock, recall status, every supplier that offers it and this kitchen's own figures for it. Each part names its source. 404 `PRODUCT_NOT_FOUND` for a code that is not in the catalogs or this kitchen's own products. Shape under "Product page" (#1603). |
 | GET | `/recipes`, `/recipes/{id}` | `kitchen:read` | Recipe = products x quantity per portion, with yield; allergens rolled up. |
 | POST, PUT, DELETE | `/recipes`, `/recipes/{id}` | `kitchen:write` | Create, change or delete a recipe. |
+| GET | `/recipes/{id}/nutrition` | `kitchen:read` | One portion of a recipe as eaten, from the products' own nutrition tables (`gateway/nutrition_routes.py`): `recipe_id`, `name`, `per_portion` (kcal and macros, a value no label gives is left out, never 0), `known_ingredients`, `unknown` (`[{product_id, product_name}]`), `complete`, `plausible`, `source`. 404 `NOT_FOUND` for a recipe this kitchen does not have. |
+| GET | `/recipes/nutrition?ids=` | `kitchen:read` | The same row for many recipes in one call (#1101): `{"recipes": [...]}`, each row in the `/recipes/{id}/nutrition` shape. Without `ids`: every recipe of the kitchen, in the order of `GET /recipes`. `ids` is 1 to 200 recipe ids, comma-separated, answered in the order asked; an id this kitchen does not have is left out, it is not an error. Fewer than 1 or more than 200 ids is 422 `INVALID_REQUEST`. One product lookup for all recipes together. |
 | GET | `/menu-plans/{week}` | `kitchen:read` | The week's menu plan (shape below). |
 | PUT | `/menu-plans/{week}` | `kitchen:write` | Menus per day: recipe + expected covers. `week` is ISO `YYYY-Www`. |
 | GET | `/demand?from=&to=` | `kitchen:read` | Future need per product and day, from the menu plan and history. At most 62 days. Shape under "Body shapes: stock and demand". |
