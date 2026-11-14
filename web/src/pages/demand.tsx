@@ -181,7 +181,7 @@ function ProductSummary({ group }: { group: ProductGroup }) {
     <span className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
       <ProductThumb en={group.productName} size="sm" />
       <span className="block min-w-40 flex-1">
-        <span className="block font-medium break-words"><ProductLink productId={group.productId}>{group.productName}</ProductLink></span>
+        <span className="block font-medium break-words">{group.productName}</span>
         <span className="block text-xs text-muted-foreground">{group.productId}</span>
       </span>
       <RiskBadge risk={group.worst} />
@@ -212,6 +212,17 @@ function ProductSummary({ group }: { group: ProductGroup }) {
   );
 }
 
+/** The product page link, kept outside the row's toggle button: a link may not sit inside a button. */
+function OpenProductPage({ group, className }: { group: ProductGroup; className?: string }) {
+  const t = useT();
+  return (
+    <ProductLink productId={group.productId} className={`text-xs text-primary underline ${className ?? ""}`}>
+      {t("Open the product page")}{" "}
+      <span className="sr-only">{group.productName}</span>
+    </ProductLink>
+  );
+}
+
 /** One product's days, in their own body so its name heads the row group. */
 function ProductSection({
   group,
@@ -237,6 +248,7 @@ function ProductSection({
           >
             <ProductSummary group={group} />
           </Button>
+          <OpenProductPage group={group} className="px-2" />
         </TableHead>
       </TableRow>
       {group.rows.map((row) => (
@@ -384,6 +396,7 @@ function MobileGroup({
         />
       </Button>
       <div data-phone-details hidden={!open} className="ml-4 space-y-1 border-l pb-2 pl-3 text-sm">
+        <OpenProductPage group={group} className="inline-flex min-h-11 items-center" />
         <p className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
           <span>{group.productId}</span>
           {group.shortDays > 0 ? (
