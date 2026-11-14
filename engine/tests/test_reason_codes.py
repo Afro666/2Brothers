@@ -52,9 +52,17 @@ def test_standing_order_that_no_longer_matches_usage_drifts():
     assert "propose_standing_order" in line.numbers and "a person changes it" in line.why
 
 
-def test_standing_order_close_to_the_need_is_fine():
-    assert "STANDING_ORDER_DRIFT" not in replenish(item(standing_order=D(42)), P).reason_codes
+def test_standing_order_close_to_usage_is_fine():
+    assert "STANDING_ORDER_DRIFT" not in replenish(item(standing_order=D(145)), P).reason_codes   # usage 140
     assert "STANDING_ORDER_DRIFT" not in replenish(item(), P).reason_codes
+
+
+def test_a_standing_order_equal_to_usage_never_suggests_itself():
+    """#803: standing 140, demand 20/day, review 7 days, lots of stock: no drift, no suggestion."""
+    for on_hand in (120, 500):
+        line = replenish(item(on_hand=on_hand, standing_order=D(140)), P)
+        assert "STANDING_ORDER_DRIFT" not in line.reason_codes
+        assert "propose_standing_order" not in line.numbers and "Suggested" not in line.why
 
 
 def test_standing_order_when_nothing_is_needed_also_drifts():

@@ -39,12 +39,16 @@ def _drift(item: Item, qty: Decimal) -> str | None:
     """S08: a standing order that no longer matches usage. The engine only flags it;
     a person changes the standing order."""
     s = item.standing_order
-    if s is None or s <= 0 or abs(s - qty) <= s * DRIFT_TOLERANCE:
+    if s is None or s <= 0:
         return None
-    return (f" Standing order {_fmt(s)} {item.pack.sales_unit} no longer matches usage: "
-            f"this delivery needs {_fmt(qty)}. Suggested standing order: "
-            f"{_fmt(proposed_standing_order(item))} {item.pack.sales_unit} (usage per delivery); "
-            f"a person changes it.")
+    # Against usage per delivery, not this delivery's need: extra stock this week is not
+    # drift (#803), and a standing order equal to usage never "drifts" to itself.
+    usage = proposed_standing_order(item)
+    if abs(s - usage) <= s * DRIFT_TOLERANCE:
+        return None
+    return (f" Standing order {_fmt(s)} {item.pack.sales_unit} no longer matches usage "
+            f"({_fmt(usage)} per delivery); this delivery needs {_fmt(qty)}. Suggested standing "
+            f"order: {_fmt(usage)} {item.pack.sales_unit}; a person changes it.")
 
 
 def proposed_standing_order(item: Item) -> Decimal:
