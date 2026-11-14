@@ -62,7 +62,10 @@ describe("useAsync", () => {
 
       await act(async () => vi.advanceTimersByTimeAsync(500));
       expect(load).toHaveBeenCalledTimes(2);
-      await act(async () => vi.advanceTimersByTimeAsync(1500));
+      expect(result.current.status).toBe("loading");
+      await act(async () => vi.advanceTimersByTimeAsync(1499));
+      expect(result.current.status).toBe("loading");
+      await act(async () => vi.advanceTimersByTimeAsync(1));
       expect(load).toHaveBeenCalledTimes(3);
       expect(result.current.status).toBe("error");
       await act(async () => vi.advanceTimersByTimeAsync(5000));
@@ -97,6 +100,18 @@ describe("useAsync", () => {
       unmount();
       await act(async () => vi.advanceTimersByTimeAsync(5000));
       expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it("drops a waiting retry when the dependencies change", async () => {
+      const load = vi.fn((key: string) => (key === "a" ? Promise.reject(netError()) : Promise.resolve(key)));
+      const { result, rerender } = renderHook(({ key }) => useAsync(() => load(key), [key]), {
+        initialProps: { key: "a" },
+      });
+      await act(async () => vi.advanceTimersByTimeAsync(100));
+      rerender({ key: "b" });
+      await act(async () => vi.advanceTimersByTimeAsync(5000));
+      expect(load.mock.calls.map(([key]) => key)).toEqual(["a", "b"]);
+      expect(result.current.data).toBe("b");
     });
 
     it("keeps the ready data while a failing reload tries again", async () => {
