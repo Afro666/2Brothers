@@ -329,6 +329,8 @@ function failureMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "INVALID_QUERY" || error.code === "FREE_EMAIL") return error.message;
     if (error.code === "NOT_SERVED") return "Lookup is not available yet. Fill in the form yourself.";
+    // The gateway limits paid lookups (429); api/http.ts reports every 429 as RATE_LIMITED.
+    if (error.code === "RATE_LIMITED") return "Too many lookups just now. Wait a minute, or fill in the form yourself.";
   }
   return "The lookup did not work this time. Fill in the form yourself, or try again.";
 }
