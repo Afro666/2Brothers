@@ -1,0 +1,12 @@
+{
+  "_comment": "Synthetic demo order for #362: the milk order the gateway places in the demo (51 ST of 462775). Kitchen numbers are demo values.",
+  "order_ref": "ORD-DEMO-0001",
+  "lines": [{"product_id": "462775", "quantity": "51", "unit": "ST"}],
+  "catalog": {
+    "462775": {"base_unit": "ST", "units": {"ST": 1, "KI": 12}},
+    "462921": {"base_unit": "ST", "units": {"ST": 1, "KI": 5}}
+  },
+  "stock_before": {"462775": "0"},
+  "items": [{"product_id": "462775", "sales_unit": "ST", "measure": "L", "size": "1", "lot_size": "1",
+             "daily_demand": 10, "lead_time_days": 1, "review_days": 2, "safety_stock": 10}]
+}
