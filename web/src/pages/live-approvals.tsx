@@ -108,7 +108,7 @@ function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; r
           // Stable across retries and tabs; a changed offer gets a new decision key.
           idempotency_key: `web-approve-${row.proposal_id}-${row.offer_id}`,
           expected_total: row.expected_total,
-        } : { reason: "Rejected by chef in the approval inbox", idempotency_key: `web-reject-${row.proposal_id}` }),
+        } : { reason: "Rejected by chef in the approval inbox", idempotency_key: `web-reject-${row.proposal_id}-${row.offer_id}` }),
       }) as { order_id?: string; expected_total?: string; status?: string };
       if (approve) {
         if (typeof result.order_id !== "string" || typeof result.expected_total !== "string")

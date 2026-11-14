@@ -42,6 +42,9 @@ it("requires confirmation to close a recall-held proposal without dismissing its
   await user.click(screen.getByRole("button", { name: "Confirm rejection" }));
   expect((await screen.findAllByText("REJECTED")).length).toBeGreaterThan(0);
   expect(fetch.mock.calls[1][0]).toBe("/api/v1/kitchens/demo-kitchen/proposals/p1/reject");
+  expect(JSON.parse(String(fetch.mock.calls[1][1]?.body))).toEqual({
+    reason: "Rejected by chef in the approval inbox", idempotency_key: "web-reject-p1-o1",
+  });
   expect(fetch.mock.calls.some(c => String(c[0]).includes("/dismiss"))).toBe(false);
 });
 
