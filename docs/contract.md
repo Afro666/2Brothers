@@ -726,6 +726,7 @@ person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at`
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
 | POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver` (create: signed-in session only) | Personal approval tokens. Shape under "Personal approval tokens". |
 | GET | `/model-usage` | `kitchen:read` | How much the Buyer agent used its model for this kitchen: runs, model calls, tokens, seconds. Shape under "Model usage". |
+| GET | `/atlas` | `kitchen:read` | What MongoDB Atlas holds and runs for the product: vectors, index states, time-series collections, audit chain length. Counts only. Shape under "Atlas facts". Proposed (#1393); the store function exists, the route is not built. |
 | GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
 | POST, GET | `/webhooks` | human, role `approver` | Register a webhook (body `url`, `events`) or list them. Shape under "Webhooks". |
 | DELETE | `/webhooks/{id}` | human, role `approver` | Remove the webhook and its delivery log. |
@@ -2475,6 +2476,40 @@ reached the Buyer worker):
 - `model` is the Buyer's model name, the same value as `buyer_model` on a proposal answer.
 - Counts only: no request text, no reply text, no key.
 - Where it shows: the About page.
+
+### Atlas facts (proposed, #1393)
+
+`GET /v1/kitchens/{kitchen_id}/atlas` (`kitchen:read`) answers what MongoDB Atlas holds
+and runs for the product, read live. Proposed: the store function exists
+(`store.atlas.atlas_facts`); the gateway route is not built yet (#1383).
+
+```json
+{"mongodb_version": "8.0.37", "data_mb": 215, "products": 17548,
+ "vectors": [{"model": "voyage-4", "dimensions": 1024, "count": 17546}],
+ "search_indexes": [
+   {"name": "products_search", "type": "search", "status": "READY", "queryable": true},
+   {"name": "products_vector", "type": "vectorSearch", "status": "READY", "queryable": true}],
+ "time_series": [{"collection": "covers", "documents": 1780},
+                 {"collection": "orders_history", "documents": 1050}],
+ "audit_entries": 1487,
+ "change_stream_collections": ["proposals", "approvals", "audit_log"]}
+```
+
+- The numbers are for the whole database, the same for every kitchen: counts and index
+  states only. No address, no key, no document, no other kitchen's rows.
+- **Unknown is `null`, never zero.** Each top-level value except
+  `change_stream_collections` is `null` when it could not be read; the page then shows no
+  number for it. An empty list was read and is empty.
+- `data_mb`: data plus indexes, whole megabytes. `products`: rows the text search reads.
+- `vectors`: one row per embedding model and size, largest first. Two rows mean the
+  vectors are being replaced; the page shows both.
+- `search_indexes`: `type` is `search` (Atlas Search) or `vectorSearch` (Atlas Vector
+  Search); `status` is Atlas's own word (`READY`, `PENDING`, `BUILDING`, `FAILED`, ...).
+- `time_series`: the time-series collections behind forecasts and the drift aggregation.
+- `audit_entries`: the length of the hash-chained audit log, all kitchens.
+- `change_stream_collections`: the collections the live event stream (`/events`) watches.
+- The gateway keeps the answer for a minute. Never a 404 for a kitchen the session may read.
+- Where it shows: the About page (#1383, #1292).
 
 ### Standing-order drift
 
