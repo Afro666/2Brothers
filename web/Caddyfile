@@ -51,6 +51,16 @@
 				events 10
 				window 1m
 			}
+			# A shelf photo runs the paid vision model (#373): the same cap as a proposal.
+			zone shelf_photos {
+				match {
+					method POST
+					path_regexp ^/v1/kitchens/[^/]+/stock/photo$
+				}
+				key {remote_host}
+				events 10
+				window 1m
+			}
 			zone writes {
 				match {
 					method POST PUT PATCH DELETE

@@ -51,6 +51,29 @@ export interface StockCount {
   onHand: number | null;
 }
 
+/** One product Nemotron saw on a shelf photo (docs/contract.md, "Count from a shelf photo"). */
+export interface ShelfPhotoRow {
+  kind: "COUNTED" | "PLEASE_COUNT" | "UNMATCHED";
+  /** null when the label fits no product of the kitchen (UNMATCHED). */
+  productId: string | null;
+  productName: string | null;
+  /** The text the model read on the pack. */
+  label: string;
+  confidence: "high" | "medium" | "low";
+  /** Packs counted, and the count in `unit` (packs x pack size). null unless the row is COUNTED: unknown, never zero. */
+  packs: number | null;
+  packSize: number | null;
+  count: number | null;
+  unit: string | null;
+}
+
+export interface ShelfPhotoRead {
+  /** The model that read the photo: `nemotron-3.5-super-vl`. */
+  model: string;
+  durationMs: number;
+  rows: ShelfPhotoRow[];
+}
+
 export type ProductTemperature = "ambient" | "chilled" | "frozen";
 
 export interface ProductSearchFilters {
@@ -163,6 +186,11 @@ export interface Api {
   saveMenuPlan(week: string, entries: Draft<MenuPlanEntry>[]): Promise<MenuPlanEntry[]>;
   getStock(): Promise<StockItem[]>;
   submitStockCount(counts: StockCount[], actor: AuditActor): Promise<StockItem[]>;
+  /**
+   * Nemotron 3.5 Super VL reads a shelf photo (JPEG or PNG) into counts to confirm. It saves
+   * nothing: the person checks the numbers and `submitStockCount` stores them.
+   */
+  readShelfPhoto(photo: Blob, actor: AuditActor): Promise<ShelfPhotoRead>;
   /** The kitchen's need per product and day, `from` and `to` inclusive (`YYYY-MM-DD`). */
   getDemand(from: string, to: string): Promise<DemandLine[]>;
   /**
