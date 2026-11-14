@@ -42,3 +42,20 @@ def test_seed_after_a_check_says_the_coffee_is_left_out(monkeypatch):
     out = seed(gw, today=TODAY, kitchen_id="hotel", key="late")
     assert not out["has_coffee"]
     assert out["excluded"] == [{"product_id": COFFEE, "reason": "BLOCKED_BY_RECALL"}]
+
+
+class Valio:
+    """Monday's cut-off has passed; Tuesday is open."""
+    def availability(self, products, day):
+        passed = day == "2026-11-16"
+        return {"products": [{"productId": COFFEE, "cutoff_passed": passed,
+                              "scheduleLines": [{"availableDate": day, "availableAmount": 50}]}]}
+
+
+class Gw:
+    valio = Valio()
+
+
+def test_open_day_skips_a_day_whose_cut_off_has_passed():
+    from demo.recall_demo import open_day
+    assert open_day(Gw(), TODAY) == date(2026, 11, 17)
