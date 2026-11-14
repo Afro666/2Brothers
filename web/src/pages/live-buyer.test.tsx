@@ -219,6 +219,37 @@ describe("live Buyer request page", () => {
     expect(screen.queryByRole("link", { name: "Open live approval inbox" })).toBeNull();
   });
 
+  it("shows a request the allergen rule refused as one plain sentence, with the products folded once", async () => {
+    const message =
+      'This kitchen excludes peanuts, so "peanut butter" cannot be ordered: every best match contains peanuts. No other kind of product is proposed in its place.';
+    const products = [
+      "100001 left out: ALLERGEN_RULE: the kitchen excludes AN, AP, AS, SA, SC, ST",
+      "100002 left out: ALLERGEN_RULE: the kitchen excludes AN, AP, AS, SA, SC, ST",
+    ];
+    const refused = {
+      ...rejected,
+      request: { made_by: "parser", refusal: { code: "ALLERGEN_RULE", allergens: ["peanuts"], message } },
+      decision_summary: {
+        asked: 'Asked: "15 kg peanut butter".',
+        chosen: [],
+        left_out: products,
+        text: ['Asked: "15 kg peanut butter".', "Chosen: nothing.", ...products].join("\n"),
+      },
+      mandate: { verdict: "REFUSED", reason_codes: ["ALLERGEN_RULE"], reasons: [message, ...products] },
+    };
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify(refused)));
+    await fill();
+    const blocked = await screen.findByRole("status", { name: "Nothing can be ordered" });
+    expect(within(blocked).getByText(message)).toBeVisible();
+    expect(screen.getByText("Refused by the kitchen’s allergen rule")).toBeVisible();
+    expect(screen.queryByText(/fallback parser/)).toBeNull();
+    const folded = within(blocked).getByText("Products that were left out").closest("details");
+    expect(folded).not.toHaveAttribute("open");
+    for (const line of products) expect(screen.getAllByText(line, { exact: false })).toHaveLength(1);
+    expect(screen.queryByRole("region", { name: "Why this basket" })).toBeNull();
+    expect(screen.getByRole("region", { name: "What the guards said" })).toHaveTextContent("Refused");
+  });
+
   it.each([
     ["READY", []],
     ["REJECTED", ready.lines],

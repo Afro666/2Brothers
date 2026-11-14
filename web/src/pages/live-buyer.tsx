@@ -17,7 +17,7 @@ interface Proposal {
   expected_total: string;
   total_ex_vat: string;
   buyer_model?: string;
-  request?: { made_by?: string };
+  request?: { made_by?: string; refusal?: { code?: string; allergens?: string[]; message?: string } };
   decision_summary?: { asked?: string; searched?: string; chosen?: string[]; left_out?: string[]; text?: string };
   mandate?: { verdict?: string; reasons?: string[] };
   lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
@@ -93,7 +93,12 @@ function productNames(row: Proposal) {
   return names;
 }
 
+/** The plain sentence of a request the kitchen's allergen rule refused; undefined when it is not one. */
+const refusal = (row: Proposal) =>
+  row.request?.refusal ? (text(row.request.refusal.message) ?? text(row.mandate?.reasons?.[0]) ?? "") : undefined;
+
 function proposedBy(row: Proposal) {
+  if (refusal(row) !== undefined) return "Refused by the kitchen’s allergen rule";
   if (row.status === "REJECTED" && row.request?.made_by === "parser")
     return "Made by the fallback parser because the Buyer agent was not available";
   const model = text(row.buyer_model);
@@ -173,8 +178,45 @@ function Decision({ row }: { row: Proposal }) {
   );
 }
 
+function Refusal({ row, message }: { row: Proposal; message: string }) {
+  // The per-product lines are shown once, folded: the plain sentence is what a person reads.
+  const leftOut = texts(row.decision_summary?.left_out);
+  const products = leftOut?.length ? leftOut : (texts(row.mandate?.reasons) ?? []).slice(1);
+  return (
+    <>
+      <section className="hatch space-y-3 break-words" role="status" aria-label="Nothing can be ordered">
+        <h2 className="label-caps">Nothing can be ordered</h2>
+        <p className="max-w-[68ch] text-lg font-semibold leading-7">
+          {message || <span className="unknown-value">unknown</span>}
+        </p>
+        {products.length ? (
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium">Products that were left out</summary>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {products.map((reason, index) => (
+                <li key={index}>{reason}</li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </section>
+      <section className="space-y-2" aria-label="What the guards said">
+        <h2 className="label-caps">What the guards said</h2>
+        <p className="text-sm">
+          Verdict:{" "}
+          <Badge variant="destructive" className="stamp rounded-sm border-2 border-danger bg-transparent text-danger">Refused</Badge>
+        </p>
+        <p className="text-sm">The kitchen’s allergen rule refused this request before any agent ran.</p>
+      </section>
+      <p className="border-t border-dashed border-input pt-3 text-sm">No order has been placed.</p>
+    </>
+  );
+}
+
 function Rejection({ row }: { row: Proposal }) {
   const leftOut = texts(row.decision_summary?.left_out);
+  const refused = refusal(row);
+  if (refused !== undefined) return <Refusal row={row} message={refused} />;
   return (
     <>
       <section className="hatch space-y-3 break-words" role="status" aria-label="Nothing can be ordered">
