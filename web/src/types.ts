@@ -186,6 +186,8 @@ export interface Order {
   inclVat?: number | null;
   /** Names of the lines whose VAT rate is unknown (`vat_unknown`). */
   vatUnknown?: string[];
+  /** The gateway's uncovered `shortfall` and its `measure`; null = no shortfall or not sent. */
+  shortfall?: { amount: number; unit: string } | null;
   /** null = the supplier's delivery terms are not known. */
   mov: MovState | null;
   /** The supplier's own reference after a person resolves an unknown send. */

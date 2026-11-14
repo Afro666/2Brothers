@@ -241,6 +241,7 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
   const request = proposal ? object(proposal.request, "a proposal's request") : null;
   const deliveryDate = request ? text(request.requested_date, "requested_date") : null;
   if (!Array.isArray(source.lines)) invalid("order lines");
+  const shortfall = decimal(source.shortfall, "shortfall");
   // #1630: the order answer carries its own totals; the proposal only fills what it does not send.
   const own = (key: string): unknown => (placed && key in placed ? placed[key] : proposal?.[key]);
   return {
@@ -256,6 +257,10 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     // The approve figure; the screen shows `inclVat` (or "unknown") as incl VAT (#1630).
     totalInclVat: mapMoney((placed ?? source).expected_total, "expected_total"),
     ...vatTotals(placed && "total_incl_vat" in placed ? placed : proposal, source.lines),
+    shortfall:
+      shortfall !== null && shortfall > 0 && typeof source.measure === "string" && source.measure
+        ? { amount: shortfall, unit: source.measure }
+        : null,
     mov: proposal ? mapMov(proposal) : null,
     supplierOrderRef: placed ? resolutionRecord(placed.resolution)?.supplierOrderRef ?? null : null,
     ...(placed ? { receipt: mapReceipt(placed.receipt) } : {}),

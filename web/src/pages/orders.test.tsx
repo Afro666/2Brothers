@@ -53,14 +53,14 @@ describe("orders pages", () => {
     cleanup();
 
     renderApp("/orders", api);
-    const row = await screen.findByRole("link", { name: /ORD-1047/ });
+    const row = (await screen.findByText("Call Valio Aimo to confirm")).closest("a")!;
     expect(within(row).getByText("Call Valio Aimo to confirm")).toBeVisible();
   });
 
   it("badges the order history row without replacing its gateway status", async () => {
     renderApp("/orders");
 
-    const row = await screen.findByRole("link", { name: /ORD-1047/ });
+    const row = (await screen.findByText("Call Töölö Bakery to confirm")).closest("a")!;
     expect(within(row).getByText("Arla 1 L lactose free fat free UHT milk drink × 51 pieces")).toBeVisible();
     expect(within(row).getByText("Call Töölö Bakery to confirm")).toBeVisible();
     expect(within(row).getByText("Placed", { selector: "[data-status='PLACED']" })).toBeVisible();
@@ -97,7 +97,7 @@ describe("orders pages", () => {
     const user = userEvent.setup();
     renderApp("/orders");
 
-    await user.click(await screen.findByRole("link", { name: /ORD-1042/ }));
+    await user.click((await screen.findByText(/Asked: “1,000 L/)).closest("a")!);
     expect(
       await screen.findByRole("heading", { level: 1, name: "Arla 1 L lactose free fat free UHT milk drink × 51 pieces" }),
     ).toBeInTheDocument();
@@ -106,6 +106,35 @@ describe("orders pages", () => {
     await user.click(screen.getByRole("tab", { name: "History" }));
     expect(await screen.findByText("ORD-1042 placed for Mon 16 Nov")).toBeInTheDocument();
     expect(screen.queryByText("Asked the buyer to approve ORD-1043")).not.toBeInTheDocument();
+  });
+
+  it("explains an unknown VAT rate by product and keeps the known ex-VAT total", async () => {
+    const api = createMockApi();
+    const listOrders = api.listOrders;
+    api.listOrders = async () => [
+      {
+        ...(await listOrders())[0]!,
+        inclVat: null,
+        vatUnknown: ["CHERRY TOMATO 4KG LOOSE FINLAND"],
+      },
+    ];
+    renderApp("/orders", api);
+
+    const row = (await screen.findByText(/Arla 1 L lactose free/)).closest("li")!;
+    expect(within(row).getByText(/incl VAT unknown: no VAT rate for CHERRY TOMATO 4KG LOOSE FINLAND/)).toBeVisible();
+    expect(within(row).getByText(/€131\.07 ex VAT/)).toBeVisible();
+    expect(within(row).queryByText(/unknown \(CHERRY/)).not.toBeInTheDocument();
+  });
+
+  it("says when an order is a partial fill and leaves raw ids on the detail page", async () => {
+    const api = createMockApi();
+    const listOrders = api.listOrders;
+    api.listOrders = async () => [(await listOrders()).find((order) => order.id === "ORD-1042")!];
+    renderApp("/orders", api);
+
+    const row = (await screen.findByText(/Arla 1 L lactose free/)).closest("li")!;
+    expect(within(row).getByText("Partial fill: 949 l of the request cannot be covered for this date.")).toBeVisible();
+    expect(within(row).queryByText("ORD-1042")).not.toBeInTheDocument();
   });
 
   it("shows the signed receipt of a placed order and copies the JWS", async () => {

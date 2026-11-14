@@ -14,10 +14,10 @@ export function inclVatOf(totals: VatTotals): number | null {
 
 type Translate = (text: string, vars?: Record<string, string | number>) => string;
 
-/** "€91.20 incl VAT", or "incl VAT: unknown (Oat drink)" when a rate is unknown: never the approve figure as incl VAT. */
+/** "€91.20 incl VAT", or the missing rate's product names when a rate is unknown. */
 export function inclVatText(totals: VatTotals, t: Translate, formatEur: (value: number | null) => string): string {
   const inclVat = inclVatOf(totals);
   if (inclVat !== null) return t("{amount} incl VAT", { amount: formatEur(inclVat) });
   const names = (totals.vatUnknown ?? []).join(", ");
-  return names ? t("incl VAT: unknown ({names})", { names }) : t("incl VAT: unknown");
+  return names ? t("incl VAT unknown: no VAT rate for {names}", { names }) : t("incl VAT: unknown");
 }
