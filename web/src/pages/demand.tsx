@@ -398,6 +398,7 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
   const directGroups =
     filter === "SHORT" ? shortGroups : filter === "UNKNOWN" ? unknownGroups : filter === "ALL" ? [...shortGroups, ...unknownGroups] : [];
   const showCovered = filter === "ALL" || filter === "COVERED";
+  const filterIsEmpty = directGroups.length === 0 && !(showCovered && coveredGroups.length > 0);
   const options = [
     { id: "ALL" as const, label: t("All ({n})", { n: formatNumber(groups.length) }) },
     { id: "SHORT" as const, label: t("Short ({n})", { n: formatNumber(shortGroups.length) }) },
@@ -470,6 +471,15 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
                   <TableHead className="text-right">{t("Buy")}</TableHead>
                 </TableRow>
               </TableHeader>
+              {filterIsEmpty ? (
+                <TableBody>
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-4 text-center text-muted-foreground">
+                      {t("No products in this filter")}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              ) : null}
               {directGroups.map((group) => (
                 <ProductSection
                   key={group.productId}
@@ -509,6 +519,9 @@ function DemandGroups({ groups }: { groups: ProductGroup[] }) {
             </Table>
           </div>
           <ul className="divide-y md:hidden">
+            {filterIsEmpty ? (
+              <li className="py-4 text-center text-sm text-muted-foreground">{t("No products in this filter")}</li>
+            ) : null}
             {directGroups.map((group) => (
               <MobileGroup
                 key={group.productId}
