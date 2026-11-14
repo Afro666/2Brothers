@@ -51,6 +51,7 @@ describe("mapApproval", () => {
         },
       ],
       suppliersToConfirm: [],
+      blockDeliveryFees: [],
       cutoffs: [{ closingTime: null, supplierName: null }],
       status: "PENDING",
       options: [],
