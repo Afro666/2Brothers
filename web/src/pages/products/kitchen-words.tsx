@@ -224,7 +224,7 @@ export function KitchenWords() {
                               )
                             }
                           >
-                            <ProductThumb en={s.productName} size="sm" className="size-6 text-base" />
+                            <ProductThumb en={s.productName} size="sm" className="size-6" />
                             {s.productName}
                           </Button>
                         ))}

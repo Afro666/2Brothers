@@ -39,7 +39,7 @@ export function RecipeNutritionLine({ recipe }: { recipe: Recipe }) {
       <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         <span className="flex shrink-0 gap-0.5">
           {nutrition.unknown.map((product) => (
-            <ProductThumb key={product.productId} en={product.productName} size="sm" className="size-5 text-xs" />
+            <ProductThumb key={product.productId} en={product.productName} size="sm" className="size-5" />
           ))}
         </span>
         <span className="min-w-0 break-words">
