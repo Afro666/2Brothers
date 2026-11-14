@@ -24,6 +24,7 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from gateway.decision import decision_summary
+from gateway.partial_fill import partial_out
 from store import audit, orders, recalls
 from store.audit import canonical
 from store.history import current_stock
@@ -185,6 +186,7 @@ class Gateway:
                 "lines": [{"product_id": ln.product_id, "quantity": f"{ln.quantity.normalize():f}",
                            "unit": ln.unit, "total": _money(ln.total), "why": ln.why}
                           for ln in plan.alternative.lines]},
+            "partial_fill": partial_out(plan.partial),   # confirmed stock now, a plan for the rest (#288)
         }
 
     def _quote(self, kitchen_id: str, request: dict) -> dict:
@@ -353,6 +355,10 @@ class Gateway:
                     self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
                         'status': 'COMMITTING', 'approving_key': key},
                         {'$set': {'status': state}, '$unset': {'approving_key': ''}})
+                elif attempt.get('proposal_id') == proposal_id and attempt['outcome'] is None:
+                    # The attempt never ended: the send result is unknown. The proposal stays
+                    # held; a person resolves the order (gateway/resolve.py, #291).
+                    orders.set_outcome(self.db, attempt['order_id'], outcome='UNCONFIRMED', status=None)
             except Exception:
                 pass  # Cannot prove absence while the database is unavailable.
             raise
@@ -423,10 +429,19 @@ class Gateway:
             raise GatewayError(404, "PROPOSAL_NOT_FOUND", "no such proposal")
         if doc["status"] != "REJECTED":
             raise GatewayError(409, "NOT_PENDING", f"proposal is {doc['status']}")
-        audit.append_event(self.db, {'event_id': 'proposal-rejected:' + _hash([kitchen_id, proposal_id]),
+        event_id = 'proposal-rejected:' + _hash([kitchen_id, proposal_id])
+        first_time = self.db.audit_log.find_one({'event.event_id': event_id}, {'_id': 1}) is None
+        audit.append_event(self.db, {'event_id': event_id,
             'kind': 'proposal_rejected', 'actor': doc.get('rejected_by', human),
             'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')},
             {'kitchen_id': kitchen_id, 'at': doc.get('rejected_at', self.now().isoformat())})
+        if first_time:   # this path writes its audit event itself, so it also tells the webhooks (#277)
+            try:
+                from gateway import webhooks
+                webhooks.dispatch(self.db, kitchen_id, 'proposal_rejected',
+                                  {'proposal_id': proposal_id, 'reason': doc.get('reject_reason', '')})
+            except Exception:
+                pass
         return {"proposal_id": proposal_id, "status": "REJECTED"}
 
     def dismiss_recall(self, kitchen_id: str, event_id: str, body: dict, *, human: str | None) -> dict:

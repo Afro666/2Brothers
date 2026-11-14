@@ -10,6 +10,10 @@ catalog rows, Valio offers and kitchen stock; the Buyer agent only reads its out
   "1,000 L by Monday". Excludes passed cut-offs, sales blocks and late dates; confirmed
   stock first, then the cheapest unknown-stock offer (flagged); a shortfall is reported.
   Gives a cheaper all-unknown alternative when there is one.
+- `partial.py`: `partial_fill(need, measure, offers, date)`, also on `RequestPlan.partial`: when
+  confirmed stock does not cover the need, order the confirmed quantity now and state a plan
+  for the rest: the earliest later date with confirmed stock (`LATER`), else hold it until the
+  supplier confirms stock (`HOLD`). Each part has its own `why`; unknown stock never counts.
 - `quantity.py`: `replenish(item, params)`: periodic order-up-to (lead time + review days +
   safety stock) against position (on hand + on order). An empty stock count is sized as if
   empty and marked urgent. `cover_limit` checks extra quantity against the cover ceiling.
