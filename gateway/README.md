@@ -370,6 +370,13 @@ The public key is at `/.well-known/jwks.json` (no token). Check one offer:
 
     python -m gateway.verify_offer --base-url https://<host>/gateway --offer offer.json
 
+Every placed order carries `receipt`, signed with the same key: the order, its offer hash,
+lines, total, who approved, the time and the supplier outcome (`NOT_SENT`: Valio has no
+order endpoint, so the receipt never says a supplier accepted). Null when signing failed
+and for older orders. Check one order answer:
+
+    python -m gateway.verify_offer --base-url https://<host>/gateway --receipt order.json
+
 A changed line, price or total, another key or an expired offer fails (exit code 1). The
 approved order stores the `offer_hash`; `place_order` for any other offer is 409
 `APPROVAL_MISMATCH`. The key comes from `GATEWAY_SIGNING_KEY` (base64 of 32 bytes) or is

@@ -5,6 +5,8 @@
   unknown), as-of time, valid-until, total, and `offer_hash` over the exact lines and total.
 - The public key is at `/.well-known/jwks.json`. `python -m gateway.verify_offer` checks one.
 - The approval stores the `offer_hash` it approved; placement refuses any other offer.
+- Every placed order gets a signed receipt (same key): what was ordered, on which offer,
+  who approved, when, and what the gateway knows about the supplier.
 
 Key: `GATEWAY_SIGNING_KEY` (base64 of a 32-byte Ed25519 seed) from the server .env. Without
 it, a key is created once and kept in the database, so offers still verify after a restart.
@@ -23,6 +25,10 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 ISSUER = "trusted-kitchen-buyer"
+RECEIPT_TYPE = "order_receipt"
+# Valio's API has no order endpoint: the gateway records the order and sends nothing.
+NOT_SENT_NOTE = ("Recorded by the gateway. Nothing was sent to the supplier: its API has no order "
+                 "endpoint. The supplier has not accepted this order.")
 _cache: dict[str, Ed25519PrivateKey] = {}
 
 
@@ -103,8 +109,35 @@ def sign_offer(db, *, offer_id: str, kitchen_id: str, simulation: dict, requeste
     return token, digest
 
 
+def sign_receipt(db, *, order_id: str, kitchen_id: str, offer_id: str, offer_hash: str | None,
+                 expected_total: str, lines: list[dict], approved_by: str,
+                 supplier_must_confirm: list[str], at: datetime) -> str:
+    """Compact JWS for one placed order. It says what a person approved and that the gateway
+    recorded it; it never says that a supplier accepted it. No `exp`: a receipt does not expire."""
+    claims = {
+        "iss": ISSUER, "type": RECEIPT_TYPE, "sub": order_id, "kitchen_id": kitchen_id,
+        "offer_id": offer_id, "offer_hash": offer_hash, "iat": int(at.timestamp()),
+        "currency": "EUR", "expected_total": expected_total,
+        "lines": [{"product_id": ln.get("product_id"), "quantity": str(ln.get("quantity")), "unit": ln.get("unit")}
+                  for ln in lines],
+        "approved_by": approved_by,
+        "supplier_outcome": "NOT_SENT", "supplier_note": NOT_SENT_NOTE,
+        "supplier_must_confirm": list(supplier_must_confirm),
+    }
+    return jwt.encode(claims, _private(db), algorithm="EdDSA", headers={"kid": kid(db)})
+
+
+def receipt_matches(order: dict, claims: dict) -> bool:
+    """The order shown is the order signed: same id, total and lines, in any number spelling."""
+    def lines(rows: list | None) -> list:
+        return [[ln.get("product_id"), _num(ln.get("quantity")), ln.get("unit")] for ln in rows or []]
+    return (order.get("order_id") == claims.get("sub")
+            and _num(order.get("expected_total")) == _num(claims.get("expected_total"))
+            and lines(order.get("lines")) == lines(claims.get("lines")))
+
+
 def verify(token: str, keys: dict, *, check_expiry: bool = True) -> dict:
-    """Claims of a valid offer signature; raises jwt.InvalidTokenError otherwise."""
+    """Claims of a valid offer or receipt signature; raises jwt.InvalidTokenError otherwise."""
     header = jwt.get_unverified_header(token)
     key = next((k for k in keys.get("keys", []) if k.get("kid") == header.get("kid")), None)
     if key is None:
