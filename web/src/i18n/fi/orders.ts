@@ -1,4 +1,7 @@
 export default {
+  "Examples": "Esimerkkejä",
+  "100 L cream for Thursday": "100 litraa kermaa torstaiksi",
+  "400 pcs single-serve fruit yoghurt for Friday": "400 kpl annoshedelmäjogurtteja perjantaiksi",
   " (later than asked)": " (myöhemmin kuin pyydettiin)",
   " (needs approval)": " (vaatii hyväksynnän)",
   " (passed)": " (umpeutunut)",
