@@ -14,6 +14,8 @@ import type { OfferTier, ProposalOption } from "@/types";
 export const CHOOSE_TIMEOUT_MS = 5000;
 
 const TIER_ORDER: OfferTier[] = ["good", "better", "best"];
+/** Basket thumbnails shown before a "+N" chip, so a large basket does not squeeze the title on a phone. */
+const MAX_THUMBS = 3;
 const BADGE = "label-caps rounded-sm border border-input px-2 py-0.5 whitespace-nowrap";
 export const CHOOSE_ERRORS: Record<string, string> = {
   STOCK_UNKNOWN: "Stock is not confirmed for this option. The current basket is unchanged; wait for the supplier or choose another option. Nothing was approved.",
@@ -203,9 +205,18 @@ export function OptionCompare({
                   )}
                 >
                   <span className="flex shrink-0 -space-x-2" data-testid="option-thumbs">
-                    {option.lines.map((line, n) => (
+                    {option.lines.slice(0, MAX_THUMBS).map((line, n) => (
                       <ProductThumb key={`${line.productId}-${n}`} en={line.productName} size="sm" className="ring-2 ring-background" />
                     ))}
+                    {option.lines.length > MAX_THUMBS ? (
+                      <span
+                        aria-hidden
+                        data-testid="option-thumbs-more"
+                        className="inline-flex size-8 shrink-0 select-none items-center justify-center rounded-lg bg-muted text-xs font-medium text-muted-foreground ring-2 ring-background"
+                      >
+                        +{option.lines.length - MAX_THUMBS}
+                      </span>
+                    ) : null}
                   </span>
                   <span id={titleId} className="min-w-0 flex-[1_1_16rem] break-words font-medium">
                     {t("Option {letter}:", { letter })}{" "}

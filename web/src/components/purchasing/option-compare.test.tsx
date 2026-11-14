@@ -176,6 +176,24 @@ describe("OptionCompare", () => {
     expect(within(row("B")).getByRole("button", { name: /^Choose option B/ })).toBeVisible();
   });
 
+  it("caps the basket thumbnails at three plus a +N chip", () => {
+    const big: ProposalOption = {
+      ...optionA,
+      lines: Array.from({ length: 6 }, (_, n) => ({ ...optionA.lines[0], productId: `p-${n}` })),
+    };
+    render(<OptionCompare options={[big]} onChoose={vi.fn()} onApprove={vi.fn()} />);
+    const thumbs = within(row("A")).getByTestId("option-thumbs");
+    expect(thumbs.children).toHaveLength(4);
+    const more = within(thumbs).getByTestId("option-thumbs-more");
+    expect(more).toHaveTextContent(/^\+3$/);
+    expect(more).toHaveAttribute("aria-hidden");
+  });
+
+  it("shows no +N chip for a basket of three or fewer lines", () => {
+    render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
+    expect(screen.queryByTestId("option-thumbs-more")).toBeNull();
+  });
+
   it("shows unknown values as unknown, never as zero and never as recommended", () => {
     const unknown: ProposalOption = {
       ...optionA,
