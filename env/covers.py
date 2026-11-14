@@ -1,10 +1,14 @@
 """Independent covers models. Recipe explosion stays in the caller."""
+import importlib.util
+import logging
+
 from env.history import Forecaster
 from signals.covers import CoverSignals
 
 
 class Current(Forecaster):
     name = "current"
+    requires = ()
 
     def __init__(self, kitchen, signals=None):
         super().__init__(kitchen)
@@ -17,6 +21,7 @@ class RidgeCovers:
     A 21-day cold start uses the current model; closed days remain zero.
     """
     name = "ridge"
+    requires = ("numpy", "holidays")      # holidays: the calendar features (signals/covers.py)
 
     def __init__(self, kitchen, signals=None):
         self.kitchen = kitchen
@@ -62,6 +67,7 @@ class RidgeCovers:
 class ETSCovers(RidgeCovers):
     """Statsmodels additive level + weekly seasonality; refit at each origin."""
     name = "ets"
+    requires = ("numpy", "statsmodels")
 
     def __call__(self, day):
         if self.origin is not None and day <= self.origin:
@@ -96,5 +102,22 @@ MODELS = {m.name: m for m in (Current, RidgeCovers, ETSCovers)}
 SELECTED = {kind: "current" for kind in ("school", "hospital", "hotel", "restaurant")}
 
 
+log = logging.getLogger(__name__)
+
+
+def missing_deps(model) -> list[str]:
+    """The packages a covers model needs that this install lacks (the `covers` extra)."""
+    return [name for name in model.requires if importlib.util.find_spec(name) is None]
+
+
 def demo_forecaster(kitchen, signals=None):
-    return MODELS[SELECTED[kitchen.type.name]](kitchen, signals)
+    """The SELECTED model for the kitchen type. The demo/deploy install has only the base
+    deps (#1039): when the model's packages are missing, use `current` and say so, so a
+    future backtest result can never crash demo seeding halfway."""
+    model = MODELS[SELECTED[kitchen.type.name]]
+    missing = missing_deps(model)
+    if missing:
+        log.warning("covers model %r needs %s (pip install '.[covers]'); using 'current' for %s",
+                    model.name, ", ".join(missing), kitchen.type.name)
+        model = Current
+    return model(kitchen, signals)
