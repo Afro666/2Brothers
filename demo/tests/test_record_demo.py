@@ -58,4 +58,4 @@ def test_approve_is_scoped_to_the_card_of_the_request_it_sent():
     with pytest.raises(RuntimeError, match="200 L milk"):
         decide(_Fake(log))     # no card for this request: nothing is clicked
     assert log == [("locator", '[data-slot="card"]'), ("text", "200 L milk", True), ("filter",),
-                   ("role", "button", "Approve")]
+                   ("role", "button", "Choose option"), ("role", "button", "Approve")]
