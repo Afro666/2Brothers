@@ -92,4 +92,9 @@ export default {
   "One line is already changed. Restore it first.": "Yhtä riviä on jo muutettu. Palauta se ensin.",
   "The audit log has no line to change yet.": "Toimintolokissa ei vielä ole muutettavaa riviä.",
   "The break is in another kitchen's entry (the demo), not in yours": "Katkos on toisen keittiön lokimerkinnässä (demo), ei omassasi",
+  "Heart Symbol": "Sydänmerkki",
+  "Hyvää Suomesta (Produced in Finland)": "Hyvää Suomesta (Tuotettu Suomessa)",
+  "Test row": "Testirivi",
+  "not checked": "ei tarkistettu",
+  "Not checked: {count} labels with no public register": "Ei tarkistettu: {count} merkintää ilman julkista rekisteriä",
 } satisfies Record<string, string>;
