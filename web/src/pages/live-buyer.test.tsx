@@ -171,7 +171,10 @@ describe("live Buyer request page", () => {
     const guards = screen.getByRole("region", { name: "What the guards said" });
     expect(within(guards).getByText("Needs a person’s approval")).toBeVisible();
     expect(within(guards).getByRole("listitem")).toHaveTextContent(shortfall);
-    expect(screen.getByText("Proposed by the Buyer agent (Nemotron 3.5 Super VL)")).toBeVisible();
+    const proposedBy = screen.getByText("Proposed by the Buyer agent (Nemotron 3.5 Super VL)");
+    expect(proposedBy).toBeVisible();
+    // Nemotron made it: the NVIDIA mark sits next to the words.
+    expect(within(proposedBy).getByTestId("nemotron-mark")).toBeInTheDocument();
     expect(screen.getByText(`51 ST · ${name} (462775)`)).toBeVisible();
   });
 
@@ -215,6 +218,8 @@ describe("live Buyer request page", () => {
     await fill();
     expect(await screen.findByText(/Proposed by the gateway’s request parser/)).toBeVisible();
     expect(screen.getByText("No reasons given.")).toBeVisible();
+    // The parser answered, not the model: no NVIDIA mark anywhere.
+    expect(screen.queryByTestId("nemotron-mark")).not.toBeInTheDocument();
   });
 
   it("says plainly when the parser answered because the Buyer model was not answering", async () => {

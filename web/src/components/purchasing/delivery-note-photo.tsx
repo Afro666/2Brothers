@@ -11,6 +11,7 @@ import { useT } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import { downscalePhoto } from "@/lib/shelf-photo";
 import type { Order, Product } from "@/types";
+import { NemotronMark } from "@/components/nemotron-mark";
 
 export function DeliveryNotePhoto({ order }: { order: Order }) {
   const t = useT();
@@ -111,7 +112,7 @@ export function DeliveryNotePhoto({ order }: { order: Order }) {
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="space-y-1">
         <h2 id="delivery-note-title" className="text-base font-semibold">{t("Photo of the delivery note")}</h2>
-        <p className="max-w-prose text-sm text-muted-foreground">{t("Nemotron reads the note and compares it with this order. Check every quantity before updating stock.")}</p>
+        <p className="max-w-prose text-sm text-muted-foreground"><NemotronMark />{t("Nemotron reads the note and compares it with this order. Check every quantity before updating stock.")}</p>
       </div>
       <Button type="button" disabled={!allowed || reading} onClick={() => input.current?.click()}>{t("Choose a delivery note photo")}</Button>
       <input ref={input} type="file" accept="image/jpeg,image/png" className="sr-only" aria-label={t("Choose a delivery note photo")}

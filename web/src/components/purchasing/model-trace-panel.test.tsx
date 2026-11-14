@@ -36,6 +36,8 @@ describe("ModelTracePanel", () => {
     show(BUYER);
     const summary = screen.getByText("4 model calls, 6.2 s, thinking off");
     expect(screen.getByText("What Nemotron did")).toBeVisible();
+    // The model did the work: the NVIDIA mark sits next to the words.
+    expect(screen.getByTestId("nemotron-mark")).toBeInTheDocument();
     const details = summary.closest("details")!;
     expect(details.open).toBe(false);
     await userEvent.click(summary);
@@ -57,6 +59,8 @@ describe("ModelTracePanel", () => {
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
     expect(screen.queryByText(/model calls?,/)).not.toBeInTheDocument();
     expect(screen.getByText("Quantities and prices: the engine. Approval: you.")).toBeVisible();
+    // No model ran: no NVIDIA mark.
+    expect(screen.queryByTestId("nemotron-mark")).not.toBeInTheDocument();
   });
 
   it("shows a seller rule pick as a rule, and a policy rejection by its code", async () => {
@@ -65,6 +69,7 @@ describe("ModelTracePanel", () => {
       steps: [{ by: "code", attempt: 1, tool: "shortlist", count: 5 }, { by: "code", attempt: 1, tool: "pick", code: "PICKED" }],
     });
     expect(screen.getByText("Picked by rule. No model ran.")).toBeVisible();
+    expect(screen.queryByTestId("nemotron-mark")).not.toBeInTheDocument();
   });
 
   it("names one call in the singular, thinking on, a restart and cut steps", async () => {

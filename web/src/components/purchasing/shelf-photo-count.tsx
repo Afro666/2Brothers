@@ -9,6 +9,7 @@ import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { downscalePhoto, suggestedCounts } from "@/lib/shelf-photo";
 import type { StockItem } from "@/types";
+import { NemotronMark } from "@/components/nemotron-mark";
 
 /** The name people know; the gateway's `model` field is the id (`nemotron-3.5-super-vl`). */
 export const SHELF_MODEL_NAME = "Nemotron 3.5 Super VL";
@@ -19,7 +20,7 @@ export function PhotoMark() {
   return (
     <p className="mt-1 flex w-56 max-w-full items-start gap-1 text-xs font-medium whitespace-normal text-warning" data-testid="photo-mark">
       <ScanEye className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-      <span>{t("read from the photo by {model}, check and save", { model: SHELF_MODEL_NAME })}</span>
+      <span><NemotronMark side="after" />{t("read from the photo by {model}, check and save", { model: SHELF_MODEL_NAME })}</span>
     </p>
   );
 }
@@ -144,6 +145,7 @@ export function ShelfPhotoCount({
             {t("Count from a photo")}
           </h2>
           <p className="max-w-prose text-sm text-muted-foreground">
+            <NemotronMark />
             {t("{model} reads a photo of a shelf and fills in the counts it is sure of. You check them, then save.", { model: SHELF_MODEL_NAME })}
           </p>
         </div>
@@ -161,6 +163,7 @@ export function ShelfPhotoCount({
       </div>
       {reading || result ? (
         <p role="status" className="text-sm">
+          <NemotronMark />
           {reading ? t("{model} is reading the photo. This takes a few seconds.", { model: SHELF_MODEL_NAME }) : null}
           {!reading && result ? summary(result.read, result.filled, t) : null}
         </p>

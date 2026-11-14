@@ -5,6 +5,7 @@ import { mapModelTrace } from "@/api/model-trace";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { ChefRequestBox } from "@/components/purchasing/chef-request-box";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
 import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Badge } from "@/components/ui/badge";
@@ -102,20 +103,39 @@ function productNames(row: Proposal) {
 const refusal = (row: Proposal) =>
   row.request?.refusal ? (text(row.request.refusal.message) ?? text(row.mandate?.reasons?.[0]) ?? "") : undefined;
 
-function proposedBy(row: Proposal, t: (text: string, vars?: Record<string, string | number>) => string) {
-  if (refusal(row) !== undefined) return t("Refused by the kitchen’s allergen rule");
+/** Who made the proposal, and whether Nemotron did the work (only then the NVIDIA mark shows). */
+function proposedBy(
+  row: Proposal,
+  t: (text: string, vars?: Record<string, string | number>) => string,
+): { text: string; byNemotron: boolean } {
+  const by = (sentence: string, byNemotron = false) => ({ text: sentence, byNemotron });
+  if (refusal(row) !== undefined) return by(t("Refused by the kitchen’s allergen rule"));
   if (row.request?.made_by === "parser" && row.request?.buyer_down === true)
-    return t("The Buyer model was not answering, so the gateway’s request parser made this proposal");
+    return by(t("The Buyer model was not answering, so the gateway’s request parser made this proposal"));
   if (row.status === "REJECTED" && row.request?.made_by === "parser")
-    return t("Made by the fallback parser because the Buyer agent was not available");
+    return by(t("Made by the fallback parser because the Buyer agent was not available"));
   const model = text(row.buyer_model);
   if (model)
-    return t("Proposed by the Buyer agent ({model})", {
-      model: model === "nemotron-3.5-super-vl" ? "Nemotron 3.5 Super VL" : model,
-    });
+    return by(
+      t("Proposed by the Buyer agent ({model})", {
+        model: model === "nemotron-3.5-super-vl" ? "Nemotron 3.5 Super VL" : model,
+      }),
+      isNemotron(model) && row.request?.made_by !== "parser",
+    );
   // The gateway marks a proposal made by its fallback parser: do not credit the Buyer for it.
-  if (row.request?.made_by === "parser") return t("Proposed by the gateway’s request parser, not the Buyer model");
-  return t("Proposed by the Buyer agent");
+  if (row.request?.made_by === "parser") return by(t("Proposed by the gateway’s request parser, not the Buyer model"));
+  return by(t("Proposed by the Buyer agent"));
+}
+
+function ProposedBy({ row }: { row: Proposal }) {
+  const t = useT();
+  const who = proposedBy(row, t);
+  return (
+    <p className="font-mono text-xs leading-4 text-muted-foreground">
+      {who.text}
+      <NemotronMark when={who.byNemotron} side="after" />
+    </p>
+  );
 }
 
 function Decision({ row }: { row: Proposal }) {
@@ -312,7 +332,7 @@ export function LiveBuyerRequests() {
               <CardTitle className="label-caps leading-4">{t("Buyer decision")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 px-0">
-              <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result, t)}</p>
+              <ProposedBy row={result} />
               <ModelTracePanel trace={mapModelTrace(result.model_trace)} />
               <p className="break-all font-mono text-[11px] text-muted-foreground">{result.proposal_id}</p>
               <Rejection row={result} />
@@ -325,7 +345,7 @@ export function LiveBuyerRequests() {
               <CardTitle className="label-caps leading-4">{t("Proposal ready for human review")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 px-0">
-              <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result, t)}</p>
+              <ProposedBy row={result} />
               <ModelTracePanel trace={mapModelTrace(result.model_trace)} />
               <p className="break-all font-mono text-[11px] text-muted-foreground">{result.proposal_id}</p>
               <p className="text-xl font-bold">

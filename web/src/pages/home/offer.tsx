@@ -12,6 +12,7 @@ import { auditActorForRole, useRole } from "@/lib/role";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import type { SupplierOffer } from "@/types";
+import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
 
 /** Who chose the product, in words a person reads. The value itself comes from the supplier. */
 export function madeByLabel(madeBy: string): string {
@@ -107,6 +108,7 @@ export function SupplierOfferTile({ api }: { api: Api }) {
               possessive: t(supplierName(offer) === "Valio Aimo" ? "Valio's" : "the supplier's"),
               madeBy: t(madeByLabel(offer.madeBy)),
             })}
+            <NemotronMark when={isNemotron(offer.madeBy)} side="after" />
           </figcaption>
         </figure>
         <ModelTracePanel trace={offer.modelTrace} />

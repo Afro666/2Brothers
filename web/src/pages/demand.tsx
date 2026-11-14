@@ -18,6 +18,7 @@ import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
 import { isValidWeek, isoWeekOf, shiftWeek, weekDates, weekRangeLabel } from "@/lib/week";
 import type { BuyingNote, ShortageRisk, SupplierDemandRow } from "@/types";
+import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
 
 /** Worst first: a short week matters more than an unmeasured one. */
 const RISK_ORDER: Record<ShortageRisk, number> = { SHORT: 0, UNKNOWN: 1, AT_RISK: 2, COVERED: 3 };
@@ -133,6 +134,7 @@ function BuyingNoteBox({ note }: { note: BuyingNote }) {
         ))}
       </ul>
       <p className="text-xs text-muted-foreground">
+        <NemotronMark when={isNemotron(model)} />
         {t("Written by {model}. Every number is checked against its row in the table.", { model })}
       </p>
     </section>
