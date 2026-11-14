@@ -29,6 +29,20 @@ class Item:
     safety_stock: float | None = None  # a fixed value overrides the formula
     demand_note: str = ""              # e.g. "stock-out adjusted from 30" (S10)
     demand_codes: tuple[str, ...] = ()
+    standing_order: Decimal | None = None   # in sales units per delivery (S08)
+
+
+DRIFT_TOLERANCE = Decimal("0.10")          # standing order more than 10% off the need: drift
+
+
+def _drift(item: Item, qty: Decimal) -> str | None:
+    """S08: a standing order that no longer matches usage. The engine only flags it;
+    a person changes the standing order."""
+    s = item.standing_order
+    if s is None or s <= 0 or abs(s - qty) <= s * DRIFT_TOLERANCE:
+        return None
+    return (f" Standing order {_fmt(s)} {item.pack.sales_unit} no longer matches usage: "
+            f"this delivery needs {_fmt(qty)}.")
 
 
 @dataclass(frozen=True)
@@ -65,6 +79,8 @@ def replenish(item: Item, params: KitchenParams) -> LinePlan:
     m = item.pack.measure
     numbers = {"daily_demand": d, "safety_stock": round(ss, 2), "order_up_to": round(target, 2),
                "on_hand": item.on_hand, "on_order": item.on_order, "position": position}
+    if item.standing_order is not None:
+        numbers["standing_order"] = item.standing_order
 
     if unknown:
         codes.append("STOCK_COUNT_MISSING")
@@ -73,6 +89,10 @@ def replenish(item: Item, params: KitchenParams) -> LinePlan:
         why = (f"No order now: position {_fmt(position)} {m} (on hand {_fmt(on_hand)} + on order "
                f"{_fmt(item.on_order)}) covers {_fmt(cover)} days of {_fmt(d)} {m}/day + safety "
                f"{_fmt(ss)} = {_fmt(target)} {m}.")
+        drift = _drift(item, Decimal(0))
+        if drift:
+            codes.append("STANDING_ORDER_DRIFT")
+            why += drift
         return LinePlan(item.product_id, Decimal(0), item.pack.sales_unit, tier, tuple(codes), why, numbers)
 
     need = max(target - position, 0.0)
@@ -88,6 +108,10 @@ def replenish(item: Item, params: KitchenParams) -> LinePlan:
              else f"on hand {_fmt(on_hand)} + on order {_fmt(item.on_order)}")
     why = (f"{_fmt(qty)} {item.pack.sales_unit}: {demand} x {_fmt(cover)} days + safety "
            f"{_fmt(ss)} {m}, {stock}.")
+    drift = _drift(item, qty)
+    if drift:
+        codes.append("STANDING_ORDER_DRIFT")
+        why += drift
     return LinePlan(item.product_id, qty, item.pack.sales_unit, tier, tuple(codes), why, numbers)
 
 

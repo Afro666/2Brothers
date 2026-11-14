@@ -12,3 +12,11 @@ export function mapMoney(value: unknown, label = "amount"): number {
   if (!Number.isFinite(parsed)) throw new ApiError("INVALID_RESPONSE", `${label} is not a finite number.`);
   return parsed;
 }
+
+/**
+ * Audit text names products by id ("51 ST of 462775"). People read names, so
+ * each known id becomes its name; an id with no known name stays as it is.
+ */
+export function nameProducts(text: string, names: ReadonlyMap<string, string>): string {
+  return text.replace(/\b\d{6,}\b/g, (id) => names.get(id) ?? id);
+}

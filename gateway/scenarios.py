@@ -30,7 +30,7 @@ from pathlib import Path
 import sys
 from typing import Callable
 
-from engine import Item, KitchenParams, Offer, pack_info, plan_request, replenish, stockout_adjusted
+from engine import Item, KitchenParams, Offer, allergen_codes, pack_info, plan_request, replenish, stockout_adjusted
 from engine.quantity import cover_limit
 from engine.urgency import Urgency
 
@@ -74,10 +74,11 @@ def _row(pid, sales, base, units, lot=0.01):
             "units": [{"unitId": u, "sizeInBaseUnits": s} for u, s in units]}
 
 
-def _offer(pid, name, product, price, cmp, cmp_unit, available, cutoff_passed, measure=None):
+def _offer(pid, name, product, price, cmp, cmp_unit, available, cutoff_passed, measure=None, allergen_data_known=True):
     pack = pack_info(product, price=D(price), comparison_price=D(cmp) if cmp else None,
                      comparison_unit=cmp_unit, measure=measure)
-    return Offer(pid, name, pack, D(price), None if available is None else D(available), cutoff_passed, MON)
+    return Offer(pid, name, pack, D(price), None if available is None else D(available), cutoff_passed, MON,
+                 allergen_data_known=allergen_data_known)
 
 
 def _lines(plan):
@@ -156,7 +157,7 @@ def s01() -> Result:
 def s02() -> Result:
     r = Result("S02", "Partial stock, good-better-best", "engine")
     ph7 = _offer("465138", "PH7 gluten free oat bread", _row("465138", "KI", "KI", [("KI", 1)]),
-                 "64.27", "7.65", "KG", "16", False, measure="KI")
+                 "64.27", "7.65", "KG", "16", False, measure="KI", allergen_data_known=False)   # allergen_data: none
     plan = plan_request(D(20), "KI", [ph7], MON, P)
     r.expect("lines", _lines(plan), [("465138", "16")])
     r.expect("total", f"{plan.total:f}", "1028.32")
@@ -188,7 +189,8 @@ def s04() -> Result:
     r.expect("125 g allergen data known", small["allergen_data_known"], False)
     r.expect("125 g says no allergens", small["no_declarable_allergens"], False)
     r.expect("200 g lists milk", big["allergens"]["contains"], ["AM"])
-    r.codes([], ["ALLERGEN_DATA_MISSING"])
+    r.expect("200 g needs no flag", allergen_codes(big), ())
+    r.codes(allergen_codes(small), ["ALLERGEN_DATA_MISSING"])
     r.checks.append("allergen card answer ('unknown, check the pack'): not built")
     return r.finish()
 
@@ -197,7 +199,7 @@ def s05() -> Result:
     r = Result("S05", "Above the budget warning (event order)", "engine")
     steak = _offer("461423", "Snellman hanger steak", _row("461423", "KG", "KG", [("KG", 1), ("KI", 1)], lot=10),
                    "19.93", "19.93", "KG", None, False)
-    plan = plan_request(D(115), "KG", [steak], MON, P)
+    plan = plan_request(D(115), "KG", [steak], MON, P, event=True)
     r.expect("lines", _lines(plan), [("461423", "120")])
     r.expect("total", f"{plan.total:f}", "2391.60")
     r.codes([*plan.reason_codes, *plan.warnings],
@@ -231,7 +233,7 @@ def s08() -> Result:
     esl = pack_info(_row("469549", "ST", "ST", [("KI", 20), ("ST", 1)]), price=D("1.00"),
                     comparison_price=D("1.00"), comparison_unit="L", measure="L")
     line = replenish(Item("469549", esl, daily_demand=20, lead_time_days=0, review_days=7, on_hand=120,
-                          safety_stock=20, category="fresh_dairy"), P)
+                          safety_stock=20, category="fresh_dairy", standing_order=D(200)), P)
     r.expect("this week qty", f"{line.quantity.normalize():f}", "40")
     r.codes(line.reason_codes, ["STANDING_ORDER_DRIFT"])
     r.checks.append("proposing the standing order 200 -> 140: not built")
@@ -273,7 +275,7 @@ def s11() -> Result:
     line = replenish(item, P)
     r.expect("order now", f"{line.quantity.normalize():f}", "0")
     check = cover_limit(item, KitchenParams.from_dict({"max_cover_days": {"dry": 14}}), extra=150)
-    r.expect("max within ceiling", round(check["max_extra"]), 28)
+    r.expect("max within ceiling", round(check["max_extra"]), 34)   # 4 x (3 + 14) + 6 - 40 (Aron, 2026-11-14)
     r.expect("days of cover for 150", int(check["days_of_cover"]), 47)
     r.codes([*line.reason_codes, *check["reason_codes"]], ["POSITION_OK", "COVER_CEILING"])
     return r.finish()

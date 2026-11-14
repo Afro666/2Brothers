@@ -365,6 +365,10 @@ IDs) apply here too. Base path: `/v1`.
 | GET | `/settings` | `kitchen:read` | Kitchen settings: how the engine sizes orders and what the Buyer may propose. Shape below. |
 | PUT | `/settings` | `kitchen:write` (human) | Change settings. Only the fields in the body change. Every change is an audit entry. Proposed; the gateway does not serve these two routes yet. |
 | GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
+| GET | `/audit/verify` | `kitchen:read` | Check the audit hash chain now. Shape below. Proposed, like the next three rows; the gateway does not serve them yet. |
+| POST | `/audit/demo-tamper` | `kitchen:approve` (human) | Demo only: edit one audit row of the synthetic demo kitchen, so `/audit/verify` shows the break. 403 `DEMO_ONLY` for any other kitchen. |
+| POST | `/audit/demo-restore` | `kitchen:approve` (human) | Demo only: put the tampered row back exactly as it was. |
+| GET | `/events` | `kitchen:read` | Server-sent events: this kitchen's new and changed proposals, approvals and audit entries, as they happen. Shape below. |
 
 Proposal `status`: `PENDING`, `READY`, `APPROVED`, `REJECTED`, `EXPIRED`. An approved
 proposal places one order per supplier block, through the same `place_order` guards.
@@ -502,6 +506,46 @@ per product and day:
 
 `GET /v1/suppliers/{supplier_id}/demand/shortage-risk` returns the same rows, only
 those whose `risk` is not `OK`.
+
+### Trust: audit verification and the live event stream
+
+`GET /audit/verify` recomputes every hash of the audit chain:
+
+```json
+{"ok": true, "length": 412, "broken_at": null, "kitchen_entries": 57}
+```
+
+- `length` counts the entries checked up to the first broken one. The chain is one for
+  all kitchens; `kitchen_entries` is how many entries belong to this kitchen.
+- `broken_at` is the `seq` of the first entry that was changed or removed, else null.
+
+`POST /audit/demo-tamper` answers `{"seq": 412, "tampered": true}`: it edited that entry
+(it adds a field `tampered` to the event). `/audit/verify` then answers `ok: false`,
+`broken_at: 412`. `POST /audit/demo-restore` answers `{"seq": 412, "restored": true}`, or
+`{"seq": null, "restored": false}` when nothing was tampered. Both take
+`idempotency_key` like every mutation.
+
+- Only the synthetic demo kitchen (`demo-kitchen`) can be tampered. Any other kitchen
+  gets 403 `DEMO_ONLY`. This is a demonstration that a change is detected; the audit
+  log has no other way to change or delete an entry.
+- One tampered row at a time: a second tamper before a restore is 409 `ALREADY_TAMPERED`.
+  A demo kitchen without audit entries is 409 `NOTHING_TO_TAMPER`.
+
+`GET /events` is a `text/event-stream`. Each message:
+
+```
+event: proposal
+data: {"operation": "insert", "document": {"proposal_id": "...", "status": "PENDING"}}
+```
+
+- `event` is `proposal`, `approval` or `audit`. `operation` is `insert`, `update` or
+  `replace`. `document` is the whole row after the change, in the shape the matching
+  read route returns (`GET /proposals/{id}`, the approval row, a `GET /audit` entry).
+- Only this kitchen's rows are sent. A comment line (`: ping`) arrives every few seconds
+  when nothing happens, so a dropped connection is noticed.
+- Nothing is replayed after a reconnect: the client loads the lists again, then listens.
+- The browser's `EventSource` cannot send an `Authorization` header; the web client
+  reads the stream with `fetch`.
 
 ### Webhooks (both sides)
 

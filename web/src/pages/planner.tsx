@@ -27,15 +27,16 @@ function todayIso(): string {
   )}`;
 }
 
-function displayedWeek(search: string): string {
-  const value = new URLSearchParams(search).get("week");
-  return value && /^\d{4}-W\d{2}$/.test(value) ? value : isoWeekOf(todayIso());
-}
-
 function shiftWeek(week: string, amount: number): string {
   const monday = new Date(`${weekDates(week)[0]}T12:00:00Z`);
   monday.setUTCDate(monday.getUTCDate() + amount * 7);
   return isoWeekOf(monday.toISOString().slice(0, 10));
+}
+
+/** Without `?week=` the planner opens on next week: that is the week a kitchen plans and orders for. */
+function displayedWeek(search: string): string {
+  const value = new URLSearchParams(search).get("week");
+  return value && /^\d{4}-W\d{2}$/.test(value) ? value : shiftWeek(isoWeekOf(todayIso()), 1);
 }
 
 function weekTitle(week: string): string {

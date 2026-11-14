@@ -1,5 +1,13 @@
-import { type RouterHistory, Outlet, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import {
+  type RouterHistory,
+  Outlet,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  redirect,
+} from "@tanstack/react-router";
 
+import { AboutPage } from "@/pages/about";
 import { KitPage } from "@/pages/kit";
 import { RoleProvider } from "@/lib/role";
 import { ApprovalsPage } from "@/pages/approvals";
@@ -14,7 +22,8 @@ import { RequestsPage } from "@/pages/requests";
 import { StockPage } from "@/pages/stock";
 import { SuppliersPage } from "@/pages/suppliers";
 import { HomePage } from "@/pages/home";
-import { SettingsPage } from "@/pages/settings";
+import { DEFAULT_SETTINGS_SECTION } from "@/pages/settings/sections";
+import { SettingsPage } from "@/pages/settings/settings-page";
 
 function RootLayout() {
   return (
@@ -42,7 +51,24 @@ const suppliersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/su
 const productsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/products", component: ProductsPage });
 const plannerRoute = createRoute({ getParentRoute: () => rootRoute, path: "/planner", component: PlannerPage });
 const demandRoute = createRoute({ getParentRoute: () => rootRoute, path: "/demand", component: DemandPage });
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsPage });
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  // A phone gets the section list alone; a wider screen has room for a section beside it.
+  beforeLoad: () => {
+    if (typeof window.matchMedia === "function" && window.matchMedia("(min-width: 768px)").matches) {
+      throw redirect({ to: "/settings/$section", params: { section: DEFAULT_SETTINGS_SECTION }, replace: true });
+    }
+  },
+  component: SettingsPage,
+});
+// One route for every section: the list in pages/settings/sections.ts decides what `$section` shows.
+const settingsSectionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/$section",
+  component: SettingsPage,
+});
+const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: "/about", component: AboutPage });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -59,6 +85,8 @@ const routeTree = rootRoute.addChildren([
   plannerRoute,
   demandRoute,
   settingsRoute,
+  settingsSectionRoute,
+  aboutRoute,
 ]);
 
 export function createAppRouter(history?: RouterHistory) {

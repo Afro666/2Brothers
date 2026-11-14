@@ -266,8 +266,9 @@ export function DemandPage() {
     select: (routerState) => new URLSearchParams(routerState.location.searchStr).get("week"),
   });
   const navigate = useNavigate();
-  const currentWeek = isoWeekOf(new Date().toISOString().slice(0, 10));
-  const week = requestedWeek ?? currentWeek;
+  // Without `?week=` the page opens on next week: that is the demand Valio can still act on.
+  const defaultWeek = shiftWeek(isoWeekOf(new Date().toISOString().slice(0, 10)), 7);
+  const week = requestedWeek ?? defaultWeek;
   const weekIsValid = isValidWeek(week);
   const state = useAsync(() => (weekIsValid ? loadWeek(api, week) : noWeek()), [api, week, weekIsValid]);
 
@@ -297,7 +298,7 @@ export function DemandPage() {
         ) : null}
         {!weekIsValid ? (
           <div className="space-y-3">
-            <InvalidWeek>Go to the current week, {weekLabel(currentWeek)}</InvalidWeek>
+            <InvalidWeek>Go to next week, {weekLabel(defaultWeek)}</InvalidWeek>
           </div>
         ) : null}
         {weekIsValid && state.status === "loading" ? <LoadingState label="Loading demand" /> : null}

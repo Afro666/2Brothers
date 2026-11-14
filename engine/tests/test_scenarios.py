@@ -193,3 +193,36 @@ def test_rounding_up_to_lot():
 
 def test_unknown_class_gets_a_level():
     assert P.z(None) == P.z("A") > P.z("C")
+
+
+# ---- #274 compare more than price ----------------------------------------------------
+
+def _milk(pid, price, available="100", reliability=None, carbon=None):
+    product = row(pid, "ST", "ST", [("ST", 1)])
+    pack = pack_info(product, price=D(price), comparison_price=D(price), comparison_unit="L", measure="L")
+    return Offer(pid, f"milk {pid}", pack, D(price), D(available), False, MON,
+                 reliability=reliability, carbon=carbon)
+
+
+def test_reliable_offer_beats_slightly_cheaper_unreliable_one():
+    cheap = _milk("A", "1.00", reliability=0.80)
+    solid = _milk("B", "1.02", reliability=0.99)
+    plan = plan_request(D(50), "L", [cheap, solid], MON, P)
+    assert plan.lines[0].product_id == "B"
+    assert "delivery reliability 99% vs 80%" in plan.lines[0].why
+    assert plan.lines[0].reliability == 0.99
+
+
+def test_outside_the_band_price_wins():
+    cheap = _milk("A", "1.00", reliability=0.80)
+    solid = _milk("B", "1.10", reliability=0.99)
+    assert plan_request(D(50), "L", [cheap, solid], MON, P).lines[0].product_id == "A"
+
+
+def test_unknown_reliability_is_never_best_then_carbon_decides():
+    unknown = _milk("A", "1.00", reliability=None)
+    known = _milk("B", "1.01", reliability=0.90)
+    assert plan_request(D(50), "L", [unknown, known], MON, P).lines[0].product_id == "B"
+    green = _milk("C", "1.02", reliability=0.90, carbon=1.1)
+    plan = plan_request(D(50), "L", [known.__class__(**{**known.__dict__, "carbon": 1.6}), green], MON, P)
+    assert plan.lines[0].product_id == "C" and "lower carbon" in plan.lines[0].why

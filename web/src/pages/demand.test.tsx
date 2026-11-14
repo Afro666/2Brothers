@@ -1,6 +1,6 @@
 import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import type { Api } from "@/api/types";
@@ -205,11 +205,22 @@ describe("DemandPage", () => {
     expect(demandCalls).toBe(0);
   });
 
-  it("links from an invalid week back to the current week", async () => {
+  it("opens on next week when no week is asked for", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-13T12:00:00Z"));
+    try {
+      renderApp("/demand", createMockApi());
+      expect(await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("links from an invalid week back to next week", async () => {
     renderApp("/demand?week=banana", createMockApi());
 
     const alert = await screen.findByRole("alert");
-    const link = within(alert).getByRole("link", { name: /^Go to the current week, Week \d+/ });
+    const link = within(alert).getByRole("link", { name: /^Go to next week, Week \d+/ });
     expect(link).toHaveAttribute("href", "/demand");
   });
 });

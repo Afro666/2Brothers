@@ -9,6 +9,9 @@ COPY engine ./engine
 COPY store ./store
 COPY agent ./agent
 COPY signals ./signals
+# Demo data: docker compose exec gateway python -m demo.seed
+COPY env ./env
+COPY demo ./demo
 RUN pip install --no-cache-dir . && useradd --system --uid 10001 app
 USER app
 EXPOSE 8000

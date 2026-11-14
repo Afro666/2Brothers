@@ -146,7 +146,7 @@ export function ApprovalCard({
           </p>
         ) : null}
         <section className="space-y-2">
-          <h4 className="text-sm font-medium">Why it needs you</h4>
+          <h4 className="text-sm font-medium">What to check</h4>
           <ul className="space-y-2">
             {request.reasons.map((r) => (
               <li key={r.rule} className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.warning)}>
