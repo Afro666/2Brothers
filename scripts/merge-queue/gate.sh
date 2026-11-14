@@ -66,7 +66,12 @@ for n in "$@"; do
   if [ $ok = 1 ]; then
     msg=$(gh api -X PUT "repos/$REPO/pulls/$n/merge" -f merge_method=squash -f sha="$sha" --jq .message 2>&1)
     echo "#$n MERGE: $msg"
-    gh api -X DELETE "repos/$REPO/git/refs/heads/$head" >/dev/null 2>&1
+    # Delete the branch only after a real merge: deleting it closes the PR, so a refused
+    # merge (e.g. required checks missing, 2026-11-14 14:37) must leave the PR open.
+    case "$msg" in
+      *"successfully merged"*) gh api -X DELETE "repos/$REPO/git/refs/heads/$head" >/dev/null 2>&1 ;;
+      *) echo "#$n NOT MERGED: branch kept, PR stays open" ;;
+    esac
   else
     echo "#$n RED: not merged (logs $LOG/$n-*)"
   fi

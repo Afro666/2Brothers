@@ -33,7 +33,10 @@ One PR by hand: `bash scripts/merge-queue/gate.sh <pr>`. Results go to `$GATE_LO
 4. Python changed: the full suite. Web changed: `tsc`, then `vitest related` for the changed
    files; a failed file is run twice more alone (5 s timeouts flake when other sessions run
    tests on the same laptop).
-5. Green: squash-merge through the API at the tested head SHA (`sha=`), then delete the branch.
+5. Green: squash-merge through the API at the tested head SHA (`sha=`), then delete the branch
+   **only if the merge succeeded**: deleting a branch closes its PR (2026-11-14: a refused merge
+   closed five reviewed fix PRs). Required checks (`python`, `web`) must be green on the PR's
+   head: a bot PR starts no workflows, so run `gh workflow run tests.yml --ref ai-fix/<n>` first.
    Red: nothing merged; a person reads the logs. Check whether main itself is red before
    blaming the PR.
 
