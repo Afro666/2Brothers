@@ -116,7 +116,7 @@ export function LiveApprovalsPage() {
     return result.proposals.map(parse);
   }, []);
   return <AppShell activeId="approvals"><main className="mx-auto max-w-5xl space-y-5">
-    <h1 className="text-2xl font-semibold">Approvals</h1>
+    <h1 className="text-2xl font-semibold">To approve</h1>
     <p>Live demo proposals. A person confirms the exact basket and total before an order is recorded.</p>
     <Button variant="outline" onClick={proposals.reload}>Refresh proposals</Button>
     {proposals.status === "loading" && <p>Loading proposals…</p>}

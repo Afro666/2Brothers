@@ -11,20 +11,20 @@ async function renderAt(path: string) {
 describe("application routes", () => {
   beforeEach(() => localStorage.clear());
   it.each([
-    ["/requests", "Requests"],
-    ["/approvals", "Approvals"],
-    ["/orders", "Orders"],
+    ["/requests", "Request an order"],
+    ["/approvals", "To approve"],
+    ["/orders", "Order history"],
     ["/orders/ORD-1", "Order ORD-1"],
-    ["/audit", "Audit log"],
-    ["/catalog", "Catalog"],
-    ["/stock", "Stock"],
+    ["/audit", "Activity log"],
+    ["/catalog", "Products"],
+    ["/stock", "Stock count"],
     ["/suppliers", "Suppliers"],
-    ["/products", "Products"],
-    ["/planner", "Planner"],
+    ["/products", "Recipes"],
+    ["/planner", "Menu plan"],
     ["/demand", "Demand"],
-    ["/forecast", "Forecast check"],
+    ["/forecast", "Forecast vs actual"],
     ["/settings", "Settings"],
-    ["/trust", "Trust"],
+    ["/trust", "Tamper check"],
   ])("renders %s", async (path, title) => {
     await renderAt(path);
     expect(await screen.findByRole("heading", { level: 1, name: title })).toBeInTheDocument();
@@ -33,18 +33,18 @@ describe("application routes", () => {
   it("switches the nav to the Valio side and returns home", async () => {
     const user = userEvent.setup();
     await renderAt("/requests");
-    await screen.findByRole("heading", { level: 1, name: "Requests" });
+    await screen.findByRole("heading", { level: 1, name: "Request an order" });
     await user.click(screen.getAllByRole("combobox")[0]);
     await user.click(await screen.findByRole("option", { name: "Valio planner" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Kitchen Buyer" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Demand" }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("link", { name: "Approvals" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "To approve" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Orders" })).not.toBeInTheDocument();
   });
 
   it("shows five menu entries and the current entry's pages as tabs", async () => {
     await renderAt("/approvals");
-    await screen.findByRole("heading", { level: 1, name: "Approvals" });
+    await screen.findByRole("heading", { level: 1, name: "To approve" });
     const menu = within(screen.getAllByRole("navigation", { name: "Main" })[0]);
     expect(menu.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Home",
@@ -60,7 +60,7 @@ describe("application routes", () => {
     expect(tabs.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Request an order",
       "To approve",
-      "History",
+      "Order history",
     ]);
     expect(tabs.getByRole("link", { name: "To approve" })).toHaveAttribute("aria-current", "page");
   });

@@ -85,7 +85,7 @@ function ApiApprovalsPage() {
     <AppShell activeId="approvals">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Approvals</h1>
+          <h1 className="text-2xl font-semibold">To approve</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Every order the Buyer proposes waits here. Nothing is sent until a person approves it.
           </p>

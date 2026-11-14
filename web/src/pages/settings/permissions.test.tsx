@@ -40,7 +40,7 @@ describe("Permissions settings", () => {
     expect(link).toHaveAttribute("href", "/audit?kind=search");
     await user.click(link);
 
-    expect(await screen.findByRole("heading", { level: 1, name: "Audit log" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Activity log" })).toBeInTheDocument();
     expect(router.state.location.search).toEqual({ kind: "search" });
     expect(await screen.findByRole("combobox", { name: "Kind" })).toHaveTextContent("Search");
     await screen.findByText(/^\d+ steps?$/);

@@ -232,7 +232,7 @@ export function ForecastPage() {
     <AppShell activeId="forecast">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Forecast check</h1>
+          <h1 className="text-2xl font-semibold">Forecast vs actual</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             What the kitchen needed each week against what was predicted. Our engine (menu x covers x recipe) is next to
             the plain weekday average. Future weeks show the forecast only.

@@ -9,7 +9,7 @@ import { renderApp } from "@/test/render";
 async function ask(api = createMockApi()) {
   const user = userEvent.setup();
   renderApp("/requests", api);
-  await screen.findByRole("heading", { level: 1, name: "Requests" });
+  await screen.findByRole("heading", { level: 1, name: "Request an order" });
   await user.type(screen.getByLabelText("What do you need?"), "1,000 L lactose-free milk by Monday");
   await user.type(screen.getByLabelText("Needed by"), "2026-11-16");
   await user.click(screen.getByRole("button", { name: "Ask the agent" }));
@@ -28,7 +28,7 @@ describe("RequestsPage", () => {
     );
     expect(within(proposal).getAllByText(/the other 949 L, rounded up to full cases of 5/).length).toBeGreaterThan(0);
     expect(within(proposal).getByRole("heading", { name: "Other options" })).toBeInTheDocument();
-    expect(within(proposal).getByRole("link", { name: /Approvals/ })).toHaveAttribute("href", "/approvals");
+    expect(within(proposal).getByRole("link", { name: /To approve/ })).toHaveAttribute("href", "/approvals");
     await user.click(within(proposal).getByRole("button", { name: "Use good" }));
     expect(within(proposal).getByRole("status")).toHaveTextContent(
       "Noted: you prefer Valio Eila 3 % lactose free milk drink 1 L. This is not applied to the order yet; tell the approver, or ask the Buyer again.",

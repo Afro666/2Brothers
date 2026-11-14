@@ -56,7 +56,7 @@ export const KITCHEN_NAV: NavItem[] = [
   HOME,
   { id: "requests", label: "Request an order", href: "/requests", icon: Inbox, group: "Orders" },
   { id: "approvals", label: "To approve", href: "/approvals", icon: UserCheck, group: "Orders" },
-  { id: "orders", label: "History", href: "/orders", icon: Package, group: "Orders" },
+  { id: "orders", label: "Order history", href: "/orders", icon: Package, group: "Orders" },
   { id: "planner", label: "Menu plan", href: "/planner", icon: CalendarDays, group: "Kitchen" },
   { id: "stock", label: "Stock count", href: "/stock", icon: Archive, group: "Kitchen" },
   { id: "products", label: "Recipes", href: "/products", icon: ShoppingBasket, group: "Kitchen" },

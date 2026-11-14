@@ -105,7 +105,7 @@ describe("live Buyer request page", () => {
     );
     await fill();
     expect(await screen.findByText(/Waiting for supplier stock confirmation/)).toBeVisible();
-    expect(screen.queryByRole("link", { name: /Review it in Approvals/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Review it (in|under) / })).toBeNull();
   });
 
   it("says in plain words why the basket was chosen and what the guards said", async () => {

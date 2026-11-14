@@ -47,7 +47,7 @@ function DemoRequestsPage() {
     <AppShell activeId="requests">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Requests</h1>
+          <h1 className="text-2xl font-semibold">Request an order</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             Say what the kitchen needs. The Buyer agent proposes an order, and a person approves it before it is sent.
           </p>
@@ -139,7 +139,7 @@ function Proposal({
             <p>
               This order is not placed yet: a human must approve it first.{" "}
               <Link to="/approvals" className="font-medium text-primary underline underline-offset-4">
-                Review it in Approvals
+                Review it under To approve
               </Link>
               .
             </p>
