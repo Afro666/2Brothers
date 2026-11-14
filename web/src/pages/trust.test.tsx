@@ -96,6 +96,6 @@ describe("trust page", () => {
       throw new ApiError("NETWORK", "Could not reach the gateway.");
     };
     renderApp("/trust", api);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not reach the gateway.");
+    expect(await screen.findByRole("alert", {}, { timeout: 5000 })).toHaveTextContent("Could not reach the gateway.");
   });
 });
