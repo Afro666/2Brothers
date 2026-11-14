@@ -221,6 +221,13 @@ search_products(db, "", {"require_labels": ["EU_ORGANIC_FARMING"], "temperature"
   (`home_category`: one extra count query per text search). Category codes have no
   names, so non-food is a list of code prefixes measured on the catalog
   (`NON_FOOD_PREFIXES`). A query for a non-food product still finds it.
+- Rows with the same score come in a fixed order, by product code (#1657). Many names
+  score exactly the same, and Atlas gives equal rows in no fixed order; the search reads
+  200 rows past the limit (`TIE_ROOM`), orders them and cuts to the limit. So the same
+  search gives the same list every time as long as no more than 200 rows tie at the cut;
+  the longest tie measured for a word search is 46 rows ("potato" at place 50). Not
+  covered: a search with filters and no words (every row scores the same), and the text
+  side of a hybrid search.
 - `exclude_allergens` takes names or GS1 codes and removes CONTAINS and MAY_CONTAIN.
   Products without allergen data stay, with the reason `allergen data missing`;
   `allergen_strictness: "strict"` removes them too. A misspelt allergen is an error.

@@ -2,7 +2,12 @@ import json
 from pathlib import Path
 import unittest
 
-from store.search import (ALL_WORDS_BOOST, FOOD_BOOST, HOME_BOOST, SIZE_BOOST, _reasons,
+try:
+    import mongomock
+except ImportError:  # the `test` extra is not installed
+    mongomock = None
+
+from store.search import (ALL_WORDS_BOOST, FOOD_BOOST, HOME_BOOST, SIZE_BOOST, TIE_ROOM, _reasons,
                           allergen_codes, build_pipeline, home_category, parse_query,
                           search_products)
 
@@ -165,6 +170,25 @@ class SearchQueryTests(unittest.TestCase):
                                       ("milk", {"exclude_allergens": "AM"}, 20)):
             with self.assertRaises(ValueError, msg=(query, filters, limit)):
                 build_pipeline(query, filters, limit)
+
+    def test_equal_scores_come_in_a_fixed_order_whatever_order_atlas_gives(self):
+        # #1657: Atlas gives rows with the same score in no fixed order. This holds for a tie
+        # that fits in TIE_ROOM; a longer one is cut by Atlas first (store/search.py).
+        pipeline = build_pipeline("cheese", limit=3)
+        self.assertEqual(pipeline[1], {"$limit": 3 + TIE_ROOM})  # read past the cut, then order
+        self.assertEqual(pipeline[-2:], [{"$sort": {"score": -1, "_id": 1}}, {"$limit": 3}])
+        self.assertEqual(list(pipeline[-3]), ["$addFields"])     # the score is a field by then
+        if mongomock is None:
+            self.skipTest("install the test extra: pip install -e '.[test]'")
+        rows = [{"_id": "900005", "score": 210.5}, {"_id": "900002", "score": 210.5},
+                {"_id": "900009", "score": 250.0}, {"_id": "900001", "score": 210.5},
+                {"_id": "900007", "score": 210.5}, {"_id": "900003", "score": 199.0}]
+        lists = []
+        for fed in (rows, rows[::-1], rows[3:] + rows[:3]):
+            products = mongomock.MongoClient()["test"].products
+            products.insert_many([dict(row) for row in fed])
+            lists.append([row["_id"] for row in products.aggregate(pipeline[-2:])])
+        self.assertEqual(lists, [["900009", "900001", "900002"]] * 3)  # which tied rows make the cut too
 
     def test_rows_never_carry_the_raw_record(self):
         pipeline = build_pipeline("milk", limit=5)

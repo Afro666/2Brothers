@@ -31,6 +31,14 @@ FOOD_BOOST = 40
 # under these two-digit prefixes (tableware, packaging, cleaning, office) no product
 # declares a food allergen; under every other prefix most do.
 NON_FOOD_PREFIXES = ("20", "30", "32", "63", "64", "67", "77", "90")
+# Many names score exactly the same ("potato": 46 rows tie at place 50), and Atlas gives
+# equal rows in no fixed order. So a search reads this many rows past the limit and
+# orders them itself: score, then product code (#1657).
+# shortcut: a tie longer than this keeps Atlas's order past it, which only a search with
+# filters and no words reaches (every row scores the same); sort those by code in Atlas
+# when `_id` is in the search index.
+TIE_ROOM = 200
+FIXED_ORDER = {"$sort": {"score": -1, "_id": 1}}
 
 # The 14 EU allergens by GS1 code, plus three single ingredients people ask for.
 # `gluten` covers the gluten cereals but not oats (GO): gluten-free oats exist.
@@ -210,9 +218,11 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
     compound = {key: value for key, value in compound.items() if value}
     return [
         {"$search": {"index": INDEX_NAME, "compound": compound}},
-        {"$limit": limit},
+        {"$limit": limit + TIE_ROOM},
         {"$project": {"raw": 0, "embedding": 0}},
         {"$addFields": {"score": {"$meta": "searchScore"}}},
+        FIXED_ORDER,
+        {"$limit": limit},
     ]
 
 
@@ -255,7 +265,10 @@ def build_hybrid_pipeline(query: str, query_vector, filters: dict | None = None,
     Each side gives its best `MAX_LIMIT` rows; `$rankFusion` merges them by reciprocal
     rank, so a product that words miss but meaning finds still comes up.
     """
-    text_side = build_pipeline(query, filters, MAX_LIMIT, kitchen_id, home)[:2]  # validates too
+    # shortcut: the text side's own cut at MAX_LIMIT keeps Atlas's order for equal rows;
+    # $rankFusion takes no computed sort key. Fix when the Buyer runs on hybrid search.
+    text_side = [build_pipeline(query, filters, MAX_LIMIT, kitchen_id, home)[0],  # validates too
+                 {"$limit": MAX_LIMIT}]
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIMIT:
         raise ValueError(f"limit must be an integer from 1 to {MAX_LIMIT}")
     vector_side = [{"$vectorSearch": {
