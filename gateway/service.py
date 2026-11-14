@@ -446,6 +446,8 @@ class Gateway:
         need = {"_id": uuid4().hex, "kitchen_id": kitchen_id, "quantity": str(body["quantity"]),
                 "unit": body["unit"], "requested_date": body["requested_date"],
                 "text": body.get("text") or "", "created_by": actor, "created_at": self.now()}
+        if body.get("event") is True:
+            need["event"] = True      # set by the trusted app, never by the model (#530)
         self.db.needs.insert_one(need)
         return {"need_id": need["_id"], **{k: need[k] for k in ("quantity", "unit", "requested_date", "text")}}
 
@@ -460,6 +462,8 @@ class Gateway:
             raise GatewayError(422, "INVALID_REQUEST", "requested_date must match the need")
         request = {"product_ids": ids, "quantity": need["quantity"], "unit": need["unit"],
                    "requested_date": need["requested_date"], "text": need["text"], "need_id": need["_id"]}
+        if need.get("event"):
+            request["event"] = True
         return offer_out(self._quote(kitchen_id, request))
 
     def _kitchen_offer(self, kitchen_id: str, offer_id: str | None) -> dict:
