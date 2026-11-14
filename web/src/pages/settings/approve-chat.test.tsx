@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import { ApiError, type Api } from "@/api/types";
-import { desktopConfig } from "@/pages/settings/approve-chat";
+import { connectorLink, desktopConfig } from "@/pages/settings/approve-chat";
 import { renderApp } from "@/test/render";
 
 async function signedIn(email = "buyer@demo.kitchen") {
@@ -34,10 +34,41 @@ describe("Approve from chat settings", () => {
     expect(create).toHaveBeenCalledWith({ hours: 8 });
     expect(await screen.findByText("tka_demo_0001", { selector: "code" })).toBeVisible();
     const config = screen.getByLabelText("claude_desktop_config.json");
-    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "tka_demo_0001"));
+    // The config never carries the token (#1595): it is shown once, in its own box.
+    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "<token>"));
     const list = await screen.findByRole("list", { name: "Approval tokens" });
     expect(within(list).getByText("open-demo")).toBeVisible();
     expect(within(list).queryByText(/tka_demo_0001/)).not.toBeInTheDocument();
+  });
+
+  it("shows the connector link once with a copy button and three steps, then hides it on revoke", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const api = await signedIn();
+    renderApp("/settings/approve-chat", api);
+
+    await screen.findByText("No approval tokens yet");
+    expect(screen.queryByLabelText("Connector link")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create approval token" }));
+
+    const link = await screen.findByLabelText("Connector link");
+    const expected = connectorLink(window.location.origin, "tka_demo_0001");
+    expect(expected).toBe(`${window.location.origin}/gateway/mcp/t/tka_demo_0001`);
+    expect(link).toHaveTextContent(expected);
+    expect(screen.getByText(/open Settings, then Connectors, then Add custom connector/)).toBeVisible();
+    expect(screen.getByText("Paste the link and press Add. There is nothing else to fill in.")).toBeVisible();
+    expect(screen.getByText("Ask Claude: what is waiting for my approval?")).toBeVisible();
+    expect(screen.getByText("Advanced: a Claude Desktop config file")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Copy connector link" }));
+    expect(writeText).toHaveBeenLastCalledWith(expected);
+
+    const list = await screen.findByRole("list", { name: "Approval tokens" });
+    expect(within(list).queryByText(/gateway\/mcp\/t\//)).not.toBeInTheDocument();
+    await user.click(within(list).getByRole("button", { name: "Revoke token tka_demo" }));
+    const dialog = screen.getByRole("dialog", { name: "Revoke approval token tka_demo?" });
+    await user.click(within(dialog).getByRole("button", { name: "Revoke token" }));
+    await waitFor(() => expect(screen.queryByLabelText("Connector link")).not.toBeInTheDocument());
   });
 
   it("never calls the mock create when gateway mode does not serve it", async () => {
@@ -79,7 +110,12 @@ describe("Approve from chat settings", () => {
     expect(await screen.findByText("tka_demo_0001", { selector: "code" })).toBeVisible();
     expect(screen.getByText("This is the only time the token is shown.")).toBeVisible();
     const config = screen.getByLabelText("claude_desktop_config.json");
-    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "tka_demo_0001"));
+    // The config never carries the token: the token is shown once, in its own box.
+    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "<token>"));
+    expect(config.textContent).not.toContain("tka_demo_0001");
+    expect(config).toHaveClass("max-w-full", "overflow-x-auto");
+    expect(config.querySelector("code")).toHaveClass("whitespace-pre-wrap", "break-all");
+    expect(screen.getByText(/mcp-remote sends AUTH_HEADER as the Authorization header/)).toBeVisible();
     expect(screen.getByRole("link", { name: `${window.location.origin}/.well-known/agent-card.json` })).toBeVisible();
     expect(screen.getByText(/must show you the total and get your clear yes/)).toBeVisible();
 
@@ -123,7 +159,7 @@ describe("Approve from chat settings", () => {
     await user.click(await screen.findByRole("button", { name: "Copy approval token" }));
     expect(writeText).toHaveBeenLastCalledWith("tka_demo_0001");
     await user.click(screen.getByRole("button", { name: "Copy config" }));
-    expect(writeText).toHaveBeenLastCalledWith(desktopConfig(`${window.location.origin}/gateway/mcp`, "tka_demo_0001"));
+    expect(writeText).toHaveBeenLastCalledWith(desktopConfig(`${window.location.origin}/gateway/mcp`, "<token>"));
   });
 
   it("revokes a token after a confirmation and hides the shown value", async () => {

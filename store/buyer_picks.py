@@ -8,7 +8,7 @@ from pymongo.errors import DuplicateKeyError
 
 
 def cache_key(kitchen, need, policy, rows, *, memory=''):
-    stable = [{k: row.get(k) for k in ('product_id', 'name', 'pack', 'can_arrive', 'alias')} for row in rows]
+    stable = [{k: row.get(k) for k in ('product_id', 'name', 'pack', 'can_arrive', 'alias', 'selection')} for row in rows]
     payload = [kitchen, ' '.join(need['text'].casefold().split()), need['requested_date'], need['quantity'],
                need['unit'], sorted(policy or []), sorted(stable, key=lambda r: r['product_id']),
                hashlib.sha256(memory.encode()).hexdigest()]

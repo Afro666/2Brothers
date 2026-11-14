@@ -39,7 +39,7 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
     const cream = byId("404233");
     const row = rowOf(cream.product.names.en);
     expect(row).toHaveTextContent("Valio · 404233");
-    expect(row).toHaveTextContent(`36 ST`);
+    expect(row).toHaveTextContent(`36 pieces`);
     expect(row).toHaveTextContent(formatEur(cream.offer.priceExVat));
     expect(row).toHaveTextContent(formatEur(cream.lineTotal));
     expect(row).toHaveTextContent(cream.why);
@@ -50,7 +50,7 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
 
   it("shows stock as a chip: confirmed amount, who must confirm, or not available", () => {
     render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
-    expect(within(rowOf(byId("404151").product.names.en)).getByText("2,400 ST")).toHaveAttribute("data-stock", "success");
+    expect(within(rowOf(byId("404151").product.names.en)).getByText("2,400 pieces")).toHaveAttribute("data-stock", "success");
     expect(within(rowOf(byId("404233").product.names.en)).getByText("Valio must confirm")).toHaveAttribute("data-stock", "warning");
     expect(within(rowOf(byId("405322").product.names.en)).getByText("Not available")).toHaveAttribute("data-stock", "danger");
   });
@@ -134,7 +134,7 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
         editing={{ busy: false, value: () => typed, onType: (_l, v) => (typed = v), onUpdate, onRemove, inputId: () => "qty-x" }}
       />,
     );
-    const input = screen.getByRole("spinbutton", { name: `Quantity for ${line.product.names.en} (KG)` });
+    const input = screen.getByRole("spinbutton", { name: `Quantity for ${line.product.names.en} (kg)` });
     expect(input).toHaveValue(20);
     await user.type(input, "{Enter}");
     expect(onUpdate).toHaveBeenCalledTimes(1);

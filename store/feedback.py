@@ -58,11 +58,14 @@ def _row(change: dict) -> dict:
 
 
 def record_feedback(db, kitchen_id: str, proposal_id: str, changes: list[dict],
-                    user: str) -> int:
-    """Store one row per change a human made to a proposal. Returns how many."""
+                    user: str, *, at: datetime | None = None) -> int:
+    """Store one row per change a human made to a proposal. Returns how many.
+
+    `at` is for a sample history only (demo/learning_seed.py): the rows carry that time
+    instead of now. The gateway never passes it: a person's change is stamped when made."""
     if not user:
         raise ValueError("user is required: feedback is what a human did")
-    now = datetime.now(timezone.utc)
+    now = at.astimezone(timezone.utc) if at is not None else datetime.now(timezone.utc)
     rows = []
     for change in changes:
         row = _row(change)  # validate everything before writing anything

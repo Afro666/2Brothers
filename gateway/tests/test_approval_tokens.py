@@ -519,7 +519,121 @@ def test_personal_token_of_a_person_moved_to_another_kitchen_is_401_on_mcp(mcp_e
     assert rpc(client, "tools/list", {}, tka).status_code == 401
 
 
+# ---- connector link: /mcp/t/<token> (#1693) ------------------------------------------------
+
+def rpc_path(client, token, method, params, headers=None, slash=""):
+    return client.post(f"/mcp/t/{token}{slash}", headers={**MCP_HEADERS, **(headers or {})},
+                       json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+
+
+def call_path(client, token, tool, arguments):
+    r = rpc_path(client, token, "tools/call", {"name": tool, "arguments": arguments})
+    assert r.status_code == 200, r.text
+    result = r.json()["result"]
+    data = json.loads(result["content"][0]["text"]) if result.get("content") and not result.get("isError") else None
+    return result, data
+
+
+def test_path_token_lists_the_person_tools_and_approves_with_expected_total(mcp_env):
+    client, _, db = mcp_env
+    out, _ = personal(client, db)
+    token = out["token"]
+    for slash in ("", "/"):
+        r = rpc_path(client, token, "tools/list", {}, slash=slash)
+        assert r.status_code == 200, r.text
+        assert {t["name"] for t in r.json()["result"]["tools"]} == PERSON_TOOLS
+    p = milk(client)
+    bad, _ = call_path(client, token, "approve_proposal", {"proposal_id": p["proposal_id"]})
+    assert bad["isError"] is True                      # expected_total is still required
+    result, order = call_path(client, token, "approve_proposal", {"proposal_id": p["proposal_id"],
+                                                                  "expected_total": p["expected_total"],
+                                                                  "idempotency_key": "path-yes"})
+    assert not result.get("isError"), result
+    assert order["order_id"]
+    placed = db.audit_log.find_one({"event.kind": "order_placed"})["event"]
+    assert placed["actor"] == "aron@example.com" and placed["via"] == "personal_token"
+    assert placed["token_id"] == out["token_id"]
+    secret = token[8:]
+    for row in db.audit_log.find({}):
+        assert secret not in json.dumps(row, default=str)
+
+
+def test_path_token_open_demo_works_only_in_its_kitchen(mcp_env):
+    client, _, _ = mcp_env
+    out, _ = open_demo_token(client)
+    r = rpc_path(client, out["token"], "tools/list", {})
+    assert r.status_code == 200 and {t["name"] for t in r.json()["result"]["tools"]} == PERSON_TOOLS
+
+
+def test_path_refuses_agent_kitchen_human_unknown_expired_and_revoked_the_same_way(mcp_env, monkeypatch):
+    client, _, db = mcp_env
+    kitchen = client.post(K + "/tokens", headers=HUMAN, json={"name": "k", "scopes": ["kitchen:read", "kitchen:propose"]}).json()
+    out, _ = personal(client, db)
+    old = approval_tokens.create(db, "aron@example.com", "demo-kitchen", "operator-cli",
+                                 hours=1, now=NOW - timedelta(hours=2))
+    revoked = approval_tokens.create(db, "aron@example.com", "demo-kitchen", "operator-cli", hours=8, now=NOW)
+    approval_tokens.revoke(db, "demo-kitchen", revoked["token_id"])
+    bad = [AGENT["Authorization"][7:], HUMAN["Authorization"][7:], kitchen["token"], "tka_made-up",
+           old["token"], revoked["token"], out["token"] + "/extra", ""]
+    answers = set()
+    for token in bad:
+        r = rpc_path(client, token, "tools/list", {})
+        assert r.status_code == 401, (token[:8], r.text)
+        assert "www-authenticate" not in r.headers
+        answers.add(r.text)
+    assert answers == {'{"error":{"code":"UNAUTHENTICATED","message":"unauthenticated"}}'}
+
+
+def test_path_token_wins_over_a_header_token(mcp_env):
+    client, _, db = mcp_env
+    out, _ = personal(client, db)
+    r = rpc_path(client, out["token"], "tools/list", {}, headers=AGENT)
+    assert {t["name"] for t in r.json()["result"]["tools"]} == PERSON_TOOLS
+    r = rpc_path(client, AGENT["Authorization"][7:], "tools/list", {}, headers={"Authorization": "Bearer " + out["token"]})
+    assert r.status_code == 401
+
+
+def test_path_token_is_masked_in_every_uvicorn_and_gateway_log_line(mcp_env, caplog):
+    import logging
+
+    from gateway.mcp_http import mask_path_token
+    client, _, db = mcp_env
+    out, _ = personal(client, db)
+    token = out["token"]
+    assert mask_path_token(f"POST /mcp/t/{token} HTTP/1.1") == f"POST /mcp/t/{token[:8]}... HTTP/1.1"
+    assert mask_path_token("POST /mcp HTTP/1.1") == "POST /mcp HTTP/1.1"
+    with caplog.at_level(logging.INFO):
+        # uvicorn's access logger passes the path in the args tuple; its formatter unpacks five.
+        logging.getLogger("uvicorn.access").info('%s - "%s %s HTTP/%s" %d', "1.2.3.4", "POST", f"/mcp/t/{token}", "1.1", 200)
+        logging.getLogger("uvicorn.error").info(f"error at /gateway/mcp/t/{token}/")
+        logging.getLogger("gateway").info("seen %s", f"/mcp/t/{token}")
+        rpc_path(client, token, "tools/list", {})
+    assert caplog.records
+    for record in caplog.records:
+        assert token[8:] not in record.getMessage()
+    access = [r for r in caplog.records if r.name == "uvicorn.access"][0]
+    assert isinstance(access.args, tuple) and len(access.args) == 5 and access.args[2] == f"/mcp/t/{token[:8]}..."
+
+
 # ---- operator CLI -----------------------------------------------------------------------
+
+def test_the_operator_cli_lists_and_revokes_every_persons_token(env, monkeypatch, capsys):
+    client, _, db = env
+    aron, _ = personal(client, db)
+    users.create_user(db, "maciek@example.com", PW, name="Maciek", role="approver", kitchen_id="demo-kitchen")
+    sign_in(client, "maciek@example.com")
+    maciek = client.post(K + "/approval-tokens", json={}).json()
+    from gateway import tokens
+    import store.db
+    monkeypatch.setattr(store.db, "get_db", lambda: db)
+    capsys.readouterr()
+    assert tokens.main(["list-approvers"]) == 0
+    listing = capsys.readouterr().out
+    assert aron["token_id"] in listing and maciek["token_id"] in listing
+    for out in (aron, maciek):
+        assert tokens.main(["remove-approver", "--token-id", out["token_id"]]) == 0
+        assert db.approval_tokens.find_one({"_id": out["token_id"]})["revoked_at"] is not None
+
 
 def test_cli_add_list_remove(env, monkeypatch, capsys):
     _, _, db = env

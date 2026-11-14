@@ -111,3 +111,8 @@ def test_days():
     assert days("20 L milk 16.11. and 5 kg butter 17.11.", SAT) == {date(2026, 11, 16), date(2026, 11, 17)}
     assert days("20 L milk and 5 kg butter by Monday", SAT) == {date(2026, 11, 16)}
     assert days("20 L milk and 5 kg butter", SAT) == set()
+
+
+def test_days_a_short_weekday_in_a_product_name_is_not_a_day():
+    assert days("20 kg sun dried tomatoes and 5 kg butter", SAT) == set()
+    assert days("20 kg sun dried tomatoes and 5 kg butter by sun", SAT) == {date(2026, 11, 15)}

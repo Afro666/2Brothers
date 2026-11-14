@@ -14,12 +14,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
+import { formatAmount, formatDate, formatDateTime, formatTime } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { useAsync } from "@/lib/use-async";
 import type { StockItem } from "@/types";
+import { ProductLink } from "@/components/purchasing/product-link";
 
 export interface RowDraft {
   /** What the user typed; kept even when the save fails. */
@@ -80,7 +81,7 @@ function OnHand({ item, className }: { item: StockItem; className?: string }) {
   }
   return (
     <span className={cn("tabular-nums", className)}>
-      {item.unit === "PCS" ? `${formatNumber(item.onHand)} pcs` : `${formatNumber(item.onHand)} ${item.unit}`}
+      {formatAmount(item.onHand, item.unit)}
     </span>
   );
 }
@@ -96,9 +97,13 @@ function OnOrder({ item }: { item: StockItem }) {
   }
   return (
     <>
-      {formatNumber(item.onOrder)} {item.unit}
+      {formatAmount(item.onOrder, item.unit)}
     </>
   );
+}
+
+function countedAt(value: string | null): string {
+  return value != null && formatTime(value) === "00:00" ? formatDate(value) : formatDateTime(value);
 }
 
 export function StockPage() {
@@ -219,7 +224,7 @@ export function StockPage() {
                               <div className="flex items-center gap-2">
                                 <ProductThumb en={item.productName} size="sm" />
                                 <div className="min-w-0">
-                                  <div className="font-medium">{item.productName}</div>
+                                  <div className="font-medium"><ProductLink productId={item.productId}>{item.productName}</ProductLink></div>
                                   <div className="text-xs text-muted-foreground">{item.productId}</div>
                                 </div>
                               </div>
@@ -232,7 +237,7 @@ export function StockPage() {
                               <OnOrder item={item} />
                             </TableCell>
                             <TableCell>{formatDate(item.lastDelivery)}</TableCell>
-                            <TableCell>{formatDateTime(item.countedAt)}</TableCell>
+                            <TableCell>{countedAt(item.countedAt)}</TableCell>
                             <TableCell>
                               <label className="flex items-center gap-2 text-xs font-medium" htmlFor={countId}>
                                 {t("Count")}
@@ -294,7 +299,7 @@ export function StockPage() {
                         <div className="flex items-center gap-2">
                           <ProductThumb en={item.productName} size="sm" />
                           <div className="min-w-0">
-                            <div className="font-medium break-words">{item.productName}</div>
+                            <div className="font-medium break-words"><ProductLink productId={item.productId}>{item.productName}</ProductLink></div>
                             <div className="text-xs text-muted-foreground">
                               {item.productId} · {item.unit}
                             </div>
@@ -312,7 +317,7 @@ export function StockPage() {
                           <dt className="text-muted-foreground">{t("Last delivery")}</dt>
                           <dd className="text-right">{formatDate(item.lastDelivery)}</dd>
                           <dt className="text-muted-foreground">{t("Counted at")}</dt>
-                          <dd className="text-right">{formatDateTime(item.countedAt)}</dd>
+                          <dd className="text-right">{countedAt(item.countedAt)}</dd>
                         </dl>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                           <label className="flex items-center gap-2 text-sm font-medium" htmlFor={countId}>

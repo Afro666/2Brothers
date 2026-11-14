@@ -14,11 +14,13 @@ import {
   isLater,
   isPassed,
   isStockUnconfirmed,
+  peopleUnit,
 } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { TONE_CLASSES, type Tone } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import type { DeliverySource, OrderLine } from "@/types";
+import { ProductLink } from "@/components/purchasing/product-link";
 
 const CHIP = "inline-flex items-center gap-1 rounded-sm border px-1.5 py-px text-xs font-medium whitespace-nowrap";
 
@@ -253,9 +255,11 @@ export function ProposalLines({
                   <div className="flex min-w-0 items-center gap-2">
                     <ProductThumb en={product.names.en} fi={product.names.fi} brand={product.brand} size="sm" />
                     <div className="min-w-0">
-                      <div className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]" title={name}>
-                        {name}
-                      </div>
+                      <ProductLink productId={product.id} className="block">
+                        <div className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]" title={name}>
+                          {name}
+                        </div>
+                      </ProductLink>
                       <div className="truncate font-mono text-[11px] leading-4 text-muted-foreground">
                         {product.brand ? <>{product.brand} · </> : null}
                         {product.id}
@@ -279,7 +283,7 @@ export function ProposalLines({
                       }}
                     >
                       <label className="sr-only" htmlFor={editing.inputId(line)}>
-                        {t("Quantity for {product} ({unit})", { product: name, unit: product.salesUnit })}
+                        {t("Quantity for {product} ({unit})", { product: name, unit: peopleUnit(product.salesUnit, number) })}
                       </label>
                       <Input
                         id={editing.inputId(line)}
@@ -289,9 +293,11 @@ export function ProposalLines({
                         value={value}
                         disabled={editing.busy || removing}
                         onChange={(event) => editing.onType(line, event.target.value)}
-                        className="h-8 w-16 px-1.5 text-right font-mono tabular-nums"
+                        className="h-8 w-12 shrink-0 px-1 text-right font-mono tabular-nums"
                       />
-                      <span className="w-5 font-mono text-[11px] text-muted-foreground">{product.salesUnit}</span>
+                      <span className="min-w-0 flex-1 text-[11px] leading-3 text-muted-foreground">
+                        {peopleUnit(product.salesUnit, number)}
+                      </span>
                       <Button
                         type="submit"
                         size="icon"
@@ -306,7 +312,7 @@ export function ProposalLines({
                     </form>
                   ) : (
                     <span className="font-mono whitespace-nowrap tabular-nums">
-                      {formatNumber(line.quantity)} {product.salesUnit}
+                      {formatNumber(line.quantity)} {peopleUnit(product.salesUnit, line.quantity)}
                     </span>
                   )}
                 </div>

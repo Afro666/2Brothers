@@ -30,6 +30,7 @@ import { createApprovalTokensMock } from "@/api/mock-approval-tokens";
 import { modelUsageMock } from "@/api/mock-usage";
 import { atlasFactsMock } from "@/api/mock-atlas";
 import { createWordsMock } from "@/api/mock-words";
+import { getProductPageMock } from "@/api/mock-product-page";
 import {
   approval as seedApproval,
   chefRequest,
@@ -669,6 +670,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       });
     },
     getProducts,
+    getProductPage: getProductPageMock,
     async getMandate() {
       return mandate;
     },

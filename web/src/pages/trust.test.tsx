@@ -50,6 +50,22 @@ describe("trust page", () => {
     expect(screen.queryByText(/Chain OK/)).not.toBeInTheDocument();
   });
 
+  it("uses a plain label when an audit summary is a raw code", async () => {
+    const api = createMockApi();
+    api.listAuditChain = async () => [
+      {
+        seq: 1,
+        event: { id: "label-1", at: "2026-11-14T10:00:00Z", kind: "other", actor: "system", summary: "kitchen_brief_read", reason: "" },
+        prevHash: "a".repeat(64),
+        hash: "b".repeat(64),
+      },
+    ];
+    renderApp("/trust", api);
+
+    expect(await screen.findByText("Kitchen brief read")).toBeInTheDocument();
+    expect(screen.queryByText("kitchen_brief_read")).not.toBeInTheDocument();
+  });
+
   it("shows loading instead of an unchecked result during the opening check", async () => {
     const api = createMockApi();
     api.verifyAuditChain = () => new Promise(() => {});

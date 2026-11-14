@@ -46,6 +46,16 @@ KINDS_RETRY = timedelta(seconds=60) # after a failed catalog read, wait this lon
 MAX_NEED_QUANTITY = Decimal("1000000")   # one need of a list body (#1375), as change.py caps a line
 
 
+def _safe_selection_facts(offers, need: Decimal, measure: str) -> dict:
+    """Private pick evidence (#1728): optional, so a data quirk leaves it empty, never fails a quote."""
+    from engine.selection_facts import selection_facts
+    try:
+        return selection_facts(offers, need, measure)
+    except (ValueError, ArithmeticError, TypeError) as exc:
+        log.warning("selection facts skipped: %s", type(exc).__name__)
+        return {}
+
+
 class GatewayError(Exception):
     """An error the routes return as {"error": {"code", "message"}}."""
 
@@ -360,7 +370,7 @@ class Gateway:
         docs = self.db.products.find({"_id": {"$in": ids}}, {"raw.synkkaData.nutritionalContent": 1})
         return fat_levels_differ([fat_per_100g(d.get("raw")) for d in docs])
 
-    def _plan_one(self, kitchen_id: str, request: dict) -> tuple:
+    def _plan_one(self, kitchen_id: str, request: dict, *, selection=None) -> tuple:
         """One need over its products: recall holds, the kitchen's allergen rule, live offers,
         the engine's sizes and the gap fill. (plan, skipped, tax, supplier_of, when, refused);
         no discount tier yet, nothing saved. The single request and each need of a list."""
@@ -374,12 +384,18 @@ class Gateway:
         offers, skipped, tax, supplier_of, when = self._offers(
             kitchen_id, [p for p in request["product_ids"] if p not in blocked and p not in refused],
             measure, requested)
+        if selection is not None:
+            selection.update(_safe_selection_facts(offers, need, measure))
+            for pid, fact in selection.items():
+                lead = (when.get(pid) or {}).get('lead_time_days')
+                fact['lead_time_days'] = None if lead is None else str(lead)
         skipped.extend((p, 'BLOCKED_BY_RECALL') for p in request['product_ids'] if p in blocked)
         skipped.extend((p, f"ALLERGEN_RULE: the kitchen excludes {', '.join(hits)}")
                        for p, hits in refused.items())
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
-        plan, skipped = self._fill_gap(kitchen_id, plan, skipped, requested, tax, supplier_of, when)
+        plan, skipped = self._fill_gap(kitchen_id, plan, skipped, requested, tax, supplier_of, when,
+                                       selection=selection)
         return plan, skipped, tax, supplier_of, when, refused
 
     def _quote(self, kitchen_id: str, request: dict) -> dict:
@@ -388,7 +404,8 @@ class Gateway:
             return self._save_offer(kitchen_id, request, sim)
         if request.get("made_by") == "list":
             return self._save_offer(kitchen_id, request, self._list_basket(kitchen_id, request))
-        plan, skipped, tax, supplier_of, when, refused = self._plan_one(kitchen_id, request)
+        selection = {} if request.get("need_id") else None
+        plan, skipped, tax, supplier_of, when, refused = self._plan_one(kitchen_id, request, selection=selection)
         tiers = {sid: (self._supplier(kitchen_id, sid).get("terms") or {}).get("discount_tiers") or []
                  for sid in set(supplier_of.values())}
         plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
@@ -401,10 +418,10 @@ class Gateway:
             sim["mandate"]["reason_codes"] = [c for c in sim["mandate"]["reason_codes"] if c != "PARTIAL_STOCK"]
         if self._mixed_fat(plan) and "SUBSTITUTE_FAT_LEVEL" not in sim["mandate"]["reason_codes"]:
             sim["mandate"]["reason_codes"].append("SUBSTITUTE_FAT_LEVEL")   # S01: a person picks
-        return self._save_offer(kitchen_id, request, sim)
+        return self._save_offer(kitchen_id, request, sim, selection=selection)
 
     def _fill_gap(self, kitchen_id: str, plan: RequestPlan, skipped: list, requested: date,
-                  tax: dict, supplier_of: dict, when: dict) -> tuple[RequestPlan, list]:
+                  tax: dict, supplier_of: dict, when: dict, *, selection=None) -> tuple[RequestPlan, list]:
         """S02 (#731): the original covers only part of the need, and a basket product was left
         out because it is sold in another measure (bread in cases, rolls in bags). Size that
         substitute for the gap by weight or volume (engine/gap.py); its lines say
@@ -428,6 +445,13 @@ class Gateway:
             return plan, skipped
         tax.update(t), supplier_of.update(s), when.update(w)
         used = {ln.product_id for ln in sub.lines}
+        if selection is not None:
+            # The gap engine proves this link: original sales units -> common KG/L.
+            evidence = _safe_selection_facts([o for o in subs if o.product_id in used],
+                                       plan.need * orig[0].pack.size, common)
+            for fact in evidence.values():
+                fact['substitute_for'] = original
+            selection.update(evidence)
         rest = (sub.shortfall / orig[0].pack.size) if sub.shortfall > 0 else Decimal(0)
         codes = [*plan.reason_codes, *sub.reason_codes]   # PARTIAL_STOCK stays: the original is short
         plan = replace(plan, lines=(*plan.lines, *sub.lines), total=plan.total + sub.total, shortfall=rest,
@@ -742,7 +766,7 @@ class Gateway:
             raise GatewayError(422, "CANNOT_READ_REQUEST", "the delivery day is in the past")
         return {"day": day.isoformat()}
 
-    def _save_offer(self, kitchen_id: str, request: dict, sim: dict) -> dict:
+    def _save_offer(self, kitchen_id: str, request: dict, sim: dict, *, selection=None) -> dict:
         now = self.now()
         offer_id = uuid4().hex
         from gateway import signing
@@ -758,7 +782,8 @@ class Gateway:
         offer = orders.save_offer(self.db, {
             "offer_id": offer_id, "kitchen_id": kitchen_id, "supplier_id": VALIO,
             "request": request, "valid_until": (now + OFFER_TTL).isoformat(),
-            "simulation": sim, "fetched_at": now, **signed})
+            "simulation": sim, "fetched_at": now,
+            **({"selection_facts": selection} if selection is not None else {}), **signed})
         return offer
 
     def _of_kind(self, rows: list[dict], query: str, filters: dict | None, text: str, unit: str,

@@ -1,0 +1,475 @@
+{
+  "fixture_sha256": "9d35a3ded8921e8846230a00925de931e2dd8b3e719c9096911d48fbacb57e00",
+  "model": "nemotron-3.5-super-vl",
+  "design": "New synthetic 30-case shortlist dataset, five families x six distinct requests; three repeats per condition; temperature 0; interleaved conditions; concurrency 2. Not the original #1025 request set and not held-out evaluation.",
+  "primary_metric": "Exact set of selected products, using fixed expected_first for single-product cases and expected_includes for partial-stock cases. Stability compares product sets, not returned order.",
+  "iterations": {
+    "1": {
+      "summary": {
+        "baseline": {
+          "runs": 90,
+          "valid": 90,
+          "correct_first": 43,
+          "full_choice": 27,
+          "stable_cases": 29,
+          "cases": 30,
+          "median_seconds": 0.554,
+          "mean_prompt_tokens": 350,
+          "mean_completion_tokens": 56
+        },
+        "enriched": {
+          "runs": 90,
+          "valid": 58,
+          "correct_first": 35,
+          "full_choice": 32,
+          "stable_cases": 10,
+          "cases": 30,
+          "median_seconds": 0.758,
+          "mean_prompt_tokens": 882,
+          "mean_completion_tokens": 100
+        }
+      },
+      "source_sha256": "3cc69d71096b7ab53c06bad6eebcd583550859862be8e814aa531f155b2f306b"
+    },
+    "2": {
+      "summary": {
+        "baseline": {
+          "runs": 90,
+          "valid": 90,
+          "correct_first": 43,
+          "full_choice": 29,
+          "stable_cases": 25,
+          "cases": 30,
+          "median_seconds": 0.321,
+          "mean_prompt_tokens": 350,
+          "mean_completion_tokens": 53
+        },
+        "enriched": {
+          "runs": 90,
+          "valid": 89,
+          "correct_first": 61,
+          "full_choice": 20,
+          "stable_cases": 23,
+          "cases": 30,
+          "median_seconds": 0.437,
+          "mean_prompt_tokens": 921,
+          "mean_completion_tokens": 81
+        }
+      },
+      "source_sha256": "1d1d041951b11353dfab0bc182bc21bfe15281063cf7998710b456bd51ce63bc"
+    },
+    "3": {
+      "summary": {
+        "baseline": {
+          "runs": 90,
+          "valid": 89,
+          "correct_first": 43,
+          "full_choice": 27,
+          "stable_cases": 26,
+          "cases": 30,
+          "median_seconds": 0.242,
+          "mean_prompt_tokens": 346,
+          "mean_completion_tokens": 55
+        },
+        "enriched": {
+          "runs": 90,
+          "valid": 90,
+          "correct_first": 68,
+          "full_choice": 54,
+          "stable_cases": 20,
+          "cases": 30,
+          "median_seconds": 0.281,
+          "mean_prompt_tokens": 964,
+          "mean_completion_tokens": 52
+        }
+      },
+      "source_sha256": "cc112458cdf93fe69a25fa56749c6ba0bfc50e40603ecf9fbf0349289dc7857c"
+    }
+  },
+  "families": {
+    "stock": {
+      "baseline": {
+        "runs": 18,
+        "valid": 18,
+        "correct_first": 10,
+        "full_choice": 11,
+        "stable_cases": 4,
+        "cases": 6,
+        "median_seconds": 0.258,
+        "mean_prompt_tokens": 345,
+        "mean_completion_tokens": 60
+      },
+      "enriched": {
+        "runs": 18,
+        "valid": 18,
+        "correct_first": 14,
+        "full_choice": 15,
+        "stable_cases": 6,
+        "cases": 6,
+        "median_seconds": 0.297,
+        "mean_prompt_tokens": 960,
+        "mean_completion_tokens": 66
+      }
+    },
+    "diet": {
+      "baseline": {
+        "runs": 18,
+        "valid": 18,
+        "correct_first": 0,
+        "full_choice": 0,
+        "stable_cases": 6,
+        "cases": 6,
+        "median_seconds": 0.297,
+        "mean_prompt_tokens": 342,
+        "mean_completion_tokens": 70
+      },
+      "enriched": {
+        "runs": 18,
+        "valid": 18,
+        "correct_first": 18,
+        "full_choice": 18,
+        "stable_cases": 6,
+        "cases": 6,
+        "median_seconds": 0.312,
+        "mean_prompt_tokens": 954,
+        "mean_completion_tokens": 38
+      }
+    },
+    "history": {
+      "baseline": {
+        "runs": 18,
+        "valid": 18,
+        "correct_first": 0,
+        "full_choice": 0,
+        "stable_cases": 6,
+        "cases": 6,
+        "median_seconds": 0.196,
+        "mean_prompt_tokens": 349,
+        "mean_completion_tokens": 31
+      },
+      "enriched": {
+        "runs": 18,
+        "valid": 18,
+        "correct_first": 0,
+        "full_choice": 0,
+        "stable_cases": 2,
+        "cases": 6,
+        "median_seconds": 0.266,
+        "mean_prompt_tokens": 964,
+        "mean_completion_tokens": 55
+      }
+    },
+    "price": {
+      "baseline": {
+        "runs": 18,
+        "valid": 18,
+        "correct_first": 16,
+        "full_choice": 0,
+        "stable_cases": 6,
+        "cases": 6,
+        "median_seconds": 0.312,
+        "mean_prompt_tokens": 362,
+        "mean_completion_tokens": 82
+      },
+      "enriched": {
+        "runs": 18,
+        "valid": 18,
+        "correct_first": 18,
+        "full_choice": 6,
+        "stable_cases": 0,
+        "cases": 6,
+        "median_seconds": 0.289,
+        "mean_prompt_tokens": 976,
+        "mean_completion_tokens": 56
+      }
+    },
+    "kind": {
+      "baseline": {
+        "runs": 18,
+        "valid": 17,
+        "correct_first": 17,
+        "full_choice": 16,
+        "stable_cases": 4,
+        "cases": 6,
+        "median_seconds": 0.204,
+        "mean_prompt_tokens": 332,
+        "mean_completion_tokens": 32
+      },
+      "enriched": {
+        "runs": 18,
+        "valid": 18,
+        "correct_first": 18,
+        "full_choice": 15,
+        "stable_cases": 6,
+        "cases": 6,
+        "median_seconds": 0.234,
+        "mean_prompt_tokens": 968,
+        "mean_completion_tokens": 43
+      }
+    }
+  },
+  "iteration_notes": {
+    "1": "Initial enriched draft: numeric reason validator omitted code-proven pack size and the structured requested quantity; 32 replies rejected. Not merged.",
+    "2": "Validator includes those trusted sources; reasons requested qualitative. Product-set prompt still allowed unnecessary candidates. Not merged.",
+    "3": "Clarified fewest necessary products and ranking tie behavior; same frozen cases and expectations. Accuracy improved but stability and prompt cost worsened."
+  },
+  "live_quote_rehearsal": {
+    "source": "Read-only live quote snapshot 2026-11-14; confirmed stock currently 51 L, not the older 698 L scenario. No proposals or orders.",
+    "case": {
+      "request": "1,000 L lactose-free milk by Monday",
+      "need": {
+        "quantity": "1000",
+        "unit": "L",
+        "needed_by": "2026-11-16"
+      },
+      "products": [
+        {
+          "product_id": "462775",
+          "name": "Arla Milkdrink 1L lactose free fat free UHT Suomesta",
+          "can_arrive": true
+        },
+        {
+          "product_id": "463335",
+          "name": "Valio Eila 3 % milk drink 1 l lactose free",
+          "can_arrive": true
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "462775",
+          "size": "1",
+          "price": "2.57",
+          "stock": "51",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "463335",
+          "size": "1",
+          "price": "1.4",
+          "stock": null,
+          "sales_unit": "ST"
+        }
+      ],
+      "order_counts": {
+        "462775": 0,
+        "463335": 0
+      },
+      "diet_claims": {
+        "462775": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "463335": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      }
+    },
+    "results": [
+      {
+        "mode": "baseline",
+        "repeat": 0,
+        "picks": [
+          "462775",
+          "463335"
+        ],
+        "keeps_confirmed": true
+      },
+      {
+        "mode": "baseline",
+        "repeat": 1,
+        "picks": [
+          "462775",
+          "463335"
+        ],
+        "keeps_confirmed": true
+      },
+      {
+        "mode": "baseline",
+        "repeat": 2,
+        "picks": [
+          "462775",
+          "463335"
+        ],
+        "keeps_confirmed": true
+      },
+      {
+        "mode": "enriched",
+        "repeat": 0,
+        "picks": [
+          "463335",
+          "462775"
+        ],
+        "keeps_confirmed": true
+      },
+      {
+        "mode": "enriched",
+        "repeat": 1,
+        "picks": [
+          "463335",
+          "462775"
+        ],
+        "keeps_confirmed": true
+      },
+      {
+        "mode": "enriched",
+        "repeat": 2,
+        "picks": [
+          "463335",
+          "462775"
+        ],
+        "keeps_confirmed": true
+      }
+    ]
+  },
+  "final_pipeline": {
+    "summary": {
+      "baseline": {
+        "runs": 90,
+        "valid": 89,
+        "correct_first": 43,
+        "full_choice": 27,
+        "stable_cases": 26,
+        "cases": 30,
+        "median_seconds": 0.242,
+        "mean_prompt_tokens": 346,
+        "mean_completion_tokens": 55
+      },
+      "enriched": {
+        "runs": 90,
+        "valid": 90,
+        "correct_first": 68,
+        "full_choice": 69,
+        "stable_cases": 30,
+        "cases": 30,
+        "median_seconds": 0.281,
+        "mean_prompt_tokens": 964,
+        "mean_completion_tokens": 52
+      }
+    },
+    "method": "Deterministic rescore of the SAME v3 model replies using the exact-quote full-coverage guard. No new model call, no new prompt or fixture. Raw v3 picks are preserved in the local run artifact. Model-only v3 metrics remain above.",
+    "artifact_sha256": "51770df9fef9661040eb0fab405f1e4d08a5eac378498be41ca59ff00be4fa91",
+    "families": {
+      "stock": {
+        "baseline": {
+          "runs": 18,
+          "valid": 18,
+          "correct_first": 10,
+          "full_choice": 11,
+          "stable_cases": 4,
+          "cases": 6,
+          "median_seconds": 0.258,
+          "mean_prompt_tokens": 345,
+          "mean_completion_tokens": 60
+        },
+        "enriched": {
+          "runs": 18,
+          "valid": 18,
+          "correct_first": 14,
+          "full_choice": 15,
+          "stable_cases": 6,
+          "cases": 6,
+          "median_seconds": 0.297,
+          "mean_prompt_tokens": 960,
+          "mean_completion_tokens": 66
+        }
+      },
+      "diet": {
+        "baseline": {
+          "runs": 18,
+          "valid": 18,
+          "correct_first": 0,
+          "full_choice": 0,
+          "stable_cases": 6,
+          "cases": 6,
+          "median_seconds": 0.297,
+          "mean_prompt_tokens": 342,
+          "mean_completion_tokens": 70
+        },
+        "enriched": {
+          "runs": 18,
+          "valid": 18,
+          "correct_first": 18,
+          "full_choice": 18,
+          "stable_cases": 6,
+          "cases": 6,
+          "median_seconds": 0.312,
+          "mean_prompt_tokens": 954,
+          "mean_completion_tokens": 38
+        }
+      },
+      "history": {
+        "baseline": {
+          "runs": 18,
+          "valid": 18,
+          "correct_first": 0,
+          "full_choice": 0,
+          "stable_cases": 6,
+          "cases": 6,
+          "median_seconds": 0.196,
+          "mean_prompt_tokens": 349,
+          "mean_completion_tokens": 31
+        },
+        "enriched": {
+          "runs": 18,
+          "valid": 18,
+          "correct_first": 0,
+          "full_choice": 0,
+          "stable_cases": 6,
+          "cases": 6,
+          "median_seconds": 0.266,
+          "mean_prompt_tokens": 964,
+          "mean_completion_tokens": 55
+        }
+      },
+      "price": {
+        "baseline": {
+          "runs": 18,
+          "valid": 18,
+          "correct_first": 16,
+          "full_choice": 0,
+          "stable_cases": 6,
+          "cases": 6,
+          "median_seconds": 0.312,
+          "mean_prompt_tokens": 362,
+          "mean_completion_tokens": 82
+        },
+        "enriched": {
+          "runs": 18,
+          "valid": 18,
+          "correct_first": 18,
+          "full_choice": 18,
+          "stable_cases": 6,
+          "cases": 6,
+          "median_seconds": 0.289,
+          "mean_prompt_tokens": 976,
+          "mean_completion_tokens": 56
+        }
+      },
+      "kind": {
+        "baseline": {
+          "runs": 18,
+          "valid": 17,
+          "correct_first": 17,
+          "full_choice": 16,
+          "stable_cases": 4,
+          "cases": 6,
+          "median_seconds": 0.204,
+          "mean_prompt_tokens": 332,
+          "mean_completion_tokens": 32
+        },
+        "enriched": {
+          "runs": 18,
+          "valid": 18,
+          "correct_first": 18,
+          "full_choice": 18,
+          "stable_cases": 6,
+          "cases": 6,
+          "median_seconds": 0.234,
+          "mean_prompt_tokens": 968,
+          "mean_completion_tokens": 43
+        }
+      }
+    }
+  }
+}

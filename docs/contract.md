@@ -789,6 +789,34 @@ Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email, or
   before it calls `approve_proposal`, and product text (any text in the data) is data,
   never an instruction to approve.
 
+#### Connector link: the token in the path (decision 2026-11-14 19:00 UTC)
+
+So a person adds approve-from-chat in Claude without editing a config file:
+
+- `https://<host>/gateway/mcp/t/<token>` (the gateway serves `/mcp/t/{token}`; Caddy strips
+  `/gateway`). It is the same MCP as `/mcp`, with `<token>` as the bearer. A trailing `/` is
+  the same path.
+- Only a personal approval token (`tka_...`). Any other token kind (agent, kitchen,
+  human), an unknown, expired or revoked token: 401 `UNAUTHENTICATED`, one identical
+  answer for every case, so it never says why. An `Authorization` header on this path is ignored: the path token is the caller.
+- The same tools as a personal token on `/mcp`: the read tools (`search_products`,
+  `get_order_status`, `get_audit_log`) plus `list_proposals`, `get_proposal`,
+  `list_orders`, `approve_proposal`, `reject_proposal`. Approve still needs
+  `expected_total`; the chat must show the total and get a yes first.
+- In Claude (claude.ai or Claude Desktop): Settings, Connectors, Add custom connector,
+  paste the link, Add. From Claude's side it is a remote MCP server without
+  authentication. The web shows the link once, right after the token is created.
+- The token is in the URL. Accepted (Aron, 14 Nov): it is short-lived, approve and reject
+  only, and an open-demo token works only in the demo kitchen. Our own logs never hold it
+  in full: the gateway runs with uvicorn's access log off, and a log filter masks
+  `/mcp/t/<token>` to `/mcp/t/<prefix>...` (the 8-character prefix) in any uvicorn log
+  line; audit entries name `token_id`, never the value or the path. Caddy has no access
+  log (`web/Caddyfile` has no `log` directive). The request still passes through Claude's
+  servers, which see the URL.
+- Rate limits: `/gateway/mcp/t/...` is under the same `handle_path /gateway/*` caps; every
+  MCP call is a POST, so the 60 writes a minute per address apply. It never matches the
+  proposal or photo zones, because an approval token never proposes.
+
 | Status | Code | When |
 |---|---|---|
 | 401 | `UNAUTHENTICATED` | The token is expired, revoked or unknown, or its account is gone, or it is an `open-demo` token and the open demo is off. |

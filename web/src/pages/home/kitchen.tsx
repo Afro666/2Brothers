@@ -11,6 +11,7 @@ import { DecisionStrip } from "@/components/purchasing/decision-strip";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
+import { plainCode } from "@/lib/codes";
 import { nextCutoff } from "@/pages/home/cutoff";
 import { HOME_STOCK_ROWS, stockToCheck } from "@/pages/home/stock-rows";
 import { Tile, TileState } from "@/pages/home/tile";
@@ -158,7 +159,7 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
               {more > 0 ? (
                 <Link
                   to="/stock"
-                  className="block w-fit text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-foreground"
+                  className="flex min-h-11 w-fit items-center text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-foreground"
                 >
                   {t("+{count} more", { count: more })}
                 </Link>
@@ -200,7 +201,7 @@ export function AuditTile({ api }: { api: Api }) {
                   <time className="font-mono text-xs text-muted-foreground" dateTime={event.at ?? undefined}>
                     {formatDateTime(event.at)}
                   </time>
-                  <p>{event.summary}</p>
+                  <p>{plainCode(event.summary, t)}</p>
                 </li>
               ))}
           </ul>

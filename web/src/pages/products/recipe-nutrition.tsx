@@ -1,5 +1,5 @@
 import { useApi } from "@/api";
-import type { NutrientValues } from "@/api/types";
+import type { NutrientValues, RecipeNutrition } from "@/api/types";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n";
@@ -16,23 +16,38 @@ export const MACROS: [keyof NutrientValues, string][] = [
 /** Thumbnails shown before the missing-nutrition text; the rest become a "+N" chip. */
 const MAX_THUMBS = 3;
 
+/** What a recipe card shows: still loading, not available, or the gateway's row. */
+export type RecipeNutritionState = "loading" | "error" | RecipeNutrition;
+
+/**
+ * Loads the nutrition of every recipe in one request (`GET /recipes/nutrition`, #1101) and gives
+ * each card its row. `active` is the Recipes tab being open: no call is made before that.
+ */
+export function useRecipesNutrition(recipes: Recipe[], active: boolean): (recipe: Recipe) => RecipeNutritionState {
+  const api = useApi();
+  const asked = active && recipes.length > 0;
+  // The numbers change with the ingredients, so a saved edit loads them again.
+  const ingredients = JSON.stringify(
+    recipes.map((recipe) => [recipe.id, recipe.items.map((item) => [item.productId, item.unit, item.qtyPerPortion])]),
+  );
+  const state = useAsync(() => (asked ? api.getRecipesNutrition() : Promise.resolve(null)), [api, asked, ingredients]);
+  const rows = state.status === "ready" && state.data ? new Map(state.data.map((row) => [row.recipeId, row])) : null;
+  // A recipe the answer leaves out (added after the read began) shows "not available", never 0.
+  return (recipe) => (state.status === "error" ? "error" : rows ? (rows.get(recipe.id) ?? "error") : "loading");
+}
+
 /**
  * One portion's energy and macros under a recipe, from the products' own nutrition tables.
  * A value the labels do not give is left out, never shown as 0. Loading and a failed call are
  * one quiet line each, so the recipe card always shows.
  */
-export function RecipeNutritionLine({ recipe }: { recipe: Recipe }) {
+export function RecipeNutritionLine({ nutrition }: { nutrition: RecipeNutritionState }) {
   const t = useT();
-  const api = useApi();
-  // The numbers change with the ingredients, so a saved edit loads them again.
-  const ingredients = JSON.stringify(recipe.items.map((item) => [item.productId, item.unit, item.qtyPerPortion]));
-  const state = useAsync(() => api.getRecipeNutrition(recipe.id), [api, recipe.id, ingredients]);
   const quiet = "text-sm text-muted-foreground";
 
-  if (state.status === "loading") return <p className={quiet}>{t("Counting nutrition…")}</p>;
-  if (state.status === "error") return <p className={quiet}>{t("Nutrition is not available right now.")}</p>;
+  if (nutrition === "loading") return <p className={quiet}>{t("Counting nutrition…")}</p>;
+  if (nutrition === "error") return <p className={quiet}>{t("Nutrition is not available right now.")}</p>;
 
-  const nutrition = state.data;
   if (!nutrition.plausible) {
     return <p className="text-sm text-warning">{t("This looks wrong: check the units in this recipe.")}</p>;
   }

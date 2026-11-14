@@ -49,13 +49,13 @@ export const TILES: {
   },
   {
     label: "Short",
-    hint: "Needed above the forecast.",
+    hint: "Needed above the forecast. Euros are estimated from your latest order prices.",
     value: (score, unit, t) => quantityOrEuros(score, "short", unit, t),
     units: "short",
   },
   {
     label: "Waste",
-    hint: "Forecast above the need.",
+    hint: "Forecast above the need. Euros are estimated from your latest order prices.",
     value: (score, unit, t) => quantityOrEuros(score, "waste", unit, t),
     units: "waste",
   },
@@ -65,7 +65,8 @@ export const TILES: {
 function quantityOrEuros(score: ForecastScore, key: "short" | "waste", unit: string | null, t: ReturnType<typeof useT>) {
   if (!score.byUnit) return formatQuantity(score[key], unit, t("unknown"));
   const eur = key === "short" ? score.shortEur : score.wasteEur;
-  return eur == null ? "" : formatEur(eur);
+  // Estimated: the latest order price per kitchen unit (gateway/forecast_value.py), never a booked figure.
+  return eur == null ? "" : t("about {value}", { value: formatEur(eur) });
 }
 
 function Figure({ score, unit, tile, main }: { score: ForecastScore; unit: string | null; tile: (typeof TILES)[number]; main: boolean }) {

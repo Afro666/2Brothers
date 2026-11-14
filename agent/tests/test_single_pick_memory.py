@@ -46,7 +46,7 @@ def test_without_facts_the_pick_messages_are_exactly_the_existing_ones(monkeypat
         assert single_pick.MEMORY_NOTE not in messages[0]['content']
         payload = json.loads(messages[1]['content'])
         assert messages[1]['role'] == 'user'
-        assert set(payload) == {'request', 'products'} and payload['request'] == NEED['text']
+        assert set(payload) == {'request', 'need', 'products'} and payload['request'] == NEED['text']
     asyncio.run(run())
 
 

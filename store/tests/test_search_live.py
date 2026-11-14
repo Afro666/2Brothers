@@ -49,11 +49,79 @@ class SearchAcceptance(unittest.TestCase):
         cups = search_products(self.db, "coffee cup", limit=5)
         self.assertTrue(all("cup" in row["names"]["en"].lower() for row in cups))
 
+    def test_almond_milk_gives_food_first_not_the_hand_wash(self):
+        # #1658: the only name with both words is "Palmolive Naturals Almond Milk liquid hand wash".
+        from store.search import ALL_WORDS_BOOST, NON_FOOD_PREFIXES
+        # "olive milk": the same picture with another hand wash ("Milk & Olive"), and no
+        # plant drink of that name to answer it (#1699 answers "almond milk" with almond drinks).
+        for query in ("almond milk", "olive milk"):
+            rows = search_products(self.db, query, limit=50)
+            self.assertFalse(rows[0]["category"].startswith(NON_FOOD_PREFIXES), rows[0]["names"])
+            for row in rows[:3]:
+                self.assertNotIn("hand wash", row["names"]["en"].lower())
+            # A non-food name with both words must not look like a full match
+            # (gateway/candidates.py would hand the Buyer only that row: the hand wash).
+            self.assertTrue(all(row["score"] < ALL_WORDS_BOOST for row in rows
+                                if row["category"].startswith(NON_FOOD_PREFIXES)), query)
+            foods = [not row["category"].startswith(NON_FOOD_PREFIXES) for row in rows]
+            self.assertEqual(foods, sorted(foods, reverse=True))  # every food row before any non-food row
+        # A food name with every word keeps its full-match score in such a query.
+        self.assertGreaterEqual(search_products(self.db, "lactose free milk", limit=1)[0]["score"],
+                                ALL_WORDS_BOOST)
+        jugs = search_products(self.db, "milk jug", limit=3)  # the last word is tableware
+        self.assertEqual([row["category"] for row in jugs], ["20033"] * 3)
+
+    def test_a_plant_milk_gives_the_plant_drink_first(self):
+        # #1699: was almond ice cream for "almond milk", milk chocolate for "oat milk",
+        # and nothing at all for "kauramaito".
+        for query, word in (("almond milk", "almond drink"), ("oat milk", "oat drink"),
+                            ("rice milk", "rice drink"), ("barista oat milk", "oat drink")):
+            first = search_products(self.db, query, limit=1)[0]
+            self.assertEqual(first["category"], "10402", (query, first["names"]))
+            self.assertIn(word, first["names"]["en"].lower())
+            if query != "barista oat milk":  # "Oat Drink Barista": the words, not the phrase
+                self.assertIn(f'name contains "{word}"', first["match_reasons"])
+        for query, word in (("kauramaito", "kaurajuoma"), ("mantelimaito", "mantelijuoma"),
+                            ("soijamaito", "soijajuoma")):
+            rows = search_products(self.db, query, limit=3)
+            self.assertTrue(rows, query)
+            self.assertTrue(all(word in row["names"]["fi"].lower() for row in rows), query)
+        soy = search_products(self.db, "soy milk", limit=10)
+        self.assertEqual([row["category"] for row in soy[:5]], ["10402"] * 5)
+        self.assertFalse(any("soda" in row["names"]["en"].lower() for row in soy))  # one typo from "soya"
+        litres = search_products(self.db, "oat milk 1 l", limit=5)
+        self.assertTrue(all(row["net_content"] == ONE_LITRE and "oat drink" in row["names"]["en"].lower()
+                            for row in litres))
+        coconut = search_products(self.db, "coconut milk", limit=3)  # its own product, not a drink
+        self.assertTrue(all("coconut milk" in row["names"]["en"].lower() for row in coconut))
+
+    def test_the_meaning_search_keeps_the_hand_wash_out_of_a_food_query_too(self):
+        # #1692. The query vector is the hand wash's own stored vector: the worst case, the
+        # vector side ranks it first. No call to the embedding service.
+        from unittest import mock
+        from store import embeddings
+        from store.search import NON_FOOD_PREFIXES
+        soap = self.db.products.find_one({"names.en": {"$regex": "Almond Milk liquid hand wash"}},
+                                         {"embedding.vector": 1})
+        if not soap or "embedding" not in soap:
+            self.skipTest("the product vectors are not loaded")
+        vector = list(soap["embedding"]["vector"].as_vector().data)
+        with mock.patch.object(embeddings, "current_model", return_value=None):
+            rows = search_products(self.db, "almond milk", limit=20, hybrid=True,
+                                   embedder=lambda texts, kind: [vector])
+            wash = search_products(self.db, "hand wash", limit=3, hybrid=True,
+                                   embedder=lambda texts, kind: [vector])
+        self.assertFalse(rows[0]["category"].startswith(NON_FOOD_PREFIXES), rows[0]["names"])
+        for row in rows[:3]:
+            self.assertNotIn("hand wash", row["names"]["en"].lower())
+        foods = [not row["category"].startswith(NON_FOOD_PREFIXES) for row in rows]
+        self.assertEqual(foods, sorted(foods, reverse=True))  # every food row before any non-food row
+        self.assertTrue(all(row["category"].startswith("63") for row in wash))  # a non-food query: as before
+
     def test_a_row_with_some_of_the_words_stays_under_the_all_words_line(self):
         from store.search import ALL_WORDS_BOOST
-        rows = search_products(self.db, "almond milk", limit=20)
-        some = [row for row in rows if not all(
-            word in " ".join(row["names"].values()).lower() for word in ("almond", "milk"))]
+        rows = search_products(self.db, "milk honey", limit=20)
+        some = [row for row in rows if "honey" not in " ".join(row["names"].values()).lower()]
         self.assertTrue(some)
         self.assertTrue(all(row["score"] < ALL_WORDS_BOOST for row in some))
 

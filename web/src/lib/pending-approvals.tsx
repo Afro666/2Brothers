@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { useApi } from "@/api";
 import { useLiveConnected, useLiveEvents } from "@/lib/live-events";
@@ -51,6 +51,13 @@ export function PendingApprovalsProvider({
   const refresh = useCallback(() => setVersion((value) => value + 1), []);
   useLiveEvents(["proposal", "approval"], refresh);
   const liveConnected = useLiveConnected();
+  // The stream sends only new events: a proposal or approval made while it was down is asked
+  // for once when it connects again.
+  const wasConnected = useRef(liveConnected);
+  useEffect(() => {
+    if (liveConnected && !wasConnected.current) refresh();
+    wasConnected.current = liveConnected;
+  }, [liveConnected, refresh]);
   // The connected event stream already refreshes the count; without it, ask every 30 s while the
   // tab is seen, and at once when it is seen again.
   useEffect(() => {

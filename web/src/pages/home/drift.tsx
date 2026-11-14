@@ -9,6 +9,7 @@ import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
 import { Tile, TileState } from "@/pages/home/tile";
+import { ProductLink } from "@/components/purchasing/product-link";
 
 export const KIND_LABEL: Record<DriftWarning["kind"], string> = {
   portion_creep: "Portions creeping",
@@ -54,7 +55,7 @@ function DriftList({
             <span className="flex min-w-0 items-center gap-2">
               <ProductThumb en={warning.productName} size="sm" />
               <span className="min-w-0 font-medium break-words">
-                {warning.productName ?? warning.productId}
+                <ProductLink productId={warning.productId}>{warning.productName ?? warning.productId}</ProductLink>
                 {showKitchen && warning.kitchenName ? (
                   <span className="font-normal text-muted-foreground">
                     {" "}

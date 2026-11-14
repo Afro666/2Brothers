@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
+import { plainCode } from "@/lib/codes";
 import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import { LabelVerificationDemo } from "@/components/purchasing/label-evidence";
@@ -207,7 +208,7 @@ export function TrustPage() {
                             </Badge>
                           ) : null}
                         </div>
-                        <p className="text-sm break-words">{row.event.summary}</p>
+                        <p className="text-sm break-words">{plainCode(row.event.summary, t)}</p>
                         <p className="font-mono text-xs text-muted-foreground">
                           {t("hash {hash} · previous {previous}", {
                             hash: short(row.hash),

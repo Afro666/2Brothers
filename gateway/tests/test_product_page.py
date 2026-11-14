@@ -136,6 +136,17 @@ def test_kitchen_stats_orders_waiting_proposals_stock_recipes(page):
     assert (order["order_id"], order["quantity"], order["total"]) == (r.json()["order_id"], "51", "131.07")
 
 
+def test_newest_waiting_proposal_shows_past_200_older_ready_ones(page):
+    client, _, db = page
+    old = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    db.proposals.insert_many([{"_id": f"old-{i}", "kitchen_id": "demo-kitchen", "status": "READY",
+                               "offer_id": f"old-offer-{i}", "idempotency_key": f"old-{i}",
+                               "created_at": old} for i in range(250)])
+    p = milk(client, quantity="51")                     # inserted last, created newest
+    waiting = get(client).json()["kitchen"]["proposals_waiting"]
+    assert [w["proposal_id"] for w in waiting] == [p["proposal_id"]]
+
+
 def test_recall_alert_blocks_until_dismissed(page):
     client, _, db = page
     db.recall_alerts.insert_one({"_id": "recall-1", "kitchen_id": "demo-kitchen", "product_id": PID,

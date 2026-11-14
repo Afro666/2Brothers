@@ -36,6 +36,20 @@ def test_engine_yield_and_running_stock():
     assert weeks_between(date(2026, 11, 15), date(2026, 11, 23)) == ["2026-W46", "2026-W47", "2026-W48"]
 
 
+def test_counted_needs_round_after_combining_dishes_and_keep_measured_precision():
+    recipes = {"bread": {"name": "Bread", "ingredients": [
+        {"product_id": "roll", "qty_per_portion": "0.6", "unit": "PCS"},
+        {"product_id": "milk", "qty_per_portion": "0.125", "unit": "L"}]}}
+    entries = [{"date": "2026-11-16", "recipe_id": "bread", "covers": 1}] * 2
+    rows, problems = gross_needs(entries, recipes)
+    by_id = {row['product_id']: row for row in rows}
+    assert not problems and by_id['roll']['gross_need'] == D('2')  # ceil(0.6 + 0.6)
+    assert by_id['milk']['gross_need'] == D('0.250')
+    net = {row['product_id']: row for row in net_needs(rows, {'roll': ('PCS', D('0.5'))})}
+    assert net['roll']['net_need'] == D('2')
+    assert net['milk']['net_need'] is None
+
+
 def test_recipes_menu_plan_stock_and_demand_end_to_end(env):
     client, _, db = env
     for recipe in (SOUP, PORRIDGE):

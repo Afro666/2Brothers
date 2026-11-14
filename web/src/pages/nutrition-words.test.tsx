@@ -30,6 +30,23 @@ describe("nutrition on the recipes tab", () => {
     expect(soup).toHaveTextContent("No nutrition table: Rye bread loaf");
   });
 
+  it("loads the nutrition of every recipe card with one request", async () => {
+    const api = createMockApi();
+    const batch = vi.spyOn(api, "getRecipesNutrition");
+    const single = vi.spyOn(api, "getRecipeNutrition");
+    renderApp("/products", api);
+    await screen.findByRole("tab", { name: "Recipes" });
+    expect(batch).not.toHaveBeenCalled(); // nothing is read before the Recipes tab opens
+
+    const pudding = await recipeCard("Rice pudding");
+    expect(await within(pudding).findByText("320 kcal per portion")).toBeInTheDocument();
+    const soup = screen.getByText("Salmon soup").closest("[data-slot='card-content']") as HTMLElement;
+    expect(await within(soup).findByText(/540 kcal per portion/)).toBeInTheDocument();
+    expect(batch).toHaveBeenCalledTimes(1);
+    // The mock's batch reads its own per-recipe rows; the page itself never asks per card.
+    expect(single.mock.calls.length).toBe((await api.listRecipes()).length);
+  });
+
   it("hides the number and asks to check the units when the gateway says it is not plausible", async () => {
     const api = createMockApi();
     const real = api.getRecipeNutrition;

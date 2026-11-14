@@ -27,6 +27,23 @@ describe("audit page", () => {
     expect(screen.getByText("3 requests, 8 steps")).toBeInTheDocument();
   });
 
+  it.each([999, 1000])("describes the gateway limit at %i steps", async (count) => {
+    const api = createMockApi();
+    api.listAudit = async () => Array.from({ length: count }, (_, index) => ({
+      id: `event-${index}`,
+      at: new Date(Date.UTC(2026, 10, 14, 0, 0, index)).toISOString(),
+      kind: "other" as const,
+      actor: "system" as const,
+      summary: `Step ${index}`,
+      reason: "",
+    }));
+    renderApp("/audit", api);
+
+    expect(await screen.findByText(
+      count === 1000 ? "1000 requests, the newest 1,000 steps" : "999 requests, 999 steps",
+    )).toBeInTheDocument();
+  });
+
   it("names products instead of showing their ids", async () => {
     renderApp("/audit");
     expect(
@@ -87,6 +104,9 @@ describe("audit page", () => {
       order_resolved: "A person resolved an unknown send",
       recall_check: "Recall check",
       demo_inbox_cleared: "Test proposals cleared before a demo",
+      delivery_note_read: "Delivery note read",
+      proposal_explanation_failed: "Proposal explanation failed",
+      kitchen_brief_read: "Kitchen brief read",
       some_future_kind: "some_future_kind",
     };
     const raw = [
@@ -94,7 +114,9 @@ describe("audit page", () => {
         event_id: `k-${i}`,
         kind,
         actor: "system",
-        at: `2026-11-14T10:0${i}:00+00:00`,
+        ...(kind === "proposal_explanation_failed" ? { reason: "EXPLANATION_UNAVAILABLE" } : {}),
+        ...(kind === "order_lookup" ? { reason: "BLOCKED_BY_RECALL" } : {}),
+        at: `2026-11-14T10:${String(i).padStart(2, "0")}:00+00:00`,
       })),
       { event_id: "t-1", type: "tool_call_finished", tool: "request_approval", arguments: {}, result: {} },
       { event_id: "t-2", type: "tool_call_finished", tool: "simulate_order", arguments: {}, result: {} },
@@ -110,6 +132,10 @@ describe("audit page", () => {
     expect(screen.getAllByText("Buyer simulated the order")).toHaveLength(1);
     expect(screen.getAllByText("Buyer is asking for approval")).toHaveLength(1);
     expect(screen.getAllByText("new_tool finished")).toHaveLength(1);
+    // A reason code reads as its plain name, without the approval card's present-tense advice.
+    expect(screen.getByText("Explanation unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Blocked by a recall")).toBeInTheDocument();
+    expect(screen.queryByText(/EXPLANATION_UNAVAILABLE|BLOCKED_BY_RECALL|It cannot be approved/)).not.toBeInTheDocument();
     for (const name of ["stock_photo_read", "request_approval finished", "Buyer called request_approval"]) {
       expect(screen.queryByText(name)).not.toBeInTheDocument();
     }

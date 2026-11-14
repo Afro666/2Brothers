@@ -237,7 +237,7 @@ deadline, not streaming first-token instrumentation.
 
 Only product IDs are cached for ten minutes, scoped to kitchen, request, day,
 quantity/unit, allergen policy, eligible catalog shortlist and the compact kitchen
-memory hash. Prices, stock,
+memory hash and the current quote's selection evidence. Prices, stock,
 offers and approval are never reused by this cache: every new request re-quotes and
 simulates live. The same idempotency key replays its original result as before.
 An identical choice already in flight does not start another model call; its
@@ -257,6 +257,35 @@ is checked before looking up a cached pick, so a changed summary cannot reuse th
 previous ten-minute product choice. Idempotent request replay stays exact. This
 changes context freshness, not Nemotron's weights or the engine's authority over
 quantities. It does not establish a latency guarantee during provider congestion.
+
+The pick now also reads a structured need and exact-quote facts: confirmed/unknown/zero
+stock, coverage, price per proven base unit, sales-unit size and packs needed, arrival,
+cut-off, declared lactose/gluten claims, and distinct confirmed real orders observed in
+the last eight weeks. These facts are private offer metadata, read with kitchen and
+expiry checks; no extra supplier request is made. Prices are ex VAT before basket
+discounts. Unknown evidence stays unknown. The model still returns only indices and
+short reasons; numeric reasons are checked against that product's evidence and the
+request. Changed quote evidence or compact memory invalidates the product choice.
+When the first preferred product alone has proven full, timely coverage, code drops
+unnecessary alternatives so the engine cannot replace that preference with another
+cheaper candidate; partial-stock choices keep their complements. All sizing, quote,
+allergen, recall and human-approval guards still run normally.
+
+The new synthetic 30-case benchmark is independent of #1025's old request set. Run with
+the normal private Nemotron environment configured (never pass a key on the command line):
+
+```
+python -m agent.pick_context_bench --out .local/pick-context-run.jsonl --repeats 3
+```
+
+It makes model calls only, with no proposals/orders, and resumes completed cases from
+the output. Use a fresh output path after changing the prompt or benchmark code. The
+fixture hash prevents accidentally resuming against changed cases. Measurements and
+limits, including the failed initial draft and weaker raw model stability, are in
+`agent/benchmarks/pick-context-v1-report.json` and `docs/submission.md`. Final exact-set
+matches were 27/90 baseline, 54/90 enriched model alone, 69/90 with the deterministic
+full-coverage guard; tokens increased from 346 to 964 per call. This is development-set
+evidence, not a held-out generalization claim.
 
 Set `NEMOTRON_BUYER_STRATEGY=loop` to retain the previous multi-turn implementation.
 The CLI tool agent still uses that audited loop. The legacy worker-mode tests set

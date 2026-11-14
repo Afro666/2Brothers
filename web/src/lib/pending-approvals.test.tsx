@@ -262,6 +262,53 @@ describe("Waiting-approvals count", () => {
     });
   });
 
+  it("asks again at once when the event stream connects again", async () => {
+    vi.useFakeTimers();
+    try {
+      const base = createMockApi();
+      const pending = (await base.listApprovals()).filter((approval) => approval.status === "PENDING");
+      let shown = pending.slice(0, 1);
+      let setConnected: ((connected: boolean) => void) | undefined;
+      const api = {
+        ...base,
+        listApprovals: vi.fn(async () => structuredClone(shown)),
+        subscribeEvents(_onEvent: (event: LiveEvent) => void, onStatus?: (connected: boolean) => void) {
+          setConnected = onStatus;
+          return () => {};
+        },
+      };
+      function Count() {
+        const { count } = usePendingApprovals();
+        return <p>count: {String(count)}</p>;
+      }
+      render(
+        <ApiProvider api={api}>
+          <LiveEventsProvider>
+            <PendingApprovalsProvider><Count /></PendingApprovalsProvider>
+          </LiveEventsProvider>
+        </ApiProvider>,
+      );
+      await act(async () => {
+        setConnected?.(true);
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(screen.getByText("count: 1")).toBeInTheDocument();
+
+      // The stream drops, an approval is added meanwhile, and the stream is back before 30 s.
+      await act(async () => {
+        setConnected?.(false);
+      });
+      shown = pending.slice(0, 2);
+      await act(async () => {
+        setConnected?.(true);
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(screen.getByText("count: 2")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reloads the count after a proposal event", async () => {
     vi.useFakeTimers();
     try {

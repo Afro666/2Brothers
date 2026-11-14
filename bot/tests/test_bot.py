@@ -1,10 +1,13 @@
 """The bot with a fake Telegram and a fake gateway: no network, no token."""
+import copy
+import threading
+import time
 from datetime import datetime
 
 import pytest
 
 from bot import render
-from bot.app import NOT_LINKED, Bot, due_slot, parse_brief_times
+from bot.app import MAX_ADDS, NOT_LINKED, Bot, due_slot, parse_brief_times
 from bot.clients import GatewayError, SpeechError, TelegramError
 from bot.links import Links
 
@@ -220,6 +223,20 @@ def test_a_request_gives_a_summary_and_one_message_per_supplier(bot):
     assert "product own-1" in bakery                   # no name known: said so, never invented
 
 
+@pytest.mark.parametrize("kind", ["group", "supergroup"])
+def test_a_group_chat_gets_a_url_button_and_the_supplier_messages(bot, kind):
+    bot.handle({"message": {"chat": {"id": 7, "type": kind}, "text": "what the menu needs"}})
+    button = bot.tg.edits[0]["markup"]["inline_keyboard"][0][0]
+    assert "web_app" not in button                     # Telegram refuses web_app outside a private chat
+    assert button["url"] == f"https://site.example/approvals?proposal={PID}"
+    assert len(bot.tg.sent) == 3                       # the status message, then one per supplier
+
+
+def test_a_private_chat_keeps_the_web_app_button(bot):
+    bot.handle({"message": {"chat": {"id": 7, "type": "private"}, "text": "what the menu needs"}})
+    assert bot.tg.edits[0]["markup"]["inline_keyboard"][0][0]["web_app"]["url"].endswith(f"proposal={PID}")
+
+
 def test_week_starts_on_the_next_working_day_and_names_it_as_the_delivery_day(bot):
     say(bot, "/week")                # the fixture's "now" is Saturday 14 Nov: Sunday is skipped
     assert bot.gw.calls == [("plan", "2026-11-16", "2026-11-22", "2026-11-16")]
@@ -312,6 +329,34 @@ def test_plus_moves_one_lot_and_updates_the_po_and_the_summary(bot):
     assert ("change", "463380", "704") in bot.gw.calls          # 698 + the lot size of 6
     assert any(e["id"] == summary_id and "EUR 2,100.00" in e["text"] for e in bot.tg.edits)
     assert bot.tg.edits[-1]["id"] == 555 and "704 L" in bot.tg.edits[-1]["text"]
+
+
+class SlowGateway(FakeGateway):
+    """Reads a copy of the proposal, then waits: two updates that run at once both see the old quantity."""
+    def proposal(self, proposal_id):
+        seen = copy.deepcopy(self.current)
+        time.sleep(0.05)
+        return seen
+
+
+def test_two_fast_plus_taps_on_one_chat_are_two_steps(bot):
+    bot.gw = SlowGateway()
+    taps = [threading.Thread(target=press, args=(bot, f"q:{PID}:0:0:+")) for _ in range(2)]
+    for tap in taps:
+        tap.start()
+    for tap in taps:
+        tap.join()
+    changes = [c for c in bot.gw.calls if c[0] == "change"]
+    assert changes == [("change", "463380", "704"), ("change", "463380", "710")]
+
+
+def test_a_busy_chat_does_not_block_another_chat(bot):
+    with bot._chat_lock(7):
+        other = threading.Thread(target=say, args=(bot, "/help", 8))
+        other.start()
+        other.join(2)
+        assert not other.is_alive()
+    assert bot.tg.sent[-1]["chat"] == 8
 
 
 def test_minus_without_a_lot_size_moves_one_unit(bot):
@@ -595,6 +640,22 @@ def test_a_press_adds_the_product_and_the_total_moves(bot):
     assert "EUR 2,098.70" in summary["text"]
 
 
+def test_an_add_that_makes_a_new_supplier_block_shows_that_supplier(bot):
+    bot.gw.current = proposal(blocks=[{"supplier_id": "sup-valio", "name": "Valio Aimo", "expected_total": "1240.10",
+                                       "lines": [line("463380", "698", "L")]}])
+
+    def add(proposal_id, product_id, quantity):
+        bot.gw.calls.append(("add", product_id, quantity))
+        bot.gw.current["blocks"].append({"supplier_id": "sup-bakery", "name": "Corner Bakery", "expected_total": "46.20",
+                                         "lines": [line(product_id, quantity)]})
+        return bot.gw.current
+    bot.gw.add = add
+    press(bot, f"p:{PID}:0")
+    press(bot, f"d:{PID}:0:469549b")
+    assert bot.tg.answers[-1] == "Added."
+    assert "<b>Corner Bakery · 1 item" in bot.tg.edits[-1]["text"]
+
+
 def test_nothing_to_add_and_a_refused_add_are_said(bot):
     bot.gw.addable_rows = []
     press(bot, f"p:{PID}:0")
@@ -614,6 +675,13 @@ def test_add_works_after_a_restart_of_the_bot(bot):
     assert ("addable", PID) in bot.gw.calls and ("add", "469549b", "12") in bot.gw.calls
 
 
+def test_the_addable_lists_in_memory_are_capped(bot):
+    for n in range(MAX_ADDS + 30):
+        bot._addable(f"p{n}")
+    assert len(bot._adds) == MAX_ADDS
+    assert "p0" not in bot._adds and f"p{MAX_ADDS + 29}" in bot._adds      # the oldest went first
+
+
 # ---- found in the first live test, 2026-11-14 ---------------------------------------------
 def test_a_question_is_explained_and_never_sent_to_the_buyer(bot):
     say(bot, "what does it mean active recall?")
@@ -623,7 +691,9 @@ def test_a_question_is_explained_and_never_sent_to_the_buyer(bot):
     assert bot.tg.sent[-1]["text"].startswith("I make orders and briefs") and bot.gw.calls == []
     say(bot, "can I get 20 L oat drink for Monday?")             # a number: this is an order
     say(bot, "what the menu needs")                              # not a question form
-    assert [c[0] for c in bot.gw.calls] == ["ask", "ask"]
+    say(bot, "can you order oat drink for Monday")               # a polite order without a number
+    say(bot, "can I get milk for tomorrow?")
+    assert [c[0] for c in bot.gw.calls] == ["ask", "ask", "ask", "ask"]
 
 
 def test_a_change_updates_the_last_brief_and_the_summary_also_after_a_restart(bot, tmp_path):
@@ -652,6 +722,15 @@ def test_a_message_that_cannot_be_edited_does_not_stop_the_change(bot):
         real(chat_id, message_id, text, markup)
 
     bot.tg.edit = edit
+    press(bot, f"q:{PID}:0:0:+")
+    assert ("change", "463380", "704") in bot.gw.calls
+    assert bot.tg.edits[-1]["id"] == 555 and "704 L" in bot.tg.edits[-1]["text"]
+
+
+def test_an_odd_stored_brief_does_not_stop_the_change(bot):
+    say(bot, "20 L oat drink")
+    chat = bot.tg.sent[0]["chat"]
+    bot.links.note(f"brief:{chat}", {"id": 1, "answer": "bad", "day": "x"})
     press(bot, f"q:{PID}:0:0:+")
     assert ("change", "463380", "704") in bot.gw.calls
     assert bot.tg.edits[-1]["id"] == 555 and "704 L" in bot.tg.edits[-1]["text"]

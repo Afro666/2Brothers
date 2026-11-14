@@ -243,7 +243,8 @@ def _kitchen(gw, kitchen_id: str, pid: str, today: date) -> dict:
                        "quantity": line.get("quantity"), "unit": line.get("unit"), "total": line.get("total"),
                        "status": order.get("status"), "outcome": order.get("outcome")})
     ready = {p["offer_id"]: p for p in db.proposals.find({"kitchen_id": kitchen_id, "status": "READY"},
-                                                         {"offer_id": 1, "created_at": 1}).limit(200)}
+                                                         {"offer_id": 1, "created_at": 1})
+             .sort("created_at", -1).limit(200)}     # the newest 200, never a random 200 (#1632)
     waiting = []
     for offer in db.offers.find({"_id": {"$in": list(ready)}, "simulation.lines.product_id": pid},
                                 {"simulation.lines": 1}) if ready else []:
@@ -251,6 +252,7 @@ def _kitchen(gw, kitchen_id: str, pid: str, today: date) -> dict:
         waiting.append({"proposal_id": proposal["_id"], "created_at": _when(proposal.get("created_at")),
                         "quantity": line.get("quantity"), "unit": line.get("unit"), "total": line.get("total")})
     waiting.sort(key=lambda w: str(w["created_at"] or ""), reverse=True)
+    waiting = waiting[:ORDERS_SHOWN]
     count = next(iter(db.kitchen_stock.find({"meta.kitchen_id": kitchen_id, "meta.product_id": pid})
                       .sort("ts", -1).limit(1)), None)
     stock = None if count is None else {"on_hand": _num(count.get("on_hand")), "unit": count.get("unit"),

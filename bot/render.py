@@ -99,8 +99,10 @@ def _plural(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
-def summary(proposal: dict, approve_url: str | None = None, heard: str | None = None) -> Message:
-    """The first message: what, from how many suppliers, the total, then one line per supplier."""
+def summary(proposal: dict, approve_url: str | None = None, heard: str | None = None,
+            private: bool = True) -> Message:
+    """The first message: what, from how many suppliers, the total, then one line per supplier.
+    Telegram allows a web_app button only in a private chat; a group gets a plain url button."""
     request = proposal.get("request") or {}
     blocks = blocks_of(proposal)
     out: list[str] = []
@@ -133,7 +135,9 @@ def summary(proposal: dict, approve_url: str | None = None, heard: str | None = 
         who = "Proposed by the Buyer agent (Nemotron)."
     if who:
         out.append(who)
-    buttons = [[{"text": "Open to approve", "web_app": {"url": approve_url}}]] if approve_url else []
+    kind = "web_app" if private else "url"
+    target = {"url": approve_url} if private else approve_url
+    buttons = [[{"text": "Open to approve", kind: target}]] if approve_url else []
     return Message("\n".join(out), buttons)
 
 

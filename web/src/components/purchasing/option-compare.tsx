@@ -6,7 +6,7 @@ import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { DemoNote, leadTimeText } from "@/components/purchasing/proposal-lines";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/api/types";
-import { formatDateTime, formatEur, formatNumber, formatPercent } from "@/lib/format";
+import { formatDateTime, formatEur, formatNumber, formatPercent, peopleUnit } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { OfferTier, ProposalOption } from "@/types";
@@ -176,7 +176,7 @@ export function OptionCompare({
               option.lines.map((line) =>
                 line.unitPrice == null
                   ? "unknown"
-                  : t("{price} per {unit}", { price: formatEur(line.unitPrice), unit: line.unit }),
+                  : t("{price} per {unit}", { price: formatEur(line.unitPrice), unit: peopleUnit(line.unit, 1) }),
               ),
             ),
           ];
@@ -227,7 +227,7 @@ export function OptionCompare({
                   <span id={titleId} className="min-w-0 flex-[1_1_16rem] break-words font-medium">
                     {t("Option {letter}:", { letter })}{" "}
                     {option.lines
-                      .map((line) => `${formatNumber(line.quantity)} ${line.unit} ${line.productName ?? line.productId}`)
+                      .map((line) => `${formatNumber(line.quantity)} ${peopleUnit(line.unit, line.quantity)} ${line.productName ?? line.productId}`)
                       .join(" + ")}
                   </span>
                   <span id={metaId} className="contents">
@@ -334,7 +334,7 @@ export function OptionCompare({
                 <p className="hatch text-sm text-warning sm:col-start-2">
                   {t("{quantity} {unit} waits for stock confirmation", {
                     quantity: formatNumber(option.held.quantity),
-                    unit: option.held.unit,
+                    unit: peopleUnit(option.held.unit, option.held.quantity),
                   })}
                 </p>
               ) : null}

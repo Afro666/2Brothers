@@ -69,7 +69,7 @@ describe("/kit", () => {
     expect(within(orders).getAllByText("unknown").length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toMatch(/999[\s,.]?999/);
     // The real stock of 462775 is shown as measured.
-    expect(within(orders).getAllByText("51 ST").length).toBeGreaterThan(0);
+    expect(within(orders).getAllByText("51 pieces").length).toBeGreaterThan(0);
   });
 
   it("flags a closing time that has already passed", async () => {

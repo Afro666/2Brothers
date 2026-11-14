@@ -7,6 +7,7 @@ message opens our own approval card, where a person approves the exact total.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import threading
 import time
@@ -27,6 +28,7 @@ NOT_LINKED = "This chat is not linked to a kitchen yet. Ask the kitchen's admin 
 MAX_VOICE_SECONDS = 30
 MAX_PHOTO_BYTES = 4 * 1024 * 1024       # the gateway's limit for a shelf photo
 MAX_SHELVES = 50
+MAX_ADDS = 200                          # proposals whose addable rows are kept
 
 
 BRIEF_TIMES = {"morning": "07:00", "evening": "16:00"}      # the kitchen's time
@@ -76,10 +78,17 @@ NO_ANSWER = ("I make orders and briefs; I cannot answer that question yet.\n"
              "Say what the kitchen needs, for example: <b>20 L oat drink for Monday</b>, or send /brief.")
 
 
+# "can you order oat drink for Monday" is a polite order, not a question (#1653).
+ORDER_WORDS = re.compile(r"\b(?:orders?|get|need|buy|send|add|want|tilaa\w*|tarvit\w*|zam[óo]w\w*|zamawia\w*|"
+                         r"potrzeb\w*|kup\w*)\b")
+
+
 def is_question(text: str) -> bool:
     low = text.strip().lower()
     if any(ch.isdigit() for ch in low):
         return False            # "can I get 20 L milk for Monday?" is an order
+    if ORDER_WORDS.search(low) and not any(word in low for words, _ in EXPLAINED for word in words):
+        return False            # "can you order oat drink for Monday" goes to the Buyer
     return low.endswith("?") or low.startswith(QUESTION_STARTS)
 
 
@@ -106,11 +115,27 @@ class Bot:
         self._adds: dict[str, list[dict]] = {}               # proposal -> its addable rows, until one is added
         self._shelves: dict[tuple[int, int], dict] = {}      # (chat, message) -> a shelf read to confirm
         self._lock = threading.Lock()
+        self._chat_locks: dict[int, threading.Lock] = {}     # chat -> held for one update at a time
         self._last_brief: dict = {}
+        self._groups: set[int] = set()                       # chats that are not private: no web_app buttons
         self.brief_times = brief_times if brief_times is not None else dict(BRIEF_TIMES)
 
     # ---- entry -------------------------------------------------------------------------
     def handle(self, update: dict) -> None:
+        """One update. Updates from one chat run one at a time, in the order they came (two fast
+        "+" taps are two steps); other chats run in parallel."""
+        message = (update.get("callback_query") or {}).get("message") or update.get("message") or {}
+        chat = (message.get("chat") or {}).get("id")
+        if chat is None:
+            return self._handle(update)
+        with self._chat_lock(chat):
+            self._handle(update)
+
+    def _chat_lock(self, chat: int) -> threading.Lock:
+        with self._lock:
+            return self._chat_locks.setdefault(chat, threading.Lock())
+
+    def _handle(self, update: dict) -> None:
         try:
             if "callback_query" in update:
                 self._callback(update["callback_query"])
@@ -121,8 +146,20 @@ class Bot:
         except Exception as exc:        # one bad update must not stop the bot; never the content
             print(f"bot: update failed: {type(exc).__name__}", file=sys.stderr, flush=True)
 
+    def _note_chat_type(self, chat_info: dict) -> None:
+        """Telegram allows web_app buttons only in private chats; remember which chats are groups."""
+        kind, chat = chat_info.get("type"), chat_info.get("id")
+        if chat is None or kind is None:
+            return
+        with self._lock:
+            if kind == "private":
+                self._groups.discard(chat)
+            else:
+                self._groups.add(chat)
+
     def _message(self, message: dict) -> None:
         chat = message["chat"]["id"]
+        self._note_chat_type(message["chat"])
         text = (message.get("text") or "").strip()
         if text.startswith("/start"):
             return self._start(chat, text, message)
@@ -339,7 +376,7 @@ class Bot:
         known = self.links.noted(f"summary:{chat}:{pid}")
         if known:
             url = f"{self.site_url}/approvals?proposal={pid}" if self.site_url and pid else None
-            message = render.summary(proposal, url, known.get("heard"))
+            message = render.summary(proposal, url, known.get("heard"), private=chat not in self._groups)
             self._edit_quietly(chat, known["id"], message)
         last = self.links.noted(f"brief:{chat}")
         if last:
@@ -348,7 +385,10 @@ class Bot:
             except GatewayError:
                 return
             url = f"{self.site_url}/approvals" if self.site_url else None
-            self._edit_quietly(chat, last["id"], render.brief(last["answer"], waiting, last["day"], url))
+            try:                            # an odd stored brief must not stop the change
+                self._edit_quietly(chat, last["id"], render.brief(last["answer"], waiting, last["day"], url))
+            except Exception as exc:
+                print(f"bot: brief refresh failed: {type(exc).__name__}", file=sys.stderr, flush=True)
 
     def _edit_quietly(self, chat: int, message_id: int, message: render.Message) -> None:
         try:
@@ -369,6 +409,7 @@ class Bot:
     def _callback(self, query: dict) -> None:
         message = query.get("message") or {}
         chat, message_id = (message.get("chat") or {}).get("id"), message.get("message_id")
+        self._note_chat_type(message.get("chat") or {})
         parts = str(query.get("data") or "").split(":")
         if chat is None or not self.links.linked(chat) or parts[0] == "noop" or len(parts) < 3:
             self.tg.answer(query["id"])
@@ -404,6 +445,7 @@ class Bot:
             elif action == "d":
                 proposal, index = self._add(proposal, index, parts[3])
                 self._show_summary(chat, proposal)
+                blocks = render.blocks_of(proposal)       # the product may start a new supplier block
                 notice = "Added."
             elif action == "q":
                 proposal, mode, notice = self._set_quantity(proposal, index, line, parts[4])
@@ -435,7 +477,10 @@ class Bot:
                 found.append({**row, "add_qty": qty})
         with self._lock:
             self._products.update(lots)
+            self._adds.pop(proposal_id, None)                   # re-adding moves it to the newest
             self._adds[proposal_id] = found
+            for old in list(self._adds)[:-MAX_ADDS]:             # the oldest lists go first
+                del self._adds[old]
         return found
 
     def _add(self, proposal: dict, index: int, product_id: str):

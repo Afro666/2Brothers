@@ -729,6 +729,21 @@ def test_the_improved_tables_are_read_from_submission_md():
     assert "a&lt;b" in page and "<th" in page and "<td" in page
 
 
+def test_the_improved_tables_stop_at_the_next_bold_part(tmp_path):
+    """A later part with its own table (#1722) is not an "improved" table."""
+    from demo.record_demo import improved_tables
+    text = ("**How we improved its outputs.** We measured **first**.\n\n"
+            "| Setting | Score |\n|---|---:|\n| on | 1 |\n\n"
+            "Some text with **bold** words in it.\n\n"
+            "| Live loop | Seconds |\n|---|---:|\n| run | 289 |\n\n"
+            "**It learns from the kitchen.** Another part.\n\n"
+            "| Buyer | Corrections |\n|---|---:|\n| with | 5.88 |\n\n"
+            "**Not built:** fine-tuning.\n")
+    path = tmp_path / "submission.md"
+    path.write_text(text, encoding="utf-8")
+    assert [table[0][0] for table in improved_tables(path)] == ["Setting", "Live loop"]
+
+
 def test_improved_tables_name_a_missing_part(tmp_path):
     from demo.record_demo import improved_tables
     other = tmp_path / "submission.md"

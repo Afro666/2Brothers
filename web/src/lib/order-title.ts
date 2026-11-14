@@ -1,4 +1,4 @@
-import { formatNumber } from "@/lib/format";
+import { formatNumber, peopleUnit } from "@/lib/format";
 import type { TranslationVariables } from "@/lib/i18n";
 import type { Order, OrderLine } from "@/types";
 
@@ -7,7 +7,7 @@ type Translate = (text: string, vars?: TranslationVariables) => string;
 function lineTitle(line: OrderLine, t: Translate): string {
   return t("{name} × {quantity}", {
     name: line.product.names.en || line.product.id,
-    quantity: `${formatNumber(line.quantity)} ${line.product.salesUnit}`,
+    quantity: `${formatNumber(line.quantity)} ${peopleUnit(line.product.salesUnit, line.quantity)}`,
   });
 }
 

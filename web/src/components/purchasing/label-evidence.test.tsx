@@ -1,6 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
+import { ApiProvider } from "@/api";
 import { gatewayRequest } from "@/api/http";
+import { createMockApi } from "@/api/mock";
 import { formatDateTime } from "@/lib/format";
 import { LabelEvidence, LabelVerificationDemo, type LabelCheck } from "./label-evidence";
 
@@ -11,6 +13,10 @@ const base: LabelCheck = { product_id: "462775", producer: "ARLA OY", label: "GO
   scope: "producer", reason: "Exact registered producer" };
 
 beforeEach(() => vi.mocked(gatewayRequest).mockReset());
+
+function renderDemo(api = createMockApi()) {
+  return render(<ApiProvider api={api}><LabelVerificationDemo /></ApiProvider>);
+}
 
 it("shows producer-only verification with an official source", () => {
   render(<LabelEvidence check={base} />);
@@ -55,7 +61,7 @@ it("puts unsupported registers in one collapsed group below the checked rows", a
     checks: [base, unsupported],
     negative_control: { ...base, label_verified: "not_found", synthetic: true },
   });
-  render(<LabelVerificationDemo />);
+  renderDemo();
 
   const summary = await screen.findByText("Not checked: 1 labels with no public register");
   const group = summary.closest("details");
@@ -66,4 +72,34 @@ it("puts unsupported registers in one collapsed group below the checked rows", a
   const verified = screen.getByText("Producer registration verified");
   expect(verified.compareDocumentPosition(group as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByText(/Test row/)).toBeVisible();
+});
+
+it("shows known product names before codes and keeps codes for missing products", async () => {
+  const api = createMockApi();
+  const [product] = await api.getProducts([base.product_id]);
+  api.getProducts = vi.fn(async () => [product]);
+  vi.mocked(gatewayRequest).mockResolvedValue({
+    checks: [base, { ...base, product_id: "missing" }],
+    negative_control: { ...base, label_verified: "not_found", synthetic: true },
+  });
+  renderDemo(api);
+
+  expect(await screen.findByText(new RegExp(`${product.names.en} · Product ${base.product_id}`))).toBeVisible();
+  expect(screen.getByText("Product missing · ARLA OY")).toBeVisible();
+  expect(api.getProducts).toHaveBeenCalledOnce();
+  expect(api.getProducts).toHaveBeenCalledWith([base.product_id, "missing"]);
+});
+
+it("keeps label evidence available when the product lookup fails", async () => {
+  const api = createMockApi();
+  api.getProducts = vi.fn(async () => { throw new Error("Catalog unavailable"); });
+  vi.mocked(gatewayRequest).mockResolvedValue({
+    checks: [base],
+    negative_control: { ...base, label_verified: "not_found", synthetic: true },
+  });
+  renderDemo(api);
+
+  expect(await screen.findByText("Producer registration verified")).toBeVisible();
+  expect(screen.getByText(`Product ${base.product_id} · ARLA OY`)).toBeVisible();
+  expect(screen.queryByRole("alert")).toBeNull();
 });

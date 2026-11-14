@@ -1,3 +1,4 @@
+import type { ProductPage } from "@/api/http-product-page";
 import type { ApprovalDecision } from "@/components/purchasing/approval-card";
 import type {
   AllergenPresence,
@@ -642,6 +643,8 @@ export interface Api {
   searchProducts(query: string, filters?: ProductSearchFilters): Promise<SearchedProducts>;
   /** Catalog products by id; ids the catalog does not know are absent from the result. */
   getProducts(ids: ProductCode[]): Promise<Product[]>;
+  /** One product's page (docs/contract.md "Product page"); 404 `PRODUCT_NOT_FOUND` for an unknown code. */
+  getProductPage(productId: ProductCode, date?: string): Promise<ProductPage>;
   getMandate(): Promise<Mandate>;
   listSuppliers(): Promise<Supplier[]>;
   /** Creates when `id` is missing, otherwise replaces. */
@@ -657,6 +660,11 @@ export interface Api {
   getMenuPlan(week: string): Promise<MenuPlanEntry[]>;
   /** One portion of a recipe from the label data. Fails with `NOT_FOUND` for an unknown recipe. */
   getRecipeNutrition(recipeId: string): Promise<RecipeNutrition>;
+  /**
+   * The same row for every recipe of the kitchen, or for `ids` in that order, in one call
+   * (`GET /recipes/nutrition`, #1101). An id the kitchen does not have is left out.
+   */
+  getRecipesNutrition(ids?: string[]): Promise<RecipeNutrition[]>;
   /** Planned and ordered energy, `from` and `to` inclusive (`YYYY-MM-DD`). */
   getNutrition(from: string, to: string): Promise<KitchenNutrition>;
   /** The kitchen's own names for products, and the words of requests that matched nothing. */

@@ -60,7 +60,7 @@ describe("orders pages", () => {
     renderApp("/orders");
 
     const row = await screen.findByRole("link", { name: /ORD-1047/ });
-    expect(within(row).getByText("Arla 1 L lactose free fat free UHT milk drink × 51 ST")).toBeVisible();
+    expect(within(row).getByText("Arla 1 L lactose free fat free UHT milk drink × 51 pieces")).toBeVisible();
     expect(within(row).getByText("Call Töölö Bakery to confirm")).toBeVisible();
     expect(within(row).getByText("Placed", { selector: "[data-status='PLACED']" })).toBeVisible();
     expect(within(row).queryByText("Runs out before next delivery")).not.toBeInTheDocument();
@@ -70,7 +70,7 @@ describe("orders pages", () => {
     renderApp("/orders/ORD-1042");
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Arla 1 L lactose free fat free UHT milk drink × 51 ST" }),
+      await screen.findByRole("heading", { level: 1, name: "Arla 1 L lactose free fat free UHT milk drink × 51 pieces" }),
     ).toBeVisible();
     expect(screen.queryByText(/Waiting for .* to confirm\. Call or e-mail them/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Call .* to confirm/)).not.toBeInTheDocument();
@@ -83,7 +83,7 @@ describe("orders pages", () => {
     api.getOrder = async () => ({ ...(await getOrder("ORD-1042")), id: longId });
     renderApp(`/orders/${longId}`, api);
 
-    const title = "Arla 1 L lactose free fat free UHT milk drink × 51 ST";
+    const title = "Arla 1 L lactose free fat free UHT milk drink × 51 pieces";
     expect(await screen.findByRole("heading", { level: 1, name: title })).toBeVisible();
     expect(screen.getByRole("heading", { level: 2, name: title })).toBeVisible();
     const reference = screen.getByText("d2148e9a…", { selector: "code" });
@@ -98,7 +98,7 @@ describe("orders pages", () => {
 
     await user.click(await screen.findByRole("link", { name: /ORD-1042/ }));
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Arla 1 L lactose free fat free UHT milk drink × 51 ST" }),
+      await screen.findByRole("heading", { level: 1, name: "Arla 1 L lactose free fat free UHT milk drink × 51 pieces" }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Arla 1 L lactose free fat free UHT milk drink").length).toBeGreaterThan(0);
 
@@ -318,7 +318,7 @@ describe("orders pages", () => {
 
     const lines = await screen.findByRole("list", { name: "Lines" });
     expect(within(lines).getByText("pack size not in the catalog")).toHaveClass("unknown-value");
-    expect(within(lines).getByText("pack size not in the catalog").parentElement).toHaveTextContent("KG");
+    expect(within(lines).getByText("pack size not in the catalog").parentElement).toHaveTextContent("kg");
     expect(within(lines).queryByText(/pack size unknown/)).not.toBeInTheDocument();
   });
 

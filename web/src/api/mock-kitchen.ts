@@ -15,11 +15,11 @@ function validTimezone(value: string): boolean {
 
 export function createKitchenMock(recordAudit: AuditRecorder): KitchenApi {
   let profile: KitchenProfile = {
-    name: "Kuu School Kitchen",
-    type: "school",
-    address: "Koulukatu 12, 00100 Helsinki, Finland",
+    name: "Demo kitchen",
+    type: "restaurant",
+    address: "Demokatu 1, 00100 Helsinki, Finland",
     timezone: "Europe/Helsinki",
-    deliveryAddress: "Kuu School, rear delivery entrance, Koulukatu 14, Helsinki",
+    deliveryAddress: "Demo kitchen, delivery entrance, Demokatu 1, Helsinki",
   };
 
   return {

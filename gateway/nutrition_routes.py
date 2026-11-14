@@ -1,6 +1,8 @@
 """Nutrition from the catalog's label data (engine/nutrition.py).
 
 - GET /v1/kitchens/{k}/recipes/{recipe_id}/nutrition: one portion as eaten.
+- GET /v1/kitchens/{k}/recipes/nutrition?ids=: the same row for every recipe (or the ids
+  asked) with one product lookup for all of them (#1101).
 - GET /v1/kitchens/{k}/nutrition?from=&to=: per day of the menu plan the planned energy and
   energy per cover, and for the window what was ordered against what the plan needs.
 
@@ -43,17 +45,48 @@ def _products(db, ids: list[str]) -> dict[str, dict]:
     return out
 
 
+MAX_BATCH_IDS = 200
+
+
+def _ingredient_ids(recipes: list[dict]) -> list[str]:
+    return [str(i["product_id"]) for r in recipes for i in r.get("ingredients") or []]
+
+
+def _row(recipe: dict, products: dict[str, dict]) -> dict:
+    result = nutrition.recipe_portion(recipe, products)
+    return {"recipe_id": recipe["recipe_id"], "name": recipe.get("name"), **_plain(result),
+            "unknown": [{"product_id": pid, "product_name": (products.get(pid) or {}).get("name")}
+                        for pid in result["unknown"]],
+            "source": "the products' own nutrition tables (GS1), per 100 g or 100 ml"}
+
+
 def recipe_nutrition(db, kitchen_id: str, recipe_id: str) -> dict:
     from store.repository import Repository
     recipe = Repository(db).recipes.get(kitchen_id, recipe_id)
     if recipe is None:
         raise GatewayError(404, "NOT_FOUND", "no such recipe")
-    products = _products(db, [str(i["product_id"]) for i in recipe.get("ingredients") or []])
-    result = nutrition.recipe_portion(recipe, products)
-    return {"recipe_id": recipe_id, "name": recipe.get("name"), **_plain(result),
-            "unknown": [{"product_id": pid, "product_name": (products.get(pid) or {}).get("name")}
-                        for pid in result["unknown"]],
-            "source": "the products' own nutrition tables (GS1), per 100 g or 100 ml"}
+    return _row({**recipe, "recipe_id": recipe_id}, _products(db, _ingredient_ids([recipe])))
+
+
+def parse_recipe_ids(raw: str | None) -> list[str] | None:
+    """`?ids=`: None when absent (every recipe); 1 to 200 ids, else 422."""
+    if raw is None:
+        return None
+    ids = list(dict.fromkeys(i.strip() for i in raw.split(",") if i.strip()))
+    if not 1 <= len(ids) <= MAX_BATCH_IDS:
+        raise GatewayError(422, "INVALID_REQUEST", f"ids must be 1 to {MAX_BATCH_IDS} recipe ids, comma-separated")
+    return ids
+
+
+def recipes_nutrition(db, kitchen_id: str, ids: list[str] | None = None) -> dict:
+    """Every recipe's row, or the ids asked in that order (an unknown id left out)."""
+    from store.repository import Repository
+    recipes = Repository(db).recipes.list(kitchen_id)
+    if ids is not None:
+        by_id = {r["recipe_id"]: r for r in recipes}
+        recipes = [by_id[i] for i in ids if i in by_id]
+    products = _products(db, _ingredient_ids(recipes))
+    return {"recipes": [_row(r, products) for r in recipes]}
 
 
 def window_nutrition(db, kitchen_id: str, start: date, end: date) -> dict:
@@ -99,6 +132,12 @@ def window_nutrition(db, kitchen_id: str, start: date, end: date) -> dict:
 
 def mount_nutrition(app, gw, principal) -> None:
     k = "/v1/kitchens/{kitchen_id}"
+
+    # Before /recipes/{recipe_id} (gateway/kitchen_routes.py) so "nutrition" is never read as an id.
+    @app.get(k + "/recipes/nutrition")
+    def recipes(kitchen_id: str, request: Request, who=Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
+        return recipes_nutrition(gw().db, kitchen_id, parse_recipe_ids(request.query_params.get("ids")))
 
     @app.get(k + "/recipes/{recipe_id}/nutrition")
     def recipe(kitchen_id: str, recipe_id: str, who=Depends(principal)):
