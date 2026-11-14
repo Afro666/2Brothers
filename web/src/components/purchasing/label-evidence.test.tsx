@@ -19,3 +19,9 @@ it("never upgrades unknown or missing evidence into a verified badge", () => {
   expect(screen.getByText("Producer not found")).toBeVisible();
   expect(screen.getByText(/Synthetic negative control/)).toBeVisible();
 });
+it("names an unsupported scheme without implying a Hyvää Suomesta check", () => {
+  render(<LabelEvidence check={{ ...base, label: "FINNISH_HEART_SYMBOL", label_verified: "unknown", source_url: null }} />);
+  expect(screen.getByText(/FINNISH_HEART_SYMBOL · producer scope/)).toBeVisible();
+  expect(screen.queryByText(/Hyvää Suomesta/)).toBeNull();
+  expect(screen.getByText("Verification unknown")).toBeVisible();
+});
