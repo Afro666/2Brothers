@@ -519,9 +519,10 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | PUT | `/auto-approve` | human, role `approver` | Switch auto-approve on (with a limit) or off. 409 `LEARNING_PERIOD` before the learning period is done. |
 | GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
 | GET | `/drift` | `kitchen:read` | Standing-order drift for the last full week: products whose order per 100 guests (`portion_creep`) or spend per 100 guests (`cost_creep`) is 15% or more above the 4 weeks before. Shape below. Served (`gateway/drift_routes.py` over `store.drift.standing_order_drift`). |
-| GET | `/audit/verify` | `kitchen:read` | Check the audit hash chain now. Shape below. Proposed, like the next three rows; the gateway does not serve them yet. |
-| POST | `/audit/demo-tamper` | `kitchen:approve` (human) | Demo only: edit one audit row of the synthetic demo kitchen, so `/audit/verify` shows the break. 403 `DEMO_ONLY` for any other kitchen. |
-| POST | `/audit/demo-restore` | `kitchen:approve` (human) | Demo only: put the tampered row back exactly as it was. |
+| GET | `/audit/verify` | `kitchen:read` | Check the audit hash chain now. Shape below. Served, like the next four rows (`gateway/trust_routes.py` over `store.trust`). |
+| GET | `/audit/chain?limit=` | `kitchen:read` | This kitchen's newest audit entries with their chain hashes, for the Trust screen. Shape below. |
+| POST | `/audit/demo-tamper` | `kitchen:approve` (human, role `approver`) | Demo only: edit one audit row of the synthetic demo kitchen, so `/audit/verify` shows the break. 403 `DEMO_ONLY` for any other kitchen. |
+| POST | `/audit/demo-restore` | `kitchen:approve` (human, role `approver`) | Demo only: put the tampered row back exactly as it was. |
 | GET | `/events` | `kitchen:read` | Server-sent events: this kitchen's new and changed proposals, approvals and audit entries, as they happen. Shape below. |
 | GET | `/recalls` | `kitchen:read` | This kitchen's recall alerts, the proposals they hold and the last check. Shape under "Recall alerts (Context.dev)". |
 | POST | `/recalls/check` | `kitchen:write` | Run the recall monitor now: one Context.dev scrape of the Ruokavirasto list (the recording when Context.dev is slow, down or has no key), applied to the open proposals. Body: `idempotency_key`. Never orders. Same answer as `GET /recalls`. |
@@ -1174,7 +1175,15 @@ token can hold `supplier:demand` yet). A signed-in person passes the scope check
 (it adds a field `tampered` to the event). `/audit/verify` then answers `ok: false`,
 `broken_at: 412`. `POST /audit/demo-restore` answers `{"seq": 412, "restored": true}`, or
 `{"seq": null, "restored": false}` when nothing was tampered. Both take
-`idempotency_key` like every mutation.
+`idempotency_key` like every mutation (422 `INVALID_REQUEST` without it); the same key
+answers the stored result again.
+
+- Only a person with the role `approver` can call them: 403 `HUMAN_SESSION_REQUIRED` for
+  a token or the agent, 403 `ROLE_REQUIRED` for another role.
+- Each tamper, and each restore that put a row back, writes an audit entry after the
+  edit: `kind` `audit_demo_tamper` or `audit_demo_restore`, `actor` (the person) and
+  `tampered_seq`. So the tampered entry is not the newest one, and `length` after a
+  restore is two more than before the demo.
 
 - Only the synthetic demo kitchen (`demo-kitchen`) can be tampered. Any other kitchen
   gets 403 `DEMO_ONLY`. This is a demonstration that a change is detected; the audit
@@ -1183,6 +1192,20 @@ token can hold `supplier:demand` yet). A signed-in person passes the scope check
   `/audit/demo-tamper` restores a tampered row that is older than 10 minutes.
 - One tampered row at a time: a second tamper before a restore is 409 `ALREADY_TAMPERED`.
   A demo kitchen without audit entries is 409 `NOTHING_TO_TAMPER`.
+
+`GET /audit/chain?limit=5` answers this kitchen's newest `limit` entries (1 to 100,
+default 20; else 422 `INVALID_REQUEST`), oldest first:
+
+```json
+{"entries": [{"seq": 412, "prev_hash": "9f2c...", "hash": "41ab...",
+              "event": {"seq": 412, "event_id": "...", "kind": "order_placed", "actor": "aron", "at": "..."}}]}
+```
+
+- `event` is the entry exactly as `GET /audit` answers it. `hash` and `prev_hash` are
+  the stored SHA-256 values (64 hex characters). `seq` counts the shared chain, so one
+  kitchen's rows can skip numbers.
+- A tampered entry shows its edited `event` with its old `hash`: this route shows what
+  is stored, `/audit/verify` says whether it still fits.
 
 `GET /events` is a `text/event-stream`. Each message:
 
@@ -1194,8 +1217,18 @@ data: {"operation": "insert", "document": {"proposal_id": "...", "status": "READ
 - `event` is `proposal`, `approval` or `audit`. `operation` is `insert`, `update` or
   `replace`. `document` is the whole row after the change, in the shape the matching
   read route returns (`GET /proposals/{id}`, the approval row, a `GET /audit` entry).
-- Only this kitchen's rows are sent. A comment line (`: ping`) arrives every few seconds
-  when nothing happens, so a dropped connection is noticed.
+- Only this kitchen's rows are sent. The stream starts with the comment `: connected`.
+  A comment line (`: ping`) arrives after 5 seconds without a message, so a dropped
+  connection is noticed.
+- A `proposal` whose offer cannot be read arrives as `{"proposal_id", "status"}` only;
+  the client loads the rest with `GET /proposals/{id}`.
+- The gateway ends a stream after 10 minutes. That is not an error: the client connects
+  again, as after any drop.
+- 503 `EVENTS_UNAVAILABLE` instead of a stream: the database has no change streams (a
+  standalone MongoDB; Atlas has them), or 16 streams are open on the gateway already.
+  The screens then work without live updates.
+- The tamper demo shows on the stream: the tamper is an `audit` message with
+  `operation: "update"`, the restore one with `operation: "replace"`.
 - Nothing is replayed after a reconnect: the client loads the lists again, then listens.
 - The browser's `EventSource` cannot send an `Authorization` header; the web client
   reads the stream with `fetch`.
