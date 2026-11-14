@@ -4,7 +4,7 @@ from datetime import datetime
 import pytest
 
 from bot import render
-from bot.app import NOT_LINKED, Bot
+from bot.app import NOT_LINKED, Bot, due_slot, parse_brief_times
 from bot.clients import GatewayError, SpeechError
 from bot.links import Links
 
@@ -55,6 +55,7 @@ class FakeGateway:
 
     def __init__(self, current=None, error=None):
         self.current, self.error, self.calls = current or proposal(), error, []
+        self.brief_answer, self.waiting_list = None, None
 
     def _answer(self, *call):
         self.calls.append(call)
@@ -70,6 +71,21 @@ class FakeGateway:
 
     def proposal(self, proposal_id):
         return self.current
+
+    def brief(self, when, lang="en"):
+        self.calls.append(("brief", when))
+        if self.error:
+            raise self.error
+        return self.brief_answer if self.brief_answer is not None else {
+            "when": when, "lang": lang, "made_by": "model", "nothing_urgent": False, "lines": [
+                {"text": "Active recall for Kulta Katriina coffee: 3.253 KG in stock.", "kind": "RECALL",
+                 "ref_id": "r1", "urgent": True},
+                {"text": "Open supplier offer from Valio Aimo <b>for</b> 10.48 KG potato.", "kind": "SUPPLIER_OFFER",
+                 "ref_id": "o1", "urgent": False},
+                {"text": "2 drafts wait.", "kind": "WAITING_DRAFTS", "ref_id": "w1", "urgent": False}]}
+
+    def waiting(self):
+        return self.waiting_list if self.waiting_list is not None else [self.current]
 
     def change(self, proposal_id, product_id, quantity):
         self.calls.append(("change", product_id, quantity))
@@ -306,3 +322,101 @@ def test_money_and_quantity_formats():
     assert render.quantity("3", "BAG") == "3 bag"
     assert render.quantity("2.50", "KG") == "2.5 kg"
     assert render.quantity("12", "ST") == "12 pcs"
+
+
+# ---- the brief ---------------------------------------------------------------------------
+def test_brief_shows_everything_that_waits_then_one_message_per_supplier(bot):
+    say(bot, "/brief")
+    assert ("brief", "evening") in bot.gw.calls              # 16:00 in the fixture
+    text = bot.tg.edits[-1]["text"]
+    lines = text.split("\n")
+    assert lines[0] == "Evening brief · Sat 14 Nov"
+    assert lines[1] == "<b>3 products needed · 2 suppliers · EUR 2,052.50</b>"
+    assert lines[2] == "<b>Active recall for Kulta Katriina coffee: 3.253 KG in stock.</b>"
+    assert "Valio Aimo: 2 items, EUR 1,240.10, before Sun 15 Nov 17:00" in lines
+    assert "Corner Bakery &lt;demo&gt;: 1 item, EUR 812.40, stock not confirmed" in lines
+    assert "Open supplier offer from Valio Aimo &lt;b&gt;for&lt;/b&gt; 10.48 KG potato." in lines   # escaped, not bold
+    assert "2 drafts wait." not in text                      # the supplier lines say it already
+    assert lines[-1] == "<i>Wording by the Buyer agent (Nemotron).</i>"
+    assert bot.tg.edits[-1]["markup"]["inline_keyboard"][0][0]["web_app"]["url"] == "https://site.example/approvals"
+    orders = bot.tg.sent[1:]
+    assert [m["text"].split(" · ")[0] for m in orders] == ["<b>Valio Aimo", "<b>Corner Bakery &lt;demo&gt;"]
+    assert orders[0]["markup"]["inline_keyboard"][0][0]["callback_data"] == f"c:{PID}:0"
+
+
+def test_brief_with_nothing_is_one_line_with_no_button(bot):
+    bot.gw.brief_answer = {"when": "morning", "lines": [], "nothing_urgent": True, "made_by": "rule"}
+    bot.gw.waiting_list = []
+    say(bot, "/brief morning")
+    assert ("brief", "morning") in bot.gw.calls
+    assert bot.tg.edits[-1]["text"] == "Morning brief · Sat 14 Nov\nNothing urgent. No orders wait."
+    assert bot.tg.edits[-1]["markup"] is None and len(bot.tg.sent) == 1
+
+
+def test_brief_with_the_model_off_has_the_same_numbers_and_no_nemotron_line(bot):
+    bot.gw.brief_answer = {"when": "evening", "lines": [], "nothing_urgent": True, "made_by": "rule"}
+    say(bot, "/brief")
+    text = bot.tg.edits[-1]["text"]
+    assert "<b>3 products needed · 2 suppliers · EUR 2,052.50</b>" in text and "Nemotron" not in text
+
+
+def test_brief_never_shows_a_part_total(bot):
+    broken = proposal()
+    broken["blocks"][1]["expected_total"] = None
+    bot.gw.waiting_list = [broken]
+    say(bot, "/brief")
+    text = bot.tg.edits[-1]["text"]
+    assert "<b>3 products needed · 2 suppliers</b>" in text
+    assert "Corner Bakery &lt;demo&gt;: 1 item, stock not confirmed" in text
+
+
+def test_brief_adds_up_one_supplier_over_two_orders_and_caps_the_messages(bot):
+    bot.gw.waiting_list = [proposal() for _ in range(4)]                     # 8 supplier orders
+    say(bot, "/brief")
+    text = bot.tg.edits[-1]["text"]
+    assert "<b>12 products needed · 2 suppliers · EUR 8,210.00</b>" in text
+    assert "Valio Aimo: 8 items, EUR 4,960.40" in text
+    assert len(bot.tg.sent) == 1 + render.BRIEF_ORDERS + 1
+    assert bot.tg.sent[-1]["text"].startswith("... and 2 more supplier orders.")
+
+
+def test_brief_says_when_the_gateway_refuses(bot):
+    bot.gw.error = GatewayError(503, "STORE_UNAVAILABLE", "The store does not answer.")
+    say(bot, "/brief")
+    assert bot.tg.edits[-1]["text"] == "The store does not answer."
+
+
+def test_the_timed_brief_goes_out_once_per_slot_also_after_a_restart(bot, tmp_path):
+    bot.now = lambda: datetime(2026, 11, 14, 16, 0, 20, tzinfo=render.HELSINKI)
+    bot.tick()
+    first = len(bot.tg.sent)
+    assert first == 3 and bot.tg.sent[0]["chat"] == 7 and bot.tg.sent[0]["text"].startswith("Evening brief")
+    bot.tick()
+    assert len(bot.tg.sent) == first
+    again = Bot(FakeTelegram(), FakeGateway(), Links(tmp_path), now=bot.now)   # the bot started again
+    again.tick()
+    assert again.tg.sent == []
+    again.now = lambda: datetime(2026, 11, 15, 7, 1, tzinfo=render.HELSINKI)
+    again.tick()
+    assert again.tg.sent[0]["text"].startswith("Morning brief · Sun 15 Nov")
+
+
+def test_no_timed_brief_outside_its_window_or_when_switched_off(bot):
+    bot.now = lambda: datetime(2026, 11, 14, 15, 59, tzinfo=render.HELSINKI)
+    bot.tick()
+    bot.now = lambda: datetime(2026, 11, 14, 18, 0, tzinfo=render.HELSINKI)    # started late: not sent
+    bot.tick()
+    assert bot.tg.sent == [] and bot.gw.calls == []
+    assert parse_brief_times("off") == {} and parse_brief_times(None) == {"morning": "07:00", "evening": "16:00"}
+    assert parse_brief_times("06:30, 15:00") == {"morning": "06:30", "evening": "15:00"}
+    assert due_slot(datetime(2026, 11, 14, 6, 45, tzinfo=render.HELSINKI), {"morning": "06:30"}) == "morning"
+    assert due_slot(datetime(2026, 11, 14, 6, 45, tzinfo=render.HELSINKI), {"morning": "nonsense"}) is None
+
+
+def test_a_failed_timed_brief_is_not_sent_twice(bot):
+    bot.now = lambda: datetime(2026, 11, 14, 7, 0, 5, tzinfo=render.HELSINKI)
+    bot.gw.error = GatewayError(0, "NETWORK", "The gateway did not answer.")
+    bot.tick()
+    bot.gw.error = None
+    bot.tick()
+    assert bot.tg.sent == []

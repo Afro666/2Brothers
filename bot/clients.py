@@ -112,6 +112,15 @@ class Gateway:
     def proposal(self, proposal_id: str) -> dict:
         return self._call("GET", f"/proposals/{proposal_id}")
 
+    def brief(self, when: str, lang: str = "en") -> dict:
+        """The kitchen's morning or evening brief (contract: #1332). A read: it makes no order."""
+        return self._call("GET", "/brief", params={"when": when, "lang": lang})
+
+    def waiting(self) -> list[dict]:
+        """The proposals that wait for a person's approval, newest first."""
+        found = self._call("GET", "/proposals").get("proposals") or []
+        return [p for p in found if p.get("status") == "READY"]
+
     def change(self, proposal_id: str, product_id: str, new_quantity: str) -> dict:
         return self._call("POST", f"/proposals/{proposal_id}/change",
                           json={"idempotency_key": f"tg-{uuid.uuid4().hex}",

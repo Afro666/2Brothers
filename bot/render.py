@@ -183,6 +183,63 @@ def supplier_message(proposal: dict, index: int, names: dict[str, str] | None = 
     return Message("\n".join(out), buttons)
 
 
+BRIEF_ORDERS = 6      # supplier messages after a brief; more than this is a wall of text
+
+
+def waiting_suppliers(waiting: list[dict]) -> list[dict]:
+    """The waiting orders added up per supplier: items, total, deadline, stock words.
+    `total` is None when one of the supplier's totals is not a number: never a part total."""
+    found: dict[str, dict] = {}
+    for proposal in waiting:
+        for block in blocks_of(proposal):
+            key = str(block.get("supplier_id") or block.get("name"))
+            row = found.setdefault(key, {"name": str(block.get("name") or block.get("supplier_id")),
+                                         "lines": [], "total": Decimal(0)})
+            row["lines"] += block.get("lines") or []
+            try:
+                if row["total"] is not None:
+                    row["total"] += Decimal(str(block.get("expected_total")))
+            except (InvalidOperation, TypeError):
+                row["total"] = None
+    return list(found.values())
+
+
+def brief(answer: dict, waiting: list[dict], today: str, approve_url: str | None = None) -> Message:
+    """The morning or evening brief: what waits (products, suppliers, cost), what is urgent,
+    one line per supplier, then the other things to know. `answer` is the gateway's brief,
+    `waiting` the proposals that wait for approval."""
+    title = f"{'Morning' if answer.get('when') == 'morning' else 'Evening'} brief · {day(today)}"
+    rows = answer.get("lines") or []
+    suppliers = waiting_suppliers(waiting)
+    if not rows and not suppliers:
+        return Message(f"{title}\nNothing urgent. No orders wait.")
+    out = [title]
+    if suppliers:
+        products = sum(len(s["lines"]) for s in suppliers)
+        head = f"{_plural(products, 'product')} needed · {_plural(len(suppliers), 'supplier')}"
+        if all(s["total"] is not None for s in suppliers):
+            head += f" · {money(sum(s['total'] for s in suppliers))}"
+        out.append(f"<b>{head}</b>")
+    out += [f"<b>{escape(str(r.get('text') or ''))}</b>" for r in rows if r.get("urgent")]
+    if suppliers:
+        out.append("")
+        for s in suppliers:
+            parts = [f"{escape(s['name'])}: {_plural(len(s['lines']), 'item')}"]
+            if s["total"] is not None:
+                parts.append(money(s["total"]))
+            parts += [p for p in (_deadline(s["lines"]), _stock_words(s["lines"])) if p]
+            out.append(", ".join(parts))
+    # With the orders shown above, the gateway's own "drafts wait" row would say it twice.
+    rest = [r for r in rows if not r.get("urgent") and not (suppliers and r.get("kind") == "WAITING_DRAFTS")]
+    if rest:
+        out.append("")
+        out += [escape(str(r.get("text") or "")) for r in rest]
+    if answer.get("made_by") in ("model", "mixed"):
+        out.append("<i>Wording by the Buyer agent (Nemotron).</i>")
+    buttons = [[{"text": "Open to approve", "web_app": {"url": approve_url}}]] if approve_url and suppliers else []
+    return Message("\n".join(out), buttons)
+
+
 def refusal(code: str, message: str | None = None) -> str:
     """One plain sentence for an answer that is not a proposal."""
     known = {

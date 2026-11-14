@@ -45,6 +45,15 @@ person opens it in Telegram and presses Start. Only linked chats get an answer.
 
 - Type or say a request: "20 L oat drink for Monday". One product per message until #1375.
 - `/week`: the order for the menu plan of the next 7 days, all suppliers.
+- `/brief` (or `/brief morning`, `/brief evening`): what waits and what is urgent, now. The first
+  message has the products needed, the suppliers and the cost of all waiting orders (bold), the
+  urgent lines (bold, set by the gateway's plain code), one line per supplier, then the other
+  lines. Then one order message per supplier, 6 at most. The lines come from the gateway's brief
+  route (#1332, wording by Nemotron, numbers checked there); the counts and totals are added up
+  from the waiting proposals, and a total with an unknown part is not shown.
+- The same brief comes by itself at 07:00 and 16:00 Helsinki time to every linked chat
+  (`BOT_BRIEF_TIMES`), once per slot also across a restart, and not later than 2 hours after its
+  time. A brief with nothing in it makes no sound.
 - `Change` on a supplier's message, then a line, then `−`, `+` or `Remove`. One step is the
   product's lot size. The gateway rounds, checks stock and gives the new total.
 - `Open to approve` on the summary: our approval card. Approve and reject happen there,
