@@ -152,7 +152,6 @@ def test_a_failed_search_stores_nothing_and_the_next_call_fills_it(monkeypatch):
 
 
 def test_after_a_failed_embedding_call_suggestions_use_words_until_the_cooldown_ends(monkeypatch):
-    import time
     import mongomock
     import store.search
     db = mongomock.MongoClient(tz_aware=True)["t"]
@@ -171,7 +170,25 @@ def test_after_a_failed_embedding_call_suggestions_use_words_until_the_cooldown_
     assert memory.suggest(db, "k", "maito")[1] == "words"
     assert memory.suggest(db, "k", "kerma")[1] == "words"
     assert calls == [False, False]                                   # no embedding call while resting
-    catalog_search._state["skip_until"] = time.monotonic() - 1       # the cooldown ends
+    catalog_search.reset()                                           # the cooldown ends
     calls.clear()
     memory.suggest(db, "k", "juusto")
     assert calls == [True, False]
+
+
+def test_a_failed_suggestion_embedding_never_rests_the_buyers_search(monkeypatch):
+    """#1452: a suggestion is not the Buyer; its 429 must not send the Buyer's search to words."""
+    import mongomock
+    import store.search
+    db = mongomock.MongoClient(tz_aware=True)["t"]
+    db.products.insert_one({"_id": "p1", "names": {"en": "Valio butter 500 g"}})
+
+    def fake(db, phrase, filters, limit, kitchen_id=None, hybrid=False, embedder=None):
+        if hybrid:
+            raise RuntimeError("429 over the free tier")
+        return [{"product_id": "p1"}]
+    monkeypatch.setattr(store.search, "search_products", fake)
+    assert memory.suggest(db, "k", "voi")[1] == "words"
+    assert catalog_search.resting("suggest", "maito") is True
+    assert catalog_search.resting("buyer", "maito") is False
+    assert catalog_search.resting("catalog", "maito") is False
