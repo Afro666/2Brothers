@@ -1,18 +1,38 @@
 """Recall evidence and proposal holds; Mongo access stays in store."""
+from store.history import current_stock
 from store.orders import NotPending, decide_approval
 from store.products import get_products
+from store.repository import Repository
 from pymongo import ReturnDocument
 
 
 def context(db, kitchen_id):
+    """The kitchen the recall monitor scans, and its open proposals.
+
+    A recalled product matters where the kitchen has it: on an open proposal, on the shelf
+    or in a recipe. `stock` is the newest count per product, `{product_id: (on_hand, unit)}`;
+    a count of zero is not on the shelf, and a product that was listed but not counted keeps
+    `None` (unknown, never zero). `recipes` is `{product_id: [recipe name, ...]}`."""
     proposals = list(db.proposals.find({'kitchen_id': kitchen_id,
         'status': {'$in': ['READY', 'APPROVING', 'BLOCKED_BY_RECALL']}}))
     ids = set()
     for proposal in proposals:
         offer = db.offers.find_one({'_id': proposal['offer_id']}) or {}
         ids.update(line['product_id'] for line in offer.get('simulation', {}).get('lines', []))
-    return {'kitchen_id': kitchen_id, 'products': get_products(db, sorted(ids), kitchen_id),
-            'proposal': sorted(ids), 'stock': {}, 'recipes': {}}, proposals
+    stock = {}
+    for row in current_stock(db, kitchen_id):
+        on_hand = row.get('on_hand')
+        if on_hand is None or on_hand > 0:
+            stock[row['product_id']] = (None if on_hand is None else float(on_hand), row['unit'])
+    recipes = {}
+    for recipe in sorted(Repository(db).recipes.list(kitchen_id), key=lambda row: row['name']):
+        for item in recipe.get('ingredients') or []:
+            names = recipes.setdefault(item['product_id'], [])
+            if recipe['name'] not in names:
+                names.append(recipe['name'])
+    used = sorted(ids | set(stock) | set(recipes))
+    return {'kitchen_id': kitchen_id, 'products': get_products(db, used, kitchen_id),
+            'proposal': sorted(ids), 'stock': stock, 'recipes': recipes}, proposals
 
 
 def remember(db, alert):

@@ -11,6 +11,12 @@ approval. It orders nothing. Then "Check recalls now" in the inbox has a line to
 It says so when the proposal does not hold the coffee, with the gateway's reason. The usual
 one is BLOCKED_BY_RECALL: an earlier check already recorded the recall, so new quotes leave
 the coffee out. The banner then needs the proposal that check held, not a new one.
+
+This seed needs a product whose ordering is open at Valio. For the coffee it is not: Valio's
+mock API closed ordering for 461332 on 2026-11-12 for every date, so the proposal comes back
+REJECTED with no line. The stock alert needs no seed: when the kitchen has the coffee in
+stock (or in a recipe), "Check recalls now" gives the alert with "in stock: ..." and no
+proposal (`store/recalls.py` `context`).
 """
 
 from __future__ import annotations
