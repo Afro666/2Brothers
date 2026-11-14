@@ -51,7 +51,7 @@ export const STATUS_META: Record<OrderStatus, StatusMeta> = {
     label: "Recorded",
     tone: "info",
     icon: CircleCheck,
-    meaning: "The gateway recorded this order and stored the confirmation. Nothing is sent to the supplier from here.",
+    meaning: "The gateway recorded this order and stored the confirmation.",
   },
   NOT_SENT: {
     label: "Not sent",
