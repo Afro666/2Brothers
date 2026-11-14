@@ -284,3 +284,134 @@ def test_post_sends_the_key_only_in_the_header(monkeypatch):
     monkeypatch.setattr(onboarding.urllib.request, "urlopen",
                         lambda request, timeout: Answer(b"<html>gateway timeout</html>"))
     assert onboarding._post({}, KEY) == (200, {})      # not JSON: no brand, so the route says 502
+
+
+# ---- credit limits (#604): a short cache by domain and a rate limit per caller ------
+
+@pytest.fixture()
+def clock(monkeypatch):
+    """The module's clock, moved by hand: no test sleeps."""
+    now = {"t": 1000.0}
+    monkeypatch.setattr(onboarding, "_now", lambda: now["t"])
+    return now
+
+
+def test_same_domain_again_makes_no_second_context_dev_call(env, clock):
+    client, upstream, _ = env
+    first = client.post(URL, headers=HUMAN, json={"website": "https://www.scandichotels.com/en"})
+    clock["t"] += 599
+    again = client.post(URL, headers=HUMAN, json={"website": "ScandicHotels.com"})
+    assert again.status_code == 200 and again.json() == first.json() and first.json()["found"] is True
+    assert len(upstream["calls"]) == 1
+
+
+def test_cache_expires_after_the_ttl(env, clock, monkeypatch):
+    client, upstream, _ = env
+    client.post(URL, headers=HUMAN, json={"website": "scandichotels.com"})
+    clock["t"] += 600
+    assert client.post(URL, headers=HUMAN, json={"website": "scandichotels.com"}).status_code == 200
+    assert len(upstream["calls"]) == 2
+    monkeypatch.setenv("ONBOARDING_CACHE_TTL_S", "5")        # the override, read at call time
+    clock["t"] += 600
+    client.post(URL, headers=HUMAN, json={"website": "scandichotels.com"})
+    clock["t"] += 5
+    client.post(URL, headers=HUMAN, json={"website": "scandichotels.com"})
+    assert len(upstream["calls"]) == 4
+
+
+@pytest.mark.parametrize("trouble", [(402, {"error_code": "OUT_OF_CREDITS"}), TimeoutError("timed out"),
+                                     (422, {"error_code": "VALIDATION_ERROR"})])
+def test_failed_lookup_is_not_cached(env, clock, trouble):
+    client, upstream, _ = env
+    upstream["answer"] = trouble
+    assert client.post(URL, headers=HUMAN, json={"website": "scandichotels.com"}).status_code in (502, 422)
+    upstream["answer"] = (200, recorded())
+    r = client.post(URL, headers=HUMAN, json={"website": "scandichotels.com"})
+    assert r.status_code == 200 and r.json()["found"] is True      # not the failure, not an empty profile
+    assert len(upstream["calls"]) == 2
+
+
+def test_not_found_is_cached_only_briefly(env, clock):
+    client, upstream, _ = env
+    upstream["answer"] = (400, {"error_code": "NOT_FOUND"})
+    assert client.post(URL, headers=HUMAN, json={"website": "new-kitchen.fi"}).json()["found"] is False
+    clock["t"] += 59
+    assert client.post(URL, headers=HUMAN, json={"website": "new-kitchen.fi"}).json()["found"] is False
+    assert len(upstream["calls"]) == 1
+    upstream["answer"] = (200, recorded())      # Context.dev has read the site by now
+    clock["t"] += 1
+    assert client.post(URL, headers=HUMAN, json={"website": "new-kitchen.fi"}).json()["found"] is True
+    assert len(upstream["calls"]) == 2
+
+
+def test_email_and_website_of_one_domain_are_cached_apart(env, clock):
+    client, upstream, _ = env
+    assert client.post(URL, headers=HUMAN, json={"website": "gmail.com"}).status_code == 200
+    upstream["answer"] = (422, {"error_code": "FREE_EMAIL_DETECTED"})
+    r = client.post(URL, headers=HUMAN, json={"email": "chef@gmail.com"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "FREE_EMAIL"    # not the cached brand
+    upstream["answer"] = (200, recorded())
+    client.post(URL, headers=HUMAN, json={"email": "chef@scandichotels.com"})
+    client.post(URL, headers=HUMAN, json={"email": "owner@scandichotels.com"})  # same domain: the cache
+    assert [call[0]["type"] for call in upstream["calls"]] == ["by_domain", "by_email", "by_email"]
+
+
+def test_past_the_limit_is_429_without_a_call_and_recovers_after_the_window(env, clock):
+    client, upstream, _ = env
+    for n in range(10):
+        clock["t"] += 1
+        assert client.post(URL, headers=HUMAN, json={"website": f"kitchen-{n}.fi"}).status_code == 200
+    r = client.post(URL, headers=HUMAN, json={"website": "kitchen-10.fi"})
+    assert r.status_code == 429, r.text
+    assert r.json()["error"]["code"] == "LOOKUP_RATE_LIMITED" and r.json()["error"]["retry_after_s"] == 51
+    assert r.headers["retry-after"] == "51"         # the first call leaves the window in 51 s
+    assert "found" not in r.json() and KEY not in r.text       # a limit is never an empty profile
+    assert len(upstream["calls"]) == 10
+    # What is cached costs nothing, so it still answers; a bad query is still a 422.
+    assert client.post(URL, headers=HUMAN, json={"website": "kitchen-3.fi"}).status_code == 200
+    assert client.post(URL, headers=HUMAN, json={"website": "kuusi"}).status_code == 422
+    clock["t"] += 50
+    assert client.post(URL, headers=HUMAN, json={"website": "kitchen-10.fi"}).status_code == 429
+    clock["t"] += 1
+    assert client.post(URL, headers=HUMAN, json={"website": "kitchen-10.fi"}).status_code == 200
+    assert len(upstream["calls"]) == 11
+
+
+def test_failed_calls_count_against_the_limit(env, clock, monkeypatch):
+    client, upstream, _ = env
+    monkeypatch.setenv("ONBOARDING_RATE_LIMIT", "2")
+    monkeypatch.setenv("ONBOARDING_RATE_WINDOW_S", "30")
+    upstream["answer"] = (500, {})
+    for _ in range(2):
+        assert client.post(URL, headers=HUMAN, json={"website": "hotelkuusi.fi"}).status_code == 502
+    r = client.post(URL, headers=HUMAN, json={"website": "hotelkuusi.fi"})
+    assert r.status_code == 429 and r.headers["retry-after"] == "30"
+    assert len(upstream["calls"]) == 2
+
+
+def test_limit_is_per_caller_and_x_user_is_not_an_identity(env, clock, monkeypatch):
+    client, upstream, db = env
+    monkeypatch.setenv("ONBOARDING_RATE_LIMIT", "1")
+    assert client.post(URL, headers=HUMAN, json={"website": "a-kitchen.fi"}).status_code == 200
+    other_name = {**HUMAN, "X-User": "someone-else"}       # same address, a new name: same bucket
+    assert client.post(URL, headers=other_name, json={"website": "b-kitchen.fi"}).status_code == 429
+    from gateway import users
+    for email in ("one@example.com", "two@example.com"):
+        users.create_user(db, email, "correct horse battery staple", name=email, role="chef", kitchen_id="K01")
+        client.cookies.clear()
+        client.post("/v1/auth/login", json={"email": email, "password": "correct horse battery staple"})
+        assert client.post(URL, json={"website": f"{email[:3]}-kitchen.fi"}).status_code == 200    # own bucket
+        assert client.post(URL, json={"website": f"{email[:3]}-other.fi"}).status_code == 429
+    assert len(upstream["calls"]) == 3
+
+
+def test_cache_and_limit_live_in_the_process_not_in_the_database(env, clock):
+    client, upstream, db = env
+    for _ in range(12):
+        client.post(URL, headers=HUMAN, json={"website": "scandichotels.com"})
+    assert len(upstream["calls"]) == 1
+    assert not any(db[name].count_documents({}) for name in db.list_collection_names())
+    # Another gateway app (a restart) starts empty.
+    fresh = TestClient(create_app(Gateway(db, None)))
+    assert fresh.post(URL, headers=HUMAN, json={"website": "scandichotels.com"}).status_code == 200
+    assert len(upstream["calls"]) == 2

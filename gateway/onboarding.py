@@ -5,7 +5,10 @@ The kitchen types its work email or its website; one Context.dev call
 (`POST /v1/brand/retrieve`) returns the profile fields to pre-fill. Rules:
 
 - The key (`CONTEXT_DEV_API_KEY`) stays on the server: never logged, never returned.
-- Nothing is saved: no database write, no cache.
+- Nothing is saved: no database write. The answer for a domain stays in this process's
+  memory for a few minutes (#604), so the same domain makes no second paid call.
+- The open demo cannot drain the credits: a caller gets a few Context.dev calls per minute,
+  then 429 `LOOKUP_RATE_LIMITED`. A limit is never answered with an empty profile.
 - A field Context.dev did not return is `{"value": null, "source": null}`. Never a guess.
 - The person's text is never fetched by the gateway; only a checked domain or email is
   sent to Context.dev.
@@ -13,15 +16,18 @@ The kitchen types its work email or its website; one Context.dev call
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, Request
 
+from gateway.limits import KeyedLocks, RateLimit, TooMany, TTLCache, env_number
 from gateway.service import GatewayError
 
 API = "https://api.context.dev/v1/brand/retrieve"
@@ -30,6 +36,11 @@ TIMEOUT = 20            # seconds; a cold domain can take more than 10 s (contra
 MAX_BODY = 2_000_000    # bytes read from Context.dev; a brand answer is a few kB
 FIELDS = ("name", "logo_url", "colors", "address", "kitchen_type", "opening_hours")
 ADDRESS_PARTS = ("street", "postal_code", "city", "country")
+# Credit limits (#604). Each number has an environment override of the same meaning.
+CACHE_TTL_S = 600               # ONBOARDING_CACHE_TTL_S: a found brand; 0 = no cache
+CACHE_NOT_FOUND_TTL_S = 60      # ONBOARDING_CACHE_NOT_FOUND_TTL_S: `found: false`, briefly
+RATE_LIMIT = 10                 # ONBOARDING_RATE_LIMIT: Context.dev calls per caller ...
+RATE_WINDOW_S = 60              # ONBOARDING_RATE_WINDOW_S: ... in this many seconds; 0 = no limit
 
 _DOMAIN = re.compile(r"^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$")
 _LOCAL = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}$")
@@ -181,11 +192,56 @@ def profile(domain: str, brand: dict | None) -> dict:
             "opening_hours": _field(None)}
 
 
-def lookup(data: dict) -> dict:
+def _now() -> float:
+    """Seconds on a clock that never goes back. Tests replace this function: no sleeping."""
+    return time.monotonic()
+
+
+class Limits:
+    """The cache and the rate limit of one gateway app.
+
+    Process-local on purpose: memory only, never MongoDB (the contract's "saves nothing"),
+    empty after a restart, and not shared between gateway processes (the demo runs one).
+    The cache holds what Context.dev says about a public domain. It is not kitchen data and
+    it is not keyed by caller, so it cannot show one kitchen's data to another; the email's
+    local part is never kept."""
+
+    def __init__(self):
+        self.cache, self.rate, self.locks = TTLCache(), RateLimit(), KeyedLocks()
+
+
+def lookup(data: dict, limits: Limits | None = None, caller: str = "") -> dict:
+    """The contract answer. With `limits`: from the cache when it has the domain, else one
+    Context.dev call counted against `caller`. Only a lookup that would call Context.dev counts."""
     domain, payload = parse_query(data)
     key = (os.environ.get("CONTEXT_DEV_API_KEY") or "").strip()
     if not key:
         raise _unavailable()
+    if limits is None:
+        return _retrieve(domain, payload, key)
+    # By email and by domain are kept apart: a free-mail domain is refused by email
+    # (FREE_EMAIL) but is a brand by domain.
+    cache_key = (payload["type"], domain)
+    # One call at a time per domain: a double click waits, then reads the cache. When the
+    # wait runs out the lookup goes on without the lock; the rate limit still counts it.
+    with limits.locks.hold(cache_key, TIMEOUT + 5):
+        cached = limits.cache.get(cache_key, _now())
+        if cached is not None:
+            return copy.deepcopy(cached)
+        wait = limits.rate.hit(caller, env_number("ONBOARDING_RATE_LIMIT", RATE_LIMIT),
+                               env_number("ONBOARDING_RATE_WINDOW_S", RATE_WINDOW_S), _now())
+        if wait > 0:
+            raise TooMany("LOOKUP_RATE_LIMITED",
+                          "Too many lookups. Try again in a moment, or fill in the form by hand.", wait)
+        answer = _retrieve(domain, payload, key)     # an error is raised, so it is never cached
+        ttl = (env_number("ONBOARDING_CACHE_TTL_S", CACHE_TTL_S) if answer["found"]
+               else env_number("ONBOARDING_CACHE_NOT_FOUND_TTL_S", CACHE_NOT_FOUND_TTL_S))
+        limits.cache.put(cache_key, copy.deepcopy(answer), ttl, _now())
+        return answer
+
+
+def _retrieve(domain: str, payload: dict, key: str) -> dict:
+    """One paid Context.dev call: the profile, or the contract's error."""
     try:
         status, body = _post(payload, key)
     except (OSError, ValueError):
@@ -202,11 +258,24 @@ def lookup(data: dict) -> dict:
     raise _unavailable()      # 401, 402 (credits), 408, 429, 5xx, or an answer without a brand
 
 
+def _caller(who, request: Request) -> str:
+    """Who the rate limit counts: a signed-in person by account (they have a kitchen), else
+    the client address. The shared demo token's X-User is free text, so it is not an identity."""
+    if who.kitchen_id is not None:
+        return "user:" + who.name
+    return "address:" + (request.client.host if request.client else "unknown")
+
+
 def mount_onboarding(app: FastAPI, principal, body) -> None:
+    limits = Limits()       # one per app, so one per gateway process
+
     @app.post("/v1/onboarding/lookup")
     async def onboarding_lookup(request: Request, who=Depends(principal)):
         if who.kind != "human":
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can look a business up")
         data = await body(request)
         from starlette.concurrency import run_in_threadpool
-        return await run_in_threadpool(lookup, data)
+        try:
+            return await run_in_threadpool(lookup, data, limits, _caller(who, request))
+        except TooMany as busy:
+            return busy.answer()        # 429 with Retry-After; app.py's handler has no headers
