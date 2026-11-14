@@ -141,15 +141,35 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 | `get_audit_log` | GET `/tools/get_audit_log` | `run_id: string` | `events: object[]` |
 | `change_proposal` | POST `/tools/change_proposal` | `proposal_id: string`, `idempotency_key: string`, `lines`, `add` (as "Changing a proposal") | the proposal in the `GET /proposals/{id}` shape |
 
+Five more tools exist only for a personal approval token (see "Personal approval tokens").
+They call the kitchen routes of the token's kitchen (`GET /v1/me` gives it):
+
+| MCP tool | Method and path | Request fields | Success response fields |
+|---|---|---|---|
+| `list_proposals` | GET `/v1/kitchens/{k}/proposals` | none | `proposals: object[]` |
+| `get_proposal` | GET `/v1/kitchens/{k}/proposals/{id}` | `proposal_id: string` | the proposal |
+| `list_orders` | GET `/v1/kitchens/{k}/orders` | none | `orders: object[]` |
+| `approve_proposal` | POST `/v1/kitchens/{k}/proposals/{id}/approve` | `proposal_id`, `expected_total: decimal string`, `idempotency_key: string` | as the approve route |
+| `reject_proposal` | POST `/v1/kitchens/{k}/proposals/{id}/reject` | `proposal_id`, `reason: string`, `idempotency_key: string` | `proposal_id`, `status: REJECTED` |
+
 **Remote MCP (#280).** The same eight tools are also served over MCP streamable HTTP at
 `POST /mcp` (stateless, JSON responses), same names, arguments and results as above.
-Two bearer tokens are accepted (`Authorization: Bearer <token>`): the agent token, and a
-kitchen API token (`tkb_...`, see "Kitchen API tokens") that holds `kitchen:propose`.
+Three bearer tokens are accepted (`Authorization: Bearer <token>`): the agent token, a
+kitchen API token (`tkb_...`, see "Kitchen API tokens") that holds `kitchen:propose`, and
+a personal approval token (`tka_...`, see "Personal approval tokens").
 Any other caller, the human token and a session cookie included, gets
-`401 UNAUTHENTICATED` with `WWW-Authenticate: Bearer`. Each call runs the `/tools/*`
-route above with the caller's own token: the agent principal, or the kitchen token with
-its own kitchen and scopes. So every refusal and audit entry is the same. There is no
-approve, reject or cancel tool.
+`401 UNAUTHENTICATED` with `WWW-Authenticate: Bearer`. Each call runs the route above
+with the caller's own token: the agent principal, the kitchen token with its own kitchen
+and scopes, or the person of the approval token. So every refusal and audit entry is the
+same as over HTTP.
+
+`tools/list` depends on the caller. The agent token and a kitchen token see the eight
+tools above and nothing else: no approve, reject or cancel tool. A personal approval
+token sees the read tools (`search_products`, `get_order_status`, `get_audit_log`) and
+the five tools of the second table; it does not see the tools that propose
+(`get_offer`, `simulate_order`, `request_approval`, `place_order`, `change_proposal`).
+A hidden tool called by name with an agent or kitchen token runs its route and gets
+the route's 403 `HUMAN_SESSION_REQUIRED`. There is no cancel tool for anyone.
 
 The trusted application/engine creates `need_id` before invoking the buyer agent,
 with `POST /v1/kitchens/{kitchen_id}/needs` (scope `kitchen:propose`). Body:
@@ -433,9 +453,10 @@ IDs) apply here too. Base path: `/v1`.
 - Scopes: `kitchen:read`, `kitchen:write` (stock, menus, products, suppliers),
   `kitchen:propose`, `kitchen:approve`, `supplier:read-orders`, `supplier:confirm`,
   `supplier:demand`, `supplier:offers` (a write: sending an offer to a kitchen, #110).
-- **`kitchen:approve` is only on a human user session.** No API key and no agent MCP
-  token can hold it. The Buyer proposes; it never approves. A call to approve or reject
-  without a human session returns 403 `HUMAN_SESSION_REQUIRED`.
+- **Only a person approves or rejects: through a signed-in session or a personal
+  approval token.** No agent token and no kitchen API token can hold `kitchen:approve`.
+  The Buyer proposes; it never approves. A call to approve or reject without a person
+  returns 403 `HUMAN_SESSION_REQUIRED` (decision 2026-11-14, "Personal approval tokens").
 - Every mutation (POST, PUT, DELETE) carries a nonempty `idempotency_key` string in
   the JSON body, scoped to the organisation and the route. The same rules as the
   gateway tools apply: a replay returns the stored result, reuse with a different
@@ -453,7 +474,7 @@ agent or human bearer token, then a kitchen API token.
 |---|---|---|---|
 | POST | `/v1/auth/login` | `email`, `password` | `{email, name, role, kitchen_id}`. Sets the cookie `tkb_session`: httpOnly, SameSite=Strict, path `/`, 12 hours, Secure over HTTPS. |
 | POST | `/v1/auth/logout` | none | `{"signed_out": true}`. Ends the session and clears the cookie. Also 200 without a session. |
-| GET | `/v1/me` | | `{kind, name, role, kitchen_id, can_approve, scopes}`. `kind` is `human`, `agent` or `token`. `role` is null when `kind` is not `human`. `scopes` is null for a person, a sorted list for a token. `kitchen_id` is null for the server tokens (any kitchen). |
+| GET | `/v1/me` | | `{kind, name, role, kitchen_id, can_approve, scopes}`. `kind` is `human`, `agent`, `token` or `personal` (a personal approval token: `name` is the person's email, `role` the person's role now, `scopes` `["kitchen:read"]`, plus `via: "personal_token"`, `token_id` and `expires_at`). `role` is null when `kind` is `agent` or `token`. `scopes` is null for a person, a sorted list for a token. `kitchen_id` is null for the server tokens (any kitchen). |
 | POST | `/v1/auth/change-password` | `current_password`, `new_password` | `{"changed": true}`. Needs the session cookie. Ends every other session of that person; this one stays. |
 
 These four routes take no `idempotency_key`.
@@ -524,6 +545,72 @@ The three token routes check the kitchen first (#591): a session belongs to one 
 so a person cannot create, list or revoke the tokens of another kitchen (403
 `KITCHEN_SCOPE`). The shared human token has no kitchen, so it is not bound.
 
+### Personal approval tokens
+
+A personal approval token stands for one person, so that person can approve or reject
+from their own chat (for example Claude Desktop over `/mcp`). It is not a kitchen API
+token: agent and kitchen tokens still never approve.
+
+| Method | Path | Body | Answer |
+|---|---|---|---|
+| POST | `/v1/kitchens/{kitchen_id}/approval-tokens` | `name` (optional, 1 to 80 characters, default `"chat"`), `hours` (optional integer, 1 to 24, default 8) | The token row plus `token`. |
+| GET | `/v1/kitchens/{kitchen_id}/approval-tokens` | | `{"tokens": [...]}`, newest first, revoked and expired ones included. Never the secret. |
+| DELETE | `/v1/kitchens/{kitchen_id}/approval-tokens/{token_id}` | | The token row, with `revoked_at` set. A second revoke returns the same row. |
+
+Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email),
+`kitchen_id`, `prefix` (the first 8 characters), `created_at`, `created_by` (the
+person, or `operator-cli`), `expires_at`, `last_used_at` (or null), `revoked_at` (or null).
+
+- Who creates one: only a person signed in with the session cookie, role `approver`,
+  whose account is in the `users` collection, for their own kitchen. The token is that
+  person's, bound to that kitchen. The open demo's shared human token (everyone acts as
+  the demo approver) cannot create one: 403 `PERSONAL_TOKEN_NEEDS_SIGN_IN`. An agent, a
+  kitchen token or a personal token: 403 `HUMAN_SESSION_REQUIRED`. A chef or a viewer:
+  403 `ROLE_REQUIRED`. Any approver of the kitchen may list and revoke the kitchen's
+  personal tokens (list and revoke also work with the shared human token, like the
+  kitchen token routes), so a lost token can be stopped at once.
+- Operator command for the stage, on the server: `python -m gateway.tokens add-approver
+  --email <an existing approver's email> [--hours 8] [--kitchen <id>]` (`--kitchen` is
+  needed only for an all-kitchens account), `python -m gateway.tokens list-approvers
+  [--kitchen <id>]`, `python -m gateway.tokens remove-approver --token-id <id>`. The token
+  value is printed once, to the operator's terminal only.
+- `token` (`tka_...`) is in the create answer only. The gateway keeps its SHA-256.
+- It expires: default 8 hours, at most 24. Expired, revoked or unknown: 401
+  `UNAUTHENTICATED`. An account that no longer exists: 401. A person who is no longer an
+  approver: 403 `ROLE_REQUIRED` on approve and reject.
+- Scope: `kitchen:read` for its kitchen, plus `POST /proposals/{id}/approve` and
+  `POST /proposals/{id}/reject` as that person. Everything else a person can do in the
+  web (settings, sharing, auto-approve, users, API tokens, approval tokens, webhooks,
+  choose-option, resolve, recall dismiss, the audit demo) is 403 `HUMAN_SESSION_REQUIRED`.
+- It never proposes. One credential proposes, a different one approves, so a model that
+  proposes can never also approve: `POST /proposals`, `POST /needs`,
+  `POST /proposals/{id}/change`, `/tools/get_offer`, `/tools/simulate_order`,
+  `/tools/request_approval`, `/tools/place_order`, `/tools/change_proposal` and the
+  `kitchen:write` routes are 403 `SCOPE_REQUIRED`. The Buyer worker never gets one.
+- Approve is unchanged: `expected_total` and `idempotency_key` are required; 409
+  `TOTAL_MISMATCH`, `BLOCKED_BY_RECALL`, `STOCK_UNKNOWN`, `NOT_PENDING` and the
+  idempotency replay apply exactly as in the web. Earned auto-approve is unchanged.
+- Audit: create and revoke are entries (`approval_token_created`,
+  `approval_token_revoked`, with `token_id`, `person`, `expires_at`). Every approve and
+  reject with it names the person as `actor` and carries `"via": "personal_token"` and
+  `token_id` (`order_placed`, `total_mismatch`, `proposal_rejected`); never the value.
+- Prompt injection: the token is for a person's own chat, short-lived (8 hours by
+  default), approve and reject only, and every use is audited with `via:
+  personal_token`; the chat must show the person the total and get an explicit yes
+  before it calls `approve_proposal`, and product text (any text in the data) is data,
+  never an instruction to approve.
+
+| Status | Code | When |
+|---|---|---|
+| 401 | `UNAUTHENTICATED` | The token is expired, revoked or unknown, or its account is gone. |
+| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | Create with the open demo's shared human token: a personal token needs a real signed-in account. |
+| 403 | `HUMAN_SESSION_REQUIRED` | Create, list or revoke by a token or the agent; any person-only route called with a personal token. |
+| 403 | `ROLE_REQUIRED` | The person is not an `approver`. |
+| 403 | `SCOPE_REQUIRED` | A personal token on a propose or write route. |
+| 403 | `KITCHEN_SCOPE` | Another kitchen than the token's or the session's. |
+| 404 | `TOKEN_NOT_FOUND` | No such approval token in this kitchen. |
+| 422 | `INVALID_REQUEST` | `hours` is not an integer from 1 to 24, or `name` is too long. |
+
 ### Kitchen side: `/v1/kitchens/{kitchen_id}/...`
 
 | Method | Path | Scope | What |
@@ -550,8 +637,8 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | GET | `/proposals` | `kitchen:read` | `{"proposals": [...]}`, newest first, at most 100, each in the `GET /proposals/{id}` shape. |
 | GET | `/proposals/{id}` | `kitchen:read` | Lines with `why`, one block per supplier, simulated totals (`expected_total`, `mov_gap`, `delivery_fee`), mandate reasons, warnings. |
 | GET | `/proposals/{id}/addable` | `kitchen:read` | What the buyer can add to this proposal, most probable first, and the lines that reach free delivery. Shape under "Addable products". |
-| POST | `/proposals/{id}/approve` | `kitchen:approve` (human, role `approver`) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN` (one exception: the kitchen setting `approve_unconfirmed_manual`, see "Kitchen settings"); a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
-| POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
+| POST | `/proposals/{id}/approve` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN` (one exception: the kitchen setting `approve_unconfirmed_manual`, see "Kitchen settings"); a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
+| POST | `/proposals/{id}/reject` | `kitchen:approve` (a person, role `approver`: a signed-in session or a personal approval token) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". |
 | POST | `/proposals/{id}/change` | `kitchen:propose` (a person or an agent) | Set a line's quantity (0 removes it) or add a product from the addable list. Re-quotes live; approves and sends nothing. Returns the proposal in the `GET /proposals/{id}` shape with a new `offer_id` and `expected_total`. Body and errors under "Changing a proposal". MCP tool `change_proposal`. |
 | GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. `receipt` is the signed order receipt or null ("Signed order receipt"). |
@@ -578,6 +665,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | POST | `/recalls/{event_id}/dismiss` | `kitchen:approve` (human) | A person dismisses one alert after checking the packs. Body: `reason`. Shape in [recall-contract.md](recall-contract.md). |
 | GET | `/label-checks` | `kitchen:read` | Recorded Hyvää Suomesta producer checks for catalog products 462535, 462576 and 462775, plus one synthetic `negative_control`. Answer: `{"checks": [...], "negative_control": {...}}`. Shape in [product-evidence-contract.md](product-evidence-contract.md). |
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
+| POST, GET, DELETE | `/approval-tokens`, `/approval-tokens/{id}` | human, role `approver` (create: signed-in session only) | Personal approval tokens. Shape under "Personal approval tokens". |
 | GET | `/model-usage` | `kitchen:read` | How much the Buyer agent used its model for this kitchen: runs, model calls, tokens, seconds. Shape under "Model usage". |
 | GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
 | POST, GET | `/webhooks` | human, role `approver` | Register a webhook (body `url`, `events`) or list them. Shape under "Webhooks". |
@@ -744,7 +832,7 @@ reference, the outcome before.
 
 | Error | Status | When |
 |---|---|---|
-| `HUMAN_SESSION_REQUIRED` | 403 | The caller is not a person (agent token, API key) |
+| `HUMAN_SESSION_REQUIRED` | 403 | The caller is not a person through a signed-in session (agent token, API key, personal approval token) |
 | `ROLE_REQUIRED` | 403 | The person is not an approver |
 | `ORDER_NOT_FOUND` | 404 | No such order in this kitchen |
 | `INVALID_REQUEST` | 422 | `resolution` is not `placed` or `not_sent`; `placed` without `supplier_order_ref`; `not_sent` with one; a field too long; no `idempotency_key` |
@@ -844,6 +932,8 @@ is written to audit. The signed offer and receipt remain authoritative.
      of `completion_tokens`. A run that was started again counts both attempts. The
      field is missing when the model client has no meter.
 
+   The answer also has `model_trace` (what the model did, see "What the model did"
+   below). Unlike the three fields above, a later `GET /proposals/{id}` has it too.
    A replay with the same key returns the same answer, with the same three fields.
    The sum over a kitchen's runs is under "Model usage".
 2. The deterministic parser (`gateway/parse.py`), only when the worker is not
@@ -927,6 +1017,81 @@ supplier `blocks`, one approval, signed) with these additions:
 Recall holds and the kitchen's `excluded_allergens` apply per product, as for any quote.
 Approve, reject, the live re-check (`TOTAL_MISMATCH`) and signing work as for any proposal.
 Earned auto-approve never applies while any line has unknown stock or a shortfall.
+
+### What the model did: `model_trace` (#1197)
+
+A proposal the Buyer made and an offer Valio's selling agent made carry `model_trace`:
+what the model did, in counts and codes. The web shows it as a folded panel, "What
+Nemotron did". It shows which work the model did (it chose the tools and the products)
+and which work it did not do (the engine sets every quantity and price; a person
+approves).
+
+```json
+{"model_trace": {
+  "made_by": "model", "reader": "buyer", "model": "nemotron-3.5-super-vl", "thinking": false,
+  "calls": 4, "failed": 0, "prompt_tokens": 23110, "completion_tokens": 910,
+  "reasoning_tokens": 0, "seconds": 6.214, "attempts": 1, "truncated": false,
+  "steps": [
+    {"by": "model", "attempt": 1, "tool": "search_products", "query": "lactose free milk", "count": 12},
+    {"by": "model", "attempt": 1, "tool": "get_offer", "products": 3, "count": 3},
+    {"by": "model", "attempt": 1, "tool": "simulate_order", "count": 3, "code": "NEEDS_APPROVAL"},
+    {"by": "model", "attempt": 1, "tool": "request_approval", "code": "PENDING"}]}}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `made_by` | `model` or `rule` | `model`: Nemotron chose the products and the tool calls. `rule`: code chose (the gateway's parser, or the selling agent run with `--no-model`). |
+| `reader` | `buyer`, `parser` or `seller` | Who read the request: the Buyer worker, the gateway's parser (`gateway/parse.py`), or Valio's selling agent (`agent/seller.py`). |
+| `model` | string or `null` | The model name, `"nemotron-3.5-super-vl"`. `null` when no model ran. |
+| `thinking` | boolean or `null` | Thinking on or off for the model calls. `null` when no model ran. |
+| `calls`, `failed` | integer | Model calls, and the calls of those that failed. |
+| `prompt_tokens`, `completion_tokens`, `reasoning_tokens` | integer | As in `buyer_usage`; `reasoning_tokens` is a part of `completion_tokens`. |
+| `seconds` | number | Time in model calls, at most 3 decimals. |
+| `attempts` | integer | Buyer runs for this request: 1, or 2 when a run that wrote nothing was started again (#735). 1 for the seller, 0 for the parser. |
+| `steps` | array | In order, at most 40 (`truncated: true` when more were cut). Empty when no model ran. |
+| `truncated` | boolean | Steps were cut at 40. |
+
+Every count is 0 and `seconds` is 0 when no model ran. All counts come from the
+endpoint's own `usage` (`agent/usage.py`), both attempts together.
+
+One step:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `by` | `model` or `code` | `model`: the model asked for this step. `code`: the runner or agent did it itself (the substitute reads after a short simulation, the seller's shortlist, a rule pick). |
+| `attempt` | integer | 1 or 2. |
+| `tool` | string | One of the seven Buyer tools (`search_products`, `get_offer`, `simulate_order`, `request_approval`, `place_order`, `get_order_status`, `get_audit_log`); `invalid` for a call the policy could not read; for the seller, `shortlist` (code) and `pick`. |
+| `query` | string, optional | `search_products` only: the search words, only letters, digits, spaces and `-`, at most 60 characters. |
+| `products` | integer, optional | `get_offer` only: how many products were asked for. |
+| `count` | integer, optional | How many rows came back: products found (after the allergen rule), offer lines, simulated lines, shortlist entries. |
+| `code` | string, optional | A code, never text: the mandate verdict (`NEEDS_APPROVAL`, `REFUSED`), the approval status (`PENDING`), the order outcome, a policy reason code (`SCHEMA_INVALID`, `UNKNOWN_ID`, `NEED_MISMATCH`, ...), `TOOL_FAILED`, or `PICKED` for the seller's pick. |
+
+**Never in it:** a key or token, the system prompt, any text the model wrote (its
+reply, its reasons, the seller's `reason`), prices, quantities, other kitchens' data
+(the seller's shortlist facts such as the demand of all kitchens stay out). The search
+words are the one exception to "no model text": cleaned as above, and shown only to the
+kitchen that asked.
+
+**Where it is.**
+
+- `POST /proposals`, the Buyer's answer: `model_trace` with `reader: buyer`. It is
+  stored with the run (`db.agent_runs`, `result.model_trace`, through
+  `store/agent_runs.py`), so a replay answers the same trace.
+- `GET /proposals` and `GET /proposals/{id}`: a proposal the Buyer made carries the
+  trace of its run. A proposal the parser made (`request.made_by: parser`) carries
+  `{"made_by": "rule", "reader": "parser", "model": null, "thinking": null, ...0,
+  "attempts": 0, "steps": []}`: the panel says the parser answered and shows no model
+  steps. Every other proposal (structured, menu plan, an accepted offer) has
+  `model_trace: null`.
+- Supplier offers: an optional `model_trace` in the `POST /offers` body, with
+  `reader: seller`, is checked, stored on the offer and returned in the offer shape
+  (`null` when none was sent). See "Supplier offers".
+- A trace from before #1197 does not exist: such a proposal has `model_trace: null`.
+  The web then shows no panel.
+
+The web: one folded line ("4 model calls, 6.2 s, thinking off"), unfolded the steps as
+a short list, and the last line "Quantities and prices: the engine. Approval: you."
+Strings go through the web's i18n (English and Finnish).
 
 ### Addable products
 
@@ -1509,9 +1674,10 @@ Answer:
 - `dropped` is null, or one of `ROW_UNKNOWN`, `PRODUCT_MISMATCH`, `ROW_REPEATED`,
   `NUMBER_NOT_IN_ROW`, `NUMBERS_LIST_MISMATCH`, `GAP_FOR_UNKNOWN`, `NUMBER_WORD`, or
   `REPLY_INVALID` (the model's reply did not match its schema at all).
-- The answer is cached for 5 minutes by supplier, window, language and the input rows,
-  so a page refresh makes no new model call (`cached: true`). One supplier's note is
-  never served to another.
+- Passing notes are cached for 5 minutes by supplier, window, language and the input
+  rows. Dropped notes (`note: null`) are cached for 30 seconds (#1211), so a refresh
+  immediately after a bad reply does not spend another call, but a later view can
+  recover. Cache hits have `cached: true`. One supplier's note is never served to another.
 - One note per supplier at a time: a second request while one is written answers 429
   `BUYING_NOTE_BUSY`. One model call, up to 30 s, never retried by the gateway.
 - 503 `BUYING_NOTE_UNAVAILABLE` (model or worker down, or no model key) and 504
@@ -1549,6 +1715,7 @@ offers and stops accepting the open ones.
 | `reason` | string | Plain text, at most 300 characters. Control characters are removed. |
 | `made_by` | string | Who chose the product: a model name, `rule` or a person. At most 100 characters. |
 | `idempotency_key` | string | Scoped to the supplier. |
+| `model_trace` | object, optional | What the selling agent's model did (#1197), in the shape of "What the model did", with `reader: seller`. The gateway keeps only the fields that shape names; a wrong type, more than 40 steps, a `query` on a seller step, or a `made_by` that disagrees with the offer's `made_by` (`rule` against anything else) is 422 `INVALID_REQUEST`. It is not part of the idempotency payload. It is the supplier's account of its own agent: shown to a person as that, never read as a price, a quantity or a reason. |
 
 There is no price and no quantity in the body. The gateway takes the quantity and the unit
 from the kitchen's own forecast: its `demand` for `replaces_product_id` on that date, in
@@ -1576,9 +1743,17 @@ The answer is the stored offer:
   "proposal_id": null,
   "decided_by": null,
   "decided_at": null,
-  "allergen_data_known": true
+  "allergen_data_known": true,
+  "model_trace": {"made_by": "model", "reader": "seller", "model": "nemotron-3.5-super-vl",
+                  "thinking": false, "calls": 1, "failed": 0, "prompt_tokens": 812,
+                  "completion_tokens": 48, "reasoning_tokens": 0, "seconds": 1.204,
+                  "attempts": 1, "truncated": false,
+                  "steps": [{"by": "code", "attempt": 1, "tool": "shortlist", "count": 5},
+                            {"by": "model", "attempt": 1, "tool": "pick", "code": "PICKED"}]}
 }
 ```
+
+`model_trace` is `null` on an offer sent without one, and on offers from before #1197.
 
 **Allergen data.** A product that declares an allergen the kitchen excludes is always
 refused. A product without allergen data is refused too, with one exception: the product it
@@ -1801,13 +1976,17 @@ Answer:
   "lines": [
     {"product_id": "462775", "status": "SHORT", "ordered": "51", "received": "36",
      "missing": "15", "base_unit": "ST",
+     "order_quantity": "51", "order_unit": "ST", "missing_order_qty": "15",
+     "unit_price": "1.10", "claim_eur": "16.50",
      "lots": [{"lot": "L2611A", "best_before": "unknown", "quantity": "3", "unit": "KI"}]}
   ],
   "not_ordered": [
     {"product_id": "462921", "status": "SUBSTITUTE", "replaces": "462775",
      "quantity": "2", "unit": "KI", "received": "10", "base_unit": "ST",
      "lot": "L2611B", "best_before": "2026-11-28", "needs_approval": true}
-  ]
+  ],
+  "claim": {"currency": "EUR", "total_eur": "16.50", "lines": 1, "quantity": "15",
+            "unit": "ST", "not_valued": 0, "supplier_name": "Valio Aimo"}
 }
 ```
 
@@ -1817,6 +1996,16 @@ Answer:
 | `complete` | boolean | True only when every ordered line is `RECEIVED` and nothing else came. |
 | `lines[]` | one per ordered line | `status`: `RECEIVED`, `SHORT`, `MISSING` or `UNKNOWN`. |
 | `lines[].ordered`, `received`, `missing` | decimal string or null | In `base_unit` (the catalog's base unit, converted with the catalog's pack sizes). Null when unknown. |
+| `lines[].order_quantity`, `order_unit` | decimal string, string | The ordered quantity and unit as stored on the order (the supplier's sales unit). (#1198) |
+| `lines[].missing_order_qty` | decimal string or null | `missing` in `order_unit`: `missing` x `order_quantity` / `ordered`. Null when `missing` is null. (#1198) |
+| `lines[].unit_price` | money string or null | EUR ex VAT per `order_unit`, the price stored on the order. Null when the order has none. (#1198) |
+| `lines[].claim_eur` | money string or null | The value of what did not come: `missing_order_qty` x `unit_price`, rounded half up to cents. `"0.00"` for `RECEIVED`. Null for `UNKNOWN` and for a line without a price. (#1198) |
+| `claim` | object | One total to claim from the supplier, for the `SHORT` and `MISSING` lines (#1198). |
+| `claim.total_eur` | money string | The sum of the `claim_eur` of the `SHORT` and `MISSING` lines (each rounded first). `"0.00"` when there are none. Ex VAT. |
+| `claim.lines` | integer | How many lines are `SHORT` or `MISSING`. |
+| `claim.quantity`, `claim.unit` | decimal string and string, or both null | The sum of `missing_order_qty` when every `SHORT` and `MISSING` line has the same `order_unit` and a known value; else both null. |
+| `claim.not_valued` | integer | Lines that may be short but have no value: `UNKNOWN` lines, and `SHORT` or `MISSING` lines without a price. They are not in `total_eur`; a person checks them. |
+| `claim.supplier_name` | string or null | The supplier's name when the order is for one supplier; else null. |
 | `lines[].lots` | list | The note's lines for this product: `lot`, `best_before` (`"unknown"` when unreadable), quantity and unit as printed. |
 | `not_ordered[]` | one per note line not on the order | `status`: `SUBSTITUTE` (it says it replaces an ordered product, or that part is unreadable), `EXTRA` (not ordered, replaces nothing), `UNREADABLE` (no readable product code). |
 | `not_ordered[].needs_approval` | boolean | True for every `SUBSTITUTE`: a person says yes or no before it counts as received. |
@@ -1826,13 +2015,22 @@ Unknown is never a number. An unreadable quantity makes the line `UNKNOWN`, neve
 code on the note was readable; otherwise it is `UNKNOWN`, because the unreadable line
 may be that product.
 
+The money is plain code in the gateway, from the stored order's own lines and prices; the
+model gives no price and no value (#1198). A `SUBSTITUTE` is not taken off the claim: a
+person decides if it counts. Nothing is sent to the supplier (Valio's API has no claim
+route); the web app copies the claim as plain text for a person to send.
+
 Errors: those of `POST /stock/photo` (with `DELIVERY_NOTE_BUSY` in place of
 `STOCK_PHOTO_BUSY`), plus 404 `ORDER_NOT_FOUND`. In every case nothing was read and
 nothing is stored. A person can always check the delivery by hand.
 
 ### Check a package's allergen label from a photo (#1175)
 
-Planned. `POST /v1/kitchens/{kitchen_id}/orders/{order_id}/label/photo` reads one photo of
+Served by `gateway/label_photo.py` (#1175); the photo is read by the Buyer worker
+(`agent/label_service.py`), the words are mapped and compared by plain code
+(`agent/label.py`). The prepared demo photo is `demo/label-photo.png`: the demo bakery's
+cinnamon bun, whose "may contain" line names peanuts, which the demo kitchen excludes.
+`POST /v1/kitchens/{kitchen_id}/orders/{order_id}/label/photo` reads one photo of
 a delivered package's label with Nemotron 3.5 Super VL. Plain code compares the allergens
 read with the kitchen's allergen rule and with the catalog row of the product. **The
 answer is shown to a person and stored nowhere**: it never changes the catalog, the order
@@ -1853,7 +2051,8 @@ The model copies, as printed:
 Plain code maps each word to its GS1 code with a fixed table in Finnish, Swedish and English
 (`maito` → `AM`, `vehnä` → `UW`, `manteli` → `SA`, `pähkinä` → `AN`, ...). The table matches
 whole words and safe word starts only: `kookosmaito` is not `maito` and `munakoiso` is not
-`muna`. **A word that is not in the table is "please check", never ignored.**
+`muna`. The "may contain" phrase itself is removed first: `voi sisältää` starts with `voi`,
+which alone means butter. **A word that is not in the table is "please check", never ignored.**
 
 Answer:
 
@@ -1879,7 +2078,7 @@ Answer:
 |---|---|
 | `outcome` | The first that applies: `EXCLUDED_ALLERGEN` (a code the kitchen excludes, as CONTAINS **or** MAY_CONTAIN, same as the search filter), `PLEASE_CHECK` (any reason below), `DIFFERS` (label and catalog differ), `CATALOG_UNKNOWN` (the catalog has no allergen data; the label is shown as read), `AGREES`. |
 | `message` | One plain sentence for the page. `AGREES` says "The label we read agrees with the catalog. Read the label yourself before use." **There is no green or safe outcome**: a vision model can miss a word. |
-| `product_check` | `CONFIRMED_BY_EAN` (the EAN read is one of the product's GTINs), `CONFIRMED_BY_NAME` (no EAN read; most words of a catalog name of the product are on the label), `MISMATCH` (an EAN read that is not this product's), `NOT_CONFIRMED`. The last two are "please check: this may be another product". |
+| `product_check` | `CONFIRMED_BY_EAN` (the EAN read is one of the product's GTINs), `CONFIRMED_BY_NAME` (no EAN read, or the product has no GTIN, as an own product; at least 60% of the words of a catalog name of the product are on the label), `MISMATCH` (an EAN read that is not this product's), `NOT_CONFIRMED`. The last two are "please check: this may be another product". |
 | `label.contains`, `label.may_contain` | The words as printed with their code; a word with no code is in `unknown_words` instead. |
 | `excluded_hits` | Codes the label declares that the kitchen's rule excludes (groups expanded as in the order path, #741). |
 | `differences` | Both directions, each with a sentence: `LABEL_ADDS` (on the label, not in the catalog) and `CATALOG_ADDS` ("The catalog lists milk; we did not read it on the label.", the more likely reader error). Empty when the catalog data is unknown. |
@@ -2161,15 +2360,16 @@ data: {"operation": "insert", "document": {"proposal_id": "...", "status": "READ
 
 **Conformance kit (#609).** `python -m gateway.conformance --base-url <gateway> --token
 <token> [--kitchen demo-kitchen] [--markdown | --json]` checks a running gateway's trust
-rules with an agent-level token. It places no order and opens no approval. Twelve checks,
-C01 to C12: `/health` answers; no token is 401; `GET /permissions` is served; the
+rules with an agent-level token. It places no order and opens no approval. Thirteen checks,
+C01 to C13: `/health` answers; no token is 401; `GET /permissions` is served; the
 gateway sizes the order from the stored need and ignores a model quantity;
 `simulate_order` returns the offer's total with a verdict; `place_order` without a human
 approval is 403 `NEEDS_APPROVAL`; the token cannot approve or reject (403) or create
 tokens (403); no cancel or edit route exists for an order (404 or 405); a kitchen token
 reading another kitchen is 403 `KITCHEN_SCOPE` (skipped for a server agent token); an
-unknown offer is 404 `OFFER_NOT_FOUND`; the MCP tool list has no approve, reject or
-cancel tool. A check is PASS, FAIL or SKIP; any FAIL gives exit code 1.
+unknown offer is 404 `OFFER_NOT_FOUND`; the MCP tool list of this token has no approve,
+reject or cancel tool; the hidden `approve_proposal` tool called by name is refused with
+403 (C13). A check is PASS, FAIL or SKIP; any FAIL gives exit code 1.
 
 ### Model usage (#365)
 

@@ -25,6 +25,7 @@ from gateway.stock_photo import MODEL_NAME
 from gateway.supplier_routes import shortage_rows, window
 
 CACHE_SECONDS = 300
+DROPPED_CACHE_SECONDS = 30
 WORKER_TIMEOUT = 35       # seconds; the worker stops its one call at 30
 STATUS = {"BUYING_NOTE_UNAVAILABLE": 503, "BUYING_NOTE_TIMEOUT": 504, "REPLY_INVALID": 502}
 MODEL_FIELDS = ("product_id", "product_name", "date", "unit", "demand", "kitchens", "available",
@@ -121,7 +122,8 @@ def mount_buying_note(app, gw, principal, worker=None, *, clock=time.monotonic) 
         key = hashlib.sha256(json.dumps([supplier_id, base["from"], base["to"], lang, rows],
                                         sort_keys=True).encode()).hexdigest()
         hit = cache.get(key)
-        if hit and clock() - hit[0] < CACHE_SECONDS:
+        ttl = DROPPED_CACHE_SECONDS if hit and hit[1]['note'] is None else CACHE_SECONDS
+        if hit and clock() - hit[0] < ttl:
             return {**hit[1], "cached": True}
         if supplier_id in busy:
             raise GatewayError(429, "BUYING_NOTE_BUSY", "a buying note is already being written for this supplier")
@@ -137,7 +139,8 @@ def mount_buying_note(app, gw, principal, worker=None, *, clock=time.monotonic) 
             note, dropped = check(reply, rows, lang) if isinstance(reply, dict) else (None, "REPLY_INVALID")
             result = {**base, "duration_ms": round((clock() - started) * 1000), "cached": False,
                       "note": note, "dropped": dropped}
-            for old in [k for k, (at, _) in cache.items() if clock() - at >= CACHE_SECONDS]:
+            for old in [k for k, (at, result) in cache.items()
+                        if clock() - at >= (DROPPED_CACHE_SECONDS if result['note'] is None else CACHE_SECONDS)]:
                 cache.pop(old, None)
             cache[key] = (clock(), result)
             return result

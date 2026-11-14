@@ -1,6 +1,7 @@
 """The demo recorder's plan (demo/record_demo.py). The browser run itself is not a unit test."""
 
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -533,3 +534,270 @@ def test_site_needs_sign_in_reads_the_session_check():
     assert site_needs_sign_in("https://x", answers(200)) is False        # the open demo
     assert site_needs_sign_in("https://x", answers(502)) is False
     assert site_needs_sign_in("https://x", answers(None)) is False
+
+
+# ---- the NVIDIA demo (--story nvidia, #1196) ---------------------------------------------
+
+class _Any:
+    """A permissive stand-in for Playwright's page and locators. Every lookup gives another
+    `_Any` that knows its chain, so a click records exactly which button it went through.
+    `texts` are the texts the page shows; `alert` is an error the page shows; `uploads` and
+    `clicks` record what the actions did."""
+
+    url = "https://x/"
+
+    def __init__(self, page=None, chain=(), texts=(), alert=""):
+        self.page = page or self
+        self.chain = chain
+        if page is None:
+            self.texts, self.alert, self.clicks, self.uploads, self.urls = set(texts), alert, [], [], []
+            self.order_id, self.content = "ord-1", None
+        self.first = self
+
+    def _child(self, *link):
+        return _Any(self.page, self.chain + link)
+
+    def goto(self, url):
+        self.page.urls.append(url)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def wait_for(self, state="visible", timeout=None):
+        pass
+
+    def scroll_into_view_if_needed(self):
+        pass
+
+    def evaluate(self, script, arg=None):
+        return self.page.order_id if "order_id" in script else None
+
+    def set_content(self, html):
+        self.page.content = html
+
+    def locator(self, selector):
+        return self._child(("locator", selector))
+
+    def get_by_label(self, label):
+        return self._child(("label", label))
+
+    def get_by_text(self, text, exact=False):
+        return self._child(("text", text))
+
+    def get_by_role(self, role, name=None, exact=False):
+        return self._child(("role", role, name))
+
+    def count(self):
+        kind = self.chain[-1] if self.chain else None
+        if kind and kind[0] == "text":
+            return int(any(kind[1] in shown for shown in self.page.texts))
+        if kind and kind[:2] == ("role", "alert"):
+            return int(bool(self.page.alert))
+        return 1
+
+    def inner_text(self):
+        return self.page.alert
+
+    def fill(self, value):
+        pass
+
+    def click(self):
+        self.page.clicks.append(self.chain)
+
+    def set_input_files(self, path):
+        self.page.uploads.append((self.chain, path))
+
+
+def _nvidia(photos=None, approve=False):
+    return steps("https://x", "1,000 L lactose-free milk by Monday", "2026-11-16", approve=approve,
+                 story="nvidia", photos=photos)
+
+
+def _note(tmp_path):
+    note = tmp_path / "note.png"
+    note.write_bytes(b"png")
+    return {"note": note}
+
+
+def test_nvidia_plan_has_the_five_jobs_in_order_and_ends_on_the_numbers():
+    plan = _nvidia()
+    assert [n for n, _, _ in plan] == [
+        "intro", "plan", "buy", "trace", "sell", "count", "receive", "numbers", "improved"]
+    for name, caption, action in plan:
+        assert caption.strip() and callable(action), name
+    assert "never sets a number" in {n: c for n, c, _ in plan}["intro"]
+
+
+def test_nvidia_never_approves_even_when_asked():
+    for flag in (False, True):
+        names = {n for n, _, _ in _nvidia(approve=flag)}
+        assert not {"approve", "accept"} & names
+
+
+def test_no_nvidia_action_presses_a_button_that_decides_orders_or_saves(tmp_path):
+    from demo.record_demo import NEVER_PRESSED
+    page = _Any(texts={"What Nemotron did", "Why this basket"})
+    for _, _, action in _nvidia(_note(tmp_path)):
+        action(page)
+    pressed = [link for chain in page.clicks for link in chain if link[0] == "role"]
+    for link in pressed:
+        assert not any(word in (link[2] or "") for word in NEVER_PRESSED), link
+    assert pressed == [("role", "button", "Ask the agent")]      # the only button pressed by name
+    assert page.content and "How we improved its outputs" in page.content
+
+
+def test_the_photos_go_to_their_own_file_inputs(tmp_path):
+    page = _Any()
+    plan = {n: a for n, _, a in _nvidia(_note(tmp_path))}
+    for name in ("plan", "count", "receive"):
+        plan[name](page)
+    inputs = [(chain[0][1], chain[-1][1], Path(path).name) for chain, path in page.uploads]
+    assert inputs == [
+        ('[aria-labelledby="menu-photo-title"]', 'input[type="file"][aria-label="Choose a photo of the menu"]',
+         "menu-photo.png"),
+        ('[aria-labelledby="shelf-photo-title"]', 'input[type="file"][aria-label="Choose a photo of the shelf"]',
+         "demo-shelf.png"),
+        ('[aria-labelledby="delivery-note-title"]', 'input[type="file"][aria-label="Choose a delivery note photo"]',
+         "note.png"),
+    ]
+    assert "https://x/planner?week=2026-W47" in page.urls
+    assert "https://x/orders/ord-1" in page.urls
+
+
+def test_the_default_photos_are_in_the_repo():
+    from demo.record_demo import DEFAULT_PHOTOS
+    assert DEFAULT_PHOTOS["menu"].is_file() and DEFAULT_PHOTOS["shelf"].is_file()
+    assert DEFAULT_PHOTOS["note"] is None            # the prepared note comes with #1198
+
+
+def test_a_beat_whose_model_did_not_answer_is_skipped_with_the_pages_words():
+    page = _Any(alert="The model is not answering right now. Plan the week by hand or try again later.")
+    plan = {n: a for n, _, a in _nvidia()}
+    with pytest.raises(RuntimeError, match="model did not answer: The model is not answering"):
+        plan["plan"](page)
+    with pytest.raises(RuntimeError, match="model did not answer"):
+        plan["count"](page)
+
+
+def test_the_receive_beat_waits_for_the_prepared_note_and_for_an_order(tmp_path):
+    with pytest.raises(RuntimeError, match="after #1198"):
+        {n: a for n, _, a in _nvidia()}["receive"](_Any())
+    page = _Any()
+    page.order_id = None
+    with pytest.raises(RuntimeError, match="no order"):
+        {n: a for n, _, a in _nvidia(_note(tmp_path))}["receive"](page)
+    with pytest.raises(RuntimeError, match="is not there"):
+        {n: a for n, _, a in _nvidia({"note": tmp_path / "gone.png"})}["receive"](_Any())
+
+
+def test_the_trace_beat_waits_for_the_panel_of_1197():
+    trace = {n: a for n, _, a in _nvidia()}["trace"]
+    with pytest.raises(RuntimeError, match="after #1197"):
+        trace(_Any())
+    page = _Any(texts={"What Nemotron did"})
+    trace(page)
+    assert page.clicks == [(("text", "What Nemotron did"),)]
+
+
+def test_a_fallback_answer_is_said_and_never_credited_to_nemotron():
+    plan = {n: a for n, _, a in _nvidia()}
+    assert plan["buy"](_Any(texts={"Why this basket", "Proposed by the Buyer agent (Nemotron 3.5 Super VL)"})) is None
+    said = plan["buy"](_Any(texts={"Why this basket", "Proposed by the gateway’s request parser, not the Buyer model"}))
+    assert "request parser" in said and "not Nemotron" in said
+    assert plan["sell"](_Any(texts={"written by Valio's selling agent (Nemotron 3.5 Super VL)"})) is None
+    said = plan["sell"](_Any(texts={"written by Valio's selling agent (picked by rule, not by a model)"}))
+    assert "rule" in said and "Nemotron" not in said
+
+
+def test_the_improved_tables_are_read_from_submission_md():
+    from demo.record_demo import improved_html, improved_tables
+    tables = improved_tables()
+    assert len(tables) == 2
+    assert tables[0][0][:2] == ["Setting", "Score EUR/week"]
+    assert ["Nemotron, thinking on", "4395", "-2817", "0", "1"] in tables[0]
+    assert tables[1][0][0] == "Live loop" and any("289" in row for row in tables[1])
+    page = improved_html([[["a<b", "c"], ["1", "2"]]])
+    assert "a&lt;b" in page and "<th" in page and "<td" in page
+
+
+def test_improved_tables_name_a_missing_part(tmp_path):
+    from demo.record_demo import improved_tables
+    other = tmp_path / "submission.md"
+    other.write_text("# nothing here\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="How we improved"):
+        improved_tables(other)
+
+
+def test_iso_week_is_the_planners_week():
+    from demo.record_demo import iso_week
+    assert iso_week("2026-11-16") == "2026-W47"
+    assert iso_week("2027-01-01") == "2026-W53"
+
+
+def test_record_shows_the_caption_an_action_returns(monkeypatch, tmp_path):
+    """The caption bar shows the fallback sentence an action returns, not the planned one."""
+    import sys
+    import types
+    from demo import record_demo
+    shown = []
+
+    class _Video:
+        def path(self):
+            return str(tmp_path / "v.webm")
+
+    class _RecPage:
+        video = _Video()
+
+        def evaluate(self, script, arg=None):
+            if script == record_demo.CAPTION_JS:
+                shown.append(arg)
+
+        def wait_for_timeout(self, ms):
+            pass
+
+    class _Ctx:
+        def new_page(self):
+            return _RecPage()
+
+        def close(self):
+            pass
+
+    class _Browser:
+        def new_context(self, **kw):
+            return _Ctx()
+
+        def close(self):
+            pass
+
+    class _PW:
+        chromium = types.SimpleNamespace(launch=lambda: _Browser())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    fake = types.ModuleType("playwright.sync_api")
+    fake.sync_playwright = lambda: _PW()
+    monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", fake)
+    monkeypatch.setattr(record_demo, "steps", lambda *a, **k: [
+        ("one", "planned", lambda page: None), ("two", "planned", lambda page: "the parser answered")])
+    record_demo.record("https://x", tmp_path, "t", "2026-11-16", False, 0)
+    assert shown == ["planned", "the parser answered"]
+
+
+def test_nvidia_on_the_command_line(monkeypatch):
+    from demo import record_demo
+    seen = {}
+    monkeypatch.setattr(record_demo, "site_needs_sign_in", lambda base: False)
+    monkeypatch.setattr(record_demo, "record", lambda *a, **k: seen.update(k) or "video.webm")
+    record_demo.main(["--story", "nvidia", "--note-photo", "n.png"])
+    assert seen["story"] == "nvidia" and seen["photos"]["note"] == "n.png"
+    assert seen["photos"]["menu"].endswith("menu-photo.png")
+    for refused in (["--approve"], ["--press-recall"]):
+        seen.clear()
+        with pytest.raises(SystemExit) as stop:
+            record_demo.main(["--story", "nvidia", *refused])
+        assert "never approves" in str(stop.value) and not seen       # nothing was recorded

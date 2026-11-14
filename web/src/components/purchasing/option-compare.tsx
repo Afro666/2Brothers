@@ -2,6 +2,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { LabelChip } from "@/components/purchasing/chips";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/api/types";
 import { formatDateTime, formatEur, formatNumber, formatPercent } from "@/lib/format";
@@ -201,6 +202,11 @@ export function OptionCompare({
                     open ? "p-0" : "px-3 py-2 font-normal hover:bg-muted/60",
                   )}
                 >
+                  <span className="flex shrink-0 -space-x-2" data-testid="option-thumbs">
+                    {option.lines.map((line, n) => (
+                      <ProductThumb key={`${line.productId}-${n}`} en={line.productName} size="sm" className="ring-2 ring-background" />
+                    ))}
+                  </span>
                   <span id={titleId} className="min-w-0 flex-[1_1_16rem] break-words font-medium">
                     {t("Option {letter}:", { letter })}{" "}
                     {option.lines
