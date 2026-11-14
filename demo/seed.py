@@ -31,6 +31,7 @@ from env.covers import demo_forecaster
 from env.history import simulate_kitchen
 from env.kitchens import RECIPES, make_kitchens
 from env.policies import POLICIES
+from env.quantities import forecast_quantity
 from signals.covers import CoverSignals
 
 START = date(2026, 8, 17)
@@ -119,7 +120,7 @@ def build(seed: int, today: date, future_weeks: int, kitchens: int = 20,
                 covers = engine(target)
                 for pid in k.products:
                     unit = PRODUCTS[pid].unit
-                    need = round(covers * use.get(pid, 0.0), 3)
+                    need = forecast_quantity(covers * use.get(pid, 0.0), unit)
                     out["forecasts"].append({
                         "kitchen_id": kid, "product_id": pid, "date": target.isoformat(), "need": need,
                         "unit": unit, "method": "engine", "made_on": day.isoformat(),
@@ -127,7 +128,7 @@ def build(seed: int, today: date, future_weeks: int, kitchens: int = 20,
                     if target < today and baseline.has_history(pid, target):
                         out["baseline"].append({
                             "kitchen_id": kid, "product_id": pid, "date": target.isoformat(),
-                            "need": round(baseline.use(pid, target), 3), "unit": unit,
+                            "need": forecast_quantity(baseline.use(pid, target), unit), "unit": unit,
                             "method": "weekday-average", "made_on": day.isoformat(),
                             "why": "mean of the last 4 same weekdays"})
             if day < today:
