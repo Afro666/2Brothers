@@ -28,7 +28,30 @@ shaky ones.
 4. **Open the tabs:** `/requests`, `/approvals` on a phone, `/audit`, `/llms.txt`, a
    terminal with the two commands of beat 5.
 5. **Recall beat only:** it is one-shot per recorded notice and needs data (see beat 4).
-6. **Have the fallback video open** in a player, paused at 0:00 (#295: not recorded yet).
+6. **Have the fallback video open** in a player, paused at 0:00. Record it with
+   `python -m demo.record_demo --approve` (about one minute, captions, no sound; the file
+   lands in `demo/out/`). Record again after any change to the demo path.
+7. **Clear the inbox.** Test requests pile up: on 14 Nov the menu badge showed 24 waiting
+   proposals. On the server, through the gateway container:
+   `python -m demo.clear_inbox` lists them, `python -m demo.clear_inbox --apply` removes
+   them. It is not a reject, so it does not count as a person's decision.
+8. **Warm up.** Send one request before the live one. The Buyer model does not finish about
+   one run in three; the gateway then retries once (#735), and after that the parser answers.
+
+## Two requests, not one
+
+A proposal with a line whose stock Valio does not report cannot be placed: a person's yes is
+not stock confirmation. On 14 Nov every 1,000 L milk proposal had such a line, so its
+Approve button was disabled. Until the option card has a Choose button (#403), show the
+approval on a request that confirmed stock covers:
+
+- **Small request, for the one-tap approval:** `200 L lactose-free milk by Monday`. Measured
+  live: the Buyer (Nemotron 3.5 Super VL) answered in 8.5 s with 200 ST of 463380, stock
+  confirmed, EUR 601.55. It can be approved.
+- **Big request, for the honest answer:** `1,000 L lactose-free milk by Monday`. It shows
+  the split, the cut-offs and the first option: "Order the confirmed 698 L now. The other
+  302 L is held until the supplier confirms stock" (EUR 2,099.41, served by the gateway
+  since #775). With the Choose button a person takes that option and approves it.
 
 ## The script
 
@@ -74,12 +97,15 @@ are planned, and none of them scores in three minutes.
 
 ## Open items for this script
 
-- [ ] Record the 90-second fallback video (#295).
+- [x] Fallback video: `python -m demo.record_demo` records it (first run 14 Nov, 57 s). Record the
+      final one with `--approve` after the last change.
 - [ ] Measure the manual webshop time (#295).
 - [ ] Buyer path through the web still fell back to the parser at 02:22 UTC on 14 Nov;
       confirm it says the Buyer model before rehearsal.
 - [ ] Recall beat: web wiring #655; `CONTEXT_DEV_API_KEY` on the server; seed with
       `python -m demo.recall_demo` (see `deploy/README.md`). One-shot: do not press
       "Check recalls now" in rehearsal on the live kitchen.
-- [ ] Tamper check beat: gateway trust routes and the web wiring.
+- [ ] Tamper check beat: the gateway routes are live (#747, `/audit/verify` answers the real
+      chain); the web Trust page still shows sample data until #789.
+- [ ] Choose button on the option card (#403), so the big request can be approved in the demo.
 - [ ] Claude Desktop as the second agent (`docs/byoa.md`): run it once before the demo.
