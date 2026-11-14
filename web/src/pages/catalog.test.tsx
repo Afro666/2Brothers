@@ -178,6 +178,8 @@ describe("catalog page", () => {
 
     await waitFor(() => expect(calls).toContain("lactose-free milk"));
     expect(await screen.findByText(sampleProducts.arlaUht1l.names.en)).toBeInTheDocument();
+    // Once: the example is not searched again when the page draws again.
+    expect(calls.filter((query) => query === "lactose-free milk")).toHaveLength(1);
     expect(await screen.findByRole("searchbox", { name: "Search the catalog" })).toHaveValue("lactose-free milk");
     await waitFor(() => expect(router.state.location.href).toBe("/catalog?q=lactose-free+milk"));
     expect(screen.queryByRole("heading", { name: "No products match this search" })).not.toBeInTheDocument();
