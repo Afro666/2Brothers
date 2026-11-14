@@ -142,7 +142,12 @@ export interface Order {
   totalExVat: number | null;
   vat: number | null;
   deliveryFee: number | null;
+  /** The figure a person approves (the gateway's `expected_total`). Show `inclVatOf(order)` as "incl VAT". */
   totalInclVat: number;
+  /** The gateway's `total_incl_vat`: null = a line's VAT rate is unknown; absent = not sent. */
+  inclVat?: number | null;
+  /** Names of the lines whose VAT rate is unknown (`vat_unknown`). */
+  vatUnknown?: string[];
   /** null = the supplier's delivery terms are not known. */
   mov: MovState | null;
   /** The supplier's own reference after a person resolves an unknown send. */
@@ -239,7 +244,12 @@ export interface ApprovalRequest {
   lineCount: number;
   deliveryDate: string;
   totalExVat: number;
+  /** The figure a person approves and the approve call sends (the gateway's `expected_total`). Show `inclVatOf(request)` as "incl VAT". */
   totalInclVat: number;
+  /** The gateway's `total_incl_vat`: null = a line's VAT rate is unknown; absent = not sent. */
+  inclVat?: number | null;
+  /** Names of the lines whose VAT rate is unknown (`vat_unknown`). */
+  vatUnknown?: string[];
   reasons: MandateReason[];
   suppliersToConfirm: { supplierId: string; name: string }[];
   /** Proposal-line cut-offs and the supplier block each line belongs to. */
