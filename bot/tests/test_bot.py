@@ -639,7 +639,9 @@ def test_a_question_is_explained_and_never_sent_to_the_buyer(bot):
     assert bot.tg.sent[-1]["text"].startswith("I make orders and briefs") and bot.gw.calls == []
     say(bot, "can I get 20 L oat drink for Monday?")             # a number: this is an order
     say(bot, "what the menu needs")                              # not a question form
-    assert [c[0] for c in bot.gw.calls] == ["ask", "ask"]
+    say(bot, "can you order oat drink for Monday")               # a polite order without a number
+    say(bot, "can I get milk for tomorrow?")
+    assert [c[0] for c in bot.gw.calls] == ["ask", "ask", "ask", "ask"]
 
 
 def test_a_change_updates_the_last_brief_and_the_summary_also_after_a_restart(bot, tmp_path):

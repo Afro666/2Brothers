@@ -7,6 +7,7 @@ message opens our own approval card, where a person approves the exact total.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import threading
 import time
@@ -76,10 +77,17 @@ NO_ANSWER = ("I make orders and briefs; I cannot answer that question yet.\n"
              "Say what the kitchen needs, for example: <b>20 L oat drink for Monday</b>, or send /brief.")
 
 
+# "can you order oat drink for Monday" is a polite order, not a question (#1653).
+ORDER_WORDS = re.compile(r"\b(?:orders?|get|need|buy|send|add|want|tilaa\w*|tarvit\w*|zam[óo]w\w*|zamawia\w*|"
+                         r"potrzeb\w*|kup\w*)\b")
+
+
 def is_question(text: str) -> bool:
     low = text.strip().lower()
     if any(ch.isdigit() for ch in low):
         return False            # "can I get 20 L milk for Monday?" is an order
+    if ORDER_WORDS.search(low) and not any(word in low for words, _ in EXPLAINED for word in words):
+        return False            # "can you order oat drink for Monday" goes to the Buyer
     return low.endswith("?") or low.startswith(QUESTION_STARTS)
 
 
