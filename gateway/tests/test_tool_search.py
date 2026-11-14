@@ -10,6 +10,8 @@ CATALOG = [
      "supplier_id": "valio_aimo"},                                                # as the real catalog rows are
     {"product_id": "463335", "net_content": {"value": 1.0, "unit": "L"}},         # litres, can arrive
 ]
+for _row in CATALOG[1:]:
+    _row["lactose_free"] = True      # the milks are lactose-free: the catalog's own flag (#1869)
 
 
 def test_search_with_need_keeps_the_measure_and_puts_deliverable_first(env):

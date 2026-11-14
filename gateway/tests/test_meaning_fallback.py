@@ -23,6 +23,8 @@ def row(pid, name, contains=(), may_contain=(), known=True, unit="L", reasons=()
 MILK = [row("462775", "Valio Zero lactose milk drink fat free 1 l"),
         row("462921", "Valio lactose free milk drink 5 l"),
         row("463335", "Valio Eila milk drink 3 % 1 l")]
+for _row in MILK:
+    _row["lactose_free"] = True      # the catalog's own flag: a lactose-free need keeps them (#1869)
 BY_MEANING = [row(r["product_id"], r["names"]["en"], reasons=["similar meaning, no word match"]) for r in MILK]
 
 
@@ -48,7 +50,7 @@ class Meaning:
 def gateway(search=words, meaning=None):
     db = mongomock.MongoClient(tz_aware=True)["test"]
     for pid, raw in RAW.items():
-        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
+        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "lactose_free": True, "raw": raw})
     valio = ValioClient("test-not-a-real-key", transport=FakeValio().transport, ttl=0, now=lambda: NOW)
     return Gateway(db, valio, now=lambda: NOW, search=search, meaning=meaning)
 

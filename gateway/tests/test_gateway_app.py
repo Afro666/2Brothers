@@ -60,12 +60,13 @@ def env(monkeypatch):
     monkeypatch.setenv("GATEWAY_HUMAN_TOKEN", "human-test-token")
     monkeypatch.setenv("GATEWAY_AGENT_TOKEN", "agent-test-token")
     db = mongomock.MongoClient(tz_aware=True)["test"]
-    for pid, raw in RAW.items():
-        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "raw": raw})
+    for pid, raw in RAW.items():   # the recorded milks are lactose-free: the catalog's own flag (#1869)
+        db.products.insert_one({"_id": pid, "names": {"en": f"milk {pid}"}, "lactose_free": True, "raw": raw})
     fake = FakeValio()
     valio = ValioClient("test-not-a-real-key", transport=fake.transport, ttl=0, now=lambda: NOW)
     def search(db, query, filters, limit, kitchen_id=None):
-        return [{"product_id": pid} for pid in ("462775", "462921", "463335")] if "milk" in query or "maito" in query else []
+        return ([{"product_id": pid, "lactose_free": True} for pid in ("462775", "462921", "463335")]
+                if "milk" in query or "maito" in query else [])
 
     gw = Gateway(db, valio, now=lambda: NOW, search=search)
     return TestClient(create_app(gw)), fake, db

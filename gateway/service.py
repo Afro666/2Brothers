@@ -396,6 +396,7 @@ class Gateway:
         blocked = recalls.blocked_ids(self.db, kitchen_id)
         refused = self._allergen_refusals(kitchen_id, request["product_ids"])
         other_kind = self._not_the_plant_drink(kitchen_id, request)      # #1700: never cow's milk for oat milk
+        other_kind = {**self._not_the_diet(kitchen_id, request), **other_kind}   # #1869: never low lactose
         offers, skipped, tax, supplier_of, when = self._offers(
             kitchen_id, [p for p in request["product_ids"]
                          if p not in blocked and p not in refused and p not in other_kind],
@@ -433,6 +434,11 @@ class Gateway:
         plant = plant_drink(request.get("text") or "")
         if plant is not None and any(e["reason"] == not_asked(plant) for e in sim["excluded"]):
             sim["mandate"]["reasons"].insert(0, not_asked(plant))     # #1700: said, not hidden
+        if not sim["lines"]:             # #1869: nothing meets the diet asked: say it first
+            from gateway import diet
+            for wanted in diet.asked(request.get("text") or ""):
+                if any(e["reason"] == diet.not_met(wanted) for e in sim["excluded"]):
+                    sim["mandate"]["reasons"].insert(0, diet.not_met(wanted))
         if request.get("refusal"):       # the whole request is refused (#974): say it first
             sim["mandate"]["reasons"].insert(0, request["refusal"]["message"])
             # A rule refused it, not the stock (#995).
@@ -591,7 +597,8 @@ class Gateway:
                 continue
             plan, skip, t, s, w, refused = self._plan_one(kitchen_id, {
                 "product_ids": free, "quantity": item["quantity"], "unit": item["unit"],
-                "requested_date": requested, "event": request.get("event")})
+                "requested_date": requested, "event": request.get("event"),
+                "text": item.get("text") or "", "made_by": "list_item"})     # #1869: the need's diet
             tax.update(t), supplier_of.update(s), when.update(w)
             skipped += skip
             allergen = allergen or bool(refused)
@@ -809,6 +816,14 @@ class Gateway:
 
     def _of_kind(self, rows: list[dict], query: str, filters: dict | None, text: str, unit: str,
                  kitchen_id: str | None = None) -> list[dict]:
+        """`_kind_rows`, then only the rows that meet the diet `text` names (gateway/diet.py,
+        #1869): a lactose-free request never gets a low lactose milk on its shortlist. With
+        no fallback: when no row meets the diet the answer is empty."""
+        from gateway import diet
+        return diet.keep(self._kind_rows(rows, query, filters, text, unit, kitchen_id), text)
+
+    def _kind_rows(self, rows: list[dict], query: str, filters: dict | None, text: str, unit: str,
+                   kitchen_id: str | None = None) -> list[dict]:
         """The search hits narrowed to the kind of product `text` names (gateway/kind.py,
         gateway/candidates.py `of_kind`). The word search returns 50 hits and "cheese" is in
         439 names, so the best hits of each category of that kind (three at most) are
@@ -907,6 +922,25 @@ class Gateway:
         rows = {r["product_id"]: r for r in get_products(self.db, ids, kitchen_id)}
         cooking = cooking_milk(request.get("text") or "", plant)       # #1748: the can too
         return {pid: not_asked(plant) for pid in ids if not is_plant_drink(rows.get(pid), plant, cooking)}
+
+    def _not_the_diet(self, kitchen_id: str, request: dict) -> dict[str, str]:
+        """#1869: {product_id: reason} for the products that do not meet a diet the person's
+        text names ("lactose-free", "gluten-free": gateway/diet.py); {} when it names none.
+        Low lactose is not lactose-free, and a product with no proof is not either. Where
+        the codes were picked for the text: the Buyer's offer (`need_id`), the plain-code
+        reader, a need of a list and the confirmed-stock options. So every option of a
+        proposal passes here. A body with its own codes is left as asked."""
+        from gateway import diet
+        if not (request.get("need_id") or request.get("made_by") in diet.PICKED_FOR_TEXT) or request.get("refusal"):
+            return {}
+        asked = diet.asked(request.get("text") or "")
+        if not asked:
+            return {}
+        from store.products import get_products
+        ids = [str(pid) for pid in request.get("product_ids") or []]
+        rows = {r["product_id"]: r for r in get_products(self.db, ids, kitchen_id)}
+        unmet = {pid: diet.unmet(rows.get(pid), asked) for pid in ids}
+        return {pid: diet.not_met(missing) for pid, missing in unmet.items() if missing is not None}
 
     # ---- kitchen side ---------------------------------------------------------------
 
@@ -1682,6 +1716,11 @@ class Gateway:
             plant = plant_drink(need["text"] or query)
             if plant is not None:          # #1700: say it, never offer cow's milk instead
                 note = none_found(plant)
+            else:
+                from gateway import diet
+                wanted = diet.asked(need["text"] or query)
+                if wanted:                 # #1869: say it, never offer a low lactose milk instead
+                    note = diet.none_found(wanted)
         return {"products": _matched_by(rows), "requested_date": need["requested_date"],
                 "measure": measure if filtered else None, "search": kind, "note": note}
 
