@@ -27,6 +27,7 @@ NOT_LINKED = "This chat is not linked to a kitchen yet. Ask the kitchen's admin 
 MAX_VOICE_SECONDS = 30
 MAX_PHOTO_BYTES = 4 * 1024 * 1024       # the gateway's limit for a shelf photo
 MAX_SHELVES = 50
+MAX_SUMMARIES = 500                     # proposals whose summary the bot still edits
 
 
 BRIEF_TIMES = {"morning": "07:00", "evening": "16:00"}      # the kitchen's time
@@ -166,6 +167,9 @@ class Bot:
                 self._summaries[(chat, pid)] = status
                 if heard:
                     self._heard[(chat, pid)] = heard
+                for kept in (self._summaries, self._heard):     # the oldest go first
+                    while len(kept) > MAX_SUMMARIES:
+                        del kept[next(iter(kept))]
         self._show_summary(chat, proposal)
         if proposal.get("status") == "REJECTED":
             return
