@@ -73,6 +73,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
   const unknownApproval: ApprovalRequest = {
     ...structuredClone(seedApproval),
     id: "APR-UNKNOWN-1046",
+    approvalRef: "APR-UNKNOWN-1046",
     orderId: unknownOrder.id,
     status: "APPROVED",
   };
@@ -450,9 +451,6 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       const found = demoOrders.get(id);
       if (!found) throw new ApiError("NOT_FOUND", `Order ${id} was not found.`);
       return found;
-    },
-    async getCurrentSession() {
-      return { kind: "human", name: "aron", role: "approver", kitchenId: KITCHEN_ID, canApprove: true, scopes: null };
     },
     async getOrderResolution(orderId) {
       const found = resolutions.get(orderId);

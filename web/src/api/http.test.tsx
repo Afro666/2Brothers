@@ -67,7 +67,6 @@ describe("createHttpApi", () => {
         "changePassword",
         "chooseOption",
         "getApproval",
-        "getCurrentSession",
         "getForecastAccuracy",
         "getOrder",
         "getOrderResolution",
@@ -273,17 +272,51 @@ describe("createHttpApi", () => {
       [`POST ${K}/proposals/prop-1/approve`]: () => ({ proposal_id: "prop-1", ...placedOrder }),
     });
     const result = await createHttpApi("/api").approve(
-      { approvalId: "prop-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 },
+      { approvalId: "prop-1", approvalRef: "appr-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 },
       "chef",
     );
     expect(result.status).toBe("APPROVED");
     expect(calls[0].route).toBe(`POST ${K}/proposals/prop-1/approve`);
-    expect(calls[0].body).toEqual({
+    expect(calls.filter((call) => call.route === `POST ${K}/proposals/prop-1/approve`)).toHaveLength(1);
+    const approvalCall = calls.find((call) => call.route === `POST ${K}/proposals/prop-1/approve`);
+    expect(approvalCall?.body).toEqual({
       expected_total: "91.20",
-      idempotency_key: "web-approve:prop-1:91.20",
+      idempotency_key: "web-approve:prop-1:91.20:appr-1",
     });
-    expect(calls[0].headers).toMatchObject({ "X-User": "chef" });
+    expect(approvalCall?.headers).toMatchObject({ "X-User": "chef" });
     expect(calls.every((call) => !("Authorization" in call.headers))).toBe(true);
+  });
+
+  it("reuses one idempotency key when the same approval decision is retried", async () => {
+    const approved = { ...proposal, status: "APPROVED", order_id: "ord-1" };
+    const calls = gateway({
+      ...inbox(approved),
+      [`POST ${K}/proposals/prop-1/approve`]: () => ({ proposal_id: "prop-1", ...placedOrder }),
+    });
+    const api = createHttpApi("/api");
+    const decision = { approvalId: "prop-1", approvalRef: "appr-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 };
+
+    await api.approve(decision, "human");
+    await api.approve(decision, "human");
+
+    const keys = calls.filter((call) => call.route.endsWith("/approve")).map((call) => call.body.idempotency_key);
+    expect(keys).toEqual(["web-approve:prop-1:91.20:appr-1", "web-approve:prop-1:91.20:appr-1"]);
+  });
+
+  it("uses a stable first-attempt key when the gateway sent no approval id", async () => {
+    const approved = { ...proposal, status: "APPROVED", order_id: "ord-1" };
+    const calls = gateway({
+      ...inbox(approved),
+      [`POST ${K}/proposals/prop-1/approve`]: () => ({ proposal_id: "prop-1", ...placedOrder }),
+    });
+    const api = createHttpApi("/api");
+    const decision = { approvalId: "prop-1", approvalRef: null, expectedTotalExVat: 80, expectedTotalInclVat: 91.2 };
+
+    await api.approve(decision, "human");
+    await api.approve(decision, "human");
+
+    const keys = calls.filter((call) => call.route.endsWith("/approve")).map((call) => call.body.idempotency_key);
+    expect(keys).toEqual(["web-approve:prop-1:91.20:first", "web-approve:prop-1:91.20:first"]);
   });
 
   it("rejects with the reason", async () => {
@@ -323,7 +356,7 @@ describe("createHttpApi", () => {
     gateway({ [`POST ${K}/proposals/prop-1/approve`]: () => error(409, "BLOCKED_BY_RECALL") });
     await expect(
       createHttpApi("/api").approve(
-        { approvalId: "prop-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 },
+        { approvalId: "prop-1", approvalRef: "appr-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 },
         "human",
       ),
     ).rejects.toMatchObject({ code: "BLOCKED_BY_RECALL", message: expect.stringContaining("blocked by a recall") });
@@ -346,7 +379,7 @@ describe("createHttpApi", () => {
       role: "approver",
       canApprove: true,
     });
-    await api.approve({ approvalId: "prop-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 }, "human");
+    await api.approve({ approvalId: "prop-1", approvalRef: "appr-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 }, "human");
     const approvalCall = calls.find((call) => call.route.includes("/approve"));
     expect(approvalCall?.headers).not.toHaveProperty("X-User");
     expect(calls[0].body).toEqual({ email: "buyer@example.com", password: "demo-kitchen-2026" });
@@ -417,7 +450,7 @@ describe("createHttpApi", () => {
     await api.signIn("buyer@example.com", "demo-kitchen-2026");
 
     await expect(api.signOut()).resolves.toBeUndefined();
-    await api.approve({ approvalId: "prop-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 }, "chef");
+    await api.approve({ approvalId: "prop-1", approvalRef: "appr-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 }, "chef");
 
     expect(calls.find((call) => call.route.includes("/approve"))?.headers).toMatchObject({ "X-User": "chef" });
   });
@@ -513,13 +546,12 @@ describe("createHttpApi", () => {
       }),
     });
     const api = createHttpApi("/api");
-    expect(await api.getCurrentSession()).toEqual({
+    expect(await api.getSession()).toEqual({
       kind: "human",
       name: "aron",
+      email: null,
       role: "approver",
-      kitchenId: "demo-kitchen",
       canApprove: true,
-      scopes: null,
     });
     expect(await api.getOrderResolution("ord-unknown")).toMatchObject({
       orderId: "ord-unknown",
@@ -580,35 +612,44 @@ describe("createHttpApi", () => {
     expect(calls.every((call) => !call.route.endsWith("/approve"))).toBe(true);
   });
 
-  it("uses a fresh approval key after not_sent returns the proposal to the inbox", async () => {
+  it("uses the new server approval id for a fresh key after not_sent and a reload", async () => {
+    let currentProposal = proposal;
     const calls = gateway({
       ...inbox(),
-      [`POST ${K}/orders/ord-unknown/resolve`]: () => ({
-        order_id: "ord-unknown",
-        proposal_id: "prop-1",
-        proposal_status: "READY",
-        outcome: "NOT_SENT",
-        status: null,
-        resolution: {
-          resolution: "not_sent",
-          supplier_order_ref: null,
-          note: "No such order",
-          resolved_by: "aron",
-          resolved_at: "2026-11-14T02:31:00+00:00",
-          from_outcome: "UNCONFIRMED",
-        },
-      }),
+      [`GET ${K}/proposals/prop-1`]: () => currentProposal,
+      [`POST ${K}/orders/ord-unknown/resolve`]: () => {
+        currentProposal = { ...proposal, approval_id: "appr-2" };
+        return {
+          order_id: "ord-unknown",
+          proposal_id: "prop-1",
+          proposal_status: "READY",
+          outcome: "NOT_SENT",
+          status: null,
+          resolution: {
+            resolution: "not_sent",
+            supplier_order_ref: null,
+            note: "No such order",
+            resolved_by: "aron",
+            resolved_at: "2026-11-14T02:31:00+00:00",
+            from_outcome: "UNCONFIRMED",
+          },
+        };
+      },
       [`POST ${K}/proposals/prop-1/approve`]: () => placedOrder,
     });
     const api = createHttpApi("/api");
-    const decision = { approvalId: "prop-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 };
+    const decision = { approvalId: "prop-1", approvalRef: "appr-1", expectedTotalExVat: 80, expectedTotalInclVat: 91.2 };
     await api.approve(decision, "human");
     const originalKey = calls.find((call) => call.route.endsWith("/approve"))!.body.idempotency_key;
     await api.resolveOrder("ord-unknown", { resolution: "not_sent", note: "No such order" }, "aron");
-    await api.approve(decision, "human");
+    const reloaded = createHttpApi("/api");
+    const reopened = await reloaded.getApproval("prop-1");
+    expect(reopened.approvalRef).toBe("appr-2");
+    await reloaded.approve({ ...decision, approvalRef: reopened.approvalRef }, "human");
     const approvalCalls = calls.filter((call) => call.route.endsWith("/approve"));
+    expect(originalKey).toBe("web-approve:prop-1:91.20:appr-1");
+    expect(approvalCalls[1].body.idempotency_key).toBe("web-approve:prop-1:91.20:appr-2");
     expect(approvalCalls[1].body.idempotency_key).not.toBe(originalKey);
-    expect(approvalCalls[1].body.idempotency_key).toContain(`${originalKey}:reopened:`);
   });
 
   it("reads the forecast check from the two forecast routes; nothing compared stays unknown", async () => {

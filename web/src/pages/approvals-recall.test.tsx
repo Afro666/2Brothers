@@ -63,7 +63,7 @@ describe("ApprovalsPage recalls", () => {
     const api = createMockApi();
     await api.checkRecalls!("human");
     await api.approve(
-      { approvalId: "APR-313-R", expectedTotalExVat: 129.6, expectedTotalInclVat: 147.1 },
+      { approvalId: "APR-313-R", approvalRef: "APR-313-R", expectedTotalExVat: 129.6, expectedTotalInclVat: 147.1 },
       "human",
     );
     renderApp("/approvals", api);
@@ -107,7 +107,7 @@ describe("ApprovalsPage recalls", () => {
 
     await waitFor(() => {
       expect(approve).toHaveBeenCalledWith(
-        { approvalId: "APR-313-R", expectedTotalExVat: 129.6, expectedTotalInclVat: 147.1 },
+        { approvalId: "APR-313-R", approvalRef: "APR-313-R", expectedTotalExVat: 129.6, expectedTotalInclVat: 147.1 },
         "human",
       );
     });
@@ -131,7 +131,7 @@ describe("ApprovalsPage recalls", () => {
     const api = createMockApi();
     await api.checkRecalls!("human");
     await expect(
-      api.approve({ approvalId: "APR-313", expectedTotalExVat: 145.3, expectedTotalInclVat: 164.92 }, "human"),
+      api.approve({ approvalId: "APR-313", approvalRef: "APR-313", expectedTotalExVat: 145.3, expectedTotalInclVat: 164.92 }, "human"),
     ).rejects.toMatchObject({ code: "BLOCKED_BY_RECALL", message: expect.stringContaining("blocked by a recall") });
     expect((await api.reject("APR-313", "Recalled line; replacement proposed", "human")).status).toBe("REJECTED");
     expect((await api.getApproval("APR-313-R")).status).toBe("PENDING");

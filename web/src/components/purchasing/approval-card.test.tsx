@@ -90,6 +90,7 @@ describe("ApprovalCard", () => {
 
     expect(onApprove).toHaveBeenCalledWith({
       approvalId: approval.id,
+      approvalRef: approval.approvalRef,
       expectedTotalExVat: approval.totalExVat,
       expectedTotalInclVat: approval.totalInclVat,
     });

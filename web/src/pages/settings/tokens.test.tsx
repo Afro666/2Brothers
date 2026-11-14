@@ -81,6 +81,7 @@ describe("API & MCP token settings", () => {
   it("does not show token management to a non-approver", async () => {
     const api = createMockApi();
     vi.spyOn(api, "getSession").mockResolvedValue({
+      kind: "human",
       name: "A viewer",
       email: "viewer@demo.kitchen",
       role: "viewer",

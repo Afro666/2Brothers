@@ -37,6 +37,7 @@ describe("orders pages", () => {
   it("shows what is known and resolves a placed order only with its supplier reference", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
+    await api.signIn("buyer@demo.kitchen", "demo-kitchen-2026");
     const resolve = vi.spyOn(api, "resolveOrder");
     renderApp("/orders/ORD-1046", api);
 
@@ -61,7 +62,7 @@ describe("orders pages", () => {
     expect(resolve).toHaveBeenCalledWith(
       "ORD-1046",
       { resolution: "placed", supplierOrderRef: "VAL-2026-00123" },
-      "aron",
+      "Buyer",
     );
     expect(await screen.findByText("VAL-2026-00123")).toBeVisible();
     expect(await screen.findByText("Placed", { selector: "[data-status='PLACED']" })).toBeVisible();
@@ -82,25 +83,18 @@ describe("orders pages", () => {
     expect(resolve).toHaveBeenCalledWith(
       "ORD-1046",
       { resolution: "not_sent", note: "Valio sales desk: no such order" },
-      "aron",
+      "Buyer",
     );
     expect(await screen.findByText("Not sent", { selector: "[data-status='NOT_SENT']" })).toBeVisible();
     expect((await api.getApproval("APR-UNKNOWN-1046")).status).toBe("PENDING");
     expect(screen.queryByRole("button", { name: "It was not sent" })).not.toBeInTheDocument();
   });
 
-  it("hides both actions for a chef and when the gateway says the order is not resolvable", async () => {
-    const chef = createMockApi();
-    chef.getCurrentSession = async () => ({
-      kind: "human",
-      name: "chef",
-      role: "chef",
-      kitchenId: "demo-kitchen",
-      canApprove: false,
-      scopes: null,
-    });
-    const lookup = vi.spyOn(chef, "getOrderResolution");
-    renderApp("/orders/ORD-1046", chef);
+  it("shows the role explanation to a viewer without loading or offering resolution actions", async () => {
+    const viewer = createMockApi();
+    await viewer.signIn("planner@demo.valio", "demo-kitchen-2026");
+    const lookup = vi.spyOn(viewer, "getOrderResolution");
+    renderApp("/orders/ORD-1046", viewer);
     expect(await screen.findByRole("alert")).toHaveTextContent("Your role cannot resolve orders");
     expect(lookup).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "It was placed" })).not.toBeInTheDocument();

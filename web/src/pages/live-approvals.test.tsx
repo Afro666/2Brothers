@@ -17,6 +17,7 @@ it("disables live approval decisions with the reason for a read-only account", a
   vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [row] })));
   const api = createMockApi();
   api.getSession = async () => ({
+    kind: "human",
     name: "Kitchen viewer",
     email: "viewer@example.com",
     role: "viewer",

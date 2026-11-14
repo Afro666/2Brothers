@@ -95,6 +95,7 @@ describe("authentication", () => {
     localStorage.setItem("purchasing-role", "buyer");
     const api = createMockApi();
     api.getSession = async () => ({
+      kind: "human",
       name: "Restored chef",
       email: "chef@example.com",
       role: "chef",
@@ -111,6 +112,7 @@ describe("authentication", () => {
     localStorage.setItem("purchasing-role", "valio_planner");
     const api = createMockApi();
     api.getSession = async () => ({
+      kind: "human",
       name: "Kitchen viewer",
       email: "viewer@example.com",
       role: "viewer",

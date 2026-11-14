@@ -5,11 +5,17 @@ import { confirmedDemoApproval as approval, approval as unknownApproval, milkOpt
 
 const DECISION = {
   approvalId: approval.id,
+  approvalRef: approval.approvalRef,
   expectedTotalExVat: approval.totalExVat,
   expectedTotalInclVat: approval.totalInclVat,
 };
 
 describe("mock API approvals", () => {
+  it("uses each approval's own id as its stable approval reference", async () => {
+    const approvals = await createMockApi().listApprovals();
+    expect(approvals.every((approval) => approval.approvalRef === approval.id)).toBe(true);
+  });
+
   it("places the measured-stock demo once while leaving unknown stock pending", async () => {
     const api = createMockApi();
     await api.approve(DECISION, "human");
@@ -18,6 +24,7 @@ describe("mock API approvals", () => {
     const events = await api.listAudit({ orderId: approval.orderId });
     expect(events.filter((event) => event.kind === "order")).toHaveLength(1);
     await expect(api.approve({ approvalId: unknownApproval.id,
+      approvalRef: unknownApproval.approvalRef,
       expectedTotalExVat: unknownApproval.totalExVat,
       expectedTotalInclVat: unknownApproval.totalInclVat }, "human")).rejects.toMatchObject({ code: "STOCK_UNKNOWN" });
     expect((await api.getApproval(unknownApproval.id)).status).toBe("PENDING");
@@ -177,7 +184,7 @@ describe("mock API proposal changes", () => {
     );
     await expect(
       api.approve(
-        { approvalId: approval.id, expectedTotalExVat: changed.totalExVat, expectedTotalInclVat: changed.totalInclVat },
+        { approvalId: approval.id, approvalRef: changed.approvalRef, expectedTotalExVat: changed.totalExVat, expectedTotalInclVat: changed.totalInclVat },
         "human",
       ),
     ).rejects.toMatchObject({ code: "PARTIAL_STOCK" });
@@ -221,7 +228,7 @@ describe("mock API options", () => {
     // Option C's stock is not measured: the existing approval rule still refuses it.
     await expect(
       api.approve(
-        { approvalId: approval.id, expectedTotalExVat: 2050, expectedTotalInclVat: optionC.totalInclVat },
+        { approvalId: approval.id, approvalRef: approval.approvalRef, expectedTotalExVat: 2050, expectedTotalInclVat: optionC.totalInclVat },
         "human",
       ),
     ).rejects.toMatchObject({ code: "STOCK_UNKNOWN" });

@@ -255,6 +255,7 @@ describe("ApprovalCard with options", () => {
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,326.75" }));
     expect(onApprove).toHaveBeenCalledWith({
       approvalId: request.id,
+      approvalRef: request.approvalRef,
       expectedTotalExVat: 2050,
       expectedTotalInclVat: 2326.75,
     });
@@ -303,7 +304,7 @@ describe("Approvals page: the milk options", () => {
 
     await waitFor(() =>
       expect(approve).toHaveBeenCalledWith(
-        { approvalId: confirmedDemoApproval.id, expectedTotalExVat: 131.07, expectedTotalInclVat: 148.76 },
+        { approvalId: confirmedDemoApproval.id, approvalRef: confirmedDemoApproval.approvalRef, expectedTotalExVat: 131.07, expectedTotalInclVat: 148.76 },
         "human",
       ),
     );

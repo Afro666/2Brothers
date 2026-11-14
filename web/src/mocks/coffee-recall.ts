@@ -107,6 +107,7 @@ export const coffeeOrder: Order = {
 
 export const coffeeApproval: ApprovalRequest = {
   id: "APR-313",
+  approvalRef: "APR-313",
   orderId: coffeeOrder.id,
   requestedBy: "Breakfast lead",
   createdAt: "2026-11-13T20:50:00+02:00",
@@ -131,6 +132,7 @@ export const coffeeReplacementOrder: Order = {
 export const coffeeReplacementApproval: ApprovalRequest = {
   ...coffeeApproval,
   id: "APR-313-R",
+  approvalRef: "APR-313-R",
   orderId: coffeeReplacementOrder.id,
   summary: "Replacement coffee for the recalled breakfast order",
   totalExVat: 129.6,

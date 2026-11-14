@@ -22,6 +22,7 @@ export function createMockAuth(signedOut = false): Pick<Api, "getSession" | "sig
   let currentAccount = signedOut ? null : accounts.find((account) => account.role === "approver")!;
   const session = (): Session | null =>
     currentAccount && {
+      kind: "human",
       name: currentAccount.name,
       email: currentAccount.email,
       role: currentAccount.role,

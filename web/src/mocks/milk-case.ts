@@ -251,6 +251,7 @@ export const consideredLines: OrderLine[] = [lineArla, lineEila3, lineEilaOrgani
 
 export const approval: ApprovalRequest = {
   id: "APR-311",
+  approvalRef: "APR-311",
   orderId: orders.needsApproval.id,
   requestedBy: "Head chef",
   createdAt: "2026-11-13T20:42:12+02:00",
@@ -284,7 +285,7 @@ export const confirmedDemoOrder: Order = {
 };
 
 export const confirmedDemoApproval: ApprovalRequest = {
-  id: "APR-312", orderId: confirmedDemoOrder.id, requestedBy: "Head chef",
+  id: "APR-312", approvalRef: "APR-312", orderId: confirmedDemoOrder.id, requestedBy: "Head chef",
   createdAt: "2026-11-13T20:43:00+02:00",
   summary: "Demo: 51 L measured-stock milk for Monday",
   lineCount: 1, deliveryDate: REQUESTED,
