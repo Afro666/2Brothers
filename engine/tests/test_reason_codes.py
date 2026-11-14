@@ -60,3 +60,13 @@ def test_standing_order_when_nothing_is_needed_also_drifts():
     line = replenish(item(on_hand=500, standing_order=D(200)), P)
     assert line.quantity == 0
     assert line.reason_codes == ("POSITION_OK", "STANDING_ORDER_DRIFT")
+
+
+def test_allergen_rule_hits_only_known_excluded_codes():
+    from engine import allergen_rule_hits
+    oatly = {"allergens": {"contains": ["AW", "GO"], "may_contain": [], "undeclared": []}}
+    trace = {"allergens": {"contains": [], "may_contain": ["AW"], "undeclared": []}}
+    assert allergen_rule_hits(oatly, ("AW",)) == ("AW",)
+    assert allergen_rule_hits(trace, ("AW",)) == ("AW",)            # may contain counts
+    assert allergen_rule_hits(oatly, ()) == ()                       # no rule, no hit
+    assert allergen_rule_hits({}, ("AW",)) == ()                     # unknown: ALLERGEN_DATA_MISSING instead
