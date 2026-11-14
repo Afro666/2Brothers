@@ -10,7 +10,7 @@ import { placedStatuses } from "@/lib/order-status";
 import { UrgencyBadge } from "@/components/purchasing/urgency-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDate, formatEur, shortOrderId } from "@/lib/format";
+import { formatDate, formatDateTime, formatEur, shortOrderId } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { orderTitle } from "@/lib/order-title";
 import { useAsync } from "@/lib/use-async";
@@ -59,6 +59,16 @@ export function OrdersPage() {
                           >
                             {shortOrderId(order.id)}
                           </code>
+                          {order.requestText ? (
+                            <span className="mt-1 block text-sm [overflow-wrap:anywhere]">
+                              {t("Asked: “{text}”", { text: order.requestText })}
+                            </span>
+                          ) : null}
+                          {order.createdAt ? (
+                            <span className="mt-1 block text-xs tabular-nums text-muted-foreground">
+                              {t("Ordered {time}", { time: t(formatDateTime(order.createdAt)) })}
+                            </span>
+                          ) : null}
                         </div>
                         <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
                           {t("Delivery {date} · {amount} incl VAT", {

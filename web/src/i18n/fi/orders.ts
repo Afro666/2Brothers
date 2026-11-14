@@ -540,4 +540,6 @@ export default {
   "Stop using it now. Check your packs: only {lots} are recalled.": "Lopeta käyttö heti. Tarkista pakkauksesi: vain {lots} on vedetty takaisin.",
   "Stop using it now. Check your packs.": "Lopeta käyttö heti. Tarkista pakkauksesi.",
   "A person checks whether this notice is about your product.": "Ihminen tarkistaa, koskeeko ilmoitus tuotettasi.",
+  "Asked: “{text}”": "Pyydetty: ”{text}”",
+  "Ordered {time}": "Tilattu {time}",
 } satisfies Record<string, string>;
