@@ -115,3 +115,32 @@ def test_mcp_tool_call_with_a_kitchen_token_acts_for_that_kitchen(env):
     assert req["status"] == "PENDING"
     assert [p["kitchen_id"] for p in db.proposals.find({})] == ["other-k"]
     assert db.proposals.find_one({"_id": req["proposal_id"]})["kitchen_id"] == "other-k"
+
+
+def test_the_open_demo_sees_no_persons_email_on_tokens_and_webhooks(env):
+    """#1577: the shared demo token is everyone at once. A signed-in person still sees the email."""
+    from gateway.tests.test_users import people, sign_in
+    client, _, db = env
+    own = make(client, ["kitchen:read"], name="mine")                          # made by the open demo ("aron")
+    theirs = make(client, ["kitchen:read"], name="theirs")
+    db.api_tokens.update_one({"_id": theirs["token_id"]}, {"$set": {"created_by": "tymon@example.com"}})
+    hook = client.post(K + "/webhooks", headers=HUMAN, json={"url": "https://hooks.example.com/tkb",
+                                                             "events": ["proposal.ready"]})
+    assert hook.status_code == 200, hook.text
+    db.webhooks.update_one({"_id": hook.json()["webhook_id"]}, {"$set": {"created_by": "tymon@example.com"}})
+
+    listed = {t["token_id"]: t["created_by"] for t in client.get(K + "/tokens", headers=HUMAN).json()["tokens"]}
+    assert listed == {own["token_id"]: "aron", theirs["token_id"]: "a signed-in person"}
+    hooks = client.get(K + "/webhooks", headers=HUMAN).json()["webhooks"]
+    assert [h["created_by"] for h in hooks] == ["a signed-in person"]
+    assert "tymon@" not in client.get(K + "/tokens", headers=HUMAN).text
+    assert "tymon@" not in client.get(K + "/webhooks", headers=HUMAN).text
+    gone = client.delete(f"{K}/webhooks/{hook.json()['webhook_id']}", headers=HUMAN)
+    assert gone.status_code == 200 and "tymon@" not in gone.text
+    revoked = client.delete(f"{K}/tokens/{theirs['token_id']}", headers=HUMAN)
+    assert revoked.status_code == 200 and revoked.json()["created_by"] == "a signed-in person"
+
+    people(db)
+    assert sign_in(client, "aron@example.com").status_code == 200
+    seen = {t["token_id"]: t["created_by"] for t in client.get(K + "/tokens").json()["tokens"]}
+    assert seen[theirs["token_id"]] == "tymon@example.com"                     # a real account sees the name

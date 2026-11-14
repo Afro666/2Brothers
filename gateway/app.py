@@ -100,6 +100,9 @@ def _token_matches(given: str, env: str) -> bool:
     return bool(expected) and hmac.compare_digest(given.encode(), expected.encode())
 
 
+SIGNED_IN_PERSON = "a signed-in person"      # in place of an email, for the open demo (#1577)
+
+
 def _env_principal(request: Request, token: str) -> Principal:
     # GATEWAY_REQUIRE_LOGIN=true: the shared human token stops working; people sign in (#270).
     require_login = os.environ.get("GATEWAY_REQUIRE_LOGIN", "").lower() == "true"
@@ -556,6 +559,14 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         return {"events": gw().audit_log(kitchen_id)}
 
     # ---- API tokens (#271): a person creates and revokes them; tokens never approve ----
+    def made_by_for(who: Principal, row: dict) -> dict:
+        """The open demo is everyone at once (#1577): it sees who made a kitchen token or a
+        webhook only when that was the open demo's own name. A signed-in person's email is
+        shown to signed-in people of the kitchen only."""
+        if who.via == "session" or row.get("created_by") == who.human:
+            return row
+        return {**row, "created_by": SIGNED_IN_PERSON}
+
     @app.post(k + "/tokens")
     async def create_token(kitchen_id: str, request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)   # the person must belong to this kitchen
@@ -579,7 +590,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need("kitchen:read", kitchen_id)
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can list tokens")
-        return {"tokens": tokens.list_tokens(gw().db, kitchen_id)}
+        return {"tokens": [made_by_for(who, t) for t in tokens.list_tokens(gw().db, kitchen_id)]}
 
     @app.delete(k + "/tokens/{token_id}")
     def revoke_token(kitchen_id: str, token_id: str, who: Principal = Depends(principal)):
@@ -592,7 +603,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         if out is None:
             raise GatewayError(404, "TOKEN_NOT_FOUND", "no such token")
         gw()._audit(kitchen_id, "token_revoked", who.human, token_id=token_id)
-        return out
+        return made_by_for(who, out)
 
     # ---- Personal approval tokens (decision 2026-11-14): a person approves from chat ----
     @app.post(k + "/approval-tokens")
@@ -674,7 +685,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     def list_webhooks(kitchen_id: str, who: Principal = Depends(principal)):
         from gateway import webhooks
         hook_admin(who, kitchen_id)
-        return {"webhooks": webhooks.list_hooks(gw().db, kitchen_id), "events": list(webhooks.EVENTS)}
+        return {"webhooks": [made_by_for(who, h) for h in webhooks.list_hooks(gw().db, kitchen_id)],
+                "events": list(webhooks.EVENTS)}
 
     @app.delete(k + "/webhooks/{webhook_id}")
     def delete_webhook(kitchen_id: str, webhook_id: str, who: Principal = Depends(principal)):
@@ -684,7 +696,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         if out is None:
             raise GatewayError(404, "WEBHOOK_NOT_FOUND", "no such webhook")
         gw()._audit(kitchen_id, "webhook_deleted", person, webhook_id=webhook_id)
-        return {**out, "deleted": True}
+        return {**made_by_for(who, out), "deleted": True}
 
     @app.post(k + "/webhooks/{webhook_id}/test")
     def test_webhook(kitchen_id: str, webhook_id: str, who: Principal = Depends(principal)):
