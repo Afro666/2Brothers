@@ -76,8 +76,10 @@ approve/cancel tools or model-supplied quantities. Mutation requests are sent
 once; ambiguous transport failures must be reconciled before another attempt.
 The mock has no persistence and is intended only for demos and tests.
 
-Both mutation HTTP requests carry a nonempty `idempotency_key` in the JSON body,
-as specified in contract PR #85. The approval adapter generates its stable key
+All three mutation HTTP requests (`place_order`, `request_approval`,
+`change_proposal`) carry a nonempty `idempotency_key` in the JSON body, as
+specified in contract PR #85. `place_order` and `change_proposal` take the key
+from the caller as a tool input. The approval adapter generates its stable key
 internally, so the MCP `request_approval` tool still takes only `offer_id`.
 Header-only keys are rejected by the mock. This convention changes no consent,
 retry, or replay behavior.
