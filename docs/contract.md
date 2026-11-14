@@ -1672,7 +1672,12 @@ the engine and a plain weekday average.
 {"kitchen_id": "demo-kitchen", "from": "2026-09-01", "to": "2026-11-09", "methods": {
   "engine": {
     "total": {"predicted": 1200.0, "actual": 1150.0, "wape": 0.113, "bias": 0.0435,
-              "under": 40.0, "over": 90.0, "series": 48},
+              "under": null, "over": null, "series": 48,
+              "under_eur": "212.40", "over_eur": "388.10", "unpriced_series": 0,
+              "by_unit": [{"unit": "KG", "under": 25.0, "over": 60.0, "series": 30,
+                           "under_eur": "170.20", "over_eur": "331.70"},
+                          {"unit": "L", "under": 15.0, "over": 30.0, "series": 18,
+                           "under_eur": "42.20", "over_eur": "56.40"}]},
     "weeks": [{"week": "2026-W36", "predicted": 120.0, "actual": 115.0, "wape": 0.0957,
                "bias": 0.0435, "under": 3.0, "over": 8.0, "series": 5}]
   },
@@ -1687,6 +1692,18 @@ the engine and a plain weekday average.
   `wape` is the sum of the absolute errors divided by `actual`. `bias` is
   (`predicted` - `actual`) / `actual`. `under` is the sum of actual above predicted,
   `over` the sum of predicted above actual. `series` counts the product-weeks.
+- Short and waste are never one sum over mixed units (#1618). `by_unit` has one row per
+  kitchen unit (`KG`, `L`, `PCS`), sorted by unit: `under` and `over` in that unit, and
+  `series`. `under` and `over` at the top of a row are that sum only when every product
+  has the same unit; with two or more units they are `null`.
+- `under_eur` and `over_eur` (strings, EUR before VAT) value `under` and `over` at the
+  product's price per kitchen unit, in each `by_unit` row and over all units. They count
+  only products with a known price; `null` when none has one. `unpriced_series` counts the
+  product-weeks without a price (in `by_unit`, not in the euros).
+- The price per kitchen unit is the kitchen's latest `orders_history` line price per sales
+  unit divided by the kitchen units in one sales unit, as its deliveries show
+  (`kitchen_stock.received` / `deliveries.delivered_qty`). No order or delivery: no price.
+- Every `weeks` row has the same fields as `total`.
 - These are numbers for display, never figures to approve.
 - `weeks` has one row per ISO week (`YYYY-Www`), oldest first.
 - The window is at most 400 days.
