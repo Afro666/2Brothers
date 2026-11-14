@@ -1822,6 +1822,70 @@ Errors: those of `POST /stock/photo` (with `DELIVERY_NOTE_BUSY` in place of
 `STOCK_PHOTO_BUSY`), plus 404 `ORDER_NOT_FOUND`. In every case nothing was read and
 nothing is stored. A person can always check the delivery by hand.
 
+### Check a package's allergen label from a photo (#1175)
+
+Planned. `POST /v1/kitchens/{kitchen_id}/orders/{order_id}/label/photo` reads one photo of
+a delivered package's label with Nemotron 3.5 Super VL. Plain code compares the allergens
+read with the kitchen's allergen rule and with the catalog row of the product. **The
+answer is shown to a person and stored nowhere**: it never changes the catalog, the order
+or the stock, and "unknown" in the catalog stays unknown.
+
+Body: `{"image_base64": "...", "product_id": "462921"}`. Scope `kitchen:write`, the same
+image limits as `POST /stock/photo`, and the order must be this kitchen's (404
+`ORDER_NOT_FOUND`). `product_id` is a catalog product (404 `PRODUCT_NOT_FOUND`); it may be
+a substitute that is not on the order (`in_order: false`). One read per kitchen at a time
+(429 `LABEL_PHOTO_BUSY`).
+
+The model copies, as printed:
+- the product name and the EAN (barcode digits);
+- the words emphasised as allergens in the ingredient list (bold or capitals);
+- the allergen words of a "may contain" sentence (`voi sisältää`, `kan innehålla`, `may contain`);
+- whether an allergen statement is printed at all.
+
+Plain code maps each word to its GS1 code with a fixed table in Finnish, Swedish and English
+(`maito` → `AM`, `vehnä` → `UW`, `manteli` → `SA`, `pähkinä` → `AN`, ...). The table matches
+whole words and safe word starts only: `kookosmaito` is not `maito` and `munakoiso` is not
+`muna`. **A word that is not in the table is "please check", never ignored.**
+
+Answer:
+
+```json
+{
+  "model": "nemotron-3.5-super-vl", "duration_ms": 3100,
+  "order_id": "ord-...", "product_id": "462921", "in_order": true,
+  "outcome": "EXCLUDED_ALLERGEN",
+  "message": "The label declares peanuts, which this kitchen excludes. Do not use it; ask a person.",
+  "product_check": "CONFIRMED_BY_EAN",
+  "label": {"product_name": "...", "ean": "6408430000000",
+            "contains": [{"word": "MAITO", "code": "AM"}],
+            "may_contain": [{"word": "maapähkinää", "code": "AP"}],
+            "unknown_words": []},
+  "excluded_hits": [{"code": "AP", "level": "MAY_CONTAIN"}],
+  "differences": [{"code": "AP", "kind": "LABEL_ADDS", "text": "The label lists peanuts (may contain); the catalog does not."}],
+  "catalog_allergen_data": "KNOWN",
+  "please_check": []
+}
+```
+
+| Field | Rule |
+|---|---|
+| `outcome` | The first that applies: `EXCLUDED_ALLERGEN` (a code the kitchen excludes, as CONTAINS **or** MAY_CONTAIN, same as the search filter), `PLEASE_CHECK` (any reason below), `DIFFERS` (label and catalog differ), `CATALOG_UNKNOWN` (the catalog has no allergen data; the label is shown as read), `AGREES`. |
+| `message` | One plain sentence for the page. `AGREES` says "The label we read agrees with the catalog. Read the label yourself before use." **There is no green or safe outcome**: a vision model can miss a word. |
+| `product_check` | `CONFIRMED_BY_EAN` (the EAN read is one of the product's GTINs), `CONFIRMED_BY_NAME` (no EAN read; most words of a catalog name of the product are on the label), `MISMATCH` (an EAN read that is not this product's), `NOT_CONFIRMED`. The last two are "please check: this may be another product". |
+| `label.contains`, `label.may_contain` | The words as printed with their code; a word with no code is in `unknown_words` instead. |
+| `excluded_hits` | Codes the label declares that the kitchen's rule excludes (groups expanded as in the order path, #741). |
+| `differences` | Both directions, each with a sentence: `LABEL_ADDS` (on the label, not in the catalog) and `CATALOG_ADDS` ("The catalog lists milk; we did not read it on the label.", the more likely reader error). Empty when the catalog data is unknown. |
+| `catalog_allergen_data` | `KNOWN` or `UNKNOWN` (from the catalog row; unknown is never "free from"). |
+| `please_check` | Reasons: `NO_STATEMENT_READ` (no allergen statement found: never "no allergens"), `WORD_UNKNOWN`, `PRODUCT_MISMATCH`, `PRODUCT_NOT_CONFIRMED`. |
+
+Errors: those of `POST /stock/photo`, plus 404 `ORDER_NOT_FOUND`, 404 `PRODUCT_NOT_FOUND`
+and 429 `LABEL_PHOTO_BUSY`.
+
+Audit: `label_photo_read` (actor the person, `order_id`, `product_id`, `outcome`,
+`product_check`, the count of `excluded_hits`, `differences` and `please_check`,
+`duration_ms`) or `label_photo_failed` (`code`, `duration_ms`). Never the photo or the
+label's text.
+
 ### Plan from a menu photo (#1136)
 
 Served by `gateway/menu_photo.py` (#1154, Maciek, #1136).
