@@ -90,10 +90,11 @@ class BuyerWorker:
             # for approval). A run that wrote nothing is safe to start once more, under its own
             # run id so its audit steps stay separate. A run that wrote something is never repeated.
             for attempt in (1, 2):
+                run_id = row['_id'] if attempt == 1 else f"{row['_id']}-retry"
                 async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
                     buyer = Buyer(model, session, self.gateway, need_id=stored['need_id'],
                                   requested_date=need['requested_date'],
-                                  run_id=row['_id'] if attempt == 1 else f"{row['_id']}-retry",
+                                  run_id=run_id,
                                   max_steps=12, now=self.now,
                                   catalog_lookup=lookup, allergen_policy=policy,
                                   substitute_planner=SubstitutePlanner(lookup, policy) if policy else None)
@@ -109,7 +110,7 @@ class BuyerWorker:
             if outcome.get('substitute_options'):
                 buyer_context.save_options(self.db, kitchen_id, result['proposal_id'], outcome['substitute_options'])
                 result['substitute_options'] = outcome['substitute_options']
-            return {**result, 'buyer_run_id': row['_id'], 'buyer_model': 'nemotron-3.5-super-vl'}
+            return {**result, 'buyer_run_id': run_id, 'buyer_model': 'nemotron-3.5-super-vl'}
         try:
             result = await asyncio.wait_for(execute(), timeout=self.timeout)
             agent_runs.finish(self.db, row['_id'], state='READY', result=result)
