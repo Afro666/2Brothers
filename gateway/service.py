@@ -24,7 +24,7 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from gateway.decision import decision_summary
-from store import audit, orders
+from store import audit, orders, recalls
 from store.audit import canonical
 from store.history import current_stock
 from store.products import get_product
@@ -176,7 +176,9 @@ class Gateway:
         need = Decimal(str(request["quantity"]))
         if need <= 0:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
-        offers, skipped, tax = self._offers(list(request["product_ids"]), measure, requested)
+        blocked = recalls.blocked_ids(self.db, kitchen_id)
+        offers, skipped, tax = self._offers([p for p in request["product_ids"] if p not in blocked], measure, requested)
+        skipped.extend((p, 'BLOCKED_BY_RECALL') for p in request['product_ids'] if p in blocked)
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
         sim = self._simulate(kitchen_id, plan, tax, skipped)
@@ -259,12 +261,17 @@ class Gateway:
 
     def _proposal_out(self, doc: dict) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
-        return {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
+        result = {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
                 "substitute_options": doc.get('substitute_options', []),
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
                 **offer["simulation"],
                 "decision_summary": self._summary(doc["request"], offer["simulation"])}
+        result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error')})
+        blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
+        result['lines'] = [{**line, **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
+                           for line in result['lines']]
+        return result
 
     def _summary(self, request: dict, sim: dict) -> dict:
         ids = {ln["product_id"] for ln in sim.get("lines") or []} | {e["product_id"] for e in sim.get("excluded") or []}
@@ -315,6 +322,8 @@ class Gateway:
     def _approved_or_conflict(self, kitchen_id: str, proposal_id: str, key: str) -> dict:
         """Not READY: replay the order placed with this key, else 409 NOT_PENDING."""
         doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id}) or {}
+        if doc.get('status') == 'BLOCKED_BY_RECALL':
+            raise GatewayError(409, 'BLOCKED_BY_RECALL', 'a recall holds this basket; review its replacement proposal')
         if doc.get("status") == "APPROVED" and doc.get("order_id"):
             order = orders.get_order(self.db, doc["order_id"])
             if order["idempotency_key"] == key:
@@ -338,6 +347,12 @@ class Gateway:
         # lines visible in proposals, but never record a placed order for them.
         if any(line.get("unknown_stock") is not False for line in sim["lines"]):
             raise GatewayError(409, "STOCK_UNKNOWN", "supplier stock must be confirmed before placement")
+        # Atomic commit point shared with the recall monitor. A notice arriving
+        # during the live quote can still claim APPROVING and prevent this order.
+        committed = self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
+            'status': 'APPROVING', 'approving_key': key}, {'$set': {'status': 'COMMITTING'}})
+        if not committed.modified_count:
+            return self._approved_or_conflict(kitchen_id, proposal_id, key)
         payload = {"offer_id": stored["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}
         order, created = orders.record_attempt(
             self.db, kitchen_id=kitchen_id, idempotency_key=key, offer_id=stored["offer_id"],
