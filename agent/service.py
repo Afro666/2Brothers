@@ -15,6 +15,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 from agent.model import Nemotron
 from agent.runner import Buyer
 from agent.usage import emit
+from agent.memory_cache import KitchenFactsCache
 from gateway import model_trace
 from gateway.mcp_server import GatewayClient, build_server
 from store import agent_runs
@@ -69,6 +70,7 @@ class BuyerWorker:
                                                if self.strategy == 'single_pick' else Nemotron)
         self.timeout = timeout if timeout is not None else (35 if self.strategy == 'single_pick' else 150)
         self.now = now
+        self.memory_cache = KitchenFactsCache()
 
     async def run(self, kitchen_id, body):
         need = parse_need(body)
@@ -106,7 +108,7 @@ class BuyerWorker:
                     from agent.single_pick import SinglePickModel
                     clock = self.now() if self.now else datetime.now(ZoneInfo('Europe/Helsinki'))
                     selected_model = SinglePickModel(model, self.db, kitchen_id, need, stored['need_id'],
-                                                    exclusions, today=clock.date())
+                                                    exclusions, today=clock.date(), memory_cache=self.memory_cache)
                 async with create_connected_server_and_client_session(build_server(self.gateway)) as session:
                     buyer = Buyer(selected_model, session, self.gateway, need_id=stored['need_id'],
                                   requested_date=need['requested_date'],

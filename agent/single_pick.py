@@ -9,6 +9,7 @@ from jsonschema import validate
 from gateway.parse import parse_request
 from agent.vision import parse_reply
 from agent.memory import kitchen_memory, prompt_block
+from agent.memory_cache import KitchenFactsCache
 from gateway.learned import compute_facts
 from store import buyer_picks
 
@@ -71,7 +72,8 @@ def compact(products, quote):
 
 class SinglePickModel:
     """Adapts a single JSON pick to the existing tool runner; no policy bypass path."""
-    def __init__(self, model, db, kitchen, need, need_id, exclusions, *, today, timeout=20, poll=0.5):
+    def __init__(self, model, db, kitchen, need, need_id, exclusions, *, today, timeout=20, poll=0.5,
+                 memory_cache=None):
         self.model, self.db, self.kitchen, self.need = model, db, kitchen, need
         self.need_id, self.exclusions, self.timeout, self.poll = need_id, exclusions, timeout, poll
         self.today = today
@@ -79,14 +81,17 @@ class SinglePickModel:
         self.phase, self.products, self.offer_id, self.cached = 'search', [], None, False
         self.selected_ids = []
         self.timed_out = False
+        self.memory_cache = memory_cache if memory_cache is not None else KitchenFactsCache()
 
-    def memory(self, rows, quote):
+    async def memory(self, rows, quote):
         """The kitchen facts for this shortlist, or nothing when they cannot be read."""
         try:
-            facts = compute_facts(_FactsGateway(self.db, datetime.now(timezone.utc)),
-                                  self.kitchen, self.today)
-            return prompt_block(kitchen_memory(facts, [str(row['product_id']) for row in rows],
-                                                _suppliers(self.products, quote)))
+            def read():
+                facts = self.memory_cache.get(self.kitchen, self.today, lambda: compute_facts(
+                    _FactsGateway(self.db, datetime.now(timezone.utc)), self.kitchen, self.today))
+                return prompt_block(kitchen_memory(facts, [str(row['product_id']) for row in rows],
+                                                    _suppliers(self.products, quote)))
+            return await asyncio.to_thread(read)
         except Exception as exc:
             log.warning('kitchen memory unavailable for the pick: %s', type(exc).__name__)
             return ''
@@ -107,7 +112,8 @@ class SinglePickModel:
             return self.offer([p['product_id'] for p in self.products])
         if self.phase == 'pick':
             rows = compact(self.products, result)
-            key = buyer_picks.cache_key(self.kitchen, self.need, self.exclusions, rows)
+            memory = await self.memory(rows, result)
+            key = buyer_picks.cache_key(self.kitchen, self.need, self.exclusions, rows, memory=memory)
             ids = await asyncio.to_thread(buyer_picks.get, self.db, key)
             allowed = {p['product_id'] for p in self.products}
             def usable(ids):
@@ -128,7 +134,6 @@ class SinglePickModel:
                 self.cached = True
             else:
                 try:
-                    memory = self.memory(rows, result)
                     system = SYSTEM if not memory else SYSTEM + '\n' + MEMORY_NOTE + '\n' + memory
                     try:
                         message = await asyncio.wait_for(self.model.complete_json([

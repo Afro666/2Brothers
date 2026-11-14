@@ -7,10 +7,11 @@ from uuid import uuid4
 from pymongo.errors import DuplicateKeyError
 
 
-def cache_key(kitchen, need, policy, rows):
+def cache_key(kitchen, need, policy, rows, *, memory=''):
     stable = [{k: row.get(k) for k in ('product_id', 'name', 'pack', 'can_arrive', 'alias')} for row in rows]
     payload = [kitchen, ' '.join(need['text'].casefold().split()), need['requested_date'], need['quantity'],
-               need['unit'], sorted(policy or []), sorted(stable, key=lambda r: r['product_id'])]
+               need['unit'], sorted(policy or []), sorted(stable, key=lambda r: r['product_id']),
+               hashlib.sha256(memory.encode()).hexdigest()]
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 
 
