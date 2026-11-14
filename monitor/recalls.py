@@ -250,6 +250,10 @@ def _alert(notice, item, product, hit, kitchen, now) -> dict:
         "match": level,
         "why": why,
         "where": _where(pid, kitchen),
+        # The same evidence as `where`, as data: readers count from this, not the text.
+        "found": {"stock": pid in (kitchen.get("stock") or {}),
+                  "recipes": list((kitchen.get("recipes") or {}).get(pid) or []),
+                  "open_proposal": pid in (kitchen.get("proposal") or [])},
         "recall": {"url": notice["url"], "date": notice.get("date"), "title": notice.get("title"),
                    "reason": notice.get("reason"), "action": notice.get("action"),
                    "recalled_product": item.get("product_name"), "brand": item.get("brand"),

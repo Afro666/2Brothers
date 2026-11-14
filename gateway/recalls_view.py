@@ -211,7 +211,14 @@ def _found(alert: dict) -> dict | None:
     """The stock and recipe evidence in an active alert, or None when it has neither."""
     if alert.get("status") == "dismissed":
         return None
-    where = alert.get("where") or []
+    evidence = alert.get("found")
+    if isinstance(evidence, dict):     # structured evidence, stored by monitor/recalls.py
+        recipes = evidence.get("recipes")
+        found = {"stock": bool(evidence.get("stock")),
+                 "recipes": len(recipes) if isinstance(recipes, list) else 0,
+                 "open_proposal": bool(evidence.get("open_proposal"))}
+        return found if found["stock"] or found["recipes"] else None
+    where = alert.get("where") or []   # an alert stored before the structured evidence
     stock = any(entry.startswith(("in stock", "on the stock list")) for entry in where)
     names = next((entry.removeprefix("in recipes: ") for entry in where
                   if entry.startswith("in recipes: ")), "")
