@@ -200,6 +200,17 @@ def test_switch_on_a_manual_block_can_be_approved_and_waits_for_the_supplier(env
     assert r.status_code == 200, r.text
     assert r.json()["supplier_must_confirm"] == ["sup-bakery"]
     assert db.orders.find_one({})["supplier_must_confirm"] == ["sup-bakery"]
+    placed = [e for e in client.get(K + "/audit", headers=AGENT).json()["events"] if e["kind"] == "order_placed"]
+    assert placed[0]["supplier_must_confirm"] == ["sup-bakery"]    # the audit names who to call (#884)
+
+
+def test_switch_default_shown_and_audit_lists_no_supplier_when_none(env):
+    client, _, _ = env
+    assert client.get(K + "/settings", headers=AGENT).json()["defaults"]["approve_unconfirmed_manual"] is False
+    p = propose(client, quantity="51", ids=("462775",))
+    assert approve(client, p, "a3").status_code == 200
+    placed = [e for e in client.get(K + "/audit", headers=AGENT).json()["events"] if e["kind"] == "order_placed"]
+    assert placed[0]["supplier_must_confirm"] == []
 
 
 def test_switch_on_still_refuses_unknown_valio_stock(env):
