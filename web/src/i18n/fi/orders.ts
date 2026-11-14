@@ -45,6 +45,8 @@ export default {
   "Approval of the held order stays locked.": "Pidossa olevan tilauksen hyväksyntä pysyy lukittuna.",
   "Approve this order?": "Hyväksytäänkö tämä tilaus?",
   "Approve {amount}": "Hyväksy {amount}",
+  "= {amount} to approve": "= {amount} hyväksyttäväksi",
+  "Amount you approve": "Hyväksyttävä summa",
   "Approve {amount} incl VAT": "Hyväksy {amount} sis. alv",
   "Approved": "Hyväksytty",
   "Approved at": "Hyväksytty",
