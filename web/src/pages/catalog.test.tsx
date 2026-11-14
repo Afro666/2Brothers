@@ -17,6 +17,14 @@ const MILK_PRODUCTS = [
 
 const NO_DATA = "Arla lactose free milk drink 10 L novobox ESL";
 
+/** The first visit searches the first example; clearing the box brings the start state with the examples. */
+async function startState(user: ReturnType<typeof userEvent.setup>, firstExample: string) {
+  const box = await screen.findByRole("searchbox");
+  await waitFor(() => expect(box).toHaveValue(firstExample));
+  await user.clear(box);
+  await user.keyboard("{Enter}");
+}
+
 describe("catalog page", () => {
   beforeEach(() => localStorage.clear());
 
@@ -157,10 +165,35 @@ describe("catalog page", () => {
     expect(await screen.findByText("Atlas Search")).toBeInTheDocument();
   });
 
-  it("opens with a start state when the full search answers nothing", async () => {
+  it("runs the first example on the first visit and shows its rows", async () => {
     const api = createMockApi();
-    api.searchProducts = async () => [];
+    const actual = api.searchProducts;
+    const calls: string[] = [];
+    api.searchProducts = (query, filters) => {
+      calls.push(query);
+      if (query === "lactose-free milk") return Promise.resolve([sampleProducts.arlaUht1l]);
+      return query.trim() ? actual(query, filters) : Promise.resolve([]);
+    };
+    const { router } = renderApp("/catalog", api);
+
+    await waitFor(() => expect(calls).toContain("lactose-free milk"));
+    expect(await screen.findByText(sampleProducts.arlaUht1l.names.en)).toBeInTheDocument();
+    expect(await screen.findByRole("searchbox", { name: "Search the catalog" })).toHaveValue("lactose-free milk");
+    await waitFor(() => expect(router.state.location.href).toBe("/catalog?q=lactose-free+milk"));
+    expect(screen.queryByRole("heading", { name: "No products match this search" })).not.toBeInTheDocument();
+  });
+
+  it("shows the start state with the examples once the person clears the box", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const actual = api.searchProducts;
+    api.searchProducts = (query, filters) => (query.trim() ? actual(query, filters) : Promise.resolve([]));
     renderApp("/catalog", api);
+    const box = await screen.findByRole("searchbox", { name: "Search the catalog" });
+    await waitFor(() => expect(box).toHaveValue("lactose-free milk"));
+
+    await user.clear(box);
+    await user.click(screen.getByRole("button", { name: "Search" }));
 
     expect(await screen.findByRole("heading", { name: "Search the Valio Aimo catalog" })).toBeInTheDocument();
     expect(screen.getByText("Type a product name, or pick an allergen, a label or a temperature.")).toBeInTheDocument();
@@ -184,6 +217,7 @@ describe("catalog page", () => {
       return query.trim() ? actual(query, filters) : Promise.resolve([]);
     };
     const { router } = renderApp("/catalog", api);
+    await startState(user, "lactose-free milk");
 
     await user.click(await screen.findByRole("button", { name: "butter" }));
 
@@ -203,6 +237,7 @@ describe("catalog page", () => {
       return Promise.resolve([]);
     };
     renderApp("/catalog", api);
+    await startState(user, "laktoositon maito");
 
     await user.click(await screen.findByRole("button", { name: "voi" }));
 

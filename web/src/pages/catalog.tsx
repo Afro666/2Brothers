@@ -193,6 +193,15 @@ export function CatalogPage() {
   const withoutData = excluding && !active.strict ? results.filter((product) => product.allergens === null).length : 0;
   const unfiltered = !active.q.trim() && !excluding && active.labels.length === 0 && !active.temp;
 
+  // The first visit with nothing typed runs the first example, so the page shows real rows from
+  // the catalog search and not only buttons. Once per visit: clearing the box shows the examples.
+  const firstSearchDone = useRef(false);
+  useEffect(() => {
+    if (firstSearchDone.current || currentResult.status !== "ready") return;
+    firstSearchDone.current = true;
+    if (unfiltered && results.length === 0) runExample(t(EXAMPLE_SEARCHES[0]));
+  }, [currentResult.status]);
+
   return (
     <AppShell activeId="catalog">
       <div className="mx-auto max-w-5xl space-y-6">
