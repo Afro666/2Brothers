@@ -512,12 +512,20 @@ those whose `risk` is not `OK`.
 `GET /audit/verify` recomputes every hash of the audit chain:
 
 ```json
-{"ok": true, "length": 412, "broken_at": null, "kitchen_entries": 57}
+{"ok": true, "length": 412, "broken_at": null, "broken_kitchen_id": null, "kitchen_entries": 57}
 ```
 
 - `length` counts the entries checked up to the first broken one. The chain is one for
   all kitchens; `kitchen_entries` is how many entries belong to this kitchen.
 - `broken_at` is the `seq` of the first entry that was changed or removed, else null.
+- `broken_kitchen_id` is the kitchen of the entry at `broken_at` when that entry itself
+  was edited. It is null when the chain is intact, and when an entry is missing or
+  relinked: then nobody can say whose entry it was.
+- Because the chain is shared, a break shows for **every** kitchen. While the demo
+  kitchen is tampered, every kitchen's `/audit/verify` answers `ok: false` with
+  `broken_kitchen_id: "demo-kitchen"`. A kitchen whose id differs from
+  `broken_kitchen_id` shows "the break is in another kitchen's entry (the demo), not
+  in yours"; a null `broken_kitchen_id` with `ok: false` is shown as a break.
 
 `POST /audit/demo-tamper` answers `{"seq": 412, "tampered": true}`: it edited that entry
 (it adds a field `tampered` to the event). `/audit/verify` then answers `ok: false`,
@@ -528,6 +536,8 @@ those whose `risk` is not `OK`.
 - Only the synthetic demo kitchen (`demo-kitchen`) can be tampered. Any other kitchen
   gets 403 `DEMO_ONLY`. This is a demonstration that a change is detected; the audit
   log has no other way to change or delete an entry.
+- A forgotten tamper heals itself: the next `/audit/verify` (from any kitchen) or
+  `/audit/demo-tamper` restores a tampered row that is older than 10 minutes.
 - One tampered row at a time: a second tamper before a restore is 409 `ALREADY_TAMPERED`.
   A demo kitchen without audit entries is 409 `NOTHING_TO_TAMPER`.
 
