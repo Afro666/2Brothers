@@ -1,7 +1,7 @@
-import type { Api, CreatedWebhook, Webhook } from "@/api/types";
+import { ApiError, type Api, type CreatedWebhook, type Webhook } from "@/api/types";
 import type { AuditEvent } from "@/types";
 
-type DeveloperApi = Pick<Api, "listWebhooks" | "createWebhook" | "testWebhook" | "getGatewayHealth" | "listRecentApiCalls">;
+type DeveloperApi = Pick<Api, "listWebhooks" | "createWebhook" | "testWebhook" | "deleteWebhook" | "getGatewayHealth" | "listRecentApiCalls">;
 type AuditRecorder = (event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason">) => void;
 
 const EVENTS = ["proposal.ready", "proposal.approved", "proposal.rejected", "order.placed", "total_mismatch", "recall.alert"];
@@ -46,6 +46,13 @@ export function createDeveloperMock(recordAudit: AuditRecorder): DeveloperApi {
         ok: Boolean(hook),
         error: hook ? null : "WEBHOOK_NOT_FOUND",
       };
+    },
+    async deleteWebhook(id, actor) {
+      const index = webhooks.findIndex((row) => row.id === id);
+      if (index < 0) throw new ApiError("WEBHOOK_NOT_FOUND", "No such webhook.");
+      const [hook] = webhooks.splice(index, 1);
+      // The gateway records `webhook_deleted`; the web AuditKind has no such kind, so "other".
+      recordAudit({ kind: "other", actor, summary: "Webhook deleted (webhook_deleted)", reason: hook.url });
     },
     async getGatewayHealth() {
       return { status: "not connected (sample data)", valioMode: "unknown" };

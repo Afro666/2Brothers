@@ -37,6 +37,21 @@ describe("Developer gateway adapter", () => {
     expect(calls[2].init.method).toBe("POST");
   });
 
+  it("removes a webhook with DELETE and the acting person", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit = {}) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({ webhook_id: "hook-1", deleted: true }));
+    });
+    const api = createHttpApi("/api");
+
+    expect(api.live!.has("deleteWebhook")).toBe(true);
+    await expect(api.deleteWebhook("hook/1", "human")).resolves.toBeUndefined();
+    expect(calls[0].url).toBe("/api/v1/kitchens/demo-kitchen/webhooks/hook%2F1");
+    expect(calls[0].init.method).toBe("DELETE");
+    expect(new Headers(calls[0].init.headers).get("X-User")).toBe("human");
+  });
+
   it("reads health and leaves Valio mode unknown when the route does not report it", async () => {
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ status: "ok" })));
     const api = createHttpApi("/api");

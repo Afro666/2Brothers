@@ -43,6 +43,7 @@ export function DeveloperSection() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   const origin = window.location.origin;
   const version = import.meta.env.VITE_APP_VERSION || "unknown";
   const gitSha = import.meta.env.VITE_GIT_SHA || "unknown";
@@ -86,6 +87,23 @@ export function DeveloperSection() {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setTesting(null);
+    }
+  }
+
+  async function remove(id: string, hookUrl: string) {
+    if (!window.confirm(`Remove the webhook to ${hookUrl}? Its delivery log is deleted too.`)) return;
+    setRemoving(id);
+    setError(null);
+    try {
+      await api.deleteWebhook(id, "human");
+      setDeliveries(({ [id]: _removed, ...rest }) => rest);
+      if (created?.id === id) setCreated(null);
+      hooks.reload();
+      toast.success("Webhook removed");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setRemoving(null);
     }
   }
 
@@ -160,7 +178,7 @@ export function DeveloperSection() {
               </div></fieldset>
               <Button type="submit" disabled={creating || hooks.status === "loading"}>{creating ? "Creating…" : "Create webhook"}</Button>
             </form>
-          ) : <p className="text-sm text-muted-foreground">Only an approver can create or test webhooks.</p>}
+          ) : <p className="text-sm text-muted-foreground">Only an approver can create, test or remove webhooks.</p>}
 
           {hooks.status === "loading" ? <LoadingState label="Loading webhooks" /> : null}
           {hooks.status === "error" ? <ErrorState message={hooks.error.message} onRetry={hooks.reload} /> : null}
@@ -170,7 +188,7 @@ export function DeveloperSection() {
               {hooks.data.webhooks.map((hook) => {
                 const delivery = deliveries[hook.id];
                 return <li key={hook.id} className="space-y-3 py-4 first:pt-0 last:pb-0">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="font-mono text-sm break-all">{hook.url}</p><p className="mt-1 text-xs text-muted-foreground">{hook.events.join(", ")}</p></div>{canManage ? <Button type="button" variant="outline" size="sm" disabled={testing !== null} onClick={() => void test(hook.id)}>{testing === hook.id ? "Sending…" : `Send test to ${hook.id}`}</Button> : null}</div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="font-mono text-sm break-all">{hook.url}</p><p className="mt-1 text-xs text-muted-foreground">{hook.events.join(", ")}</p></div>{canManage ? <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={testing !== null || removing !== null} onClick={() => void test(hook.id)}>{testing === hook.id ? "Sending…" : `Send test to ${hook.id}`}</Button><Button type="button" variant="outline" size="sm" disabled={testing !== null || removing !== null} onClick={() => void remove(hook.id, hook.url)} aria-label={`Remove ${hook.id}`}>{removing === hook.id ? "Removing…" : "Remove"}</Button></div> : null}</div>
                   {delivery ? <p className={delivery.ok ? "text-sm text-muted-foreground" : "text-sm text-destructive"}>Last test: {delivery.ok ? "delivered" : "failed"}, HTTP {delivery.status ?? "unknown"}, {delivery.attempts ?? "unknown"} attempt{delivery.attempts === 1 ? "" : "s"}.</p> : null}
                 </li>;
               })}

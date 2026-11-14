@@ -77,9 +77,30 @@ describe("Developer settings", () => {
     renderApp("/settings/developer", api);
 
     expect(await screen.findByText("https://hooks.example.test/kitchen")).toBeVisible();
-    expect(screen.getByText("Only an approver can create or test webhooks.")).toBeVisible();
+    expect(screen.getByText("Only an approver can create, test or remove webhooks.")).toBeVisible();
     expect(screen.queryByLabelText("Webhook URL")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create webhook" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Send test to/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Remove/ })).not.toBeInTheDocument();
+  });
+
+  it("lets an approver remove a webhook after a confirm and reloads the list", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const remove = vi.spyOn(api, "deleteWebhook");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    renderApp("/settings/developer", api);
+
+    const button = await screen.findByRole("button", { name: "Remove hook-demo-1" });
+    await user.click(button);
+    expect(remove).not.toHaveBeenCalled();
+    expect(screen.getByText("https://hooks.example.test/kitchen")).toBeVisible();
+
+    await user.click(button);
+    expect(remove).toHaveBeenCalledWith("hook-demo-1", "human");
+    expect(await screen.findByText("No webhooks")).toBeVisible();
+    expect(screen.queryByText("https://hooks.example.test/kitchen")).not.toBeInTheDocument();
+    expect(confirm).toHaveBeenCalledTimes(2);
+    confirm.mockRestore();
   });
 });

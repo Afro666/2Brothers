@@ -76,6 +76,7 @@ describe("createHttpApi", () => {
         "revokeApiToken",
         "createWebhook",
         "testWebhook",
+        "deleteWebhook",
         "listWebhooks",
         "getGatewayHealth",
         "getSession",
