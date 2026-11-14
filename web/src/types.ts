@@ -360,3 +360,49 @@ export interface FeedbackRow {
   to: number | null;
   reason: string | null;
 }
+
+/** How one forecast method did against what the kitchen really needed. Every null is "unknown", never zero. */
+export interface ForecastScore {
+  /** Weekly error: sum of |predicted - actual| over sum of actual, as a fraction. */
+  wape: number | null;
+  /** (predicted - actual) / actual; above zero means the forecast was too high. */
+  bias: number | null;
+  /** Quantity needed above the forecast (the kitchen would have run short). */
+  short: number | null;
+  /** Quantity forecast above the need (it would have been waste). */
+  waste: number | null;
+  /** Days a product would have run out when ordering to this forecast. */
+  stockOutDays: number | null;
+}
+
+export interface ForecastWeek {
+  /** ISO `YYYY-Www`. */
+  week: string;
+  /** null in a week that is not over: future weeks carry a forecast only. */
+  actual: number | null;
+  engine: number | null;
+  baseline: number | null;
+  engineWape: number | null;
+  baselineWape: number | null;
+}
+
+/** Predicted against actual per week, for the whole kitchen or one product. */
+export interface ForecastSeries {
+  /** null for the whole kitchen. */
+  productId: ProductCode | null;
+  name: string;
+  /** null when the series adds products counted in different units. */
+  unit: string | null;
+  /** Our engine: menu x covers x recipe. */
+  engine: ForecastScore;
+  /** The plain weekday average. */
+  baseline: ForecastScore;
+  /** Oldest first: past weeks, then future weeks. */
+  weeks: ForecastWeek[];
+}
+
+export interface ForecastAccuracy {
+  kitchen: ForecastSeries;
+  /** null when the gateway does not say per product (unknown, not "no products"). */
+  products: ForecastSeries[] | null;
+}

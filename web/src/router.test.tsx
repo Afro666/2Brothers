@@ -22,6 +22,7 @@ describe("application routes", () => {
     ["/products", "Products"],
     ["/planner", "Planner"],
     ["/demand", "Demand"],
+    ["/forecast", "Forecast check"],
     ["/settings", "Settings"],
   ])("renders %s", async (path, title) => {
     await renderAt(path);
