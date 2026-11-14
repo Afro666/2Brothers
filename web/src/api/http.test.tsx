@@ -762,6 +762,20 @@ describe("createHttpApi", () => {
     await expect(api.getSession()).rejects.toMatchObject({ code: "RATE_LIMITED" });
   });
 
+  it.each(["PRICE_LIST_BUSY", "MENU_PHOTO_BUSY", "LABEL_PHOTO_BUSY"])("keeps the busy code %s of a 429", async (code) => {
+    gateway({ "GET /api/v1/me": () => error(429, code) });
+    await expect(createHttpApi("/api").getSession()).rejects.toMatchObject({ code, status: 429 });
+  });
+
+  it("keeps SUPPLIER_BUSY of a 429 with its retry_after", async () => {
+    gateway({ "GET /api/v1/me": () => error(429, "SUPPLIER_BUSY", { retry_after: 30 }) });
+    await expect(createHttpApi("/api").getSession()).rejects.toMatchObject({
+      code: "SUPPLIER_BUSY",
+      status: 429,
+      details: { retry_after: 30 },
+    });
+  });
+
   it("clears the local account when logout fails", async () => {
     const approved = { ...proposal, status: "APPROVED", order_id: "ord-1" };
     const calls = gateway({

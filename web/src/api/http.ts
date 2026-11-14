@@ -57,6 +57,14 @@ export const SIGNED_IN_EVENT = "kitchen-buyer:signed-in";
  * shortcut: an entry is never removed; the app makes one api per page. Remove on dispose if that changes. */
 const beforeWrite = new Set<() => void>([dropKeptAnswers]);
 
+/** The 429 codes that mean "busy", not "rate limited": each panel shows its own text for them. */
+const BUSY_429 = new Map<unknown, string>([
+  ["PRICE_LIST_BUSY", "Another price list is being read."],
+  ["MENU_PHOTO_BUSY", "Another menu photo is being read."],
+  ["LABEL_PHOTO_BUSY", "Another label is being read."],
+  ["SUPPLIER_BUSY", "The supplier is busy - try again shortly."],
+]);
+
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
   if ((init?.method ?? "GET").toUpperCase() === "GET") return send(baseUrl, path, init);
@@ -88,12 +96,15 @@ async function send(baseUrl: string, path: string, init?: RequestInit): Promise<
   }
   if (response.status === 429) {
     // The gateway locks an account for five minutes after five wrong passwords: "wait a minute" would be wrong.
-    const code = (await response.json().catch(() => null))?.error?.code;
+    const error = (await response.json().catch(() => null))?.error;
+    const code = error?.code;
     if (isLogin && code === "ACCOUNT_LOCKED") {
       throw new ApiError("ACCOUNT_LOCKED", "Too many wrong passwords. Try again in five minutes.", {}, 429);
     }
-    // One price-list read per kitchen at a time (#1174): "wait a minute" would be wrong too.
-    if (code === "PRICE_LIST_BUSY") throw new ApiError(code, "Another price list is being read.", {}, 429);
+    // One read per kitchen at a time (#1174, #1451), or the supplier asks us to wait `retry_after`:
+    // "wait a minute" would be wrong too, so the busy code and its details stay for the panel.
+    const busy = BUSY_429.get(code);
+    if (busy) throw new ApiError(code, busy, error && typeof error === "object" ? error : {}, 429);
     throw new ApiError("RATE_LIMITED", "Too many requests - wait a minute and try again.");
   }
   let body: unknown;

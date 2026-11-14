@@ -99,6 +99,17 @@ describe("PlannerPage: plan from a menu photo", () => {
     expect(section.getByRole("button", { name: "Choose a file" })).toBeEnabled();
   });
 
+  it("says another menu photo is being read on MENU_PHOTO_BUSY, not the rate limit", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    api.readMenuPhoto = async () => {
+      throw new ApiError("MENU_PHOTO_BUSY", "Another menu photo is being read.", {}, 429);
+    };
+    renderApp("/planner", api);
+    const section = await choosePhoto(user);
+    expect(await section.findByRole("alert")).toHaveTextContent("Another menu photo is being read. Wait for it, then try again.");
+  });
+
   it("shows the dishes read when none matched a recipe", async () => {
     const user = userEvent.setup();
     const api = createMockApi();
