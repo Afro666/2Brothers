@@ -380,11 +380,11 @@ describe("ApprovalsPage", () => {
     holdReload = true;
     await user.click(screen.getByRole("button", { name: "Update Arla 1 L lactose free fat free UHT milk drink" }));
 
-    expect(screen.getByRole("button", { name: /Approve €148\.76 incl VAT/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve €148.76" })).toBeDisabled();
     expect(quantity).toBeDisabled();
 
     reload.resolve();
-    expect(await screen.findByRole("button", { name: /Approve €116\.68 incl VAT/ })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "Approve €116.68" })).toBeEnabled();
     expect(quantity).toBeEnabled();
   });
 
@@ -407,9 +407,9 @@ describe("ApprovalsPage", () => {
     });
     await user.click(screen.getByRole("button", { name: /^Option C:/ }));
     holdReload = true;
-    await user.click(screen.getByRole("button", { name: "Choose option C: approve €2,326.75 incl VAT" }));
+    await user.click(screen.getByRole("button", { name: "Choose option C: approve €2,326.75" }));
 
-    expect(screen.getByRole("button", { name: /Approve €148\.76 incl VAT/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve €148.76" })).toBeDisabled();
     expect(quantity).toBeDisabled();
 
     reload.resolve();

@@ -488,7 +488,7 @@ describe("ApprovalCard", () => {
     const onApprove = vi.fn(() => Promise.reject(failure));
     render(<ApprovalCard request={approval} order={confirmedOrder} onApprove={onApprove} />);
 
-    await user.click(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    await user.click(screen.getByRole("button", { name: "Approve €2,210.41" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
 
