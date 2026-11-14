@@ -354,7 +354,7 @@ def test_the_parser_prices_products_that_fit_the_asked_measure_not_the_top_text_
                                         json={"text": "60 l milk by Monday", "idempotency_key": "fit1"})
     assert r.status_code == 200
     assert r.json()["request"]["product_ids"] == ["462775"]      # the chocolate is not priced
-    assert seen["limit"] == 60                                     # a wider look than the top 8
+    assert seen["limit"] == 50                                     # a wider look than the top 8
 
 
 def test_a_structured_body_cannot_claim_the_parser_made_it(env):

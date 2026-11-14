@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-SEARCH_LIMIT = 60   # how many hits to look at
+SEARCH_LIMIT = 50   # how many hits to look at: the most store.search allows (MAX_LIMIT)
 CANDIDATES = 20     # how many go on to price and availability
 _FAMILY = {"L": "volume", "DL": "volume", "CL": "volume", "ML": "volume",
            "KG": "weight", "G": "weight"}

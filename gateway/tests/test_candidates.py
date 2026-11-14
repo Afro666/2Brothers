@@ -1,6 +1,7 @@
 """The fallback parser's choice of products to price (gateway/candidates.py)."""
 
-from gateway.candidates import CANDIDATES, pick_candidates
+from gateway.candidates import CANDIDATES, SEARCH_LIMIT, pick_candidates
+from store.search import MAX_LIMIT, build_pipeline
 
 
 def row(pid, value, unit, category="10400"):
@@ -52,3 +53,9 @@ def test_cap_and_empty():
 def test_rows_without_category_do_not_crash():
     rows = [{"product_id": "X", "net_content": {"value": 1, "unit": "l"}}, {"product_id": "Y"}]
     assert pick_candidates(rows, "L") == ["X", "Y"]
+
+
+def test_the_search_limit_is_one_the_real_search_accepts():
+    """The tests above use a fake search; the real one refuses a limit above MAX_LIMIT."""
+    assert CANDIDATES <= SEARCH_LIMIT <= MAX_LIMIT
+    build_pipeline("lactose free milk", {}, SEARCH_LIMIT)      # raises ValueError when too high
