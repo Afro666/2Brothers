@@ -51,6 +51,21 @@ NEVER = [
 ]
 
 
-def matrix() -> dict:
+def matrix(auto_approve: dict | None = None) -> dict:
+    """The table for one kitchen. `auto_approve` is the kitchen's setting (gateway.autoapprove
+    .settings): when an approver switched it on, the table says so instead of "every order"
+    (#756), so the screen never claims more human control than the kitchen chose."""
     strip = lambda rows: [{k: v for k, v in r.items() if k != "id"} for r in rows]  # noqa: E731
-    return {"alone": strip(ALONE), "person": strip(PERSON), "never": strip(NEVER)}
+    alone, person = strip(ALONE), strip(PERSON)
+    on = bool(auto_approve and auto_approve.get("enabled"))
+    if on:
+        limit, by = auto_approve.get("limit_eur"), auto_approve.get("set_by")
+        alone.append({"action": f"Approve routine orders up to {limit} EUR", "audit_kind": "auto_approved",
+                      "rule": f"Earned auto-approve, switched on by {by}: only orders with confirmed stock, no warning, "
+                              "nothing excluded or short, and products already on 3 unedited approved orders. "
+                              "Each one is an audit entry with the evidence; switching it off is instant."})
+        person[0] = {"action": "Every order that is not routine", "audit_kind": "approval",
+                     "rule": "Substitutes, unknown stock, allergen, cut-off or recall issues, new products, events "
+                             "and anything above the kitchen's limit always wait for an approver; the live re-check "
+                             "(TOTAL_MISMATCH) applies to every order."}
+    return {"alone": alone, "person": person, "never": strip(NEVER), "auto_approve_enabled": on}

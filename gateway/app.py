@@ -346,7 +346,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     def permissions_matrix(kitchen_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
         from gateway import permissions
-        return permissions.matrix()
+        from gateway import autoapprove
+        return permissions.matrix(autoapprove.settings(gw().db, kitchen_id))
 
     @app.get(k + "/audit")
     def audit(kitchen_id: str, who: Principal = Depends(principal)):

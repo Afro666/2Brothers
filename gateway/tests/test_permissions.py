@@ -7,8 +7,9 @@ from gateway.tests.test_gateway_app import AGENT, HUMAN, K, env, milk  # noqa: F
 def test_matrix_is_served_and_has_the_three_groups(env):
     client, _, _ = env
     m = client.get(K + "/permissions", headers=AGENT).json()
-    assert set(m) == {"alone", "person", "never"}
-    assert all({"action", "audit_kind", "rule"} <= set(row) for group in m.values() for row in group)
+    assert {"alone", "person", "never"} <= set(m) and m["auto_approve_enabled"] is False
+    assert all({"action", "audit_kind", "rule"} <= set(row) for key in ("alone", "person", "never") for row in m[key])
+    assert m["person"][0]["action"] == "Every order"
     assert client.get(K + "/permissions").status_code == 401
 
 
@@ -58,3 +59,14 @@ def test_never_act_for_another_kitchen(env):
     token = client.post(K + "/tokens", headers=HUMAN, json={"name": "t", "scopes": ["kitchen:read"]}).json()["token"]
     r = client.get("/v1/kitchens/other-kitchen/orders", headers={"Authorization": "Bearer " + token})
     assert r.status_code == 403 and r.json()["error"]["code"] == "KITCHEN_SCOPE"
+
+
+def test_matrix_says_so_when_auto_approve_is_on(env):
+    client, _, db = env
+    db.kitchen_settings.update_one({"_id": "demo-kitchen"}, {"$set": {"auto_approve": {
+        "enabled": True, "limit_eur": "500", "set_by": "aron"}}}, upsert=True)
+    m = client.get(K + "/permissions", headers=AGENT).json()
+    assert m["auto_approve_enabled"] is True
+    assert m["person"][0]["action"] == "Every order that is not routine"
+    assert any("up to 500 EUR" in row["action"] and "aron" in row["rule"] for row in m["alone"])
+    assert "Every order" not in [row["action"] for row in m["person"]]
