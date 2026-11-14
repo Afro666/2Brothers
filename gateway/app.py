@@ -162,7 +162,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
             if len(refusals_seen) > 10_000:
                 refusals_seen.clear()
         refusals_seen[key] = now
-        gw()._audit(target, "refused", who.name, code=code, method=request.method, path=request.url.path)
+        gw()._audit(target, "refused", who.name, code=code, method=request.method,
+                    route=route, path=request.url.path)
 
     @app.exception_handler(GatewayError)
     async def _error(request: Request, exc: GatewayError) -> JSONResponse:
