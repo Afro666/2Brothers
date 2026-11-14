@@ -111,8 +111,13 @@ class Rehearsal:
         methods = (data or {}).get("methods", {})
         ours = (methods.get("engine") or {}).get("total", {}).get("wape")
         base = (methods.get("weekday-average") or {}).get("total", {}).get("wape")
-        ok = code == 200 and ours is not None and base is not None and ours < base
-        return ok, f"engine {ours:.1%} vs weekday average {base:.1%}" if ok else f"HTTP {code}"
+        if code != 200:
+            return False, f"HTTP {code}"
+        missing = [name for name, v in (("engine", ours), ("weekday average", base)) if v is None]
+        if missing:
+            return False, f"HTTP {code}, no WAPE for {' and '.join(missing)}"
+        ok = ours < base
+        return ok, f"engine {ours:.1%} vs weekday average {base:.1%}" + ("" if ok else " (not better)")
 
     def valio_view(self):
         monday = _monday(self.today)

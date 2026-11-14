@@ -47,7 +47,17 @@ def test_all_green_and_the_buyer_is_skipped_by_default():
 
 def test_a_forecast_worse_than_the_baseline_fails():
     rows = Rehearsal("https://site.test", client=site(broken=("forecast",)), today=TODAY).run(with_buyer=False)
-    assert {name: s for name, s, _ in rows}["Forecast beats the weekday average"] == "FAIL"
+    name, status, detail = next(r for r in rows if r[0] == "Forecast beats the weekday average")
+    assert status == "FAIL"
+    assert "20.0%" in detail and "6.7%" in detail and "not better" in detail
+
+
+def test_a_missing_wape_is_named():
+    def handler(request):
+        return httpx.Response(200, json={"methods": {"engine": {"total": {"wape": 0.05}}}})
+    check = Rehearsal("https://site.test", client=httpx.Client(base_url="https://site.test", transport=httpx.MockTransport(handler)), today=TODAY)
+    check.check("Forecast", check.forecast_proof)
+    assert check.rows[0][1] == "FAIL" and "weekday average" in check.rows[0][2]
 
 
 def test_a_dropped_connection_is_tried_once_more():
