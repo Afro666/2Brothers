@@ -8,6 +8,7 @@ into `None` first.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 import hashlib
 from uuid import uuid4
 
@@ -18,7 +19,7 @@ from store.audit import canonical
 
 OUTCOMES = ("CONFIRMED", "NOT_SENT", "UNCONFIRMED", "SENT_READ_FAILED")
 DECISIONS = ("APPROVED", "REJECTED")
-STOCK_SENTINELS = (999999, 9999999999)
+STOCK_FILLER_MIN = 999999  # any availableAmount this large is a filler, not stock
 
 
 class IdempotencyConflict(Exception):
@@ -27,6 +28,16 @@ class IdempotencyConflict(Exception):
 
 class NotPending(Exception):
     """The approval does not exist or was already decided."""
+
+
+def _is_stock_filler(value) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value >= STOCK_FILLER_MIN
+    if isinstance(value, Decimal):
+        return not value.is_nan() and value >= STOCK_FILLER_MIN
+    return False
 
 
 def _check(value) -> None:
@@ -38,7 +49,7 @@ def _check(value) -> None:
             _check(item)
     elif isinstance(value, float):
         raise TypeError("binary float refused: use Decimal for money and quantities")
-    elif not isinstance(value, bool) and value in STOCK_SENTINELS:
+    elif _is_stock_filler(value):
         raise ValueError("unknown-stock sentinel refused: store None for unknown stock")
 
 
