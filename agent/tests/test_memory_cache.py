@@ -52,3 +52,22 @@ def test_concurrent_memory_reads_share_one_load():
         release.set()
         assert first.result() == second.result() == ['facts']
     assert len(calls) == 1
+
+
+def test_blocked_load_for_one_kitchen_does_not_block_another():
+    cache = KitchenFactsCache()
+    entered, release = Event(), Event()
+    def slow():
+        entered.set()
+        assert release.wait(2)
+        return ['a facts']
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(cache.get, 'a', 'day', slow)
+        assert entered.wait(2)
+        other = pool.submit(cache.get, 'b', 'day', lambda: ['b facts'])
+        try:
+            assert other.result(timeout=1) == ['b facts']
+        finally:
+            release.set()
+        assert first.result() == ['a facts']
+    assert cache._loading == {}
