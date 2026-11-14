@@ -495,7 +495,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 
 | Method | Path | Scope | What |
 |---|---|---|---|
-| POST | `/stock-counts` | `kitchen:write` | Push a stock count (POS, inventory, manual). `null` means unknown, never zero. A repeat `idempotency_key` returns the stored answer. |
+| POST | `/stock-counts` | `kitchen:write` | Push a stock count (POS, inventory, manual). `null` means unknown, never zero. A repeat `idempotency_key` returns the stored answer. A repeat key while the first request is still storing returns 409 `IDEMPOTENCY_IN_PROGRESS`: try again. A store that fails releases the key, so the same key can be retried. |
 | GET | `/stock` | `kitchen:read` | Current stock and position (on hand + on order). Shape under "Body shapes: stock and demand". |
 | POST | `/stock/photo` | `kitchen:write` | Nemotron 3.5 Super VL reads a shelf photo into a count to confirm. Stores no count. Shape under "Count from a shelf photo". Served. |
 | GET | `/products`, `/products/{id}` | `kitchen:read` | Own products (not in a supplier catalog). Shape below. |
@@ -515,10 +515,10 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | GET | `/proposals` | `kitchen:read` | `{"proposals": [...]}`, newest first, at most 100, each in the `GET /proposals/{id}` shape. |
 | GET | `/proposals/{id}` | `kitchen:read` | Lines with `why`, one block per supplier, simulated totals (`expected_total`, `mov_gap`, `delivery_fee`), mandate reasons, warnings. |
 | GET | `/proposals/{id}/addable` | `kitchen:read` | What the buyer can add to this proposal, most probable first, and the lines that reach free delivery. Shape under "Addable products". |
-| POST | `/proposals/{id}/approve` | `kitchen:approve` (human, role `approver`) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN`; a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
+| POST | `/proposals/{id}/approve` | `kitchen:approve` (human, role `approver`) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN` (one exception: the kitchen setting `approve_unconfirmed_manual`, see "Kitchen settings"); a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
 | POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". Proposed; the gateway does not serve it yet. |
-| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). |
+| GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. |
 | GET | `/orders/{id}/resolution` | `kitchen:approve` (human) | What our store knows about an order whose send result is unknown. Shape under "Resolving an unknown send". |
 | POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
@@ -539,7 +539,7 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | POST | `/recalls/{event_id}/dismiss` | `kitchen:approve` (human) | A person dismisses one alert after checking the packs. Body: `reason`. Shape in [recall-contract.md](recall-contract.md). |
 | GET | `/label-checks` | `kitchen:read` | Recorded Hyvää Suomesta producer checks for catalog products 462535, 462576 and 462775, plus one synthetic `negative_control`. Answer: `{"checks": [...], "negative_control": {...}}`. Shape in [product-evidence-contract.md](product-evidence-contract.md). |
 | POST, GET, DELETE | `/tokens`, `/tokens/{id}` | human, role `approver` | Kitchen API tokens. Shape under "Kitchen API tokens". |
-| GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never}`, each a list of `{action, audit_kind, rule}`. |
+| GET | `/permissions` | `kitchen:read` | What the Buyer does alone, what a person signs off, what it can never do (`gateway/permissions.py`). Answer: `{alone, person, never, auto_approve_enabled}`; the first three are lists of `{action, audit_kind, rule}`, `auto_approve_enabled` is a boolean. When it is `true`, `alone` gets one more row (audit_kind `auto_approved`, `"Approve routine orders up to <limit> EUR"`; its `rule` names the approver who switched it on), and the first `person` row reads `"Every order that is not routine"`. When it is `false`, the rows are unchanged. |
 | POST, GET | `/webhooks` | human, role `approver` | Register a webhook (body `url`, `events`) or list them. Shape under "Webhooks". |
 | DELETE | `/webhooks/{id}` | human, role `approver` | Remove the webhook and its delivery log. |
 | POST | `/webhooks/{id}/test` | human, role `approver` | Send one signed `ping` now, one attempt. Answer: the delivery row. |
@@ -976,7 +976,15 @@ The trusted worker reads `kitchen_settings.excluded_allergens` through `store`:
 an explicit string array of supported allergen names/GS1 codes, including `[]`
 when the kitchen explicitly has no exclusions. Missing/malformed policy disables
 automatic substitute assessment. The model cannot supply or relax this policy.
-AW expands to the individual gluten cereals; GO oats remain distinct.
+Allergen groups (`store/allergen_groups.py`, #672) work in both directions, on every
+path that reads `excluded_allergens` (the gateway and the Buyer):
+
+- A group code or its name (`AN` or `nuts`, `AW` or `gluten`) excludes the group code
+  and every member code.
+- A member code (`SA` almond, `UW` wheat) also excludes its group code: a product that
+  declares only "tree nuts" does not say which nut, and unknown is never safe. It does
+  not exclude the other members.
+- Oats (`GO`) stay outside the gluten group in both directions.
 CONTAINS, MAY_CONTAIN and UNDECLARED matches are refused. Unknown allergen data
 is excluded for substitutes and for restricted kitchens. An unrestricted
 kitchen's specifically requested original may remain visible as unknown for
@@ -1170,10 +1178,10 @@ Response: `{"stock_count_id": "...", "stored": 2}`.
 | `product_id`, `unit` | string | |
 | `on_hand` | decimal string or null | The last count; null when never counted or counted as unknown. |
 | `counted_at` | timestamp or null | |
-| `on_order` | decimal string | Approved orders not yet delivered. Today always `"0"`: open orders are in supplier units and not converted yet. |
-| `on_order_known` | boolean | `false` while `on_order` is not converted (today always). Never read `on_order` as a real zero when this is `false`. |
-| `position` | decimal string or null | `on_hand` + `on_order`; null when `on_hand` is null. |
-| `next_delivery_date` | date or null | |
+| `on_order` | decimal string or null | Approved orders (outcome `CONFIRMED`, status `SENT`, `CONFIRMED` or `PARTIAL`) whose delivery day is today or later, in the kitchen's `unit`: quantity x `size_in_base_units` x `net_content`. An order without a known delivery day is not counted. Null when a line cannot be converted to the kitchen's unit. |
+| `on_order_known` | boolean | `false` when `on_order` is null (a line could not be converted). Never read a missing `on_order` as zero. |
+| `position` | decimal string or null | `on_hand` + `on_order`; null when `on_hand` or `on_order` is null. |
+| `next_delivery_date` | date or null | The earliest delivery day among the counted open orders. |
 
 `GET /v1/kitchens/{kitchen_id}/demand?from=&to=` returns `from`, `to` and `rows`, one
 per product and day:
@@ -1636,6 +1644,7 @@ engine's default, except `excluded_allergens`, which is `null` until a person se
 | `certainty_premium_max` | decimal string or null | How much more the kitchen pays for stock the supplier confirms: the main plan uses a confirmed-stock offer only when its price per litre or kilo is at most this many times the cheapest orderable price. At least `1`; default `3`; `null` means no limit. A dearer confirmed offer is left out of the plan and listed in `excluded` with the two prices. When leaving it out would make the order short, it stays and the plan carries `CERTAINTY_PREMIUM_HIGH`. Engine default until `store/` saves it and the settings page shows it. |
 | `excluded_allergens` | string[] or null | GS1 codes or the allergen names of `search_products`. A product that lists one as CONTAINS, MAY_CONTAIN or UNDECLARED is refused. `[]` means the kitchen has explicitly no exclusions. `null` means nobody has set the policy yet: unknown, not "none". |
 | `standing_orders` | object of decimal strings | Per `product_id`: the kitchen's standing order per delivery, in that product's sales unit. `{}` means none. The engine only flags a standing order more than 10 % off the need (`STANDING_ORDER_DRIFT`, S08); a person changes it. |
+| `approve_unconfirmed_manual` | boolean | Off by default (#631). Absent from `GET` until a person sets it; absent means off. Another type is a 422. When `true`, an approver may approve a proposal whose unknown-stock lines all belong to a manual or csv supplier's block. The order then carries that block's `supplier_id` in `supplier_must_confirm` and waits for the supplier's confirmation; the block's mandate reason says so. A Valio line with unknown stock is still 409 `STOCK_UNKNOWN`. Earned auto-approve never applies to these blocks: it refuses every unknown-stock line. When `false` or absent, every unknown-stock line is 409 `STOCK_UNKNOWN`. |
 
 `PUT /settings` takes any subset of these fields plus `idempotency_key`. A field that is
 left out keeps its value, so a partial save can never drop the allergen policy.
