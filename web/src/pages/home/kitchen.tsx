@@ -158,7 +158,7 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
               {more > 0 ? (
                 <Link
                   to="/stock"
-                  className="block w-fit text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-foreground"
+                  className="flex min-h-11 w-fit items-center text-sm font-medium underline decoration-border underline-offset-4 hover:decoration-foreground"
                 >
                   {t("+{count} more", { count: more })}
                 </Link>
