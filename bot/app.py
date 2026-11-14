@@ -55,6 +55,42 @@ def parse_brief_times(text: str | None) -> dict[str, str]:
     return dict(zip(("morning", "evening"), (part.strip() for part in text.split(","))))
 
 
+# A question is not an order. The bot explains its own words in plain code; it does not send a
+# question to the Buyer, which would answer "cannot read" or, worse, make an order from it.
+QUESTION_STARTS = ("what is", "what are", "what does", "what do ", "what's", "why ", "how ", "when ", "who ",
+                   "where ", "is ", "are ", "can ", "does ", "do ",
+                   "mikä ", "mitä ", "miksi ", "miten ", "milloin ", "co to", "czy ", "jak ", "dlaczego ", "kiedy ")
+EXPLAINED = (
+    (("recall",), "<b>Active recall</b>: the Finnish Food Authority has recalled a product that this kitchen has "
+                  "in stock, in a recipe or on an order. Take it off the shelf. An order with it is held."),
+    (("cut-off", "cutoff", "cut off", "approve before"), "<b>Cut-off</b>: the supplier's last time for the order. "
+                  "Approve before it, or the delivery moves to a later day."),
+    (("stock not confirmed", "not confirmed"), "<b>Stock not confirmed</b>: this supplier does not show live stock. "
+                  "The order goes out and waits for the supplier's answer."),
+    (("supplier offer", "offer"), "<b>Supplier offer</b>: a supplier proposes a product, often in place of one "
+                  "that is short. It waits for your yes or no on the site."),
+    (("delivery-note", "delivery note", "short", "missing"), "<b>Delivery-note check</b>: a delivery was compared "
+                  "with its order. SHORT is less than ordered, MISSING did not come at all."),
+)
+NO_ANSWER = ("I make orders and briefs; I cannot answer that question yet.\n"
+             "Say what the kitchen needs, for example: <b>20 L oat drink for Monday</b>, or send /brief.")
+
+
+def is_question(text: str) -> bool:
+    low = text.strip().lower()
+    if any(ch.isdigit() for ch in low):
+        return False            # "can I get 20 L milk for Monday?" is an order
+    return low.endswith("?") or low.startswith(QUESTION_STARTS)
+
+
+def answer_for(text: str) -> str:
+    low = text.lower()
+    for words, answer in EXPLAINED:
+        if any(word in low for word in words):
+            return answer
+    return NO_ANSWER
+
+
 class NotConfigured(Exception):
     pass
 
@@ -67,11 +103,10 @@ class Bot:
         self.site_url = site_url.rstrip("/") if site_url else None
         self.now = now
         self._products: dict[str, dict] = {}                 # product_id -> {"name", "lot"}
-        self._summaries: dict[tuple[int, str], int] = {}     # (chat, proposal) -> summary message id
-        self._heard: dict[tuple[int, str], str] = {}
         self._adds: dict[str, list[dict]] = {}               # proposal -> its addable rows, until one is added
         self._shelves: dict[tuple[int, int], dict] = {}      # (chat, message) -> a shelf read to confirm
         self._lock = threading.Lock()
+        self._last_brief: dict = {}
         self.brief_times = brief_times if brief_times is not None else dict(BRIEF_TIMES)
 
     # ---- entry -------------------------------------------------------------------------
@@ -114,6 +149,8 @@ class Bot:
             self._brief(chat, text.partition(" ")[2].strip().lower())
         elif text.startswith("/"):
             self.tg.send(chat, HELP)
+        elif is_question(text):
+            self.tg.send(chat, answer_for(text))        # never to the Buyer: a question is not an order
         elif text:
             self._ask(chat, text)
 
@@ -168,9 +205,7 @@ class Bot:
         pid = proposal.get("proposal_id")
         if pid:
             with self._lock:
-                self._summaries[(chat, pid)] = status
-                if heard:
-                    self._heard[(chat, pid)] = heard
+                self.links.note(f"summary:{chat}:{pid}", {"id": status, "heard": heard})
         self._show_summary(chat, proposal)
         if proposal.get("status") == "REJECTED":
             return
@@ -244,7 +279,9 @@ class Bot:
         answer = self.gw.brief(period)
         waiting = self.gw.waiting()
         url = f"{self.site_url}/approvals" if self.site_url else None
-        messages = [render.brief(answer, waiting, self.now().date().isoformat(), url)]
+        today = self.now().date().isoformat()
+        self._last_brief = {"answer": answer, "day": today}
+        messages = [render.brief(answer, waiting, today, url)]
         orders = [(p, i) for p in waiting for i in range(len(render.blocks_of(p)))]
         for proposal, index in orders[:render.BRIEF_ORDERS]:
             messages.append(render.supplier_message(proposal, index, self._names(proposal)))
@@ -267,6 +304,7 @@ class Bot:
             self.tg.edit(chat, status, "The brief could not be made. Try /brief again.")
             return
         self.tg.edit(chat, status, messages[0].text, messages[0].markup)
+        self.links.note(f"brief:{chat}", {"id": status, **self._last_brief})
         for message in messages[1:]:
             self.tg.send(chat, message.text, message.markup, silent=True)
 
@@ -286,20 +324,37 @@ class Bot:
         quiet = len(messages) == 1 and "<b>" not in messages[0].text      # nothing urgent: no sound
         for chat in self.links.chats():
             try:
-                self.tg.send(chat, messages[0].text, messages[0].markup, silent=quiet)
+                sent = self.tg.send(chat, messages[0].text, messages[0].markup, silent=quiet)
+                self.links.note(f"brief:{chat}", {"id": sent, **self._last_brief})
                 for message in messages[1:]:
                     self.tg.send(chat, message.text, message.markup, silent=True)
             except TelegramError as exc:
                 print(f"bot: telegram: {exc}", file=sys.stderr, flush=True)
 
     def _show_summary(self, chat: int, proposal: dict) -> None:
+        """After a request or a change: the order's summary message and the chat's last brief
+        show the new numbers. Seen live on 2026-11-14: a brief kept EUR 55.19 after "+" made the
+        order EUR 62.74. A message that cannot be edited never stops the change itself."""
         pid = proposal.get("proposal_id")
-        message_id = self._summaries.get((chat, pid))
-        if message_id is None:
-            return          # after a restart the summary is not known: the PO message is still right
-        url = f"{self.site_url}/approvals?proposal={pid}" if self.site_url and pid else None
-        message = render.summary(proposal, url, self._heard.get((chat, pid)))
-        self.tg.edit(chat, message_id, message.text, message.markup)
+        known = self.links.noted(f"summary:{chat}:{pid}")
+        if known:
+            url = f"{self.site_url}/approvals?proposal={pid}" if self.site_url and pid else None
+            message = render.summary(proposal, url, known.get("heard"))
+            self._edit_quietly(chat, known["id"], message)
+        last = self.links.noted(f"brief:{chat}")
+        if last:
+            try:
+                waiting = self.gw.waiting()
+            except GatewayError:
+                return
+            url = f"{self.site_url}/approvals" if self.site_url else None
+            self._edit_quietly(chat, last["id"], render.brief(last["answer"], waiting, last["day"], url))
+
+    def _edit_quietly(self, chat: int, message_id: int, message: render.Message) -> None:
+        try:
+            self.tg.edit(chat, message_id, message.text, message.markup)
+        except TelegramError as exc:        # for example "message is not modified", or a deleted message
+            print(f"bot: telegram: {exc}", file=sys.stderr, flush=True)
 
     def _names(self, proposal: dict) -> dict[str, str]:
         ids = [str(ln["product_id"]) for b in render.blocks_of(proposal) for ln in b.get("lines") or []]
