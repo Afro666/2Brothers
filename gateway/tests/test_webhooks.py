@@ -81,6 +81,16 @@ def test_only_subscribed_events_are_sent(env, receiver):
     assert receiver.events() == ["order.placed", "proposal.rejected"]
 
 
+def test_a_second_reject_sends_no_second_rejected_event(env, receiver):
+    client, _, _ = env
+    make(client, ["proposal.rejected"])
+    p = milk(client)
+    url = f"{K}/proposals/{p['proposal_id']}/reject"
+    assert client.post(url, headers=HUMAN, json={"reason": "too much"}).status_code == 200
+    assert client.post(url, headers=HUMAN, json={"reason": "too much"}).status_code == 200
+    assert receiver.events() == ["proposal.rejected"]
+
+
 def test_approve_sends_approved_and_placed_and_a_moved_price_sends_total_mismatch(env, receiver):
     client, fake, _ = env
     make(client, list(webhooks.EVENTS))
