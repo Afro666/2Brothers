@@ -19,12 +19,16 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # Caddy serves HTTP/3 over UDP.
+      - "443:443/udp"
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
       GATEWAY_HUMAN_TOKEN: ${GATEWAY_HUMAN_TOKEN:?set GATEWAY_HUMAN_TOKEN in .env}
     volumes:
       # Caddy keeps its HTTPS certificates here; losing it re-requests them.
       - caddy_data:/data
+      # Caddy's autosaved config; the image documents it as a volume too.
+      - caddy_config:/config
 
   # Reached only through the web container (no published port).
   gateway:
@@ -65,3 +69,4 @@ services:
 
 volumes:
   caddy_data:
+  caddy_config:
