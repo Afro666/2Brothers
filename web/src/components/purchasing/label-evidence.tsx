@@ -16,7 +16,7 @@ export function LabelEvidence({ check }: { check: LabelCheck }) {
     <p className={verified ? "font-semibold text-green-700 dark:text-green-400" : "font-semibold"}>
       {verified ? "Producer registration verified" : check.label_verified === "not_found" ? "Producer not found" : "Verification unknown"}
     </p>
-    <p>Hyvää Suomesta · producer scope · individual product certification unverified</p>
+    <p>{check.label === "GOODS_FROM_FINLAND_BLUE_SWAN" ? "Hyvää Suomesta" : check.label} · producer scope · individual product certification unverified</p>
     <p>{check.reason} · checked {check.checked_at ?? "unknown"}</p>
     {check.source_url && /^https:\/\//.test(check.source_url) && <a className="underline" href={check.source_url} target="_blank" rel="noreferrer">Official producer register</a>}
   </div>;
