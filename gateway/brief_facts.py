@@ -159,7 +159,7 @@ def collect(gateway, kitchen, when, lang):
             continue
         simulation = item["offer"].get("simulation") or {}
         closing = [_dt(line.get("closing_time")) for line in simulation.get("lines") or []]
-        cutoff = min((d for d in closing if d), default=None)
+        cutoff = min((d for d in closing if d and d >= now), default=None)
         due = cutoff and ((cutoff.date() == today) if when == "morning"
                           else (now <= cutoff <= tomorrow_noon))
         if due:
