@@ -46,6 +46,16 @@ KINDS_RETRY = timedelta(seconds=60) # after a failed catalog read, wait this lon
 MAX_NEED_QUANTITY = Decimal("1000000")   # one need of a list body (#1375), as change.py caps a line
 
 
+def _safe_selection_facts(offers, need: Decimal, measure: str) -> dict:
+    """Private pick evidence (#1728): optional, so a data quirk leaves it empty, never fails a quote."""
+    from engine.selection_facts import selection_facts
+    try:
+        return selection_facts(offers, need, measure)
+    except (ValueError, ArithmeticError, TypeError) as exc:
+        log.warning("selection facts skipped: %s", type(exc).__name__)
+        return {}
+
+
 class GatewayError(Exception):
     """An error the routes return as {"error": {"code", "message"}}."""
 
@@ -375,8 +385,7 @@ class Gateway:
             kitchen_id, [p for p in request["product_ids"] if p not in blocked and p not in refused],
             measure, requested)
         if selection is not None:
-            from engine.selection_facts import selection_facts
-            selection.update(selection_facts(offers, need, measure))
+            selection.update(_safe_selection_facts(offers, need, measure))
             for pid, fact in selection.items():
                 lead = (when.get(pid) or {}).get('lead_time_days')
                 fact['lead_time_days'] = None if lead is None else str(lead)
@@ -437,9 +446,8 @@ class Gateway:
         tax.update(t), supplier_of.update(s), when.update(w)
         used = {ln.product_id for ln in sub.lines}
         if selection is not None:
-            from engine.selection_facts import selection_facts
             # The gap engine proves this link: original sales units -> common KG/L.
-            evidence = selection_facts([o for o in subs if o.product_id in used],
+            evidence = _safe_selection_facts([o for o in subs if o.product_id in used],
                                        plan.need * orig[0].pack.size, common)
             for fact in evidence.values():
                 fact['substitute_for'] = original

@@ -68,3 +68,23 @@ def test_private_pick_evidence_includes_a_gap_filled_product():
     assert facts['base_unit'] == 'KG' and facts['stock_state'] == 'unknown'
     assert facts['substitute_for'] == BREAD
     assert 'selection_facts' not in result.json()  # private context, no API payload expansion
+
+
+def test_failing_pick_evidence_never_fails_a_quote(monkeypatch):
+    """#1728: selection_facts raising (a pack measure quirk) leaves the evidence empty, the quote 200."""
+    import engine.selection_facts as sf
+
+    def broken(*_a, **_k):
+        raise ValueError('unproven selection measure')
+    monkeypatch.setattr(sf, 'selection_facts', broken)
+    g = _gateway()
+    need = g.client.post(g.k + '/needs', headers=g.agent, json={
+        'text': '20 cases of gluten free bread by Monday', 'quantity': '20', 'unit': 'KI',
+        'requested_date': MON.isoformat()}).json()
+    result = g.client.post('/tools/get_offer', headers=g.agent, json={
+        'product_ids': [BREAD, ROLLS], 'need_id': need['need_id'],
+        'requested_date': MON.isoformat()})
+    assert result.status_code == 200, result.text
+    assert {ln['product_id'] for ln in result.json()['lines']} == {BREAD, ROLLS}
+    stored = g.db.offers.find_one({'_id': result.json()['offer_id']})
+    assert not stored.get('selection_facts')
