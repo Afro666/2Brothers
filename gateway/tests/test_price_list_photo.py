@@ -1,4 +1,5 @@
 """The price-list photo route (#1174): drafts only, never a write; a person saves each row."""
+import asyncio
 import base64
 import json
 from pathlib import Path
@@ -87,3 +88,24 @@ def test_a_worker_error_is_passed_on(env):
     client, _ = app_for(env, down)
     r = client.post(URL, headers=HUMAN, json={"image_base64": PHOTO})
     assert r.status_code == 504 and r.json()["error"]["code"] == "VISION_TIMEOUT"
+
+
+def test_a_second_read_for_the_same_kitchen_is_busy_and_the_slot_is_freed(env):
+    state = {"client": None, "inner": [], "fail": True}
+
+    async def slow(kitchen_id, encoded):
+        if not state["inner"]:                     # while this read runs, a second one arrives
+            state["inner"].append(await asyncio.to_thread(
+                state["client"].post, URL, headers=HUMAN, json={"image_base64": PHOTO}))
+        if state["fail"]:
+            state["fail"] = False
+            raise GatewayError(504, "VISION_TIMEOUT", "slow")
+        return REPLY
+    client, _ = app_for(env, slow)
+    state["client"] = client
+    first = client.post(URL, headers=HUMAN, json={"image_base64": PHOTO})
+    assert first.status_code == 504                                        # the worker failed
+    busy = state["inner"][0]
+    assert busy.status_code == 429 and busy.json()["error"]["code"] == "PRICE_LIST_BUSY"
+    later = client.post(URL, headers=HUMAN, json={"image_base64": PHOTO})  # the slot was freed after the error
+    assert later.status_code == 200, later.text
