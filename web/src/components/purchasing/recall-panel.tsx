@@ -54,8 +54,7 @@ export function recallSentence(text: string, t: (text: string, vars?: Translatio
     const match = pattern.exec(text);
     if (match) return t(template, match[1] == null || name == null ? undefined : { [name]: match[1] });
   }
-  // As before for a shape nobody listed: the gateway's words, starting with a capital.
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  return text;
 }
 
 /**
@@ -91,7 +90,8 @@ function UnheldRecall({ alert }: { alert: RecallAlert }) {
       </p>
       {alert.where.map((line) => (
         <p key={line} className="font-medium [overflow-wrap:anywhere]">
-          {recallSentence(line, t)}
+          {/* "in stock: ..." reads as a sentence start; a line nobody listed keeps the gateway's words. */}
+          {recallSentence(line, t).replace(/^./, (first) => first.toUpperCase())}
         </p>
       ))}
       <p>
