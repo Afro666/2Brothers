@@ -12,14 +12,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, formatNumber } from "@/lib/format";
+import { translate, useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
-import { isValidWeek, isoWeekOf, shiftWeek, weekDates, weekLabel } from "@/lib/week";
+import { isValidWeek, isoWeekOf, shiftWeek, weekDates, weekRangeLabel } from "@/lib/week";
 import type { ShortageRisk, SupplierDemandRow } from "@/types";
 
 /** Worst first: a short week matters more than an unmeasured one. */
 const RISK_ORDER: Record<ShortageRisk, number> = { SHORT: 0, UNKNOWN: 1, AT_RISK: 2, COVERED: 3 };
 
-const RISK_PLURALS: Record<ShortageRisk, string> = {
+export const RISK_PLURALS: Record<ShortageRisk, string> = {
   SHORT: "short",
   UNKNOWN: "unknown",
   AT_RISK: "at risk",
@@ -36,16 +37,20 @@ interface ProductGroup {
   worst: ShortageRisk;
 }
 
-export function riskSummary(rows: SupplierDemandRow[]): string {
+export function riskSummary(
+  rows: SupplierDemandRow[],
+  // Without a language the English text, with its placeholders filled.
+  t: ReturnType<typeof useT> = (text, vars) => translate("en", text, vars),
+): string {
   const counts: Record<ShortageRisk, number> = { SHORT: 0, UNKNOWN: 0, AT_RISK: 0, COVERED: 0 };
   for (const row of rows) counts[row.risk] += 1;
-  const spoken = RISK_BEFORE_AND.filter((risk) => counts[risk] > 0).map(
-    (risk) => `${counts[risk]} ${RISK_PLURALS[risk]}`,
+  const spoken = RISK_BEFORE_AND.filter((risk) => counts[risk] > 0).map((risk) =>
+    t("{count} {risk}", { count: counts[risk], risk: t(RISK_PLURALS[risk]) }),
   );
-  if (counts.COVERED > 0) spoken.push(`${counts.COVERED} covered`);
-  if (spoken.length === 0) return "No forecast lines this week";
+  if (counts.COVERED > 0) spoken.push(t("{count} {risk}", { count: counts.COVERED, risk: t("covered") }));
+  if (spoken.length === 0) return t("No forecast lines this week");
   if (spoken.length === 1) return spoken[0];
-  return `${spoken.slice(0, -1).join(", ")} and ${spoken.at(-1)}`;
+  return t("{items} and {last}", { items: spoken.slice(0, -1).join(", "), last: spoken.at(-1) ?? "" });
 }
 
 export function groupByProduct(rows: SupplierDemandRow[]): ProductGroup[] {
@@ -88,14 +93,21 @@ function noWeek(): Promise<WeekSection> {
   return new Promise<WeekSection>(() => undefined);
 }
 
-async function loadWeek(api: Api, week: string): Promise<WeekSection> {
+async function loadWeek(api: Api, week: string, t: ReturnType<typeof useT>): Promise<WeekSection> {
   const [monday, sunday] = [weekDates(week)[0], weekDates(week)[6]];
   const rows = await api.getSupplierDemand(monday, sunday);
-  return { monday, sunday, label: weekLabel(week), summary: riskSummary(rows), groups: groupByProduct(rows) };
+  return {
+    monday,
+    sunday,
+    label: t("Week {number}, {range}", { number: Number(week.slice(6)), range: weekRangeLabel(week) }),
+    summary: riskSummary(rows, t),
+    groups: groupByProduct(rows),
+  };
 }
 
 /** One product's days, in their own body so its name heads the row group. */
 function ProductSection({ group }: { group: ProductGroup }) {
+  const t = useT();
   return (
     <TableBody data-product-section={group.productId}>
       <TableRow className="border-b-0 bg-muted/40 hover:bg-muted/40">
@@ -104,9 +116,9 @@ function ProductSection({ group }: { group: ProductGroup }) {
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{group.productId}</span>
             <span aria-hidden>·</span>
-            <span>{RISK_PLURALS[group.worst]} this week</span>
+            <span>{t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })}</span>
             <span aria-hidden>·</span>
-            <span>{group.rows.length} days</span>
+            <span>{t("{count} days", { count: group.rows.length })}</span>
           </div>
         </TableHead>
       </TableRow>
@@ -118,6 +130,7 @@ function ProductSection({ group }: { group: ProductGroup }) {
 }
 
 function DemandRow({ row }: { row: SupplierDemandRow }) {
+  const t = useT();
   return (
     <TableRow>
       <TableCell>{formatDate(row.date)}</TableCell>
@@ -131,9 +144,9 @@ function DemandRow({ row }: { row: SupplierDemandRow }) {
         {row.available == null ? (
           <span
             className="font-medium text-warning"
-            title="The supplier has not measured availability for this product"
+            title={t("The supplier has not measured availability for this product")}
           >
-            unknown
+            {t("unknown")}
           </span>
         ) : (
           <span className="tabular-nums">
@@ -145,9 +158,9 @@ function DemandRow({ row }: { row: SupplierDemandRow }) {
         <RiskBadge risk={row.risk} />
       </TableCell>
       <TableCell className="text-right">
-        <div className="text-xs text-muted-foreground">Buy</div>
+        <div className="text-xs text-muted-foreground">{t("Buy")}</div>
         {row.suggestedBuy == null ? (
-          <div className="font-medium text-warning">unknown</div>
+          <div className="font-medium text-warning">{t("unknown")}</div>
         ) : (
           <div className="tabular-nums">
             {formatNumber(row.suggestedBuy)} {row.unit}
@@ -159,11 +172,12 @@ function DemandRow({ row }: { row: SupplierDemandRow }) {
 }
 
 function KitchenDisclosure({ row }: { row: SupplierDemandRow }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   // The table and the phone list are both in the DOM, so each instance needs its own id.
   const listId = useId();
   if (row.byKitchen.length === 0) {
-    return <span className="text-muted-foreground">No kitchens share this forecast</span>;
+    return <span className="text-muted-foreground">{t("No kitchens share this forecast")}</span>;
   }
   const kitchens = [...row.byKitchen].sort((a, b) => b.demand - a.demand || a.kitchenName.localeCompare(b.kitchenName));
   return (
@@ -176,9 +190,11 @@ function KitchenDisclosure({ row }: { row: SupplierDemandRow }) {
         aria-controls={listId}
         onClick={() => setExpanded((value) => !value)}
       >
-        {formatNumber(row.kitchens)} {row.kitchens === 1 ? "kitchen" : "kitchens"}{" "}
+        {row.kitchens === 1
+          ? t("{count} kitchen", { count: formatNumber(row.kitchens) })
+          : t("{count} kitchens", { count: formatNumber(row.kitchens) })}{" "}
         <span className="sr-only">
-          for {row.productName}, {formatDate(row.date)}
+          {t("for {product}, {date}", { product: row.productName, date: formatDate(row.date) })}
         </span>
       </Button>
       <ul id={listId} hidden={!expanded} className="space-y-1 text-sm">
@@ -196,12 +212,14 @@ function KitchenDisclosure({ row }: { row: SupplierDemandRow }) {
 }
 
 function MobileGroup({ group }: { group: ProductGroup }) {
+  const t = useT();
   return (
     <li className="space-y-3 py-4">
       <div>
         <div className="font-medium">{group.productName}</div>
         <div className="text-xs text-muted-foreground">
-          {group.productId} · {RISK_PLURALS[group.worst]} this week · {group.rows.length} days
+          {group.productId} · {t("{risk} this week", { risk: t(RISK_PLURALS[group.worst]) })} ·{" "}
+          {t("{count} days", { count: group.rows.length })}
         </div>
       </div>
       <ul className="space-y-3">
@@ -212,27 +230,27 @@ function MobileGroup({ group }: { group: ProductGroup }) {
               <RiskBadge risk={row.risk} />
             </div>
             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-              <dt className="text-muted-foreground">Forecast demand</dt>
+              <dt className="text-muted-foreground">{t("Forecast demand")}</dt>
               <dd className="text-right tabular-nums">
                 {formatNumber(row.forecastDemand)} {row.unit}
               </dd>
-              <dt className="text-muted-foreground">Kitchens</dt>
+              <dt className="text-muted-foreground">{t("Kitchens")}</dt>
               <dd className="text-right">
                 <KitchenDisclosure row={row} />
               </dd>
-              <dt className="text-muted-foreground">Available</dt>
+              <dt className="text-muted-foreground">{t("Available")}</dt>
               <dd className="text-right tabular-nums">
                 {row.available == null ? (
-                  <span className="font-medium text-warning">unknown</span>
+                  <span className="font-medium text-warning">{t("unknown")}</span>
                 ) : (
                   `${formatNumber(row.available)} ${row.unit}`
                 )}
               </dd>
-              <dt className="text-muted-foreground">Buy</dt>
+              <dt className="text-muted-foreground">{t("Buy")}</dt>
               <dd
                 className={row.suggestedBuy == null ? "text-right font-medium text-warning" : "text-right tabular-nums"}
               >
-                {row.suggestedBuy == null ? "unknown" : `${formatNumber(row.suggestedBuy)} ${row.unit}`}
+                {row.suggestedBuy == null ? t("unknown") : `${formatNumber(row.suggestedBuy)} ${row.unit}`}
               </dd>
             </dl>
           </li>
@@ -244,9 +262,10 @@ function MobileGroup({ group }: { group: ProductGroup }) {
 
 /** The ErrorState look, without a retry that would repeat the same bad request. */
 function InvalidWeek({ children }: { children: ReactNode }) {
+  const t = useT();
   return (
     <div role="alert" className="space-y-3 rounded-lg border border-destructive/40 p-4">
-      <p className="text-sm">That week is not valid</p>
+      <p className="text-sm">{t("That week is not valid")}</p>
       <Button variant="outline" asChild>
         <Link to="/demand">{children}</Link>
       </Button>
@@ -255,6 +274,7 @@ function InvalidWeek({ children }: { children: ReactNode }) {
 }
 
 export function DemandPage() {
+  const t = useT();
   const api = useApi();
   const requestedWeek = useRouterState({
     select: (routerState) => new URLSearchParams(routerState.location.searchStr).get("week"),
@@ -264,7 +284,7 @@ export function DemandPage() {
   const defaultWeek = shiftWeek(isoWeekOf(new Date().toISOString().slice(0, 10)), 1);
   const week = requestedWeek ?? defaultWeek;
   const weekIsValid = isValidWeek(week);
-  const state = useAsync(() => (weekIsValid ? loadWeek(api, week) : noWeek()), [api, week, weekIsValid]);
+  const state = useAsync(() => (weekIsValid ? loadWeek(api, week, t) : noWeek()), [api, week, weekIsValid, t]);
 
   function showWeek(target: string) {
     void navigate({ to: "/demand", search: { week: target } });
@@ -274,28 +294,40 @@ export function DemandPage() {
     <AppShell activeId="demand">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Demand</h1>
+          <h1 className="text-2xl font-semibold">{t("Demand")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            What kitchens that share their forecast expect to need, against what is available.
+            {t("What kitchens that share their forecast expect to need, against what is available.")}
           </p>
         </header>
         {weekIsValid ? (
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => showWeek(shiftWeek(week, -1))}>
-              Previous week
+              {t("Previous week")}
             </Button>
-            <h2 className="px-2 text-center text-lg font-semibold">{weekLabel(week)}</h2>
+            <h2 className="px-2 text-center text-lg font-semibold">
+              {t("Week {number}, {range}", {
+                number: Number(week.slice(6)),
+                range: weekRangeLabel(week),
+              })}
+            </h2>
             <Button variant="outline" onClick={() => showWeek(shiftWeek(week, 1))}>
-              Next week
+              {t("Next week")}
             </Button>
           </div>
         ) : null}
         {!weekIsValid ? (
           <div className="space-y-3">
-            <InvalidWeek>Go to next week, {weekLabel(defaultWeek)}</InvalidWeek>
+            <InvalidWeek>
+              {t("Go to next week, {week}", {
+                week: t("Week {number}, {range}", {
+                  number: Number(defaultWeek.slice(6)),
+                  range: weekRangeLabel(defaultWeek),
+                }),
+              })}
+            </InvalidWeek>
           </div>
         ) : null}
-        {weekIsValid && state.status === "loading" ? <LoadingState label="Loading demand" /> : null}
+        {weekIsValid && state.status === "loading" ? <LoadingState label={t("Loading demand")} /> : null}
         {weekIsValid && state.status === "error" ? (
           <ErrorState message={state.error.message} onRetry={state.reload} />
         ) : null}
@@ -306,8 +338,10 @@ export function DemandPage() {
               {state.data.summary}
             </p>
             {state.data.groups.length === 0 ? (
-              <EmptyState title="No demand forecast for this week">
-                Kitchens that share forecasts have nothing planned for {state.data.label.toLowerCase()}.
+              <EmptyState title={t("No demand forecast for this week")}>
+                {t("Kitchens that share forecasts have nothing planned for {week}.", {
+                  week: state.data.label.toLowerCase(),
+                })}
               </EmptyState>
             ) : (
               <Card>
@@ -316,12 +350,12 @@ export function DemandPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead className="text-right">Forecast demand</TableHead>
-                          <TableHead className="text-right">Kitchens</TableHead>
-                          <TableHead>Available</TableHead>
-                          <TableHead>Risk</TableHead>
-                          <TableHead className="text-right">Buy</TableHead>
+                          <TableHead>{t("Date")}</TableHead>
+                          <TableHead className="text-right">{t("Forecast demand")}</TableHead>
+                          <TableHead className="text-right">{t("Kitchens")}</TableHead>
+                          <TableHead>{t("Available")}</TableHead>
+                          <TableHead>{t("Risk")}</TableHead>
+                          <TableHead className="text-right">{t("Buy")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       {state.data.groups.map((group) => (
@@ -338,7 +372,7 @@ export function DemandPage() {
               </Card>
             )}
             <p className="text-sm text-muted-foreground">
-              Forecasts come only from kitchens that agreed to share them.
+              {t("Forecasts come only from kitchens that agreed to share them.")}
             </p>
           </div>
         ) : null}

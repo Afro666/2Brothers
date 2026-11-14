@@ -1,6 +1,7 @@
 import { type ReactNode, useId, useState } from "react";
 
 import { formatNumber } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { weekRangeLabel } from "@/lib/week";
 import type { ForecastWeek } from "@/types";
 
@@ -55,6 +56,7 @@ function TipRow({ label, value, children }: { label: string; value: string; chil
  * engine, the grey line for the weekday average. Weeks ahead sit in a "Forecast only" band.
  */
 export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: string | null }) {
+  const t = useT();
   const titleId = useId();
   const descId = useId();
   const [active, setActive] = useState<number | null>(null);
@@ -95,15 +97,15 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <li className="flex items-center gap-1.5">
           <Key color={ACTUAL} dot />
-          Needed (actual)
+          {t("Needed (actual)")}
         </li>
         <li className="flex items-center gap-1.5">
           <Key color={ENGINE} />
-          Our engine
+          {t("Our engine")}
         </li>
         <li className="flex items-center gap-1.5">
           <Key color={BASELINE} />
-          Weekday average
+          {t("Weekday average")}
         </li>
       </ul>
       <div className="flex">
@@ -128,10 +130,16 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
             className="block overflow-visible"
             onPointerLeave={() => setActive(null)}
           >
-            <title id={titleId}>{`Needed and predicted per week${unit ? `, in ${unit}` : ""}`}</title>
+            <title id={titleId}>
+              {unit
+                ? t("Needed and predicted per week, in {unit}", { unit })
+                : t("Needed and predicted per week")}
+            </title>
             <desc id={descId}>
-              {`${past} past weeks with what the kitchen needed and both forecasts. ` +
-                `${count - past} future weeks with the forecast only. The table below has the same numbers.`}
+              {t(
+                "{past} past weeks with what the kitchen needed and both forecasts. {future} future weeks with the forecast only. The table below has the same numbers.",
+                { past, future: count - past },
+              )}
             </desc>
             {past < count ? (
               <>
@@ -148,7 +156,7 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
                   textAnchor="middle"
                   className="fill-muted-foreground text-[11px]"
                 >
-                  Forecast only
+                  {t("Forecast only")}
                 </text>
               </>
             ) : null}
@@ -213,23 +221,26 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
               }
             >
               <p>
-                <span className="font-medium">Week {Number(shown.week.slice(6))}</span>
+                <span className="font-medium">{t("Week {number}", { number: Number(shown.week.slice(6)) })}</span>
                 <span className="block text-muted-foreground">{weekRangeLabel(shown.week)}</span>
               </p>
-              <TipRow label="Needed" value={formatQuantity(shown.actual, unit, shown.ahead ? "not yet" : "unknown")}>
+              <TipRow
+                label={t("Needed")}
+                value={formatQuantity(shown.actual, unit, shown.ahead ? t("not yet") : t("unknown"))}
+              >
                 <Key color={ACTUAL} dot />
               </TipRow>
-              <TipRow label="Our engine" value={formatQuantity(shown.engine, unit)}>
+              <TipRow label={t("Our engine")} value={formatQuantity(shown.engine, unit, t("unknown"))}>
                 <Key color={ENGINE} />
               </TipRow>
-              <TipRow label="Weekday average" value={formatQuantity(shown.baseline, unit)}>
+              <TipRow label={t("Weekday average")} value={formatQuantity(shown.baseline, unit, t("unknown"))}>
                 <Key color={BASELINE} />
               </TipRow>
             </div>
           ) : null}
         </div>
       </div>
-      <p className="text-center text-xs text-muted-foreground">Week of the year</p>
+      <p className="text-center text-xs text-muted-foreground">{t("Week of the year")}</p>
     </div>
   );
 }

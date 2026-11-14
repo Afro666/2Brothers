@@ -14,30 +14,32 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import { LabelVerificationDemo } from "@/components/purchasing/label-evidence";
 
 /** The gateway's refusals of the tamper demo, in plain words. */
-const DEMO_ERRORS: Record<string, string> = {
+export const DEMO_ERRORS: Record<string, string> = {
   DEMO_ONLY: "The tamper demo only runs on the demo kitchen.",
   ALREADY_TAMPERED: "One line is already changed. Restore it first.",
   NOTHING_TO_TAMPER: "The audit log has no line to change yet.",
 };
 
-function plain(error: unknown): string {
-  if (error instanceof ApiError && DEMO_ERRORS[error.code]) return DEMO_ERRORS[error.code];
-  return error instanceof Error ? error.message : "Something went wrong.";
+function plain(error: unknown, t: ReturnType<typeof useT>): string {
+  if (error instanceof ApiError && DEMO_ERRORS[error.code]) return t(DEMO_ERRORS[error.code]);
+  return error instanceof Error ? error.message : t("Something went wrong.");
 }
 
 const short = (hash: string) => hash.slice(0, 8);
 
-const ELSEWHERE = "The break is in another kitchen's entry (the demo), not in yours";
+export const ELSEWHERE = "The break is in another kitchen's entry (the demo), not in yours";
 
 /** The chain is one for all kitchens. A break with no kitchen named counts as this kitchen's. */
 const isElsewhere = (check: AuditChainCheck) =>
   !check.ok && check.brokenKitchenId != null && check.brokenKitchenId !== KITCHEN_ID;
 
 export function TrustPage() {
+  const t = useT();
   const api = useApi();
   const rows = useAsync(() => api.listAuditChain(5));
   const [check, setCheck] = useState<AuditChainCheck | null>(null);
@@ -49,7 +51,7 @@ export function TrustPage() {
     try {
       await action();
     } catch (error) {
-      toast.error(plain(error));
+      toast.error(plain(error, t));
     } finally {
       setBusy(false);
     }
@@ -59,9 +61,9 @@ export function TrustPage() {
     run(async () => {
       const result = await api.verifyAuditChain();
       setCheck(result);
-      if (result.ok) toast.success(`Chain OK: ${result.length} lines checked`);
-      else if (isElsewhere(result)) toast.warning(ELSEWHERE);
-      else toast.error(`Chain broken at line ${result.brokenAt}`);
+      if (result.ok) toast.success(t("Chain OK: {count} lines checked", { count: result.length }));
+      else if (isElsewhere(result)) toast.warning(t(ELSEWHERE));
+      else toast.error(t("Chain broken at line {line}", { line: String(result.brokenAt) }));
     });
 
   // A changed line makes the last result stale, so it is cleared until the next verify.
@@ -70,7 +72,7 @@ export function TrustPage() {
       const { seq } = await api.tamperAuditRow();
       setCheck(null);
       rows.reload();
-      toast.warning(`Line ${seq} was changed in the data. Verify the chain to see the break.`);
+      toast.warning(t("Line {line} was changed in the data. Verify the chain to see the break.", { line: seq }));
     });
 
   const restore = () =>
@@ -78,29 +80,31 @@ export function TrustPage() {
       const { seq, restored } = await api.restoreAuditRow();
       setCheck(null);
       rows.reload();
-      if (restored) toast.success(`Line ${seq} was restored. Verify the chain again.`);
-      else toast.info("Nothing was tampered, so nothing was restored.");
+      if (restored) toast.success(t("Line {line} was restored. Verify the chain again.", { line: String(seq) }));
+      else toast.info(t("Nothing was tampered, so nothing was restored."));
     });
 
   return (
     <AppShell activeId="trust">
       <div className="mx-auto max-w-3xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Tamper check</h1>
+          <h1 className="text-2xl font-semibold">{t("Tamper check")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Every audit line carries the hash of the line before it. Changing any line breaks every hash after it.
+            {t("Every audit line carries the hash of the line before it. Changing any line breaks every hash after it.")}
           </p>
-          <Badge variant="outline">{live ? "Audit log stored in MongoDB Atlas" : "Sample data"}</Badge>
+          <Badge variant="outline">
+            {live ? t("Audit log stored in MongoDB Atlas") : t("Sample data")}
+          </Badge>
         </header>
 
         <Card>
           <CardContent className="space-y-4">
             <Button onClick={verify} disabled={busy}>
-              Verify audit chain
+              {t("Verify audit chain")}
             </Button>
             <div role="status" className="text-sm">
               {check === null ? (
-                <p className="text-muted-foreground">Not checked yet.</p>
+                <p className="text-muted-foreground">{t("Not checked yet.")}</p>
               ) : (
                 <div className="flex items-start gap-2">
                   {check.ok ? (
@@ -113,14 +117,22 @@ export function TrustPage() {
                   <div className="tabular-nums">
                     <p className="font-medium">
                       {check.ok
-                        ? `Chain OK: ${check.length} lines checked`
+                        ? t("Chain OK: {count} lines checked", { count: check.length })
                         : isElsewhere(check)
-                          ? ELSEWHERE
-                          : `Chain broken at line ${check.brokenAt}: ${check.length} lines before it are intact`}
+                          ? t(ELSEWHERE)
+                          : t("Chain broken at line {line}: {count} lines before it are intact", {
+                              line: String(check.brokenAt),
+                              count: check.length,
+                            })}
                     </p>
                     <p className="text-muted-foreground">
-                      {isElsewhere(check) ? `It is line ${check.brokenAt} of the shared log. ` : null}
-                      {check.kitchenEntries} of the lines are this kitchen's. Checked at {formatTime(check.checkedAt)}.
+                      {isElsewhere(check)
+                        ? t("It is line {line} of the shared log. ", { line: String(check.brokenAt) })
+                        : null}
+                      {t("{count} of the lines are this kitchen's. Checked at {time}.", {
+                        count: check.kitchenEntries,
+                        time: formatTime(check.checkedAt),
+                      })}
                     </p>
                   </div>
                 </div>
@@ -131,12 +143,12 @@ export function TrustPage() {
 
         <section aria-labelledby="trust-lines" className="space-y-3">
           <h2 id="trust-lines" className="text-lg font-semibold">
-            Newest audit lines
+            {t("Newest audit lines")}
           </h2>
-          {rows.status === "loading" ? <LoadingState label="Loading audit lines" /> : null}
+          {rows.status === "loading" ? <LoadingState label={t("Loading audit lines")} /> : null}
           {rows.status === "error" ? <ErrorState message={rows.error.message} onRetry={rows.reload} /> : null}
           {rows.status === "ready" && rows.data.length === 0 ? (
-            <EmptyState title="No audit lines yet">Recorded events will appear here.</EmptyState>
+            <EmptyState title={t("No audit lines yet")}>{t("Recorded events will appear here.")}</EmptyState>
           ) : null}
           {rows.status === "ready" && rows.data.length > 0 ? (
             <Card>
@@ -147,17 +159,24 @@ export function TrustPage() {
                     return (
                       <li key={row.seq} className="space-y-1 py-3 first:pt-0 last:pb-0">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                          <span className="font-medium text-foreground tabular-nums">Line {row.seq}</span>
-                          <span>{ACTOR_LABEL[row.event.actor] ?? row.event.actor}</span>
+                          <span className="font-medium text-foreground tabular-nums">
+                            {t("Line {line}", { line: row.seq })}
+                          </span>
+                          <span>
+                            {ACTOR_LABEL[row.event.actor] ? t(ACTOR_LABEL[row.event.actor]) : row.event.actor}
+                          </span>
                           {broken ? (
                             <Badge variant="destructive">
-                              {row.seq === check.brokenAt ? "Broken here" : "After the break"}
+                              {row.seq === check.brokenAt ? t("Broken here") : t("After the break")}
                             </Badge>
                           ) : null}
                         </div>
                         <p className="text-sm break-words">{row.event.summary}</p>
                         <p className="font-mono text-xs text-muted-foreground">
-                          hash {short(row.hash)} · previous {short(row.prevHash)}
+                          {t("hash {hash} · previous {previous}", {
+                            hash: short(row.hash),
+                            previous: short(row.prevHash),
+                          })}
                         </p>
                       </li>
                     );
@@ -171,20 +190,21 @@ export function TrustPage() {
         <section aria-labelledby="trust-demo" className="space-y-3 rounded-xl border border-dashed p-4">
           <div className="flex flex-wrap items-center gap-2">
             <h2 id="trust-demo" className="text-lg font-semibold">
-              Tamper test
+              {t("Tamper test")}
             </h2>
-            <Badge variant="secondary">Demo only</Badge>
+            <Badge variant="secondary">{t("Demo only")}</Badge>
           </div>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Changes the newest line straight in the data, the way someone with database access could, and leaves its
-            hash alone. Verify the chain afterwards, then restore the line.
+            {t(
+              "Changes the newest line straight in the data, the way someone with database access could, and leaves its hash alone. Verify the chain afterwards, then restore the line.",
+            )}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="destructive" onClick={tamper} disabled={busy}>
-              Tamper with one line
+              {t("Tamper with one line")}
             </Button>
             <Button variant="outline" onClick={restore} disabled={busy}>
-              Restore
+              {t("Restore")}
             </Button>
           </div>
         </section>

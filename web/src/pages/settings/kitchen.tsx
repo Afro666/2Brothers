@@ -18,10 +18,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { EU_ALLERGENS } from "@/lib/allergens";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
+import { useT } from "@/lib/i18n";
 import { SettingsSection } from "@/pages/settings/section";
 import type { KitchenSettings } from "@/types";
 
-const TYPES: { value: KitchenProfileType; label: string }[] = [
+export const TYPES: { value: KitchenProfileType; label: string }[] = [
   { value: "restaurant", label: "Restaurant" },
   { value: "school", label: "School" },
   { value: "hospital", label: "Hospital" },
@@ -39,6 +40,7 @@ function validTimezone(value: string): boolean {
 }
 
 export function KitchenSection() {
+  const t = useT();
   const api = useApi();
   const { session } = useSession();
   const canEdit = session?.canApprove === true;
@@ -78,16 +80,16 @@ export function KitchenSection() {
       timezone: profile.timezone.trim(),
       deliveryAddress: profile.deliveryAddress.trim(),
     };
-    if (!next.name) return setProfileError("Kitchen name is required.");
-    if (!next.address) return setProfileError("Address is required for local weather and holidays.");
-    if (!validTimezone(next.timezone)) return setProfileError("Enter a valid IANA timezone, for example Europe/Helsinki.");
-    if (!next.deliveryAddress) return setProfileError("Delivery address is required.");
+    if (!next.name) return setProfileError(t("Kitchen name is required."));
+    if (!next.address) return setProfileError(t("Address is required for local weather and holidays."));
+    if (!validTimezone(next.timezone)) return setProfileError(t("Enter a valid IANA timezone, for example Europe/Helsinki."));
+    if (!next.deliveryAddress) return setProfileError(t("Delivery address is required."));
     setSavingProfile(true);
     setProfileError(null);
     try {
       const saved = await api.saveKitchenProfile(next, "human");
       setProfile(structuredClone(saved));
-      toast.success("Kitchen profile saved");
+      toast.success(t("Kitchen profile saved"));
     } catch (error) {
       setProfileError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -103,7 +105,7 @@ export function KitchenSection() {
     try {
       const saved = await api.saveKitchenSettings(settings, "human");
       setSettings(structuredClone(saved));
-      toast.success("Allergen rules saved");
+      toast.success(t("Allergen rules saved"));
     } catch (error) {
       setRulesError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -116,63 +118,63 @@ export function KitchenSection() {
       title="Kitchen"
       description="Identity and location for purchasing, local weather and holidays, plus the allergen rules that always apply."
     >
-      {state.status === "loading" ? <LoadingState label="Loading kitchen" /> : null}
+      {state.status === "loading" ? <LoadingState label={t("Loading kitchen")} /> : null}
       {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
       {state.status === "ready" && (!profile || !settings) ? (
-        <EmptyState title="Kitchen settings are unavailable">Try loading this section again.</EmptyState>
+        <EmptyState title={t("Kitchen settings are unavailable")}>{t("Try loading this section again.")}</EmptyState>
       ) : null}
       {state.status === "ready" && profile && settings ? (
         <div className="grid items-start gap-5 xl:grid-cols-2">
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle>Kitchen profile</CardTitle>
+                <CardTitle>{t("Kitchen profile")}</CardTitle>
                 <SampleData of="getKitchenProfile" />
               </div>
-              <CardDescription>The address supports local weather and holiday signals.</CardDescription>
+              <CardDescription>{t("The address supports local weather and holiday signals.")}</CardDescription>
             </CardHeader>
             <CardContent>
               <form className="space-y-4" onSubmit={(event) => void saveProfile(event)} noValidate>
                 {profileError ? <p role="alert" className="text-sm text-destructive">{profileError}</p> : null}
-                {!canEdit ? <p className="text-sm text-muted-foreground">Only an approver can edit kitchen settings.</p> : null}
+                {!canEdit ? <p className="text-sm text-muted-foreground">{t("Only an approver can edit kitchen settings.")}</p> : null}
                 {api.live && !api.live.has("saveKitchenProfile") ? (
-                  <p className="text-sm text-muted-foreground">The gateway has no kitchen-profile save route, so this sample profile is read-only.</p>
+                  <p className="text-sm text-muted-foreground">{t("The gateway has no kitchen-profile save route, so this sample profile is read-only.")}</p>
                 ) : null}
                 <div className="space-y-2">
-                  <Label htmlFor="kitchen-name">Kitchen name</Label>
+                  <Label htmlFor="kitchen-name">{t("Kitchen name")}</Label>
                   <Input id="kitchen-name" value={profile.name} disabled={!canEditProfile || savingProfile} onChange={(event) => changeProfile("name", event.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="kitchen-type">Kitchen type</Label>
+                  <Label htmlFor="kitchen-type">{t("Kitchen type")}</Label>
                   <Select value={profile.type} disabled={!canEditProfile || savingProfile} onValueChange={(value) => changeProfile("type", value as KitchenProfileType)}>
                     <SelectTrigger id="kitchen-type" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}
+                      {TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{t(type.label)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="kitchen-address">Address</Label>
+                  <Label htmlFor="kitchen-address">{t("Address")}</Label>
                   <Textarea id="kitchen-address" value={profile.address} disabled={!canEditProfile || savingProfile} onChange={(event) => changeProfile("address", event.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="kitchen-timezone">Timezone</Label>
+                  <Label htmlFor="kitchen-timezone">{t("Timezone")}</Label>
                   <Input id="kitchen-timezone" value={profile.timezone} disabled={!canEditProfile || savingProfile} onChange={(event) => changeProfile("timezone", event.target.value)} />
-                  <p className="text-xs text-muted-foreground">Use an IANA timezone such as Europe/Helsinki.</p>
+                  <p className="text-xs text-muted-foreground">{t("Use an IANA timezone such as Europe/Helsinki.")}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="delivery-address">Delivery address</Label>
+                  <Label htmlFor="delivery-address">{t("Delivery address")}</Label>
                   <Textarea id="delivery-address" value={profile.deliveryAddress} disabled={!canEditProfile || savingProfile} onChange={(event) => changeProfile("deliveryAddress", event.target.value)} />
                 </div>
-                {canEditProfile ? <Button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</Button> : null}
+                {canEditProfile ? <Button type="submit" disabled={savingProfile}>{savingProfile ? t("Saving…") : t("Save profile")}</Button> : null}
               </form>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Hard allergen rules</CardTitle>
-              <CardDescription>Products that contain or may contain a selected allergen are always refused. For example, select gluten cereals for coeliac pupils.</CardDescription>
+              <CardTitle>{t("Hard allergen rules")}</CardTitle>
+              <CardDescription>{t("Products that contain or may contain a selected allergen are always refused. For example, select gluten cereals for coeliac pupils.")}</CardDescription>
             </CardHeader>
             <CardContent>
               <form className="space-y-4" onSubmit={(event) => void saveRules(event)}>
@@ -194,12 +196,12 @@ export function KitchenSection() {
                           setRulesError(null);
                         }}
                       />
-                      <Label htmlFor={`kitchen-allergen-${code}`} className="font-normal">{name} ({code})</Label>
+                      <Label htmlFor={`kitchen-allergen-${code}`} className="font-normal">{t(name)} ({code})</Label>
                     </div>
                   ))}
                 </div>
-                <p className="text-sm text-muted-foreground">These are the same rules used by the <Link to="/settings/$section" params={{ section: "engine" }} className="underline underline-offset-4">ordering engine settings</Link>.</p>
-                {canEdit ? <Button type="submit" disabled={savingRules}>{savingRules ? "Saving…" : "Save allergen rules"}</Button> : null}
+                <p className="text-sm text-muted-foreground">{t("These are the same rules used by the")} <Link to="/settings/$section" params={{ section: "engine" }} className="underline underline-offset-4">{t("ordering engine settings")}</Link>.</p>
+                {canEdit ? <Button type="submit" disabled={savingRules}>{savingRules ? t("Saving…") : t("Save allergen rules")}</Button> : null}
               </form>
             </CardContent>
           </Card>

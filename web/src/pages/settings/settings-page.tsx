@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 
 import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { SETTINGS_SECTIONS } from "@/pages/settings/sections";
 
@@ -14,14 +15,15 @@ const FOCUS = "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/70"
  * is a page of its own with a link back.
  */
 export function SettingsPage() {
+  const t = useT();
   const { section: sectionId } = useParams({ strict: false });
   const Section = SETTINGS_SECTIONS.find((section) => section.id === sectionId)?.component;
   return (
     <AppShell activeId="settings">
       <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="text-2xl font-semibold">Settings</h1>
+        <h1 className="text-2xl font-semibold">{t("Settings")}</h1>
         <div className="md:grid md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
-          <nav aria-label="Settings sections" className={cn(sectionId && "hidden md:block")}>
+          <nav aria-label={t("Settings sections")} className={cn(sectionId && "hidden md:block")}>
             <ul className="space-y-1">
               {SETTINGS_SECTIONS.map((section) => {
                 const active = section.id === sectionId;
@@ -37,7 +39,7 @@ export function SettingsPage() {
                         active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
                       )}
                     >
-                      {section.label}
+                      {t(section.label)}
                     </Link>
                   </li>
                 );
@@ -54,14 +56,14 @@ export function SettingsPage() {
                 )}
               >
                 <ChevronLeft className="size-4" aria-hidden />
-                All settings
+                {t("All settings")}
               </Link>
             ) : null}
             {Section ? (
               <Section />
             ) : (
-              <EmptyState title={sectionId ? "No such settings section" : "Choose a section"}>
-                Pick a section from the list.
+              <EmptyState title={sectionId ? t("No such settings section") : t("Choose a section")}>
+                {t("Pick a section from the list.")}
               </EmptyState>
             )}
           </div>

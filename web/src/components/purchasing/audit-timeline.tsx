@@ -1,4 +1,5 @@
 import { formatDateTime } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import type { AuditEvent, AuditKind } from "@/types";
 
 export const KIND_META: Record<AuditKind, { label: string }> = {
@@ -36,18 +37,19 @@ const ACTOR_STYLE: Record<AuditEvent["actor"], string> = {
 
 /** Every step, oldest first, each with who did it and why. */
 export function AuditTimeline({ events }: { events: AuditEvent[] }) {
+  const t = useT();
   // Array.sort is stable, so steps with the same time keep the order the API recorded them in.
   // A step with no recorded time keeps its place in that order too.
   const sorted = [...events].sort((a, b) => (a.at && b.at ? new Date(a.at).getTime() - new Date(b.at).getTime() : 0));
   if (sorted.length === 0) {
-    return <p className="text-sm text-muted-foreground">No steps yet.</p>;
+    return <p className="text-sm text-muted-foreground">{t("No steps yet.")}</p>;
   }
   return (
     <ol className="divide-y rounded-sm border bg-card">
       {sorted.map((e) => {
         // The gateway may send kinds or actors this app does not know yet: show the raw value.
-        const kindLabel = KIND_META[e.kind]?.label ?? e.kind;
-        const actorLabel = ACTOR_LABEL[e.actor] ?? e.actor;
+        const kindLabel = KIND_META[e.kind]?.label ? t(KIND_META[e.kind].label) : e.kind;
+        const actorLabel = ACTOR_LABEL[e.actor] ? t(ACTOR_LABEL[e.actor]) : e.actor;
         const actorStyle = ACTOR_STYLE[e.actor] ?? ACTOR_STYLE.system;
         return (
           <li
