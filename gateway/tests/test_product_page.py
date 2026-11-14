@@ -179,3 +179,14 @@ def test_needs_kitchen_read(page):
     client, _, _ = page
     assert client.get(f"{K}/catalog/products/{PID}").status_code == 401
 
+
+
+def test_every_allergen_code_has_a_name_not_only_the_first_of_its_group():
+    """Review of #1625: GB (barley) and SA (almond) came back with name None."""
+    from gateway.product_page import ALLERGEN_NAMES
+    from store.search import ALLERGENS
+    for codes in ALLERGENS.values():
+        for code in codes:
+            assert ALLERGEN_NAMES.get(code), code
+    assert ALLERGEN_NAMES["GB"] == "barley (gluten)" and ALLERGEN_NAMES["SA"] == "almond (nuts)"
+    assert ALLERGEN_NAMES["AM"] == "milk" and ALLERGEN_NAMES["AW"] == "gluten"

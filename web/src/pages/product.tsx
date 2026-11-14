@@ -117,7 +117,7 @@ function Allergens({ allergens }: { allergens: ProductPage["allergens"] }) {
 function PriceStockVat({ page }: { page: ProductPage }) {
   const t = useT();
   const { live, vat } = page;
-  const vatRate = vat.rate ?? live?.taxRate ?? null;
+  const vatRate = live?.taxRate ?? vat.rate ?? null; // Valio's live rate wins, as on the gateway (contract "VAT per product")
   const stock = live?.stock ?? null;
   const per = live?.per ?? page.product.salesUnit;
   const sources = [live?.source, vat.source].filter(Boolean).join(" · ");

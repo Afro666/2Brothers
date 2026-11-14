@@ -15,6 +15,9 @@ def test_milk_proposal_carries_the_partial_fill(env):  # noqa: F811
     assert (now["kind"], now["quantity"], now["deliver_on"], now["total_ex_vat"]) == ("NOW", "51", "2026-11-16", "131.07")
     assert [(ln["product_id"], ln["quantity"], ln["unit"], ln["unknown_stock"]) for ln in now["lines"]] == [
         ("462775", "51", "ST", False)]
+    # Each partial line carries the same VAT as the product's main line (contract "VAT per product").
+    main = {ln["product_id"]: (ln["vat_rate"], ln["vat_source"]) for ln in p["lines"]}
+    assert [(ln["vat_rate"], ln["vat_source"]) for ln in now["lines"]] == [main["462775"]]
     assert part["rest"] == [{
         "kind": "HOLD", "quantity": "949", "measure": "L", "deliver_on": None, "total_ex_vat": None,
         "why": "Hold the remaining 949 L until Valio confirms stock: "
