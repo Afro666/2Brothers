@@ -31,7 +31,7 @@ describe("AboutPage", () => {
   it.each(["Chef", "Valio planner"])("is linked from the nav when viewing as %s", async (role) => {
     const user = userEvent.setup();
     renderApp("/");
-    await user.click(await screen.findByRole("combobox", { name: "Viewing as" }));
+    await user.click(await screen.findByRole("combobox", { name: "Your role" }));
     await user.click(await screen.findByRole("option", { name: role }));
     await user.click(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "About" }));
     expect(await screen.findByRole("heading", { level: 1, name: "About Kitchen Buyer" })).toBeInTheDocument();

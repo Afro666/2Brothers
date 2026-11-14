@@ -122,7 +122,7 @@ export function AboutPage() {
               </CardContent>
             </Card>
           </div>
-          <p className="text-sm text-muted-foreground">Switch sides with “Viewing as” in the menu.</p>
+          <p className="text-sm text-muted-foreground">Switch sides with “Your role” in the menu.</p>
         </section>
 
         <section aria-labelledby="about-rules" className="space-y-3">
