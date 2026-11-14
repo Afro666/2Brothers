@@ -49,40 +49,87 @@ def attach_confirmed(gw, kitchen_id: str, proposal_id: str, request: dict, sim: 
         return
 
 
-def _confirmed_option(gw, kitchen_id: str, request: dict, sim: dict) -> dict | None:
-    part = sim.get("partial_fill")
-    if not part or request.get("needs"):
+def _catalog_quote(gw, kitchen_id: str, request: dict) -> dict | None:
+    """The same need quoted over the request's products plus the catalog shortlist for
+    its text. Used when the chosen basket has no confirmed stock: the Buyer model once
+    picked a single product whose stock Valio does not report, while another lactose-free
+    milk had confirmed stock. None when the request has no text to search by."""
+    text = (request.get("text") or "").strip()
+    if not text:
         return None
-    if all(line.get("unknown_stock") is False for line in sim.get("lines") or []):
-        return None      # the plan is placeable as it is
-    now = part.get("now") or {}
-    ids = [line["product_id"] for line in now.get("lines") or []]
-    if not ids:
+    from gateway.candidates import SEARCH_LIMIT, pick_candidates
+    from gateway.parse import ParseError, parse_request
+    try:
+        query = parse_request(text, gw.now().date()).query
+    except ParseError:
         return None
-    quote_request = {"product_ids": ids, "quantity": now["quantity"], "unit": part["measure"],
-                     "requested_date": request["requested_date"], "text": request.get("text") or "",
-                     "made_by": "confirmed_only"}
-    offer = gw._quote(kitchen_id, quote_request)       # stored and signed like every offer
-    quote = offer["simulation"]
+    search = gw._search
+    if search is None:
+        from store.search import search_products as search
+    rows = search(gw.db, query, {}, SEARCH_LIMIT, kitchen_id=kitchen_id)
+    ids = list(dict.fromkeys([*request["product_ids"], *pick_candidates(rows, request["unit"])]))
+    if set(ids) == set(request["product_ids"]):
+        return None      # the catalog adds nothing to the basket already quoted
+    offer = gw._quote(kitchen_id, {"product_ids": ids, "quantity": request["quantity"],
+                                   "unit": request["unit"], "requested_date": request["requested_date"],
+                                   "text": text, "made_by": "confirmed_search"})
+    return offer
+
+
+def _all_confirmed(quote: dict) -> bool:
     lines = quote.get("lines") or []
-    if not lines or any(line.get("unknown_stock") is not False for line in lines):
+    return (bool(lines) and all(line.get("unknown_stock") is False for line in lines)
+            and Decimal(str(quote.get("shortfall") or "0")) <= 0)
+
+
+def _confirmed_option(gw, kitchen_id: str, request: dict, sim: dict) -> dict | None:
+    if request.get("needs") or not sim.get("lines"):
         return None
-    if Decimal(str(quote.get("shortfall") or "0")) > 0:
+    if all(line.get("unknown_stock") is False for line in sim["lines"]):
+        return None      # the plan is placeable as it is
+    part, found = sim.get("partial_fill"), ""
+    if not (part and (part.get("now") or {}).get("lines")):
+        wide = _catalog_quote(gw, kitchen_id, request)
+        if wide is None:
+            return None
+        found = " This stock was found in the catalog, outside the basket above."
+        if _all_confirmed(wide["simulation"]):      # the catalog covers the whole need
+            return _option(gw, wide, request["unit"], None,
+                           f"Order all {request['quantity']} {request['unit']} from stock the supplier "
+                           "confirms for this date." + found)
+        part = wide["simulation"].get("partial_fill")
+        if not (part and (part.get("now") or {}).get("lines")):
+            return None
+    now = part["now"]
+    ids = [line["product_id"] for line in now["lines"]]
+    offer = gw._quote(kitchen_id, {"product_ids": ids, "quantity": now["quantity"], "unit": part["measure"],
+                                   "requested_date": request["requested_date"],
+                                   "text": request.get("text") or "", "made_by": "confirmed_only"})
+    if not _all_confirmed(offer["simulation"]):
         return None
+    measure, held = part["measure"], part["remaining"]
+    return _option(gw, offer, measure, held,
+                   f"Order the confirmed {now['quantity']} {measure} now. The other {held} {measure} "
+                   "is held until the supplier confirms stock; nothing is ordered for it." + found)
+
+
+def _option(gw, offer: dict, measure: str, held: str | None, why: str) -> dict:
+    """An option entry for a stored, signed quote whose every line has confirmed stock."""
+    quote = offer["simulation"]
+    ids = [line["product_id"] for line in quote["lines"]]
     known = {d["_id"]: d.get("allergen_data_known") is True
              for d in gw.db.products.find({"_id": {"$in": ids}}, {"allergen_data_known": 1})}
-    measure, held = part["measure"], part["remaining"]
-    return {
+    option = {
         "source": CONFIRMED, "offer_id": offer["offer_id"],
         "expected_total": quote["expected_total"], "currency": quote["currency"],
-        "lines": lines,
-        "why": (f"Order the confirmed {now['quantity']} {measure} now. The other {held} {measure} "
-                "is held until the supplier confirms stock; nothing is ordered for it."),
+        "lines": quote["lines"], "why": why,
         "requires_chef_approval": True, "stock_confirmed": True,
         "allergen_data_known": all(known.get(pid, False) for pid in ids),
         "recommended": True,
-        "held": {"quantity": held, "unit": measure},
     }
+    if held is not None:
+        option["held"] = {"quantity": held, "unit": measure}
+    return option
 
 
 def choose(gw, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None) -> dict:
