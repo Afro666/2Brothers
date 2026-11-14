@@ -595,6 +595,22 @@ def test_a_press_adds_the_product_and_the_total_moves(bot):
     assert "EUR 2,098.70" in summary["text"]
 
 
+def test_an_add_that_makes_a_new_supplier_block_shows_that_supplier(bot):
+    bot.gw.current = proposal(blocks=[{"supplier_id": "sup-valio", "name": "Valio Aimo", "expected_total": "1240.10",
+                                       "lines": [line("463380", "698", "L")]}])
+
+    def add(proposal_id, product_id, quantity):
+        bot.gw.calls.append(("add", product_id, quantity))
+        bot.gw.current["blocks"].append({"supplier_id": "sup-bakery", "name": "Corner Bakery", "expected_total": "46.20",
+                                         "lines": [line(product_id, quantity)]})
+        return bot.gw.current
+    bot.gw.add = add
+    press(bot, f"p:{PID}:0")
+    press(bot, f"d:{PID}:0:469549b")
+    assert bot.tg.answers[-1] == "Added."
+    assert "<b>Corner Bakery · 1 item" in bot.tg.edits[-1]["text"]
+
+
 def test_nothing_to_add_and_a_refused_add_are_said(bot):
     bot.gw.addable_rows = []
     press(bot, f"p:{PID}:0")
