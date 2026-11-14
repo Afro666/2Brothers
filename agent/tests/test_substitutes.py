@@ -173,3 +173,13 @@ def test_s02_better_option_fills_the_gap_by_weight():
     assert (better['tier'], better['source']) == ('better', 'supplier')
     assert [(ln['product_id'], ln['quantity']) for ln in better['lines']] == [('465138', '16'), ('462300', '84')]
     assert '84 BAG of the substitute' in better['why'] and better['requires_chef_approval'] is True
+
+
+def test_original_option_with_gap_fill_line_explains_the_substitute():
+    """#1032: the gateway can add SUBSTITUTE_NEEDS_OK lines to the first quote."""
+    option = _original_option([
+        {'product_id': '463380', 'quantity': '698', 'unit': 'ST', 'unknown_stock': False, 'reason_codes': []},
+        {'product_id': '463335', 'quantity': '12', 'unit': 'KG', 'unknown_stock': False,
+         'reason_codes': ['SUBSTITUTE_NEEDS_OK']}])
+    assert 'confirmed portion only' not in option['why']
+    assert '12 KG of the substitute' in option['why']
