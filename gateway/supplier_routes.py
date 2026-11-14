@@ -13,13 +13,13 @@ to kitchen units; a sentinel or a missing value is unknown (null), never plenty.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from decimal import ROUND_CEILING, Decimal
 
 from fastapi import Depends, Request
 
 from gateway.service import GatewayError
-from store.history import consenting_kitchens
+from store.history import product_docs, supplier_forecasts
 
 MAX_DAYS = 14
 
@@ -39,28 +39,20 @@ def _per_sales_unit(doc: dict) -> Decimal | None:
 
 
 def supplier_demand(db, valio, supplier_id: str, start: date, end: date, product: str | None = None) -> dict:
-    kitchens = consenting_kitchens(db, supplier_id)
-    names = {k["_id"]: k.get("name") for k in db.kitchens.find({"_id": {"$in": kitchens}}, {"name": 1})} if kitchens else {}
-    lo = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
-    hi = datetime.combine(end, datetime.max.time(), tzinfo=timezone.utc)
-    query = {"meta.kitchen_id": {"$in": kitchens}, "ts": {"$gte": lo, "$lte": hi}}
-    if product:
-        query["meta.product_id"] = str(product)
+    names, forecasts = supplier_forecasts(db, supplier_id, start, end, product)
     total: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     parts: dict[tuple[str, str], dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
     unit: dict[str, str] = {}
-    for row in db.forecasts.find(query) if kitchens else []:
+    for row in forecasts:
         need = Decimal(str(row["need"]))
         if need <= 0:
             continue
-        key = (row["meta"]["product_id"], row["ts"].date().isoformat())
+        key = (row["product_id"], row["day"])
         total[key] += need
-        parts[key][row["meta"]["kitchen_id"]] += need
+        parts[key][row["kitchen_id"]] += need
         unit[key[0]] = row["unit"]
 
-    products = sorted({pid for pid, _ in total})
-    docs = {d["_id"]: d for d in db.products.find({"_id": {"$in": products}},
-                                                  {"names": 1, "units": 1, "sales_unit": 1, "net_content": 1})}
+    docs = product_docs(db, sorted({pid for pid, _ in total}))
     available: dict[tuple[str, str], Decimal | None] = {}
     for day in sorted({d for _, d in total}):
         ids = [pid for pid, d in total if d == day]
@@ -90,7 +82,7 @@ def supplier_demand(db, valio, supplier_id: str, start: date, end: date, product
             "suggested_buy": None if shortage is None else _q(shortage.to_integral_value(ROUND_CEILING)),
         })
     return {"supplier_id": supplier_id, "from": start.isoformat(), "to": end.isoformat(),
-            "kitchens_sharing": len(kitchens), "rows": rows}
+            "kitchens_sharing": len(names), "rows": rows}
 
 
 def mount_supplier(app, gw, principal) -> None:
