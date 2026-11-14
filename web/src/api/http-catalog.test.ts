@@ -187,13 +187,23 @@ describe("Products by code on the real gateway", () => {
     expect(found.map((product) => product.id)).toEqual(["400001", "463335"]);
   });
 
-  it("answers from the sample products while the gateway does not serve the route yet (#1172)", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    const sample = products.arlaUht1l.id;
-    // A gateway without the route: FastAPI's own 404, no `error` envelope.
+  // #1263: no sample rows any more. A 404 with no `error` envelope (a proxy mis-route) is an error.
+  it("fails on a 404 with no error envelope, never answers with sample products", async () => {
+    // FastAPI's own 404, no `error` envelope.
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 }));
-    const found = await createHttpApi("/api").getProducts([sample, "999999"]);
-    expect(found.map((product) => product.id)).toEqual([sample]);
+    await expect(createHttpApi("/api").getProducts([products.arlaUht1l.id])).rejects.toMatchObject({
+      code: "GATEWAY_ERROR",
+      status: 404,
+    });
+  });
+
+  it("fails when the gateway cannot be reached, never answers with sample products", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    await expect(createHttpApi("/api").getProducts([products.arlaUht1l.id])).rejects.toMatchObject({
+      code: "NETWORK",
+    });
   });
 
   it("still fails on a 404 the gateway names (the route is served)", async () => {

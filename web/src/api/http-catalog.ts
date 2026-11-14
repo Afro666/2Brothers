@@ -181,23 +181,8 @@ function gatewayFilters(filters: ProductSearchFilters): Json {
   return out;
 }
 
-/**
- * A 404 without the gateway's `error` envelope is the framework's "no such route": a gateway
- * from before PR #1172 does not serve `GET /catalog/products`. A named 404 means the route exists.
- */
-function routeNotServed(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 404 && error.code === "GATEWAY_ERROR";
-}
-
-/**
- * Catalog search and products by code, on the gateway. `sampleProducts` answers `getProducts`
- * while the gateway does not serve its route yet, so the screens keep the sample rows they had.
- */
-export function createCatalogHttp(
-  call: GatewayCall,
-  kitchen: string,
-  sampleProducts?: Api["getProducts"],
-): CatalogApi {
+/** Catalog search and products by code, on the gateway. A failed call is an error, never sample rows (#1263). */
+export function createCatalogHttp(call: GatewayCall, kitchen: string): CatalogApi {
   return {
     async searchProducts(query, filters = {}) {
       const trimmed = query.trim();
@@ -219,16 +204,9 @@ export function createCatalogHttp(
       for (let start = 0; start < unique.length; start += IDS_PER_CALL) {
         groups.push(unique.slice(start, start + IDS_PER_CALL));
       }
-      let answers: unknown[];
-      try {
-        answers = await Promise.all(
-          groups.map((group) => call(`${kitchen}/catalog/products?ids=${group.map(encodeURIComponent).join(",")}`)),
-        );
-      } catch (error) {
-        if (!sampleProducts || !routeNotServed(error)) throw error;
-        console.warn("The gateway does not serve GET /catalog/products yet (#1172): sample products shown.");
-        return sampleProducts(unique);
-      }
+      const answers = await Promise.all(
+        groups.map((group) => call(`${kitchen}/catalog/products?ids=${group.map(encodeURIComponent).join(",")}`)),
+      );
       return answers.flatMap(mapRows);
     },
   };

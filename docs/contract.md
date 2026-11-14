@@ -500,8 +500,8 @@ with `allergen_strictness`, `require_labels`, `temperature`), and does not call 
 query with no filter. With the switch "Search by meaning (Atlas Vector Search)" on, it also
 sends `mode: "hybrid"`; with it off it sends no `mode`. Each row shows its `matched_by`, and
 `meaning_unavailable: true` shows a line that the words were used. `getProducts` reads `GET /v1/kitchens/{kitchen_id}/catalog/products?ids=`
-in groups of 200; while the gateway does not serve that route (a 404 with no `error` envelope,
-before #1172), it answers from the sample products as it did before. A named 404 is an error. Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
+in groups of 200. Any failed call (a 404 with or without the `error` envelope, a network
+error) is an error, never sample rows (#1263). Both map a row with `mapCatalogProduct` (`web/src/api/http-catalog.ts`):
 `allergen_data_known: false` is `allergens: null` (unknown), never an empty list.
 
 ### Stored rows: order, approval, audit entry
