@@ -77,6 +77,15 @@ describe("Supplier offers on the real gateway", () => {
     expect(calls.map((call) => call.route)).toEqual([`GET ${K}/supplier-offers`]);
   });
 
+  it("skips a row it cannot read and still lists the open offer", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    gateway({ [`GET ${K}/supplier-offers`]: () => ({ offers: [{ ...OFFER, offer_id: "old", status: "PAID" }, OFFER] }) });
+    const offers = await createHttpApi("/api").listSupplierOffers();
+    expect(offers.map((offer) => [offer.id, offer.status])).toEqual([["5f0c", "OPEN"]]);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
   it("fails when the gateway does not serve the route, instead of answering from the mock", async () => {
     gateway({});
     await expect(createHttpApi("/api").listSupplierOffers()).rejects.toMatchObject({ code: "NO_ROUTE" });
