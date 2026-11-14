@@ -34,6 +34,11 @@ class ReviewSecurityTests(unittest.TestCase):
             def fake_cli(cmd, **kwargs):
                 self.assertTrue(Path(kwargs['env']['CODEX_HOME']).is_dir())
                 self.assertNotIn('GH_TOKEN', kwargs['env'])
+                self.assertNotIn('OPENAI_API_KEY', kwargs['env'])
+                self.assertNotIn(key, cmd)
+                if 'login' in cmd:
+                    self.assertEqual(kwargs['input'], key)
+                    return subprocess.CompletedProcess(cmd, 0, stdout=key, stderr=key)
                 self.assertIn('shell_tool', cmd)
                 self.assertIn('read-only', cmd)
                 self.assertNotEqual(Path(kwargs['cwd']), Path.cwd())

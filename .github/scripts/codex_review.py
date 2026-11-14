@@ -66,7 +66,20 @@ def review(folder):
         home = Path(working) / 'home'
         home.mkdir()
         env = {k: os.environ[k] for k in ('PATH', 'HOME', 'SystemRoot') if k in os.environ}
-        env.update(OPENAI_API_KEY=key, CODEX_HOME=str(home))
+        env.update(CODEX_HOME=str(home))
+        # The OpenAI provider requires CLI login; merely setting OPENAI_API_KEY
+        # does not authenticate this CLI version. stdin avoids argv/log exposure.
+        try:
+            login = subprocess.run(['codex', 'login', '--with-api-key', '-c',
+                                    'cli_auth_credentials_store="file"'],
+                                   cwd=working, env=env, input=key, text=True,
+                                   capture_output=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            login = None
+        if login is None or login.returncode:
+            (folder / 'comment.md').write_text(heading + 'Unavailable: private CLI authentication setup failed. No model review ran.\n', encoding='utf-8')
+            print('Private CLI authentication setup failed; diagnostics suppressed.')
+            return
         output = Path(working) / 'reply.md'
         cmd = ['codex', 'exec', '--ignore-user-config', '--skip-git-repo-check',
                '--ephemeral', '--sandbox', 'read-only', '--disable', 'shell_tool',
