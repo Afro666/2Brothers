@@ -1,7 +1,32 @@
 import { describe, expect, it } from "vitest";
 
-import { mapAddable, mapApproval, mapAudit, mapOrder } from "@/api/gateway-map";
+import { mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions } from "@/api/gateway-map";
 import { addable, auditEvents, placedOrder, proposal } from "@/test/gateway-fixtures";
+
+describe("mapPermissions", () => {
+  it("maps the gateway matrix, keeps the rule, and shows an unknown audit kind as other", () => {
+    const body = {
+      alone: [{ action: "Search the catalog", audit_kind: "search", rule: "Read-only search." }],
+      person: [{ action: "Every order", audit_kind: "approval", rule: "An approver says yes." }],
+      never: [
+        { action: "Place an order nobody approved", audit_kind: "order", rule: "403 NEEDS_APPROVAL." },
+        { action: "Act for another kitchen", audit_kind: "token_created", rule: "403 KITCHEN_SCOPE." },
+      ],
+    };
+    expect(mapPermissions(body)).toEqual({
+      alone: [{ action: "Search the catalog", auditKind: "search", rule: "Read-only search." }],
+      person: [{ action: "Every order", auditKind: "approval", rule: "An approver says yes." }],
+      never: [
+        { action: "Place an order nobody approved", auditKind: "order", rule: "403 NEEDS_APPROVAL." },
+        { action: "Act for another kitchen", auditKind: "other", rule: "403 KITCHEN_SCOPE." },
+      ],
+    });
+  });
+
+  it("refuses a body without the three groups", () => {
+    expect(() => mapPermissions({ alone: [] })).toThrow(/unexpected shape/);
+  });
+});
 
 describe("mapApproval", () => {
   it("maps a proposal to the approval card, with who asked and when from the audit log", () => {

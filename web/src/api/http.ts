@@ -1,4 +1,4 @@
-import { type Json, mapAddable, mapApproval, mapAudit, mapOrder, rows } from "@/api/gateway-map";
+import { type Json, mapAddable, mapApproval, mapAudit, mapOrder, mapPermissions, rows } from "@/api/gateway-map";
 import { mapMoney } from "@/api/map";
 import { forecastWindow, mapForecastAccuracy } from "@/api/map-forecast";
 import { createMockApi } from "@/api/mock";
@@ -155,6 +155,9 @@ export function createHttpApi(baseUrl: string): Api {
         get(`${kitchen}/forecast?from=${w.aheadFrom}&to=${w.aheadTo}`),
       ]);
       return mapForecastAccuracy(accuracy, forecast);
+    },
+    async getPermissions() {
+      return mapPermissions(await get(`${kitchen}/permissions`));
     },
     async submitChefRequest(request) {
       const ask = { text: request.text.trim(), requested_date: request.deliveryDate };

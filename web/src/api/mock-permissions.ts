@@ -1,7 +1,8 @@
 import type { Api } from "@/api/types";
 
 /**
- * The gateway serves neither route yet, so the screen runs on these values.
+ * The mock API runs on these values. Against the gateway, `getPermissions` comes from
+ * GET /permissions (api/http.ts); the gateway does not serve auto-approve learning yet.
  * The thresholds are the ones in the earned auto-approve issue (#299):
  * 4 weeks, 20 decisions, at most 10 % of them edited.
  */
