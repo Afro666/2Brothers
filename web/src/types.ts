@@ -150,6 +150,8 @@ export interface OrderReceipt {
   total: number | null;
   /** `supplier_outcome` claim: `NOT_SENT` today; null when the claim is absent. */
   supplierOutcome: string | null;
+  /** `supplier_note` claim: the gateway's one-line explanation; null when absent or empty. */
+  supplierNote: string | null;
 }
 
 export type OrderSendOutcome = "CONFIRMED" | "NOT_SENT" | "UNCONFIRMED" | "SENT_READ_FAILED";
