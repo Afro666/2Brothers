@@ -10,6 +10,9 @@ _Z = {Decimal("0.90"): 1.2816, Decimal("0.95"): 1.6449, Decimal("0.975"): 1.9600
       Decimal("0.98"): 2.0537, Decimal("0.99"): 2.3263}
 
 
+_CATEGORIES = ("fresh_dairy", "vegetables", "meat", "fish", "frozen", "dry", "other")
+
+
 def _default_cover() -> dict[str, int]:
     return {"fresh_dairy": 4, "vegetables": 4, "meat": 3, "fish": 2, "frozen": 21,
             "dry": 30, "other": 14}
@@ -43,15 +46,25 @@ class KitchenParams:
             return base
         changes: dict = {}
         if "service_level" in data:
-            changes["service_level"] = {**base.service_level,
-                                        **{k: Decimal(str(v)) for k, v in data["service_level"].items()}}
+            levels = {k: Decimal(str(v)) for k, v in data["service_level"].items()}
+            for k, level in levels.items():
+                if not Decimal(0) < level < Decimal(1):
+                    raise ValueError(f"service_level {k} must be a fraction above 0 and below 1 "
+                                     f"(97.5 % is 0.975), got {level}")
+            changes["service_level"] = {**base.service_level, **levels}
         if "max_cover_days" in data:
-            changes["max_cover_days"] = {**base.max_cover_days,
-                                         **{k: int(v) for k, v in data["max_cover_days"].items()}}
+            cover = {k: int(v) for k, v in data["max_cover_days"].items()}
+            for k, days in cover.items():
+                if k not in _CATEGORIES:
+                    raise ValueError(f"max_cover_days key {k!r} is not one of "
+                                     f"{', '.join(_CATEGORIES)}")
+                if days < 1:
+                    raise ValueError(f"max_cover_days {k} must be at least 1, got {days}")
+            changes["max_cover_days"] = {**base.max_cover_days, **cover}
         if "stockout_cap" in data:
             cap = float(data["stockout_cap"])
-            if cap < 1:
-                raise ValueError("stockout_cap must be at least 1")
+            if not 1 <= cap <= 3:
+                raise ValueError(f"stockout_cap must be from 1 to 3, got {cap}")
             changes["stockout_cap"] = cap
         for key in ("budget_warning_order_eur", "budget_warning_week_eur"):
             if key in data:
