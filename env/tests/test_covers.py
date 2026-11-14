@@ -105,6 +105,16 @@ class CoversTest(unittest.TestCase):
             self.assertIn(".[covers]", logged.output[0])
             self.assertGreater(model(self.start), 0)
 
+    def test_demo_accepts_a_model_without_requires(self):
+        class Bare:
+            name = "bare"
+
+            def __init__(self, kitchen, signals=None):
+                self.kitchen = kitchen
+
+        with patch.dict(MODELS, bare=Bare), patch.dict(SELECTED, hotel="bare"):
+            self.assertIsInstance(demo_forecaster(self.kitchen), Bare)
+
     def test_every_model_declares_deps_that_the_covers_extra_installs(self):
         import re
         extra = Path(__file__).resolve().parents[2].joinpath("pyproject.toml").read_text(encoding="utf-8")
