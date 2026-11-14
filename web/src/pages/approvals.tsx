@@ -19,7 +19,7 @@ import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import { LiveConnectionLabel, useLiveEvents } from "@/lib/live-events";
 import { useSession } from "@/lib/session";
-import { getTelegramWebApp } from "@/lib/telegram";
+import { closeTelegram, inTelegram } from "@/lib/telegram";
 import { OpenDemoNote } from "@/components/purchasing/open-demo-note";
 import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
 import { LiveApprovalsPage } from "@/pages/live-approvals";
@@ -103,11 +103,10 @@ function ApiApprovalsPage() {
           testId: "approval-toast",
         });
       }
-      const telegram = getTelegramWebApp();
       // Inside Telegram the Mini App closes after the person has seen the result.
-      if (telegram) {
+      if (inTelegram()) {
         window.clearTimeout(closeTimer.current);
-        closeTimer.current = window.setTimeout(() => telegram.close(), 2000);
+        closeTimer.current = window.setTimeout(closeTelegram, 2000);
       }
     } finally {
       // Also after a refusal: when the total moved, the card must show the new one before asking again.
