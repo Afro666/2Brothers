@@ -28,7 +28,7 @@ from gateway import options
 from gateway.decision import decision_summary
 from gateway.partial_fill import partial_out
 from gateway.suppliers import VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers
-from store import audit, orders, recalls
+from store import audit, orders, recalls, supplier_offers
 from store.audit import canonical
 from store.history import current_stock
 
@@ -82,6 +82,7 @@ class Gateway:
         db.proposals.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
         db.orders.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
         db.approvals.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
+        supplier_offers.ensure_indexes(db)      # a supplier's suggestions to a kitchen (#374)
 
     # ---- helpers ------------------------------------------------------------------
 
@@ -436,7 +437,9 @@ class Gateway:
                 "window": {"from": start.isoformat(), "to": end.isoformat()}, "problems": problems,
                 "idempotency_key": body.get("idempotency_key")}
 
-    def create_proposal(self, kitchen_id: str, body: dict, actor: str) -> dict:
+    def create_proposal(self, kitchen_id: str, body: dict, actor: str, *, auto_approve: bool = True) -> dict:
+        """`auto_approve=False`: this proposal always waits for a person, whatever the kitchen's
+        auto-approve rule says (a proposal made from a supplier's offer, #374)."""
         planned = False
         if body.get("from") and body.get("to") and not body.get("product_ids") and not body.get("text"):
             if not body.get("idempotency_key"):
@@ -488,7 +491,7 @@ class Gateway:
         try:
             self.db.proposals.insert_one(doc)
         except DuplicateKeyError:
-            return self.create_proposal(kitchen_id, body, actor)
+            return self.create_proposal(kitchen_id, body, actor, auto_approve=auto_approve)
         if sim["lines"]:
             approval, _ = orders.request_approval(
                 self.db, kitchen_id=kitchen_id, idempotency_key=f"proposal:{doc['_id']}",
@@ -501,7 +504,8 @@ class Gateway:
                     verdict=sim["mandate"]["verdict"])
         self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], summary=self._summary(request, sim)["text"])
-        self._maybe_auto_approve(kitchen_id, doc, sim, request)
+        if auto_approve:
+            self._maybe_auto_approve(kitchen_id, doc, sim, request)
         return self._proposal_out(self.db.proposals.find_one({"_id": doc["_id"]}) or doc)
 
     def _maybe_auto_approve(self, kitchen_id: str, doc: dict, sim: dict, request: dict) -> None:

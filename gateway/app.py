@@ -562,6 +562,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     mount_drift(app, gw, principal)
     from gateway.supplier_routes import mount_supplier   # the wholesaler's demand view (#33)
     mount_supplier(app, gw, principal)
+    from gateway.supplier_offers import mount_supplier_offers   # the selling agent's suggestions (#374)
+    mount_supplier_offers(app, gw, principal, body)
 
     # Trust (#711): audit chain verify, the tamper demo, the live event stream.
     from gateway.trust_routes import mount_trust
