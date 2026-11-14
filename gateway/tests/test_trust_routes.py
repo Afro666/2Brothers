@@ -96,6 +96,45 @@ def test_verify_auth(env):
     assert r.status_code == 403 and code(r) == "SCOPE_REQUIRED"
 
 
+# ---- the newest entries with their hashes ----------------------------------------------
+
+def test_chain_rows_are_this_kitchens_newest_entries_oldest_first(env):
+    client, db, _ = env
+    r = client.get(DEMO + "/audit/chain?limit=5", headers=AGENT)
+    assert r.status_code == 200, r.text
+    entries = r.json()["entries"]
+    assert [entry["seq"] for entry in entries] == [1, 3]             # seq 2 is another kitchen's
+    stored = db.audit_log.find_one({"_id": 3})
+    assert entries[1] == {"seq": 3, "prev_hash": stored["prev_hash"], "hash": stored["hash"],
+                          "event": {"seq": 3, "event_id": "e2", "kind": "proposal_created",
+                                    "actor": "buyer", "at": NOW.isoformat()}}
+    # The events are the ones GET /audit answers.
+    assert [entry["event"] for entry in entries] == client.get(DEMO + "/audit", headers=AGENT).json()["events"]
+    assert [e["seq"] for e in client.get(DEMO + "/audit/chain?limit=1", headers=AGENT).json()["entries"]] == [3]
+    assert len(client.get(DEMO + "/audit/chain", headers=AGENT).json()["entries"]) == 2
+
+
+def test_chain_rows_show_the_tampered_entry_with_its_old_hash(env):
+    client, _, _ = env
+    before = client.get(DEMO + "/audit/chain", headers=AGENT).json()["entries"][-1]
+    client.post(DEMO + "/audit/demo-tamper", headers=HUMAN, json={"idempotency_key": "t1"})
+    entries = client.get(DEMO + "/audit/chain", headers=AGENT).json()["entries"]
+    assert [entry["seq"] for entry in entries] == [1, 3, 4]
+    assert entries[1]["hash"] == before["hash"] and entries[1]["event"]["tampered"] == trust.TAMPER_NOTE
+    assert entries[2]["event"]["kind"] == "audit_demo_tamper" and entries[2]["prev_hash"] == before["hash"]
+
+
+def test_chain_rows_limit_and_auth(env):
+    client, db, _ = env
+    for bad in ("0", "101", "-1", "abc", "1.5", ""):
+        r = client.get(DEMO + "/audit/chain?limit=" + bad, headers=AGENT)
+        assert r.status_code == 422 and code(r) == "INVALID_REQUEST", bad
+    assert client.get(DEMO + "/audit/chain").status_code == 401
+    made = tokens.create(db, "real-kitchen", "reader", ["kitchen:read"], "aron")
+    r = client.get(DEMO + "/audit/chain", headers={"Authorization": "Bearer " + made["token"]})
+    assert r.status_code == 403 and code(r) == "KITCHEN_SCOPE"
+
+
 # ---- tamper and restore ---------------------------------------------------------------
 
 def test_tamper_then_restore_round_trip(env):

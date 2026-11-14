@@ -2,6 +2,8 @@
 live event stream". Thin wrappers over `store.trust`.
 
 - GET  /v1/kitchens/{kitchen_id}/audit/verify        (`kitchen:read`)
+- GET  /v1/kitchens/{kitchen_id}/audit/chain?limit=  (`kitchen:read`): the newest entries
+  with their chain hashes, for the Trust screen
 - POST /v1/kitchens/{kitchen_id}/audit/demo-tamper   (a person, role approver; demo kitchen only)
 - POST /v1/kitchens/{kitchen_id}/audit/demo-restore  (the same)
 - GET  /v1/kitchens/{kitchen_id}/events              (`kitchen:read`, server-sent events)
@@ -42,6 +44,25 @@ _DONE = object()
 
 
 # ---- verify, tamper, restore ----------------------------------------------------------
+
+CHAIN_DEFAULT, CHAIN_MAX = 20, 100
+
+
+def chain_rows(gw, kitchen_id: str, limit: str | None) -> dict:
+    """This kitchen's newest `limit` audit entries with their place in the hash chain,
+    oldest first. `event` is the entry as `GET /audit` answers it. The hashes are the
+    stored ones: a tampered entry still shows its old hash, and `verify` finds the break."""
+    try:
+        count = CHAIN_DEFAULT if limit is None else int(limit)
+    except ValueError:
+        count = 0
+    if not 1 <= count <= CHAIN_MAX:
+        raise GatewayError(422, "INVALID_REQUEST", f"limit: a whole number from 1 to {CHAIN_MAX}")
+    newest = gw.db.audit_log.find({"server.kitchen_id": kitchen_id}).sort("_id", -1).limit(count)
+    return {"entries": [{"seq": entry["seq"], "prev_hash": entry["prev_hash"], "hash": entry["hash"],
+                         "event": _document(gw, "audit_log", entry)}
+                        for entry in reversed(list(newest))]}
+
 
 def _key(body: dict) -> str:
     key = body.get("idempotency_key")
@@ -267,6 +288,11 @@ def mount_trust(app: FastAPI, gw, principal, body) -> None:
     def audit_verify(kitchen_id: str, who=Depends(principal)):
         who.need("kitchen:read", kitchen_id)
         return trust.verify(gw().db, kitchen_id)
+
+    @app.get(k + "/audit/chain")
+    def audit_chain(kitchen_id: str, request: Request, who=Depends(principal)):
+        who.need("kitchen:read", kitchen_id)
+        return chain_rows(gw(), kitchen_id, request.query_params.get("limit"))
 
     @app.post(k + "/audit/demo-tamper")
     async def audit_demo_tamper(kitchen_id: str, request: Request, who=Depends(principal)):

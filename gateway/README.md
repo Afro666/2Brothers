@@ -217,6 +217,9 @@ The aggregation needs Atlas or MongoDB 7; the tests replace it
 (docs/contract.md, "Trust: audit verification and the live event stream"):
 
 - `GET /v1/kitchens/{k}/audit/verify` (`kitchen:read`): the chain check.
+- `GET /v1/kitchens/{k}/audit/chain?limit=` (`kitchen:read`): this kitchen's newest entries
+  (1 to 100, default 20), oldest first, each `{seq, prev_hash, hash, event}`; `event` is the
+  `GET /audit` entry. The Trust screen shows these lines.
 - `POST /v1/kitchens/{k}/audit/demo-tamper` and `.../audit/demo-restore`: a person with
   the role `approver`, the synthetic `demo-kitchen` only (403 `DEMO_ONLY` otherwise). Each
   one that changes a row writes an audit entry (`audit_demo_tamper`, `audit_demo_restore`)
