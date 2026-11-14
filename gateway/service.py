@@ -822,7 +822,7 @@ class Gateway:
         filters = dict(filters or {})
         plant = plant_drink(text)
         if plant is not None:
-            return self._plant_drinks(rows, plant, filters, kitchen_id)
+            return self._plant_drinks(rows, plant, filters, kitchen_id, text)
         now = self.now()
         stale = self._kinds is None or self._kinds_at is None or now - self._kinds_at >= KINDS_TTL
         backing_off = self._kinds_failed_at is not None and now - self._kinds_failed_at < KINDS_RETRY
@@ -859,21 +859,28 @@ class Gateway:
         return of_kind(merged, categories, unit)
 
     def _plant_drinks(self, rows: list[dict], plant: str, filters: dict,
-                      kitchen_id: str | None) -> list[dict]:
+                      kitchen_id: str | None, text: str = "") -> list[dict]:
         """#1700: a text that names a plant drink ("20 L almond milk", "kauramaitoa") keeps
         only the plant drinks of that plant (gateway/kind.py), never cow's milk, and has no
         fallback: when none is found the answer is empty and the caller says so. The plant
         drinks are searched too, with the catalog's own words ("almond drink"), so a Finnish
-        or Swedish text finds them. A failed search adds nothing; the rows are still narrowed."""
+        or Swedish text finds them. A failed search adds nothing; the rows are still narrowed.
+        #1748: "coconut milk" is also the can for a curry: searched as "coconut milk" in any
+        category too, and kept when its name holds coconut milk."""
         from gateway import catalog_search
         from gateway.candidates import SEARCH_LIMIT
-        from gateway.kind import PLANT_DRINK_CATEGORY, is_plant_drink, plant_query
+        from gateway.kind import PLANT_DRINK_CATEGORY, cooking_milk, is_plant_drink, plant_query
         merged, seen = list(rows), {r.get("product_id") for r in rows}
+        cooking = cooking_milk(text, plant)
+        searches = []
         if filters.get("category") in (None, PLANT_DRINK_CATEGORY):
+            searches.append((plant_query(plant), {**filters, "category": PLANT_DRINK_CATEGORY}))
+        if cooking:
+            searches.append((f"{plant} milk", filters))
+        for words, where in searches:
             try:
-                more, _ = catalog_search.search(
-                    self.db, plant_query(plant), {**filters, "category": PLANT_DRINK_CATEGORY},
-                    SEARCH_LIMIT, kitchen_id, injected=self._search, hybrid_ok=False)
+                more, _ = catalog_search.search(self.db, words, where, SEARCH_LIMIT, kitchen_id,
+                                                injected=self._search, hybrid_ok=False)
             except Exception:
                 log.warning("plant drink search failed", exc_info=True)
                 more = []
@@ -881,7 +888,7 @@ class Gateway:
                 if row.get("product_id") not in seen:
                     seen.add(row.get("product_id"))
                     merged.append(row)
-        return [r for r in merged if is_plant_drink(r, plant)]
+        return [r for r in merged if is_plant_drink(r, plant, cooking)]
 
     def _not_the_plant_drink(self, kitchen_id: str, request: dict) -> dict[str, str]:
         """#1700: {product_id: reason} for the products that are not the plant drink the
@@ -889,7 +896,7 @@ class Gateway:
         request and the codes were picked for it: the Buyer's offer (`need_id`) and the
         parser path. The Buyer may quote any code it found; cow's milk must never answer
         "almond milk". A body with its own codes (a supplier offer, a client) is left as asked."""
-        from gateway.kind import is_plant_drink, not_asked, plant_drink
+        from gateway.kind import cooking_milk, is_plant_drink, not_asked, plant_drink
         if not (request.get("need_id") or request.get("made_by") == "parser") or request.get("refusal"):
             return {}
         plant = plant_drink(request.get("text") or "")
@@ -898,7 +905,8 @@ class Gateway:
         from store.products import get_products
         ids = [str(pid) for pid in request.get("product_ids") or []]
         rows = {r["product_id"]: r for r in get_products(self.db, ids, kitchen_id)}
-        return {pid: not_asked(plant) for pid in ids if not is_plant_drink(rows.get(pid), plant)}
+        cooking = cooking_milk(request.get("text") or "", plant)       # #1748: the can too
+        return {pid: not_asked(plant) for pid in ids if not is_plant_drink(rows.get(pid), plant, cooking)}
 
     # ---- kitchen side ---------------------------------------------------------------
 

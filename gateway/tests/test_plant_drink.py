@@ -2,6 +2,8 @@
 as the product word and picked the dairy milk category. A plant drink is its own kind
 (gateway/kind.py `plant_drink`), on the parser path, the Buyer's shortlist and every quote."""
 
+import sys
+
 from fastapi.testclient import TestClient
 import mongomock
 import pytest
@@ -191,3 +193,72 @@ def test_the_parser_path_never_quotes_cows_milk_for_almond_milk_and_says_why(gat
     assert [(e["product_id"], e["reason"]) for e in p["excluded"]] == [
         ("462775", "not the almond drink asked: no other kind of product is proposed in its place")]
     assert p["mandate"]["reasons"][0].startswith("not the almond drink asked")
+
+
+# #1748: in a kitchen "coconut milk" is mostly the can for a curry, not a drink. Its catalog
+# category is not the plant drinks (10402); the code here stands for any other category.
+CAN = [product("cc0", "13305", "Santa Maria Coconut milk 400 ml", "Santa Maria Kookosmaito 400 ml",
+               unit="L", value=0.4)]
+COCONUT_DRINK = [product("cd0", "10402", "Alpro Coconut drink 1L", "Alpro Kookosjuoma 1L", unit="L")]
+
+
+@pytest.fixture()
+def kitchen(monkeypatch, gateway):
+    """The gateway's catalog with a can of coconut milk and a coconut drink."""
+    client, gw = gateway
+    monkeypatch.setattr(sys.modules[__name__], "CATALOG", CATALOG + CAN + COCONUT_DRINK)
+    gw.db.products.insert_many([{"_id": r["product_id"], **{k: v for k, v in r.items() if k != "product_id"}}
+                                for r in CAN + COCONUT_DRINK])
+    return client, gw
+
+
+@pytest.mark.parametrize("text,query", [
+    ("coconut milk 400 ml for the curry", "coconut milk"),
+    ("8 L coconut milk by Monday", "coconut milk"),
+    ("8 l kookosmaitoa maanantaiksi", "kookosmaitoa"),      # Finnish: the word search finds nothing
+    ("8 l kokosmjölk till måndag", "kokosmjölk"),           # Swedish
+])
+def test_coconut_milk_for_a_curry_finds_the_can(kitchen, text, query):
+    client, _ = kitchen
+    found = {p["product_id"] for p in shortlist(client, text, query)["products"]}
+    assert "cc0" in found, found
+    assert found <= {"cc0", "cd0", "pd5"}, found            # never cow's milk, never the hand wash
+
+
+@pytest.mark.parametrize("text,query", [
+    ("8 L coconut drink by Monday", "coconut drink"),
+    ("8 l kookosjuomaa maanantaiksi", "kookosjuomaa"),
+])
+def test_a_coconut_drink_is_only_the_drink(kitchen, text, query):
+    client, _ = kitchen
+    found = {p["product_id"] for p in shortlist(client, text, query)["products"]}
+    assert found == {"cd0", "pd5"}, found
+
+
+def test_a_quote_for_coconut_milk_keeps_the_can_and_leaves_cows_milk_out(kitchen):
+    client, _ = kitchen
+    n = need(client, "8 L coconut milk by Monday")
+    offer = client.post("/tools/get_offer", headers=AGENT, json={
+        "need_id": n["need_id"], "product_ids": ["cc0", "mi0"]}).json()
+    reasons = {e["product_id"]: e["reason"] for e in offer["excluded"]}
+    assert reasons.get("mi0", "").startswith("not the coconut"), reasons
+    assert not reasons.get("cc0", "").startswith("not the coconut"), reasons
+
+
+def test_the_parser_path_finds_the_can_for_coconut_milk(kitchen):
+    _, gw = kitchen
+    read = gw._from_text("demo-kitchen", {"text": "8 L coconut milk by Monday", "idempotency_key": "cm"})
+    assert "cc0" in read["product_ids"], read["product_ids"]
+
+
+def test_only_coconut_milk_is_also_a_cooking_product():
+    from gateway.kind import cooking_milk
+    assert cooking_milk("coconut milk 400 ml for the curry", "coconut")
+    assert cooking_milk("8 l kookosmaitoa", "coconut") and cooking_milk("8 l kokosmjölk", "coconut")
+    assert not cooking_milk("8 L coconut drink", "coconut")
+    assert not cooking_milk("8 l kookosjuomaa", "coconut")
+    assert not cooking_milk("20 L almond milk", "almond")
+    assert is_plant_drink(CAN[0], "coconut", cooking=True)
+    assert not is_plant_drink(CAN[0], "coconut")
+    assert not is_plant_drink(MILK[0], "coconut", cooking=True)
+    assert not is_plant_drink(HAND_WASH[0], "coconut", cooking=True)

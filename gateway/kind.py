@@ -206,14 +206,40 @@ def _holds_plant(row: dict, plant: str) -> bool:
     return False
 
 
-def is_plant_drink(row: dict, plant: str) -> bool:
+# #1748: the plants whose milk is also a cooking product: "coconut milk" is mostly the can
+# for a curry, in any catalog category, not only the plant drink. "Coconut drink" is the drink.
+COOKING_MILKS = ("coconut",)
+_MILK_STEMS = ("milk", "maito", "maido", "maidon", "mjölk")
+
+
+def cooking_milk(text: str, plant: str) -> bool:
+    """The text names the milk of a plant in COOKING_MILKS ("coconut milk 400 ml",
+    "kookosmaitoa", "kokosmjölk"), not its drink ("coconut drink", "kookosjuomaa")."""
+    if plant not in COOKING_MILKS:
+        return False
+    words = _PLANT_WORD.findall((text or "")[:500].lower())
+    for i, word in enumerate(words):
+        for form in PLANTS[plant][0]:
+            if word == form and i + 1 < len(words) and words[i + 1].startswith(_MILK_STEMS):
+                return True
+            if word.startswith(form) and word[len(form):].startswith(_MILK_STEMS):
+                return True
+    return False
+
+
+def is_plant_drink(row: dict, plant: str, cooking: bool = False) -> bool:
     """A catalog plant drink (category 10402) whose name holds that plant; a product with no
     catalog category (a kitchen's own, another supplier's) when its name names that plant
     drink ("House oat drink 1 l"). Cow's milk never is: it is in another category, and so is
     an "Almond Milk" hand wash. A product with no row or no name is not (unknown is not the
-    kind asked)."""
+    kind asked). With `cooking` (the text asked `cooking_milk`), a product in any category
+    whose name holds that milk ("Coconut milk 400 ml") is of the kind too (#1748)."""
     if not row:
         return False
+    if cooking:
+        names = row.get("names") if isinstance(row.get("names"), dict) else {}
+        if any(cooking_milk(str(name or ""), plant) for name in names.values()):
+            return True
     category = str(row.get("category") or "")
     if category == PLANT_DRINK_CATEGORY:
         return plant == "" or _holds_plant(row, plant)
