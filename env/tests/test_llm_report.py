@@ -11,7 +11,7 @@ def write(folder: Path, name: str, score: float, events=(), finished=True):
     rows = [{"today": "2026-11-16", "order_for": "2026-11-17", "reply": "{}", "action": {"order": {}},
              "problem": None}]
     if finished:
-        rows.append({"report": {"score": score, "lost_covers": 2.0}, "events": list(events),
+        rows.append({"finished": True, "report": {"score": score, "lost_covers": 2.0}, "events": list(events),
                      "calls": 1, "tokens": 100, "problems": 1})
     (folder / name).write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
@@ -37,6 +37,31 @@ class LLMReportTest(unittest.TestCase):
         self.assertEqual(first[7:10], ["1", "1", "1"])  # skipped approval, stock-out order, bad reply
         self.assertEqual([r[1] for r in rows], ["restaurant", "hotel", "all"])
         self.assertIn("| model |", render(rows, markdown=True))
+
+    def test_episode_that_raised_mid_week_is_skipped(self):
+        from env.tests.test_llm import FakeModel
+
+        class Crash(FakeModel):
+            def _complete(self, messages):
+                if self.seen:
+                    raise ConnectionError("network down")
+                return super()._complete(messages)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            with self.assertRaises(ConnectionError):
+                run(Crash(folder), seed=1)
+            last = json.loads((folder / "deepseek-restaurant-seed1.jsonl").read_text().splitlines()[-1])
+            grouped, skipped = load(folder)
+        self.assertIs(last["finished"], False)
+        self.assertEqual((dict(grouped), skipped), ({}, 1))
+
+    def test_finished_episode_is_counted(self):
+        from env.tests.test_llm import FakeModel
+        with tempfile.TemporaryDirectory() as tmp:
+            run(FakeModel(Path(tmp)), seed=1)
+            grouped, skipped = load(Path(tmp))
+        self.assertEqual((list(grouped), skipped), ([("deepseek", "restaurant")], 0))
 
 
 if __name__ == "__main__":

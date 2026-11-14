@@ -3,7 +3,8 @@
     python -m env.llm_report                 # plain table from env/out/llm
     python -m env.llm_report --markdown      # GitHub table for env/README.md
 
-Reads `<model>-<kitchen>-seed<N>.jsonl` written by env/llm.py; skips unfinished runs.
+Reads `<model>-<kitchen>-seed<N>.jsonl` written by env/llm.py; skips unfinished runs
+(no last row with `finished: true`, e.g. an episode that raised mid-week).
 The reference score is recomputed per (kitchen, seed): the policy is deterministic.
 """
 import argparse
@@ -43,7 +44,7 @@ def load(folder: Path):
         if not m:
             continue
         rows = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
-        if not rows or "report" not in rows[-1]:
+        if not rows or rows[-1].get("finished") is not True or "report" not in rows[-1]:
             skipped += 1
             continue
         key = (m["kitchen"], int(m["seed"]))
