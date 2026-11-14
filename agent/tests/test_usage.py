@@ -125,6 +125,14 @@ def test_emit_skips_an_empty_meter_and_a_model_without_one(capsys):
     assert capsys.readouterr().err == ""
 
 
+def test_emit_never_raises_on_a_value_json_cannot_write(capsys):
+    meter = Meter()
+    meter.record("buyer", USAGE, 1.0)
+    emit(meter, run=object())
+    err = capsys.readouterr().err
+    assert err.startswith(MARK) and json.loads(err[len(MARK):])["roles"]["buyer"]["calls"] == 1
+
+
 def test_collect_sums_usage_lines_and_skips_other_log_lines():
     meter = Meter()
     meter.record("buyer", USAGE, 1.5)
