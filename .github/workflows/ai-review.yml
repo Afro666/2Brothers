@@ -2,7 +2,8 @@ name: ai-review
 
 # Opus reviews every PR. Blocking problems fail the check (the PR cannot merge).
 # Non-blocking improvements become issues:
-#   ai-fix -> the Opus fix agent (ai-fix.yml) starts at once and opens a PR
+#   ai-fix -> the Opus fix agent (ai-fix.yml) starts when this PR merges
+#             (ai-fix-after-merge.yml): before that, the code is not on main
 #   todo   -> assigned to the PR author (GitHub notifies them)
 # PRs from the fix agent (branch ai-fix/*) never create new issues: no loops.
 
@@ -86,14 +87,6 @@ jobs:
                (file:line, why, the fix), then links to the issues you created.
 
             5. Write `verdict.txt` in the repo root with exactly one word: PASS or BLOCK.
-
-      - name: Start the fix agent for ai-fix issues
-        if: always() && steps.facts.outputs.issues == 'yes'
-        run: |
-          [ -f fix_issues.txt ] || exit 0
-          grep -Eo '[0-9]+' fix_issues.txt | sort -u | while read -r n; do
-            gh workflow run ai-fix.yml -f issue="$n" && echo "fix agent started for #$n" || echo "could not start fix agent for #$n"
-          done
 
       - name: Hand a blocked fix-agent PR to a human
         if: always() && steps.facts.outputs.issues == 'no'

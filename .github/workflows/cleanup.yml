@@ -28,14 +28,13 @@ jobs:
             --jq '.[] | select(.headRefName | startswith("ai-fix/")) | select((.mergedAt | fromdateiso8601) > (now - 10800)) | "\(.number) \(.headRefName)"' |
           while read -r pr head; do
             issue=${head#ai-fix/}
-            if gh api "repos/$REPO/branches/$head" >/dev/null 2>&1; then
-              open=$(gh pr list -R "$REPO" --head "$head" --state open --json number --jq 'length')
-              if [ "$open" = "0" ]; then
-                gh api -X DELETE "repos/$REPO/git/refs/heads/$head" && echo "deleted branch $head (PR #$pr)"
-              fi
+            # a new fix run for the same issue may have an open PR on this head (#42)
+            open=$(gh pr list -R "$REPO" --head "$head" --state open --json number --jq 'length')
+            if [ "$open" = "0" ] && gh api "repos/$REPO/branches/$head" >/dev/null 2>&1; then
+              gh api -X DELETE "repos/$REPO/git/refs/heads/$head" && echo "deleted branch $head (PR #$pr)"
             fi
             state=$(gh issue view "$issue" -R "$REPO" --json state --jq .state 2>/dev/null || echo NONE)
-            if [ "$state" = "OPEN" ]; then
+            if [ "$state" = "OPEN" ] && [ "$open" = "0" ]; then
               gh issue close "$issue" -R "$REPO" -c "Fixed by #$pr (merged)." && echo "closed issue #$issue"
             fi
           done
