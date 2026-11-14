@@ -148,7 +148,8 @@ def create(gw, supplier_id: str, body: dict, sender: str) -> dict:
     # The catalog is Valio's: no other supplier has a catalog product to offer yet.
     if supplier_id != VALIO or product is None or product.get("source", "valio") == "own":
         raise GatewayError(404, "PRODUCT_NOT_FOUND", "product_id is not a catalog product of this supplier")
-    new_id = offers.offer_id(supplier_id, kitchen_id, product_id, fields["requested_date"])
+    round_ = offers.round_of(gw.db, kitchen_id)        # a demo reset starts a new round
+    new_id = offers.offer_id(supplier_id, kitchen_id, product_id, fields["requested_date"], round_)
     same = offers.by_id(gw.db, new_id)
     if same is not None:                        # one offer per supplier, kitchen, product and date
         return _out(same, today)
@@ -167,7 +168,7 @@ def create(gw, supplier_id: str, body: dict, sender: str) -> dict:
         "_id": new_id, "supplier_id": supplier_id, "supplier_name": supplier.get("name") or supplier_id,
         **fields, "product_name": _name(product, product_id),
         "replaces_product_name": _name(rows.get(fields["replaces_product_id"]), fields["replaces_product_id"]),
-        "quantity": demand[0], "unit": demand[1], "status": offers.OPEN,
+        "quantity": demand[0], "unit": demand[1], "status": offers.OPEN, "round": round_,
         "allergen_data_known": product.get("allergen_data_known") is True,
         "idempotency_key": key, "payload_hash": payload_hash, "sent_by": sender,
         "created_at": gw.now().isoformat(), "proposal_id": None, "decided_by": None, "decided_at": None})

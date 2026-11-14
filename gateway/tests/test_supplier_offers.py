@@ -72,6 +72,32 @@ def code(response):
     return response.status_code, response.json().get("error", {}).get("code")
 
 
+def test_a_new_round_lets_the_same_offer_come_again_as_a_new_offer(w):
+    """A demo uses the one open offer up, and a decided offer is final. A new round (the demo
+    reset) gives the same supplier, product and day a new offer_id: its accept makes a new
+    proposal, not a replay of the old one, and the old offer stays as it was."""
+    from store import supplier_offers as offers
+    first = w.offer().json()
+    assert w.client.post(f"{K1}/{first['offer_id']}/accept", headers=HUMAN).json()["proposal_status"] == "READY"
+    assert w.offer(key="o2").json()["offer_id"] == first["offer_id"]        # same round: the stored one
+    assert offers.next_round(w.db, "K1") == 1
+    again = w.offer(key="o2-round-1").json()
+    assert again["offer_id"] != first["offer_id"] and again["status"] == "OPEN"
+    out = w.client.post(f"{K1}/{again['offer_id']}/accept", headers=HUMAN).json()
+    assert out["proposal_status"] == "READY" and out["proposal_id"] != first.get("proposal_id")
+    assert w.db.proposals.count_documents({"kitchen_id": "K1"}) == 2
+    kinds = w.kinds()
+    assert kinds.count("supplier_offer_received") == 2 and kinds.count("supplier_offer_accepted") == 2
+    assert w.db.supplier_offers.find_one({"_id": first["offer_id"]})["status"] == "ACCEPTED"
+    assert w.db.supplier_offers.find_one({"_id": again["offer_id"]})["round"] == 1
+
+
+def test_the_first_round_keeps_the_offer_ids_that_already_exist():
+    from store import supplier_offers as offers
+    assert offers.offer_id("s", "k", "p", "2026-11-16") == offers.offer_id("s", "k", "p", "2026-11-16", 0)
+    assert offers.offer_id("s", "k", "p", "2026-11-16", 1) != offers.offer_id("s", "k", "p", "2026-11-16")
+
+
 def test_offer_takes_its_quantity_from_the_kitchens_forecast_never_from_the_supplier(w):
     r = w.offer(quantity="9999", unit="KG", price="0.01")
     assert r.status_code == 200, r.text
