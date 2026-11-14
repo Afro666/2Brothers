@@ -24,6 +24,7 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from gateway.decision import decision_summary
+from gateway.partial_fill import partial_out
 from store import audit, orders, recalls
 from store.audit import canonical
 from store.history import current_stock
@@ -175,6 +176,7 @@ class Gateway:
                 "lines": [{"product_id": ln.product_id, "quantity": f"{ln.quantity.normalize():f}",
                            "unit": ln.unit, "total": _money(ln.total), "why": ln.why}
                           for ln in plan.alternative.lines]},
+            "partial_fill": partial_out(plan.partial),   # confirmed stock now, a plan for the rest (#288)
         }
 
     def _quote(self, kitchen_id: str, request: dict) -> dict:
