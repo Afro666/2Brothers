@@ -203,6 +203,31 @@ def test_human_approval_does_not_confirm_unknown_stock(env):
     assert client.get(f"{K}/proposals/{p['proposal_id']}", headers=HUMAN).json()['status'] == 'READY'
 
 
+def test_failing_record_attempt_leaves_the_proposal_ready(env, monkeypatch):
+    # A transient Mongo error while recording the order must release the claim (#456).
+    from store import orders
+
+    client, _, db = env
+    p = milk(client)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("mongo is down")
+
+    real = orders.record_attempt
+    monkeypatch.setattr(orders, "record_attempt", boom)
+    gw_client = TestClient(client.app, raise_server_exceptions=False)
+    r = gw_client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                       json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
+    assert r.status_code == 500
+    doc = db.proposals.find_one({"_id": p["proposal_id"]})
+    assert doc["status"] == "READY" and "approving_key" not in doc
+    assert db.orders.count_documents({}) == 0
+    monkeypatch.setattr(orders, "record_attempt", real)
+    ok = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                     json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
+    assert ok.status_code == 200, ok.text
+
+
 def test_reject_records_reason(env):
     client, _, db = env
     p = milk(client)
