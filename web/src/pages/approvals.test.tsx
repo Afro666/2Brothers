@@ -38,6 +38,8 @@ describe("ApprovalsPage", () => {
       });
       renderApp("/approvals", api);
 
+      expect((await screen.findAllByText("Leipomo Demo must confirm")).length).toBeGreaterThan(0);
+      for (const inspect of await screen.findAllByRole("button", { name: /^Inspect/ })) await userEvent.click(inspect);
       expect((await screen.findAllByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).length).toBeGreaterThan(0);
       expect(screen.queryByText(/before this order can be approved/)).toBeNull();
     },
@@ -46,6 +48,9 @@ describe("ApprovalsPage", () => {
   it("keeps the milk proposal visible while awaiting stock confirmation", async () => {
     renderApp("/approvals", createMockApi());
     expect(await screen.findByRole("heading", { name: "Waiting for you (4)" })).toBeVisible();
+    // Compact: a chip names who must confirm; the full sentence is under Inspect.
+    expect(await screen.findByText("Valio must confirm 1")).toBeVisible();
+    await userEvent.click(screen.getAllByRole("button", { name: /^Inspect/ })[1]);
     expect(await screen.findByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
     expect(screen.getAllByRole("button", { name: /^Approve/ }).filter((button) => button.hasAttribute("disabled"))).toHaveLength(0);
     expect(screen.getAllByRole("button", { name: "Reject" })[0]).toBeEnabled();
@@ -134,11 +139,11 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
 
-    const button = (await screen.findAllByRole("button", { name: "Show order lines" }))[1];
+    const button = (await screen.findAllByRole("button", { name: /^Inspect/ }))[1];
     expect(button).toHaveAttribute("aria-expanded", "false");
     await user.click(button);
 
-    expect(screen.getByRole("button", { name: "Hide order lines" })).toHaveAttribute("aria-expanded", "true");
+    expect(button).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByText("Valio Eila 3 % lactose free milk drink 1 L").length).toBeGreaterThan(0);
   });
 
@@ -146,7 +151,7 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     const api = withConfirmedStock();
     renderApp("/approvals", api);
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[0]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[0]);
     const originalQuantity = screen.getByRole("spinbutton", {
       name: "Quantity for Arla 1 L lactose free fat free UHT milk drink (ST)",
     });
@@ -174,7 +179,8 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     const api = createMockApi();
     renderApp("/approvals", api);
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
+    await user.click(screen.getByRole("button", { name: "Add products" }));
     const search = screen.getByRole("searchbox", { name: "Search products" });
     await user.type(search, "Arla 1 L");
     const productRow = screen.getByText("Arla 1 L lactose free fat free UHT milk drink").closest("li");
@@ -208,7 +214,8 @@ describe("ApprovalsPage", () => {
   it("follows the edited lines: the waiting notice goes once the line with unconfirmed stock is removed", async () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
+    await user.click(screen.getByRole("button", { name: "Add products" }));
     await user.type(screen.getByRole("searchbox", { name: "Search products" }), "Arla 1 L");
     await user.click(await screen.findByRole("button", { name: "Add Arla 1 L lactose free fat free UHT milk drink" }));
     // Arla's stock is known, Eila's is not: the order still waits for the supplier, but can be approved.
@@ -229,7 +236,7 @@ describe("ApprovalsPage", () => {
       throw new ApiError("NETWORK", "Could not reach the gateway.");
     };
     renderApp("/approvals", api);
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
     const before = listed.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
     const alert = await screen.findByRole("alert");
@@ -245,7 +252,7 @@ describe("ApprovalsPage", () => {
     const change = vi.fn(() => new Promise<never>((_, reject) => { finish = () => reject(new ApiError("NOT_PENDING", "no")); }));
     api.changeProposal = change;
     renderApp("/approvals", api);
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
     const remove = screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" });
     fireEvent.click(remove);
     fireEvent.click(remove);
@@ -257,7 +264,7 @@ describe("ApprovalsPage", () => {
   it("shows the API message when removing the only line is refused", async () => {
     const user = userEvent.setup();
     renderApp("/approvals", createMockApi());
-    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    await user.click((await screen.findAllByRole("button", { name: /^Inspect/ }))[1]);
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Could not change this proposal: An order needs at least one line; reject it instead. The proposal is unchanged.",

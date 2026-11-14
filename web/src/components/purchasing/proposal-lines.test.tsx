@@ -1,0 +1,205 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import { ApprovalCard } from "@/components/purchasing/approval-card";
+import { ProposalLines } from "@/components/purchasing/proposal-lines";
+import { formatDateTime, formatEur } from "@/lib/format";
+import { splitChecks, statusChips } from "@/lib/proposal-checks";
+import { MOCK_NOW } from "@/mocks/milk-case";
+import { menuPlanApproval, menuPlanLines, menuPlanOrder } from "@/mocks/menu-plan-case";
+
+const byId = (id: string) => menuPlanLines.find((line) => line.product.id === id)!;
+
+function rowOf(name: string) {
+  return screen.getByText(name, { selector: "div" }).closest('[role="row"]') as HTMLElement;
+}
+
+describe("ProposalLines: the lines of a proposal as a table", () => {
+  it("has one column per fact, one row per product, names with brand and code", () => {
+    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
+    const table = screen.getByRole("table", { name: "Order lines" });
+    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
+      "Product",
+      "Qty",
+      "Price",
+      "Total",
+      "Stock",
+      "Order by",
+      "Why this much",
+    ]);
+    expect(screen.getByText("All prices ex VAT")).toBeVisible();
+    expect(screen.getAllByTestId("proposal-line")).toHaveLength(menuPlanLines.length);
+    const cream = byId("404233");
+    const row = rowOf(cream.product.names.en);
+    expect(row).toHaveTextContent("Valio · 404233");
+    expect(row).toHaveTextContent(`36 ST`);
+    expect(row).toHaveTextContent(formatEur(cream.offer.priceExVat));
+    expect(row).toHaveTextContent(formatEur(cream.lineTotal));
+    expect(row).toHaveTextContent(cream.why);
+    // Not editable: no inputs, no remove buttons.
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
+  });
+
+  it("shows stock as a chip: confirmed amount, who must confirm, or not available", () => {
+    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
+    expect(within(rowOf(byId("404151").product.names.en)).getByText("2,400 ST")).toHaveAttribute("data-stock", "success");
+    expect(within(rowOf(byId("404233").product.names.en)).getByText("Valio must confirm")).toHaveAttribute("data-stock", "warning");
+    expect(within(rowOf(byId("405322").product.names.en)).getByText("Not available")).toHaveAttribute("data-stock", "danger");
+  });
+
+  it("says a passed cut-off on its row, and the order-by time otherwise", () => {
+    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
+    expect(within(rowOf(byId("404933").product.names.en)).getAllByText("Cut-off passed").length).toBeGreaterThan(0);
+    expect(within(rowOf(byId("404151").product.names.en)).queryByText("Cut-off passed")).toBeNull();
+    const milk = byId("404151");
+    expect(within(rowOf(milk.product.names.en)).getAllByText(formatDateTime(milk.offer.closingTime)).length).toBeGreaterThan(0);
+  });
+
+  it("folds a long why to two lines and opens it by keyboard", async () => {
+    const user = userEvent.setup();
+    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy="Valio" checks={new Map()} />);
+    const milk = byId("404151");
+    const toggle = screen.getByRole("button", { name: `Show all of why for ${milk.product.names.en}` });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText(milk.why)).toHaveAttribute("title", milk.why);
+    toggle.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: `Show less of why for ${milk.product.names.en}` })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("edits a quantity inline: Enter or the check button updates, the icon button removes", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    const onRemove = vi.fn();
+    let typed = "";
+    const line = byId("404318");
+    const { rerender } = render(
+      <ProposalLines
+        lines={[line]}
+        now={MOCK_NOW}
+        confirmBy="Valio"
+        checks={new Map()}
+        editing={{ busy: false, value: () => typed || String(line.quantity), onType: (_l, v) => (typed = v), onUpdate, onRemove, inputId: () => "qty-x" }}
+      />,
+    );
+    const update = screen.getByRole("button", { name: `Update ${line.product.names.en}` });
+    expect(update).toBeDisabled();
+    typed = "20";
+    rerender(
+      <ProposalLines
+        lines={[line]}
+        now={MOCK_NOW}
+        confirmBy="Valio"
+        checks={new Map()}
+        editing={{ busy: false, value: () => typed, onType: (_l, v) => (typed = v), onUpdate, onRemove, inputId: () => "qty-x" }}
+      />,
+    );
+    const input = screen.getByRole("spinbutton", { name: `Quantity for ${line.product.names.en} (KG)` });
+    expect(input).toHaveValue(20);
+    await user.type(input, "{Enter}");
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: `Update ${line.product.names.en}` }));
+    expect(onUpdate).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole("button", { name: `Remove ${line.product.names.en}` }));
+    expect(onRemove).toHaveBeenCalledWith(line);
+  });
+});
+
+describe("splitChecks: What to check, per product", () => {
+  it("puts a product's reasons on its row, lists left-out products, and keeps the rest proposal-wide", () => {
+    const { perLine, leftOut, general } = splitChecks(
+      [
+        ...menuPlanApproval.reasons,
+        { rule: `${byId("404151").product.names.en}: Allergen rule: the kitchen excludes AN`, detail: "" },
+        { rule: "Valio Eila milk 1 L (405418): label checked", detail: "" },
+      ],
+      menuPlanLines,
+    );
+    expect(perLine.get("404933")).toEqual(["order cut-off has passed"]);
+    expect(perLine.get("405322")).toEqual(["not available for this date"]);
+    expect(perLine.get("404151")).toEqual(["Allergen rule: the kitchen excludes AN"]);
+    expect(perLine.get("405418")).toEqual(["label checked"]);
+    expect(leftOut).toEqual([
+      { product: "463132", reason: "order cut-off has passed" },
+      { product: "463335", reason: "order cut-off has passed" },
+    ]);
+    expect(general.map((reason) => reason.rule)).toEqual([
+      "The total is above your kitchen's budget warning.",
+      expect.stringMatching(/^Valio must confirm stock for: /),
+    ]);
+  });
+
+  it("names the status chips most serious first", () => {
+    const { leftOut } = splitChecks(menuPlanApproval.reasons, menuPlanLines);
+    const chips = statusChips({ request: menuPlanApproval, order: menuPlanOrder, now: MOCK_NOW, heldByRecall: false, leftOut: leftOut.length });
+    expect(chips.map((chip) => [chip.text, chip.values?.count])).toEqual([
+      ["Not available {count}", 1],
+      ["Cut-off passed {count}", 1],
+      ["Over budget", undefined],
+      ["Valio must confirm {count}", 3],
+      ["Left out {count}", 2],
+    ]);
+  });
+});
+
+describe("ApprovalCard: a menu plan of many lines", () => {
+  it("is compact until Inspect: chips, total and decision first; the table and checks behind one toggle", async () => {
+    const user = userEvent.setup();
+    render(<ApprovalCard request={menuPlanApproval} order={menuPlanOrder} now={MOCK_NOW} onApprove={vi.fn()} onReject={vi.fn()} />);
+    expect(screen.getByText(menuPlanApproval.summary)).toBeVisible();
+    expect(screen.getByText(formatEur(menuPlanApproval.totalInclVat))).toBeVisible();
+    // At most three chips, the most serious first.
+    const chips = within(screen.getByRole("list", { name: "Status" })).getAllByRole("listitem");
+    expect(chips.map((chip) => chip.textContent)).toEqual(["Not available 1", "Cut-off passed 1", "Over budget"]);
+    expect(screen.queryByTestId("proposal-lines")).toBeNull();
+    expect(screen.queryByText("What to check")).toBeNull();
+    expect(screen.getByRole("button", { name: /^Approve / })).toBeEnabled();
+
+    const inspect = screen.getByRole("button", { name: "Inspect" });
+    expect(inspect).toHaveAttribute("aria-expanded", "false");
+    const panel = document.getElementById(inspect.getAttribute("aria-controls")!)!;
+    expect(panel).not.toBeVisible();
+    inspect.focus();
+    await user.keyboard("{Enter}");
+    expect(inspect).toHaveAttribute("aria-expanded", "true");
+    expect(panel).toBeVisible();
+    expect(within(panel).getAllByTestId("proposal-line")).toHaveLength(menuPlanLines.length);
+    // The per-product check is on its row, not a separate bar per product id.
+    expect(within(rowOf(byId("404933").product.names.en)).getByText("order cut-off has passed")).toBeVisible();
+    expect(within(panel).getByText("Left out of this order (2)")).toBeVisible();
+    const checks = within(panel).getByRole("heading", { name: "What to check" }).closest("section")!;
+    expect(within(checks).queryByText(/^404933/)).toBeNull();
+    expect(within(checks).getByText("The total is above your kitchen's budget warning.")).toBeVisible();
+    await user.keyboard(" ");
+    expect(inspect).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens Add products only on its button, closed by default", async () => {
+    const user = userEvent.setup();
+    const listAddableProducts = vi.fn().mockResolvedValue([]);
+    render(
+      <ApprovalCard
+        request={menuPlanApproval}
+        order={menuPlanOrder}
+        now={MOCK_NOW}
+        onChangeProposal={vi.fn()}
+        listAddableProducts={listAddableProducts}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Inspect" }));
+    const add = screen.getByRole("button", { name: "Add products" });
+    expect(add).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("searchbox", { name: "Search products" })).toBeNull();
+    expect(listAddableProducts).not.toHaveBeenCalled();
+    await user.click(add);
+    expect(add).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("searchbox", { name: "Search products" })).toBeVisible();
+    expect(await screen.findByText("No products found.")).toBeVisible();
+    expect(listAddableProducts).toHaveBeenCalledWith("");
+    // Every line is editable inline in the table.
+    expect(screen.getAllByRole("spinbutton", { name: /^Quantity for / })).toHaveLength(menuPlanLines.length);
+    expect(screen.getAllByRole("button", { name: /^Remove / })).toHaveLength(menuPlanLines.length);
+  });
+});
