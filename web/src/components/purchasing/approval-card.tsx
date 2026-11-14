@@ -290,12 +290,11 @@ export function ApprovalCard({
     leftOut: checks.leftOut.length,
   });
   const suppliers = [...new Set(["Valio", ...request.suppliersToConfirm.map((supplier) => supplier.name)])];
-  // Each line is confirmed by its own supplier block (cutoffs follow the proposal's lines); a line
-  // whose block is not known says "The supplier must confirm" rather than naming another supplier.
-  const lineSupplier = (line: OrderLine): string | null => {
-    const index = lines.indexOf(line);
-    return index < 0 ? null : (request.cutoffs?.[index]?.supplierName ?? null);
-  };
+  // Each line is confirmed by its own supplier block, found by product id (not position: the
+  // order's lines may be edited or ordered differently); a line whose block is not known says
+  // "The supplier must confirm" rather than naming another supplier.
+  const lineSupplier = (line: OrderLine): string | null =>
+    request.cutoffs?.find((cutoff) => cutoff.productId != null && cutoff.productId === line.product.id)?.supplierName ?? null;
   // One sentence on why: the checked Nemotron explanation (#1394) when there is one, else the
   // engine's own reason for a one-line order.
   const why = !explanation?.text && lines.length === 1 ? lines[0].why : null;
