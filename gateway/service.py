@@ -220,13 +220,17 @@ class Gateway:
                     raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
                 return self._proposal_out(stored)
             body = self._from_text(kitchen_id, body)
+            parsed = True
+        else:
+            parsed = False
         for field in ("product_ids", "quantity", "unit", "requested_date", "idempotency_key"):
             if not body.get(field):
                 raise GatewayError(422, "INVALID_REQUEST", f"{field} is required")
         request = {k: body[k] for k in ("product_ids", "quantity", "unit", "requested_date")}
         request["text"] = body.get("text") or ""
-        request["made_by"] = body.get("made_by") or "structured"
-        if body.get("query"):
+        # Set by the gateway, never by the client: a structured body cannot claim the parser.
+        request["made_by"] = "parser" if parsed else "structured"
+        if parsed and body.get("query"):
             request["query"] = body["query"]
         if body.get("event"):
             request["event"] = True       # one-off demand (S05): EVENT_LINE, kept out of the forecast
