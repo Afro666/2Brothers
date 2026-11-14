@@ -36,7 +36,7 @@ def find(db, kitchen_id: str, before: datetime) -> list[dict]:
 def clear(db, kitchen_id: str, before: datetime, *, apply: bool, actor: str = "demo.clear_inbox") -> dict:
     rows = find(db, kitchen_id, before)
     listing = [{"proposal_id": r["_id"], "created_at": r.get("created_at"), "created_by": r.get("created_by"),
-                "text": (r.get("request") or {}).get("text", "")[:60], "status": r["status"]} for r in rows]
+                "text": ((r.get("request") or {}).get("text") or "")[:60], "status": r["status"]} for r in rows]
     if not apply or not rows:
         return {"found": len(rows), "removed": 0, "proposals": listing}
     ids = [r["_id"] for r in rows]
