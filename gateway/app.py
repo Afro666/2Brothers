@@ -333,6 +333,15 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         from gateway import options
         return options.choose(gw(), kitchen_id, proposal_id, await body(request), human=who.human)
 
+    @app.post(k + "/proposals/{proposal_id}/change")
+    async def change_proposal(kitchen_id: str, proposal_id: str, request: Request,
+                              who: Principal = Depends(principal)):
+        # A person or an agent may change a proposal (#303); only a person approves it.
+        who.need("kitchen:propose", kitchen_id)
+        from gateway import change
+        return change.change(gw(), kitchen_id, proposal_id, await body(request), actor=who.name,
+                             person=who.name if who.kind == "human" else None)
+
     @app.post(k + "/recalls/{event_id}/dismiss")
     async def dismiss_recall(kitchen_id: str, event_id: str, request: Request, who: Principal = Depends(principal)):
         who.need('kitchen:read', kitchen_id)
@@ -567,6 +576,18 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need("kitchen:read")
         from store.audit import list_events
         return {"events": [e["event"] for e in list_events(gw().db, run_id=run_id, kitchen_id=kitchen(who))]}
+
+    @app.post("/tools/change_proposal")
+    async def change_tool(request: Request, who: Principal = Depends(principal)):
+        """The MCP `change_proposal` tool (#303): the kitchen route's code for the caller's kitchen."""
+        who.need("kitchen:propose")
+        data = await body(request)
+        proposal_id = data.pop("proposal_id", None)
+        if not isinstance(proposal_id, str) or not proposal_id:
+            raise GatewayError(422, "INVALID_REQUEST", "proposal_id is required")
+        from gateway import change
+        return change.change(gw(), kitchen(who), proposal_id, data, actor=who.name,
+                             person=who.name if who.kind == "human" else None)
 
     @app.post("/audit/events")
     async def audit_ingest(request: Request, who: Principal = Depends(principal)):

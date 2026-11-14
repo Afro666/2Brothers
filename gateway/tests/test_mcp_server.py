@@ -26,7 +26,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                 tools = (await session.list_tools()).tools
                 self.assertEqual({t.name for t in tools}, {
                     "search_products", "get_offer", "simulate_order", "place_order",
-                    "request_approval", "get_order_status", "get_audit_log"})
+                    "request_approval", "get_order_status", "get_audit_log", "change_proposal"})
                 products = unpack(await session.call_tool("search_products", {"query": "lactose free milk 1 l", "filters": {}}))
                 self.assertEqual(products["products"][0]["product_id"], "462775")
                 offer = unpack(await session.call_tool("get_offer", {
@@ -163,6 +163,6 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-                self.assertEqual(len((await session.list_tools()).tools), 7)
+                self.assertEqual(len((await session.list_tools()).tools), 8)
                 result = unpack(await session.call_tool("simulate_order", {"offer_id": "milk-offer-1"}))
                 self.assertEqual(result["expected_total"], "149.02")

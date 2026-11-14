@@ -59,7 +59,7 @@ function SignedReceipt({ receipt }: { receipt: OrderReceipt | null }) {
       {receipt ? (
         <>
           <p className="text-sm text-muted-foreground">{t("Signed by the gateway. Anyone can check it with the public key.")}</p>
-          <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-3">
+          <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <dt className="text-muted-foreground">{t("Approved by")}</dt>
               <dd className="break-words">{receipt.approvedBy ?? t("unknown")}</dd>
@@ -71,6 +71,14 @@ function SignedReceipt({ receipt }: { receipt: OrderReceipt | null }) {
             <div>
               <dt className="text-muted-foreground">{t("Signed total")}</dt>
               <dd>{formatEur(receipt.total)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">{t("Supplier")}</dt>
+              <dd className="break-words">
+                {receipt.supplierOutcome === "NOT_SENT"
+                  ? t("Nothing sent to the supplier yet")
+                  : receipt.supplierOutcome ?? t("unknown")}
+              </dd>
             </div>
           </dl>
           <Button type="button" variant="outline" size="sm" onClick={() => void copyReceipt(receipt.jws)}>

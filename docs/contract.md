@@ -139,8 +139,9 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 | `request_approval` | POST `/tools/request_approval` | `offer_id: string`, `idempotency_key: string` | `approval_id`, `status: PENDING` |
 | `get_order_status` | GET `/tools/get_order_status` | `order_id: string` | `order_id`, `status`, `outcome` |
 | `get_audit_log` | GET `/tools/get_audit_log` | `run_id: string` | `events: object[]` |
+| `change_proposal` | POST `/tools/change_proposal` | `proposal_id: string`, `idempotency_key: string`, `lines`, `add` (as "Changing a proposal") | the proposal in the `GET /proposals/{id}` shape |
 
-**Remote MCP (#280).** The same seven tools are also served over MCP streamable HTTP at
+**Remote MCP (#280).** The same eight tools are also served over MCP streamable HTTP at
 `POST /mcp` (stateless, JSON responses), same names, arguments and results as above.
 Two bearer tokens are accepted (`Authorization: Bearer <token>`): the agent token, and a
 kitchen API token (`tkb_...`, see "Kitchen API tokens") that holds `kitchen:propose`.
@@ -542,7 +543,8 @@ so a person cannot create, list or revoke the tokens of another kitchen (403
 | GET | `/proposals/{id}/addable` | `kitchen:read` | What the buyer can add to this proposal, most probable first, and the lines that reach free delivery. Shape under "Addable products". |
 | POST | `/proposals/{id}/approve` | `kitchen:approve` (human, role `approver`) | Body: `expected_total` (decimal string, the total the person saw) + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH` with the current total as `expected_total` in the `error` object; a line whose supplier stock is not confirmed returns 409 `STOCK_UNKNOWN` (one exception: the kitchen setting `approve_unconfirmed_manual`, see "Kitchen settings"); a proposal held by a recall returns 409 `BLOCKED_BY_RECALL`; a proposal that is not `READY` returns 409 `NOT_PENDING`. In each case nothing is sent. A missing `expected_total` is 422 `INVALID_REQUEST`. `blocks` is ignored (see below). |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
-| POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". Proposed; the gateway does not serve it yet. |
+| POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". |
+| POST | `/proposals/{id}/change` | `kitchen:propose` (a person or an agent) | Set a line's quantity (0 removes it) or add a product from the addable list. Re-quotes live; approves and sends nothing. Returns the proposal in the `GET /proposals/{id}` shape with a new `offer_id` and `expected_total`. Body and errors under "Changing a proposal". MCP tool `change_proposal`. |
 | GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). Each order also has `supplier_must_confirm`: the `supplier_id`s whose stock nobody confirmed yet (a person calls or e-mails them). `[]` for a normal order. `receipt` is the signed order receipt or null ("Signed order receipt"). |
 | GET | `/orders/{id}/resolution` | `kitchen:approve` (human) | What our store knows about an order whose send result is unknown. Shape under "Resolving an unknown send". |
 | POST | `/orders/{id}/resolve` | `kitchen:approve` (human) | A person records what really happened to an `UNCONFIRMED` or `SENT_READ_FAILED` order: `placed` or `not_sent`. Never resends. Shape under "Resolving an unknown send". |
@@ -740,6 +742,58 @@ reference, the outcome before.
 | `ORDER_NOT_RESOLVABLE` | 409 | The order's outcome is not `UNCONFIRMED` or `SENT_READ_FAILED` and no resolution is stored. The error carries `outcome` |
 | `ALREADY_RESOLVED` | 409 | A different resolution, or another reference, is already stored. The error carries the stored `resolution` |
 
+### Optional Nemotron proposal explanation (#1173)
+
+`GET /v1/kitchens/{kitchen_id}/proposals/{proposal_id}` accepts optional
+`explanation_language=en|fi` (422 for any other value). It keeps `kitchen:read`
+and kitchen isolation. Without this parameter, it makes no model call. With it,
+the normal proposal returns immediately, adding `explanation: null` until the
+background job has a checked result. A later read with the same language returns:
+
+```json
+{"explanation": {"text": "?", "language": "en", "model": "nemotron-3.5-super-vl",
+ "checked": true, "source_hash": "?", "duration_ms": 1540}}
+```
+
+This field is optional for older clients. The web loads the existing approval card
+first and requests this detail separately for visible proposals, using the person's
+current language. It may poll this detail, but never waits for it before rendering
+the card. The full deterministic `decision_summary` stays available. Tymon owns
+that card integration. Missing, invalid or unavailable explanations leave the card
+unchanged. A proposal creation, option choice, approval or order never waits for
+an explanation.
+
+The worker receives only versioned facts derived from the stored request and offer
+simulation, the same sources as `gateway/decision.py`. Each fact binds its kind
+(`chosen`, `left_out`, `held`, `total`, `approval`), product, quantity, unit and
+reason. Nemotron composes two or three sentences by choosing among supplied,
+localized sentence forms for these facts; it cannot write an unsupported reason,
+change a product/quantity pairing, or claim a pending order is placed. Each sentence
+returns `{fact_id, kind, product_id, text, numbers}`. Gateway code validates the
+whole result against those facts and sentence forms; one invalid sentence discards
+the whole explanation. Amounts, dates, product names/codes and reasons are copied
+from the facts, never calculated by the model. EN/FI number formatting is accepted
+only when it denotes the same bound value; invented quantities and number words
+outside the supplied sentence forms fail. Unreadable or absent facts stay unknown.
+
+Results are cached separately by kitchen, proposal, source revision and language.
+The source revision includes the current offer, decision inputs and proposal status;
+choosing another option, refreshing an offer, approval or a recall invalidates the
+old explanation. A job finishing after a change cannot publish its stale text.
+Only the requested language is generated; a later view in the other language has
+its own result. The server permits one explanation job per kitchen at a time and
+at most one new model attempt per 30 seconds, with a five-minute cooldown for a
+failed source/language. Polling, parallel viewers and refreshes share a durable
+claim. Claims expire so an interrupted worker can be recovered. Expired proposals
+and non-pending states do not start jobs.
+
+One model call, thinking off, short reply budget, 15-second worker deadline; no
+model or gateway retry and no automatic provider fallback. Usage is metered as
+`proposal_explanation`. Audit actions `proposal_explanation_ready` and
+`proposal_explanation_failed` contain the proposal/source, language, model,
+latency, sentence count or safe error code. No explanation text, prompt or secret
+is written to audit. The signed offer and receipt remain authoritative.
+
 ### Creating a proposal
 
 `POST /v1/kitchens/{kitchen_id}/proposals` takes one of three bodies. All need a nonempty
@@ -915,6 +969,62 @@ person changes the proposal.
 | Status | Code | When |
 |---|---|---|
 | 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
+
+### Changing a proposal
+
+`POST /v1/kitchens/{kitchen_id}/proposals/{proposal_id}/change` (served, #303). Scope
+`kitchen:propose`: a person (approver or chef) or an agent may change a proposal; only a
+person approves it. Over MCP the tool `change_proposal` calls the same code
+(`POST /tools/change_proposal`, the same body plus `proposal_id`, for the token's kitchen).
+
+```json
+{"idempotency_key": "change-1",
+ "lines": [{"product_id": "462775", "quantity": "40"}, {"product_id": "463335", "quantity": "0"}],
+ "add": [{"product_id": "462921", "quantity": "8"}]}
+```
+
+- `lines`: products on the proposal. `quantity` (decimal string or number, 0 or more) is the
+  new quantity in the line's own sales unit (the line's `unit`). `0` removes the line. A
+  line that is not named keeps its quantity.
+- `add` (optional): products from the proposal's `GET .../addable` list with `addable: true`;
+  `quantity` above 0, in the row's `unit`.
+- At least one of the two is needed; a product is named once.
+- The gateway quotes the new basket live on the proposal's own path: a stored, signed
+  offer snapshot with `offer_hash`, the recall, allergen and mandate checks again. The
+  engine rounds each quantity up to the product's lot size. A line whose quantity was set
+  says so in its `why`: `"Quantity set by <actor>. ..."`; when rounded, `"Quantity set by
+  <actor>: 2.5 ST asked, rounded up to 3 ST (sold in steps of 1). ..."`, with
+  `LOT_SIZE_ROUNDED` in its `reason_codes`. A quantity above the confirmed stock is cut to
+  it, as on any proposal (`PARTIAL_STOCK`).
+- The answer is the proposal in the `GET /proposals/{id}` shape: the same `proposal_id`,
+  still `READY`, with a new `offer_id` and `expected_total`. Nothing is approved or sent. The
+  old total can no longer be approved: `/approve` with it is 409 `TOTAL_MISMATCH`.
+- The proposal's `request` becomes the changed basket (one need per product, in its sales
+  unit, `unit: "products"`, `changed_by`); the first request is kept as `original_request`.
+- Audit entry `proposal_changed`: `actor`, `proposal_id`, `from_offer_id`, `offer_id`,
+  `from_total`, `expected_total`, and `changes`: one
+  `{product_id, unit, from_qty, asked_qty, to_qty}` per named product (`to_qty` after
+  rounding; `0` for a removed line, `from_qty` `0` for an added one). A person's change is
+  also learning data (`qty_changed`, `line_removed`, `line_added`); an agent's is not.
+- A repeat with the same `idempotency_key` and body returns the proposal and quotes nothing.
+
+The web's `ProposalChange` maps onto this body: `SET_QUANTITY` is one `lines` entry,
+`REMOVE_LINE` is one `lines` entry with `quantity: 0`, `ADD_LINE` is one `add` entry.
+
+| Status | Code | When |
+|---|---|---|
+| 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
+| 404 | `LINE_NOT_FOUND` | A `lines` product is not on the proposal (add it with `add`). |
+| 409 | `NOT_PENDING` | The proposal is not `READY` (approved, rejected, held by a recall), or it changed during this call. |
+| 409 | `NOT_ADDABLE` | An `add` product is not on the addable list, or cannot be added (no price). |
+| 409 | `CLOSING_PASSED` | The cut-off of a line has passed. |
+| 409 | `LINE_UNAVAILABLE` | A product cannot be ordered now for another reason (a recall hold, an allergen rule, no stock date). |
+| 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. |
+| 422 | `EMPTY_PROPOSAL` | Every line would be removed: reject the proposal instead. |
+| 422 | `INVALID_REQUEST` | No `idempotency_key`, no line, a negative or non-numeric quantity, a product named twice, an `add` product already on the proposal. |
+| 403 | `ROLE_REQUIRED` / `SCOPE_REQUIRED` | A viewer, or a token without `kitchen:propose`. |
+
+After a refused change the proposal is unchanged: it keeps the basket it had.
 
 ### Forecasts
 
@@ -1236,6 +1346,7 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. Served (#662). |
 | GET | `/demand/shortage-risk?from=&to=` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability, or the availability is unknown. Served (#662). |
+| GET | `/demand/buying-note?from=&to=&lang=` | `supplier:demand` | A short note for the supplier's planner, written by Nemotron from the shortage-risk rows; every number checked against its row. Planned (#1176). Shape under "Buying note for the supplier's planner". |
 | GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Only the server's unbound session passes: no token can hold `supplier:demand` yet, and a person signed in to a kitchen gets 403 `SCOPE_REQUIRED` (#599). |
 | POST | `/offers` | `supplier:offers` | A substitute offered to one kitchen before a predicted shortage. It shows up as a suggestion, never as an order. Shape under "Supplier offers". |
 
@@ -1331,6 +1442,69 @@ token can hold `supplier:demand` yet). A person signed in to a kitchen also gets
 `SCOPE_REQUIRED` (#599): consent names the supplier, not other kitchens, so one kitchen's
 people never read another kitchen's demand. Until supplier accounts exist, only the
 server's unbound session (the demo's Valio view) passes.
+
+### Buying note for the supplier's planner (#1176)
+
+Planned. `GET /v1/suppliers/{supplier_id}/demand/buying-note?from=&to=&lang=` turns the
+shortage-risk rows of the same window into a short note for the supplier's planner,
+written by Nemotron 3.5 Super VL. Same scope, window rules and 403s as
+`shortage-risk` above. `lang` is `en` (default) or `fi`; anything else is 422
+`INVALID_REQUEST`.
+
+The model only chooses the words. Plain code picks the rows first: `SHORT` rows by the
+largest `shortage`, then `UNKNOWN` rows by the largest `demand`, at most 8. The model sees
+for each row only `product_id`, `product_name`, `date`, `unit`, `demand`, `kitchens`,
+`available`, `shortage`, `suggested_buy` and `risk`: never `by_kitchen`, a kitchen
+name, a menu, a recipe, a price or a pack size. It is told to write no dates and no
+product names (the answer shows both next to each line).
+
+Every line the model writes is checked by plain code before anyone sees it:
+
+- it names one input row (`row`), and its `product_id` is that row's;
+- every number in its text is one of that row's values (`demand`, `available`,
+  `shortage`, `suggested_buy`, `kitchens`), compared after reading the number in the
+  note's language (`1 000`, `12,5` in Finnish; `1,000`, `12.5` in English), and the
+  line's own `numbers` list holds exactly those numbers;
+- a row with `risk: UNKNOWN` may state only its `kitchens` count: unknown availability
+  is never written as a gap of the whole forecast;
+- no number words for a quantity (`two`, `hundred`, `kaksi`, `sata`, `tuhat`, ...);
+- no row is used twice.
+
+If any line fails, the whole note is dropped: `note` is null and `dropped` names the
+first failed rule. The page then shows the table as it does today.
+
+Answer:
+
+```json
+{
+  "supplier_id": "sup-valio", "from": "2026-11-16", "to": "2026-11-22", "lang": "en",
+  "model": "nemotron-3.5-super-vl", "duration_ms": 2140, "cached": false,
+  "rows_used": 2,
+  "note": [
+    {"product_id": "462775", "product_name": "Valio Eila lactose-free milk 1 L",
+     "date": "2026-11-16", "risk": "SHORT",
+     "text": "Forecast 2400 L from 6 kitchens against 1700 L available: buy 700 L more."},
+    {"product_id": "463335", "product_name": "Washed potato 10 kg",
+     "date": "2026-11-17", "risk": "UNKNOWN",
+     "text": "Availability unknown for 3 kitchens: ask the grower."}
+  ],
+  "dropped": null
+}
+```
+
+- No `SHORT` or `UNKNOWN` row in the window: `note` is `[]`, `rows_used` is 0, and no
+  model call is made.
+- `dropped` is null, or one of `ROW_UNKNOWN`, `PRODUCT_MISMATCH`, `ROW_REPEATED`,
+  `NUMBER_NOT_IN_ROW`, `NUMBERS_LIST_MISMATCH`, `GAP_FOR_UNKNOWN`, `NUMBER_WORD`.
+- The answer is cached for 5 minutes by supplier, window, language and the input rows,
+  so a page refresh makes no new model call (`cached: true`). One supplier's note is
+  never served to another.
+- One note per supplier at a time: a second request while one is written answers 429
+  `BUYING_NOTE_BUSY`. One model call, up to 30 s, never retried by the gateway.
+- 503 `BUYING_NOTE_UNAVAILABLE` (model or worker down, or no model key) and 504
+  `BUYING_NOTE_TIMEOUT`: the page shows the table only.
+- The note writes nothing: no audit entry in any kitchen's log, no offer, no order. Its
+  model calls are counted by the usage meter under `buying_note`.
 
 ### Supplier offers (#374)
 
