@@ -3,15 +3,16 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
+import { RecallPanel, type RecallStatus } from "@/components/purchasing/recall-panel";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { useApi } from "@/api";
-import type { Api } from "@/api/types";
+import { ApiError, type Api } from "@/api/types";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { formatEur } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
-import type { ApprovalRequest, Order, ProposalChange } from "@/types";
+import type { ApprovalRequest, Order, ProposalChange, RecallList } from "@/types";
 import { LiveApprovalsPage } from "@/pages/live-approvals";
 
 interface ApprovalWithOrder {
@@ -32,6 +33,19 @@ async function loadApprovals(api: Api): Promise<ApprovalWithOrder[]> {
   );
 }
 
+/** null when this gateway does not serve recalls yet (hidden, never shown as "no recalls"). */
+async function loadRecalls(api: Api): Promise<RecallList | null> {
+  // In gateway mode an unserved method answers from the mock: sample recalls must never
+  // stand in for the real orders' recalls.
+  if (!api.listRecalls || (api.live && !api.live.has("listRecalls"))) return null;
+  try {
+    return await api.listRecalls();
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "NOT_SERVED") return null;
+    throw error;
+  }
+}
+
 export function ApprovalsPage() {
   const api = useApi();
   // In gateway mode the Api itself reads and decides the real proposals, so the inbox below is the live one.
@@ -49,6 +63,7 @@ function ApiApprovalsPage() {
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
+  const recalls = useAsync(() => loadRecalls(api), [api]);
 
   // The gateway has no route to change a proposal yet, so its proposals are read-only.
   const canEdit = !api.live || api.live.has("changeProposal");
@@ -81,6 +96,34 @@ function ApiApprovalsPage() {
   const decided =
     approvals.status === "ready" ? approvals.data.filter(({ approval }) => approval.status !== "PENDING") : [];
 
+  const pendingOrders = new Set(pending.map(({ approval }) => approval.orderId));
+  const recallsFor = (orderId: string) =>
+    recalls.status === "ready" ? (recalls.data?.alerts ?? []).filter((alert) => alert.orderId === orderId) : [];
+  // An order a recall hits comes first, so nobody scrolls past it.
+  const hit = (row: ApprovalWithOrder) => Number(recallsFor(row.approval.orderId).length > 0);
+  const recallFirst = [...pending].sort((a, b) => hit(b) - hit(a));
+  const recallStatus: RecallStatus =
+    recalls.status === "loading"
+      ? { kind: "loading" }
+      : recalls.status === "error"
+        ? { kind: "unknown", message: recalls.error.message }
+        : recalls.data === null
+          ? { kind: "unavailable" }
+          : {
+              kind: "ready",
+              lastCheck: recalls.data.lastCheck,
+              affecting: recalls.data.alerts.filter((alert) => alert.orderId != null && pendingOrders.has(alert.orderId))
+                .length,
+            };
+  const checkRecalls =
+    api.checkRecalls && recallStatus.kind !== "unavailable"
+      ? async () => {
+          await api.checkRecalls!(actor);
+          recalls.reload();
+          approvals.reload();
+        }
+      : undefined;
+
   return (
     <AppShell activeId="approvals">
       <div className="mx-auto max-w-5xl space-y-6">
@@ -90,6 +133,7 @@ function ApiApprovalsPage() {
             Every order the Buyer proposes waits here. Nothing is sent until a person approves it.
           </p>
         </header>
+        <RecallPanel status={recallStatus} onCheck={checkRecalls} />
         {approvals.status === "loading" ? <LoadingState label="Loading approvals" /> : null}
         {approvals.status === "error" ? (
           <ErrorState message={approvals.error.message} onRetry={approvals.reload} />
@@ -105,7 +149,7 @@ function ApiApprovalsPage() {
               </h2>
               {pending.length > 0 ? (
                 <div className="space-y-4">
-                  {pending.map(({ approval, order }) => (
+                  {recallFirst.map(({ approval, order }) => (
                     <ApprovalCard
                       key={approval.id}
                       request={approval}
@@ -127,6 +171,7 @@ function ApiApprovalsPage() {
                         canEdit ? (query) => api.listAddableProducts(approval.orderId, query) : undefined
                       }
                       editCount={editCounts[approval.orderId] ?? 0}
+                      recalls={recallsFor(approval.orderId)}
                     />
                   ))}
                 </div>
