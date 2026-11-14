@@ -89,6 +89,10 @@ gateway sends free-text requests to it (`deploy/compose.yaml:41`, `agent/service
 vision side reads a delivery-note photo and a shelf photo into a strict JSON schema
 (`agent/vision.py`, `agent/receiving.py`, `agent/shelf.py`). Plain code then compares the
 note with the order.
+The shelf reader is live on the Stock page ("Count from a photo", #373): on a prepared
+test photo it filled five counts in about 2 s, and the half hidden pack got "please count"
+and no number; a person saves (`gateway/stock_photo.py`, `agent/shelf_service.py`,
+`docs/demo.md` "Photo beat").
 
 **Why it matters.** A chef writes a sentence, not product codes. The model turns it into
 catalog products and a reason a person can read. A wrong model answer cannot become a
@@ -115,8 +119,8 @@ scripted prompt-injection test shows the guards hold when the model obeys the at
 
 **Not built:** fine-tuning. The gate decided no-go: no GPU budget and no validated
 recipe, so we claim no adapter gain (`docs/fine-tuning-gate.md`). The gateway route that
-stores a delivery-note result and the photo button on the stock page
-(`agent/README.md:98`, `agent/README.md:135`). The benchmark has 3 seeds per kitchen type,
+stores a delivery-note result (`agent/README.md:98`). A test of the shelf reader on a real
+phone photo: only synthetic photos were read. The benchmark has 3 seeds per kitchen type,
 so read the "all" rows only.
 
 ## MongoDB Atlas
