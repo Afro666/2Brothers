@@ -210,5 +210,6 @@ export function formatPercent(fraction: number | null): string {
 /** "KI 12 × 1 L": the pack a sales unit holds, from the catalog `units[]`. */
 export function formatPack(salesUnit: string, baseUnitsPerSalesUnit: number | null, baseUnit: string): string {
   if (baseUnitsPerSalesUnit == null) return `${peopleUnit(salesUnit, 1)} (${translate(getLanguage(), "pack size unknown")})`;
-  return `1 ${peopleUnit(salesUnit, 1)} = ${formatNumber(baseUnitsPerSalesUnit)} ${peopleUnit(baseUnit, baseUnitsPerSalesUnit)}`;
+  // No measure (no net content, not sold by weight): the count is pieces.
+  return `1 ${peopleUnit(salesUnit, 1)} = ${formatNumber(baseUnitsPerSalesUnit)} ${peopleUnit(baseUnit || "ST", baseUnitsPerSalesUnit)}`;
 }

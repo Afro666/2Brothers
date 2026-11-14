@@ -3,7 +3,7 @@ import { ChevronRight, Factory, Thermometer, Truck } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatEur, formatNumber, formatPack, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useT } from "@/lib/i18n";
+import { useLanguage, useT } from "@/lib/i18n";
 import type { Product } from "@/types";
 
 import { AllergenList, LabelChip } from "./chips";
@@ -29,18 +29,32 @@ function Fact({ icon: Icon, label, value, hint }: { icon: typeof Truck; label: s
 /** One catalog product: names, allergens, labels and the facts a buyer weighs. */
 export function ProductCard({ product, className }: { product: Product; className?: string }) {
   const t = useT();
-  const altNames = [product.names.fi, product.names.sv].filter(Boolean).join(" · ");
+  const { language } = useLanguage();
+  const title = (language === "fi" ? product.names.fi : undefined) ?? product.names.en;
+  const altNames = [language === "fi" ? product.names.en : product.names.fi, product.names.sv]
+    .filter((name) => name && name !== title)
+    .join(" · ");
   const allergens = product.allergens?.map((allergen) => ({
     ...allergen,
     name: allergen.name === allergen.code ? t("Other allergen ({code})", { code: allergen.code }) : t(allergen.name),
   })) ?? null;
+  const temperature = product.temperature?.label.match(/^(Ambient|Chilled|Frozen)(?:, (.+) to (.+) °C)?$/);
+  const temperatureLabel = !product.temperature
+    ? "unknown"
+    : temperature?.[2] != null
+      ? t("{temperature}, {minimum} to {maximum} °C", {
+          temperature: t(temperature[1]),
+          minimum: temperature[2],
+          maximum: temperature[3],
+        })
+      : t(product.temperature.label);
   return (
     <Card className={cn("gap-3", className)}>
       <CardHeader className="flex flex-row items-start gap-3">
         <ProductThumb en={product.names.en} fi={product.names.fi} brand={product.brand} size="lg" />
         <div className="min-w-0 flex-1 space-y-1.5">
           <CardTitle className="leading-snug break-words">
-            <ProductLink productId={product.id}>{product.names.en}</ProductLink>
+            <ProductLink productId={product.id}>{title}</ProductLink>
           </CardTitle>
           <CardDescription>
             {product.id} · {product.brand} · {formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit)}
@@ -75,7 +89,7 @@ export function ProductCard({ product, className }: { product: Product; classNam
           </section>
         ) : null}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Fact icon={Thermometer} label={t("Temperature")} value={product.temperature?.label ?? "unknown"} />
+          <Fact icon={Thermometer} label={t("Temperature")} value={temperatureLabel} />
           <Fact
             icon={Factory}
             label={t("CO2 per kg")}
