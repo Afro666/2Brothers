@@ -100,3 +100,44 @@ def test_settings_and_sharing_are_an_approvers_and_audited(env):
     events = client.get(K + "/audit", headers=AGENT).json()["events"]
     assert "settings_changed" in [e.get("kind") for e in events]
     assert "share_granted" in [e.get("type") for e in events]
+
+
+PLANNING = [("/suppliers", "suppliers", "supplier_id", {"name": "Bakery", "adapter": "manual"}),
+            ("/recipes", "recipes", "recipe_id", {"name": "Soup", "ingredients": SOUP["ingredients"]}),
+            ("/products", "products", "product_id",
+             {"name": "Own bread", "supplier_id": "sup-bakery", "unit": "PCS"})]
+
+
+def test_planning_writes_replay_a_repeated_idempotency_key(env):
+    """#745: a retried create or change with the same key answers the same and writes once."""
+    client, _, _ = env
+
+    def count(path, name):
+        return len(client.get(K + path, headers=AGENT).json()[name])
+
+    def changes():
+        return len(client.get(K + "/audit", headers=AGENT).json()["events"])
+
+    for path, name, id_key, body in PLANNING:
+        keyed = {**body, "idempotency_key": "create-1"}
+        first = client.post(K + path, headers=HUMAN, json=keyed)
+        assert first.status_code == 200, first.text
+        assert client.post(K + path, headers=HUMAN, json=keyed).json() == first.json()
+        assert count(path, name) == 1, path                                  # no second row
+        assert client.post(K + path, headers=HUMAN, json=body).status_code == 200   # key optional
+        assert count(path, name) == 2, path
+        item = K + f"{path}/{first.json()[id_key]}"
+        change = {"name": "Renamed", "idempotency_key": "change-1"}
+        changed = client.put(item, headers=HUMAN, json=change).json()
+        assert changed["name"] == "Renamed"
+        before = changes()
+        assert client.put(item, headers=HUMAN, json=change).json() == changed   # replay
+        assert changes() == before, path                                     # wrote nothing
+
+    plan = {"days": [{"date": "2026-11-16", "meal": "lunch", "recipe_id": "soup", "covers": 100}],
+            "idempotency_key": "plan-1"}
+    first = client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan)
+    assert first.status_code == 200, first.text
+    before = changes()
+    assert client.put(K + "/menu-plans/2026-W47", headers=HUMAN, json=plan).json() == first.json()
+    assert changes() == before                                               # the replay wrote nothing

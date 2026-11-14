@@ -61,6 +61,21 @@ def register(app, gw, principal, body) -> None:
         except (ValueError, TypeError, KeyError) as exc:
             raise GatewayError(422, "INVALID_REQUEST", str(exc)[:300]) from None
 
+    def replayed(kitchen_id: str, route: str, data: dict, fn):
+        """An optional `idempotency_key` in the body: the first answer is stored under
+        (kitchen, route, key) and a repeat gets that answer back without writing again."""
+        key = data.pop("idempotency_key", None)
+        if not isinstance(key, str) or not key.strip():
+            return fn()
+        keys = gw().db.planning_keys
+        doc_id = f"{kitchen_id}:{route}:{key}"
+        done = keys.find_one({"_id": doc_id})
+        if done:
+            return done["answer"]
+        answer = fn()
+        keys.insert_one({"_id": doc_id, "answer": answer})
+        return answer
+
     # ---- generic CRUD for suppliers, recipes and own products --------------------------
     def crud(path: str, name: str, collection):
         @app.get(k + path, name=f"list_{name}")
@@ -80,21 +95,25 @@ def register(app, gw, principal, body) -> None:
         async def create(kitchen_id: str, request: Request, who=Depends(principal)):
             actor = writer(who, kitchen_id)
             data = await body(request)
-            data.pop("idempotency_key", None)
-            item = guarded(lambda: collection().create(kitchen_id, data))
-            gw()._audit(kitchen_id, f"{name}_created", actor, name=item.get("name"))
-            return _json(item)
+
+            def make():
+                item = guarded(lambda: collection().create(kitchen_id, data))
+                gw()._audit(kitchen_id, f"{name}_created", actor, name=item.get("name"))
+                return _json(item)
+            return replayed(kitchen_id, f"POST {path}", data, make)
 
         @app.put(k + path + "/{item_id}", name=f"update_{name}")
         async def update(kitchen_id: str, item_id: str, request: Request, who=Depends(principal)):
             actor = writer(who, kitchen_id)
             data = await body(request)
-            data.pop("idempotency_key", None)
-            item = guarded(lambda: collection().update(kitchen_id, item_id, data))
-            if item is None:
-                raise GatewayError(404, "NOT_FOUND", f"no such entry in {name}")
-            gw()._audit(kitchen_id, f"{name}_changed", actor, name=item.get("name"))
-            return _json(item)
+
+            def change():
+                item = guarded(lambda: collection().update(kitchen_id, item_id, data))
+                if item is None:
+                    raise GatewayError(404, "NOT_FOUND", f"no such entry in {name}")
+                gw()._audit(kitchen_id, f"{name}_changed", actor, name=item.get("name"))
+                return _json(item)
+            return replayed(kitchen_id, f"PUT {path}/{item_id}", data, change)
 
         @app.delete(k + path + "/{item_id}", name=f"delete_{name}")
         def delete(kitchen_id: str, item_id: str, who=Depends(principal)):
@@ -119,9 +138,12 @@ def register(app, gw, principal, body) -> None:
     async def put_menu_plan(kitchen_id: str, week: str, request: Request, who=Depends(principal)):
         actor = writer(who, kitchen_id)
         data = await body(request)
-        plan = guarded(lambda: repo().menu_plans.put(kitchen_id, week, data.get("days")))
-        gw()._audit(kitchen_id, "menu_plan_changed", actor, week=week, entries=len(plan["days"]))
-        return _json(plan)
+
+        def put():
+            plan = guarded(lambda: repo().menu_plans.put(kitchen_id, week, data.get("days")))
+            gw()._audit(kitchen_id, "menu_plan_changed", actor, week=week, entries=len(plan["days"]))
+            return _json(plan)
+        return replayed(kitchen_id, f"PUT /menu-plans/{week}", data, put)
 
     # ---- stock --------------------------------------------------------------------------
     @app.post(k + "/stock-counts")
