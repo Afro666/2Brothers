@@ -39,12 +39,14 @@ class Nemotron:
         key = os.environ.get("VERDA_INFERENCE_KEY", "")
         if not key:
             raise ValueError("VERDA_INFERENCE_KEY is required")
+        # Read before the client opens, so a bad setting leaks nothing. Fail-fast on purpose:
+        # a bad Buyer setting stops every reader (photo readers too) until it is fixed.
+        self.thinking, self.max_tokens = buyer_settings()
         self.http = httpx.AsyncClient(
             base_url="https://containers.datacrunch.io/nemotron-3-5-super-vl-b300/v1/",
             headers={"Authorization": "Bearer " + key}, transport=transport,
             timeout=90, follow_redirects=False, trust_env=False)
         self.sleep = sleep
-        self.thinking, self.max_tokens = buyer_settings()
         self.meter = Meter()    # calls, tokens and seconds per role (agent/usage.py)
 
     async def close(self):

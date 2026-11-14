@@ -63,8 +63,11 @@ def test_a_setting_nobody_can_mean_is_refused(monkeypatch, env):
     monkeypatch.setenv("VERDA_INFERENCE_KEY", "not-a-real-secret")
     for name, value in env.items():
         monkeypatch.setenv(name, value)
+    opened = []
+    monkeypatch.setattr("agent.model.httpx.AsyncClient", lambda *a, **k: opened.append(1))
     with pytest.raises(ValueError):
         Nemotron(transport=httpx.MockTransport(lambda request: httpx.Response(500)))
+    assert opened == []    # read before the client opens: nothing left to close (#968)
 
 
 def test_the_photo_readers_keep_their_own_settings(monkeypatch):
