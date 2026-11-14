@@ -1236,6 +1236,7 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. Served (#662). |
 | GET | `/demand/shortage-risk?from=&to=` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability, or the availability is unknown. Served (#662). |
+| GET | `/demand/buying-note?from=&to=&lang=` | `supplier:demand` | A short note for the supplier's planner, written by Nemotron from the shortage-risk rows; every number checked against its row. Planned (#1176). Shape under "Buying note for the supplier's planner". |
 | GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Only the server's unbound session passes: no token can hold `supplier:demand` yet, and a person signed in to a kitchen gets 403 `SCOPE_REQUIRED` (#599). |
 | POST | `/offers` | `supplier:offers` | A substitute offered to one kitchen before a predicted shortage. It shows up as a suggestion, never as an order. Shape under "Supplier offers". |
 
