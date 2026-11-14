@@ -77,9 +77,15 @@ def test_window_planned_per_day_and_ordered_against_planned(env):
     db.proposals.insert_one({"_id": "p1", "kitchen_id": "demo-kitchen", "idempotency_key": "n1",
                              "request": {"requested_date": "2026-11-16"}})
     db.orders.insert_one({"_id": "o1", "kitchen_id": "demo-kitchen", "idempotency_key": "n1", "outcome": "CONFIRMED",
+                          "status": "SENT",
                           "proposal_id": "p1", "lines": [{"product_id": "469549", "quantity": "40", "unit": "ST"},
                                                          {"product_id": "462775", "quantity": "5", "unit": "ST"}]})
+    # Approved but never sent (failed): not incoming in the stock view, so not ordered here either.
+    db.orders.insert_one({"_id": "o2", "kitchen_id": "demo-kitchen", "idempotency_key": "n2", "outcome": "CONFIRMED",
+                          "status": "FAILED", "proposal_id": "p1",
+                          "lines": [{"product_id": "469549", "quantity": "100", "unit": "ST"}]})
     got = client.get(K + "/nutrition?from=2026-11-16&to=2026-11-22", headers=AGENT).json()
+    assert got["ordered"]["lines"] == 2                    # o1 only
     assert got["ordered"]["kcal"] == "18400"                # 40 L milk x 460 kcal
     assert got["ordered"]["known_lines"] == 1 and got["ordered"]["unknown"] == ["462775"]
     assert got["ordered_vs_planned"] == "0.37"

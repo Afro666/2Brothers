@@ -266,6 +266,12 @@ def _content_per_base_unit(content: dict | None, kitchen_unit: str | None) -> De
     return Decimal(str(content["value"])) * factor
 
 
+def incoming_orders_query(kitchen_id: str) -> dict:
+    """The orders that count as incoming: approved, and sent to the supplier without failing."""
+    return {"kitchen_id": kitchen_id, "outcome": "CONFIRMED",
+            "status": {"$in": ["SENT", "CONFIRMED", "PARTIAL"]}}
+
+
 def _open_orders(db, kitchen_id: str, today: date,
                  kitchen_units: dict[str, str] | None = None) -> tuple[dict, dict, set]:
     """What is on order per product, in kitchen units (`kitchen_units`: the unit the kitchen
@@ -276,8 +282,7 @@ def _open_orders(db, kitchen_id: str, today: date,
     qty: dict[str, Decimal] = {}
     due: dict[str, date] = {}
     unknown: set[str] = set()
-    orders = list(db.orders.find({"kitchen_id": kitchen_id, "outcome": "CONFIRMED",
-                                  "status": {"$in": ["SENT", "CONFIRMED", "PARTIAL"]}}))
+    orders = list(db.orders.find(incoming_orders_query(kitchen_id)))
     if not orders:
         return qty, due, unknown
     days = {p["_id"]: (p.get("request") or {}).get("requested_date")
