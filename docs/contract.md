@@ -1023,7 +1023,7 @@ is written to audit. The signed offer and receipt remain authoritative.
 
 ### Creating a proposal
 
-`POST /v1/kitchens/{kitchen_id}/proposals` takes one of three bodies. All need a nonempty
+`POST /v1/kitchens/{kitchen_id}/proposals` takes one of four bodies. All need a nonempty
 `idempotency_key`.
 
 **Structured body.** The caller names the products; the engine sizes every line.
@@ -1080,7 +1080,7 @@ is written to audit. The signed offer and receipt remain authoritative.
 | Status | Code | When |
 |---|---|---|
 | 422 | `INVALID_REQUEST` | A required field is missing, or `quantity` is 0 or less. |
-| 422 | `CANNOT_READ_REQUEST` | The parser cannot read the text without guessing: no quantity with a unit, no delivery day, a day in the past, no product named, more than 500 characters. The message says what is missing. Also a text that asks for two products, which is a second quantity with a unit after "and", "ja", "sekä", "och", "&", "+" or a comma ("100 L cream and 50 kg cheese"): the message starts with `one product per request`. This one is answered before the Buyer worker is called; no model runs and no proposal is stored. A pack size is not a second product ("200 L milk in 1 l cartons"). |
+| 422 | `CANNOT_READ_REQUEST` | The parser cannot read the text without guessing: no quantity with a unit, no delivery day, a day in the past, no product named, more than 500 characters. The message says what is missing. A text with several products is not refused for that any more (#1375): it is split, see "Free text with several products" below. Its own refusals (two delivery days, a split that fails the check, a part with no product words, more than 30 products) are this code too; no proposal is stored. |
 | 422 | `NO_PRODUCTS_FOUND` | The parser read the text, but no catalog product matches the product words. |
 | 409 | `KITCHEN_POLICY_INVALID` | The kitchen's `excluded_allergens` names an allergen nobody knows (a typo). Fails closed: no offer is made until a person fixes the setting. |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another request (for free text: another `text`). |
@@ -1118,6 +1118,96 @@ gateway reads the product words and searches the catalog with no allergen filter
 
 The delivery day of such a request may come from `requested_date` in the body when the
 text names none. A replay with the same key and text returns the same proposal.
+
+**List body: several products in one request (#1375).** `needs` and no `product_ids`, no
+`from`/`to`. One proposal for all the needs: one total, the supplier `blocks`, one approval,
+signed. This is what a chat bot sends for "20 L oat drink, 5 kg butter and 40 rolls for
+Monday", and what a free text with several products becomes (below).
+
+| Field | Type | Rule |
+|---|---|---|
+| `needs` | object[] | 2 to 30 rows of `{text, quantity, unit}`. |
+| `needs[].text` | string | The product words ("oat drink"), 1 to 120 characters, at least one word. |
+| `needs[].quantity` | decimal string | Above 0, finite, at most 1000000. |
+| `needs[].unit` | string | `L`, `KG`, `G` or `ST` (pieces), any case. `G` is read as kilos (`500 G` = `0.5 KG`). |
+| `requested_date` | `YYYY-MM-DD` | The one delivery day of every need. Required; not in the past. |
+| `idempotency_key` | string | Required. |
+| `text` | string, optional | The person's whole sentence, kept on the proposal. At most 500 characters. |
+| `event` | boolean, optional | As for the structured body: every line gets `EVENT_LINE`. |
+
+Any other shape (1 row, 31 rows, a bad quantity or unit, two rows with the same product
+words, `needs` together with `product_ids` or `from`/`to`): 422 `INVALID_REQUEST`, and
+the message names the row.
+
+Each need is read as a single free-text request is read by the parser, in this order and
+with no model call: (1) the allergen rule of #974 on its product words, before anything
+else; (2) the kitchen's own words for a product (alias memory); (3) the catalog search
+narrowed to the kind and the measure the words name; (4) the quote: recall holds, the
+per-product allergen rule, live offers, the engine sizes the lines. The Buyer worker is not
+called for a list: one model run per need would be N slow runs in series.
+
+A need that cannot be ordered does not stop the others. It stays on the proposal with
+`result: "refused"` and a `problem`, the others are quoted:
+
+| `problem.code` | When |
+|---|---|
+| `ALLERGEN_RULE` | The kitchen's allergen rule removes the products that best match the words (#974). `problem.allergens` names them. |
+| `NO_PRODUCTS_FOUND` | No catalog product matches the words. The words are remembered for a person to link. |
+| `NOT_AVAILABLE` | Products match, but none can be ordered for the day: a recall hold, the cut-off, no stock. Also a need whose products are all on the proposal for an earlier need ("same product as need 1": ask once, with the sum). |
+
+The answer is a normal proposal with these additions:
+
+- `request.made_by` is `list`; `request.quantity` is the number of needs and
+  `request.unit` is `products`; `request.product_ids` are all products priced.
+- `request.items`: one row per need, in the order asked: `{text, quantity, unit, query,
+  product_ids, result, problem}`. `result` is `proposed` or `refused`; `problem` is
+  `{code, message}` (plus `allergens` for `ALLERGEN_RULE`) or `null`. `quantity` and `unit`
+  are the need as read (`G` already in `KG`).
+- `request.problems`: one sentence per refused need, for a person
+  (`5 kg peanut butter: This kitchen excludes peanuts, so "peanut butter" cannot be ordered: ...`).
+  The same sentences are in `mandate.reasons`.
+- `request.split_by`: only on a free text split into needs (below): `model` or `rules`.
+- `NEED_REFUSED` is in `mandate.reason_codes` when any need was refused, and
+  `ALLERGEN_RULE` when the allergen rule refused one. `shortfalls` and `PARTIAL_STOCK` as
+  for the menu-plan body.
+- At least one line: `status: READY`. Every need refused: `status: REJECTED`, no line,
+  `mandate.verdict: REFUSED`.
+
+A replay with the same key and the same body returns the same proposal; the check runs
+before any search, so a changed catalog never makes a replay a conflict. The same key with
+another body: 409 `IDEMPOTENCY_KEY_REUSED`. A kitchen allergen rule nobody knows fails the
+whole request with 409 `KITCHEN_POLICY_INVALID`. Earned auto-approve never applies while a
+need is refused (`NEED_REFUSED`): a person sees what was left out. Approve, reject, change,
+the live re-check and signing work as for any proposal.
+
+**Free text with several products (#1375).** A free-text body whose text asks for two
+products or more: a second quantity after "and", "ja", "sekä", "och", "plus", "&", "+", ";"
+or a comma. A quantity is a number with a unit ("5 kg") or a whole number before a word
+("40 rolls" is 40 pieces). A pack size is not a product ("200 L milk in 1 l cartons",
+"50 kg flour, 25 kg sacks"), and neither is a count of people or days ("for 40 guests",
+"40 hengelle") or a date ("17 nov", "16.11."). Every other text goes the single-product way
+above, unchanged.
+
+1. A stored proposal with this key: the same text returns it, another text is 409
+   `IDEMPOTENCY_KEY_REUSED`. No split, no model call on a replay.
+2. The delivery day: the day the text names, else `requested_date` of the body. A text
+   that names two days or more ("milk for Monday and bread for Tuesday") is 422
+   `CANNOT_READ_REQUEST`, and the message starts with `one delivery day per request`.
+3. Nemotron splits the text (one call to the Buyer worker's `/split`, at most 40 s). It
+   never sets a quantity: plain code checks the split. It must have one need per quantity of
+   the text, each need's quantity and unit must be one of the text's (each used once), and
+   each need's words must be words of the text that follow that quantity. The quantities that
+   go on are the ones read from the text. A split that fails the check is 422
+   `CANNOT_READ_REQUEST` with the sentence of before: `one product per request: ...`.
+4. When the model is not configured, does not answer in time, or answers outside its
+   schema, plain code splits the text: before each quantity, the product words after it. A
+   part with no product words, or product words before the first quantity, is 422
+   `CANNOT_READ_REQUEST` (the message says which). A split timeout skips the model for the
+   next 2 minutes (its own breaker; the Buyer's breaker is not touched). More than 30
+   products is 422 `CANNOT_READ_REQUEST`.
+5. The needs then go the list body's way, with `request.text` the person's sentence and
+   `request.split_by` `model` or `rules`. The trace (`model_trace`) is the parser's rule
+   trace: the model only split the words, the matching is plain code.
 
 **Menu-plan window body (#74, #701).** `from` and `to` and no `product_ids` and no
 `text`: one proposal for everything the menu plan needs in that window, net of counted
@@ -3331,6 +3421,7 @@ engine row), `warning` only in `mandate.warnings`, `error` as an HTTP error code
 | `CLOSING_PASSED` | reason | `closingTime` is at or before now for this delivery. The product is left out; the code is on the mandate. |
 | `STOCK_UNKNOWN` | reason | Valio's availability is a filler (999999 or more), or the supplier is a manual or csv price list. A missing, null or zero amount is not available, not unknown. A warning on approve: a person may still approve, the order then waits for the supplier (`supplier_must_confirm`). For each supplier with such lines the mandate reasons say "<supplier> must confirm stock for: <product names>." (`Valio` for Valio's lines). |
 | `PARTIAL_STOCK` | reason | less is available than needed |
+| `NEED_REFUSED` | reason | a request with several products (#1375): at least one need cannot be ordered (`request.items[].problem`); the others are proposed. On the mandate. Earned auto-approve never applies. |
 | `SUBSTITUTE_NEEDS_OK` | reason | a substitute changes the product; a human agrees |
 | `SUBSTITUTE_FAT_LEVEL` | reason | two lines of one plan have known fat levels more than 0.5 g per 100 g apart (fat-free and 3 % milk, S01). From the supplier record's `FAT` nutrient; unknown fat is never compared. On the mandate. |
 | `ALLERGEN_RULE` | reason | a kitchen allergen rule refuses a product: its known allergens (CONTAINS, MAY_CONTAIN or UNDECLARED) include an excluded code. That product is left out, listed under `excluded` with reason `ALLERGEN_RULE: the kitchen excludes <codes>` (per product, not the whole mandate), on every path: `POST /proposals` and MCP `get_offer`. Unknown allergen data is not a hit: the line stays with `ALLERGEN_DATA_MISSING`. |
