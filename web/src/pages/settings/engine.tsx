@@ -224,19 +224,22 @@ export function EngineSection() {
                       }}
                     />
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    aria-label={t("Remove {category}", { category: rule.category || t("category") })}
-                    onClick={() =>
-                      update((current) => ({
-                        ...current,
-                        maxDaysOfCover: current.maxDaysOfCover.filter((_, itemIndex) => itemIndex !== index),
-                      }))
-                    }
-                  >
-                    {t("Remove")}
-                  </Button>
+                  {/* Only rows added in this edit: the gateway merges cover rules, so a loaded row cannot be removed. */}
+                  {index >= (original?.maxDaysOfCover.length ?? 0) ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      aria-label={t("Remove {category}", { category: rule.category || t("category") })}
+                      onClick={() =>
+                        update((current) => ({
+                          ...current,
+                          maxDaysOfCover: current.maxDaysOfCover.filter((_, itemIndex) => itemIndex !== index),
+                        }))
+                      }
+                    >
+                      {t("Remove")}
+                    </Button>
+                  ) : null}
                 </div>
               ))}
               <Button
