@@ -196,6 +196,9 @@ def load(db, data: dict) -> dict:
             repo.own_products.delete(DEMO_ID, product["product_id"])
             repo.own_products.create(DEMO_ID, product)
         counts["suppliers"], counts["own_products"] = len(DEMO_SUPPLIERS), len(DEMO_OWN_PRODUCTS)
+        # Four invented manual suppliers, so a request gets a choice (#1604).
+        from demo.suppliers import load as load_demo_suppliers
+        counts["demo_suppliers"] = load_demo_suppliers(db)["suppliers"]
         standing = demo_standing_orders(data)
         if standing:
             repo.settings.put(DEMO_ID, {"standing_orders": standing})
