@@ -90,6 +90,7 @@ class ValioClient:
                     raise ValioError("Valio network request failed") from None
                 self._sleep(0.5 * 2**attempt)
             except (ValueError, TypeError):
+                self._seen(True)  # Valio answered; the data was bad.
                 raise ValioError("Valio returned invalid data") from None
         raise AssertionError("unreachable")
 
@@ -127,6 +128,7 @@ class ValioClient:
             try:
                 cutoff = closing_time(product.get("closingTime"))
             except (ValueError, TypeError):
+                self._seen(True)  # Valio answered; the data was bad.
                 raise ValioError("Valio returned an invalid closingTime") from None
             product["closingTime"] = cutoff.isoformat() if cutoff else None
             product["cutoff_passed"] = cutoff <= self._now() if cutoff else None
