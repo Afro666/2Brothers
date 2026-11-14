@@ -20,7 +20,10 @@ fetch is `unknown`. A missing check also means unknown. Neither is verified.
 UI source links use HTTPS. Evidence is recorded, dated and replayable; live
 Context.dev calls require an explicit operator flag and consume credits.
 
-`GET /v1/kitchens/{kitchen_id}/label-checks` uses the usual kitchen authorization.
+`GET /v1/kitchens/{kitchen_id}/label-checks` uses the usual kitchen authorization
+(`kitchen:read`). The answer is `{"checks": [...], "negative_control": {...}}`. Each
+item of `checks` has the `label_checks` item shape above. `negative_control` has the
+same shape plus `synthetic: true`.
 Its `checks` list demonstrates the recorded producer checks for catalog products
 462535, 462576 and 462775, resolved through the trusted catalog. Missing products
 are omitted. `negative_control` is an explicitly synthetic unregistered producer
