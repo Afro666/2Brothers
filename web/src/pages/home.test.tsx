@@ -107,7 +107,7 @@ describe("HomePage", () => {
 
     expect(await screen.findByText("Stock to check")).toBeInTheDocument();
     expect(await screen.findByText("Uncounted milk")).toBeInTheDocument();
-    expect(screen.getByText("Uncounted milk").parentElement).toHaveTextContent("not counted");
+    expect(screen.getByText("Uncounted milk").closest("li")).toHaveTextContent("not counted");
     expect(screen.getByText("What needs you today.")).toBeInTheDocument();
   });
 
@@ -126,8 +126,8 @@ describe("HomePage", () => {
     renderApp(`/?now=${DEMO_NOW}`, api);
 
     expect(await screen.findByText("Bread rolls")).toBeInTheDocument();
-    expect(screen.getByText("Bread rolls").parentElement).toHaveTextContent("short by 1,922 pcs");
-    expect(screen.getByText("Potatoes").parentElement).toHaveTextContent("short by 41.5 kg");
+    expect(screen.getByText("Bread rolls").closest("li")).toHaveTextContent("short by 1,922 pcs");
+    expect(screen.getByText("Potatoes").closest("li")).toHaveTextContent("short by 41.5 kg");
   });
 });
 

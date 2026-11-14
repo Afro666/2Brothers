@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import type { Api } from "@/api/types";
 import type { ApprovalRequest, AuditEvent, DemandLine, StockItem, Supplier } from "@/types";
 
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
 import { nextCutoff } from "@/pages/home/cutoff";
@@ -117,8 +118,11 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
             <>
               <ul className="divide-y text-sm">
                 {rows.slice(0, HOME_STOCK_ROWS).map((row) => (
-                  <li key={row.productId} className="flex items-start justify-between gap-3 py-2">
-                    <span className="min-w-0">{row.productName}</span>
+                  <li key={row.productId} className="flex items-center justify-between gap-3 py-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <ProductThumb size="sm" en={row.productName} />
+                      <span className="min-w-0">{row.productName}</span>
+                    </span>
                     {row.kind === "short" ? (
                       <span className="shrink-0 text-right font-mono text-[13px] font-medium text-danger">
                         <span className="whitespace-nowrap">
