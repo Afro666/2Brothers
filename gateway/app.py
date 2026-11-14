@@ -774,7 +774,9 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     def order_status(order_id: str, who: Principal = Depends(principal)):
         who.need("kitchen:read")
         order = gw().get_order(kitchen(who), order_id)
-        return {"order_id": order["order_id"], "status": order["status"], "outcome": order["outcome"]}
+        return {"order_id": order["order_id"], "status": order["status"], "outcome": order["outcome"],
+                # #1768: the Buyer must not read SENT / CONFIRMED as "the supplier has it"
+                "supplier_outcome": order["supplier_outcome"], "supplier_note": order["supplier_note"]}
 
     @app.get("/tools/get_audit_log")
     def audit_tool(run_id: str, who: Principal = Depends(principal)):

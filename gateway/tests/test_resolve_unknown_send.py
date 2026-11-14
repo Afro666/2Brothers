@@ -87,7 +87,10 @@ def test_unconfirmed_resolves_to_placed_with_the_supplier_reference(env, monkeyp
     assert proposal["status"] == "APPROVED" and proposal["order_id"] == order_id
     assert "approving_key" not in proposal
     assert db.orders.count_documents({}) == 1                       # no second attempt row
-    assert client.get(f"{K}/orders/{order_id}", headers=HUMAN).json()["outcome"] == "CONFIRMED"
+    answer = client.get(f"{K}/orders/{order_id}", headers=HUMAN).json()
+    assert answer["outcome"] == "CONFIRMED"
+    # #1768: a person recorded that the supplier has it, so the answer does not say NOT_SENT
+    assert answer["supplier_outcome"] is None and answer["supplier_note"] is None
     event = db.audit_log.find_one({"event.kind": "order_resolved"})["event"]
     assert event["actor"] == "aron" and event["order_id"] == order_id
     assert event["resolution"] == "placed" and event["supplier_order_ref"] == "VAL-123"
