@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { ACTOR_LABEL, KIND_META } from "@/components/purchasing/audit-timeline";
 import { EU_ALLERGENS } from "@/lib/allergens";
 import { collectFinnishDictionaries } from "@/lib/i18n";
-import { RISK_COUNTS } from "@/pages/demand";
+import { RISK_COUNTS, RISK_ONE } from "@/pages/demand";
 import { GROUPS as FORECAST_GROUPS, TILES as FORECAST_TILES } from "@/pages/forecast";
 import { DEMO_ERRORS, ELSEWHERE } from "@/pages/trust";
 import { DEMAND_CLASSES } from "@/pages/settings/engine";
@@ -77,6 +77,7 @@ describe("part 4 Finnish coverage", () => {
       ...Object.values(DEMO_ERRORS),
       ELSEWHERE,
       ...Object.values(RISK_COUNTS),
+      ...Object.values(RISK_ONE),
       ...SETTINGS_SECTIONS.map((section) => section.label),
       ...Object.values(ROLE_DETAILS),
       ...NOTIFICATION_EVENTS.flatMap((event) => [event.title, event.description]),

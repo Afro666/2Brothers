@@ -391,6 +391,15 @@ describe("DemandPage", () => {
     expect(await screen.findByRole("heading", { name: "Week 53, 28 Dec 2026 to 3 Jan 2027" })).toBeInTheDocument();
   });
 
+  it.each([
+    ["2026-W49", "Viikko 49, 30. marras–6. joulu 2026"],
+    ["2026-W53", "Viikko 53, 28. joulu 2026–3. tammi 2027"],
+  ])("names every month and year of the Finnish week title across a month or year end (%s)", async (week, title) => {
+    localStorage.setItem("purchasing-language", "fi");
+    renderApp(`/demand?week=${week}`, createMockApi());
+    expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
+  });
+
   it("formats the week and product summary in Finnish and asks for one Finnish note", async () => {
     localStorage.setItem("purchasing-language", "fi");
     const api = createMockApi();

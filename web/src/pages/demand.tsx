@@ -33,6 +33,14 @@ export const RISK_COUNTS: Record<ShortageRisk, string> = {
   COVERED: "{count} covered",
 };
 
+/** Finnish counts differ in the singular ("1 tuntematon", not "1 tuntematonta"). */
+export const RISK_ONE: Record<ShortageRisk, string> = {
+  SHORT: "1 short",
+  UNKNOWN: "1 unknown",
+  AT_RISK: "1 at risk",
+  COVERED: "1 covered",
+};
+
 const RISK_SUMMARY_ORDER: readonly ShortageRisk[] = ["SHORT", "UNKNOWN", "AT_RISK", "COVERED"];
 
 interface ProductGroup {
@@ -57,7 +65,7 @@ export function riskSummary(
   for (const group of groups) counts[group.worst] += 1;
   if (groups.length === 0) return t("No forecast lines this week");
   const items = RISK_SUMMARY_ORDER.filter((risk) => counts[risk] > 0)
-    .map((risk) => t(RISK_COUNTS[risk], { count: formatNumber(counts[risk]) }))
+    .map((risk) => (counts[risk] === 1 ? t(RISK_ONE[risk]) : t(RISK_COUNTS[risk], { count: formatNumber(counts[risk]) })))
     .join(", ");
   return t(groups.length === 1 ? "{count} product: {items}" : "{count} products: {items}", {
     count: formatNumber(groups.length),

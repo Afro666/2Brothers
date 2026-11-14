@@ -65,13 +65,19 @@ export function weekTitle(
   const from = new Date(`${dates[0]}T12:00:00Z`);
   const to = new Date(`${dates[6]}T12:00:00Z`);
   const month = new Intl.DateTimeFormat("fi-FI", { month: "short", timeZone: "UTC" });
-  return t("Week {week}, {from} to {to} {month} {year}", {
+  const vars = {
     week: Number(week.slice(-2)),
     from: from.getUTCDate(),
+    fromMonth: month.format(from),
+    fromYear: from.getUTCFullYear(),
     to: to.getUTCDate(),
     month: month.format(to),
     year: to.getUTCFullYear(),
-  });
+  };
+  // A week across a month end names both months, across New Year both years.
+  if (vars.fromYear !== vars.year) return t("Week {week}, {from} {fromMonth} {fromYear} to {to} {month} {year}", vars);
+  if (from.getUTCMonth() !== to.getUTCMonth()) return t("Week {week}, {from} {fromMonth} to {to} {month} {year}", vars);
+  return t("Week {week}, {from} to {to} {month} {year}", vars);
 }
 
 const MONTHS = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" });
