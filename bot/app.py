@@ -19,7 +19,7 @@ from bot.clients import Gateway, GatewayError, Speech, SpeechError, Telegram, Te
 from bot.links import Links
 
 HELP = ("Say or type what the kitchen needs, for example: <b>20 L oat drink for Monday</b>.\n"
-        "/week makes the order for the menu plan of the next 7 days.\n"
+        "/week makes the order for the menu plan: 7 days from the next working day.\n"
         "You approve on the approval card: press \"Open to approve\".")
 NOT_LINKED = "This chat is not linked to a kitchen yet. Ask the kitchen's admin for a link."
 MAX_VOICE_SECONDS = 30
@@ -65,9 +65,15 @@ class Bot:
         if text in ("/help", "/start"):
             self.tg.send(chat, HELP)
         elif text == "/week":
+            # The order arrives on the first working day from tomorrow and covers the 7 days from
+            # it. The delivery day is sent with the window, as the site's Planner does: without
+            # it the gateway quotes the window's first day, and a Sunday refuses every line.
             first = (self.now() + timedelta(days=1)).date()
-            self._order(chat, lambda: self.gw.plan(first.isoformat(), (first + timedelta(days=6)).isoformat()),
-                        "One moment: I am adding up what the menu plan needs.")
+            while first.weekday() >= 5:
+                first += timedelta(days=1)
+            self._order(chat, lambda: self.gw.plan(first.isoformat(), (first + timedelta(days=6)).isoformat(),
+                                                   first.isoformat()),
+                        f"One moment: I am adding up what the menu plan needs from {render.day(first.isoformat())}.")
         elif text.startswith("/"):
             self.tg.send(chat, HELP)
         elif text:

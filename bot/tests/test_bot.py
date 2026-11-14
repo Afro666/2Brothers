@@ -65,8 +65,8 @@ class FakeGateway:
     def ask(self, text, requested_date):
         return self._answer("ask", text, requested_date)
 
-    def plan(self, first, last):
-        return self._answer("plan", first, last)
+    def plan(self, first, last, delivery):
+        return self._answer("plan", first, last, delivery)
 
     def proposal(self, proposal_id):
         return self.current
@@ -162,9 +162,16 @@ def test_a_request_gives_a_summary_and_one_message_per_supplier(bot):
     assert "product own-1" in bakery                   # no name known: said so, never invented
 
 
-def test_week_asks_for_the_menu_plan_of_the_next_seven_days(bot):
+def test_week_starts_on_the_next_working_day_and_names_it_as_the_delivery_day(bot):
+    say(bot, "/week")                # the fixture's "now" is Saturday 14 Nov: Sunday is skipped
+    assert bot.gw.calls == [("plan", "2026-11-16", "2026-11-22", "2026-11-16")]
+    assert "from Mon 16 Nov" in bot.tg.sent[0]["text"]
+
+
+def test_week_on_a_weekday_starts_tomorrow(bot):
+    bot.now = lambda: datetime(2026, 11, 17, 9, 0, tzinfo=render.HELSINKI)      # a Tuesday
     say(bot, "/week")
-    assert bot.gw.calls == [("plan", "2026-11-15", "2026-11-21")]
+    assert bot.gw.calls == [("plan", "2026-11-18", "2026-11-24", "2026-11-18")]
 
 
 def test_a_refused_request_is_one_sentence_in_the_status_message(bot):

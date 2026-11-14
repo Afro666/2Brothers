@@ -102,9 +102,11 @@ class Gateway:
         return self._call("POST", "/proposals", json={"text": text, "requested_date": requested_date,
                                                       "idempotency_key": f"tg-{uuid.uuid4().hex}"})
 
-    def plan(self, first_day: str, last_day: str) -> dict:
-        """Everything the menu plan needs in the window, net of counted stock: one proposal."""
+    def plan(self, first_day: str, last_day: str, delivery_day: str) -> dict:
+        """Everything the menu plan needs in the window, net of counted stock: one proposal,
+        quoted for `delivery_day`."""
         return self._call("POST", "/proposals", json={"from": first_day, "to": last_day,
+                                                      "requested_date": delivery_day,
                                                       "idempotency_key": f"tg-{uuid.uuid4().hex}"})
 
     def proposal(self, proposal_id: str) -> dict:
