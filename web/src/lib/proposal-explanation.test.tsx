@@ -7,6 +7,7 @@ import { LanguageProvider, useLanguage } from "@/lib/i18n";
 import {
   EXPLANATION_POLL_LIMIT,
   EXPLANATION_POLL_MS,
+  EXPLANATION_POLL_WINDOW_MS,
   useProposalExplanation,
 } from "@/lib/proposal-explanation";
 
@@ -77,17 +78,48 @@ describe("useProposalExplanation (#1173)", () => {
     expect(api.getProposalExplanation).toHaveBeenCalledTimes(2);
   });
 
-  it("stops after five empty answers", async () => {
+  it("backs off 3 s, 5 s, 10 s, then 15 s and shows a text that arrives after the 30 s throttle", async () => {
+    // Asks at 0, 3, 8, 18, 33 s: the fifth answer, after the server's 30 s throttle, has the text.
+    const api = apiWith([null, null, null, null, text]);
+    renderHarness({ api });
+    await act(async () => {});
+    expect(api.getProposalExplanation).toHaveBeenCalledTimes(1);
+    for (const [wait, calls] of [[3000, 2], [5000, 3], [10000, 4]] as const) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(wait - 1);
+      });
+      expect(api.getProposalExplanation).toHaveBeenCalledTimes(calls - 1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(api.getProposalExplanation).toHaveBeenCalledTimes(calls);
+    }
+    expect(screen.getByTestId("text")).toHaveTextContent("none");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(api.getProposalExplanation).toHaveBeenCalledTimes(5);
+    expect(screen.getByTestId("text")).toHaveTextContent(text.text);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EXPLANATION_POLL_WINDOW_MS);
+    });
+    expect(api.getProposalExplanation).toHaveBeenCalledTimes(5);
+  });
+
+  it("stops after about two minutes of empty answers", async () => {
     const api = apiWith([null]);
     renderHarness({ api });
     await act(async () => {});
-    for (let i = 0; i < EXPLANATION_POLL_LIMIT + 2; i += 1) {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(EXPLANATION_POLL_MS);
-      });
-    }
-    expect(EXPLANATION_POLL_LIMIT).toBe(5);
-    expect(api.getProposalExplanation).toHaveBeenCalledTimes(5);
+    expect(EXPLANATION_POLL_WINDOW_MS).toBeGreaterThanOrEqual(110_000);
+    expect(EXPLANATION_POLL_WINDOW_MS).toBeLessThanOrEqual(130_000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EXPLANATION_POLL_WINDOW_MS);
+    });
+    expect(api.getProposalExplanation).toHaveBeenCalledTimes(EXPLANATION_POLL_LIMIT);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EXPLANATION_POLL_WINDOW_MS);
+    });
+    expect(api.getProposalExplanation).toHaveBeenCalledTimes(EXPLANATION_POLL_LIMIT);
   });
 
   it("stops on unmount", async () => {
@@ -97,7 +129,7 @@ describe("useProposalExplanation (#1173)", () => {
     expect(api.getProposalExplanation).toHaveBeenCalledTimes(1);
     unmount();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(EXPLANATION_POLL_MS * EXPLANATION_POLL_LIMIT * 2);
+      await vi.advanceTimersByTimeAsync(EXPLANATION_POLL_WINDOW_MS * 2);
     });
     expect(api.getProposalExplanation).toHaveBeenCalledTimes(1);
   });

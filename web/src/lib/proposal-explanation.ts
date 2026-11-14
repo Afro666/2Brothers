@@ -3,14 +3,22 @@ import { useEffect, useRef, useState } from "react";
 import type { Api, ProposalExplanation } from "@/api/types";
 import { useLanguage } from "@/lib/i18n";
 
-/** How often the card asks again while the server has no explanation yet. */
-export const EXPLANATION_POLL_MS = 3000;
-/** Empty answers before the card stops asking; the next change or language still asks again. */
-export const EXPLANATION_POLL_LIMIT = 5;
+/**
+ * The waits between asks while the server has no explanation yet: 3 s, 5 s, 10 s, then 15 s.
+ * The server runs one job per kitchen and one model attempt per 30 s (#1399), so later cards
+ * in the inbox keep asking for about two minutes before their turn comes.
+ */
+export const EXPLANATION_POLL_DELAYS_MS: readonly number[] = [3000, 5000, 10000, ...Array<number>(7).fill(15000)];
+/** The first wait. */
+export const EXPLANATION_POLL_MS = EXPLANATION_POLL_DELAYS_MS[0];
+/** The whole polling window (about 2 minutes). */
+export const EXPLANATION_POLL_WINDOW_MS = EXPLANATION_POLL_DELAYS_MS.reduce((sum, wait) => sum + wait, 0);
+/** Answers before the card stops asking; the next change or language still asks again. */
+export const EXPLANATION_POLL_LIMIT = EXPLANATION_POLL_DELAYS_MS.length + 1;
 
 /**
  * The checked Nemotron explanation for a pending proposal (#1173). It asks once the card is
- * shown and polls while the answer is null, at most `EXPLANATION_POLL_LIMIT` times. It asks
+ * shown and polls with backoff while the answer is null, at most `EXPLANATION_POLL_LIMIT` times. It asks
  * again when the offer (`source`) or the language changes, and never for a decided proposal.
  * Null means "no text": the card shows nothing and never waits for this.
  */
@@ -56,7 +64,9 @@ export function useProposalExplanation(
         setExplanation(found);
         return;
       }
-      if (answers < EXPLANATION_POLL_LIMIT) timer = window.setTimeout(() => void ask(), EXPLANATION_POLL_MS);
+      if (answers < EXPLANATION_POLL_LIMIT) {
+        timer = window.setTimeout(() => void ask(), EXPLANATION_POLL_DELAYS_MS[answers - 1]);
+      }
     };
     void ask();
     return () => {
