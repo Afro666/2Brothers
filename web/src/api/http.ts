@@ -21,13 +21,14 @@ import { createMockApi } from "@/api/mock";
 import type { Api, AuditActor, Session } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { formatEur } from "@/lib/format";
+import { randomBytes, randomHex, toHex } from "@/lib/random-id";
 import type { CurrentSession } from "@/types";
 
 function uuid(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const bytes = randomBytes(16);
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  const hex = toHex(bytes);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
@@ -313,10 +314,7 @@ export function createHttpApi(baseUrl: string): Api {
     async submitChefRequest(request) {
       const ask = { text: request.text.trim(), requested_date: request.deliveryDate };
       const identity = JSON.stringify(ask);
-      // getRandomValues, not randomUUID: it also works on a plain-HTTP address.
-      const key =
-        requestKeys.get(identity) ??
-        Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) => value.toString(16).padStart(2, "0")).join("");
+      const key = requestKeys.get(identity) ?? randomHex(16);
       requestKeys.set(identity, key);
       const receipt = (await post(`${kitchen}/proposals`, { ...ask, idempotency_key: key })) as Json;
       // The Buyer answers with a short receipt; the stored proposal has the full basket.
