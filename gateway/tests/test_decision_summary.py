@@ -79,3 +79,15 @@ def test_unknown_terms_and_refusal_wording():
     assert s["chosen"] == [] and "Chosen: nothing." in s["text"]
     assert s["decide"] == ["Nothing can be ordered: no line passed the checks."]
     assert "10 L of the request cannot be covered" in s["text"]
+
+
+def test_line_without_unknown_stock_key_is_unconfirmed():
+    # Same rule as the approve guard: a missing unknown_stock means stock is not confirmed.
+    line = {"product_id": "7", "quantity": "5", "unit": "ST", "total": "10.00", "why": "cheapest"}
+    sim = {"lines": [line, dict(line, product_id="8", unknown_stock=False)], "excluded": [],
+           "shortfall": None, "expected_total": "20.00", "total_ex_vat": "20.00", "vat": "0.00",
+           "delivery_fee": None, "mandate": {"verdict": "NEEDS_APPROVAL"}, "alternative": None}
+    s = decision_summary({"product_ids": ["7", "8"], "quantity": "10", "unit": "ST",
+                          "requested_date": "2026-11-16"}, sim)
+    stock = [d for d in s["decide"] if "not confirmed stock" in d]
+    assert len(stock) == 1 and "7 (5 ST)" in stock[0] and "8 (" not in stock[0]

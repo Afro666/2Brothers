@@ -45,7 +45,7 @@ def decision_summary(request: dict, sim: dict, names: dict | None = None) -> dic
         decide.append(f"Nothing is ordered until a person approves the total of EUR {sim['expected_total']}.")
     elif verdict == "REFUSED":
         decide.append("Nothing can be ordered: no line passed the checks.")
-    unknown = [ln for ln in sim.get("lines") or [] if ln.get("unknown_stock")]
+    unknown = [ln for ln in sim.get("lines") or [] if ln.get("unknown_stock") is not False]
     if unknown:
         decide.append("Valio has not confirmed stock for " + ", ".join(
             f"{_name(ln['product_id'], names)} ({ln['quantity']} {ln['unit']})" for ln in unknown)
