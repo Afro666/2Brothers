@@ -205,7 +205,9 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
         response.set_cookie(users.COOKIE, token, max_age=int(users.SESSION_TTL.total_seconds()),
                             httponly=True, secure=https, samesite="strict", path="/")
-        gw()._audit(person["kitchen_id"], "signed_in", person["email"])
+        # An all-kitchens account (users.py) signs in to the default kitchen's log.
+        gw()._audit(person["kitchen_id"] or os.environ.get("GATEWAY_KITCHEN_ID", DEFAULT_KITCHEN),
+                    "signed_in", person["email"])
         return response
 
     @app.post("/v1/auth/logout")
@@ -235,7 +237,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
                                   data.get("new_password"), keep_token=token)
         except users.AuthError as exc:
             raise _auth_error(exc) from None
-        gw()._audit(person["kitchen_id"], "password_changed", person["email"])
+        gw()._audit(person["kitchen_id"] or os.environ.get("GATEWAY_KITCHEN_ID", DEFAULT_KITCHEN),
+                    "password_changed", person["email"])
         return {"changed": True}
 
     @app.get("/.well-known/jwks.json")

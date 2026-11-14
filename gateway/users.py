@@ -4,6 +4,8 @@
 - Sessions: a random token in an httpOnly, Secure, SameSite=Strict cookie; only its SHA-256
   is stored; 12 hours. Changing the password ends every other session.
 - Roles: approver (approves and rejects), chef (asks and edits), viewer (reads).
+- An account belongs to one kitchen. `--kitchen all` on the command line makes one for every
+  kitchen and the supplier's view: what the open demo's person has, behind a sign-in.
 - Five wrong passwords lock the account for five minutes.
 """
 
@@ -56,7 +58,8 @@ def _out(user: dict) -> dict:
     return {"email": user["_id"], "name": user["name"], "role": user["role"], "kitchen_id": user["kitchen_id"]}
 
 
-def create_user(db, email: str, password: str, *, name: str, role: str, kitchen_id: str) -> dict:
+def create_user(db, email: str, password: str, *, name: str, role: str, kitchen_id: str | None) -> dict:
+    """`kitchen_id` None: an account for every kitchen and the supplier's view (the stage account)."""
     email = (email or "").strip().lower()
     if "@" not in email or len(email) > 200:
         raise AuthError("INVALID_REQUEST", "email is not valid", 422)
@@ -166,7 +169,9 @@ def main(argv=None) -> int:
     add.add_argument("--email", required=True)
     add.add_argument("--name", default=None)
     add.add_argument("--role", choices=ROLES, default="viewer")
-    add.add_argument("--kitchen", default="demo-kitchen")
+    add.add_argument("--kitchen", default="demo-kitchen",
+                     help="the account's kitchen; 'all' = every kitchen and the supplier's view, "
+                          "as the open demo's person has (for the stage account)")
     sub.add_parser("list", help="emails, roles and kitchens (never passwords)")
     remove = sub.add_parser("remove", help="delete an account and end its sessions")
     remove.add_argument("--email", required=True)
@@ -176,14 +181,14 @@ def main(argv=None) -> int:
     db = get_db()
     if args.command == "list":
         for user in db.users.find({}, {"name": 1, "role": 1, "kitchen_id": 1}).sort("_id", 1):
-            print(user["_id"], user["role"], user["kitchen_id"], user.get("name") or "")
+            print(user["_id"], user["role"], user["kitchen_id"] or "all", user.get("name") or "")
         return 0
     email = args.email.strip().lower()
     if args.command == "remove":
         user = db.users.find_one({"_id": email})
         if user and user["role"] == "approver" and db.users.count_documents(
                 {"role": "approver", "kitchen_id": user["kitchen_id"]}) <= 1:
-            print("this is the last approver of", user["kitchen_id"], "- add another approver first")
+            print("this is the last approver of", user["kitchen_id"] or "all kitchens", "- add another approver first")
             return 1
         gone = db.users.delete_one({"_id": email}).deleted_count
         db.sessions.delete_many({"email": email})
@@ -197,11 +202,12 @@ def main(argv=None) -> int:
         print("the two passwords differ; nothing was created")
         return 1
     try:
-        user = create_user(db, email, first, name=args.name or email, role=args.role, kitchen_id=args.kitchen)
+        user = create_user(db, email, first, name=args.name or email, role=args.role,
+                           kitchen_id=None if args.kitchen == "all" else args.kitchen)
     except AuthError as exc:
         print(str(exc))
         return 1
-    print("created", user["email"], user["role"], user["kitchen_id"])
+    print("created", user["email"], user["role"], user["kitchen_id"] or "all")
     return 0
 
 
