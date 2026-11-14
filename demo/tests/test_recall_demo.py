@@ -59,3 +59,23 @@ class Gw:
 def test_open_day_skips_a_day_whose_cut_off_has_passed():
     from demo.recall_demo import open_day
     assert open_day(Gw(), TODAY) == date(2026, 11, 17)
+
+
+def test_stock_alert_needs_no_seed(monkeypatch):
+    """The coffee is on the shelf and no proposal holds it: the check alerts without `seed`."""
+    from datetime import timedelta
+
+    from monitor.tests.test_proposals import NOW
+    from store.history import record_stock_count
+    monkeypatch.setattr(recalls_view, "ContextDev", NoKey)
+    db, gw, _ = setup()
+    db.proposals.delete_many({})
+    db.offers.delete_many({})
+    record_stock_count(db, "hotel", NOW - timedelta(days=1),
+                       [{"product_id": COFFEE, "unit": "KG", "on_hand": "3.253"}])
+    view = recalls_view.run_check(gw, "hotel", {"idempotency_key": "shelf"}, "chef")
+    [alert] = view["alerts"]
+    assert alert["product_id"] == COFFEE and alert["where"] == ["in stock: 3.253 KG"]
+    assert alert["proposals"] == [] and alert["status"] == "active"
+    out = seed(gw, today=TODAY, kitchen_id="hotel", key="after")
+    assert not out["has_coffee"] and out["excluded"] == [{"product_id": COFFEE, "reason": "BLOCKED_BY_RECALL"}]
