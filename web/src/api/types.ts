@@ -168,10 +168,13 @@ export interface Api {
 /** A gateway error: `code` is the contract's error code, e.g. `TOTAL_MISMATCH`. */
 export class ApiError extends Error {
   readonly code: string;
+  /** The other fields of the gateway's error object, e.g. `expected_total` on `TOTAL_MISMATCH`. */
+  readonly details: Record<string, unknown>;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, details: Record<string, unknown> = {}) {
     super(message);
     this.name = "ApiError";
     this.code = code;
+    this.details = details;
   }
 }

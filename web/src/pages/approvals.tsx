@@ -33,20 +33,34 @@ async function loadApprovals(api: Api): Promise<ApprovalWithOrder[]> {
 }
 
 export function ApprovalsPage() {
-  return import.meta.env.VITE_LIVE_BUYER === "true" ? <LiveApprovalsPage /> : <MockApprovalsPage />;
+  const api = useApi();
+  // In gateway mode the Api itself reads and decides the real proposals, so the inbox below is the live one.
+  // The standalone live page is for a build whose Api is still the mock.
+  return import.meta.env.VITE_LIVE_BUYER === "true" && !api.live?.has("listApprovals") ? (
+    <LiveApprovalsPage />
+  ) : (
+    <ApiApprovalsPage />
+  );
 }
 
-function MockApprovalsPage() {
+function ApiApprovalsPage() {
   const api = useApi();
   const { role } = useRole();
   const actor = auditActorForRole(role);
   const approvals = useAsync(() => loadApprovals(api), [api]);
   const [editCounts, setEditCounts] = useState<Record<string, number>>({});
 
+  // The gateway has no route to change a proposal yet, so its proposals are read-only.
+  const canEdit = !api.live || api.live.has("changeProposal");
+
   async function approve(decision: ApprovalDecision): Promise<void> {
-    await api.approve(decision, actor);
-    toast.success(`Approved: ${formatEur(decision.expectedTotalInclVat)} incl VAT`, { testId: "approval-toast" });
-    approvals.reload();
+    try {
+      await api.approve(decision, actor);
+      toast.success(`Approved: ${formatEur(decision.expectedTotalInclVat)} incl VAT`, { testId: "approval-toast" });
+    } finally {
+      // Also after a refusal: when the total moved, the card must show the new one before asking again.
+      approvals.reload();
+    }
   }
 
   async function reject(approvalId: string, reason: string): Promise<void> {
@@ -98,7 +112,9 @@ function MockApprovalsPage() {
                       order={order ?? undefined}
                       onApprove={approve}
                       onReject={reject}
-                      onChangeProposal={(proposalChange) => change(approval.orderId, proposalChange)}
+                      onChangeProposal={
+                        canEdit ? (proposalChange) => change(approval.orderId, proposalChange) : undefined
+                      }
                       onChooseOption={
                         api.chooseOption &&
                         (async (optionId) => {
@@ -107,7 +123,9 @@ function MockApprovalsPage() {
                           approvals.reload();
                         })
                       }
-                      listAddableProducts={(query) => api.listAddableProducts(approval.orderId, query)}
+                      listAddableProducts={
+                        canEdit ? (query) => api.listAddableProducts(approval.orderId, query) : undefined
+                      }
                       editCount={editCounts[approval.orderId] ?? 0}
                     />
                   ))}

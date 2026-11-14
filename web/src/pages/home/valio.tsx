@@ -4,6 +4,7 @@ import { useAsync } from "@/lib/use-async";
 import type { Api } from "@/api/types";
 import type { SupplierDemandRow } from "@/types";
 
+import { SampleData } from "@/components/purchasing/sample-data";
 import { Tile, TileState } from "@/pages/home/tile";
 
 type SupplierDemandResult = { rows: SupplierDemandRow[]; week: string; fallback: boolean };
@@ -44,6 +45,7 @@ export function ShortageTile({ api, now }: { api: Api; now: Date }) {
       href="/demand"
       linkLabel="Open demand view"
     >
+      <SampleData of="getSupplierDemand" />
       <TileState<SupplierDemandResult>
         status={state.status}
         error={state.error}
@@ -94,6 +96,7 @@ export function KitchensTile({ api, now }: { api: Api; now: Date }) {
   const state = useAsync(() => loadSupplierDemand(api, now), [api, now.toISOString()]);
   return (
     <Tile title="Kitchens sharing forecasts" href="/demand" linkLabel="Open demand view">
+      <SampleData of="getSupplierDemand" />
       <TileState<SupplierDemandRow[]>
         status={state.status}
         error={state.error}

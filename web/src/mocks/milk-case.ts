@@ -288,7 +288,7 @@ export const confirmedDemoApproval: ApprovalRequest = {
   createdAt: "2026-11-13T20:43:00+02:00",
   summary: "Demo: 51 L measured-stock milk for Monday",
   lineCount: 1, deliveryDate: REQUESTED,
-  totalExVat: confirmedDemoOrder.totalExVat, totalInclVat: confirmedDemoOrder.totalInclVat,
+  totalExVat: orders.placed.totalExVat, totalInclVat: confirmedDemoOrder.totalInclVat,
   reasons: [{ rule: "Human approval required", detail: "51 ST measured in the supplier offer. Review the exact total before placing this separate demo request." }],
   status: "PENDING",
 };
