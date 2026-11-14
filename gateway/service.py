@@ -978,7 +978,11 @@ class Gateway:
         return {"kitchen_id": kitchen_id, "band_from": kitchen_band, "lines": lines}
 
     def audit_log(self, kitchen_id: str) -> list[dict]:
-        return [{"seq": e["seq"], **e["event"], "at": e["server"].get("at")}
+        def at(entry: dict) -> str | None:
+            # Older agent events were stored without a server time: use when they were stored.
+            stored = entry.get("stored_at")
+            return entry["server"].get("at") or (stored.isoformat() if hasattr(stored, "isoformat") else stored)
+        return [{"seq": e["seq"], **e["event"], "at": at(e)}
                 for e in audit.list_events(self.db, kitchen_id=kitchen_id)]
 
 

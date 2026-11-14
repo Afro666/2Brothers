@@ -496,7 +496,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
         from store.audit import AuditConflict, append_event
         event = await body(request)
         try:
-            entry = append_event(gw().db, event, {"kitchen_id": kitchen(who), "principal": who.name})
+            entry = append_event(gw().db, event, {"kitchen_id": kitchen(who), "principal": who.name,
+                                                      "at": gw().now().isoformat()})
         except AuditConflict:
             raise GatewayError(409, "IDEMPOTENCY_CONFLICT", "event_id reused with other content") from None
         return {"event_id": entry["event"]["event_id"], "stored": True}

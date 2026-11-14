@@ -463,3 +463,14 @@ def test_a_misspelt_allergen_rule_fails_closed(env):
         "product_ids": ["462775"], "quantity": "10", "unit": "L", "requested_date": "2026-11-16",
         "idempotency_key": "typo"})
     assert r.status_code == 409 and r.json()["error"]["code"] == "KITCHEN_POLICY_INVALID"
+
+
+def test_agent_audit_events_carry_a_time(env):
+    client, _, db = env
+    r = client.post("/audit/events", headers=AGENT, json={"event_id": "e1", "run_id": "r1", "type": "tool_call_started"})
+    assert r.status_code == 200
+    db.audit_log.insert_one({"_id": 999, "seq": 999, "prev_hash": "x", "hash": "y", "stored_at": NOW,
+                             "event": {"event_id": "old", "type": "tool_call_started"},
+                             "server": {"kitchen_id": "demo-kitchen"}})     # an event stored before this fix
+    events = client.get(K + "/audit", headers=AGENT).json()["events"]
+    assert all(e["at"] for e in events) and len(events) == 2
