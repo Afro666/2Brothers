@@ -9,6 +9,7 @@ in the observation. Transcripts go to env/out/llm/ (git-ignored). Standard libra
 only; keys come from the environment or the repo's .env and are never logged.
 """
 
+from datetime import date
 import json
 import math
 import os
@@ -28,6 +29,10 @@ MODELS = {  # name: (base url, key variable, model id, extra request fields)
     "nemotron-nothink": (NEMOTRON, "VERDA_INFERENCE_KEY", "nemotron-3.5-super-vl",
                          {"chat_template_kwargs": {"enable_thinking": False}}),
 }
+# Prompt variants (#365): "<model>-<variant>" runs that model with PROMPTS[variant].
+VARIANTS = {"nemotron-nothink-v2": ("nemotron-nothink", "v2"),
+            "nemotron-nothink-v3": ("nemotron-nothink", "v3"),
+            "nemotron-v3": ("nemotron", "v3")}
 
 SYSTEM = """You are the purchasing agent of a professional kitchen in Finland that buys from
 the wholesaler Valio Aimo. Each afternoon you decide what to order for tomorrow's delivery.
@@ -51,6 +56,32 @@ products listed in `products`.
 Answer with only one JSON object, no prose:
 {"order": {"<product_id>": <whole sales units>, ...}, "request_approval": <true|false>}
 Use {"order": {}} to order nothing."""
+
+# Improvement round (#365): Nemotron read its own three worst weeks (thinking off, training
+# seeds 1-3) in one call with thinking on and proposed these rules; added verbatim (only a
+# garbled "x" restored). Kept only if they help on held-out seeds: env/README.md.
+SELF_REVIEW_RULES = [
+    "Order each product independently: compute forecast usage (covers x recipe qty) for upcoming delivery "
+    "days, subtract current stock and on_order, and order the resulting whole units.",
+    "If a product was short yesterday, order at least the shortfall quantity plus forecast demand for the "
+    "next delivery days.",
+    "Never order a product that Valio cannot deliver on the delivery date; drop it or use a substitute.",
+    "Never exceed hard_cap_eur; if an order is refused, recalculate within the cap rather than ordering "
+    "token amounts.",
+    "Only order products needed by the upcoming menu; skip items with zero forecast usage.",
+    "Do not order more of a product than can be consumed before its last_day to prevent waste.",
+    "Prioritize stocking key ingredients for forecasted covers over minimizing order size or avoiding approval.",
+]
+SYSTEM_V2 = SYSTEM + "\n\nRules learned from your past weeks:\n" + "\n".join(f"- {r}" for r in SELF_REVIEW_RULES)
+# v3: the model gets a calculator's answer instead of more rules: per product the expected
+# use per day for the next 7 days, from the forecast and recipes it already sees.
+SYSTEM_V3 = SYSTEM + (
+    "\n\n`expected_use` is already computed for you: per product, the expected use in its kitchen unit "
+    "on each of the next 7 days (forecast covers x recipe quantities), in the same order as `forecast`. "
+    "Use it to size orders: cover the days until the delivery after this one, minus stock that is still "
+    "good then and what is on order, rounded up to whole sales units.")
+PROMPTS = {"v2": SYSTEM_V2, "v3": SYSTEM_V3}
+CALCULATOR = {"v3"}
 
 
 def _load_key(name: str) -> str:
@@ -139,7 +170,10 @@ class LLMPolicy:
     # at 16k Nemotron did; Nemotron needs ~20k (one call took 20.5k tokens, 42 s).
     def __init__(self, model: str, out: Path = Path("env/out/llm"), max_tokens: int = 64000):
         self.name = model
-        self.base, self.key_name, self.model, self.extra = MODELS[model]
+        base_model, variant = VARIANTS.get(model, (model, None))
+        self.base, self.key_name, self.model, self.extra = MODELS[base_model]
+        self.system = PROMPTS[variant] if variant else SYSTEM
+        self.calculator = variant in CALCULATOR
         self.out, self.max_tokens = out, max_tokens
         self.key = None
         self.log = None
@@ -162,7 +196,11 @@ class LLMPolicy:
     def __call__(self, env, obs) -> dict:
         if not obs["order_for"]:
             return {}
-        messages = [{"role": "system", "content": SYSTEM},
+        if self.calculator:
+            days = [date.fromisoformat(f["date"]) for f in obs["forecast"]]
+            obs = {**obs, "expected_use": {pid: [round(env._expected_use(pid, d), 3) for d in days]
+                                           for pid in obs["products"]}}
+        messages = [{"role": "system", "content": self.system},
                     {"role": "user", "content": json.dumps(obs, separators=(",", ":"))}]
         self.finish = None
         text, usage = self._complete(messages)
@@ -210,4 +248,4 @@ class LLMPolicy:
             time.sleep(2 ** attempt)
 
 
-LLM_POLICIES = {f"llm-{m}": (lambda m=m: LLMPolicy(m)) for m in MODELS}
+LLM_POLICIES = {f"llm-{m}": (lambda m=m: LLMPolicy(m)) for m in [*MODELS, *VARIANTS]}

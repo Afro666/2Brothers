@@ -78,6 +78,9 @@ class ParsedRequest:
 
 _NUM = r"(\d{1,3}(?:[ ,. ]\d{3})+|\d+(?:[.,]\d+)?)"
 _QTY = re.compile(_NUM + r"\s*(" + "|".join(sorted(UNITS, key=len, reverse=True)) + r")\b", re.I)
+# Two products in one text: a second quantity after "and", "ja", "sekä", "och", "&", "+"
+# or a comma (not the comma of a decimal number, "1,5 l").
+_SECOND = re.compile(r"(?:\b(?:and|ja|sekä|och)\b|[&+]|(?<!\d),)\s*" + _QTY.pattern, re.I)
 _ISO = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _DMY = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})?")
 _DMON = re.compile(r"\b(\d{1,2})\s+(" + "|".join(MONTHS) + r")[a-z]*\b", re.I)
@@ -104,6 +107,20 @@ def _next_weekday(today: date, weekday: int) -> date:
     return today + timedelta(days=days or 7)       # "by Monday" on a Monday means next Monday
 
 
+ONE_PRODUCT = ("one product per request: this text asks for more than one "
+               "(ask for each product in its own request)")
+
+
+def asks_for_two(text: str) -> bool:
+    """True when the text joins two quantities with "and" (or "ja", "&", "+", a comma):
+    "100 L cream and 50 kg cheese". Two products are two requests: the first one alone
+    would be a guess, and the words of both together find neither. A pack size is not a
+    second product ("200 L milk in 1 l cartons")."""
+    low = (text or "")[:500].lower()
+    m = _QTY.search(low)
+    return bool(m and _SECOND.search(low, m.end()))
+
+
 def product_words(text: str) -> str:
     """The product words of a request, as `parse_request` finds them, for a text that may
     name no quantity or no day (the Buyer's stored need, #974). It never raises."""
@@ -118,6 +135,47 @@ def product_words(text: str) -> str:
     kept = [FI_STEMS.get(w, w) for w in re.findall(r"[a-zåäö%-]+", rest)
             if w not in WEEKDAYS and w not in RELATIVE and w not in FILLER]
     return " ".join(" ".join(kept).replace("-", " ").split())
+
+
+def _written_date(rest: str, today: date) -> tuple[date | None, str]:
+    """A date written with digits ("2026-11-20", "16.11.", "17 nov") and the text without
+    it; `(None, rest)` when there is none. A date that does not exist is a ParseError."""
+    for pattern in (_ISO, _DMY, _DMON):
+        d = pattern.search(rest)
+        if not d:
+            continue
+        try:
+            if pattern is _ISO:
+                when = date(int(d.group(1)), int(d.group(2)), int(d.group(3)))
+            elif pattern is _DMY:
+                year = int(d.group(3)) if d.group(3) else today.year
+                when = date(year, int(d.group(2)), int(d.group(1)))
+            else:
+                when = date(today.year, MONTHS[d.group(2)[:3].lower()], int(d.group(1)))
+        except ValueError:
+            raise ParseError(f"not a real date: {d.group(0)!r}") from None
+        if pattern is not _ISO and when < today:
+            when = when.replace(year=when.year + 1)
+        return when, rest[:d.start()] + " " + rest[d.end():]
+    return None, rest
+
+
+def named_day(text: str, today: date) -> date | None:
+    """The delivery day a text names, read as `parse_request` reads it, or None when it
+    names none. For a text that may have no quantity (the Buyer path: a day in the text
+    wins over the date picked in a form). A date that does not exist is a ParseError."""
+    low = (text or "")[:500].lower()
+    m = _QTY.search(low)
+    rest = low[:m.start()] + " " + low[m.end():] if m else low
+    when, rest = _written_date(rest, today)
+    if when is not None:
+        return when
+    for w in re.findall(r"[a-zåäö%-]+", rest):
+        if w in WEEKDAYS:
+            return _next_weekday(today, WEEKDAYS[w])
+        if w in RELATIVE:
+            return today + timedelta(days=RELATIVE[w])
+    return None
 
 
 def parse_request(text: str, today: date, default_day: date | None = None) -> ParsedRequest:
@@ -136,26 +194,10 @@ def parse_request(text: str, today: date, default_day: date | None = None) -> Pa
     if unit == "G":
         quantity, unit = quantity / 1000, "KG"
     rest = low[:m.start()] + " " + low[m.end():]
+    if asks_for_two(text):
+        raise ParseError(ONE_PRODUCT)
 
-    when = None
-    for pattern in (_ISO, _DMY, _DMON):
-        d = pattern.search(rest)
-        if not d:
-            continue
-        try:
-            if pattern is _ISO:
-                when = date(int(d.group(1)), int(d.group(2)), int(d.group(3)))
-            elif pattern is _DMY:
-                year = int(d.group(3)) if d.group(3) else today.year
-                when = date(year, int(d.group(2)), int(d.group(1)))
-            else:
-                when = date(today.year, MONTHS[d.group(2)[:3].lower()], int(d.group(1)))
-        except ValueError:
-            raise ParseError(f"not a real date: {d.group(0)!r}") from None
-        if pattern is not _ISO and when < today:
-            when = when.replace(year=when.year + 1)
-        rest = rest[:d.start()] + " " + rest[d.end():]
-        break
+    when, rest = _written_date(rest, today)
     words = re.findall(r"[a-zåäö%-]+", rest)
     kept = []
     for w in words:

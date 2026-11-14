@@ -183,3 +183,78 @@ reasoning budget are ignored by the Nemotron endpoint; `chat_template_kwargs.ena
 works. The live Buyer loop is a different job (it picks products and tools, the engine sets
 the quantities) and runs with thinking off and a 2,048 token budget; its own numbers are in
 `agent/README.md`, "Buyer loop settings".
+
+## Nemotron improvement round (#365)
+
+```
+python -m env.run --policy llm-nemotron-nothink    --seed 4 --seeds 2 --kitchen hotel   # before
+python -m env.run --policy llm-nemotron-nothink-v2 --seed 1 --seeds 3 --kitchen hotel   # self-review rules
+python -m env.run --policy llm-nemotron-nothink-v3 --seed 4 --seeds 2 --kitchen hotel   # calculator
+```
+
+This round uses Nemotron with thinking off. The product's Buyer loop runs that way too
+(`agent/README.md`, "Buyer loop settings"), and it costs about 15k tokens a week, where
+thinking costs 130k. Method, run 2026-11-14:
+
+1. **Before.** `nemotron-nothink` on the training seeds 1-3, all four kitchen types
+   (12 weeks).
+2. **Self-review.** One call with thinking on (15k tokens, 8 s). Nemotron read a digest of
+   its own three worst weeks (stock, forecast, on order, yesterday's result and its reply
+   per decision) and proposed 7 rules. The failure patterns it named:
+   - "1 of everything" token orders;
+   - too little after a shortage;
+   - orders into Valio's stock-out;
+   - token orders after a refused order.
+
+   The rules are in `env/llm.py` `SELF_REVIEW_RULES`, verbatim. **v2** is the prompt plus
+   those rules.
+3. **Calculator.** **v3** keeps the original prompt and adds one field to the
+   observation, `expected_use`: per product, the expected use per day for the next 7 days,
+   computed from the same forecast and recipes the model already sees. A tool's answer
+   instead of more rules: the model still decides every quantity.
+4. **Keep what helps**, judged on the held-out seeds 4-5 (8 weeks), which no variant was
+   chosen on.
+
+Score = EUR per week, the same scoring as above.
+
+| policy | seeds | weeks | score | lost covers | mandate penalty | calls/week | tokens/week | bad replies |
+|---|---|---|---|---|---|---|---|---|
+| nemotron-nothink (before) | train 1-3 | 12 | -917 | 702.1 | 50 | 4.2 | 15165 | 0 |
+| v2: + its own rules | train 1-3 | 12 | -1537 | 728.7 | 204 | 4.2 | 15610 | 0 |
+| v3: + calculator | train 1-3 | 12 | 2001 | 365.9 | 304 | 4.2 | 19068 | 0 |
+| nemotron-nothink (before) | **held-out 4-5** | 8 | **-107** | 627.5 | 144 | 4.2 | 15142 | 0 |
+| v3: + calculator | **held-out 4-5** | 8 | **1733** | 396.4 | 194 | 4.2 | 18954 | 0 |
+| reference engine | held-out 4-5 | 8 | 7103 | 7.8 | 0 | - | 0 | - |
+
+Per kitchen type on the held-out seeds (before / v3):
+- restaurant: 463 / 2268
+- hotel: 1204 / 2646
+- school: 417 / 5077
+- hospital: -2511 / -3059
+
+What the numbers say:
+
+1. **The calculator is worth about EUR 1.8k a week** on the held-out seeds. It costs 25%
+   more tokens (the extra field) and no extra calls. It is kept: it is how the product
+   works, where the engine does the arithmetic and the model picks.
+2. **Nemotron's own rules made it worse** (-917 to -1537). Its diagnosis was right, but a
+   model with thinking off still cannot do the multiplication in one pass, so more rules
+   do not help. They are not kept. We report it, because it is the honest result.
+3. **The gap to the engine stays.** v3 is still EUR 5.4k a week below the reference, and
+   the hospital does not improve (one bad week, sd 5.6k). The mandate penalty rises a
+   little, because larger orders need approval more often. In the product the engine sets
+   quantities and the gateway enforces approval, so neither depends on the model.
+4. Not tried in this round:
+   - best-of-n with logprobs;
+   - v3 with thinking on (about 1M tokens for 8 weeks).
+
+Tokens for this round, measured from the endpoint's `usage` field:
+- 221 benchmark calls, 870,876 tokens;
+- plus the review call, 15,377 tokens;
+- **886,253 tokens** in all.
+
+The Buyer's own measurement is in `agent/README.md`, "Token meter": 832 calls,
+9.57 million tokens.
+
+Caveats: 2-3 seeds per kitchen, with a large seed-to-seed sd, so read the means over all
+kitchens. Transcripts are in `env/out/llm/` (git-ignored).
