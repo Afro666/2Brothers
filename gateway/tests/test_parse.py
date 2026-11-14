@@ -46,6 +46,10 @@ def test_two_products_in_one_request_are_refused(text):
     ("200 L milk in 1,5 l bottles by Monday", D(200), "L"),    # the comma of a decimal number
     ("30 kg salt and pepper mix by Monday", D(30), "KG"),      # "and" with one quantity
     ("40 kg macaroni and cheese by Monday", D(40), "KG"),
+    ("50 kg flour, 25 kg sacks by Monday", D(50), "KG"),       # a pack size after a comma
+    ("200 L milk, 1 l cartons by Monday", D(200), "L"),
+    ("100 L milk and 1 l cartons by Monday", D(100), "L"),     # a pack size after "and"
+    ("100 l maitoa ja 1 l tölkkejä maanantaiksi", D(100), "L"),
 ])
 def test_one_quantity_or_a_pack_size_is_still_one_product(text, qty, unit):
     r = parse_request(text, FRI)
