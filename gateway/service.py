@@ -186,15 +186,16 @@ class Gateway:
         blocks = [self._block(self._supplier(kitchen_id, sid), lines, tax)
                   for sid, lines in by_supplier.items()]
         # The top-level gap and fee are those of the only supplier; with several, read `blocks`.
-        # No line at all: Valio's terms on an empty basket, as before #73.
+        # No line at all: nothing is ordered, so no delivery and no total (#995).
         if len(blocks) > 1:
             mov_gap = fee = None
+        elif blocks:
+            mov_gap, fee = blocks[0]["mov_gap"], blocks[0]["fee"]
         else:
-            only = blocks[0] if blocks else self._block(self._supplier(kitchen_id, VALIO), [], tax)
-            mov_gap, fee = only["mov_gap"], only["fee"]
+            mov_gap = fee = Decimal(0)
         net = plan.total
         vat = sum((b["vat"] or Decimal(0) for b in blocks), Decimal(0))
-        expected = sum((b["expected"] for b in blocks), Decimal(0)) if blocks else only["expected"]
+        expected = sum((b["expected"] for b in blocks), Decimal(0))
         excluded = [*plan.excluded, *skipped]
         reasons = [f"{pid}: {why}" for pid, why in excluded]
         if plan.shortfall > 0:
@@ -325,6 +326,8 @@ class Gateway:
             sim["mandate"]["reason_codes"].append("ALLERGEN_RULE")
         if request.get("refusal"):       # the whole request is refused (#974): say it first
             sim["mandate"]["reasons"].insert(0, request["refusal"]["message"])
+            # A rule refused it, not the stock (#995).
+            sim["mandate"]["reason_codes"] = [c for c in sim["mandate"]["reason_codes"] if c != "PARTIAL_STOCK"]
         if self._mixed_fat(plan) and "SUBSTITUTE_FAT_LEVEL" not in sim["mandate"]["reason_codes"]:
             sim["mandate"]["reason_codes"].append("SUBSTITUTE_FAT_LEVEL")   # S01: a person picks
         return self._save_offer(kitchen_id, request, sim)
