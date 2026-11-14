@@ -114,3 +114,42 @@ def test_a_signing_failure_still_sets_offer_hash_and_keeps_approval_mismatch(env
     bad = client.post("/tools/place_order", headers=AGENT, json={
         "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"})
     assert bad.status_code == 409 and bad.json()["error"]["code"] == "APPROVAL_MISMATCH"
+
+
+# ---- where the key lives (#755) ---------------------------------------------------------
+
+def test_the_server_never_keeps_a_signing_key_in_the_database(env, monkeypatch):
+    """With GATEWAY_SIGNING_KEY_REQUIRED (set in deploy/compose.yaml) and no key, signing
+    refuses, and nothing is written to the database."""
+    _, _, db = env
+    monkeypatch.delenv("GATEWAY_SIGNING_KEY", raising=False)
+    monkeypatch.setenv("GATEWAY_SIGNING_KEY_REQUIRED", "true")
+    with pytest.raises(RuntimeError, match="GATEWAY_SIGNING_KEY is required"):
+        signing.jwks(db)
+    assert db.gateway_keys.count_documents({}) == 0
+
+
+def test_the_key_from_the_environment_is_used_and_not_stored(env, monkeypatch):
+    import base64
+    _, _, db = env
+    monkeypatch.setenv("GATEWAY_SIGNING_KEY", base64.b64encode(bytes(range(32))).decode())
+    monkeypatch.setenv("GATEWAY_SIGNING_KEY_REQUIRED", "true")
+    first = signing.kid(db)
+    signing._cache.clear()
+    assert signing.kid(db) == first and db.gateway_keys.count_documents({}) == 0
+
+
+def test_tests_and_local_runs_keep_the_database_fallback(env, monkeypatch):
+    _, _, db = env
+    monkeypatch.delenv("GATEWAY_SIGNING_KEY", raising=False)
+    monkeypatch.delenv("GATEWAY_SIGNING_KEY_REQUIRED", raising=False)
+    first = signing.kid(db)
+    signing._cache.clear()
+    assert signing.kid(db) == first and db.gateway_keys.count_documents({}) == 1
+
+
+def test_the_deploy_requires_the_key():
+    from pathlib import Path
+    compose = (Path(__file__).resolve().parents[2] / "deploy" / "compose.yaml").read_text(encoding="utf-8")
+    assert "GATEWAY_SIGNING_KEY: ${GATEWAY_SIGNING_KEY:?" in compose
+    assert 'GATEWAY_SIGNING_KEY_REQUIRED: "true"' in compose
