@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 
 import { useApi } from "@/api";
 import type { AuditActor, ShelfPhotoRead, ShelfPhotoRow } from "@/api/types";
+import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
 import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n";
@@ -37,17 +38,20 @@ function RowLine({ row, name, onList }: { row: ShelfPhotoRow; name: string | nul
       ) : (
         <span className="shrink-0 font-semibold text-warning sm:w-28">{t("please count")}</span>
       )}
-      <span className="min-w-0 break-words">
-        <span className="font-medium">{name ?? t("No product on your stock list matches")}</span>
-        <span className="block text-xs text-muted-foreground">
-          {counted && row.packs != null && row.packSize != null
-            ? `${row.packs === 1
-                ? t("{count} pack x {size} {unit}. ", { count: row.packs, size: formatNumber(row.packSize), unit: unitLabel(row.unit) })
-                : t("{count} packs x {size} {unit}. ", { count: row.packs, size: formatNumber(row.packSize), unit: unitLabel(row.unit) })
-              }`
-            : null}
-          {counted && !onList ? t("Not on this stock list, so no count was filled in. ") : null}
-          {t("Read on the pack:")} “{row.label}” {t("({confidence} confidence)", { confidence: row.confidence })}
+      <span className="flex min-w-0 items-start gap-2">
+        <ProductThumb en={name ?? row.label} size="sm" />
+        <span className="min-w-0 break-words">
+          <span className="font-medium">{name ?? t("No product on your stock list matches")}</span>
+          <span className="block text-xs text-muted-foreground">
+            {counted && row.packs != null && row.packSize != null
+              ? `${row.packs === 1
+                  ? t("{count} pack x {size} {unit}. ", { count: row.packs, size: formatNumber(row.packSize), unit: unitLabel(row.unit) })
+                  : t("{count} packs x {size} {unit}. ", { count: row.packs, size: formatNumber(row.packSize), unit: unitLabel(row.unit) })
+                }`
+              : null}
+            {counted && !onList ? t("Not on this stock list, so no count was filled in. ") : null}
+            {t("Read on the pack:")} “{row.label}” {t("({confidence} confidence)", { confidence: row.confidence })}
+          </span>
         </span>
       </span>
     </li>
