@@ -337,6 +337,9 @@ describe("catalog page", () => {
     expect(screen.getAllByText(/^Product \d+$/)).toHaveLength(24);
     expect(screen.getByText("24 of 30 products")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show more (6 more)" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show more (6 more)" }));
+    expect(await screen.findByText("30 products")).toBeInTheDocument();
+    expect(screen.queryByText(/ of 30 products/)).not.toBeInTheDocument();
   });
 
   describe("Search by meaning (#1382)", () => {
@@ -545,7 +548,7 @@ describe("catalog page: a short result list on a phone (#1142)", () => {
       return resultItems();
     });
     expect(
-      screen.getByText("Search by meaning is not available right now; only words were searched."),
+      screen.getByText("Search by meaning is not available right now. These products match by words."),
     ).toBeInTheDocument();
     for (const row of rows) expect(within(row).getByRole("button", { expanded: false })).toHaveTextContent("By words");
   });

@@ -342,8 +342,8 @@ export function CatalogPage() {
           <div className="space-y-3">
             <div className="space-y-1" aria-live="polite">
               <p className="text-sm text-muted-foreground">
-                {results.length > RESULTS_PER_PAGE
-                  ? t("{shown} of {total} products", { shown: Math.min(visibleCount, results.length), total: results.length })
+                {Math.min(visibleCount, results.length) < results.length
+                  ? t("{shown} of {total} products", { shown: visibleCount, total: results.length })
                   : results.length === 1
                     ? t("{count} product", { count: results.length })
                     : t("{count} products", { count: results.length })}
