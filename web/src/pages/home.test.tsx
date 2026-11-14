@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { mapAudit } from "@/api/gateway-map";
 import { createMockApi } from "@/api/mock";
 import type { Api } from "@/api/types";
 import type { Supplier } from "@/types";
@@ -172,6 +173,21 @@ describe("HomePage", () => {
     expect(await screen.findByText("Kitchen brief read")).toBeInTheDocument();
     expect(screen.getByText("No model sentence for a proposal")).toBeInTheDocument();
     expect(screen.queryByText(/kitchen_brief_read|proposal_explanation_failed/)).not.toBeInTheDocument();
+  });
+
+  it("shows gateway audit kinds as plain words in Latest steps, a new kind too (mock jury, 14 Nov)", async () => {
+    const api = createMockApi();
+    const kinds = ["approval_token_created", "token_created", "settings_changed", "proposal_changed", "some_future_kind"];
+    api.listAudit = async () =>
+      mapAudit(kinds.map((kind, i) => ({ event_id: `e-${i}`, kind, actor: "system", at: `2026-11-14T10:0${i}:00Z` })));
+    renderApp(`/?now=${DEMO_NOW}`, api);
+
+    expect(await screen.findByText("Personal approval token created")).toBeInTheDocument();
+    expect(screen.getByText("Kitchen API token created")).toBeInTheDocument();
+    expect(screen.getByText("Settings changed")).toBeInTheDocument();
+    expect(screen.getByText("Proposal changed")).toBeInTheDocument();
+    expect(screen.getByText("Some future kind")).toBeInTheDocument();
+    expect(screen.queryByText(/_/)).not.toBeInTheDocument();
   });
 });
 

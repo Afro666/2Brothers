@@ -651,7 +651,54 @@ const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
   supplier_offer_received: { kind: "offer", summary: "Offer received from the supplier's selling agent" },
   supplier_offer_accepted: { kind: "offer", summary: "Supplier offer accepted: a proposal was made from it" },
   supplier_offer_declined: { kind: "offer", summary: "Supplier offer declined" },
+  // Mock jury, 14 Nov: Home showed raw kinds such as `approval_token_created`.
+  approval_token_created: { kind: "settings", summary: "Personal approval token created" },
+  approval_token_revoked: { kind: "settings", summary: "Personal approval token revoked" },
+  token_created: { kind: "settings", summary: "Kitchen API token created" },
+  token_revoked: { kind: "settings", summary: "Kitchen API token revoked" },
+  webhook_created: { kind: "settings", summary: "Webhook added" },
+  webhook_deleted: { kind: "settings", summary: "Webhook removed" },
+  settings_changed: { kind: "settings", summary: "Settings changed" },
+  auto_approve_changed: { kind: "settings", summary: "Auto-approve setting changed" },
+  auto_approved: { kind: "approval", summary: "Approved automatically within the limit" },
+  auto_approve_skipped: { kind: "approval", summary: "Not approved automatically: a person decides" },
+  alias_set: { kind: "settings", summary: "Product name for the kitchen saved" },
+  alias_removed: { kind: "settings", summary: "Product name for the kitchen removed" },
+  proposal_changed: { kind: "request", summary: "Proposal changed" },
+  proposal_explanation_ready: { kind: "request", summary: "Proposal explained" },
+  menu_photo_read: { kind: "request", summary: "Menu photo read by Nemotron VL" },
+  menu_photo_failed: { kind: "request", summary: "Menu photo could not be read" },
+  menu_plan_changed: { kind: "request", summary: "Menu plan changed" },
+  stock_counted: { kind: "stock", summary: "Stock counted" },
+  stock_photo_failed: { kind: "stock", summary: "Shelf photo could not be read" },
+  label_photo_read: { kind: "stock", summary: "Label photo read by Nemotron VL" },
+  label_photo_failed: { kind: "stock", summary: "Label photo could not be read" },
+  price_list_photo_read: { kind: "offer", summary: "Price list photo read by Nemotron VL" },
+  price_list_photo_failed: { kind: "offer", summary: "Price list photo could not be read" },
+  delivery_note_failed: { kind: "order", summary: "Delivery note could not be read" },
+  delivery_result_saved: { kind: "order", summary: "Delivery check saved" },
+  approve_rollback_failed: { kind: "order", summary: "An approval could not be undone after a failed send" },
+  stuck_commit_released: { kind: "order", summary: "A stuck order send was released" },
+  demo_delivery_order_placed: { kind: "order", summary: "Demo delivery order placed by the demo seed" },
+  demo_offers_reset: { kind: "other", summary: "Demo supplier offers reset" },
+  learned_fact_applied: { kind: "other", summary: "A learned fact changed a proposal" },
+  learned_fact_switched_off: { kind: "settings", summary: "A learned fact was switched off" },
+  recall_dismissed: { kind: "other", summary: "Recall alert dismissed" },
+  recall_proposal_blocked: { kind: "approval", summary: "Proposal blocked by a recall" },
+  recall_replacement_proposed: { kind: "request", summary: "Replacement proposed for a recalled product" },
+  recall_replacement_rejected: { kind: "approval", summary: "Replacement for a recalled product rejected" },
+  replacement_enriched: { kind: "other", summary: "Replacement product details added" },
+  replacement_enrichment_unknown: { kind: "other", summary: "Replacement product details not found" },
 };
+
+const SNAKE_CASE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
+
+/** A kind with no label of its own: a code `plainCode` knows stays as it is, other snake_case reads as words. */
+function kindWords(kind: string): string {
+  if (Object.hasOwn(CODE_LABELS, kind) || !SNAKE_CASE.test(kind)) return kind;
+  const text = kind.replace(/_/g, " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 /** `expected_total: 148.76; verdict: NEEDS_APPROVAL`: the gateway's own values, as sent. */
 function describe(fields: unknown): string {
@@ -763,7 +810,7 @@ function mapAuditEvent(event: Json): AuditEvent {
     offer_id: _offer,
     ...rest
   } = event;
-  const known = typeof kind === "string" ? EVENT_KINDS[kind] : undefined;
+  const known = typeof kind === "string" && Object.hasOwn(EVENT_KINDS, kind) ? EVENT_KINDS[kind] : undefined;
   const humanReason =
     typeof rest.summary === "string"
       ? rest.summary
@@ -790,7 +837,7 @@ function mapAuditEvent(event: Json): AuditEvent {
             : typeof actor === "string" && !actor.startsWith("token:")
               ? "human"
             : "system",
-    summary: known?.summary ?? (typeof kind === "string" ? kind : "Unknown step"),
+    summary: known?.summary ?? (typeof kind === "string" ? kindWords(kind) : "Unknown step"),
     reason: humanReason || (typeof kind === "string" && kind.startsWith("supplier_offer_") ? describe(rest) : ""),
     details: describe(details),
   };
