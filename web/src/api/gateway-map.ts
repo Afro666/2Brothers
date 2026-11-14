@@ -196,6 +196,25 @@ function mapMov(proposal: Json): MovState | null {
   return { threshold: Math.round((current + gap) * 100) / 100, current, deliveryFee };
 }
 
+/**
+ * `total_incl_vat` and the names of the `vat_unknown` lines (docs/contract.md "VAT per product").
+ * Nothing when the answer does not send `total_incl_vat` (an older gateway).
+ */
+function vatTotals(answer: Json | null, lines: unknown[]): { inclVat?: number | null; vatUnknown?: string[] } {
+  if (!answer || !("total_incl_vat" in answer)) return {};
+  const names = new Map<string, string>();
+  for (const line of lines) {
+    const row = line && typeof line === "object" ? (line as Json) : {};
+    if (typeof row.product_id === "string" && typeof row.product_name === "string" && row.product_name) {
+      names.set(row.product_id, row.product_name);
+    }
+  }
+  const unknown = strings(answer.vat_unknown).map((id) => names.get(id) ?? id);
+  const inclVat = decimal(answer.total_incl_vat, "total_incl_vat");
+  // Unknown is never a figure: a null total, or any unknown line, shows "incl VAT: unknown".
+  return { inclVat: unknown.length ? null : inclVat, vatUnknown: unknown };
+}
+
 /** The gateway `outcome` of a placed order. Anything but a known outcome is "unconfirmed", never "placed". */
 function placedStatus(outcome: unknown): OrderStatus {
   if (outcome === "CONFIRMED") return "PLACED";
@@ -221,6 +240,8 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
   const request = proposal ? object(proposal.request, "a proposal's request") : null;
   const deliveryDate = request ? text(request.requested_date, "requested_date") : null;
   if (!Array.isArray(source.lines)) invalid("order lines");
+  // #1630: the order answer carries its own totals; the proposal only fills what it does not send.
+  const own = (key: string): unknown => (placed && key in placed ? placed[key] : proposal?.[key]);
   return {
     id: text(placed ? placed.order_id : source.proposal_id, "an order id"),
     status: placed ? placedStatus(placed.outcome) : proposalStatus(source.status),
@@ -228,10 +249,12 @@ export function mapOrder(proposal: Json | null, placed: Json | null): Order {
     deliveryDate,
     lines: source.lines.map((line) => mapLine(object(line, "an order line"), deliveryDate ?? "")),
     supplierMustConfirm: placed ? strings(placed.supplier_must_confirm) : [],
-    totalExVat: proposal ? mapMoney(proposal.total_ex_vat, "total_ex_vat") : null,
-    vat: proposal ? decimal(proposal.vat, "vat") : null,
-    deliveryFee: proposal ? decimal(proposal.delivery_fee, "delivery_fee") : null,
+    totalExVat: decimal(own("total_ex_vat"), "total_ex_vat"),
+    vat: decimal(own("vat"), "vat"),
+    deliveryFee: decimal(own("delivery_fee"), "delivery_fee"),
+    // The approve figure; the screen shows `inclVat` (or "unknown") as incl VAT (#1630).
     totalInclVat: mapMoney((placed ?? source).expected_total, "expected_total"),
+    ...vatTotals(placed && "total_incl_vat" in placed ? placed : proposal, source.lines),
     mov: proposal ? mapMov(proposal) : null,
     supplierOrderRef: placed ? resolutionRecord(placed.resolution)?.supplierOrderRef ?? null : null,
     ...(placed ? { receipt: mapReceipt(placed.receipt) } : {}),
@@ -560,7 +583,9 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
     lineCount: Array.isArray(proposal.lines) ? proposal.lines.length : invalid("proposal lines"),
     deliveryDate: text(request.requested_date, "requested_date"),
     totalExVat: mapMoney(proposal.total_ex_vat, "total_ex_vat"),
+    // The approve figure, sent back on approve; `inclVat` is what the screen calls incl VAT (#1630).
     totalInclVat: mapMoney(proposal.expected_total, "expected_total"),
+    ...vatTotals(proposal, Array.isArray(proposal.lines) ? proposal.lines : []),
     reasons: reasons.length
       ? reasons
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],

@@ -11,6 +11,7 @@ import { DecisionStrip } from "@/components/purchasing/decision-strip";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { useT } from "@/lib/i18n";
+import { inclVatText } from "@/lib/vat";
 import { nextCutoff } from "@/pages/home/cutoff";
 import { HOME_STOCK_ROWS, stockToCheck } from "@/pages/home/stock-rows";
 import { Tile, TileState } from "@/pages/home/tile";
@@ -61,7 +62,7 @@ export function ApprovalTile({ api }: { api: Api }) {
                 ) : null}
               </div>
               <p className="w-fit border-b-[3px] border-double border-foreground text-2xl font-bold tabular-nums sm:justify-self-end">
-                {t(formatEur(oldest?.totalInclVat ?? null))} {t("incl VAT")}
+                {oldest ? inclVatText(oldest, t, (value) => t(formatEur(value))) : `${t(formatEur(null))} ${t("incl VAT")}`}
               </p>
             </div>
           );

@@ -32,7 +32,7 @@ function gateway(routes: Record<string, Handler>) {
   return calls;
 }
 
-const inbox = (row = proposal) => ({
+const inbox = (row: object = proposal) => ({
   [`GET ${K}/proposals`]: () => ({ proposals: [row] }),
   [`GET ${K}/proposals/prop-1`]: () => row,
   [`GET ${K}/audit`]: () => ({ events: auditEvents }),
@@ -847,6 +847,34 @@ describe("createHttpApi", () => {
     expect(alone).toMatchObject({ id: "ord-old", status: "PLACED", deliveryDate: null, totalExVat: null });
   });
 
+  it("reads the totals of an order from the order answer, not only from its proposal (#1630)", async () => {
+    const own = { total_ex_vat: "80.00", vat: "11.20", total_incl_vat: "91.20", vat_unknown: [], delivery_fee: null };
+    const oat = { ...placedOrder.lines[0], product_name: "Oat drink" };
+    gateway({
+      [`GET ${K}/orders`]: () => ({
+        orders: [
+          { ...placedOrder, ...own },
+          {
+            ...placedOrder,
+            order_id: "ord-unknown",
+            lines: [oat],
+            total_ex_vat: "80.00",
+            vat: null,
+            total_incl_vat: null,
+            vat_unknown: ["900001"],
+            expected_total: "80.00",
+          },
+        ],
+      }),
+      [`GET ${K}/proposals`]: () => ({ proposals: [] }),
+    });
+    const [known, unknown] = await createHttpApi("/api").listOrders();
+    // No proposal at hand: the ex-VAT total still comes from the order itself.
+    expect(known).toMatchObject({ id: "ord-1", totalExVat: 80, vat: 11.2, inclVat: 91.2, vatUnknown: [] });
+    // An unknown rate: incl VAT is unknown, never the ex-VAT sum; the approve figure stays.
+    expect(unknown).toMatchObject({ totalExVat: 80, vat: null, inclVat: null, vatUnknown: ["Oat drink"], totalInclVat: 80 });
+  });
+
   it("skips a malformed proposal or order and lists the rest", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     gateway({
@@ -1104,6 +1132,48 @@ describe("the app on the gateway", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("The total is now €95.00. Nothing was sent.");
     expect(await screen.findByRole("button", { name: /Approve €95\.00 incl VAT/ })).toBeEnabled();
     expect(screen.getByRole("heading", { name: "Waiting for you (1)" })).toBeVisible();
+  });
+
+  it("shows incl VAT as unknown when a rate is unknown, and still approves expected_total (#1630)", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    const user = userEvent.setup();
+    const unknownVat = {
+      ...proposal,
+      lines: [{ ...proposal.lines[0], product_name: "Oat drink" }],
+      vat: null,
+      total_incl_vat: null,
+      vat_unknown: ["900001"],
+      expected_total: "80.00",
+    };
+    const calls = gateway({
+      ...inbox(unknownVat),
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
+      [`POST ${K}/proposals/prop-1/approve`]: () => ({ proposal_id: "prop-1", ...placedOrder, expected_total: "80.00" }),
+      [`GET ${K}/orders/ord-1`]: () => ({ ...placedOrder, expected_total: "80.00" }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    expect(await screen.findByText("incl VAT: unknown (Oat drink)")).toBeVisible();
+    expect(screen.queryByText(/€80\.00 incl VAT/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Approve €80.00" }));
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €80.00" }));
+    await waitFor(() => expect(calls.some((call) => call.route === `POST ${K}/proposals/prop-1/approve`)).toBe(true));
+    const approve = calls.find((call) => call.route === `POST ${K}/proposals/prop-1/approve`);
+    expect(approve?.body).toMatchObject({ expected_total: "80.00" });
+  });
+
+  it("shows a proposal's incl VAT from total_incl_vat, not from expected_total (#1630)", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    gateway({
+      ...inbox({ ...proposal, delivery_fee: "9.90", total_incl_vat: "91.20", vat_unknown: [], expected_total: "101.10" }),
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    expect(await screen.findByText("€91.20")).toBeVisible();
+    // The approve button keeps the exact figure a person approves.
+    expect(screen.getByRole("button", { name: /Approve €101\.10 incl VAT/ })).toBeVisible();
   });
 
   it("lets a person change the pcs of a READY proposal and then approve the new total", async () => {

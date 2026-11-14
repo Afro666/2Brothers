@@ -542,4 +542,10 @@ export default {
   "A person checks whether this notice is about your product.": "Ihminen tarkistaa, koskeeko ilmoitus tuotettasi.",
   "Asked: “{text}”": "Pyydetty: ”{text}”",
   "Ordered {time}": "Tilattu {time}",
+  "incl VAT: unknown ({names})": "sis. alv: ei tiedossa ({names})",
+  "incl VAT: unknown": "sis. alv: ei tiedossa",
+  "Delivery {date} · {total}": "Toimitus {date} · {total}",
+  "Delivery {date} · {exVat} ex VAT · {total}": "Toimitus {date} · {exVat} ilman alv · {total}",
+  "Approved: {exVat} ex VAT, {total}. The order may now be sent.": "Hyväksytty: {exVat} ilman alv, {total}. Tilauksen voi nyt lähettää.",
+  "You approve exactly {exVat} ex VAT, {amount} in all ({total}). If the price or stock moves before it is placed, the gateway refuses it and asks again.": "Hyväksyt tasan {exVat} ilman alv, yhteensä {amount} ({total}). Jos hinta tai varasto muuttuu ennen tilaamista, yhdyskäytävä hylkää sen ja pyytää uuden hyväksynnän.",
 } satisfies Record<string, string>;

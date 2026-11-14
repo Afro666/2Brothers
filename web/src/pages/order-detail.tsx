@@ -19,6 +19,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, formatDateTime, formatEur, shortOrderId } from "@/lib/format";
 import { getLanguage, translate, useT } from "@/lib/i18n";
+import { inclVatOf, inclVatText } from "@/lib/vat";
 import { placedStatuses } from "@/lib/order-status";
 import { orderTitle } from "@/lib/order-title";
 import { useAsync } from "@/lib/use-async";
@@ -172,7 +173,9 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
               ) : null}
               <div className="flex items-baseline justify-between gap-4 border-t border-dashed border-input pt-3 text-base font-semibold">
                 <dt>{t("Total incl VAT")}</dt>
-                <dd className="text-right font-mono text-lg tabular-nums">{t(formatEur(order.totalInclVat))}</dd>
+                <dd className="text-right font-mono text-lg tabular-nums">
+                  {inclVatOf(order) !== null ? t(formatEur(inclVatOf(order))) : inclVatText(order, t, formatEur)}
+                </dd>
               </div>
             </dl>
             <MovProgress mov={order.mov} />

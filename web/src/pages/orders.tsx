@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatDateTime, formatEur, shortOrderId } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { inclVatText } from "@/lib/vat";
 import { orderTitle } from "@/lib/order-title";
 import { useAsync } from "@/lib/use-async";
 import { supplierName } from "@/lib/supplier-name";
@@ -71,9 +72,9 @@ export function OrdersPage() {
                           ) : null}
                         </div>
                         <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                          {t("Delivery {date} · {amount} incl VAT", {
+                          {t("Delivery {date} · {total}", {
                             date: t(formatDate(order.deliveryDate)),
-                            amount: formatEur(order.totalInclVat),
+                            total: inclVatText(order, t, formatEur),
                           })}
                         </p>
                       </div>
