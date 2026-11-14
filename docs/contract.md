@@ -591,6 +591,9 @@ products, menu plans, stock counts, stock, demand, settings and sharing.
   `stock_counted`, `settings_changed`, `share_granted`, `share_revoked`.
 - `POST /stock/photo` writes no kitchen data. It leaves one audit entry per call:
   `stock_photo_read` or `stock_photo_failed` (see "Count from a shelf photo").
+- `POST /menu-photo` leaves the stored menu plan unchanged. It writes a
+  `menu_photo_read` or `menu_photo_failed` audit entry (see "Plan from a menu photo"),
+  plus the pending proposal when matched dishes need ingredients.
 - Gap: only `POST /stock-counts` replays a repeat `idempotency_key`. The supplier,
   recipe, product and menu-plan writes ignore the key, so a repeated create makes a
   second row.
