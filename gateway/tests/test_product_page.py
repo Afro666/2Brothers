@@ -32,7 +32,7 @@ def page(env):
         "brand": "Testi", "category": "10101", "sales_unit": "ST", "base_unit": "ST",
         "net_content": {"value": 1.0, "unit": "L"}, "country": "fi", "temperature": "chilled",
         "allergens": {"contains": ["AM"], "may_contain": [], "undeclared": []}, "allergen_data_known": True,
-        "free_from": ["ML"], "vat_code": "MEDIUM", "vat_rate": "13.5", "vat_source": "Valio product data, vatCode",
+        "free_from": ["ML"], "vat_code": "MEDIUM", "vat_rate": "13.5", "vat_source": "catalog",
         "raw.synkkaData": RAW_TEXT}})
     repo = Repository(db)
     repo.suppliers.create("demo-kitchen", {"supplier_id": "sup-valio", "name": "Valio Aimo", "adapter": "valio_api",
@@ -164,6 +164,23 @@ def test_own_product_page_lists_its_supplier_then_the_catalog_product(page):
     assert p["allergens"]["known"] is False              # nothing entered: unknown, never free from
     assert [s["product_id"] for s in p["suppliers"]] == ["own-milk-dear", PID, "own-milk-cheap"]
     assert p["suppliers"][1]["price_ex_vat"] == "2.57"   # the catalog product's live price
+    assert p["vat"] == {"code": None, "rate": None, "source": None}   # nothing entered: unknown
+
+
+def test_vat_source_on_the_page_is_a_label_for_the_row_enum(page):
+    # #1609: the row says `catalog` / `entered`; the page's `vat.source` reads like its other sources
+    client, _, _ = page
+    assert get(client).json()["product"]["vat_source"] == "catalog"
+    own = get(client, "own-milk-cheap").json()
+    assert own["product"]["vat_source"] == "entered"
+    assert own["vat"] == {"code": None, "rate": "13.5", "source": "entered by the kitchen"}
+
+
+def test_a_row_with_the_old_free_text_source_still_reads(page):
+    # live rows filled before #1609 keep the old text until `python -m store.vat --apply`
+    client, _, db = page
+    db.products.update_one({"_id": PID}, {"$set": {"vat_source": "Valio product data, vatCode"}})
+    assert get(client).json()["vat"]["source"] == "Valio product data, vatCode"
 
 
 def test_unknown_or_other_kitchens_product_is_404_and_bad_date_422(page):

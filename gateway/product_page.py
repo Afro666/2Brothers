@@ -291,8 +291,15 @@ def _demand(gw, kitchen_id: str, pid: str, today: date) -> dict | None:
             "days": len({r["date"] for r in mine}), "source": "menu plan and forecast"}
 
 
+# The row's `vat_source` is a code (#1609); the page's `vat.source` is a label like its other sources.
+_VAT_LABELS = {"catalog": f"{CATALOG}, vatCode", "entered": "entered by the kitchen",
+               f"{CATALOG}, vatCode": f"{CATALOG}, vatCode"}   # a row not yet rewritten by store.vat
+
+
 def _vat(row: dict) -> dict:
-    return {"code": row.get("vat_code"), "rate": row.get("vat_rate"), "source": row.get("vat_source")}
+    rate = row.get("vat_rate")
+    label = _VAT_LABELS.get(row.get("vat_source")) if rate is not None else None
+    return {"code": row.get("vat_code"), "rate": rate, "source": label}
 
 
 def product_page(gw, kitchen_id: str, product_id: str, day: date | None = None) -> dict:

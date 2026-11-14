@@ -24,7 +24,9 @@ _TEMPERATURE_BY_TAG = {"coolTemperature": "chilled", "freezeTemperature": "froze
 # Finnish VAT in 2026, in percent, per catalog `vatCode` (#1603). The reduced rate covers all
 # foodstuffs (fish and vegetables alike): 13.5 % from 1 Jan 2026 (Law 1358/2025; it was 14 %).
 VAT_RATES = {"STANDARD": "25.5", "MEDIUM": "13.5", "LOW": "10", "NOT_APPLICABLE": "0"}
-VAT_SOURCE = "Valio product data, vatCode"
+# `vat_source` of a row whose rate is the catalog `vatCode`: the same enum as a line (#1609).
+# Null when the rate is unknown, as on a line.
+VAT_SOURCE = "catalog"
 
 
 def vat(code) -> tuple[str | None, str | None]:
@@ -159,7 +161,7 @@ def flatten(raw: dict, reliability: float | None = None, carbon: float | None = 
         "reliability": reliability,
         "carbon_kg_co2e_per_kg": carbon,
         "substitutions": [s["substituteProduct"] for s in raw.get("substitutions") or []],
-        "vat_code": vat_code, "vat_rate": vat_rate, "vat_source": VAT_SOURCE,
+        "vat_code": vat_code, "vat_rate": vat_rate, "vat_source": VAT_SOURCE if vat_rate is not None else None,
         "raw": raw,
     }
 

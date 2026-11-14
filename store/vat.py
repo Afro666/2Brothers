@@ -3,6 +3,9 @@
     python -m store.vat            # counts what would change; writes nothing
     python -m store.vat --apply    # sets vat_code, vat_rate, vat_source (safe to run again)
 
+It also rewrites a `vat_source` of the old free text ("Valio product data, vatCode") to the
+enum of #1609: `catalog` when the rate is known, else null.
+
 Only Valio catalog rows (`source: "valio"`) are read; own products keep the rate the kitchen
 entered. The rule is `store.products.vat`: the same as a fresh `python -m store.loader`.
 """
@@ -26,15 +29,15 @@ def backfill(db, apply: bool = False) -> dict:
         counts["checked"] += 1
         code, rate = vat(((doc.get("raw") or {}).get("synkkaData") or {}).get("vatCode"))
         counts["known" if rate is not None else "unknown"] += 1
-        want = {"vat_code": code, "vat_rate": rate, "vat_source": VAT_SOURCE}
+        want = {"vat_code": code, "vat_rate": rate, "vat_source": VAT_SOURCE if rate is not None else None}
         if any(key not in doc or doc[key] != value for key, value in want.items()):
             counts["changed"] += 1
-            todo.setdefault((code, rate), []).append(doc["_id"])
+            todo.setdefault((code, rate, want["vat_source"]), []).append(doc["_id"])
     if apply:
-        for (code, rate), ids in todo.items():
+        for (code, rate, source), ids in todo.items():
             for start in range(0, len(ids), BATCH):
                 db.products.update_many({"_id": {"$in": ids[start:start + BATCH]}, "source": "valio"},
-                                        {"$set": {"vat_code": code, "vat_rate": rate, "vat_source": VAT_SOURCE}})
+                                        {"$set": {"vat_code": code, "vat_rate": rate, "vat_source": source}})
     return counts
 
 
