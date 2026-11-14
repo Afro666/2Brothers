@@ -225,7 +225,8 @@ search_products(db, "", {"require_labels": ["EU_ORGANIC_FARMING"], "temperature"
   "milk" lives among the milks; `food_word_query`, one more count query when the query
   has several words). Then a non-food row gets no boost for holding every word, and
   comes after every food row that was read (#1658: the only name with "almond milk" is
-  a hand wash). "milk jug", "hand wash" and "coffee cup" are not such queries.
+  a hand wash). "milk jug", "hand wash" and "coffee cup" are not such queries. The
+  hybrid search follows the same rule: of the fused rows, the food ones come first (#1692).
 - A plant milk is also searched in the catalog's words (#1699): "almond milk" finds
   "Alpro Almond drink", "kauramaito" finds "kaurajuoma", and those names come first.
   The word pairs are a short measured table (`PLANT_DRINKS`: almond, oat, soy, rice in

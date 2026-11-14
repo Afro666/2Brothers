@@ -180,6 +180,20 @@ def food_word_query(db, text: str, home: str | None) -> bool:
     return bool(head) and not str(head).startswith(NON_FOOD_PREFIXES)
 
 
+def _food_rows_first(limit: int) -> list[dict]:
+    """The last stages for a query that asks for a food: food rows, then the others.
+
+    Words alone can still put the hand wash first (its name has the phrase), and so can
+    meaning. So food comes first among the rows read: a sort key, not a score, which
+    stays honest.
+    """
+    return [{"$addFields": {"_non_food": {"$or": [
+                {"$and": [{"$gte": ["$category", f"{prefix}000"]}, {"$lte": ["$category", f"{prefix}999"]}]}
+                for prefix in NON_FOOD_PREFIXES]}}},  # the same ranges as in the search; no category: food
+            {"$sort": {"_non_food": 1, **FIXED_ORDER["$sort"]}},
+            {"$limit": limit}, {"$project": {"_non_food": 0}}]
+
+
 def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
                    kitchen_id: str | None = None, home: str | None = None,
                    food_first: bool = False) -> list[dict]:
@@ -276,13 +290,7 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
     compound = {key: value for key, value in compound.items() if value}
     order = [FIXED_ORDER, {"$limit": limit}]
     if food_first and text:
-        # Words alone can still put the hand wash first (its name has the phrase), so food
-        # rows come first among the rows read: a sort key, not a score, which stays honest.
-        order = [{"$addFields": {"_non_food": {"$or": [
-                     {"$and": [{"$gte": ["$category", f"{prefix}000"]}, {"$lte": ["$category", f"{prefix}999"]}]}
-                     for prefix in NON_FOOD_PREFIXES]}}},  # the same ranges as in the search; no category: food
-                 {"$sort": {"_non_food": 1, **FIXED_ORDER["$sort"]}},
-                 {"$limit": limit}, {"$project": {"_non_food": 0}}]
+        order = _food_rows_first(limit)
     return [
         {"$search": {"index": INDEX_NAME, "compound": compound}},
         {"$limit": limit + TIE_ROOM},
@@ -325,15 +333,17 @@ def vector_filter(filters: dict | None = None, kitchen_id: str | None = None) ->
 
 def build_hybrid_pipeline(query: str, query_vector, filters: dict | None = None,
                           limit: int = 20, kitchen_id: str | None = None,
-                          home: str | None = None) -> list[dict]:
+                          home: str | None = None, food_first: bool = False) -> list[dict]:
     """Text search and vector search over the same filters, fused by rank in Atlas.
 
     Each side gives its best `MAX_LIMIT` rows; `$rankFusion` merges them by reciprocal
     rank, so a product that words miss but meaning finds still comes up.
+    `food_first` as in `build_pipeline`: the text side gives a non-food row no all-words
+    boost, and of the fused rows the food ones come first (#1692).
     """
     # shortcut: the text side's own cut at MAX_LIMIT keeps Atlas's order for equal rows;
     # $rankFusion takes no computed sort key. Fix when the Buyer runs on hybrid search.
-    text_side = [build_pipeline(query, filters, MAX_LIMIT, kitchen_id, home)[0],  # validates too
+    text_side = [build_pipeline(query, filters, MAX_LIMIT, kitchen_id, home, food_first)[0],  # validates too
                  {"$limit": MAX_LIMIT}]
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIMIT:
         raise ValueError(f"limit must be an integer from 1 to {MAX_LIMIT}")
@@ -341,13 +351,13 @@ def build_hybrid_pipeline(query: str, query_vector, filters: dict | None = None,
         "index": VECTOR_INDEX_NAME, "path": "embedding.vector", "queryVector": query_vector,
         "numCandidates": 10 * MAX_LIMIT, "limit": MAX_LIMIT,
         "filter": vector_filter(filters, kitchen_id)}}]
-    return [
-        {"$rankFusion": {"input": {"pipelines": {"text": text_side, "vector": vector_side}},
-                         "scoreDetails": True}},
-        {"$limit": limit},
-        {"$addFields": {"score": {"$meta": "score"}, "fusion": {"$meta": "scoreDetails"}}},
-        {"$project": {"raw": 0, "embedding": 0}},
-    ]
+    fused = {"$rankFusion": {"input": {"pipelines": {"text": text_side, "vector": vector_side}},
+                             "scoreDetails": True}}
+    scored = {"$addFields": {"score": {"$meta": "score"}, "fusion": {"$meta": "scoreDetails"}}}
+    slim = {"$project": {"raw": 0, "embedding": 0}}
+    if food_first:  # every fused row is read (100 at most), then food first, then the cut
+        return [fused, scored, slim, *_food_rows_first(limit)]
+    return [fused, {"$limit": limit}, scored, slim]
 
 
 def _reasons(doc: dict, text: str, size: dict | None, codes: list[str]) -> list[str]:
@@ -404,8 +414,9 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
             # Same size, other model: Atlas would accept the vector and rank by noise.
             raise EmbeddingError(f"query model {query_model} does not match stored vectors {stored}")
         home = home_category(db, query)  # before the paid embedding call
+        food_first = food_word_query(db, text, home)
         vector = to_binary((embedder or embed)([query], "query")[0])
-        pipeline = build_hybrid_pipeline(query, vector, filters, limit, kitchen_id, home)
+        pipeline = build_hybrid_pipeline(query, vector, filters, limit, kitchen_id, home, food_first)
     else:
         home = home_category(db, query) if text else None
         pipeline = build_pipeline(query, filters, limit, kitchen_id, home)

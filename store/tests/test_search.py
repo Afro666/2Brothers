@@ -8,7 +8,8 @@ except ImportError:  # the `test` extra is not installed
     mongomock = None
 
 from store.search import (ALL_WORDS_BOOST, FOOD_BOOST, HOME_BOOST, SIZE_BOOST, TIE_ROOM, _reasons,
-                          allergen_codes, build_pipeline, food_word_query, home_category, parse_query,
+                          allergen_codes, build_hybrid_pipeline, build_pipeline, food_word_query,
+                          home_category, parse_query,
                           plant_drink,
                           search_products)
 
@@ -290,6 +291,49 @@ class SearchQueryTests(unittest.TestCase):
         cows = compound("lactose free milk")  # no plant word: the query is built as before
         self.assertEqual(list(cows["must"][0]), ["text"])
         self.assertNotIn("drink", str(cows))
+
+    def test_a_food_word_query_puts_food_first_in_the_fused_rows_too(self):
+        # #1692: meaning also finds the hand wash for "almond milk" (its name says so).
+        plain = build_hybrid_pipeline("almond milk", "VECTOR", None, 5, home="63001")
+        food = build_hybrid_pipeline("almond milk", "VECTOR", None, 5, home="63001", food_first=True)
+        self.assertEqual([list(stage)[0] for stage in plain], ["$rankFusion", "$limit", "$addFields", "$project"])
+        self.assertEqual([list(stage)[0] for stage in food],
+                         ["$rankFusion", "$addFields", "$project", "$addFields", "$sort", "$limit", "$project"])
+        self.assertEqual(food[4:6], [{"$sort": {"_non_food": 1, "score": -1, "_id": 1}}, {"$limit": 5}])
+        self.assertEqual(food[-1], {"$project": {"_non_food": 0}})  # the sort key is not shown
+        text = food[0]["$rankFusion"]["input"]["pipelines"]["text"][0]["$search"]["compound"]
+        self.assertIn("mustNot", text["should"][0]["compound"])     # no all-words boost for non-food
+        self.assertNotIn("63001", str(text["should"]))              # and no home boost for it
+        self.assertEqual(plain[0]["$rankFusion"]["input"]["pipelines"]["vector"],
+                         food[0]["$rankFusion"]["input"]["pipelines"]["vector"])
+
+    def test_the_food_word_count_runs_before_the_embedding_call(self):
+        from unittest import mock
+        from store import embeddings
+        order = []
+
+        class Products:
+            def find_one(self, *args, **kwargs):
+                return None
+
+            def aggregate(self, pipeline):
+                if "$searchMeta" in pipeline[0]:
+                    word = pipeline[0]["$searchMeta"]["facet"]["operator"]["compound"]["must"][0]["text"]["query"]
+                    order.append(word)
+                    home = {"almond milk": "63001", "milk": "10400"}[word]
+                    return [{"facet": {"category": {"buckets": [{"_id": home, "count": 9}]}}}]
+                order.append(list(pipeline[-1])[0] + " " + str(pipeline[-1]))
+                return []
+
+        def embedder(texts, kind):
+            order.append("embed")
+            return [[0.0] * embeddings.EMBED_DIMENSIONS]
+
+        db = type("Db", (), {"products": Products(), "client": object(), "name": "fake"})()
+        with mock.patch.object(embeddings, "current_model", return_value=None):
+            search_products(db, "almond milk", hybrid=True, embedder=embedder)
+        self.assertEqual(order[:3], ["almond milk", "milk", "embed"])
+        self.assertIn("_non_food", order[3])  # the fused rows were asked food first
 
     def test_rows_never_carry_the_raw_record(self):
         pipeline = build_pipeline("milk", limit=5)

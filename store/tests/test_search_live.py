@@ -95,6 +95,29 @@ class SearchAcceptance(unittest.TestCase):
         coconut = search_products(self.db, "coconut milk", limit=3)  # its own product, not a drink
         self.assertTrue(all("coconut milk" in row["names"]["en"].lower() for row in coconut))
 
+    def test_the_meaning_search_keeps_the_hand_wash_out_of_a_food_query_too(self):
+        # #1692. The query vector is the hand wash's own stored vector: the worst case, the
+        # vector side ranks it first. No call to the embedding service.
+        from unittest import mock
+        from store import embeddings
+        from store.search import NON_FOOD_PREFIXES
+        soap = self.db.products.find_one({"names.en": {"$regex": "Almond Milk liquid hand wash"}},
+                                         {"embedding.vector": 1})
+        if not soap or "embedding" not in soap:
+            self.skipTest("the product vectors are not loaded")
+        vector = list(soap["embedding"]["vector"].as_vector().data)
+        with mock.patch.object(embeddings, "current_model", return_value=None):
+            rows = search_products(self.db, "almond milk", limit=20, hybrid=True,
+                                   embedder=lambda texts, kind: [vector])
+            wash = search_products(self.db, "hand wash", limit=3, hybrid=True,
+                                   embedder=lambda texts, kind: [vector])
+        self.assertFalse(rows[0]["category"].startswith(NON_FOOD_PREFIXES), rows[0]["names"])
+        for row in rows[:3]:
+            self.assertNotIn("hand wash", row["names"]["en"].lower())
+        foods = [not row["category"].startswith(NON_FOOD_PREFIXES) for row in rows]
+        self.assertEqual(foods, sorted(foods, reverse=True))  # every food row before any non-food row
+        self.assertTrue(all(row["category"].startswith("63") for row in wash))  # a non-food query: as before
+
     def test_a_row_with_some_of_the_words_stays_under_the_all_words_line(self):
         from store.search import ALL_WORDS_BOOST
         rows = search_products(self.db, "milk honey", limit=20)
