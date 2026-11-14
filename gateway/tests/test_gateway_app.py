@@ -673,3 +673,27 @@ def test_a_client_cannot_mark_its_own_request_as_buyer_down(monkeypatch):
     r = TestClient(create_app(gw)).post(K + "/proposals", headers=AGENT, json={
         "text": "60 l milk by Monday", "idempotency_key": "c1", "buyer_down": True})
     assert r.status_code == 200 and "buyer_down" not in r.json()["request"]
+
+
+def test_catalog_products_by_id_in_the_order_asked_and_never_another_kitchens(env):
+    """#304: the Products page holds product codes (recipes, orders) and needs their rows."""
+    client, _, db = env
+    db.products.insert_one({"_id": "own-1", "kitchen_id": "demo-kitchen", "names": {"en": "our stock"}})
+    db.products.insert_one({"_id": "other-1", "kitchen_id": "k99", "names": {"en": "not ours"}})
+    r = client.get(K + "/catalog/products", headers=AGENT, params={"ids": "463335,own-1,nope,other-1,462775,463335"})
+    assert r.status_code == 200, r.text
+    rows = r.json()["products"]
+    assert [p["product_id"] for p in rows] == ["463335", "own-1", "462775"]
+    assert "raw" not in rows[0] and rows[0]["names"]["en"] == "milk 463335"
+
+
+@pytest.mark.parametrize("ids", ["", " , ", ",".join(str(i) for i in range(201))])
+def test_catalog_products_by_id_needs_1_to_200_codes(env, ids):
+    client, _, _ = env
+    r = client.get(K + "/catalog/products", headers=AGENT, params={"ids": ids})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_catalog_products_by_id_needs_a_token(env):
+    client, _, _ = env
+    assert client.get(K + "/catalog/products", params={"ids": "462775"}).status_code in (401, 403)

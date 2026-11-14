@@ -349,6 +349,16 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need("kitchen:read", kitchen_id)
         return {"proposals": gw().list_proposals(kitchen_id)}
 
+    @app.get(k + "/catalog/products")
+    def catalog_products(kitchen_id: str, ids: str = "", who: Principal = Depends(principal)):
+        """Product rows by code, in the order asked (#304): for screens that hold codes."""
+        who.need("kitchen:read", kitchen_id)
+        codes = [c.strip() for c in ids.split(",") if c.strip()]
+        if not 1 <= len(codes) <= 200:
+            raise GatewayError(422, "INVALID_REQUEST", "ids is 1 to 200 product codes, comma-separated")
+        from store.products import get_products
+        return {"products": get_products(gw().db, codes, kitchen_id)}
+
     @app.get(k + "/label-checks")
     def label_checks(kitchen_id: str, who: Principal = Depends(principal)):
         who.need('kitchen:read', kitchen_id)
