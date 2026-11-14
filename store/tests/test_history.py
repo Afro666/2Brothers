@@ -184,3 +184,33 @@ class LiveHistoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_stock_count_once_stores_once_and_replays():
+    import mongomock
+    from store.history import StockCountBusy, stock_count_once
+    db = mongomock.MongoClient()["t"]
+    calls = []
+    first = stock_count_once(db, "K1", "k", lambda: calls.append(1) or 3)
+    again = stock_count_once(db, "K1", "k", lambda: calls.append(1) or 3)
+    assert first == ("K1:k", 3, False) and again == ("K1:k", 3, True) and len(calls) == 1
+    db.stock_count_keys.insert_one({"_id": "K1:busy", "stock_count_id": "K1:busy", "stored": None})
+    try:
+        stock_count_once(db, "K1", "busy", lambda: 1)
+        assert False, "a key being stored must not store twice"
+    except StockCountBusy:
+        pass
+
+
+def test_a_failed_stock_count_releases_its_key():
+    import mongomock
+    from store.history import stock_count_once
+    db = mongomock.MongoClient()["t"]
+
+    def boom():
+        raise ValueError("bad line")
+    try:
+        stock_count_once(db, "K1", "k", boom)
+    except ValueError:
+        pass
+    assert stock_count_once(db, "K1", "k", lambda: 2) == ("K1:k", 2, False)

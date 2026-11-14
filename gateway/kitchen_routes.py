@@ -15,6 +15,7 @@ from decimal import Decimal
 from fastapi import Depends, Request
 
 from gateway.service import GatewayError
+from store.history import forecasts_between
 
 
 def _json(value):
@@ -126,23 +127,23 @@ def register(app, gw, principal, body) -> None:
     # ---- stock --------------------------------------------------------------------------
     @app.post(k + "/stock-counts")
     async def stock_count(kitchen_id: str, request: Request, who=Depends(principal)):
-        from store.history import record_stock_count
+        from store.history import StockCountBusy, record_stock_count, stock_count_once
         actor = writer(who, kitchen_id)
         data = await body(request)
         key = data.get("idempotency_key")
         if not isinstance(key, str) or not key.strip():
             raise GatewayError(422, "INVALID_REQUEST", "idempotency_key is required")
-        done = gw().db.stock_count_keys.find_one({"_id": f"{kitchen_id}:{key}"})
-        if done:
-            return {"stock_count_id": done["stock_count_id"], "stored": done["stored"]}
 
         def store():
             counted_at = datetime.fromisoformat(str(data.get("counted_at")))
             return record_stock_count(gw().db, kitchen_id, counted_at, data.get("counts") or [],
                                       data.get("source") or "manual")
-        stored = guarded(store)
-        count_id = f"{kitchen_id}:{key}"
-        gw().db.stock_count_keys.insert_one({"_id": count_id, "stock_count_id": count_id, "stored": stored})
+        try:
+            count_id, stored, replayed = guarded(lambda: stock_count_once(gw().db, kitchen_id, key, store))
+        except StockCountBusy:
+            raise GatewayError(409, "IDEMPOTENCY_IN_PROGRESS", "this count is being stored now; try again") from None
+        if replayed:
+            return {"stock_count_id": count_id, "stored": stored}
         gw()._audit(kitchen_id, "stock_counted", actor, lines=stored, source=data.get("source") or "manual")
         return {"stock_count_id": count_id, "stored": stored}
 
@@ -316,7 +317,7 @@ def demand_rows(db, kitchen_id: str, start: date, end: date,
     planned_days = {row["date"] for row in rows}
     lo = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
     hi = datetime.combine(end, datetime.max.time(), tzinfo=timezone.utc)
-    for f in db.forecasts.find({"meta.kitchen_id": kitchen_id, "ts": {"$gte": lo, "$lte": hi}}):
+    for f in forecasts_between(db, kitchen_id, lo, hi):
         day = f["ts"].date().isoformat()
         if day not in planned_days:
             rows.append({"product_id": f["meta"]["product_id"], "date": day, "unit": f["unit"],
