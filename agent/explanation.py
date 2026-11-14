@@ -37,6 +37,32 @@ def numbers(text, language='en'):
     return [numeric(m[0], language) for m in NUMBER.finditer(text)]
 
 
+# The same number, also when it is glued to a unit or a sign: the "1" of "1L", "1,5%" (#1774).
+GLUED = re.compile(NUMBER.pattern.replace(r'(?<!\w)', '').replace(r'(?!\w)', ''))
+
+
+def glued_numbers(text, language='en'):
+    return [numeric(m[0], language) for m in GLUED.finditer(text)]
+
+
+def listed_numbers(values, language='en'):
+    """The reply's `numbers` as values. An entry may carry its unit ("1L"), never no number."""
+    out = []
+    for value in values:
+        found = glued_numbers(value, language)
+        if not found:
+            raise ValueError('invalid explanation number')
+        out += found
+    return sorted(out)
+
+
+def numbers_match(listed, sentence, language='en'):
+    """The prompt asks for every printed number, so a model also lists one glued to a unit
+    in a product name. Both readings of the server's own sentence are right, nothing else."""
+    got = listed_numbers(listed, language)
+    return got in (sorted(numbers(sentence, language)), sorted(glued_numbers(sentence, language)))
+
+
 def checked_reply(reply, facts, language='en'):
     """Metadata alone proves nothing: check the complete sentence against its own fact."""
     validate(reply, SCHEMA)
@@ -49,7 +75,7 @@ def checked_reply(reply, facts, language='en'):
         if row['kind'] != fact['kind'] or row['product_id'] != fact['product_id']:
             raise ValueError('explanation fact binding changed')
         candidates = [s for s in fact['forms'] if normalized(s, language) == normalized(row['text'], language)]
-        if not candidates or sorted(numeric(n, language) for n in row['numbers']) != sorted(numbers(candidates[0], language)):
+        if not candidates or not numbers_match(row['numbers'], candidates[0], language):
             raise ValueError('explanation sentence or numbers changed')
         seen.add(row['fact_id'])
         # Emit the server's original spelling/figures, not model formatting or extra text.
