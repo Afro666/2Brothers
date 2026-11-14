@@ -65,6 +65,7 @@ One JSON POST per delivery (contract: docs/contract.md, "Webhooks"):
        await $.service.db.set(id, true);
        const body = JSON.parse(raw);
        if (body.event !== "recall.alert") return $.flow.exit("not a recall");
+       if (body.data?.case !== "FOUND") return $.flow.exit("not a FOUND recall");
        const d = body.data;
        const where = [d.found?.stock ? "in stock" : null,
                       d.found?.recipes ? `in ${d.found.recipes} recipes` : null].filter(Boolean).join(" and ");
@@ -76,6 +77,10 @@ One JSON POST per delivery (contract: docs/contract.md, "Webhooks"):
      },
    });
    ```
+
+   The `case` check skips the older `recall.alert` for a blocked proposal
+   (`case: "PROPOSAL_BLOCKED"`): its body has no `product_name`, `found` or `next_step`, so it
+   would send an email that reads "Recall: undefined".
 
    Pipedream gives the raw body as `bodyRaw` when the trigger is set to keep the raw body;
    check that option in the trigger settings. The signature must be computed over exactly the
