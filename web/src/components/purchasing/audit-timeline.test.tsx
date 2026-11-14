@@ -188,8 +188,8 @@ describe("AuditTimeline", () => {
     for (const [summary, kind] of [
       ["Kitchen brief read", "request"],
       ["Delivery note read", "order"],
-      ["Approval token created", "settings"],
-      ["Proposal explanation failed", "request"],
+      ["Personal approval token created", "settings"],
+      ["No model sentence for a proposal", "request"],
     ]) {
       const row = screen.getByText(summary).closest("li")!;
       expect(row).toHaveAttribute("data-kind", kind);

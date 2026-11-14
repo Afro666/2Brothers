@@ -54,7 +54,7 @@ export function AuditPage() {
       : t("{count} requests", { count: formatNumber(filtered.length) });
   const visibleStepCount =
     stepCount === 1 ? t("{count} step", { count: formatNumber(stepCount) }) : t("{count} steps", { count: formatNumber(stepCount) });
-  const showingCount = t("showing the newest {count}", { count: formatNumber(visible.length) });
+  const showingCount = t("showing the newest {count} requests", { count: formatNumber(visible.length) });
   function clearFilters() {
     setOrder("all");
     setKind("all");
@@ -129,8 +129,8 @@ export function AuditPage() {
                 requestCount,
                 visibleStepCount,
                 earlier > 0 ? showingCount : null,
-                // The gateway sends at most AUDIT_LIMIT steps: never hide that the log is cut.
-                events.length >= AUDIT_LIMIT ? t("cut at the newest 1,000 steps") : null,
+                // The gateway sends at most AUDIT_LIMIT steps: say which steps these are.
+                events.length >= AUDIT_LIMIT ? t("from the newest 1,000 steps") : null,
               ]
                 .filter(Boolean)
                 .join(" · ")}

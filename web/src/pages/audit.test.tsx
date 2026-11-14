@@ -41,8 +41,8 @@ describe("audit page", () => {
 
     expect(await screen.findByText(
       count === 1000
-        ? "1,000 requests · 1,000 steps · showing the newest 50 · cut at the newest 1,000 steps"
-        : "999 requests · 999 steps · showing the newest 50",
+        ? "1,000 requests · 1,000 steps · showing the newest 50 requests · from the newest 1,000 steps"
+        : "999 requests · 999 steps · showing the newest 50 requests",
     )).toBeInTheDocument();
   });
 
@@ -179,12 +179,12 @@ describe("audit page", () => {
     expect(await screen.findAllByText("Step number 119")).toHaveLength(1);
     expect(screen.getAllByText("Step number 70")).toHaveLength(1);
     expect(screen.queryByText("Step number 69")).not.toBeInTheDocument();
-    expect(screen.getByText("120 requests · 120 steps · showing the newest 50")).toBeInTheDocument();
+    expect(screen.getByText("120 requests · 120 steps · showing the newest 50 requests")).toBeInTheDocument();
     expect(screen.queryByText(/Showing the newest/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Show more (70 earlier requests)" }));
     expect(screen.getAllByText("Step number 20")).toHaveLength(1);
-    expect(screen.getByText("120 requests · 120 steps · showing the newest 100")).toBeInTheDocument();
+    expect(screen.getByText("120 requests · 120 steps · showing the newest 100 requests")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Show more (20 earlier requests)" }));
     expect(screen.getAllByText("Step number 0")).toHaveLength(1);
     expect(screen.getByText("120 requests · 120 steps")).toBeInTheDocument();

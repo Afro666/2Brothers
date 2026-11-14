@@ -648,15 +648,14 @@ export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> =
   kitchen_brief_read: { kind: "request", summary: "Kitchen brief read" },
   delivery_note_read: { kind: "order", summary: "Delivery note read" },
   proposal_created: { kind: "request", summary: "Proposal created" },
-  proposal_changed: { kind: "request", summary: "Proposal changed" },
-  proposal_explanation_failed: { kind: "request", summary: "Proposal explanation failed" },
-  approval_token_created: { kind: "settings", summary: "Approval token created" },
+  proposal_explanation_failed: { kind: "request", summary: "No model sentence for a proposal" },
   approval_requested: { kind: "approval", summary: "Approval requested" },
   decision_summary: { kind: "mandate_check", summary: "Decision summary" },
   total_mismatch: { kind: "simulate", summary: "The total moved before placing: nothing was sent" },
   order_placed: { kind: "order", summary: "Order placed" },
   proposal_rejected: { kind: "approval", summary: "Proposal rejected" },
   // #548: a 403 to the agent or a kitchen API token; the details (code, method, path) are the reason.
+  // The gateway writes this kind only for a 403 (gateway/app.py), so "status: 403" below is its own fact.
   refused: { kind: "refused", summary: "Request refused by the gateway" },
   // #374: a supplier's selling agent suggests a substitute; only a person turns it into a proposal.
   supplier_offer_received: { kind: "offer", summary: "Offer received from the supplier's selling agent" },
