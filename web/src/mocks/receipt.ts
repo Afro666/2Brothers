@@ -30,5 +30,5 @@ export function sampleReceipt(order: Order, approvedBy: string, signedAt: string
     supplier_must_confirm: [],
   };
   const jws = `${base64url({ alg: "EdDSA", kid: "demo-key-1" })}.${base64url(claims)}.c2FtcGxlLXNpZ25hdHVyZS1ub3QtdmFsaWQ`;
-  return { jws, approvedBy, signedAt: new Date(claims.iat * 1000).toISOString(), total: order.totalInclVat, supplierOutcome: "NOT_SENT" };
+  return { jws, approvedBy, signedAt: new Date(claims.iat * 1000).toISOString(), total: order.totalInclVat, supplierOutcome: "NOT_SENT", supplierNote: claims.supplier_note };
 }

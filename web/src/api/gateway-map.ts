@@ -255,6 +255,8 @@ export function mapReceipt(value: unknown): OrderReceipt | null {
     total,
     supplierOutcome:
       typeof claims.supplier_outcome === "string" && claims.supplier_outcome ? claims.supplier_outcome : null,
+    supplierNote:
+      typeof claims.supplier_note === "string" && claims.supplier_note.trim() ? claims.supplier_note.trim() : null,
   };
 }
 

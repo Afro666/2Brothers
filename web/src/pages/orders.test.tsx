@@ -85,6 +85,7 @@ describe("orders pages", () => {
     expect(within(block).getByText("Signed total").nextElementSibling).toHaveTextContent("148.76");
     expect(within(block).getByText("Signed at").nextElementSibling).not.toHaveTextContent("unknown");
     expect(within(block).getByText("Supplier").nextElementSibling).toHaveTextContent("Nothing sent to the supplier yet");
+    expect(within(block).getByText(/Valio's API has no order endpoint/)).toBeVisible();
 
     await user.click(within(block).getByRole("button", { name: "Copy receipt" }));
     expect(writeText).toHaveBeenCalledWith(receipt!.jws);
@@ -101,6 +102,29 @@ describe("orders pages", () => {
     delete claims.supplier_outcome;
     const withoutClaim = [header, btoa(JSON.stringify(claims)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""), signature].join(".");
     expect(mapReceipt(withoutClaim)?.supplierOutcome).toBeNull();
+  });
+
+  it("maps the supplier note claim; an absent or empty note is null and renders nothing", async () => {
+    const api = createMockApi();
+    const order = await api.getOrder("ORD-1042");
+    expect(mapReceipt(order.receipt!.jws)?.supplierNote).toBe(
+      "Valio's API has no order endpoint: the gateway recorded the order and sent nothing.",
+    );
+
+    const [header, payload, signature] = order.receipt!.jws.split(".");
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    const encode = (value: unknown) => btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    expect(mapReceipt([header, encode({ ...claims, supplier_note: "  " }), signature].join("."))?.supplierNote).toBeNull();
+    delete claims.supplier_note;
+    const withoutNote = mapReceipt([header, encode(claims), signature].join("."));
+    expect(withoutNote?.supplierNote).toBeNull();
+
+    vi.spyOn(api, "getOrder").mockResolvedValue({ ...order, receipt: withoutNote });
+    renderApp("/orders/ORD-1042", api);
+    const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
+    const supplier = within(block).getByText("Supplier").parentElement!;
+    expect(supplier.querySelectorAll("dd")).toHaveLength(1);
+    expect(within(block).queryByText(/Valio's API has no order endpoint/)).not.toBeInTheDocument();
   });
 
   it("says when a placed order has no signed receipt", async () => {
