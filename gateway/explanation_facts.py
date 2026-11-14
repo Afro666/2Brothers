@@ -5,6 +5,38 @@ from decimal import Decimal, InvalidOperation
 
 MAX_FACTS = 20  # the explanation wire contract accepts at most this many facts
 MAX_SENTENCES = 3  # agent/explanation.py SCHEMA: a reply has at most this many sentences
+FACTS_VERSION = 2  # the sentences changed (#1868): a text cached from the old ones is not served
+
+
+def cheaper(proposal, name, amount, fi):
+    """Why the cheaper option was not picked (#1868), or None when the record does not say.
+
+    The engine fills confirmed stock first and puts the rest on the cheapest offer with
+    unknown stock. `alternative` exists only when putting everything on that offer is cheaper
+    (engine/offers.py, `plan_request`), so its being there is the recorded reason. Both
+    totals are copied from the record; they are compared here, never calculated."""
+    alt, total = proposal.get('alternative'), proposal.get('total_ex_vat')
+    if not isinstance(alt, dict) or total is None or alt.get('total_ex_vat') is None:
+        return None
+    try:
+        if not Decimal(str(alt['total_ex_vat'])) < Decimal(str(total)):
+            return None
+    except InvalidOperation:
+        return None
+    ids = [row['product_id'] for row in alt.get('lines') or []]
+    stock = {line['product_id']: line.get('unknown_stock') for line in proposal.get('lines', [])}
+    # The reason holds only when the record agrees: a confirmed line was picked, and no line
+    # says the cheaper product's stock is confirmed.
+    if not ids or False not in stock.values() or any(stock.get(pid) is False for pid in ids):
+        return None
+    label = ', '.join(name(pid) for pid in ids[:4])
+    low, high = amount(alt['total_ex_vat']), amount(total)
+    if fi:
+        return (f'löytyi halvempi vaihtoehto, {low} EUR ilman ALV:a eikä {high} EUR ilman ALV:a, jossa kaikki on '
+                f'tuotetta {label}, mutta sen saatavuutta ei ole vahvistettu, ja ostomoottori käyttää '
+                'vahvistetun varaston ennen hintaa')
+    return (f'a cheaper option was found, EUR {low} ex VAT instead of EUR {high} ex VAT, with all of it on '
+            f'{label}, but its stock is not confirmed and the purchasing engine uses confirmed stock before price')
 
 
 def context(proposal, names, language):
@@ -24,6 +56,10 @@ def context(proposal, names, language):
         confirmed = line.get('unknown_stock') is False
         text = (f'Ehdotuksessa on {qty} {unit} tuotetta {name(pid)}' if fi else
                 f'The proposal includes {qty} {unit} of {name(pid)}')
+        if line.get('unit_price') is not None:
+            # The line's own price, per its sales unit (#1868): copied, never calculated.
+            price = amount(line['unit_price'])
+            text += f' hintaan {price} EUR / {unit} ilman ALV:a' if fi else f' at EUR {price} per {unit} ex VAT'
         reason = ('; toimittaja on vahvistanut saatavuuden' if fi else '; the supplier has confirmed availability') if confirmed else ''
         add('chosen', pid, text + reason + '.', required=len(facts) == 0, alternative=text +
             ('; määrä on ostomoottorin laskema.' if fi else '; the purchasing engine sized this quantity.'))
@@ -56,6 +92,9 @@ def context(proposal, names, language):
         for row in proposal['shortfalls']:
             label = f"{name(row['product_id'])}: {amount(row['shortfall'])} {row['unit']}"
             warnings.append(f'kattamatta jää {label}' if fi else f'uncovered need for {label}')
+    why = cheaper(proposal, name, amount, fi)
+    if why:
+        warnings.append(why if warnings else why[0].upper() + why[1:])
     if warnings:
         # One bound warning sentence leaves room for the chosen line and human approval.
         add('held', None, '; '.join(warnings) + '.', required=True)
@@ -104,7 +143,8 @@ def context(proposal, names, language):
         keep = set((required + learned + optional)[:MAX_FACTS])
         facts = [fact for i, fact in enumerate(facts) if i in keep]
     source = {k: proposal.get(k) for k in ('proposal_id', 'offer_id', 'offer_hash', 'status', 'request',
-        'lines', 'excluded', 'expected_total', 'delivery_fee', 'shortfall', 'shortfalls', 'measure', 'mandate', 'recall_alerts', 'valid_until')}
+        'lines', 'excluded', 'alternative', 'total_ex_vat', 'expected_total', 'delivery_fee', 'shortfall', 'shortfalls', 'measure', 'mandate', 'recall_alerts', 'valid_until')}
     source['names'] = names
+    source['facts'] = FACTS_VERSION
     digest = hashlib.sha256(json.dumps(source, sort_keys=True, default=str).encode()).hexdigest()
     return {'source_hash': digest, 'language': language, 'facts': facts}
