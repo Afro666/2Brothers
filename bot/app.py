@@ -71,10 +71,19 @@ class Bot:
         self._heard: dict[tuple[int, str], str] = {}
         self._shelves: dict[tuple[int, int], dict] = {}      # (chat, message) -> a shelf read to confirm
         self._lock = threading.Lock()
+        self._chat_locks: dict[int, threading.Lock] = {}    # one chat's updates run one at a time
         self.brief_times = brief_times if brief_times is not None else dict(BRIEF_TIMES)
 
     # ---- entry -------------------------------------------------------------------------
     def handle(self, update: dict) -> None:
+        body = update.get("callback_query", {}).get("message") or update.get("message") or {}
+        chat = (body.get("chat") or {}).get("id")
+        with self._lock:
+            chat_lock = self._chat_locks.setdefault(chat, threading.Lock())
+        with chat_lock:         # two fast taps in one chat must not read the same quantity
+            self._handle(update)
+
+    def _handle(self, update: dict) -> None:
         try:
             if "callback_query" in update:
                 self._callback(update["callback_query"])
@@ -391,7 +400,8 @@ def build() -> Bot:
 
 def run(bot: Bot, stop: threading.Event | None = None) -> None:
     """Long polling: Telegram needs no public address. Each update runs on a worker, so a
-    request that waits for the Buyer does not hold up another chat."""
+    request that waits for the Buyer does not hold up another chat; one chat's updates still
+    run one at a time (Bot.handle)."""
     stop = stop or threading.Event()
     offset = None
 

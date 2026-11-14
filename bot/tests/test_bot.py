@@ -1,4 +1,7 @@
 """The bot with a fake Telegram and a fake gateway: no network, no token."""
+import copy
+import threading
+import time
 from datetime import datetime
 
 import pytest
@@ -295,6 +298,46 @@ def test_remove_takes_the_line_off_and_the_last_line_takes_the_supplier_off(bot)
     press(bot, f"q:{PID}:1:0:0")
     assert ("change", "own-1", "0") in bot.gw.calls
     assert bot.tg.edits[-1]["text"] == "Removed from the order."
+
+
+def test_two_fast_plus_taps_in_one_chat_make_two_steps(bot):
+    slow_read = bot.gw.proposal
+
+    def proposal(proposal_id):          # a slow gateway read: an unlocked second tap would read 698 too
+        snapshot = copy.deepcopy(slow_read(proposal_id))
+        time.sleep(0.05)
+        return snapshot
+
+    bot.gw.proposal = proposal
+    taps = [threading.Thread(target=press, args=(bot, f"q:{PID}:0:0:+")) for _ in range(2)]
+    for tap in taps:
+        tap.start()
+    for tap in taps:
+        tap.join()
+    assert [c for c in bot.gw.calls if c[0] == "change"] == [("change", "463380", "704"), ("change", "463380", "710")]
+    assert "710 L" in bot.tg.edits[-1]["text"]
+
+
+def test_another_chat_is_not_held_up_by_a_busy_chat(bot):
+    bot.links.redeem(bot.links.invite("other"), 8, "Other") if hasattr(bot.links, "invite") else None
+    busy, done = threading.Event(), threading.Event()
+    slow_read = bot.gw.proposal
+
+    def proposal(proposal_id):
+        busy.set()
+        done.wait(2)
+        return slow_read(proposal_id)
+
+    bot.gw.proposal = proposal
+    slow = threading.Thread(target=press, args=(bot, f"q:{PID}:0:0:+"))
+    slow.start()
+    assert busy.wait(2)
+    other = threading.Thread(target=bot.handle, args=({"message": {"chat": {"id": 99}, "text": "milk"}},))
+    other.start()
+    other.join(1)
+    assert not other.is_alive()             # chat 99 answered while chat 7 still waits
+    done.set()
+    slow.join()
 
 
 def test_a_refused_change_is_told_on_the_button_and_the_message_stays(bot):
