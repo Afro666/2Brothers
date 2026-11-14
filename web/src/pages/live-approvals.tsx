@@ -5,6 +5,7 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { Button } from "@/components/ui/button";
 import { formatEur } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
+import { LabelEvidence, type LabelCheck } from "@/components/purchasing/label-evidence";
 
 const path = "/v1/kitchens/demo-kitchen/proposals";
 interface Proposal {
@@ -15,13 +16,19 @@ interface Proposal {
   expected_total: string;
   total_ex_vat: string;
   order_id?: string;
+  label_checks?: LabelCheck[];
+  replacement_proposal_id?: string;
+  recall_replan_error?: string;
+  product_evidence?: { product_id: string; source_url: string; checked_at: string; via: string;
+    pack: string | null; origin: string | null; allergens: string | null }[];
+  recall_alerts?: { product_id: string; match: string; recall: { url: string; lot?: string; title?: string } }[];
   decision_summary?: { text?: string };
   lines: { product_id: string; quantity: string; unit: string; why: string; unknown_stock: boolean }[];
 }
 function parse(value: unknown): Proposal {
   const row = value as Proposal;
   if (!row || typeof row.proposal_id !== "string" || typeof row.offer_id !== "string" ||
-      !["READY", "APPROVING", "APPROVED", "REJECTED", "REFUSED"].includes(row.status) ||
+      !["READY", "APPROVING", "COMMITTING", "BLOCKED_BY_RECALL", "APPROVED", "REJECTED", "REFUSED"].includes(row.status) ||
       !Number.isFinite(Date.parse(row.valid_until)) || !Array.isArray(row.lines) ||
       row.lines.some(l => !l || typeof l.product_id !== "string" || typeof l.unknown_stock !== "boolean" ||
         typeof l.quantity !== "string" || typeof l.unit !== "string" || typeof l.why !== "string"))
@@ -66,10 +73,23 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
       setError(e instanceof Error ? e.message : "The decision could not be confirmed.");
     } finally { setBusy(false); }
   }
-  return <article className="space-y-3 rounded-xl border p-5" aria-label={`Proposal ${row.proposal_id}`}>
+  return <article id={`proposal-${row.proposal_id}`} className="space-y-3 rounded-xl border p-5" aria-label={`Proposal ${row.proposal_id}`}>
     <h2 className="font-semibold">Proposal {row.proposal_id}</h2>
     {typeof row.decision_summary?.text === "string" && <p className="whitespace-pre-line">{row.decision_summary.text}</p>}
     <ul>{row.lines.map(l => <li key={l.product_id}>{l.quantity} {l.unit} · {l.product_id} · {l.why}</li>)}</ul>
+    {row.label_checks?.map(c => <LabelEvidence key={`${c.product_id}-${c.label}`} check={c} />)}
+    {row.recall_alerts?.map((alert, index) => <p key={index} className="text-destructive">
+      {alert.match === "review" ? "Recall warning — check the product" : "BLOCKED_BY_RECALL"}: {alert.product_id} · {alert.recall.title} · {alert.recall.lot ?? "Check affected packs"}
+      {/^https:\/\//.test(alert.recall.url) && <> · <a className="underline" href={alert.recall.url} target="_blank" rel="noreferrer">Official recall notice</a></>}
+    </p>)}
+    {row.replacement_proposal_id && <p><a className="underline" href={`#proposal-${row.replacement_proposal_id}`}>Review replacement proposal {row.replacement_proposal_id}</a>. A fresh human approval is required.</p>}
+    {row.recall_replan_error && <p>No complete safe replacement is available ({row.recall_replan_error}). The original remains blocked.</p>}
+    {row.product_evidence?.map(e => <div key={e.product_id} className="rounded border p-3 text-sm">
+      <p>Manufacturer evidence for {e.product_id} · checked {e.checked_at} · {e.via}</p>
+      <p>Page pack: {e.pack ?? "unknown"} · Bean/ingredient origins: {e.origin ?? "unknown"} · Allergen statement: {e.allergens ?? "unknown — use trusted catalog data"}</p>
+      <p>Informational page claims; the catalog and engine still control allergens and quantities.</p>
+      {/^https:\/\//.test(e.source_url) && <a className="underline" href={e.source_url} target="_blank" rel="noreferrer">Manufacturer source</a>}
+    </div>)}
     <p>{formatEur(mapMoney(row.total_ex_vat))} ex VAT · {formatEur(mapMoney(row.expected_total))} including VAT and delivery</p>
     {unknown && <p>Waiting for supplier stock confirmation. Approval is unavailable.</p>}
     {expired && pending && <p>This offer has expired. Ask the Buyer for a fresh proposal.</p>}

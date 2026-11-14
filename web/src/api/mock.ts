@@ -5,6 +5,7 @@ import { nameProducts } from "@/api/map";
 import { permissionsMock } from "@/api/mock-permissions";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
+import { driftMock, supplierDriftMock } from "@/api/mock-drift";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
 import {
@@ -174,6 +175,8 @@ export function createMockApi(): MockApi {
     ...createPlanningMock(recordAudit),
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),
+    getDrift: async () => driftMock(),
+    getSupplierDrift: async () => supplierDriftMock(),
     ...permissionsMock,
     lookupKitchenBrand: lookupKitchenBrandMock,
     failNextApprove(code, message = "The gateway refused the approval.") {

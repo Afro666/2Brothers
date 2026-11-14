@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 import hashlib
 from typing import Callable
 from uuid import uuid4
@@ -24,7 +24,7 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
 from gateway.decision import decision_summary
-from store import audit, orders
+from store import audit, orders, recalls
 from store.audit import canonical
 from store.history import current_stock
 from store.products import get_product
@@ -79,8 +79,15 @@ class Gateway:
     def _standing_orders(self, kitchen_id: str) -> dict[str, Decimal]:
         """Per product: the standing order per delivery, in sales units (#380, S08)."""
         doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}, {"standing_orders": 1}) or {}
-        return {pid: _dec(qty) for pid, qty in (doc.get("standing_orders") or {}).items()
-                if _dec(qty) is not None}
+        out = {}
+        for pid, qty in (doc.get("standing_orders") or {}).items():
+            try:
+                value = _dec(qty)
+            except (InvalidOperation, ValueError, TypeError):
+                continue                   # nothing validates the map on write yet: skip bad values
+            if value is not None and value.is_finite() and value > 0:
+                out[pid] = value
+        return out
 
     def _terms(self, kitchen_id: str) -> dict:
         doc = self.db.suppliers.find_one({"kitchen_id": kitchen_id, "adapter": "valio_api"}) or {}
@@ -176,7 +183,9 @@ class Gateway:
         need = Decimal(str(request["quantity"]))
         if need <= 0:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
-        offers, skipped, tax = self._offers(list(request["product_ids"]), measure, requested)
+        blocked = recalls.blocked_ids(self.db, kitchen_id)
+        offers, skipped, tax = self._offers([p for p in request["product_ids"] if p not in blocked], measure, requested)
+        skipped.extend((p, 'BLOCKED_BY_RECALL') for p in request['product_ids'] if p in blocked)
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
         sim = self._simulate(kitchen_id, plan, tax, skipped)
@@ -218,13 +227,17 @@ class Gateway:
                     raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
                 return self._proposal_out(stored)
             body = self._from_text(kitchen_id, body)
+            parsed = True
+        else:
+            parsed = False
         for field in ("product_ids", "quantity", "unit", "requested_date", "idempotency_key"):
             if not body.get(field):
                 raise GatewayError(422, "INVALID_REQUEST", f"{field} is required")
         request = {k: body[k] for k in ("product_ids", "quantity", "unit", "requested_date")}
         request["text"] = body.get("text") or ""
-        request["made_by"] = body.get("made_by") or "structured"
-        if body.get("query"):
+        # Set by the gateway, never by the client: a structured body cannot claim the parser.
+        request["made_by"] = "parser" if parsed else "structured"
+        if parsed and body.get("query"):
             request["query"] = body["query"]
         if body.get("event"):
             request["event"] = True       # one-off demand (S05): EVENT_LINE, kept out of the forecast
@@ -259,12 +272,21 @@ class Gateway:
 
     def _proposal_out(self, doc: dict) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
-        return {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
+        result = {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
                 "substitute_options": doc.get('substitute_options', []),
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
                 **offer["simulation"],
                 "decision_summary": self._summary(doc["request"], offer["simulation"])}
+        result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
+        blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
+        result['lines'] = [{**line, **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
+                           for line in result['lines']]
+        from monitor.labels import checks
+        from store.products import get_products
+        result['label_checks'] = checks(get_products(self.db,
+            [line['product_id'] for line in result['lines']], doc['kitchen_id']), now=self.now())
+        return result
 
     def _summary(self, request: dict, sim: dict) -> dict:
         ids = {ln["product_id"] for ln in sim.get("lines") or []} | {e["product_id"] for e in sim.get("excluded") or []}
@@ -315,6 +337,8 @@ class Gateway:
     def _approved_or_conflict(self, kitchen_id: str, proposal_id: str, key: str) -> dict:
         """Not READY: replay the order placed with this key, else 409 NOT_PENDING."""
         doc = self.db.proposals.find_one({"_id": proposal_id, "kitchen_id": kitchen_id}) or {}
+        if doc.get('status') == 'BLOCKED_BY_RECALL':
+            raise GatewayError(409, 'BLOCKED_BY_RECALL', 'a recall holds this basket; review its replacement proposal')
         if doc.get("status") == "APPROVED" and doc.get("order_id"):
             order = orders.get_order(self.db, doc["order_id"])
             if order["idempotency_key"] == key:
@@ -338,6 +362,12 @@ class Gateway:
         # lines visible in proposals, but never record a placed order for them.
         if any(line.get("unknown_stock") is not False for line in sim["lines"]):
             raise GatewayError(409, "STOCK_UNKNOWN", "supplier stock must be confirmed before placement")
+        # Atomic commit point shared with the recall monitor. A notice arriving
+        # during the live quote can still claim APPROVING and prevent this order.
+        committed = self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
+            'status': 'APPROVING', 'approving_key': key}, {'$set': {'status': 'COMMITTING'}})
+        if not committed.modified_count:
+            return self._approved_or_conflict(kitchen_id, proposal_id, key)
         payload = {"offer_id": stored["offer_id"], "expected_total": sim["expected_total"], "lines": sim["lines"]}
         order, created = orders.record_attempt(
             self.db, kitchen_id=kitchen_id, idempotency_key=key, offer_id=stored["offer_id"],
@@ -354,7 +384,7 @@ class Gateway:
             self._audit(kitchen_id, "order_placed", human, proposal_id=proposal_id,
                         order_id=order["order_id"], expected_total=sim["expected_total"])
         else:   # the key already placed an order: nothing new placed here, release the claim
-            self.db.proposals.update_one({"_id": proposal_id, "status": "APPROVING", "approving_key": key},
+            self.db.proposals.update_one({"_id": proposal_id, "status": "COMMITTING", "approving_key": key},
                                          {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
         return {"proposal_id": proposal_id, **self._order_out(order)}
 

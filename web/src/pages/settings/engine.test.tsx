@@ -33,7 +33,7 @@ describe("Ordering engine settings", () => {
     await user.type(input, "98");
     await user.click(screen.getByRole("button", { name: "Save settings" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Settings saved");
+    expect(await screen.findByTestId("settings-saved-toast")).toHaveTextContent("Settings saved");
     await waitFor(async () => {
       expect((await api.getKitchenSettings()).serviceLevelPercent.A).toBe(98);
       expect((await api.listAudit()).at(-1)).toMatchObject({
@@ -69,7 +69,7 @@ describe("Ordering engine settings", () => {
     await user.clear(input);
     await user.click(screen.getByRole("button", { name: "Save settings" }));
 
-    await screen.findByRole("status");
+    await screen.findByTestId("settings-saved-toast");
     expect((await api.getKitchenSettings()).budgetWarningPerOrderExVat).toBeNull();
   });
 

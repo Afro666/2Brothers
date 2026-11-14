@@ -333,3 +333,14 @@ def test_parser_is_not_used_after_an_ambiguous_buyer_failure(monkeypatch):
     assert r.status_code == 503 and db.proposals.count_documents({}) == 0
     r = TestClient(create_app(gw, buyer_worker=safe)).post(K + "/proposals", headers=AGENT, json=body)
     assert r.status_code == 200 and r.json()["request"]["made_by"] == "parser"
+
+
+def test_a_structured_body_cannot_claim_the_parser_made_it(env):
+    """made_by and query are set by the gateway, never by the client."""
+    client, _, _ = env
+    r = client.post(K + "/proposals", headers=AGENT, json={
+        "product_ids": ["462775"], "quantity": "51", "unit": "L", "requested_date": "2026-11-16",
+        "idempotency_key": "spoof", "made_by": "parser", "query": "milk"})
+    assert r.status_code == 200, r.text
+    assert r.json()["request"]["made_by"] == "structured"
+    assert "query" not in r.json()["request"]

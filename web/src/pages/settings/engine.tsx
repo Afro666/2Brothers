@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { useApi } from "@/api";
 import { EmptyState } from "@/components/purchasing/empty-state";
@@ -45,7 +46,6 @@ export function EngineSection() {
   const [original, setOriginal] = useState<KitchenSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (state.status === "ready") {
@@ -59,19 +59,17 @@ export function EngineSection() {
   function update(updateDraft: (current: KitchenSettings) => KitchenSettings) {
     setDraft((current) => (current ? updateDraft(current) : current));
     setSaveError(null);
-    setSaved(false);
   }
 
   async function saveSettings() {
     if (!draft) return;
     setSaving(true);
     setSaveError(null);
-    setSaved(false);
     try {
       const settings = await api.saveKitchenSettings(clone(draft), actor);
       setDraft(clone(settings));
       setOriginal(clone(settings));
-      setSaved(true);
+      toast.success("Settings saved", { testId: "settings-saved-toast" });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -82,7 +80,6 @@ export function EngineSection() {
   function resetChanges() {
     if (original) setDraft(clone(original));
     setSaveError(null);
-    setSaved(false);
   }
 
   const allergenCodes = draft ? [...new Set([...Object.keys(ALLERGENS), ...draft.excludedAllergens])].sort() : [];
@@ -322,11 +319,6 @@ export function EngineSection() {
             <div role="alert" className="rounded-lg border border-destructive/40 p-4 text-sm">
               {saveError}
             </div>
-          ) : null}
-          {saved ? (
-            <p role="status" className="text-sm font-medium text-primary">
-              Settings saved
-            </p>
           ) : null}
           <div className="flex flex-wrap gap-3">
             <Button type="submit" disabled={!changed || saving}>
