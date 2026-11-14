@@ -1288,6 +1288,7 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. Served (#662). |
 | GET | `/demand/shortage-risk?from=&to=` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability, or the availability is unknown. Served (#662). |
+| GET | `/demand/buying-note?from=&to=&lang=` | `supplier:demand` | A short note for the supplier's planner, written by Nemotron from the shortage-risk rows; every number checked against its row. Planned (#1176). Shape under "Buying note for the supplier's planner". |
 | GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Served. Only the server's unbound session passes: no token can hold `supplier:demand` yet, and a person signed in to a kitchen gets 403 `SCOPE_REQUIRED` (#599). |
 | POST | `/offers` | `supplier:offers` | A substitute offered to one kitchen before a predicted shortage. It shows up as a suggestion, never as an order. Shape under "Supplier offers". |
 
@@ -1383,6 +1384,69 @@ token can hold `supplier:demand` yet). A person signed in to a kitchen also gets
 `SCOPE_REQUIRED` (#599): consent names the supplier, not other kitchens, so one kitchen's
 people never read another kitchen's demand. Until supplier accounts exist, only the
 server's unbound session (the demo's Valio view) passes.
+
+### Buying note for the supplier's planner (#1176)
+
+Planned. `GET /v1/suppliers/{supplier_id}/demand/buying-note?from=&to=&lang=` turns the
+shortage-risk rows of the same window into a short note for the supplier's planner,
+written by Nemotron 3.5 Super VL. Same scope, window rules and 403s as
+`shortage-risk` above. `lang` is `en` (default) or `fi`; anything else is 422
+`INVALID_REQUEST`.
+
+The model only chooses the words. Plain code picks the rows first: `SHORT` rows by the
+largest `shortage`, then `UNKNOWN` rows by the largest `demand`, at most 8. The model sees
+for each row only `product_id`, `product_name`, `date`, `unit`, `demand`, `kitchens`,
+`available`, `shortage`, `suggested_buy` and `risk`: never `by_kitchen`, a kitchen
+name, a menu, a recipe, a price or a pack size. It is told to write no dates and no
+product names (the answer shows both next to each line).
+
+Every line the model writes is checked by plain code before anyone sees it:
+
+- it names one input row (`row`), and its `product_id` is that row's;
+- every number in its text is one of that row's values (`demand`, `available`,
+  `shortage`, `suggested_buy`, `kitchens`), compared after reading the number in the
+  note's language (`1 000`, `12,5` in Finnish; `1,000`, `12.5` in English), and the
+  line's own `numbers` list holds exactly those numbers;
+- a row with `risk: UNKNOWN` may state only its `kitchens` count: unknown availability
+  is never written as a gap of the whole forecast;
+- no number words for a quantity (`two`, `hundred`, `kaksi`, `sata`, `tuhat`, ...);
+- no row is used twice.
+
+If any line fails, the whole note is dropped: `note` is null and `dropped` names the
+first failed rule. The page then shows the table as it does today.
+
+Answer:
+
+```json
+{
+  "supplier_id": "sup-valio", "from": "2026-11-16", "to": "2026-11-22", "lang": "en",
+  "model": "nemotron-3.5-super-vl", "duration_ms": 2140, "cached": false,
+  "rows_used": 2,
+  "note": [
+    {"product_id": "462775", "product_name": "Valio Eila lactose-free milk 1 L",
+     "date": "2026-11-16", "risk": "SHORT",
+     "text": "Forecast 2400 L from 6 kitchens against 1700 L available: buy 700 L more."},
+    {"product_id": "463335", "product_name": "Washed potato 10 kg",
+     "date": "2026-11-17", "risk": "UNKNOWN",
+     "text": "Availability unknown for 3 kitchens: ask the grower."}
+  ],
+  "dropped": null
+}
+```
+
+- No `SHORT` or `UNKNOWN` row in the window: `note` is `[]`, `rows_used` is 0, and no
+  model call is made.
+- `dropped` is null, or one of `ROW_UNKNOWN`, `PRODUCT_MISMATCH`, `ROW_REPEATED`,
+  `NUMBER_NOT_IN_ROW`, `NUMBERS_LIST_MISMATCH`, `GAP_FOR_UNKNOWN`, `NUMBER_WORD`.
+- The answer is cached for 5 minutes by supplier, window, language and the input rows,
+  so a page refresh makes no new model call (`cached: true`). One supplier's note is
+  never served to another.
+- One note per supplier at a time: a second request while one is written answers 429
+  `BUYING_NOTE_BUSY`. One model call, up to 30 s, never retried by the gateway.
+- 503 `BUYING_NOTE_UNAVAILABLE` (model or worker down, or no model key) and 504
+  `BUYING_NOTE_TIMEOUT`: the page shows the table only.
+- The note writes nothing: no audit entry in any kitchen's log, no offer, no order. Its
+  model calls are counted by the usage meter under `buying_note`.
 
 ### Supplier offers (#374)
 
