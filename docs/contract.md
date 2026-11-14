@@ -1819,9 +1819,9 @@ the full settings as `GET` returns them.
 email or its website; the gateway looks the business up with Context.dev and returns the
 profile fields to pre-fill. Served by the gateway (`gateway/onboarding.py`, #602). For
 now `opening_hours` is always `null`: the optional `/v1/web/scrape` call is not made.
-A caller that is not a person gets 403 `HUMAN_SESSION_REQUIRED`. The web client
-does not call the real route yet: `lookupKitchenBrand` in `web/src/api/http.ts` answers
-`NOT_SERVED`.
+A caller that is not a person gets 403 `HUMAN_SESSION_REQUIRED`. The web client calls
+this route through `lookupKitchenBrand` in `web/src/api/http-onboarding.ts`; a 429 (the
+paid-lookup limit) shows on the page as `RATE_LIMITED`.
 
 Request: exactly one of the two fields. A POST, so the email never sits in a URL or an
 access log. It saves nothing, so it takes no `idempotency_key`.
