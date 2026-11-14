@@ -5,8 +5,8 @@ import unittest
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 
-from store.audit import (AuditConflict, append_event, canonical, entry_hash, list_events,
-                         verify_chain)
+from store.audit import (AuditConflict, append_event, append_event_new, canonical, entry_hash,
+                         list_events, verify_chain)
 
 
 class FakeCursor(list):
@@ -74,6 +74,14 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(again["seq"], first["seq"])
         self.assertEqual(again["server"], {"principal": "agent"})
         self.assertEqual(len(db.audit_log.docs), 1)
+
+    def test_append_event_new_says_whether_it_appended(self):
+        db = FakeDb()
+        first, created = append_event_new(db, event(1))
+        self.assertTrue(created)
+        again, created = append_event_new(db, event(1))
+        self.assertFalse(created)
+        self.assertEqual(again["seq"], first["seq"])
 
     def test_same_id_with_different_content_is_rejected(self):
         db = FakeDb()
