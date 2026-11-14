@@ -1,7 +1,9 @@
 import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import type { ModelTrace, ModelTraceStep } from "@/types";
-import { NemotronMark } from "@/components/nemotron-mark";
+import type { ProposalExplanation } from "@/api/types";
+import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
+import { explanationModelName } from "@/components/purchasing/proposal-explanation";
 
 type T = ReturnType<typeof useT>;
 
@@ -72,55 +74,122 @@ function stepText(step: ModelTraceStep, t: T): string {
   return what;
 }
 
-function headline(trace: ModelTrace, t: T): string {
-  const seconds = formatNumber(Math.round(trace.seconds * 10) / 10);
-  const vars = { calls: trace.calls, seconds };
+/** Seconds as the panel prints them: one decimal, in the viewer's number format. */
+const tenths = (seconds: number): string => formatNumber(Math.round(seconds * 10) / 10);
+
+/**
+ * `calls` and `seconds` are the Buyer run's plus the explanation call's (#1867): the trace
+ * counts the run only, and the explanation is one more model call the gateway times itself.
+ */
+function headline(trace: ModelTrace, calls: number, seconds: number, t: T): string {
+  const vars = { calls, seconds: tenths(seconds) };
   if (trace.thinking === true)
-    return trace.calls === 1
+    return calls === 1
       ? t("1 model call, {seconds} s, thinking on", vars)
       : t("{calls} model calls, {seconds} s, thinking on", vars);
   if (trace.thinking === false)
-    return trace.calls === 1
+    return calls === 1
       ? t("1 model call, {seconds} s, thinking off", vars)
       : t("{calls} model calls, {seconds} s, thinking off", vars);
-  return trace.calls === 1 ? t("1 model call, {seconds} s", vars) : t("{calls} model calls, {seconds} s", vars);
+  return calls === 1 ? t("1 model call, {seconds} s", vars) : t("{calls} model calls, {seconds} s", vars);
+}
+
+/** The explanation on the card as a model call: its model and its time, null when there is no text. */
+function written(explanation: ProposalExplanation | null | undefined): { model: string; seconds: number | null } | null {
+  if (!explanation?.text) return null;
+  const ms = explanation.durationMs;
+  return { model: explanation.model, seconds: ms != null && ms >= 0 ? ms / 1000 : null };
+}
+
+/**
+ * One visible line on the card (#1867): who made the proposal, from the trace fields. A judge
+ * who never unfolds the panel still reads the model's name. No trace, no line.
+ */
+export function ModelTraceLine({ trace }: { trace: ModelTrace | null | undefined }) {
+  const t = useT();
+  if (!trace) return null;
+  const model = trace.madeBy === "model" ? trace.model : null;
+  const vars = { model: model ? explanationModelName(model) : "", calls: trace.calls, seconds: tenths(trace.seconds) };
+  return (
+    <p data-slot="card-made-by" className="font-mono text-xs leading-4 font-[450] text-muted-foreground">
+      <NemotronMark when={isNemotron(model)} />
+      {trace.madeBy === "rule"
+        ? t("Made by the gateway’s rules, no model call")
+        : !model
+          ? t("Picked by a model")
+          : trace.calls === 1
+            ? t("Picked by {model} · 1 call · {seconds} s", vars)
+            : t("Picked by {model} · {calls} calls · {seconds} s", vars)}
+    </p>
+  );
 }
 
 /**
  * "What Nemotron did" (#1197, docs/contract.md "What the model did"): one folded line on a
  * Buyer proposal or a supplier offer, the steps when unfolded, and who set the numbers.
- * No trace, no panel.
+ * No trace, no panel. `explanation` is the checked text the same card shows: one more model
+ * call, counted and listed here with its own time (#1867).
  */
-export function ModelTracePanel({ trace }: { trace: ModelTrace | null | undefined }) {
+export function ModelTracePanel({
+  trace,
+  explanation,
+}: {
+  trace: ModelTrace | null | undefined;
+  explanation?: ProposalExplanation | null;
+}) {
   const t = useT();
   if (!trace) return null;
+  const text = written(explanation);
   const engine = (
     <p className="text-xs text-muted-foreground">{t("Quantities and prices: the engine. Approval: you.")}</p>
   );
   if (trace.madeBy === "rule") {
     return (
       <section className="space-y-1 text-sm" aria-label={t("What Nemotron did")}>
-        <p>
-          {trace.reader === "parser"
-            ? t("The gateway’s request parser answered. No model ran.")
-            : t("Picked by rule. No model ran.")}
-        </p>
+        {text ? (
+          <>
+            <p>
+              {trace.reader === "parser"
+                ? t("The gateway’s request parser made the proposal: no model picked the products.")
+                : t("Picked by rule: no model picked the products.")}
+            </p>
+            <p>
+              <NemotronMark when={isNemotron(text.model)} />
+              {text.seconds == null
+                ? t("{model} wrote the explanation on this card: 1 model call.", {
+                    model: explanationModelName(text.model),
+                  })
+                : t("{model} wrote the explanation on this card: 1 model call, {seconds} s.", {
+                    model: explanationModelName(text.model),
+                    seconds: tenths(text.seconds),
+                  })}
+            </p>
+          </>
+        ) : (
+          <p>
+            {trace.reader === "parser"
+              ? t("The gateway’s request parser answered. No model ran.")
+              : t("Picked by rule. No model ran.")}
+          </p>
+        )}
         {engine}
       </section>
     );
   }
+  const calls = trace.calls + (text ? 1 : 0);
+  const seconds = trace.seconds + (text?.seconds ?? 0);
   return (
     <details className="text-sm" aria-label={t("What Nemotron did")}>
       <summary className="cursor-pointer">
         <NemotronMark />
         <span className="font-medium">{t("What Nemotron did")}</span>{" "}
-        <span className="font-mono text-[13px] tabular-nums text-muted-foreground">{headline(trace, t)}</span>
+        <span className="font-mono text-[13px] tabular-nums text-muted-foreground">{headline(trace, calls, seconds, t)}</span>
       </summary>
       <div className="mt-2 space-y-2 break-words">
         {trace.attempts > 1 ? (
           <p>{t("The first run stopped without a proposal and was started once more.")}</p>
         ) : null}
-        {trace.steps.length ? (
+        {trace.steps.length || text ? (
           <ol className="list-decimal space-y-1 pl-5">
             {trace.steps.map((step, index) => (
               <li key={index}>
@@ -128,6 +197,16 @@ export function ModelTracePanel({ trace }: { trace: ModelTrace | null | undefine
                 {stepText(step, t)}
               </li>
             ))}
+            {text ? (
+              <li>
+                <span className="text-muted-foreground">{t("Model:")}</span>{" "}
+                {text.seconds == null
+                  ? t("Wrote the explanation on this card from the checked decision record")
+                  : t("Wrote the explanation on this card from the checked decision record: {seconds} s", {
+                      seconds: tenths(text.seconds),
+                    })}
+              </li>
+            ) : null}
           </ol>
         ) : (
           <p>{t("No tool steps were recorded.")}</p>

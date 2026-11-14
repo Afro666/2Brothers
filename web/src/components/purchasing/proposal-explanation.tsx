@@ -1,5 +1,6 @@
 import { useOptionalApi } from "@/api";
 import type { ProposalExplanation } from "@/api/types";
+import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { useProposalExplanation } from "@/lib/proposal-explanation";
 import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
@@ -50,6 +51,10 @@ export function ProposalExplanationBlock({
         {t("Written by {model} from the checked decision record", {
           model: explanationModelName(explanation.model),
         })}
+        {/* Its own model call, with the time the gateway measured (#1867). */}
+        {explanation.durationMs != null && explanation.durationMs >= 0
+          ? t(" · 1 call · {seconds} s", { seconds: formatNumber(Math.round(explanation.durationMs / 100) / 10) })
+          : null}
       </p>
       {openDetails ? (
         <button

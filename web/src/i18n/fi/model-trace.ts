@@ -1,6 +1,22 @@
 // "What Nemotron did" panel (#1197): components/purchasing/model-trace-panel.tsx.
 export default {
   "What Nemotron did": "Mitä Nemotron teki",
+  // The visible line on the card and the explanation call in the panel (#1867).
+  "Picked by {model} · 1 call · {seconds} s": "Valinnut {model} · 1 kutsu · {seconds} s",
+  "Picked by {model} · {calls} calls · {seconds} s": "Valinnut {model} · {calls} kutsua · {seconds} s",
+  "Picked by a model": "Mallin valitsema",
+  "Made by the gateway’s rules, no model call": "Yhdyskäytävän sääntöjen tekemä, ei mallikutsua",
+  " · 1 call · {seconds} s": " · 1 kutsu · {seconds} s",
+  "Wrote the explanation on this card from the checked decision record":
+    "Kirjoitti tämän kortin selityksen tarkistetun päätöstietueen pohjalta",
+  "Wrote the explanation on this card from the checked decision record: {seconds} s":
+    "Kirjoitti tämän kortin selityksen tarkistetun päätöstietueen pohjalta: {seconds} s",
+  "The gateway’s request parser made the proposal: no model picked the products.":
+    "Yhdyskäytävän pyyntöjen jäsennin teki ehdotuksen: mikään malli ei valinnut tuotteita.",
+  "Picked by rule: no model picked the products.": "Valittu säännöllä: mikään malli ei valinnut tuotteita.",
+  "{model} wrote the explanation on this card: 1 model call.": "{model} kirjoitti tämän kortin selityksen: 1 mallikutsu.",
+  "{model} wrote the explanation on this card: 1 model call, {seconds} s.":
+    "{model} kirjoitti tämän kortin selityksen: 1 mallikutsu, {seconds} s.",
   "1 model call, {seconds} s, thinking on": "1 mallikutsu, {seconds} s, ajattelu päällä",
   "{calls} model calls, {seconds} s, thinking on": "{calls} mallikutsua, {seconds} s, ajattelu päällä",
   "1 model call, {seconds} s, thinking off": "1 mallikutsu, {seconds} s, ajattelu pois",
