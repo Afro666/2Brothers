@@ -1,0 +1,17 @@
+{
+  "fields": [
+    {"type": "vector", "path": "embedding.vector", "numDimensions": 1024, "similarity": "cosine"},
+    {"type": "filter", "path": "allergens.contains"},
+    {"type": "filter", "path": "allergens.may_contain"},
+    {"type": "filter", "path": "allergens.undeclared"},
+    {"type": "filter", "path": "allergen_data_known"},
+    {"type": "filter", "path": "labels"},
+    {"type": "filter", "path": "temperature"},
+    {"type": "filter", "path": "category"},
+    {"type": "filter", "path": "supplier_id"},
+    {"type": "filter", "path": "source"},
+    {"type": "filter", "path": "kitchen_id"},
+    {"type": "filter", "path": "net_content.unit"},
+    {"type": "filter", "path": "net_content.value"}
+  ]
+}

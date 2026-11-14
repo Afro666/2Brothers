@@ -249,6 +249,60 @@ as the consent text tells the kitchen. A kitchen without active consent appears 
 synthetic kitchens, recorded as granted by `synthetic-seed`; every fifth is held back so
 the consent rule shows.
 
+## Semantic search (hybrid)
+
+Words miss what meaning finds: a search for "lactose-free milk" should also find a
+product whose name says it another way. Every product has one embedding of 1024
+dimensions, stored on the product row as float32 binary under `embedding` with the model
+name and size. A second Atlas index, `products_vector` (`store/vector_index.json`),
+serves `$vectorSearch`.
+
+Two embedding services work; the first whose key is in `.env` is used:
+
+| Key | Model | Note |
+|---|---|---|
+| `NVIDIA_API_KEY` | `nvidia/nemotron-3.5-embed-1b` | Not run yet: the team has no key. |
+| `MONGODB_AI_API_KEY` (+ `MONGODB_AI_ENDPOINT`, default `ai.mongodb.com`) | `voyage-4` | MongoDB's embedding API. The whole catalog was embedded with it on 2026-11-14. |
+
+A row embedded with one model is embedded again when the other model becomes the current
+one: vectors of two models are never mixed in one index.
+
+```bash
+python -m store.embeddings     # embeds new and changed products; needs one of the two keys
+```
+
+A machine may hold the embedding key or the database address, not both. Then the vectors
+travel as a file (about 73 MB for the whole catalog):
+
+```bash
+# where the key is (reads the catalog file, calls the embedding service, no database)
+python -m store.embeddings --export-from vendor/valio/valio_aimo_junction26_product_data.json --out vectors.jsonl.gz
+# where the database is (needs no key); also creates the vector index
+python -m store.embeddings --import-from vectors.jsonl.gz
+```
+
+The import writes a vector only when the product row exists and its text is still the
+text that was embedded. A search still needs the key on the machine that serves it,
+because the query is embedded too.
+
+`python -m store.loader` does the same after loading the catalog, and skips it with a
+message when the key is missing. Reloading the catalog keeps the vectors.
+
+```python
+search_products(db, "lactose free milk", hybrid=True)                      # text + meaning
+search_products(db, "oat drink", {"exclude_allergens": ["gluten"]}, hybrid=True)
+```
+
+- `hybrid=True` embeds the query, runs the text search and the vector search over the
+  **same hard filters**, and lets Atlas fuse the two by rank (`$rankFusion`). A row found
+  only by meaning carries the reason `similar meaning, no word match`.
+- A similar meaning never overrides a filter: excluded allergens, required labels and
+  the kitchen scope cut rows before ranking, and missing allergen data is still unknown.
+- If the embedding service fails, the call raises `EmbeddingError`; ask again without
+  `hybrid` for the plain text search.
+- Storage: 17,546 vectors of 1024 float32 are 72 MB. As plain number arrays they would
+  be about three times that.
+
 ## Tests
 
 CI runs `python -m pytest`; install it next to the test extra:

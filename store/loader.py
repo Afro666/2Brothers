@@ -16,7 +16,8 @@ from pymongo.errors import OperationFailure
 
 from store.db import ensure_indexes, get_db
 from store.products import flatten, upsert_products
-from store.search import ensure_search_index
+from store.embeddings import embed_products
+from store.search import ensure_search_index, ensure_vector_index
 
 PREFIX = "valio_aimo_junction26_"
 
@@ -58,6 +59,15 @@ def main() -> None:
         print(f"search index: {ensure_search_index(db)}")
     except OperationFailure as exc:  # not Atlas, or no search-index rights
         print(f"search index: not created ({exc})")
+    from store import embeddings
+    if embeddings.provider() is None:
+        print("embeddings skipped: no embedding key is set (hybrid search needs them)")
+    else:
+        try:
+            print(f"embedded {embed_products(db)} new or changed products")
+            print(f"vector index: {ensure_vector_index(db)}")
+        except (embeddings.EmbeddingError, OperationFailure) as exc:
+            print(f"embeddings: not finished ({exc})")
 
 
 if __name__ == "__main__":

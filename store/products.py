@@ -166,7 +166,8 @@ def upsert_products(db, docs: list[dict], batch_size: int = 500) -> int:
 
 def get_product(db, product_id: str, raw: bool = False) -> dict | None:
     """One product by code (a string). The bulky `raw` record only on request."""
-    doc = db.products.find_one({"_id": str(product_id)}, None if raw else {"raw": 0})
+    hidden = {"embedding": 0} if raw else {"raw": 0, "embedding": 0}
+    doc = db.products.find_one({"_id": str(product_id)}, hidden)
     if doc is not None:
         doc["product_id"] = doc.pop("_id")
     return doc
@@ -183,7 +184,8 @@ def get_products(db, product_ids: list[str], kitchen_id: str | None = None) -> l
     if kitchen_id is not None:
         scope.append({"kitchen_id": kitchen_id})
     found = {doc["_id"]: doc
-             for doc in db.products.find({"_id": {"$in": ids}, "$or": scope}, {"raw": 0})}
+             for doc in db.products.find({"_id": {"$in": ids}, "$or": scope},
+                                         {"raw": 0, "embedding": 0})}
     rows = []
     for product_id in ids:
         if product_id in found:

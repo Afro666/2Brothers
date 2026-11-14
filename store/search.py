@@ -15,6 +15,7 @@ import re
 from pymongo.operations import SearchIndexModel
 
 INDEX_NAME = "products_search"
+VECTOR_INDEX_NAME = "products_vector"
 MAX_LIMIT = 50
 # Ranking tiers: every query word in one name, then a size written in the query,
 # then plain text relevance. The constants only need to be larger than a text score.
@@ -155,8 +156,62 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
     return [
         {"$search": {"index": INDEX_NAME, "compound": compound}},
         {"$limit": limit},
-        {"$project": {"raw": 0}},
+        {"$project": {"raw": 0, "embedding": 0}},
         {"$addFields": {"score": {"$meta": "searchScore"}}},
+    ]
+
+
+def vector_filter(filters: dict | None = None, kitchen_id: str | None = None) -> dict:
+    """The same hard filters as the text search, as a `$vectorSearch` pre-filter.
+
+    A similar meaning never overrides a filter: an excluded allergen, a required label
+    and the kitchen scope cut rows before any ranking.
+    """
+    filters = filters or {}
+    scope = [{"source": {"$ne": "own"}}]
+    if kitchen_id is not None:
+        scope.append({"kitchen_id": str(kitchen_id)})
+    clauses: list[dict] = [{"$or": scope}]
+    for path in ("temperature", "category", "supplier_id"):
+        if filters.get(path) is not None:
+            clauses.append({path: str(filters[path])})
+    for label in filters.get("require_labels") or []:
+        clauses.append({"labels": str(label)})
+    if filters.get("pack_size") is not None:
+        size = _size(filters["pack_size"].get("value"), filters["pack_size"].get("unit"))
+        clauses += [{"net_content.unit": size["unit"]},
+                    {"net_content.value": {"$gte": size["value"] * 0.99,
+                                           "$lte": size["value"] * 1.01}}]
+    codes = allergen_codes(filters.get("exclude_allergens"))
+    if codes:
+        strict = filters.get("allergen_strictness") == "strict"
+        for level in ["contains", "may_contain"] + (["undeclared"] if strict else []):
+            clauses.append({f"allergens.{level}": {"$nin": codes}})
+        if strict:
+            clauses.append({"allergen_data_known": {"$ne": False}})
+    return {"$and": clauses}
+
+
+def build_hybrid_pipeline(query: str, query_vector, filters: dict | None = None,
+                          limit: int = 20, kitchen_id: str | None = None) -> list[dict]:
+    """Text search and vector search over the same filters, fused by rank in Atlas.
+
+    Each side gives its best `MAX_LIMIT` rows; `$rankFusion` merges them by reciprocal
+    rank, so a product that words miss but meaning finds still comes up.
+    """
+    text_side = build_pipeline(query, filters, MAX_LIMIT, kitchen_id)[:2]  # validates too
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIMIT:
+        raise ValueError(f"limit must be an integer from 1 to {MAX_LIMIT}")
+    vector_side = [{"$vectorSearch": {
+        "index": VECTOR_INDEX_NAME, "path": "embedding.vector", "queryVector": query_vector,
+        "numCandidates": 10 * MAX_LIMIT, "limit": MAX_LIMIT,
+        "filter": vector_filter(filters, kitchen_id)}}]
+    return [
+        {"$rankFusion": {"input": {"pipelines": {"text": text_side, "vector": vector_side}},
+                         "scoreDetails": True}},
+        {"$limit": limit},
+        {"$addFields": {"score": {"$meta": "score"}, "fusion": {"$meta": "scoreDetails"}}},
+        {"$project": {"raw": 0, "embedding": 0}},
     ]
 
 
@@ -182,13 +237,23 @@ def _reasons(doc: dict, text: str, size: dict | None, codes: list[str]) -> list[
 
 
 def search_products(db, query: str = "", filters: dict | None = None, limit: int = 20,
-                    kitchen_id: str | None = None) -> list[dict]:
+                    kitchen_id: str | None = None, hybrid: bool = False,
+                    embedder=None) -> list[dict]:
     """Best match first. Each row is the product row plus `score` and `match_reasons`.
 
     Pass the authenticated `kitchen_id` to include that kitchen's own products.
+    `hybrid=True` adds meaning to words: the query is embedded and the vector search is
+    fused with the text search. It needs the embedding service; when that fails, the
+    call raises `EmbeddingError` and the caller can ask again without `hybrid`.
     """
-    pipeline = build_pipeline(query, filters, limit, kitchen_id)
     text, text_size = parse_query(query)
+    if hybrid and text:
+        from store.embeddings import embed, to_binary
+        build_pipeline(query, filters, limit, kitchen_id)  # refuse bad input before paying
+        vector = to_binary((embedder or embed)([query], "query")[0])
+        pipeline = build_hybrid_pipeline(query, vector, filters, limit, kitchen_id)
+    else:
+        pipeline = build_pipeline(query, filters, limit, kitchen_id)
     filters = filters or {}
     size = (_size(filters["pack_size"]["value"], filters["pack_size"]["unit"])
             if filters.get("pack_size") else text_size)
@@ -197,19 +262,33 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
     for doc in db.products.aggregate(pipeline):
         doc["product_id"] = doc.pop("_id")
         doc["match_reasons"] = _reasons(doc, text, size, codes)
+        ranks = {side.get("inputPipelineName"): side.get("rank")
+                 for side in (doc.pop("fusion", None) or {}).get("details", [])}
+        if ranks.get("vector") and not ranks.get("text"):
+            doc["match_reasons"].append("similar meaning, no word match")
         rows.append(doc)
     return rows
+
+
+def _ensure_index(db, name: str, file: str, kind: str) -> str:
+    definition = json.loads(Path(__file__).with_name(file).read_text())
+    existing = list(db.products.list_search_indexes(name))
+    if not existing:
+        db.products.create_search_index(
+            SearchIndexModel(definition=definition, name=name, type=kind))
+        return "CREATED"
+    if existing[0].get("latestDefinition") != definition:
+        db.products.update_search_index(name, definition)
+        return "UPDATING"
+    return existing[0].get("status", "UNKNOWN")
 
 
 def ensure_search_index(db) -> str:
     """Create the Atlas Search index, or update it when the committed definition
     changed. Returns its status; Atlas builds in the background until `READY`."""
-    definition = json.loads(Path(__file__).with_name("search_index.json").read_text())
-    existing = list(db.products.list_search_indexes(INDEX_NAME))
-    if not existing:
-        db.products.create_search_index(SearchIndexModel(definition=definition, name=INDEX_NAME))
-        return "CREATED"
-    if existing[0].get("latestDefinition") != definition:
-        db.products.update_search_index(INDEX_NAME, definition)
-        return "UPDATING"
-    return existing[0].get("status", "UNKNOWN")
+    return _ensure_index(db, INDEX_NAME, "search_index.json", "search")
+
+
+def ensure_vector_index(db) -> str:
+    """The same for the Atlas Vector Search index (store/vector_index.json)."""
+    return _ensure_index(db, VECTOR_INDEX_NAME, "vector_index.json", "vectorSearch")
