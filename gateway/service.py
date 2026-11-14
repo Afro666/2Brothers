@@ -13,6 +13,7 @@ from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 import hashlib
+import logging
 from typing import Callable
 from uuid import uuid4
 
@@ -349,15 +350,16 @@ class Gateway:
     def _save_offer(self, kitchen_id: str, request: dict, sim: dict) -> dict:
         now = self.now()
         offer_id = uuid4().hex
-        signed = {}
+        from gateway import signing
+        # offer_hash needs no key: always set, so APPROVAL_MISMATCH always runs (#753)
+        signed = {"signature": None, "offer_hash": signing.offer_hash(sim, request["requested_date"])}
         try:    # signed offers (#290): never a reason to fail a quote
-            from gateway import signing
             token, digest = signing.sign_offer(
                 self.db, offer_id=offer_id, kitchen_id=kitchen_id, simulation=sim,
                 requested_date=request["requested_date"], as_of=now, valid_until=now + OFFER_TTL)
             signed = {"signature": token, "offer_hash": digest}
         except Exception:
-            signed = {}
+            logging.getLogger(__name__).exception("offer %s: signing failed, saved unsigned", offer_id)
         offer = orders.save_offer(self.db, {
             "offer_id": offer_id, "kitchen_id": kitchen_id, "supplier_id": VALIO,
             "request": request, "valid_until": (now + OFFER_TTL).isoformat(),

@@ -82,3 +82,22 @@ def test_an_approval_for_one_offer_cannot_place_another(env):
     bad = client.post("/tools/place_order", headers=AGENT, json={
         "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"})
     assert bad.status_code == 409 and bad.json()["error"]["code"] == "APPROVAL_MISMATCH"
+
+
+def test_a_signing_failure_still_binds_the_approval_to_one_offer(env, monkeypatch):
+    client, _, db = env
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("no key")
+    monkeypatch.setattr(signing, "sign_offer", broken)
+    p = proposal(client)
+    offer = db.offers.find_one({"_id": p["offer_id"]})
+    assert offer["signature"] is None and offer["offer_hash"]
+    done = client.post(f"{K}/proposals/{p['proposal_id']}/approve", headers=HUMAN,
+                       json={"expected_total": p["expected_total"], "idempotency_key": "a1"})
+    assert done.status_code == 200, done.text
+    assert db.orders.find_one({})["offer_hash"] == offer["offer_hash"]
+    db.offers.update_one({"_id": p["offer_id"]}, {"$set": {"offer_hash": "0" * 64}})
+    bad = client.post("/tools/place_order", headers=AGENT, json={
+        "offer_id": p["offer_id"], "expected_total": p["expected_total"], "idempotency_key": "x"})
+    assert bad.status_code == 409 and bad.json()["error"]["code"] == "APPROVAL_MISMATCH"
