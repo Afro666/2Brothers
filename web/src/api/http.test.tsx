@@ -1220,6 +1220,8 @@ describe("the app on the gateway", () => {
 
     expect(await screen.findByText("incl VAT unknown: no VAT rate for Oat drink")).toBeVisible();
     expect(screen.queryByText(/€80\.00 incl VAT/)).not.toBeInTheDocument();
+    // #1858: no "=": the card shows no fee that the approve figure is the sum with.
+    expect(screen.getByText("Total to approve €80.00")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Approve €80.00" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €80.00" }));
@@ -1287,6 +1289,61 @@ describe("the app on the gateway", () => {
     expect(await screen.findByText("€37.74")).toBeVisible();
     expect(screen.getByText(/^Delivery fee €25\.00/)).toBeVisible();
     expect(screen.getByText("= €62.74 to approve")).toBeVisible();
+  });
+
+  it("names both gateway figures when the approve total holds a charge with no fee sent (#1858)", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    gateway({
+      ...inbox({ ...proposal, delivery_fee: null, total_incl_vat: "347.74", vat_unknown: [], expected_total: "372.74" }),
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    expect(await screen.findByText("€347.74")).toBeVisible();
+    expect(screen.getByText("Lines incl VAT")).toBeVisible();
+    expect(screen.getByText("Total to approve €372.74")).toBeVisible();
+    expect(
+      screen.getByText("The total to approve includes delivery or other charges the gateway does not itemise."),
+    ).toBeVisible();
+    expect(screen.queryByText(/Delivery fee/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/€25\.00/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Approve €372\.74 incl VAT/ })).toBeEnabled();
+  });
+
+  it("shows each supplier block's own delivery fee when the proposal sends no single fee (#1858)", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    const blocks = [
+      { supplier_id: "sup-demo-fish", name: "Baltic Catch Fish Wholesale (demo)", delivery_fee: "0.00", lines: [] },
+      { supplier_id: "sup-valio", name: "Valio Aimo", delivery_fee: "25.00", lines: [] },
+    ];
+    gateway({
+      ...inbox({ ...proposal, blocks, delivery_fee: null, total_incl_vat: "347.74", vat_unknown: [], expected_total: "372.74" }),
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    expect(await screen.findByText("€347.74")).toBeVisible();
+    expect(screen.getByText("Delivery fee €25.00 (Valio Aimo)")).toBeVisible();
+    expect(screen.queryByText(/Baltic Catch Fish Wholesale \(demo\)\)$/)).not.toBeInTheDocument();
+    expect(screen.getByText("Lines incl VAT")).toBeVisible();
+    expect(screen.getByText("Total to approve €372.74")).toBeVisible();
+    expect(screen.queryByText(/^= /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/does not itemise/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Approve €372\.74 incl VAT/ })).toBeEnabled();
+  });
+
+  it("names the figures without the note when the approve total is below the lines total (#1858)", async () => {
+    vi.stubEnv("VITE_LIVE_BUYER", "true");
+    gateway({
+      ...inbox({ ...proposal, delivery_fee: null, total_incl_vat: "347.74", vat_unknown: [], expected_total: "340.00" }),
+      [`GET ${K}/proposals/prop-1/addable`]: () => ({ proposal_id: "prop-1", rows: [], skipped: [] }),
+    });
+    renderApp("/approvals", createHttpApi("/api"));
+
+    expect(await screen.findByText("Total to approve €340.00")).toBeVisible();
+    expect(screen.getByText("Lines incl VAT")).toBeVisible();
+    expect(screen.queryByText(/does not itemise/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Approve €340\.00 incl VAT/ })).toBeEnabled();
   });
 
   it("shows no breakdown when the amount to approve is the total incl VAT", async () => {

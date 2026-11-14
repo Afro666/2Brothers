@@ -292,6 +292,8 @@ export interface ApprovalRequest {
   vatUnknown?: string[];
   reasons: MandateReason[];
   suppliersToConfirm: { supplierId: string; name: string }[];
+  /** The gateway's per-supplier fees (`blocks[].delivery_fee` above zero), for a proposal with no single fee (#1858). */
+  blockDeliveryFees?: { supplierName: string; amount: number }[];
   /** Proposal-line cut-offs and the supplier block each line belongs to. */
   cutoffs?: { closingTime: OrderLine["offer"]["closingTime"]; supplierName: string | null }[];
   /** Only PENDING can be approved; IN_PROGRESS and BLOCKED_BY_RECALL wait, they are not decided. */
