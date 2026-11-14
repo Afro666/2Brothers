@@ -112,7 +112,10 @@ class Gateway:
                 stock.get("cutoff_passed"),
                 date.fromisoformat(available_date) if available_date else None,
                 bool(stock.get("salesBlock") or line.get("salesBlock")),
-                not allergen_codes(doc),          # unknown allergen data is never safe (S02, S04)
+                allergen_data_known=not allergen_codes(doc),   # unknown allergen data is never safe (S02, S04)
+                reliability=doc.get("reliability"),            # Valio CSV, delivered / ordered
+                carbon=doc.get("carbon_kg_co2e_per_kg"),       # product-group average
+                labels=tuple(doc.get("labels") or ()),
             ))
             tax[pid] = _dec((price.get("tax") or {}).get("taxRate")) or Decimal(0)
         return offers, skipped, tax
@@ -148,7 +151,9 @@ class Gateway:
             "lines": [{"product_id": ln.product_id, "quantity": f"{ln.quantity.normalize():f}",
                        "unit": ln.unit, "unit_price": _money(ln.unit_price), "total": _money(ln.total),
                        "why": ln.why, "unknown_stock": ln.unknown_stock,
-                       "reason_codes": list(ln.reason_codes)} for ln in plan.lines],
+                       "reason_codes": list(ln.reason_codes),
+                       "reliability": ln.reliability, "carbon_kg_co2e_per_kg": ln.carbon,
+                       "labels": list(ln.labels)} for ln in plan.lines],
             "excluded": [{"product_id": pid, "reason": why} for pid, why in excluded],
             "alternative": None if plan.alternative is None else {
                 "total_ex_vat": _money(plan.alternative.total),
