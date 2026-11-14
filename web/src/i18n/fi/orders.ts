@@ -511,6 +511,8 @@ export default {
   "Reason for changing {product}": "Tuotteen {product} muuttamisen syy",
   "Remove line": "Poista rivi",
   "Keep line": "Säilytä rivi",
+  "Remove line: {product}": "Poista rivi: {product}",
+  "Keep line: {product}": "Säilytä rivi: {product}",
   "{count}/200 characters": "{count}/200 merkkiä",
   "Blocked by a recall": "Takaisinveto estää",
   "A product on this order matches a food recall. It cannot be approved.": "Tilauksen tuote vastaa elintarvikkeen takaisinvetoa. Tilausta ei voi hyväksyä.",

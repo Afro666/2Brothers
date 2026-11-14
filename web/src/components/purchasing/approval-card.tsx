@@ -325,6 +325,8 @@ export function ApprovalCard({
     return quantities[line.product.id] ?? String(line.quantity);
   }
 
+  const removeId = (line: OrderLine) => `remove-${request.id}-${line.product.id}`;
+
   function resetLineChange(productId: string) {
     setLineChanges((current) => {
       if (!current[productId]) return current;
@@ -383,6 +385,7 @@ export function ApprovalCard({
               variant="destructive"
               className="min-h-11"
               disabled={busy}
+              aria-label={t("Remove line: {product}", { product: line.product.names.en })}
               onClick={() =>
                 void changeProposal({ type: "REMOVE_LINE", productId: line.product.id, ...selectedChange(line.product.id) })
               }
@@ -394,7 +397,12 @@ export function ApprovalCard({
               variant="outline"
               className="min-h-11"
               disabled={busy}
-              onClick={() => resetLineChange(line.product.id)}
+              aria-label={t("Keep line: {product}", { product: line.product.names.en })}
+              onClick={() => {
+                // This button unmounts: give focus back to the line's Remove.
+                document.getElementById(removeId(line))?.focus();
+                resetLineChange(line.product.id);
+              }}
             >
               {t("Keep line")}
             </Button>
@@ -555,10 +563,9 @@ export function ApprovalCard({
                         ? {
                             busy,
                             value: quantityValue,
-                            onType: (line, value) => {
-                              setQuantities((current) => ({ ...current, [line.product.id]: value }));
-                              resetLineChange(line.product.id);
-                            },
+                            // A tapped chip and its note stay while the person corrects the number.
+                            onType: (line, value) =>
+                              setQuantities((current) => ({ ...current, [line.product.id]: value })),
                             onUpdate: (line) =>
                               void changeProposal({
                                 type: "SET_QUANTITY",
@@ -567,9 +574,13 @@ export function ApprovalCard({
                                 ...selectedChange(line.product.id),
                               }),
                             // Remove asks first: the chips and Remove line / Keep line show under the line.
+                            // A second press closes the confirm, like Keep line.
                             onRemove: (line) =>
-                              setLineChanges((current) => ({ ...current, [line.product.id]: { note: "", removing: true } })),
+                              lineChanges[line.product.id]?.removing
+                                ? resetLineChange(line.product.id)
+                                : setLineChanges((current) => ({ ...current, [line.product.id]: { note: "", removing: true } })),
                             inputId: (line) => `qty-${request.id}-${line.product.id}`,
+                            removeId,
                             removing: (line) => lineChanges[line.product.id]?.removing ?? false,
                             below: lineBelow,
                           }

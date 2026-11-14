@@ -522,6 +522,38 @@ describe("ApprovalCard", () => {
     });
   });
 
+  it("keeps a tapped chip and its note while the person corrects the quantity", async () => {
+    const user = userEvent.setup();
+    const onChangeProposal = vi.fn().mockResolvedValue(undefined);
+    const line = confirmedOrder.lines[0];
+    render(
+      <ApprovalCard
+        request={approval}
+        order={confirmedOrder}
+        onChangeProposal={onChangeProposal}
+        listAddableProducts={vi.fn().mockResolvedValue([])}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Inspect" }));
+    const quantity = screen.getAllByRole("spinbutton", { name: /^Quantity for / })[0];
+    await user.clear(quantity);
+    await user.type(quantity, String(line.quantity + 1));
+    await user.click(screen.getByRole("button", { name: "Other" }));
+    await user.type(screen.getByRole("textbox", { name: "Note (optional)" }), "Party");
+    await user.type(quantity, "0");
+
+    expect(screen.getByRole("button", { name: "Other" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("textbox", { name: "Note (optional)" })).toHaveValue("Party");
+    await user.click(screen.getByRole("button", { name: `Update ${line.product.names.en}` }));
+    expect(onChangeProposal).toHaveBeenCalledWith({
+      type: "SET_QUANTITY",
+      productId: line.product.id,
+      quantity: Number(`${line.quantity + 1}0`),
+      reason: "OTHER",
+      note: "Party",
+    });
+  });
+
   it("never sends a note after the person switches away from Other", async () => {
     const user = userEvent.setup();
     const onChangeProposal = vi.fn().mockResolvedValue(undefined);
@@ -572,7 +604,7 @@ describe("ApprovalCard", () => {
     expect(within(group).getByRole("button", { name: "Too much · suggested" })).toHaveAttribute("aria-pressed", "false");
     if (reason) await user.click(within(group).getByRole("button", { name: "Still in stock" }));
 
-    await user.click(screen.getByRole("button", { name: "Remove line" }));
+    await user.click(screen.getByRole("button", { name: `Remove line: ${line.product.names.en}` }));
     expect(onChangeProposal).toHaveBeenCalledWith({
       type: "REMOVE_LINE",
       productId: line.product.id,
@@ -599,9 +631,36 @@ describe("ApprovalCard", () => {
     await user.click(chip);
     await user.click(chip);
     expect(chip).toHaveAttribute("aria-pressed", "false");
-    await user.click(screen.getByRole("button", { name: "Keep line" }));
+    await user.click(screen.getByRole("button", { name: `Keep line: ${line.product.names.en}` }));
     expect(onChangeProposal).not.toHaveBeenCalled();
     expect(screen.queryByRole("group", { name: `Reason for changing ${line.product.names.en}` })).toBeNull();
+  });
+
+  it("keeps focus on Remove while its confirm is open and names each line's confirm", async () => {
+    const user = userEvent.setup();
+    const [first] = confirmedOrder.lines;
+    const second = { ...first, product: { ...first.product, id: "999999", names: { ...first.product.names, en: "Cream 2 L" } } };
+    render(
+      <ApprovalCard
+        request={approval}
+        order={{ ...confirmedOrder, lines: [first, second] }}
+        onChangeProposal={vi.fn().mockResolvedValue(undefined)}
+        listAddableProducts={vi.fn().mockResolvedValue([])}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Inspect" }));
+    const remove = screen.getByRole("button", { name: `Remove ${first.product.names.en}` });
+    expect(remove).toHaveAttribute("aria-expanded", "false");
+    await user.click(remove);
+    expect(remove).toHaveFocus();
+    expect(remove).toHaveAttribute("aria-expanded", "true");
+    await user.click(screen.getByRole("button", { name: `Remove ${second.product.names.en}` }));
+    expect(screen.getByRole("button", { name: `Remove line: ${first.product.names.en}` })).toBeVisible();
+    expect(screen.getByRole("button", { name: `Remove line: ${second.product.names.en}` })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: `Keep line: ${first.product.names.en}` }));
+    expect(remove).toHaveFocus();
+    expect(remove).toHaveAttribute("aria-expanded", "false");
   });
 
   it.each([
@@ -629,7 +688,7 @@ describe("ApprovalCard", () => {
     const originalQuantity = (quantity as HTMLInputElement).valueAsNumber;
 
     await user.click(screen.getAllByRole("button", { name: /^Remove / })[0]);
-    await user.click(screen.getByRole("button", { name: "Remove line" }));
+    await user.click(screen.getByRole("button", { name: `Remove line: ${confirmedOrder.lines[0].product.names.en}` }));
 
     const orderSection = screen.getByRole("region", { name: "Order lines" });
     expect(await within(orderSection).findByRole("alert")).toHaveTextContent(message);

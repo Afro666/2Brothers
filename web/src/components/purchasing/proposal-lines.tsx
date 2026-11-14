@@ -35,6 +35,8 @@ export interface LineEditing {
   inputId: (line: OrderLine) => string;
   /** #1301: true while the line's Remove waits for its confirm; its quantity is then fixed. */
   removing?: (line: OrderLine) => boolean;
+  /** #1301: the id of the line's Remove, so the confirm can give focus back to it. */
+  removeId?: (line: OrderLine) => string;
   /** #1301: the reason chips and the Remove confirm under a line, or null. */
   below?: (line: OrderLine) => ReactNode;
 }
@@ -327,7 +329,10 @@ export function ProposalLines({
                       size="icon"
                       variant="ghost"
                       className="size-7 text-muted-foreground hover:text-danger"
+                      id={editing.removeId?.(line)}
                       disabled={editing.busy}
+                      // A disclosure when Remove asks first: it stays mounted, so focus stays on it.
+                      aria-expanded={editing.removing ? removing : undefined}
                       aria-label={t("Remove {product}", { product: name })}
                       title={t("Remove")}
                       onClick={() => editing.onRemove(line)}
