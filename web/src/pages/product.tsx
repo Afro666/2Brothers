@@ -167,7 +167,7 @@ function PriceStockVat({ page }: { page: ProductPage }) {
   const stock = live?.stock ?? null;
   const per = perUnit(live?.per ?? page.product.salesUnit);
   const valio = page.suppliers.find((supplier) => supplier.adapter === "valio_api");
-  const next = stock?.cutoffPassed && valio ? nextOrderCutoff(valio, new Date()) : null;
+  const next = stock?.cutoffPassed && stock.orderable !== false && valio ? nextOrderCutoff(valio, new Date()) : null;
   const sources = [live?.source, vat.source].filter((item): item is string => !!item).join(" · ");
   const sourcesText = t("Source: {source}", { source: plainSource(sources, t) });
   if (live === null) {
