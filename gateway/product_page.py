@@ -30,7 +30,15 @@ LIVE = "Valio price and availability API"
 LANGUAGES = ("en", "fi", "sv")
 ORDERS_SHOWN = 5
 DEMAND_DAYS = 14
-ALLERGEN_NAMES = {codes[0]: name for name, codes in ALLERGENS.items()}
+# A name for every GS1 code, not only the first of its group (review of #1625): the group's first
+# code is the group itself; the others say which grain or nut, with the group in brackets.
+_SPECIFIC = {"UW": "wheat (gluten)", "NR": "rye (gluten)", "GB": "barley (gluten)",
+             "GS": "spelt (gluten)", "GK": "kamut (gluten)", "SA": "almond (nuts)",
+             "SC": "cashew (nuts)", "SH": "hazelnut (nuts)", "SM": "macadamia (nuts)",
+             "SP": "pecan (nuts)", "SR": "Brazil nut (nuts)", "ST": "pistachio (nuts)",
+             "SW": "walnut (nuts)"}
+ALLERGEN_NAMES = {**{code: name for name, codes in ALLERGENS.items() for code in codes},
+                  **{codes[0]: name for name, codes in ALLERGENS.items()}, **_SPECIFIC}
 
 
 def _num(value) -> str | None:

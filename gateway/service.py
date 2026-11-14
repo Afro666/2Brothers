@@ -316,7 +316,12 @@ class Gateway:
                 "lines": [{"product_id": ln.product_id, "quantity": f"{ln.quantity.normalize():f}",
                            "unit": ln.unit, "total": _money(ln.total), "why": ln.why}
                           for ln in plan.alternative.lines]},
-            "partial_fill": partial_out(plan.partial),   # confirmed stock now, a plan for the rest (#288)
+            # confirmed stock now, a plan for the rest (#288); its lines carry the same VAT as the
+            # product's line above, unknown when the product has no line here.
+            "partial_fill": partial_out(plan.partial, {
+                pid: {"vat_rate": rate_text(tax.get(pid)),
+                      "vat_source": when.get(pid, {}).get("vat_source") if tax.get(pid) is not None else None}
+                for pid in {ln.product_id for part in ((plan.partial.now, *plan.partial.rest) if plan.partial else ()) for ln in part.lines}}),
         }
 
     def _allergen_refusals(self, kitchen_id: str, product_ids: list[str]) -> dict[str, tuple[str, ...]]:
