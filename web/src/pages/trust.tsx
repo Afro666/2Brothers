@@ -1,5 +1,5 @@
 import { CircleCheck, CircleX, Info } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError, useApi } from "@/api";
@@ -81,7 +81,11 @@ export function TrustPage() {
     }
   }, [api, t]);
 
+  // Once per visit: a new language or api object must not start the check again.
+  const opened = useRef(false);
   useEffect(() => {
+    if (opened.current) return;
+    opened.current = true;
     void verify(false);
   }, [verify]);
 
@@ -125,6 +129,7 @@ export function TrustPage() {
               {checking ? (
                 <p className="text-muted-foreground">{t("Loading audit lines")}</p>
               ) : checkError ? (
+                // When the lines failed too, the error and its retry are shown once, with the lines below.
                 rows.status === "error" ? null : <ErrorState message={plain(checkError, t)} onRetry={() => void verify()} />
               ) : check === null ? (
                 <p className="text-muted-foreground">{t("Not checked yet.")}</p>
@@ -169,7 +174,15 @@ export function TrustPage() {
             {t("Newest audit lines")}
           </h2>
           {rows.status === "loading" ? <LoadingState label={t("Loading audit lines")} /> : null}
-          {rows.status === "error" ? <ErrorState message={rows.error.message} onRetry={rows.reload} /> : null}
+          {rows.status === "error" ? (
+            <ErrorState
+              message={rows.error.message}
+              onRetry={() => {
+                rows.reload();
+                if (checkError) void verify(false);
+              }}
+            />
+          ) : null}
           {rows.status === "ready" && rows.data.length === 0 ? (
             <EmptyState title={t("No audit lines yet")}>{t("Recorded events will appear here.")}</EmptyState>
           ) : null}

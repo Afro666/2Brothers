@@ -31,7 +31,8 @@ export function LabelEvidence({ check }: { check: LabelCheck }) {
       {verified ? t("Producer registration verified") : check.label_verified === "not_found" ? t("Producer not found") : t("Verification unknown")}
     </p>
     <p>{t(LABEL_NAMES[check.label] ?? check.label)} · {t("producer scope · individual product certification unverified")}</p>
-    <p>{check.reason} · {checkedAt}</p>
+    {/* The gateway's reason is an English sentence: the known ones have a Finnish entry. */}
+    <p>{t(check.reason)} · {checkedAt}</p>
     {check.source_url && /^https:\/\//.test(check.source_url) && <a className="underline" href={check.source_url} target="_blank" rel="noreferrer">{t("Official producer register")}</a>}
   </div>;
 }
