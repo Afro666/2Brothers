@@ -68,7 +68,7 @@ class ValioTests(unittest.TestCase):
     def test_unknown_stock_stays_visible_but_unconfirmed_with_future_cutoff(self):
         now = datetime(2026, 11, 13, tzinfo=timezone.utc)
         for model in ["Terminal", "Stock"]:
-            for amount in [999999, 666666666, 1999999999, 9999999999, None]:
+            for amount in [999999, 666666666, 1999999999, 9999999999]:
                 with self.subTest(model=model, amount=amount):
                     data = fixture("availability")
                     original = data["products"][0]
@@ -94,6 +94,22 @@ class ValioTests(unittest.TestCase):
         self.assertEqual(line["availableAmount"], 0)
         self.assertFalse(line["unknown_stock"])
         self.assertFalse(line["orderable"])
+
+    def test_null_or_absent_amount_is_not_available_not_unknown(self):
+        now = datetime(2026, 11, 13, tzinfo=timezone.utc)
+        for absent in [False, True]:
+            with self.subTest(absent=absent):
+                data = fixture("availability")
+                line = data["products"][0]["scheduleLines"][0]
+                if absent:
+                    del line["availableAmount"]
+                else:
+                    line["availableAmount"] = None
+                result = self.client(lambda *args: data, now=lambda: now).availability(["462775"], "2026-11-16")
+                line = result["products"][0]["scheduleLines"][0]
+                self.assertEqual(line["availableAmount"], 0)
+                self.assertFalse(line["unknown_stock"])
+                self.assertFalse(line["orderable"])
 
     def test_1001_products_are_chunked_with_auth_and_user_agent(self):
         calls = []
