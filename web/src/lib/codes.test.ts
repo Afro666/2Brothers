@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CODE_LABELS, codeLabel, plainCode, plainReason } from "@/lib/codes";
+import { CODE_LABELS, codeLabel, plainCode, plainReason, translateReason } from "@/lib/codes";
 import { translate } from "@/lib/i18n";
 
 describe("codeLabel", () => {
@@ -98,5 +98,33 @@ describe("plainReason", () => {
     expect(plainReason("15 KG of the request cannot be covered for this date.")).toBe(
       "15 KG of the request cannot be covered for this date.",
     );
+  });
+});
+
+describe("translateReason (#1169)", () => {
+  const fi = (text: string) => translate("fi", text);
+
+  it("has a Finnish title for every code", () => {
+    for (const { title } of Object.values(CODE_LABELS)) expect(fi(title), title).not.toBe(title);
+  });
+
+  it("shows a gateway reason's code title in Finnish", () => {
+    const reason = plainReason("472710: ALLERGEN_RULE: the kitchen excludes AN", new Map([["472710", "Peanut butter"]]));
+    expect(translateReason(reason, fi)).toBe("Peanut butter: Poissuljettu allergeeni: the kitchen excludes AN");
+    expect(translateReason("Excluded allergen: the kitchen excludes AN", fi)).toBe(
+      "Poissuljettu allergeeni: the kitchen excludes AN",
+    );
+  });
+
+  it("translates a lone code's title and detail", () => {
+    expect(translateReason(plainReason("461332: BLOCKED_BY_RECALL"), fi)).toBe(
+      "461332: Takaisinveto estää. Tilauksen tuote vastaa elintarvikkeen takaisinvetoa. Tilausta ei voi hyväksyä.",
+    );
+  });
+
+  it("leaves English and other sentences as they are", () => {
+    const reason = "Peanut butter: Excluded allergen: the kitchen excludes AN";
+    expect(translateReason(reason, (text) => text)).toBe(reason);
+    expect(translateReason("15 KG cannot be covered.", fi)).toBe("15 KG cannot be covered.");
   });
 });
