@@ -300,7 +300,7 @@ export default {
   "Stock ends before the next delivery can arrive.": "Varasto loppuu ennen kuin seuraava toimitus ehtii saapua.",
   "Stock is at the reorder point. Order in this cycle.": "Varasto on tilauspisteessä. Tilaa tässä kierroksessa.",
   "Stock is not confirmed for this option. The current basket is unchanged; wait for the supplier or choose another option. Nothing was approved.": "Tämän vaihtoehdon varastoa ei ole vahvistettu. Nykyinen kori on ennallaan; odota toimittajaa tai valitse toinen vaihtoehto. Mitään ei hyväksytty.",
-  "Stock is not confirmed. Approval is available once the supplier confirms it.": "Varastoa ei ole vahvistettu. Hyväksyntä on mahdollista, kun toimittaja vahvistaa sen.",
+  "Valio must confirm stock": "Valion on vahvistettava varasto",
   "Stock not confirmed": "Varastoa ei ole vahvistettu",
   "Stock on hand": "Varastossa",
   "Substitution rules": "Korvaussäännöt",
