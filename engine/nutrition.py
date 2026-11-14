@@ -58,7 +58,8 @@ def piece_amount(name: str | None, net_content: dict | None) -> Decimal | None:
     only when it is small (a 1 l carton, an 800 g loaf). Otherwise unknown: never the case."""
     match = _MULTIPACK.search(name or "")
     if match:
-        return Decimal(match.group(2).replace(",", ".")) * _TO_BASE[match.group(3).lower()]
+        piece = Decimal(match.group(2).replace(",", ".")) * _TO_BASE[match.group(3).lower()]
+        return piece if piece <= SINGLE_PIECE_MAX * 1000 else None    # "1x10 kg" is a case
     if net_content and net_content.get("value") and net_content.get("unit") in ("KG", "L"):
         value = Decimal(str(net_content["value"]))
         if value <= SINGLE_PIECE_MAX:
