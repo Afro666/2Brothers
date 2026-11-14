@@ -3,6 +3,7 @@ import { ApiError } from "@/api/types";
 import type { OfferTier, ProductLabel, ProposalOption, ProposalOptionLine } from "@/types";
 
 const TIERS: readonly string[] = ["good", "better", "best"] satisfies OfferTier[];
+const SOURCES: readonly string[] = ["confirmed", "original", "supplier", "catalog"];
 const LABELS: readonly string[] = [
   "EU_ORGANIC_FARMING",
   "GOODS_FROM_FINLAND_BLUE_SWAN",
@@ -38,8 +39,8 @@ function everyLine<T>(lines: Row[], read: (line: Row) => T | null): T[] | null {
  *
  * Read from each line when present: `cutoff_passed` (offer line), `reason_codes`, `reliability`,
  * `carbon_kg_co2e_per_kg` and `labels` (#274, named as on the product row), and `unit_price`
- * (the gateway sends it per `unit`; the contract does not list it yet). `recommended` is not in
- * the contract either: only an explicit `true` from the gateway marks an option.
+ * (the gateway sends it per `unit`; the contract does not list it yet). Only an explicit `true`
+ * from the gateway marks an option as recommended.
  */
 export function mapProposalOptions(
   value: unknown,
@@ -51,6 +52,7 @@ export function mapProposalOptions(
   return (value as unknown[]).map((item) => {
     const option = row(item, "an option");
     if (!TIERS.includes(option.tier as string)) invalid("tier must be good, better or best");
+    if (option.source != null && !SOURCES.includes(option.source as string)) invalid("source is not known");
     if (option.currency !== "EUR") invalid("currency must be EUR");
     // Contract: a choice never selects, approves or places itself.
     if (option.requires_chef_approval !== true) invalid("requires_chef_approval must be true");
@@ -75,9 +77,11 @@ export function mapProposalOptions(
         : null,
     );
     const labels = everyLine(rawLines, (line) => (Array.isArray(line.labels) ? (line.labels as unknown[]) : null));
+    const held = option.held == null ? null : row(option.held, "held");
     return {
       id: text(option.offer_id, "offer_id"),
       tier: option.tier as OfferTier,
+      source: (option.source ?? null) as ProposalOption["source"],
       kind: rawLines.some((line) => Array.isArray(line.reason_codes) && line.reason_codes.includes("PARTIAL_STOCK"))
         ? "PARTIAL"
         : "FULL",
@@ -98,6 +102,7 @@ export function mapProposalOptions(
         (LABELS.filter((label) => labels.every((lineLabels) => lineLabels.includes(label))) as ProductLabel[]),
       tradeOff: text(option.why, "why"),
       recommended: option.recommended === true,
+      held: held && { quantity: mapMoney(held.quantity, "held.quantity"), unit: text(held.unit, "held.unit") },
       chosen: currentOfferId != null && option.offer_id === currentOfferId,
     };
   });

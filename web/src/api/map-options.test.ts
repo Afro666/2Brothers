@@ -29,6 +29,7 @@ describe("mapProposalOptions", () => {
       {
         id: "offer-a",
         tier: "good",
+        source: "original",
         kind: "FULL",
         lines: [{ productId: "P1", productName: null, quantity: 51, unit: "ST", unitPrice: null }],
         totalInclVat: 148.76,
@@ -40,6 +41,7 @@ describe("mapProposalOptions", () => {
         labels: null,
         tradeOff: "Requested product, confirmed portion only.",
         recommended: false,
+        held: null,
         chosen: true,
       },
     ]);
@@ -98,6 +100,21 @@ describe("mapProposalOptions", () => {
       }),
     ]);
     expect(mapped).toMatchObject({ deliveryReliability: null, co2KgPerKg: null, labels: null, cutoffPassed: null });
+  });
+
+  it("keeps a confirmed option distinct and maps its held remainder", () => {
+    const [mapped] = mapProposalOptions([
+      option({ source: "confirmed", recommended: true, held: { quantity: "949", unit: "L" } }),
+    ]);
+    expect(mapped).toMatchObject({
+      source: "confirmed",
+      recommended: true,
+      held: { quantity: 949, unit: "L" },
+    });
+  });
+
+  it("never invents a held quantity when the API does not send it", () => {
+    expect(() => mapProposalOptions([option({ held: { unit: "L" } })])).toThrow(/held\.quantity/);
   });
 
   it("never reports confirmed stock when a line's stock is unknown or missing", () => {

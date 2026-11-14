@@ -228,6 +228,8 @@ export interface ProposalOption {
   id: string;
   /** Presentation order only; it does not say an option is better. */
   tier: OfferTier;
+  /** Where this basket came from; null when the API does not say. */
+  source: "confirmed" | "original" | "supplier" | "catalog" | null;
   /** PARTIAL covers part of the ask now and leaves the rest for later. */
   kind: "FULL" | "PARTIAL";
   lines: ProposalOptionLine[];
@@ -248,6 +250,8 @@ export interface ProposalOption {
   tradeOff: string;
   /** Only what the API says: the UI never ranks options. */
   recommended: boolean;
+  /** The part of the request still waiting for supplier stock confirmation. */
+  held: { quantity: number; unit: string } | null;
   /** The basket the proposal holds now. */
   chosen: boolean;
 }
