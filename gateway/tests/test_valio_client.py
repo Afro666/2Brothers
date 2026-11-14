@@ -68,7 +68,7 @@ class ValioTests(unittest.TestCase):
     def test_unknown_stock_stays_visible_but_unconfirmed_with_future_cutoff(self):
         now = datetime(2026, 11, 13, tzinfo=timezone.utc)
         for model in ["Terminal", "Stock"]:
-            for amount in [999999, 9999999999, None]:
+            for amount in [999999, 666666666, 1999999999, 9999999999, None]:
                 with self.subTest(model=model, amount=amount):
                     data = fixture("availability")
                     original = data["products"][0]
