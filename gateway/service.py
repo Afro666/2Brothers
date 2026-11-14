@@ -23,6 +23,7 @@ from engine import (AddableRow, Candidate, Item, KitchenParams, Offer, Wanted, a
                     pad_to_free_delivery, plan_request, rank_addable)
 from engine.offers import RequestPlan
 from engine.packs import PackDataError
+from gateway import options
 from gateway.decision import decision_summary
 from gateway.partial_fill import partial_out
 from gateway.suppliers import VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers
@@ -480,6 +481,7 @@ class Gateway:
                 offer_id=offer["offer_id"], reasons=sim["mandate"]["reasons"])
             self.db.proposals.update_one({"_id": doc["_id"]}, {"$set": {"approval_id": approval["approval_id"]}})
             doc["approval_id"] = approval["approval_id"]
+            options.attach_confirmed(self, kitchen_id, doc["_id"], request, sim)   # never raises
         self._audit(kitchen_id, "proposal_created", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], expected_total=sim["expected_total"],
                     verdict=sim["mandate"]["verdict"])
@@ -507,7 +509,7 @@ class Gateway:
     def _proposal_out(self, doc: dict) -> dict:
         offer = orders.get_offer(self.db, doc["offer_id"])
         result = {"proposal_id": doc["_id"], "status": doc["status"], "request": doc["request"],
-                "substitute_options": doc.get('substitute_options', []),
+                "substitute_options": options.merged(doc),
                 "offer_id": doc["offer_id"], "valid_until": offer["valid_until"],
                 "approval_id": doc.get("approval_id"), "order_id": doc.get("order_id"),
                 **offer["simulation"],
@@ -820,6 +822,7 @@ class Gateway:
             self.db, kitchen_id=kitchen_id, idempotency_key=f"proposal:{doc['_id']}",
             offer_id=offer["offer_id"], reasons=sim["mandate"]["reasons"])
         self.db.proposals.update_one({"_id": doc["_id"]}, {"$set": {"approval_id": approval["approval_id"]}})
+        options.attach_confirmed(self, kitchen_id, doc["_id"], offer["request"], sim)   # never raises
         self._audit(kitchen_id, "approval_requested", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], expected_total=sim["expected_total"])
         self._audit(kitchen_id, "decision_summary", actor, proposal_id=doc["_id"],
