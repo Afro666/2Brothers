@@ -680,7 +680,8 @@ export interface Api {
    */
   readMenuPhoto(
     photo: Blob,
-    window: { from: string; to: string; requestedDate?: string },
+    /** `covers`: for dishes whose covers the menu does not show; sent only when set. */
+    window: { from: string; to: string; requestedDate?: string; covers?: number },
     actor: AuditActor,
   ): Promise<MenuPhotoRead>;
   /**

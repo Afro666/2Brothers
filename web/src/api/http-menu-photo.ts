@@ -75,6 +75,8 @@ export function createMenuPhotoHttp(call: GatewayCall, kitchen: string): Pick<Ap
         from: window.from,
         to: window.to,
         ...(window.requestedDate ? { requested_date: window.requestedDate } : {}),
+        // Only for dishes whose covers the menu does not show; the gateway never guesses them.
+        ...(window.covers != null ? { covers: window.covers } : {}),
         // A new key per photo: a repeat of the same call makes no second proposal.
         idempotency_key: `web-menu-photo:${randomHex(16)}`,
       };

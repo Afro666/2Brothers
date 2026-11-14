@@ -6,6 +6,8 @@ import { useApi } from "@/api";
 import type { AuditActor, MenuPhotoDish, MenuPhotoRead } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatDate, formatNumber } from "@/lib/format";
 import { getLanguage, useT } from "@/lib/i18n";
 import { downscalePhoto } from "@/lib/shelf-photo";
@@ -15,6 +17,13 @@ import { NemotronMark } from "@/components/nemotron-mark";
 const MODEL_NAME = "Nemotron 3.5 Super VL";
 
 type Translate = ReturnType<typeof useT>;
+
+/** The optional default covers: empty is none, a whole number is sent, anything else is invalid. */
+export function parseCovers(text: string): { covers?: number; invalid: boolean } {
+  const trimmed = text.trim();
+  if (!trimmed) return { invalid: false };
+  return /^\d{1,6}$/.test(trimmed) ? { covers: Number(trimmed), invalid: false } : { invalid: true };
+}
 
 function weekday(date: string): string {
   return new Intl.DateTimeFormat(getLanguage() === "fi" ? "fi-FI" : "en-GB", { weekday: "long", timeZone: "UTC" }).format(
@@ -169,17 +178,21 @@ export function MenuPhotoPlan({
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<{ text: string; dishes: MenuPhotoDish[] } | null>(null);
   const [read, setRead] = useState<MenuPhotoRead | null>(null);
+  const [coversText, setCoversText] = useState("");
+  const covers = parseCovers(coversText);
+  const blocked = disabled || reading || covers.invalid;
   // A read belongs to the week it was asked for.
   const shown = read && read.from === from && read.to === to ? read : null;
 
   async function readPhoto(file: File | undefined) {
-    if (!file || reading) return;
+    if (!file || reading || covers.invalid) return;
     const turn = ++latest.current;
     setReading(true);
     setError(null);
     setRead(null);
     try {
-      const answer = await api.readMenuPhoto(await downscalePhoto(file), { from, to, requestedDate }, actor);
+      const asked = { from, to, requestedDate, ...(covers.covers != null ? { covers: covers.covers } : {}) };
+      const answer = await api.readMenuPhoto(await downscalePhoto(file), asked, actor);
       if (turn === latest.current) setRead(answer);
     } catch (problem) {
       if (turn !== latest.current) return;
@@ -224,16 +237,39 @@ export function MenuPhotoPlan({
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <Button type="button" disabled={disabled || reading} onClick={() => camera.current?.click()}>
+          <Button type="button" disabled={blocked} onClick={() => camera.current?.click()}>
             <Camera aria-hidden />
             {t("Take a photo")}
           </Button>
-          <Button type="button" variant="outline" disabled={disabled || reading} onClick={() => picker.current?.click()}>
+          <Button type="button" variant="outline" disabled={blocked} onClick={() => picker.current?.click()}>
             {t("Choose a file")}
           </Button>
         </div>
         {input(camera, t("Take a photo of the menu"), true)}
         {input(picker, t("Choose a photo of the menu"), false)}
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="menu-photo-covers">{t("Covers for dishes without covers on the menu (optional)")}</Label>
+        <Input
+          id="menu-photo-covers"
+          inputMode="numeric"
+          autoComplete="off"
+          className="w-28 tabular-nums"
+          value={coversText}
+          disabled={disabled || reading}
+          aria-invalid={covers.invalid || undefined}
+          aria-describedby="menu-photo-covers-help"
+          onChange={(event) => setCoversText(event.currentTarget.value)}
+        />
+        {covers.invalid ? (
+          <p id="menu-photo-covers-help" role="alert" className="text-sm text-destructive">
+            {t("Covers must be a whole number, for example 90.")}
+          </p>
+        ) : (
+          <p id="menu-photo-covers-help" className="text-xs text-muted-foreground">
+            {t("Used only for a dish whose covers the menu does not show. Leave it empty to plan those by hand.")}
+          </p>
+        )}
       </div>
       <div role="status" aria-live="polite">
         {reading ? (
