@@ -362,6 +362,8 @@ IDs) apply here too. Base path: `/v1`.
 | GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
 | PUT | `/sharing` | `kitchen:write` | Consent: which suppliers may see this kitchen's forecast. Every change is an audit entry. |
+| GET | `/settings` | `kitchen:read` | Kitchen settings: how the engine sizes orders and what the Buyer may propose. Shape below. |
+| PUT | `/settings` | `kitchen:write` (human) | Change settings. Only the fields in the body change. Every change is an audit entry. Proposed; the gateway does not serve these two routes yet. |
 | GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
 
 Proposal `status`: `PENDING`, `READY`, `APPROVED`, `REJECTED`, `EXPIRED`. An approved
@@ -628,6 +630,46 @@ replaces it.
 - `granted_by` is a human user. An API key or the Buyer cannot grant consent.
 - Every grant writes an audit event `share_granted`; every revoke writes `share_revoked`.
   Each carries `kitchen_id`, `supplier_id`, `scope`, the user and the time.
+
+### Kitchen settings
+
+`GET /settings` returns every field. Where the kitchen has set nothing, it returns the
+engine's default, except `excluded_allergens`, which is `null` until a person sets it.
+
+```json
+{
+  "service_level": {"A": "0.975", "B": "0.95", "C": "0.90"},
+  "max_cover_days": {"fresh_dairy": 4, "vegetables": 4, "meat": 3, "fish": 2,
+                     "frozen": 21, "dry": 30, "other": 14},
+  "stockout_cap": "1.8",
+  "budget_warning_order_eur": "1500.00",
+  "budget_warning_week_eur": "5000.00",
+  "excluded_allergens": ["AP", "AN", "AS"]
+}
+```
+
+| Field | Type | Rule |
+|---|---|---|
+| `service_level` | `{A, B, C}` of decimal strings | A fraction above 0 and below 1 per demand class (A = menu-critical). The UI shows percent: 97.5 % is `"0.975"`. A value of 0, 1 or more is a 422. |
+| `max_cover_days` | object of integers | Never order more than this many days of cover. Keys are the engine's categories: `fresh_dairy`, `vegetables`, `meat`, `fish`, `frozen`, `dry`, `other`. Each at least 1. Another key is a 422, never ignored. |
+| `stockout_cap` | decimal string | Demand seen during a stock-out is scaled up by at most this factor. From 1 to 3. |
+| `budget_warning_order_eur`, `budget_warning_week_eur` | decimal string or null | Above it the approval shows `OVER_BUDGET_WARNING`. `null` means no warning. A warning only: a person approves every order anyway. |
+| `excluded_allergens` | string[] or null | GS1 codes or the allergen names of `search_products`. A product that lists one as CONTAINS, MAY_CONTAIN or UNDECLARED is refused. `[]` means the kitchen has explicitly no exclusions. `null` means nobody has set the policy yet: unknown, not "none". |
+
+`PUT /settings` takes any subset of these fields plus `idempotency_key`. A field that is
+left out keeps its value, so a partial save can never drop the allergen policy.
+`excluded_allergens` cannot be set back to `null`. The answer is the full settings as
+`GET` returns them.
+
+- Only a human user session may change settings; an API key or the Buyer's token gets
+  403 `HUMAN_SESSION_REQUIRED`. The settings decide what the Buyer may propose, so the
+  Buyer cannot relax them.
+- Each change writes one audit entry `settings_changed` with the user and, per changed
+  field, the value before and after.
+- The web client maps its own names to these: `serviceLevelPercent` (percent) to
+  `service_level` (fraction), `maxDaysOfCover` to `max_cover_days`, `stockOutDemandCap`
+  to `stockout_cap`, `budgetWarningPerOrderExVat` / `budgetWarningPerWeekExVat` to the
+  two budget fields, `excludedAllergens` to `excluded_allergens`.
 
 ## Daily weather and holiday signals
 
