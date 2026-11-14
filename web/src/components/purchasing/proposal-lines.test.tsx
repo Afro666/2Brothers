@@ -208,7 +208,7 @@ describe("splitChecks: What to check, per product", () => {
       ["Cut-off passed {count}", 1],
       ["Over budget", undefined],
       ["Valio must confirm {count}", 3],
-      ["Left out {count}", 2],
+      ["Left out: {count}", 2],
     ]);
   });
 });

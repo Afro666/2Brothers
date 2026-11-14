@@ -1,6 +1,7 @@
 """A person resolves an order whose send result is unknown (#291): placed or not_sent.
 
-Never a resend, never a second attempt row, one resolution per order, all audited.
+Never a resend, never a second attempt row, one resolution per order; each resolution is
+audited, a lookup (a read) is not.
 """
 
 import pytest
@@ -54,7 +55,7 @@ def test_a_failed_approval_after_the_attempt_row_is_unconfirmed_and_held(env, mo
     assert db.proposals.find_one({"_id": p["proposal_id"]})["status"] == "COMMITTING"
 
 
-def test_lookup_returns_what_the_store_knows_and_is_audited(env, monkeypatch):  # noqa: F811
+def test_lookup_returns_what_the_store_knows_and_writes_no_audit_line(env, monkeypatch):  # noqa: F811
     client, _, db = env
     p, order_id = unconfirmed(client, db, monkeypatch)
     r = client.get(f"{K}/orders/{order_id}/resolution", headers=HUMAN)
@@ -68,9 +69,7 @@ def test_lookup_returns_what_the_store_knows_and_is_audited(env, monkeypatch):  
     assert known["expected_total"] == p["expected_total"] and known["lines"]
     assert known["created_at"] and known["updated_at"]
     assert known["resolvable"] is True and known["resolution"] is None
-    assert kinds(db, order_id) == ["order_lookup"]
-    entry = db.audit_log.find_one({"event.order_id": order_id})
-    assert entry["event"]["actor"] == "aron"
+    assert kinds(db, order_id) == []          # a lookup is a read, not an event
 
 
 def test_unconfirmed_resolves_to_placed_with_the_supplier_reference(env, monkeypatch):  # noqa: F811
@@ -79,7 +78,7 @@ def test_unconfirmed_resolves_to_placed_with_the_supplier_reference(env, monkeyp
     r = resolve(client, order_id, resolution="placed", supplier_order_ref="VAL-123")
     assert r.status_code == 200, r.text
     out = r.json()
-    assert (out["outcome"], out["status"], out["proposal_status"]) == ("CONFIRMED", "SENT", "APPROVED")
+    assert (out["outcome"], out["status"], out["proposal_status"]) == ("CONFIRMED", "RECORDED", "APPROVED")
     assert out["resolution"]["resolution"] == "placed"
     assert out["resolution"]["supplier_order_ref"] == "VAL-123"
     assert out["resolution"]["resolved_by"] == "aron" and out["resolution"]["from_outcome"] == "UNCONFIRMED"

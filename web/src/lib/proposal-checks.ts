@@ -67,7 +67,7 @@ export const CHIP_TEXTS = [
   "Over budget",
   "Valio must confirm {count}",
   "{supplier} must confirm",
-  "Left out {count}",
+  "Left out: {count}",
 ] as const;
 
 const BUDGET = /budget/i;
@@ -110,6 +110,6 @@ export function statusChips({
   for (const supplier of request.suppliersToConfirm) {
     chips.push({ key: `confirm-${supplier.supplierId}`, tone: "warning", text: "{supplier} must confirm", values: { supplier: supplier.name } });
   }
-  if (leftOut) chips.push({ key: "left-out", tone: "neutral", text: "Left out {count}", values: { count: leftOut } });
+  if (leftOut) chips.push({ key: "left-out", tone: "neutral", text: "Left out: {count}", values: { count: leftOut } });
   return chips;
 }

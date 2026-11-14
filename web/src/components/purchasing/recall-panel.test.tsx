@@ -12,8 +12,11 @@ const fi = (text: string, vars?: Record<string, string | number>) => translate("
 const alert = coffeeRecallAlert("2026-11-14T00:30:00Z");
 
 describe("recall sentences", () => {
+  afterEach(() => updateLanguage("en", false));
+
   it("translates the stock and recipe lines in Finnish and keeps the list as sent", () => {
-    expect(recallSentence("in stock: 3.253 KG", fi)).toBe("Varastossa: 3.253 KG");
+    updateLanguage("fi", false);
+    expect(recallSentence("in stock: 3.253 KG", fi)).toBe("Varastossa: 3,3 kg");
     expect(recallSentence("in recipes: Breakfast buffet, Hospital sides, Restaurant sides", fi)).toBe(
       "Resepteissä: Breakfast buffet, Hospital sides, Restaurant sides",
     );
@@ -44,7 +47,7 @@ describe("recall sentences", () => {
 
   it("shows an unknown shape as sent, in both languages", () => {
     expect(recallSentence("in the freezer since Tuesday", fi)).toBe("in the freezer since Tuesday");
-    expect(recallSentence("in stock: 3.253 KG", (text, vars) => translate("en", text, vars))).toBe("In stock: 3.253 KG");
+    expect(recallSentence("in stock: 3.253 KG", (text, vars) => translate("en", text, vars))).toBe("In stock: 3.3 kg");
   });
 });
 
@@ -69,7 +72,7 @@ describe("RecallPanel in Finnish", () => {
 
     localStorage.setItem("purchasing-language", "en");
     render(<LanguageProvider><RecallPanel status={{ kind: "ready", affecting: 0, lastCheck: null, unheld: [unheld] }} /></LanguageProvider>);
-    expect(screen.getByText("In stock: 5.673 KG")).toBeInTheDocument();
+    expect(screen.getByText("In stock: 5.7 kg")).toBeInTheDocument();
     expect(screen.getByText("In recipes: breakfast_buffet")).toBeInTheDocument();
     expect(
       screen.getByText("Do not use it until checked. Check your packs: only 23.8.2027, 24.8.2027, 26.8.2027, 1.9.2027 and 5.9.2027 are recalled."),
@@ -80,7 +83,7 @@ describe("RecallPanel in Finnish", () => {
     const unheld = { ...alert, orderId: null, replacement: null };
     render(<LanguageProvider><RecallPanel status={{ kind: "ready", affecting: 0, lastCheck: null, unheld: [unheld] }} onCheck={async () => undefined} /></LanguageProvider>);
     expect(screen.getByRole("status")).toHaveTextContent(
-      "1 takaisinveto: Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg on varastossasi (5.673 KG).",
+      "1 takaisinveto: Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg on varastossasi (5,7 kg).",
     );
     expect(screen.getByTestId("recall-next")).toHaveTextContent(/^Älä käytä ennen tarkistusta\.$/);
     expect(screen.getByRole("button", { name: "Tiedot" })).toHaveAttribute("aria-expanded", "false");
@@ -121,7 +124,7 @@ describe("RecallPanel, folded and unfolded", () => {
     render(<RecallPanel status={ready([unheld])} onCheck={async () => undefined} />);
     const panel = screen.getByRole("region", { name: "Food recalls" });
     expect(within(panel).getByRole("status")).toHaveTextContent(
-      "1 recall: Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg is in your stock (5.673 KG).",
+      "1 recall: Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg is in your stock (5.7 kg).",
     );
     expect(within(panel).getByTestId("recall-next")).toHaveTextContent(/^Do not use it until checked\.$/);
     expect(within(panel).getByTestId("recall-next")).toBeVisible();
@@ -147,7 +150,7 @@ describe("RecallPanel, folded and unfolded", () => {
     const item = within(within(box).getByRole("list", { name: "Recalled products in your kitchen" })).getByRole("listitem");
     expect(item).toHaveTextContent("Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg is recalled.");
     expect(within(item).getByRole("link", { name: /Suodatinkahvissa vierasesineriski/ })).toHaveAttribute("href", alert.recall.url);
-    expect(within(item).getByText("In stock: 5.673 KG")).toBeVisible();
+    expect(within(item).getByText("In stock: 5.7 kg")).toBeVisible();
     expect(within(item).getByText("In recipes: breakfast_buffet")).toBeVisible();
     expect(within(item).getByText("No open order holds it. New orders leave it out.")).toBeVisible();
     expect(
