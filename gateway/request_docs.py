@@ -32,7 +32,7 @@ class ProductFilters(RequestBody):
 
 
 class SearchProductsRequest(RequestBody):
-    query: str = Field(description='May be empty when a filter is supplied.')
+    query: str = Field(default='', description='May be empty when a filter is supplied.')
     filters: ProductFilters = Field(default_factory=ProductFilters)
     limit: int = Field(default=20, ge=1, le=50)
     need_id: Identifier | None = Field(default=None, description='Scopes results to the stored need and its delivery date.')
@@ -48,7 +48,7 @@ class CreateNeedRequest(RequestBody):
 
 class GetOfferRequest(RequestBody):
     product_ids: list[Identifier] = Field(min_length=1, max_length=50)
-    requested_date: date = Field(description='Must match the stored need. Quantity/unit come only from that need.')
+    requested_date: date | None = Field(default=None, description='Optional; when given it must match the stored need. Quantity/unit come only from that need.')
     need_id: Identifier
 
 

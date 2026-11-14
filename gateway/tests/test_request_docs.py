@@ -32,6 +32,19 @@ def test_workflow_request_schema_is_public_and_self_contained(env, path, payload
         assert not validator.is_valid({k: v for k, v in payload.items() if k != required})
 
 
+@pytest.mark.parametrize('path,field', [
+    ('/tools/search_products', 'query'),
+    ('/tools/get_offer', 'requested_date'),
+])
+def test_runtime_optional_fields_are_not_required(env, path, field):
+    client, *_ = env
+    spec = client.get('/openapi.json').json()
+    schema = spec['paths'][path]['post']['requestBody']['content']['application/json']['schema']
+    assert field not in schema.get('required', [])
+    payload = {k: v for k, v in PAYLOADS[path].items() if k != field}
+    Draft202012Validator(schema).validate(payload)
+
+
 def test_documentation_does_not_change_auth_or_error_envelopes(env):
     client, *_ = env
     unauthenticated = client.post('/tools/get_offer', content='{')
