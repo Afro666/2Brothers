@@ -44,7 +44,10 @@ export function AuditTimeline({ events }: { events: AuditEvent[] }) {
   return (
     <ol className="divide-y rounded-sm border bg-card">
       {sorted.map((e) => {
-        const meta = KIND_META[e.kind];
+        // The gateway may send kinds or actors this app does not know yet: show the raw value.
+        const kindLabel = KIND_META[e.kind]?.label ?? e.kind;
+        const actorLabel = ACTOR_LABEL[e.actor] ?? e.actor;
+        const actorStyle = ACTOR_STYLE[e.actor] ?? ACTOR_STYLE.system;
         return (
           <li
             key={e.id}
@@ -56,13 +59,13 @@ export function AuditTimeline({ events }: { events: AuditEvent[] }) {
               {formatDateTime(e.at)}
             </time>
             <span
-              className={`h-fit w-fit rounded-sm px-1.5 font-mono text-[10.5px] leading-4 font-bold tracking-wide uppercase ${ACTOR_STYLE[e.actor]}`}
+              className={`h-fit w-fit rounded-sm px-1.5 font-mono text-[10.5px] leading-4 font-bold tracking-wide uppercase ${actorStyle}`}
             >
-              {ACTOR_LABEL[e.actor]}
+              {actorLabel}
             </span>
             <div className="col-span-2 min-w-0 sm:col-span-1">
               <p className="label-caps">
-                {meta.label}
+                {kindLabel}
                 {e.orderId ? <span className="font-mono"> · {e.orderId}</span> : null}
               </p>
               <p className="mt-0.5 text-sm font-semibold break-words">{e.summary}</p>

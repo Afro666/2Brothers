@@ -80,17 +80,17 @@ def test_standing_order_that_no_longer_matches_usage_shows_drift(env):  # noqa: 
     client, _, db = env
     p = milk(client)
     db.kitchen_settings.insert_one({"_id": "demo-kitchen", "standing_orders": {"462921": "12", "777": "1"}})
-    stock(db, "462921", "L", Decimal(0), 10)       # the engine needs 8 KI; the standing order says 12
+    stock(db, "462921", "L", Decimal(0), 10)       # usage 10 L x 3 days = 6 KI; the standing order says 12
     rows = client.get(f"{K}/proposals/{p['proposal_id']}/addable", headers=AGENT).json()["rows"]
     organic = rows[0]
     assert "STANDING_ORDER_DRIFT" in organic["reason_codes"]
-    assert "Standing order 12 KI no longer matches usage: this delivery needs 8." in organic["why"]
+    assert "Standing order 12 KI no longer matches usage (6 per delivery); this delivery needs 8." in organic["why"]
 
 
-def test_standing_order_close_to_the_need_is_no_drift(env):  # noqa: F811
+def test_standing_order_close_to_usage_is_no_drift(env):  # noqa: F811
     client, _, db = env
     p = milk(client)
-    db.kitchen_settings.insert_one({"_id": "demo-kitchen", "standing_orders": {"462921": "8"}})
+    db.kitchen_settings.insert_one({"_id": "demo-kitchen", "standing_orders": {"462921": "6"}})
     stock(db, "462921", "L", Decimal(0), 10)
     organic = client.get(f"{K}/proposals/{p['proposal_id']}/addable", headers=AGENT).json()["rows"][0]
     assert "STANDING_ORDER_DRIFT" not in organic["reason_codes"]
