@@ -1,7 +1,12 @@
 """What a kitchen calls things: aliases a person sets, and unknown items it remembers."""
 
+from fastapi.testclient import TestClient
+
 from gateway import memory
-from gateway.tests.test_gateway_app import AGENT, HUMAN, K, env  # noqa: F401 (fixture)
+from gateway.app import create_app
+from gateway.service import Gateway
+from gateway.tests.test_gateway_app import AGENT, HUMAN, K, NOW, env  # noqa: F401 (fixture)
+from gateway.valio_client import ValioClient
 
 
 def test_normalise_keeps_letters_of_any_language():
@@ -51,6 +56,28 @@ def test_alias_leads_the_buyers_shortlist_and_can_be_removed(env):
     assert client.delete(K + "/aliases?phrase=house%20milk", headers=HUMAN).json() == {"deleted": True}
     assert client.delete(K + "/aliases?phrase=house%20milk", headers=HUMAN).status_code == 404
     assert memory.lookup(db, "demo-kitchen", "house milk") is None
+
+
+def test_alias_to_a_product_in_another_measure_does_not_lead_a_litre_shortlist(env):
+    client, fake, db = env
+    # The aliased product is sold by the kilo and is not among the litre search hits,
+    # so it would be fetched on its own: it must not jump to the top of a litre shortlist.
+    db.products.update_one({"_id": "463335"}, {"$set": {"net_content": {"value": 1.0, "unit": "KG"}}})
+
+    def search(db, query, filters, limit, kitchen_id=None):
+        return [{"product_id": pid, "net_content": {"value": 1.0, "unit": "L"}} for pid in ("462775", "462921")]
+
+    gw = Gateway(db, ValioClient("k", transport=fake.transport, ttl=0, now=lambda: NOW), now=lambda: NOW,
+                 search=search)
+    client = TestClient(create_app(gw))
+    client.put(K + "/aliases", headers=HUMAN, json={"phrase": "house milk", "product_id": "463335"})
+    need = client.post(K + "/needs", headers=AGENT, json={
+        "quantity": "20", "unit": "L", "requested_date": "2026-11-16", "text": "20 L house milk"}).json()
+    found = client.post("/tools/search_products", headers=AGENT, json={
+        "query": "milk", "filters": {}, "need_id": need["need_id"]}).json()
+    assert found["measure"] == "L"
+    assert found["products"][0]["product_id"] != "463335"
+    assert not any(p.get("alias") for p in found["products"])
 
 
 def test_another_kitchens_words_mean_nothing_here(env):
