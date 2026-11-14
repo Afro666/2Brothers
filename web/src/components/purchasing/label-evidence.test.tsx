@@ -20,15 +20,15 @@ function renderDemo(api = createMockApi()) {
 
 it("shows producer-only verification with an official source", () => {
   render(<LabelEvidence check={base} />);
-  expect(screen.getByText("Producer registration verified")).toBeVisible();
-  expect(screen.getByText(/individual product certification unverified/)).toBeVisible();
+  expect(screen.getByText("Producer is in the register; this product's label was not checked")).toBeVisible();
+  expect(screen.queryByText(/individual product certification unverified|SKU/)).toBeNull();
   expect(screen.getByText(`Exact registered producer · checked ${formatDateTime(base.checked_at)}`)).toBeVisible();
   expect(screen.queryByText(/2026-11-14T00:55:00Z/)).toBeNull();
   expect(screen.getByRole("link")).toHaveAttribute("href", base.source_url);
 });
 it("never upgrades unknown or missing evidence into a verified badge", () => {
   const { rerender } = render(<LabelEvidence check={{ ...base, label_verified: "unknown" }} />);
-  expect(screen.queryByText("Producer registration verified")).toBeNull();
+  expect(screen.queryByText("Producer is in the register; this product's label was not checked")).toBeNull();
   rerender(<LabelEvidence check={{ ...base, checked_at: null }} />);
   expect(screen.getByText("Exact registered producer · not checked")).toBeVisible();
   expect(screen.queryByText(/checked unknown/)).toBeNull();
@@ -38,10 +38,11 @@ it("never upgrades unknown or missing evidence into a verified badge", () => {
   expect(screen.getByText("Producer not found")).toBeVisible();
   expect(screen.getByText(/Synthetic negative control/)).toBeVisible();
   expect(screen.getByText(/Test row/)).toBeVisible();
+  expect(screen.getByText(/Control: a made-up producer the register must not find/)).toBeVisible();
 });
 it("names an unsupported scheme without implying a Hyvää Suomesta check", () => {
   render(<LabelEvidence check={{ ...base, label: "FINNISH_HEART_SYMBOL", label_verified: "unknown", source_url: null }} />);
-  expect(screen.getByText(/Heart Symbol · producer scope/)).toBeVisible();
+  expect(screen.getByText(/Heart Symbol/)).toBeVisible();
   expect(screen.queryByText(/FINNISH_HEART_SYMBOL/)).toBeNull();
   expect(screen.queryByText(/Hyvää Suomesta/)).toBeNull();
   expect(screen.getByText("Verification unknown")).toBeVisible();
@@ -63,13 +64,13 @@ it("puts unsupported registers in one collapsed group below the checked rows", a
   });
   renderDemo();
 
-  const summary = await screen.findByText("Not checked: 1 labels with no public register");
+  const summary = await screen.findByText("Not checked: 1 labels with no public register: Heart Symbol");
   const group = summary.closest("details");
   expect(group).not.toBeNull();
   expect(group).not.toHaveAttribute("open");
-  expect(within(group as HTMLElement).getByText(/Heart Symbol/)).toBeInTheDocument();
+  expect(within(group as HTMLElement).getAllByText(/Heart Symbol/)).toHaveLength(2);
   expect(within(group as HTMLElement).getByText(/not checked/)).toBeInTheDocument();
-  const verified = screen.getByText("Producer registration verified");
+  const verified = screen.getByText("Producer is in the register; this product's label was not checked");
   expect(verified.compareDocumentPosition(group as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByText(/Test row/)).toBeVisible();
 });
@@ -99,7 +100,7 @@ it("keeps label evidence available when the product lookup fails", async () => {
   });
   renderDemo(api);
 
-  expect(await screen.findByText("Producer registration verified")).toBeVisible();
+  expect(await screen.findByText("Producer is in the register; this product's label was not checked")).toBeVisible();
   expect(screen.getByText(`Product ${base.product_id} · ARLA OY`)).toBeVisible();
   expect(screen.queryByRole("alert")).toBeNull();
 });

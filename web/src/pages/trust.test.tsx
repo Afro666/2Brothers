@@ -1,8 +1,9 @@
-import { screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/api";
+import type { AuditChainRow } from "@/api/types";
 import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
 
@@ -28,14 +29,14 @@ describe("trust page", () => {
     const verify = vi.spyOn(api, "verifyAuditChain");
     renderApp("/trust", api);
 
-    const initialResult = await screen.findByText("Chain OK: 8 lines checked");
+    const initialResult = await screen.findByText("Audit log intact: each of the 8 entries carries the hash of the one before it");
     expect(initialResult).toBeInTheDocument();
     const result = within(initialResult.closest("[role=status]") as HTMLElement);
     expect(verify).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: "Verify audit chain" }));
     await vi.waitFor(() => expect(verify).toHaveBeenCalledTimes(2));
-    expect(result.getByText("Chain OK: 8 lines checked")).toBeInTheDocument();
+    expect(result.getByText("Audit log intact: each of the 8 entries carries the hash of the one before it")).toBeInTheDocument();
   });
 
   it("shows the existing error state when the opening check fails", async () => {
@@ -66,6 +67,74 @@ describe("trust page", () => {
     expect(screen.queryByText("kitchen_brief_read")).not.toBeInTheDocument();
   });
 
+  it("says how many entries belong to other kitchens, and leaves the count unknown when the numbers do not add up", async () => {
+    const api = createMockApi();
+    api.verifyAuditChain = async () => ({
+      ok: true,
+      length: 1535,
+      brokenAt: null,
+      brokenKitchenId: null,
+      kitchenEntries: 1500,
+      checkedAt: "2026-11-14T10:00:00Z",
+    });
+    renderApp("/trust", api);
+    expect(await screen.findByText(/^1500 of the 1535 entries belong to this kitchen; the others belong to other kitchens or the system\. Checked at ./)).toBeInTheDocument();
+    cleanup();
+
+    api.verifyAuditChain = async () => ({
+      ok: true,
+      length: 10,
+      brokenAt: null,
+      brokenKitchenId: null,
+      kitchenEntries: 20,
+      checkedAt: "2026-11-14T10:00:00Z",
+    });
+    renderApp("/trust", api);
+    expect(await screen.findByText(/How many entries belong to this kitchen: unknown\. Checked at/)).toBeInTheDocument();
+    expect(screen.queryByText(/20 of the 10/)).not.toBeInTheDocument();
+  });
+
+  it("shows camelCase step names and actor names as plain words, in both languages", async () => {
+    const api = createMockApi();
+    // The five newest lines as a stranger saw them: raw step codes and a raw actor name.
+    const steps: [string, string, string][] = [
+      ["proposal_changed", "system", ""],
+      ["proposalChanged", "system", ""],
+      ["Proposal explanation failed", "buyer-agent", "system"],
+      ["approval_token_created", "human", ""],
+      ["Order status checked", "order_resolved", "checked"],
+    ];
+    api.listAuditChain = async () =>
+      steps.map(([summary, actor, reason], index) => ({
+        seq: index + 1,
+        event: {
+          id: `step-${index}`,
+          at: "2026-11-14T10:00:00Z",
+          kind: "other",
+          actor: actor as AuditChainRow["event"]["actor"],
+          summary,
+          reason,
+        },
+        prevHash: "a".repeat(64),
+        hash: "b".repeat(64),
+      }));
+    renderApp("/trust", api);
+    const lines = within(await screen.findByRole("region", { name: "Newest audit lines" }));
+    expect(await lines.findByText("Proposal changed")).toBeInTheDocument();
+    expect(lines.getByText("Proposal explanation failed")).toBeInTheDocument();
+    expect(lines.getByText("Approval token created")).toBeInTheDocument();
+    expect(lines.getByText("Order status checked")).toBeInTheDocument();
+    expect(lines.getByText("proposalChanged")).toBeInTheDocument();
+    // The raw code stays only above, as a plain sentence the page did not write.
+    expect(lines.queryByText("proposal_changed")).not.toBeInTheDocument();
+    expect(lines.queryByText("approval_token_created")).not.toBeInTheDocument();
+    cleanup();
+    localStorage.setItem("purchasing-language", "fi");
+    renderApp("/trust", api);
+    const suomi = within(await screen.findByRole("region", { name: "Uusimmat lokirivit" }));
+    expect(await suomi.findByText("Ehdotusta muutettiin")).toBeInTheDocument();
+  });
+
   it("shows loading instead of an unchecked result during the opening check", async () => {
     const api = createMockApi();
     api.verifyAuditChain = () => new Promise(() => {});
@@ -83,10 +152,10 @@ describe("trust page", () => {
     expect(screen.getByText("Sample data")).toBeInTheDocument();
     expect(screen.queryByText(/MongoDB Atlas/)).not.toBeInTheDocument();
     const result = within(screen.getByRole("status"));
-    expect(await result.findByText("Chain OK: 8 lines checked")).toBeInTheDocument();
+    expect(await result.findByText("Audit log intact: each of the 8 entries carries the hash of the one before it")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Verify audit chain" }));
-    expect(await result.findByText("Chain OK: 8 lines checked")).toBeInTheDocument();
+    expect(await result.findByText("Audit log intact: each of the 8 entries carries the hash of the one before it")).toBeInTheDocument();
     expect(lines.queryByText("Broken here")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Tamper with one line" }));
@@ -99,7 +168,7 @@ describe("trust page", () => {
     await user.click(screen.getByRole("button", { name: "Restore" }));
     expect(await lines.findByText("Asked the buyer to approve ORD-1043")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Verify audit chain" }));
-    expect(await result.findByText("Chain OK: 8 lines checked")).toBeInTheDocument();
+    expect(await result.findByText("Audit log intact: each of the 8 entries carries the hash of the one before it")).toBeInTheDocument();
     expect(lines.queryByText("Broken here")).not.toBeInTheDocument();
   });
 
@@ -124,7 +193,7 @@ describe("trust page", () => {
       await screen.findByText("The break is in another kitchen's entry (the demo), not in yours"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/It is line 412 of the shared log\. 57 of the lines are this kitchen's\./),
+      screen.getByText(/It is line 412 of the shared log\. 57 of the \d+ entries belong to this kitchen; the others belong to other kitchens or the system\./),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Chain broken/)).not.toBeInTheDocument();
   });
@@ -136,7 +205,7 @@ describe("trust page", () => {
       throw new ApiError("DEMO_ONLY", "demo_only");
     };
     renderApp("/trust", api);
-    expect(await screen.findByText("Chain OK: 8 lines checked")).toBeInTheDocument();
+    expect(await screen.findByText("Audit log intact: each of the 8 entries carries the hash of the one before it")).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Tamper with one line" }));
     expect(await screen.findByText("The tamper demo only runs on the demo kitchen.")).toBeInTheDocument();
   });

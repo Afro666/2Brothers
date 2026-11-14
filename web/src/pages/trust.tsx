@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
-import { plainCode } from "@/lib/codes";
+import { plainCode, codeLabel } from "@/lib/codes";
 import { useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import { LabelVerificationDemo } from "@/components/purchasing/label-evidence";
@@ -32,6 +32,10 @@ function plain(error: unknown, t: ReturnType<typeof useT>): string {
 }
 
 const short = (hash: string) => hash.slice(0, 8);
+
+/** A log step in plain words: a raw code gets its title, and actor names ("order_resolved") their words. */
+const stepWords = (text: string, t: ReturnType<typeof useT>) =>
+  /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(text) ? t(codeLabel(text).title) : text;
 
 export const ELSEWHERE = "The break is in another kitchen's entry (the demo), not in yours";
 
@@ -69,7 +73,12 @@ export function TrustPage() {
       const result = await api.verifyAuditChain();
       setCheck(result);
       if (announce) {
-        if (result.ok) toast.success(t("Chain OK: {count} lines checked", { count: result.length }));
+        if (result.ok)
+          toast.success(
+            t("Audit log intact: each of the {count} entries carries the hash of the one before it", {
+              count: result.length,
+            }),
+          );
         else if (isElsewhere(result)) toast.warning(t(ELSEWHERE));
         else toast.error(t("Chain broken at line {line}", { line: String(result.brokenAt) }));
       }
@@ -146,7 +155,9 @@ export function TrustPage() {
                   <div className="tabular-nums">
                     <p className="font-medium">
                       {check.ok
-                        ? t("Chain OK: {count} lines checked", { count: check.length })
+                        ? t("Audit log intact: each of the {count} entries carries the hash of the one before it", {
+                            count: check.length,
+                          })
                         : isElsewhere(check)
                           ? t(ELSEWHERE)
                           : t("Chain broken at line {line}: {count} lines before it are intact", {
@@ -158,10 +169,16 @@ export function TrustPage() {
                       {isElsewhere(check)
                         ? t("It is line {line} of the shared log. ", { line: String(check.brokenAt) })
                         : null}
-                      {t("{count} of the lines are this kitchen's. Checked at {time}.", {
-                        count: check.kitchenEntries,
-                        time: formatTime(check.checkedAt),
-                      })}
+                      {check.length >= check.kitchenEntries
+                        ? t("{count} of the {total} entries belong to this kitchen; the others belong to other kitchens or the system. Checked at {time}.", {
+                            count: check.kitchenEntries,
+                            total: check.length,
+                            time: formatTime(check.checkedAt),
+                          })
+                        : // More for this kitchen than lines checked: the gateway's numbers say nothing here.
+                          t("How many entries belong to this kitchen: unknown. Checked at {time}.", {
+                            time: formatTime(check.checkedAt),
+                          })}
                     </p>
                   </div>
                 </div>
@@ -200,7 +217,7 @@ export function TrustPage() {
                             {t("Line {line}", { line: row.seq })}
                           </span>
                           <span>
-                            {ACTOR_LABEL[row.event.actor] ? t(ACTOR_LABEL[row.event.actor]) : row.event.actor}
+                            {ACTOR_LABEL[row.event.actor] ? t(ACTOR_LABEL[row.event.actor]) : stepWords(row.event.actor, t)}
                           </span>
                           {broken ? (
                             <Badge variant="destructive">
@@ -208,7 +225,7 @@ export function TrustPage() {
                             </Badge>
                           ) : null}
                         </div>
-                        <p className="text-sm break-words">{plainCode(row.event.summary, t)}</p>
+                        <p className="text-sm break-words">{t(stepWords(plainCode(row.event.summary, t), t))}</p>
                         <p className="font-mono text-xs text-muted-foreground">
                           {t("hash {hash} · previous {previous}", {
                             hash: short(row.hash),
