@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 import hashlib
 from typing import Callable
 from uuid import uuid4
@@ -79,8 +79,15 @@ class Gateway:
     def _standing_orders(self, kitchen_id: str) -> dict[str, Decimal]:
         """Per product: the standing order per delivery, in sales units (#380, S08)."""
         doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}, {"standing_orders": 1}) or {}
-        return {pid: _dec(qty) for pid, qty in (doc.get("standing_orders") or {}).items()
-                if _dec(qty) is not None}
+        out = {}
+        for pid, qty in (doc.get("standing_orders") or {}).items():
+            try:
+                value = _dec(qty)
+            except (InvalidOperation, ValueError, TypeError):
+                continue                   # nothing validates the map on write yet: skip bad values
+            if value is not None and value.is_finite() and value > 0:
+                out[pid] = value
+        return out
 
     def _terms(self, kitchen_id: str) -> dict:
         doc = self.db.suppliers.find_one({"kitchen_id": kitchen_id, "adapter": "valio_api"}) or {}
@@ -220,13 +227,17 @@ class Gateway:
                     raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
                 return self._proposal_out(stored)
             body = self._from_text(kitchen_id, body)
+            parsed = True
+        else:
+            parsed = False
         for field in ("product_ids", "quantity", "unit", "requested_date", "idempotency_key"):
             if not body.get(field):
                 raise GatewayError(422, "INVALID_REQUEST", f"{field} is required")
         request = {k: body[k] for k in ("product_ids", "quantity", "unit", "requested_date")}
         request["text"] = body.get("text") or ""
-        request["made_by"] = body.get("made_by") or "structured"
-        if body.get("query"):
+        # Set by the gateway, never by the client: a structured body cannot claim the parser.
+        request["made_by"] = "parser" if parsed else "structured"
+        if parsed and body.get("query"):
             request["query"] = body["query"]
         if body.get("event"):
             request["event"] = True       # one-off demand (S05): EVENT_LINE, kept out of the forecast
@@ -271,6 +282,10 @@ class Gateway:
         blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
         result['lines'] = [{**line, **({'recall_status': 'BLOCKED_BY_RECALL'} if line['product_id'] in blocked else {})}
                            for line in result['lines']]
+        from monitor.labels import checks
+        from store.products import get_products
+        result['label_checks'] = checks(get_products(self.db,
+            [line['product_id'] for line in result['lines']], doc['kitchen_id']), now=self.now())
         return result
 
     def _summary(self, request: dict, sim: dict) -> dict:

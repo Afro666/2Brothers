@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
+import { LabelVerificationDemo } from "@/components/purchasing/label-evidence";
 
 /** The gateway's refusals of the tamper demo, in plain words. */
 const DEMO_ERRORS: Record<string, string> = {
@@ -91,6 +92,7 @@ export function TrustPage() {
           </p>
           <Badge variant="outline">{live ? "Audit log stored in MongoDB Atlas" : "Sample data"}</Badge>
         </header>
+        {import.meta.env.VITE_LIVE_BUYER === "true" && <LabelVerificationDemo />}
 
         <Card>
           <CardContent className="space-y-4">

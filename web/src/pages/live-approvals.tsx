@@ -5,6 +5,7 @@ import { AppShell } from "@/components/purchasing/app-shell";
 import { Button } from "@/components/ui/button";
 import { formatEur } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
+import { LabelEvidence, type LabelCheck } from "@/components/purchasing/label-evidence";
 
 const path = "/v1/kitchens/demo-kitchen/proposals";
 interface Proposal {
@@ -15,6 +16,7 @@ interface Proposal {
   expected_total: string;
   total_ex_vat: string;
   order_id?: string;
+  label_checks?: LabelCheck[];
   replacement_proposal_id?: string;
   recall_replan_error?: string;
   product_evidence?: { product_id: string; source_url: string; checked_at: string; via: string;
@@ -75,6 +77,7 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
     <h2 className="font-semibold">Proposal {row.proposal_id}</h2>
     {typeof row.decision_summary?.text === "string" && <p className="whitespace-pre-line">{row.decision_summary.text}</p>}
     <ul>{row.lines.map(l => <li key={l.product_id}>{l.quantity} {l.unit} · {l.product_id} · {l.why}</li>)}</ul>
+    {row.label_checks?.map(c => <LabelEvidence key={`${c.product_id}-${c.label}`} check={c} />)}
     {row.recall_alerts?.map((alert, index) => <p key={index} className="text-destructive">
       {alert.match === "review" ? "Recall warning — check the product" : "BLOCKED_BY_RECALL"}: {alert.product_id} · {alert.recall.title} · {alert.recall.lot ?? "Check affected packs"}
       {/^https:\/\//.test(alert.recall.url) && <> · <a className="underline" href={alert.recall.url} target="_blank" rel="noreferrer">Official recall notice</a></>}
