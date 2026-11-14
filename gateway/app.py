@@ -256,6 +256,11 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need("kitchen:propose", kitchen_id)
         data = await body(request)
         if 'text' in data and 'product_ids' not in data:
+            # A request the kitchen's allergen rule removes ends here, with the reason (#974):
+            # the Buyer would only see what the rule left and propose another kind of product.
+            refused = gw().refuse_excluded(kitchen_id, data, who.name)
+            if refused is not None:
+                return refused
             from gateway.buyer_worker import run_buyer
             try:
                 return await (buyer_worker or run_buyer)(kitchen_id, data)
