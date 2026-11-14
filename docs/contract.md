@@ -732,7 +732,8 @@ engine's default, except `excluded_allergens`, which is `null` until a person se
   "stockout_cap": "1.8",
   "budget_warning_order_eur": "1500.00",
   "budget_warning_week_eur": "5000.00",
-  "excluded_allergens": ["AP", "AN", "AS"]
+  "excluded_allergens": ["AP", "AN", "AS"],
+  "standing_orders": {"469549": "200"}
 }
 ```
 
@@ -743,6 +744,7 @@ engine's default, except `excluded_allergens`, which is `null` until a person se
 | `stockout_cap` | decimal string | Demand seen during a stock-out is scaled up by at most this factor. From 1 to 3. |
 | `budget_warning_order_eur`, `budget_warning_week_eur` | decimal string or null | Above it the approval shows `OVER_BUDGET_WARNING`. `null` means no warning. A warning only: a person approves every order anyway. |
 | `excluded_allergens` | string[] or null | GS1 codes or the allergen names of `search_products`. A product that lists one as CONTAINS, MAY_CONTAIN or UNDECLARED is refused. `[]` means the kitchen has explicitly no exclusions. `null` means nobody has set the policy yet: unknown, not "none". |
+| `standing_orders` | object of decimal strings | Per `product_id`: the kitchen's standing order per delivery, in that product's sales unit. `{}` means none. The engine only flags a standing order more than 10 % off the need (`STANDING_ORDER_DRIFT`, S08); a person changes it. |
 
 `PUT /settings` takes any subset of these fields plus `idempotency_key`. A field that is
 left out keeps its value, so a partial save can never drop the allergen policy.
