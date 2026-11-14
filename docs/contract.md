@@ -152,7 +152,10 @@ The trusted application/engine creates `need_id` before invoking the buyer agent
 The gateway loads quantities from that stored need; neither `get_offer` nor
 `simulate_order` accepts quantities invented by the model. Offer lines include
 `product_id`, `quantity`, `unit`, `why`, `available_date`, `unknown_stock` and
-`cutoff_passed`. Unknown stock is never represented as a measured sentinel value.
+`cutoff_passed`. A line also carries `unit_price` (decimal string, per `unit`, before
+tax) and `closing_time` (the order cut-off for that line as a timestamp with an offset,
+or null when the supplier gives none). Unknown stock is never represented as a measured
+sentinel value.
 `expected_total` includes fees and tax. Simulation also includes `mov_gap` and
 `delivery_fee` as decimal strings. Expired offers must be refreshed and simulated.
 
@@ -359,12 +362,14 @@ IDs) apply here too. Base path: `/v1`.
 | GET | `/proposals/{id}` | `kitchen:read` | Lines with `why`, one block per supplier, simulated totals (`expected_total`, `mov_gap`, `delivery_fee`), mandate reasons, warnings. |
 | POST | `/proposals/{id}/approve` | `kitchen:approve` (human) | Body: `blocks: [{supplier_id, expected_total}]` + `idempotency_key`. A total that moved returns 409 `TOTAL_MISMATCH`; nothing is sent. |
 | POST | `/proposals/{id}/reject` | `kitchen:approve` (human) | Body: `reason` (string) + `idempotency_key`. The reason feeds the engine and `env/`. |
+| POST | `/proposals/{id}/choose-option` | `kitchen:propose` (human) | Make one of the proposal's `substitute_options` the proposal's basket. Re-simulates it; approves and sends nothing. Shape under "Chef substitute choices". Proposed; the gateway does not serve it yet. |
 | GET | `/orders`, `/orders/{id}` | `kitchen:read` | Order `status` and the gateway `outcome` (below). |
 | GET | `/sharing` | `kitchen:read` | The kitchen's consent records (shape below). |
 | PUT | `/sharing` | `kitchen:write` | Consent: which suppliers may see this kitchen's forecast. Every change is an audit entry. |
 | GET | `/settings` | `kitchen:read` | Kitchen settings: how the engine sizes orders and what the Buyer may propose. Shape below. |
 | PUT | `/settings` | `kitchen:write` (human) | Change settings. Only the fields in the body change. Every change is an audit entry. Proposed; the gateway does not serve these two routes yet. |
 | GET | `/audit` | `kitchen:read` | Every step: who, what, when, the figure shown. |
+| GET | `/drift` | `kitchen:read` | Standing-order drift for the last full week: products whose order per 100 guests (`portion_creep`) or spend per 100 guests (`cost_creep`) is 15% or more above the 4 weeks before. Shape below. Proposed; the gateway does not serve it yet (`store.drift.standing_order_drift`). |
 | GET | `/audit/verify` | `kitchen:read` | Check the audit hash chain now. Shape below. Proposed, like the next three rows; the gateway does not serve them yet. |
 | POST | `/audit/demo-tamper` | `kitchen:approve` (human) | Demo only: edit one audit row of the synthetic demo kitchen, so `/audit/verify` shows the break. 403 `DEMO_ONLY` for any other kitchen. |
 | POST | `/audit/demo-restore` | `kitchen:approve` (human) | Demo only: put the tampered row back exactly as it was. |
@@ -395,6 +400,7 @@ cutoff. Supplier-linked alternatives are considered before catalog fallback.
 | `requires_chef_approval` | `true` | Choices never select, approve or place themselves. |
 | `stock_confirmed` | boolean | False if any line has unconfirmed stock. Approval cannot override it. |
 | `allergen_data_known` | boolean | False if any retained original line has unknown allergen data; never label it safe. |
+| `recommended` | boolean, optional | `true` on at most one option: the one the engine would take. Absent or `false` means not marked; the UI never infers it. |
 
 Options use the same trusted need/date. A partial-stock option can combine the
 original and substitute products so the engine converts the gap by base unit,
@@ -402,6 +408,35 @@ not by assuming supplier packs are interchangeable. A candidate that the engine
 excludes (cutoff, wrong unit, etc.) is not offered. Selecting a preference is not
 an applied edit: re-simulate the selected basket and obtain human approval to its
 exact total through the existing workflow before placement.
+
+**Choosing an option.** `POST /v1/kitchens/{kitchen_id}/proposals/{proposal_id}/choose-option`
+
+```json
+{"offer_id": "offer-7f3a", "idempotency_key": "choose-1"}
+```
+
+- `offer_id` is the `offer_id` of one entry in the proposal's `substitute_options`; that
+  is what identifies an option.
+- The gateway simulates that basket again with fresh prices and stock and makes it the
+  proposal's basket. The answer is the proposal in the `GET /proposals/{id}` shape, still
+  `READY`: its lines and `expected_total` are the chosen basket's, and its `offer_id` is
+  the fresh offer. The chosen entry in `substitute_options` carries the same refreshed
+  `offer_id`, so a client finds the current choice by comparing the two.
+- Nothing is approved and nothing is sent. The person then approves the new
+  `expected_total` through `/approve`, as for any proposal.
+- Only a human session may choose: 403 `HUMAN_SESSION_REQUIRED` for an API key or the
+  Buyer's token.
+
+| Status | Code | When |
+|---|---|---|
+| 404 | `PROPOSAL_NOT_FOUND` | No such proposal in this kitchen. |
+| 404 | `OPTION_NOT_FOUND` | `offer_id` is not one of this proposal's options. |
+| 409 | `NOT_PENDING` | The proposal is no longer `READY` (approved, rejected, expired). |
+| 409 | `STOCK_UNKNOWN` | The fresh simulation cannot confirm the stock of a line. |
+| 409 | `CLOSING_PASSED` | The cut-off of a line has passed. |
+| 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another body. |
+
+After a 409 the proposal is unchanged: it keeps the basket it had.
 
 The trusted worker reads `kitchen_settings.excluded_allergens` through `store`:
 an explicit string array of supported allergen names/GS1 codes, including `[]`
@@ -428,6 +463,7 @@ price list the kitchen entered: stock is unknown, and the order goes out by e-ma
 | POST | `/orders/{id}/confirm` | `supplier:confirm` | Body: `result: FULL \| PARTIAL \| REJECTED`, `lines` (required for `PARTIAL`), `idempotency_key`. |
 | GET | `/demand?from=&to=&product=` | `supplier:demand` | Forecast demand across kitchens that consented, per product and day. |
 | GET | `/demand/shortage-risk` | `supplier:demand` | Products where forecast demand is above the supplier's stated availability. |
+| GET | `/demand/drift` | `supplier:demand` | The same drift warnings for each kitchen whose `/sharing` consent names this supplier, with `kitchen_id` and `kitchen_name`. Proposed. |
 | POST | `/offers` | `supplier:read-orders` | Proactive offer to a kitchen (substitute, promotion). It shows up as a suggestion, never as an order. |
 
 A supplier only sees demand from kitchens whose `/sharing` consent names it.
@@ -556,6 +592,26 @@ data: {"operation": "insert", "document": {"proposal_id": "...", "status": "PEND
 - Nothing is replayed after a reconnect: the client loads the lists again, then listens.
 - The browser's `EventSource` cannot send an `Authorization` header; the web client
   reads the stream with `fetch`.
+
+### Standing-order drift
+
+`GET /v1/kitchens/{kitchen_id}/drift` answers `{"week": "2026-11-09", "warnings": [...]}`,
+biggest change first. `week` is the Monday of the last full week. Each warning:
+
+```json
+{"product_id": "462775", "kind": "portion_creep", "change": 0.4, "unit": "ST",
+ "qty_per_100": 14.0, "baseline_qty": 10.0, "spend_per_100": 35.98,
+ "baseline_spend": 25.7, "baseline_weeks": 4,
+ "why": "14.0 ST per 100 guests last week, 10.0 on average over the 4 weeks before (+40%). Check portions before this order renews."}
+```
+
+- `kind`: `portion_creep` (more ordered per guest) or `cost_creep` (the same amount per
+  guest costs more). A drop is not a warning.
+- Fewer than 3 weeks of history, or a week without guests, is never drift: it is left out.
+- Rates are per 100 guests from the `covers` series; money values are numbers for display
+  only, never a figure to approve (approval figures come from `simulate_order`).
+- Where it shows: a warning on the next proposal for that product, and a list on the
+  supplier demand view (consenting kitchens only).
 
 ### Webhooks (both sides)
 
@@ -698,7 +754,8 @@ engine's default, except `excluded_allergens`, which is `null` until a person se
   "stockout_cap": "1.8",
   "budget_warning_order_eur": "1500.00",
   "budget_warning_week_eur": "5000.00",
-  "excluded_allergens": ["AP", "AN", "AS"]
+  "excluded_allergens": ["AP", "AN", "AS"],
+  "standing_orders": {"469549": "200"}
 }
 ```
 
@@ -709,6 +766,7 @@ engine's default, except `excluded_allergens`, which is `null` until a person se
 | `stockout_cap` | decimal string | Demand seen during a stock-out is scaled up by at most this factor. From 1 to 3. |
 | `budget_warning_order_eur`, `budget_warning_week_eur` | decimal string or null | Above it the approval shows `OVER_BUDGET_WARNING`. `null` means no warning. A warning only: a person approves every order anyway. |
 | `excluded_allergens` | string[] or null | GS1 codes or the allergen names of `search_products`. A product that lists one as CONTAINS, MAY_CONTAIN or UNDECLARED is refused. `[]` means the kitchen has explicitly no exclusions. `null` means nobody has set the policy yet: unknown, not "none". |
+| `standing_orders` | object of decimal strings | Per `product_id`: the kitchen's standing order per delivery, in that product's sales unit. `{}` means none. The engine only flags a standing order more than 10 % off the need (`STANDING_ORDER_DRIFT`, S08); a person changes it. |
 
 `PUT /settings` takes any subset of these fields plus `idempotency_key`. A field that is
 left out keeps its value, so a partial save can never drop the allergen policy.
@@ -724,6 +782,79 @@ left out keeps its value, so a partial save can never drop the allergen policy.
   `service_level` (fraction), `maxDaysOfCover` to `max_cover_days`, `stockOutDemandCap`
   to `stockout_cap`, `budgetWarningPerOrderExVat` / `budgetWarningPerWeekExVat` to the
   two budget fields, `excludedAllergens` to `excluded_allergens`.
+
+### Onboarding lookup (Context.dev)
+
+`POST /v1/onboarding/lookup` (human user session). On sign-up the kitchen types its work
+email or its website; the gateway looks the business up with Context.dev and returns the
+profile fields to pre-fill. Proposed (issue #375); the gateway does not serve it yet. The
+web page (`/onboarding`) is built against the mock.
+
+Request: exactly one of the two fields. A POST, so the email never sits in a URL or an
+access log. It saves nothing, so it takes no `idempotency_key`.
+
+```json
+{"email": "chef@hotelkuusi.fi"}
+{"website": "https://www.hotelkuusi.fi"}
+```
+
+Response: every field is `{value, source}`. `value` `null` means unknown: Context.dev did
+not return it, and the gateway never guesses one. `source` is `null` exactly when `value`
+is.
+
+```json
+{
+  "domain": "hotelkuusi.fi",
+  "found": true,
+  "name": {"value": "Hotel Kuusi",
+           "source": {"provider": "Context.dev", "endpoint": "POST /v1/brand/retrieve"}},
+  "logo_url": {"value": "https://...", "source": {"...": "..."}},
+  "colors": {"value": ["#1f4d3a", "#e9d8a6"], "source": {"...": "..."}},
+  "address": {"value": {"street": "Satakunnankatu 41", "postal_code": "33210",
+                        "city": "Tampere", "country": "Finland"}, "source": {"...": "..."}},
+  "kitchen_type": {"value": "hotel", "source": {"...": "..."}},
+  "opening_hours": {"value": null, "source": null}
+}
+```
+
+| Field | From Context.dev | Rule |
+|---|---|---|
+| `domain` | | The domain the lookup used: from the email after `@`, or the website's host without `www.`. |
+| `found` | | `false` when Context.dev knows nothing about the domain (its 400 `NOT_FOUND`): 200 with every field unknown, so the person fills in the form. |
+| `name` | `brand.title` | |
+| `logo_url` | `brand.logos[]` | An https URL. Prefer `type` `icon` or `logo` in light `mode`; `null` when there is none. |
+| `colors` | `brand.colors[].hex` | `#rrggbb`, main colour first. `null` when there are none, never `[]`. |
+| `address` | `brand.address` | `street`, `postal_code`, `city`, `country`; a part Context.dev leaves out is `null` on its own. |
+| `kitchen_type` | `brand.industries.eic[]` | `hotel`, `school`, `hospital` or `restaurant` when the industry or subindustry clearly says so (hotels and accommodation, primary or secondary education, hospitals and health care, restaurants and food service). Anything else is `null`. A guess; the person confirms it. |
+| `opening_hours` | not in `brand/retrieve` | Free text as the website writes it. Optional second call: `POST /v1/web/scrape` (the endpoint `monitor/recalls.py` uses) on the home or contact page, reading schema.org `openingHours`. Without it, `null`. `source.endpoint` names whichever endpoint gave the value. |
+
+Which Context.dev endpoint, and why:
+
+- `POST https://api.context.dev/v1/brand/retrieve` with `{"type": "by_email", "email": ...}`
+  or `{"type": "by_domain", "domain": ...}`. One call returns name, logos, colours, address
+  and industry (EIC), which is every field but the opening hours. `by_email` resolves the
+  work email's domain for us; that is the sponsor's own example ("brand itself from a
+  customer's email"). `/brand/styleguide` (fonts, spacing) and `/brand/search` (name
+  autocomplete) are not needed for the form.
+- Context.dev answers a free or disposable email with 422 `FREE_EMAIL_DETECTED` /
+  `DISPOSABLE_EMAIL_DETECTED`. The gateway returns 422 `FREE_EMAIL` with "Type the
+  kitchen's website instead."; the page then asks for the website.
+- An address that is neither an email nor a domain: 422 `INVALID_QUERY`. Context.dev down,
+  out of credits or slow (a cold domain can take more than 10 s; use a timeout of at least
+  10,000 ms): 502 `LOOKUP_UNAVAILABLE`. The page shows a blank form in both cases.
+
+Rules:
+
+- `CONTEXT_DEV_API_KEY` stays on the gateway (the same key as the recall monitor). The
+  browser calls our route, never Context.dev.
+- Nothing is saved by this route. The person checks every field, changes what is wrong
+  and presses "Confirm and save"; only then is the profile stored. Until the kitchen
+  profile has a save route, the web keeps the confirmed profile in the browser and shows
+  the logo in the app shell.
+- Every pre-filled field shows "From your website via Context.dev" and its
+  `source.endpoint` until the person edits it.
+- The web client maps `logo_url` to `logoUrl`, `kitchen_type` to `kitchenType`,
+  `opening_hours` to `openingHours` and `postal_code` to `postalCode`.
 
 ## Daily weather and holiday signals
 

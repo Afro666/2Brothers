@@ -1,6 +1,8 @@
-import type { Api, AuditActor, ProductTemperature } from "@/api/types";
+import type { Api, AuditActor, AuditChainRow, ProductTemperature } from "@/api/types";
 import { ApiError } from "@/api/types";
+import { GENESIS, KITCHEN_ID, mapChainCheck, rowHash, verifyRows } from "@/api/audit-chain";
 import { nameProducts } from "@/api/map";
+import { permissionsMock } from "@/api/mock-permissions";
 import { createPlanningMock } from "@/api/mock-planning";
 import { createSettingsMock } from "@/api/mock-settings";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
@@ -55,6 +57,24 @@ export function createMockApi(): MockApi {
   const audit: AuditEvent[] = [...auditEvents];
   const feedback: FeedbackRow[] = [];
   let nextFailure: ApiError | null = null;
+
+  // The stored hash of each audit line, in order. A line is hashed once, when the chain is
+  // first read after the line was written; changing the line later no longer matches it.
+  const hashes: Pick<AuditChainRow, "prevHash" | "hash">[] = [];
+  let tampered: { index: number; original: AuditEvent } | null = null;
+  function chainRows(): AuditChainRow[] {
+    for (let index = hashes.length; index < audit.length; index++) {
+      const prevHash = index === 0 ? GENESIS : hashes[index - 1].hash;
+      hashes.push({ prevHash, hash: rowHash(index + 1, prevHash, audit[index]) });
+    }
+    return hashes.map((stored, index) => ({ seq: index + 1, event: audit[index], ...stored }));
+  }
+  const productNames = new Map((Object.values(products) as Product[]).map((product) => [product.id, product.names.en]));
+  const named = (event: AuditEvent): AuditEvent => ({
+    ...event,
+    summary: nameProducts(event.summary, productNames),
+    reason: nameProducts(event.reason, productNames),
+  });
 
   const recordAudit = (event: Pick<AuditEvent, "kind" | "actor" | "summary" | "reason">) => {
     audit.push({
@@ -154,6 +174,7 @@ export function createMockApi(): MockApi {
     ...createPlanningMock(recordAudit),
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),
+    ...permissionsMock,
     lookupKitchenBrand: lookupKitchenBrandMock,
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
@@ -329,12 +350,34 @@ export function createMockApi(): MockApi {
       return found;
     },
     async listAudit(filter) {
-      const names = new Map((Object.values(products) as Product[]).map((product) => [product.id, product.names.en]));
-      return (filter?.orderId ? audit.filter((event) => event.orderId === filter.orderId) : audit).map((event) => ({
-        ...event,
-        summary: nameProducts(event.summary, names),
-        reason: nameProducts(event.reason, names),
-      }));
+      return (filter?.orderId ? audit.filter((event) => event.orderId === filter.orderId) : audit).map(named);
+    },
+    async listAuditChain(limit) {
+      return chainRows()
+        .slice(-limit)
+        .map((row) => ({ ...row, event: named(row.event) }));
+    },
+    async verifyAuditChain() {
+      const rows = chainRows();
+      const check = verifyRows(rows);
+      // Every sample line is this kitchen's own.
+      return mapChainCheck({ ...check, broken_kitchen_id: check.ok ? null : KITCHEN_ID, kitchen_entries: rows.length });
+    },
+    async tamperAuditRow() {
+      const rows = chainRows();
+      if (rows.length === 0) throw new ApiError("NOTHING_TO_TAMPER", "The audit log is empty.");
+      if (tampered) throw new ApiError("ALREADY_TAMPERED", "A line is already tampered.");
+      const index = rows.length - 1;
+      tampered = { index, original: audit[index] };
+      audit[index] = { ...audit[index], summary: `${audit[index].summary} (edited after the fact)` };
+      return { seq: index + 1 };
+    },
+    async restoreAuditRow() {
+      if (!tampered) return { seq: null, restored: false };
+      const { index, original } = tampered;
+      audit[index] = original;
+      tampered = null;
+      return { seq: index + 1, restored: true };
     },
     async submitChefRequest() {
       return { order: demoOrders.get(seedApproval.orderId)!, substitutes, approval: approvals.get(seedApproval.id)! };

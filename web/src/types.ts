@@ -374,6 +374,30 @@ export interface KitchenSettings {
   excludedAllergens: string[];
 }
 
+/** One thing the Buyer does, asks for or is refused, with the audit kind that shows it happening. */
+export interface PermissionRow {
+  action: string;
+  auditKind: AuditKind;
+}
+
+/** What the Buyer decides alone, what a person signs off, and what the Buyer can never do. */
+export interface BuyerPermissions {
+  alone: PermissionRow[];
+  person: PermissionRow[];
+  never: PermissionRow[];
+}
+
+/** How far this kitchen is into the learning period of the earned auto-approve. Read-only. */
+export interface AutoApproveLearning {
+  weeks: number;
+  weeksNeeded: number;
+  decisions: number;
+  decisionsNeeded: number;
+  /** Share of decisions a person edited, 0 to 1. null = not known yet, never shown as 0 %. */
+  editRate: number | null;
+  maxEditRate: number;
+}
+
 /** A product the Buyer could add to this order, most useful first. */
 export interface AddableProduct {
   product: Product;
