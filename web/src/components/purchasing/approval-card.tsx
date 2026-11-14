@@ -1,5 +1,5 @@
 import { Check, X } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { MovProgress } from "@/components/purchasing/mov-progress";
@@ -136,6 +136,7 @@ export function ApprovalCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [changeError, setChangeError] = useState<string | null>(null);
+  const changing = useRef(false);
   const [showOrder, setShowOrder] = useState(false);
   const [showDetails, setShowDetails] = useState(!folded);
   const [search, setSearch] = useState("");
@@ -166,7 +167,9 @@ export function ApprovalCard({
   const editing = pending && onChangeProposal != null && listAddableProducts != null;
 
   async function changeProposal(change: ProposalChange) {
-    if (!onChangeProposal) return;
+    // The ref closes the gap before `busy` disables the buttons: two fast presses are one change.
+    if (!onChangeProposal || changing.current) return;
+    changing.current = true;
     setBusy(true);
     setChangeError(null);
     try {
@@ -184,11 +187,15 @@ export function ApprovalCard({
           ? t("Could not change this proposal. {reason} The proposal is unchanged.", {
               reason: t(CHANGE_ERRORS[e.code]),
             })
-          : t("Could not change this proposal: {message} The proposal is unchanged.", {
-              message: e instanceof Error ? e.message : String(e),
-            }),
+          : e instanceof ApiError && e.code === "NETWORK"
+            ? // The change may have reached the gateway: never say "unchanged" here.
+              t("The gateway did not answer, so the change may or may not be saved. Check the lines and the total below before you approve.")
+            : t("Could not change this proposal: {message} The proposal is unchanged.", {
+                message: e instanceof Error ? e.message : String(e),
+              }),
       );
     } finally {
+      changing.current = false;
       setBusy(false);
     }
   }

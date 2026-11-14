@@ -1,9 +1,10 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mapKitchenSettings } from "@/api/map-planning";
 import { createMockApi } from "@/api/mock";
+import { ApiError } from "@/api/types";
 import { renderApp } from "@/test/render";
 
 function withConfirmedStock() {
@@ -218,6 +219,39 @@ describe("ApprovalsPage", () => {
     await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
     await waitFor(() => expect(screen.queryByText(/wait for the supplier's stock confirmation/)).toBeNull());
     expect(screen.getAllByRole("button", { name: /^Approve/ })[1]).toBeEnabled();
+  });
+
+  it("after a lost answer it reloads the inbox and does not say the proposal is unchanged", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const listed = vi.spyOn(api, "listApprovals");
+    api.changeProposal = async () => {
+      throw new ApiError("NETWORK", "Could not reach the gateway.");
+    };
+    renderApp("/approvals", api);
+    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    const before = listed.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("the change may or may not be saved");
+    expect(alert).not.toHaveTextContent("unchanged");
+    await waitFor(() => expect(listed.mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it("two fast presses send one change", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    let finish: (() => void) | undefined;
+    const change = vi.fn(() => new Promise<never>((_, reject) => { finish = () => reject(new ApiError("NOT_PENDING", "no")); }));
+    api.changeProposal = change;
+    renderApp("/approvals", api);
+    await user.click((await screen.findAllByRole("button", { name: "Show order lines" }))[1]);
+    const remove = screen.getByRole("button", { name: "Remove Valio Eila 3 % lactose free milk drink 1 L" });
+    fireEvent.click(remove);
+    fireEvent.click(remove);
+    expect(change).toHaveBeenCalledTimes(1);
+    finish?.();
+    expect(await screen.findByRole("alert")).toHaveTextContent("no longer waiting for approval");
   });
 
   it("shows the API message when removing the only line is refused", async () => {

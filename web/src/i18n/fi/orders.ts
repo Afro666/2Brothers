@@ -96,6 +96,7 @@ export default {
   "Could not choose this option. {reason}": "Vaihtoehtoa ei voitu valita. {reason}",
   "Could not choose this option: {message}. Nothing was changed or approved.": "Vaihtoehtoa ei voitu valita: {message}. Mitään ei muutettu eikä hyväksytty.",
   "Could not change this proposal. {reason} The proposal is unchanged.": "Ehdotusta ei voitu muuttaa. {reason} Ehdotus on ennallaan.",
+  "The gateway did not answer, so the change may or may not be saved. Check the lines and the total below before you approve.": "Yhdyskäytävä ei vastannut, joten muutos on voinut tallentua tai jäädä tallentumatta. Tarkista rivit ja summa alta ennen kuin hyväksyt.",
   "Could not change this proposal: {message} The proposal is unchanged.": "Ehdotusta ei voitu muuttaa: {message} Ehdotus on ennallaan.",
   "Could not load the updated options. Nothing was approved. Please try again.": "Päivitettyjä vaihtoehtoja ei voitu ladata. Mitään ei hyväksytty. Yritä uudelleen.",
   "Counted by the gateway from each run; a run from before the meter has no count.": "Yhdyskäytävä laskee tiedot jokaisesta ajosta; ennen mittaria tehdyistä ajoista ei ole lukuja.",
