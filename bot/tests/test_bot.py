@@ -1,4 +1,7 @@
 """The bot with a fake Telegram and a fake gateway: no network, no token."""
+import copy
+import threading
+import time
 from datetime import datetime
 
 import pytest
@@ -275,6 +278,44 @@ def test_an_out_of_date_button_does_not_crash(bot):
     press(bot, f"q:{PID}:5:0:+")
     press(bot, "garbage")
     assert bot.gw.calls == []
+
+
+def test_two_fast_plus_taps_on_one_chat_are_two_steps(bot):
+    class SlowGateway(FakeGateway):
+        def proposal(self, proposal_id):
+            return copy.deepcopy(self.current)
+
+        def change(self, proposal_id, product_id, quantity):
+            time.sleep(0.05)                       # long enough for the other tap to read
+            return copy.deepcopy(super().change(proposal_id, product_id, quantity))
+
+    bot.gw = SlowGateway()
+    taps = [threading.Thread(target=press, args=(bot, f"q:{PID}:0:0:+")) for _ in range(2)]
+    for tap in taps:
+        tap.start()
+    for tap in taps:
+        tap.join()
+    assert [c for c in bot.gw.calls if c[0] == "change"] == [("change", "463380", "704"), ("change", "463380", "710")]
+
+
+def test_another_chat_is_not_blocked_by_a_busy_chat(tmp_path):
+    links = Links(tmp_path)
+    assert links.redeem(links.new_code(), 7, "a") and links.redeem(links.new_code(), 8, "b")
+    entered = threading.Barrier(2, timeout=2)
+
+    class WaitingGateway(FakeGateway):
+        def proposal(self, proposal_id):
+            entered.wait()                         # both chats must be inside at the same time
+            return self.current
+
+    made = Bot(FakeTelegram(), WaitingGateway(), links)
+    taps = [threading.Thread(target=press, args=(made, f"c:{PID}:0"), kwargs={"chat": c}) for c in (7, 8)]
+    for tap in taps:
+        tap.start()
+    for tap in taps:
+        tap.join()
+    assert not entered.broken
+    assert len(made.tg.edits) == 2
 
 
 # ---- layout ------------------------------------------------------------------------------

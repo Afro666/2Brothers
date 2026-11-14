@@ -39,9 +39,22 @@ class Bot:
         self._summaries: dict[tuple[int, str], int] = {}     # (chat, proposal) -> summary message id
         self._heard: dict[tuple[int, str], str] = {}
         self._lock = threading.Lock()
+        self._chat_locks: dict[int, threading.Lock] = {}     # one update at a time per chat
 
     # ---- entry -------------------------------------------------------------------------
     def handle(self, update: dict) -> None:
+        # Updates from one chat run in order (two fast "+" taps are two steps); other chats
+        # are not blocked.
+        with self._chat_lock(update):
+            self._handle(update)
+
+    def _chat_lock(self, update: dict) -> threading.Lock:
+        message = (update.get("callback_query") or {}).get("message") or update.get("message") or {}
+        chat = (message.get("chat") or {}).get("id")
+        with self._lock:
+            return self._chat_locks.setdefault(chat, threading.Lock())
+
+    def _handle(self, update: dict) -> None:
         try:
             if "callback_query" in update:
                 self._callback(update["callback_query"])
