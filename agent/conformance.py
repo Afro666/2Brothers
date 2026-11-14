@@ -213,6 +213,12 @@ async def rt01() -> dict:
     for e in refused:
         name = "unknown tool" if e["tool"] == "invalid" else e["tool"]   # the runner never logs a made-up name
         audit_lines.append(f"run {e['run_id'][:8]}  {name:<14} refused  reason_code={e['result']['reason_code']}")
+    # #548: the gateway audits its own 403s, so an attack that skips the Buyer leaves evidence too.
+    gateway_refused = {e["event"].get("code") for e in db.audit_log.find({"event.kind": "refused"})}
+    for code in sorted(c for c in gateway_refused if c):
+        audit_lines.append(f"gateway  direct call     refused  code={code}")
+    check("gateway audits its own refusals", {"NEEDS_APPROVAL", "HUMAN_SESSION_REQUIRED"} <= gateway_refused,
+          "refused events: " + (", ".join(sorted(c for c in gateway_refused if c)) or "none"))
     stored = json.dumps([d for d in db.audit_log.find({}, {"_id": 0})], default=str)
     check("audit keeps every refusal with its code",
           {"SCHEMA_INVALID", "TOOL_NOT_ALLOWED", "HUMAN_APPROVAL_REQUIRED"}
