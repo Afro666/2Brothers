@@ -131,10 +131,17 @@ def http_send(url: str, body: bytes, headers: dict) -> int:
     ip = f"[{address}]" if ":" in address else address
     pinned = urlunsplit((parts.scheme, ip + (f":{parts.port}" if parts.port else ""), parts.path or "/",
                          parts.query, ""))
-    netloc = host + (f":{parts.port}" if parts.port else "")
+    # An IPv6 literal needs its brackets back in the Host header (#772); an IP literal
+    # is never sent as SNI (RFC 6066), so then no sni_hostname is set.
+    netloc = (f"[{host}]" if ":" in host else host) + (f":{parts.port}" if parts.port else "")
+    try:
+        ipaddress.ip_address(host)
+        extensions = {}
+    except ValueError:
+        extensions = {"sni_hostname": host}
     with httpx.Client(timeout=TIMEOUT, follow_redirects=False, trust_env=False) as client:
         request = client.build_request("POST", pinned, content=body, headers={**headers, "Host": netloc},
-                                       extensions={"sni_hostname": host})
+                                       extensions=extensions)
         return client.send(request).status_code
 
 
