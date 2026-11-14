@@ -4,6 +4,7 @@ import { mapMoney } from "@/api/map";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { Button } from "@/components/ui/button";
 import { formatEur } from "@/lib/format";
+import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/use-async";
 import { LabelEvidence, type LabelCheck } from "@/components/purchasing/label-evidence";
 
@@ -84,7 +85,7 @@ function parse(value: unknown): Proposal {
   return row;
 }
 
-function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
+function ProposalCard({ row, reload, approvalBlockedReason }: { row: Proposal; reload: () => void; approvalBlockedReason?: string }) {
   const [confirm, setConfirm] = useState<"approve" | "reject" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -95,6 +96,7 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
   const pending = row.status === "READY" && !placed && !rejected;
   const rejectable = ["READY", "BLOCKED_BY_RECALL"].includes(row.status) && !placed && !rejected;
   async function decide(approve: boolean) {
+    if (approvalBlockedReason) return;
     setBusy(true);
     setError(undefined);
     try {
@@ -141,24 +143,27 @@ function ProposalCard({ row, reload }: { row: Proposal; reload: () => void }) {
       row.status === "APPROVED" ? <p className="stamp-mark border-success text-sm font-medium text-success">Order recorded: {row.order_id ?? "reload to reconcile"}. Recorded in our gateway; not submitted to Valio.</p> :
       !pending ? <p>{rejected ? "REJECTED" : row.status}</p> : null}
     {error && <div role="alert">{error} Check the current proposal before repeating a decision. <Button onClick={reload}>Reload proposals</Button></div>}
+    {approvalBlockedReason && <p className="text-sm text-muted-foreground">{approvalBlockedReason}</p>}
     {rejectable && <div className="flex flex-wrap gap-3">
-      {pending && <Button className="w-full sm:w-auto" disabled={busy || unknown || !row.lines.length} onClick={() => setConfirm("approve")}>Approve {formatEur(mapMoney(row.expected_total))}</Button>}
-      <Button className="w-full sm:w-auto" variant="outline" disabled={busy} onClick={() => setConfirm("reject")}>Reject proposal</Button>
+      {pending && <Button className="w-full sm:w-auto" disabled={busy || unknown || !row.lines.length || !!approvalBlockedReason} onClick={() => setConfirm("approve")}>Approve {formatEur(mapMoney(row.expected_total))}</Button>}
+      <Button className="w-full sm:w-auto" variant="outline" disabled={busy || !!approvalBlockedReason} onClick={() => setConfirm("reject")}>Reject proposal</Button>
     </div>}
     {confirm === "approve" && pending && <div role="dialog" aria-label="Confirm approval" className="space-y-3 rounded border p-4">
       <p>Confirm this exact basket for {formatEur(mapMoney(row.expected_total))}? The gateway checks price and stock again.</p>
-      <Button disabled={busy || unknown} onClick={() => void decide(true)}>Confirm and record order</Button>
+      <Button disabled={busy || unknown || !!approvalBlockedReason} onClick={() => void decide(true)}>Confirm and record order</Button>
       <Button variant="outline" disabled={busy} onClick={() => setConfirm(null)}>Cancel</Button>
     </div>}
     {confirm === "reject" && rejectable && <div role="dialog" aria-label="Confirm rejection" className="space-y-3 rounded border p-4">
       <p>Close this proposal? Its recall notices continue blocking future quotes until a person checks and dismisses them.</p>
-      <Button disabled={busy} onClick={() => void decide(false)}>Confirm rejection</Button>
+      <Button disabled={busy || !!approvalBlockedReason} onClick={() => void decide(false)}>Confirm rejection</Button>
       <Button variant="outline" disabled={busy} onClick={() => setConfirm(null)}>Cancel rejection</Button>
     </div>}
   </article>;
 }
 
 export function LiveApprovalsPage() {
+  const { session } = useSession();
+  const approvalBlockedReason = session && !session.canApprove ? "Your account cannot approve or reject orders." : undefined;
   const proposals = useAsync(async () => {
     const result = await gatewayRequest("/api", path) as { proposals?: unknown[] };
     if (!Array.isArray(result?.proposals)) throw new Error("Invalid proposal list.");
@@ -171,6 +176,6 @@ export function LiveApprovalsPage() {
     {proposals.status === "loading" && <p>Loading proposals…</p>}
     {proposals.status === "error" && <p role="alert">{proposals.error.message}</p>}
     {proposals.status === "ready" && (proposals.data.length ? proposals.data.map(row =>
-      <ProposalCard key={`${row.proposal_id}-${row.offer_id}-${row.status}`} row={row} reload={proposals.reload} />) : <p>No proposals yet. Ask the Buyer on Requests.</p>)}
+      <ProposalCard key={`${row.proposal_id}-${row.offer_id}-${row.status}`} row={row} reload={proposals.reload} approvalBlockedReason={approvalBlockedReason} />) : <p>No proposals yet. Ask the Buyer on Requests.</p>)}
   </main></AppShell>;
 }

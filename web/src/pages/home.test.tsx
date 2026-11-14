@@ -28,7 +28,7 @@ describe("HomePage", () => {
     renderApp(`/?now=${DEMO_NOW}`, createMockApi());
 
     expect(await screen.findByText("Waiting for your approval")).toBeInTheDocument();
-    expect(screen.getByText("3", { selector: ".text-3xl" })).toBeInTheDocument();
+    expect(await screen.findByText("3", { selector: ".text-3xl" })).toBeInTheDocument();
     expect(screen.getByText("€2,210.41 incl VAT")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review orders to approve" })).toHaveAttribute("href", "/approvals");
     expect(screen.getByText("Hakaniemi Fish").parentElement).toHaveTextContent("terms not set");
@@ -38,7 +38,9 @@ describe("HomePage", () => {
 
   it("shows Valio risk counts and demand navigation for a Valio planner", async () => {
     localStorage.setItem("purchasing-role", "valio_planner");
-    renderApp(`/?now=${DEMO_NOW}`, createMockApi());
+    const api = createMockApi();
+    await api.signIn("planner@demo.valio", "demo-kitchen-2026");
+    renderApp(`/?now=${DEMO_NOW}`, api);
     expect(
       await screen.findByText(
         (_, element) => element?.textContent?.replace(/\s+/g, " ").trim() === "3 SHORT · 12 UNKNOWN · 0 AT_RISK",
@@ -56,6 +58,7 @@ describe("HomePage", () => {
   it("labels next-week forecasts when the current week has no rows", async () => {
     localStorage.setItem("purchasing-role", "valio_planner");
     const api = createMockApi();
+    await api.signIn("planner@demo.valio", "demo-kitchen-2026");
     let calls = 0;
     api.getSupplierDemand = async () => {
       calls += 1;

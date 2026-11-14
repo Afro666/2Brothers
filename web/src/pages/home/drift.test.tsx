@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
@@ -28,7 +28,9 @@ describe("Standing-order drift tiles", () => {
 
   it("names the consenting kitchen on the Valio side", async () => {
     localStorage.setItem("purchasing-role", "valio_planner");
-    renderApp(`/?now=${DEMO_NOW}`, createMockApi());
+    const api = createMockApi();
+    await api.signIn("planner@demo.valio", "demo-kitchen-2026");
+    renderApp(`/?now=${DEMO_NOW}`, api);
 
     expect(
       await screen.findByText(/K04 Hotel Aurora Helsinki/),
@@ -37,20 +39,21 @@ describe("Standing-order drift tiles", () => {
   });
 
   it("hides the tile while the gateway does not serve the route", async () => {
+    let rejectDrift!: (reason: ApiError) => void;
+    const driftRequest = new Promise<never>((_resolve, reject) => {
+      rejectDrift = reject;
+    });
     const api = {
       ...createMockApi(),
-      getDrift: async () => {
-        throw new ApiError(
-          "NOT_SERVED",
-          "The gateway does not serve this yet.",
-        );
-      },
+      getDrift: () => driftRequest,
     };
     renderApp(`/?now=${DEMO_NOW}`, api);
 
-    expect(
-      await screen.findByText("Waiting for your approval"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Waiting for your approval")).toBeInTheDocument();
+    await act(async () => {
+      rejectDrift(new ApiError("NOT_SERVED", "The gateway does not serve this yet."));
+      await driftRequest.catch(() => undefined);
+    });
     expect(screen.queryByText(/Standing-order drift/)).not.toBeInTheDocument();
   });
 

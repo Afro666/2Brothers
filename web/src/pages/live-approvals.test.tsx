@@ -1,6 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createMockApi } from "@/api/mock";
 import { renderApp } from "@/test/render";
 
 const row = {
@@ -11,6 +12,22 @@ const row = {
 beforeEach(() => vi.stubEnv("VITE_LIVE_BUYER", "true"));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const json = (body: unknown) => new Response(JSON.stringify(body));
+
+it("disables live approval decisions with the reason for a read-only account", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [row] })));
+  const api = createMockApi();
+  api.getSession = async () => ({
+    name: "Kitchen viewer",
+    email: "viewer@example.com",
+    role: "viewer",
+    canApprove: false,
+  });
+  renderApp("/approvals", api);
+
+  expect(await screen.findByRole("button", { name: /Approve .*149/ })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Reject proposal" })).toBeDisabled();
+  expect(screen.getByText("Your account cannot approve or reject orders.")).toBeVisible();
+});
 
 it("requires confirmation to close a recall-held proposal without dismissing its notice", async () => {
   const fetch = vi.fn().mockResolvedValueOnce(json({ proposals: [{ ...row, status: "BLOCKED_BY_RECALL" }] }))

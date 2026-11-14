@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ApiProvider } from "@/api";
 import { ThemeProvider } from "@/lib/theme";
 import { createAppRouter } from "@/router";
 
@@ -10,9 +11,11 @@ async function renderKit() {
   const router = createAppRouter(createMemoryHistory({ initialEntries: ["/kit"] }));
   render(
     <ThemeProvider>
-      <TooltipProvider>
-        <RouterProvider router={router} />
-      </TooltipProvider>
+      <ApiProvider>
+        <TooltipProvider>
+          <RouterProvider router={router} />
+        </TooltipProvider>
+      </ApiProvider>
     </ThemeProvider>,
   );
   await screen.findByRole("heading", { level: 1, name: "Component kit" });

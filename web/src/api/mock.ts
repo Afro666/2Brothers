@@ -10,6 +10,7 @@ import { forecastAccuracyMock } from "@/api/mock-forecast";
 import { createRecallMock } from "@/api/mock-recalls";
 import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
+import { createMockAuth } from "@/api/mock-auth";
 import {
   approval as seedApproval,
   confirmedDemoApproval,
@@ -51,8 +52,12 @@ export interface MockApi extends Api {
   failNextApprove(code: string, message?: string): void;
 }
 
+export interface MockApiOptions {
+  signedOut?: boolean;
+}
+
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
-export function createMockApi(): MockApi {
+export function createMockApi(options: MockApiOptions = {}): MockApi {
   const approvals = new Map(
     [{ ...confirmedDemoApproval, options: milkOptions }, seedApproval, coffeeApproval].map((row) => [row.id, structuredClone(row)]),
   );
@@ -174,6 +179,7 @@ export function createMockApi(): MockApi {
   }
 
   return {
+    ...createMockAuth(options.signedOut),
     ...createPlanningMock(recordAudit),
     ...createSettingsMock(recordAudit),
     getForecastAccuracy: async () => forecastAccuracyMock(),

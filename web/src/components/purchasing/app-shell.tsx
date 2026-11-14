@@ -31,6 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { usePendingApprovals } from "@/lib/pending-approvals";
 import { ROLE_LABELS, type Role, useRole } from "@/lib/role";
+import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 export interface NavItem {
@@ -164,6 +165,31 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
   );
 }
 
+function SignOutButton() {
+  const { signOut } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await signOut();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <Button variant="ghost" size="xs" className="text-muted-foreground" disabled={busy} onClick={() => void submit()}>
+        Sign out
+      </Button>
+      {error ? <span role="alert" className="block text-xs text-destructive">{error}</span> : null}
+    </>
+  );
+}
+
 /** The main entries as a list, then the small foot links in one row at the bottom. */
 function NavList({ items, activeId, onNavigate }: { items: NavItem[]; activeId?: string; onNavigate?: () => void }) {
   const main = items.filter((item) => !item.foot);
@@ -184,6 +210,9 @@ function NavList({ items, activeId, onNavigate }: { items: NavItem[]; activeId?:
               <NavLink item={item} active={item.id === activeId} onNavigate={onNavigate} />
             </li>
           ))}
+          <li>
+            <SignOutButton />
+          </li>
         </ul>
       ) : null}
     </nav>

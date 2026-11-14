@@ -4,9 +4,11 @@ import { mapMoney } from "@/api/map";
 import { mapDrift } from "@/api/map-drift";
 import { forecastWindow, mapForecastAccuracy } from "@/api/map-forecast";
 import { createMockApi } from "@/api/mock";
-import type { Api, AuditActor } from "@/api/types";
+import type { Api, AuditActor, Session } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { formatEur } from "@/lib/format";
+
+export const SIGNED_OUT_EVENT = "kitchen-buyer:signed-out";
 
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
@@ -14,10 +16,17 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
       ...init,
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json", ...init?.headers },
     });
   } catch {
     throw new ApiError("NETWORK", "Could not reach the gateway.");
+  }
+  const method = (init?.method ?? "GET").toUpperCase();
+  const isSessionCheck = method === "GET" && path === "/v1/me";
+  const isLogin = method === "POST" && path === "/v1/auth/login";
+  if (response.status === 401 && !isSessionCheck && !isLogin) {
+    window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
   }
   if (response.status === 429) {
     throw new ApiError("RATE_LIMITED", "Too many requests - wait a minute and try again.");
@@ -34,6 +43,7 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
       typeof error?.code === "string" ? error.code : "GATEWAY_ERROR",
       typeof error?.message === "string" ? error.message : `The gateway answered ${response.status}.`,
       error && typeof error === "object" ? (error as Record<string, unknown>) : {},
+      response.status,
     );
   }
   return body;
@@ -57,18 +67,30 @@ function mapEach<T>(list: Json[], what: string, idKey: string, map: (row: Json) 
  * from the mock, and `live` says which is which.
  *
  * No Authorization header is sent: in production the web server adds the gateway's human
- * token (web/Caddyfile). A decision names the person's role in `X-User`.
+ * token (web/Caddyfile).
  */
 export function createHttpApi(baseUrl: string): Api {
+  let currentSession: Session | null = null;
   const kitchen = `/v1/kitchens/${encodeURIComponent(import.meta.env.VITE_GATEWAY_KITCHEN_ID || "demo-kitchen")}`;
   const proposalPath = (id: string) => `${kitchen}/proposals/${encodeURIComponent(id)}`;
   const get = (path: string) => gatewayRequest(baseUrl, path);
+  // X-User names the acting role only while there is no signed-in account; with an account,
+  // the gateway takes the person from the session cookie.
   const post = (path: string, body: Json, actor?: AuditActor) =>
     gatewayRequest(baseUrl, path, {
       method: "POST",
-      headers: actor ? { "X-User": actor } : undefined,
+      headers: actor && !currentSession?.email ? { "X-User": actor } : undefined,
       body: JSON.stringify(body),
     });
+  const toSession = (body: Json): Session => {
+    const role = body.role === "approver" || body.role === "chef" || body.role === "viewer" ? body.role : null;
+    return {
+      name: typeof body.name === "string" ? body.name : "",
+      email: typeof body.email === "string" ? body.email : null,
+      role,
+      canApprove: body.can_approve === true && body.kind === "human",
+    };
+  };
   // The gateway lists at most its 100 newest proposals.
   const proposals = async () => rows(await get(`${kitchen}/proposals`), "proposals");
   const auditEvents = async () => rows(await get(`${kitchen}/audit`), "events");
@@ -80,6 +102,33 @@ export function createHttpApi(baseUrl: string): Api {
   const requestKeys = new Map<string, string>();
 
   const real = {
+    async getSession() {
+      try {
+        currentSession = toSession((await get("/v1/me")) as Json);
+        return currentSession;
+      } catch (error) {
+        if (error instanceof ApiError && (error.code === "UNAUTHENTICATED" || error.status === 401)) {
+          currentSession = null;
+          return null;
+        }
+        throw error;
+      }
+    },
+    async signIn(email, password) {
+      currentSession = toSession((await post("/v1/auth/login", { email, password })) as Json);
+      return currentSession;
+    },
+    async signOut() {
+      try {
+        await post("/v1/auth/logout", {});
+      } catch {
+      } finally {
+        currentSession = null;
+      }
+    },
+    async changePassword(current, next) {
+      await post("/v1/auth/change-password", { current_password: current, new_password: next });
+    },
     ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents()]);

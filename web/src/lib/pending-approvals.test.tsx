@@ -65,8 +65,9 @@ describe("Waiting-approvals count", () => {
   });
 
   it("shows no badge on the Valio side", async () => {
-    localStorage.setItem("purchasing-role", "valio_planner");
-    renderApp("/", createMockApi());
+    const api = createMockApi();
+    await api.signIn("planner@demo.valio", "demo-kitchen-2026");
+    renderApp("/", api);
 
     await screen.findByRole("heading", { level: 1 });
     await waitFor(() => expect(screen.queryByText("2 waiting")).not.toBeInTheDocument());
