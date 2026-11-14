@@ -22,6 +22,7 @@ import type {
   SubstituteOption,
   KitchenSettings,
   ForecastAccuracy,
+  DriftReport,
   BuyerPermissions,
   AutoApproveLearning,
   KitchenBrandLookup,
@@ -150,6 +151,10 @@ export interface Api {
   saveKitchenSettings(settings: KitchenSettings, actor: AuditActor): Promise<KitchenSettings>;
   /** Predicted against actual for the last 12 full weeks, and the forecast for this week and the 3 after. */
   getForecastAccuracy(): Promise<ForecastAccuracy>;
+  /** Standing-order drift for the last full week (`GET /drift`). */
+  getDrift(): Promise<DriftReport>;
+  /** Drift warnings of the kitchens that share with this supplier (`GET /demand/drift`). */
+  getSupplierDrift(): Promise<DriftReport>;
   getPermissions(): Promise<BuyerPermissions>;
   /** Progress only. There is no method to switch auto-approve on: a person approves every order. */
   getAutoApproveLearning(): Promise<AutoApproveLearning>;
