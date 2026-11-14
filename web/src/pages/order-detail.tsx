@@ -20,6 +20,7 @@ import { formatDate, formatDateTime, formatEur } from "@/lib/format";
 import { getLanguage, translate, useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import type { OrderReceipt } from "@/types";
+import { supplierName } from "@/lib/supplier-name";
 
 /** A long order id (a 32-character hex id) is cut to its first 8 characters so the title fits a phone. */
 function shortOrderId(id: string): string {
@@ -124,7 +125,7 @@ export function OrderDetailPage() {
                 {state.data.supplierMustConfirm.map((supplierId) => (
                   <p key={supplierId} className="text-sm font-medium">
                     {t("Waiting for {supplier} to confirm. Call or e-mail them: this order was sent without a stock confirmation.", {
-                      supplier: supplierNames.get(supplierId) ?? supplierId,
+                      supplier: supplierName(supplierId, supplierNames),
                     })}
                   </p>
                 ))}
