@@ -34,8 +34,8 @@ describe("recall sentences", () => {
     );
   });
 
-  it("shows an unknown shape as sent, in both languages", () => {
-    expect(recallSentence("in the freezer since Tuesday", fi)).toBe("in the freezer since Tuesday");
+  it("shows an unknown shape in the gateway's words, starting with a capital", () => {
+    expect(recallSentence("in the freezer since Tuesday", fi)).toBe("In the freezer since Tuesday");
     expect(recallSentence("in stock: 3.253 KG", (text, vars) => translate("en", text, vars))).toBe("In stock: 3.253 KG");
   });
 });
