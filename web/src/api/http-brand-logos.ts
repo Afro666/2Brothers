@@ -32,7 +32,7 @@ export function mapBrandLogos(body: unknown): BrandLogo[] {
 }
 
 /** Brand logos against the real gateway (gateway/brand_logos.py). It never calls Context.dev. */
-export function createBrandLogosHttp(call: GatewayCall): Pick<Api, "listBrandLogos"> {
+export function createBrandLogosHttp(call: GatewayCall): Required<Pick<Api, "listBrandLogos">> {
   return {
     async listBrandLogos(brands) {
       const names = [...new Set(brands)];
