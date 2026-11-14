@@ -1,9 +1,17 @@
 #!/bin/sh
 # Runs on the server as the forced command of the deploy SSH key, so that key
-# can do nothing else. The commit to deploy arrives as the SSH command text.
+# can do nothing else. The commit to deploy arrives as the SSH command text:
+# "<sha>", or "force <sha>" to deploy even when that commit is already deployed.
 set -eu
 
 sha="${SSH_ORIGINAL_COMMAND:-}"
+force=no
+case "$sha" in
+"force "*)
+	force=yes
+	sha=${sha#force }
+	;;
+esac
 if ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
 	echo "expected a 40-character commit sha" >&2
 	exit 2
@@ -30,7 +38,7 @@ fi
 # back to back, the first run deploys them all and the next runs find nothing to do, so the
 # site restarts once instead of once per merge.
 head=$(git rev-parse origin/main)
-if [ "$(cat /opt/2brothers.deployed 2>/dev/null)" = "$head" ]; then
+if [ "$force" = no ] && [ "$(cat /opt/2brothers.deployed 2>/dev/null)" = "$head" ]; then
 	echo "$head is already deployed"
 	exit 0
 fi
