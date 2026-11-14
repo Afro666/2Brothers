@@ -22,6 +22,7 @@ import { createNotificationsMock } from "@/api/mock-notifications";
 import { createDeveloperMock } from "@/api/mock-developer";
 import { createPrivacyMock } from "@/api/mock-privacy";
 import { createTokensMock } from "@/api/mock-tokens";
+import { createApprovalTokensMock } from "@/api/mock-approval-tokens";
 import { modelUsageMock } from "@/api/mock-usage";
 import { createWordsMock } from "@/api/mock-words";
 import {
@@ -271,11 +272,13 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     return (Object.values(products) as Product[]).filter((product) => wanted.has(product.id));
   };
 
+  const auth = createMockAuth(options.signedOut);
+
   return {
     subscribeEvents() {
       return () => {};
     },
-    ...createMockAuth(options.signedOut),
+    ...auth,
     ...createKitchenMock(recordAudit),
     ...createNotificationsMock(recordAudit),
     ...createDeveloperMock(recordAudit),
@@ -307,6 +310,8 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     lookupKitchenBrand: lookupKitchenBrandMock,
     listBrandLogos: listBrandLogosMock,
     ...createTokensMock(),
+    // Like the gateway: only a signed-in account (it has an email) gets a personal approval token.
+    ...createApprovalTokensMock(async () => (await auth.getSession())?.email ?? null),
     getModelUsage: async () => modelUsageMock(),
     readShelfPhoto: readShelfPhotoMock,
     readMenuPhoto: readMenuPhotoMock,

@@ -139,6 +139,25 @@ export interface CreatedApiToken extends ApiToken {
   token: string;
 }
 
+/** A personal approval token row (`tka_...`): one person, one kitchen, approve and reject only. Never the secret. */
+export interface ApprovalToken {
+  id: string;
+  name: string;
+  /** The person's email. */
+  person: string;
+  prefix: string;
+  createdAt: string;
+  createdBy: string;
+  expiresAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+/** Only the create answer carries the secret. */
+export interface CreatedApprovalToken extends ApprovalToken {
+  token: string;
+}
+
 export interface StockCount {
   productId: string;
   onHand: number | null;
@@ -411,6 +430,9 @@ export interface Api {
   listApiTokens(): Promise<ApiToken[]>;
   createApiToken(input: { name: string; scopes: ApiTokenScope[] }): Promise<CreatedApiToken>;
   revokeApiToken(id: string): Promise<ApiToken>;
+  listApprovalTokens(): Promise<ApprovalToken[]>;
+  createApprovalToken(input: { hours: number; name?: string }): Promise<CreatedApprovalToken>;
+  revokeApprovalToken(id: string): Promise<ApprovalToken>;
   getSession(): Promise<Session | null>;
   signIn(email: string, password: string): Promise<Session>;
   signOut(): Promise<void>;
