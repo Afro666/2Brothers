@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { mapAudit } from "@/api/gateway-map";
 import type { AuditEvent } from "@/types";
 
-import { AuditTimeline, groupSteps } from "./audit-timeline";
+import { AuditTimeline, groupSteps, shortTitle } from "./audit-timeline";
 
 const runId = "run-1";
 const offerId = "offer-1";
@@ -148,5 +148,13 @@ describe("AuditTimeline", () => {
     expect(failed?.details).toContain("error: No offer");
     expect(groups.flatMap((group) => group.rows).filter((event) => event.kind === "offer")).toHaveLength(1);
     expect(groups.flatMap((group) => group.rows).some((event) => event.summary === "Buyer is searching the catalog")).toBe(true);
+  });
+
+  it("titles a block with what was asked, not with the whole decision summary", () => {
+    expect(
+      shortTitle('Asked: "20L oat drink for monday" (20 L for 2026-11-16). Checked 3 product(s) with Valio prices.'),
+    ).toBe("20L oat drink for monday");
+    expect(shortTitle("ORD-1043 needs approval (€1,947.50 ex VAT)")).toBe("ORD-1043 needs approval (€1,947.50 ex VAT)");
+    expect(shortTitle(`${"A long first sentence ".repeat(10)}. Second.`).length).toBeLessThanOrEqual(120);
   });
 });

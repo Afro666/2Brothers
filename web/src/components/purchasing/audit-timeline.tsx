@@ -176,6 +176,14 @@ function expectedTotal(events: AuditEvent[]): string | null {
   return null;
 }
 
+/** The words the person asked for, from `Asked: "20 L oat drink for Monday" (...)`; else the first sentence. */
+export function shortTitle(summary: string): string {
+  const asked = /^Asked: "([^"]+)"/.exec(summary)?.[1];
+  if (asked) return asked;
+  const first = summary.split(/(?<=\.)\s/)[0];
+  return first.length <= 120 ? first : `${first.slice(0, 117)}...`;
+}
+
 function makeGroup(events: AuditEvent[], index: number): AuditStepGroup & { index: number } {
   const titleEvent = events.find((event) => event.summary === "Decision summary") ?? null;
   const rows = oldestFirst(collapseToolCalls(events).filter((event) => event.id !== titleEvent?.id));
@@ -189,7 +197,7 @@ function makeGroup(events: AuditEvent[], index: number): AuditStepGroup & { inde
   );
   return {
     id: events[0].id,
-    title: titleEvent?.reason || events[0].summary,
+    title: titleEvent?.reason ? shortTitle(titleEvent.reason) : events[0].summary,
     titleEvent,
     outcome: outcomeOf(events),
     decidedBy: decider?.actorName ?? null,
@@ -343,6 +351,10 @@ function AuditGroupCard({ group }: { group: AuditStepGroup }) {
           <h2 id={headingId} className="text-base font-semibold break-words">
             {t(group.title)}
           </h2>
+          {group.titleEvent?.reason && group.titleEvent.reason !== group.title ? (
+            // The whole decision summary, in the agent's words: the heading holds only what was asked.
+            <p className="mt-1 text-sm break-words text-muted-foreground">{group.titleEvent.reason}</p>
+          ) : null}
           {group.titleEvent?.details ? (
             <details className="mt-1 text-xs text-muted-foreground">
               <summary className="w-fit cursor-pointer">{t("Details")}</summary>
