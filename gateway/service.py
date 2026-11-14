@@ -377,6 +377,9 @@ class Gateway:
         if selection is not None:
             from engine.selection_facts import selection_facts
             selection.update(selection_facts(offers, need, measure))
+            for pid, fact in selection.items():
+                lead = (when.get(pid) or {}).get('lead_time_days')
+                fact['lead_time_days'] = None if lead is None else str(lead)
         skipped.extend((p, 'BLOCKED_BY_RECALL') for p in request['product_ids'] if p in blocked)
         skipped.extend((p, f"ALLERGEN_RULE: the kitchen excludes {', '.join(hits)}")
                        for p, hits in refused.items())
