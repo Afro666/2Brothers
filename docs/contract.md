@@ -765,8 +765,10 @@ reference, the outcome before.
    configured, or when its error carries `fallback_safe: true`. Any other worker error is
    returned as it is: the worker may already have made a proposal, so the gateway never
    makes a second one. The parser reads English and Finnish: a quantity with a unit, a
-   delivery day and the product words. It searches the catalog with the product words,
-   takes the first 8 matches, and the engine sizes the lines. It never guesses.
+   delivery day and the product words. When the text names no day, it uses
+   `requested_date` from the body (the date picked in a form); a day in the text wins. It
+   searches the catalog with the product words (50 matches), keeps up to 20 that fit the
+   asked measure (`gateway/candidates.py`), and the engine sizes the lines. It never guesses.
 
 | Status | Code | When |
 |---|---|---|
