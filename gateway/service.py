@@ -158,11 +158,6 @@ class Gateway:
             supplier_of.update({pid: supplier_id for pid in ids})
         return offers, skipped, tax, supplier_of, when
 
-    def _approve_unconfirmed_manual(self, kitchen_id: str) -> bool:
-        """#631: the kitchen's switch, stored with the engine settings. Off unless set to true."""
-        doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}, {"engine.approve_unconfirmed_manual": 1}) or {}
-        return (doc.get("engine") or {}).get("approve_unconfirmed_manual") is True
-
     def _block(self, supplier: dict, lines: list, tax: dict) -> dict:
         """One supplier's part of a basket: its lines and its own user-set terms."""
         terms = supplier.get("terms") or {}
@@ -185,7 +180,6 @@ class Gateway:
                   supplier_of: dict[str, str] | None = None, when: dict | None = None) -> dict:
         supplier_of, when = supplier_of or {}, when or {}
         unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None}
-        manual_ok = self._approve_unconfirmed_manual(kitchen_id)
         by_supplier: dict[str, list] = {}
         for ln in plan.lines:
             by_supplier.setdefault(supplier_of.get(ln.product_id, VALIO), []).append(ln)
@@ -207,13 +201,13 @@ class Gateway:
         if plan.shortfall > 0:
             reasons.append(f"{plan.shortfall.normalize():f} {plan.measure} of the request cannot be covered for this date.")
         if any(ln.unknown_stock and supplier_of.get(ln.product_id, VALIO) == VALIO for ln in plan.lines):
-            reasons.append("Some lines have stock Valio does not report: not confirmed until Valio confirms.")
+            reasons.append("Some lines have stock Valio does not report: not confirmed until Valio confirms."
+                           " You may approve it; the order then waits for Valio's confirmation.")
         for b in blocks:
             if b["supplier_id"] != VALIO:
                 reasons.append(f"{b['name']} is a price list the kitchen entered: its stock is not known "
-                               "until the supplier confirms." + (
-                                   " You may approve it; the order then waits for the supplier's "
-                                   "confirmation (call or e-mail them)." if manual_ok else ""))
+                               "until the supplier confirms. You may approve it; the order then waits "
+                               "for the supplier's confirmation (call or e-mail them).")
             if b["vat"] is None:
                 reasons.append(f"VAT for {b['name']} is not known: its total is ex VAT.")
         verdict = "NEEDS_APPROVAL" if plan.lines else "REFUSED"
@@ -888,18 +882,17 @@ class Gateway:
         if datetime.fromisoformat(stored["valid_until"]) <= self.now():
             stored = fresh
         sim = stored["simulation"]
-        # A person's consent is not supplier stock confirmation. Keep unknown
-        # lines visible in proposals, but never record a placed order for them.
-        # One exception, off by default (#631): a manual/csv supplier's block, when the
-        # kitchen switched `approve_unconfirmed_manual` on; that order waits for the supplier.
+        # A person's consent is not supplier stock confirmation, but it is enough to send
+        # the order (Aron, 2026-11-14): a kitchen cannot wait for the supplier. The lines keep
+        # unknown_stock and the order names each supplier that must still confirm. Every
+        # supplier, Valio too; `approve_unconfirmed_manual` (#631) is no longer needed.
+        # Earned auto-approve never places unknown stock: its rules refuse it, and so does this.
         blocks = sim.get("blocks") or [{"supplier_id": VALIO}]   # an offer stored before #73
-        manual = {ln["product_id"]: b["supplier_id"] for b in blocks if b["supplier_id"] != VALIO
-                  for ln in b.get("lines", [])}
+        supplier = {ln["product_id"]: b["supplier_id"] for b in blocks for ln in b.get("lines", [])}
         unknown = [ln for ln in sim["lines"] if ln.get("unknown_stock") is not False]
-        if unknown and not (self._approve_unconfirmed_manual(kitchen_id)
-                            and all(ln["product_id"] in manual for ln in unknown)):
-            raise GatewayError(409, "STOCK_UNKNOWN", "supplier stock must be confirmed before placement")
-        must_confirm = sorted({manual[ln["product_id"]] for ln in unknown})
+        if unknown and human.startswith("auto-approve"):
+            raise GatewayError(409, "STOCK_UNKNOWN", "auto-approve never places unconfirmed stock")
+        must_confirm = sorted({supplier.get(ln["product_id"], VALIO) for ln in unknown})
         # Atomic commit point shared with the recall monitor. A notice arriving
         # during the live quote can still claim APPROVING and prevent this order.
         committed = self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
