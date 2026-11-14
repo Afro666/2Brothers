@@ -330,8 +330,12 @@ class Gateway:
         try:
             return self._place(kitchen_id, proposal_id, doc, stored, seen, key, human)
         except BaseException:
-            self.db.proposals.update_one({"_id": proposal_id, "status": "APPROVING", "approving_key": key},
-                                         {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
+            # Release the claim (also from COMMITTING, e.g. record_attempt failed), but
+            # never once an order exists for this proposal: that would allow a second one.
+            if self.db.orders.find_one({"proposal_id": proposal_id}, {"_id": 1}) is None:
+                self.db.proposals.update_one(
+                    {"_id": proposal_id, "status": {"$in": ["APPROVING", "COMMITTING"]}, "approving_key": key},
+                    {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
             raise
 
     def _approved_or_conflict(self, kitchen_id: str, proposal_id: str, key: str) -> dict:

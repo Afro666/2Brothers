@@ -166,6 +166,29 @@ def test_second_approve_with_other_key_during_first_places_one_order(env):
     assert db.proposals.find_one({"_id": p["proposal_id"]})["status"] == "APPROVED"
 
 
+def test_failing_record_attempt_releases_the_proposal_to_ready(env, monkeypatch):
+    from store import orders as store_orders
+    client, _, db = env
+    p = milk(client)
+    url = f"{K}/proposals/{p['proposal_id']}/approve"
+    body = {"expected_total": p["expected_total"], "idempotency_key": "a1"}
+    real = store_orders.record_attempt
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("transient mongo error")
+
+    monkeypatch.setattr(store_orders, "record_attempt", broken)
+    with pytest.raises(RuntimeError):
+        client.post(url, headers=HUMAN, json=body)
+    doc = db.proposals.find_one({"_id": p["proposal_id"]})
+    assert doc["status"] == "READY" and "approving_key" not in doc
+    assert db.orders.count_documents({}) == 0
+    monkeypatch.setattr(store_orders, "record_attempt", real)
+    ok = client.post(url, headers=HUMAN, json=body)
+    assert ok.status_code == 200, ok.text
+    assert db.orders.count_documents({}) == 1
+
+
 def test_price_moved_is_total_mismatch_and_nothing_is_placed(env):
     client, fake, db = env
     p = milk(client, quantity="51")
