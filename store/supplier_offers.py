@@ -74,6 +74,13 @@ def list_for_kitchen(db, kitchen_id: str, limit: int = 50) -> list[dict]:
     return list(db.supplier_offers.find({"kitchen_id": kitchen_id}).sort("created_at", -1).limit(limit))
 
 
+def list_round(db, kitchen_id: str, round_: int) -> list[dict]:
+    """The kitchen's offers of one round. Offers stored before rounds existed have no
+    `round` and count as round 0."""
+    match = {"$in": [0, None]} if round_ == 0 else round_
+    return list(db.supplier_offers.find({"kitchen_id": kitchen_id, "round": match}))
+
+
 def count_open(db, supplier_id: str, kitchen_id: str, today: str) -> int:
     """Open offers that are not past their date (`today` is YYYY-MM-DD)."""
     return db.supplier_offers.count_documents({
