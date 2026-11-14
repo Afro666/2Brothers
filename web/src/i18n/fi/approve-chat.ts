@@ -26,7 +26,17 @@ export default {
   "1 to 24 hours. Default 8: one shift.": "1–24 tuntia. Oletus 8: yksi työvuoro.",
   "Creating approval token…": "Luodaan hyväksyntätunnusta…",
   "Create approval token": "Luo hyväksyntätunnus",
-  "Use it in Claude Desktop": "Käytä sitä Claude Desktopissa",
+  "Add it to Claude: no config file": "Lisää se Claudeen: ei asetustiedostoa",
+  "Connector link": "Liitinlinkki",
+  "Copy connector link": "Kopioi liitinlinkki",
+  "In Claude (claude.ai or Claude Desktop), open Settings, then Connectors, then Add custom connector.":
+    "Avaa Claudessa (claude.ai tai Claude Desktop) Settings, sitten Connectors ja sitten Add custom connector.",
+  "Paste the link and press Add. There is nothing else to fill in.":
+    "Liitä linkki ja paina Add. Muuta ei tarvitse täyttää.",
+  "Ask Claude: what is waiting for my approval?": "Kysy Claudelta: mikä odottaa hyväksyntääni?",
+  "The link holds your token. Paste it only into Claude's connector dialog. It stops working when the token expires or you revoke it.":
+    "Linkissä on tunnuksesi. Liitä se vain Clauden liitinikkunaan. Se lakkaa toimimasta, kun tunnus vanhenee tai kumoat sen.",
+  "Advanced: a Claude Desktop config file": "Lisäasetus: Claude Desktopin asetustiedosto",
   "Three steps. The token goes only into your own chat.": "Kolme vaihetta. Tunnus menee vain omaan chattiisi.",
   "In Claude Desktop, open Settings, then Developer, then Edit Config. Add this server:":
     "Avaa Claude Desktopissa Settings, sitten Developer ja sitten Edit Config. Lisää tämä palvelin:",

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
 import { ApiError, type Api } from "@/api/types";
-import { desktopConfig } from "@/pages/settings/approve-chat";
+import { connectorLink, desktopConfig } from "@/pages/settings/approve-chat";
 import { renderApp } from "@/test/render";
 
 async function signedIn(email = "buyer@demo.kitchen") {
@@ -39,6 +39,36 @@ describe("Approve from chat settings", () => {
     const list = await screen.findByRole("list", { name: "Approval tokens" });
     expect(within(list).getByText("open-demo")).toBeVisible();
     expect(within(list).queryByText(/tka_demo_0001/)).not.toBeInTheDocument();
+  });
+
+  it("shows the connector link once with a copy button and three steps, then hides it on revoke", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const api = await signedIn();
+    renderApp("/settings/approve-chat", api);
+
+    await screen.findByText("No approval tokens yet");
+    expect(screen.queryByLabelText("Connector link")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create approval token" }));
+
+    const link = await screen.findByLabelText("Connector link");
+    const expected = connectorLink(window.location.origin, "tka_demo_0001");
+    expect(expected).toBe(`${window.location.origin}/gateway/mcp/t/tka_demo_0001`);
+    expect(link).toHaveTextContent(expected);
+    expect(screen.getByText(/open Settings, then Connectors, then Add custom connector/)).toBeVisible();
+    expect(screen.getByText("Paste the link and press Add. There is nothing else to fill in.")).toBeVisible();
+    expect(screen.getByText("Ask Claude: what is waiting for my approval?")).toBeVisible();
+    expect(screen.getByText("Advanced: a Claude Desktop config file")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Copy connector link" }));
+    expect(writeText).toHaveBeenLastCalledWith(expected);
+
+    const list = await screen.findByRole("list", { name: "Approval tokens" });
+    expect(within(list).queryByText(/gateway\/mcp\/t\//)).not.toBeInTheDocument();
+    await user.click(within(list).getByRole("button", { name: "Revoke token tka_demo" }));
+    const dialog = screen.getByRole("dialog", { name: "Revoke approval token tka_demo?" });
+    await user.click(within(dialog).getByRole("button", { name: "Revoke token" }));
+    await waitFor(() => expect(screen.queryByLabelText("Connector link")).not.toBeInTheDocument());
   });
 
   it("never calls the mock create when gateway mode does not serve it", async () => {
