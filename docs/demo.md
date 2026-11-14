@@ -351,9 +351,12 @@ with a pack or a number it was not given is dropped (#963).
 - Conformance kit on the server: 11 passed, 0 failed, 1 skipped (#609).
 - `python -m gateway.scenarios`: 13 PASS.
 
-Time to order: the agent path is about 12 s plus one tap. The manual webshop time is
-**not measured yet**: do one order by hand in the Valio webshop with a stopwatch and put
-the number on the last slide. Do not quote a number nobody measured.
+Time to order: the agent path is about 12 to 15 s plus two taps (our own runs). The manual
+webshop time is **an estimate, not a measurement** (Aron, 14 Nov): nobody timed it. Say it
+like this, also on the last slide: "By hand in a webshop this order is a search, a
+comparison of several products, a stock check and a basket: we estimate 5 to 10 minutes,
+and it depends on the restaurant and the person. With the agent it is one sentence, about
+15 seconds, and two taps." Never say "measured" for the manual time.
 
 ## If something fails
 
@@ -381,7 +384,7 @@ are planned, and none of them scores in three minutes.
 
 - [x] Fallback video: `python -m demo.record_demo --approve` records it with the approval
       (run 14 Nov 04:20 UTC, all nine steps ok). Record the final one after the last change.
-- [ ] Measure the manual webshop time (#295).
+- [x] Manual webshop time: stated as an estimate of 5 to 10 minutes, not measured (#295).
 - [ ] Buyer path through the web still fell back to the parser at 02:22 UTC on 14 Nov;
       confirm it says the Buyer model before rehearsal.
 - [ ] Recall beat: `CONTEXT_DEV_API_KEY` on the server; the coffee 461332 in the demo
