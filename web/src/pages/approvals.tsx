@@ -4,10 +4,12 @@ import { EmptyState } from "@/components/purchasing/empty-state";
 import { ErrorState } from "@/components/purchasing/error-state";
 import { LoadingState } from "@/components/purchasing/loading-state";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { useApi } from "@/api";
 import type { Api } from "@/api/types";
 import { auditActorForRole, useRole } from "@/lib/role";
+import { formatEur } from "@/lib/format";
 import { useAsync } from "@/lib/use-async";
 import type { ApprovalRequest, Order, ProposalChange } from "@/types";
 import { LiveApprovalsPage } from "@/pages/live-approvals";
@@ -43,17 +45,20 @@ function MockApprovalsPage() {
 
   async function approve(decision: ApprovalDecision): Promise<void> {
     await api.approve(decision, actor);
+    toast.success(`Approved: ${formatEur(decision.expectedTotalInclVat)} incl VAT`, { testId: "approval-toast" });
     approvals.reload();
   }
 
   async function reject(approvalId: string, reason: string): Promise<void> {
     await api.reject(approvalId, reason, actor);
+    toast.success("Rejected. The reason goes back to the Buyer.", { testId: "approval-toast" });
     approvals.reload();
   }
 
   async function change(orderId: string, proposalChange: ProposalChange): Promise<void> {
     await api.changeProposal(orderId, proposalChange, actor);
     setEditCounts((counts) => ({ ...counts, [orderId]: (counts[orderId] ?? 0) + 1 }));
+    toast.success("Proposal updated. Check the new total before you approve.");
     approvals.reload();
   }
 
@@ -98,6 +103,7 @@ function MockApprovalsPage() {
                         api.chooseOption &&
                         (async (optionId) => {
                           await api.chooseOption?.(approval.id, optionId, actor);
+                          toast.success("Option chosen. Check the new total before you approve.");
                           approvals.reload();
                         })
                       }
