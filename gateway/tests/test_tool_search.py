@@ -37,3 +37,43 @@ def test_search_with_need_keeps_the_measure_and_puts_deliverable_first(env):
         assert bad.status_code == 422
     finally:
         Gateway.tool_search = original
+
+
+def test_search_never_asks_valio_availability_for_own_products(env):
+    client, _, _ = env
+    from gateway.service import Gateway
+    original = Gateway.tool_search
+    rows = [
+        {"product_id": "own-milk", "net_content": {"value": 1.0, "unit": "L"}, "source": "own"},
+        {"product_id": "462775", "net_content": {"value": 1.0, "unit": "L"}, "source": "valio",
+         "supplier_id": "valio_aimo"},
+    ]
+    asked = []
+
+    def with_catalog(self, *args, **kwargs):
+        self._search = lambda db, query, filters, limit, kitchen_id=None: [dict(r) for r in rows][:limit]
+        live = self.valio.availability
+
+        def availability(ids, requested_date):
+            asked.append(list(ids))
+            if "own-milk" in ids:   # Valio does not know a kitchen's own products
+                raise RuntimeError("unknown product")
+            return live(ids, requested_date)
+
+        self.valio.availability = availability
+        try:
+            return original(self, *args, **kwargs)
+        finally:
+            del self.valio.availability
+
+    Gateway.tool_search = with_catalog
+    try:
+        need = client.post(K + "/needs", headers=AGENT, json={
+            "quantity": "20", "unit": "L", "requested_date": "2026-11-16"}).json()
+        found = client.post("/tools/search_products", headers=AGENT, json={
+            "query": "milk", "filters": {}, "need_id": need["need_id"]}).json()
+        assert asked == [["462775"]]
+        arrive = {p["product_id"]: p["can_arrive"] for p in found["products"]}
+        assert arrive == {"462775": True, "own-milk": None}
+    finally:
+        Gateway.tool_search = original
