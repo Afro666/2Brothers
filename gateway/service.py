@@ -318,6 +318,7 @@ class Gateway:
                        for p, hits in refused.items())
         plan = plan_request(need, measure, offers, requested, self._params(kitchen_id),
                             event=bool(request.get("event")))
+        plan, skipped = self._fill_gap(kitchen_id, plan, skipped, requested, tax, supplier_of, when)
         tiers = {sid: (self._supplier(kitchen_id, sid).get("terms") or {}).get("discount_tiers") or []
                  for sid in set(supplier_of.values())}
         plan = apply_discount_tiers(plan, lambda pid: tiers.get(supplier_of.get(pid), []))
@@ -331,6 +332,38 @@ class Gateway:
         if self._mixed_fat(plan) and "SUBSTITUTE_FAT_LEVEL" not in sim["mandate"]["reason_codes"]:
             sim["mandate"]["reason_codes"].append("SUBSTITUTE_FAT_LEVEL")   # S01: a person picks
         return self._save_offer(kitchen_id, request, sim)
+
+    def _fill_gap(self, kitchen_id: str, plan: RequestPlan, skipped: list, requested: date,
+                  tax: dict, supplier_of: dict, when: dict) -> tuple[RequestPlan, list]:
+        """S02 (#731): the original covers only part of the need, and a basket product was left
+        out because it is sold in another measure (bread in cases, rolls in bags). Size that
+        substitute for the gap by weight or volume (engine/gap.py); its lines say
+        SUBSTITUTE_NEEDS_OK, so a person agrees. Updates tax, supplier_of and when in place."""
+        from dataclasses import replace
+        from engine.gap import fill_gap
+        left = [pid for pid, why in [*plan.excluded, *skipped]
+                if why.startswith(("pack size unknown", "sold in "))]
+        if plan.shortfall <= 0 or not plan.lines or not left:
+            return plan, skipped
+        original = plan.lines[0].product_id
+        for common in ("KG", "L"):
+            orig, *_ = self._offers(kitchen_id, [original], common, requested)
+            if orig and orig[0].pack.measure == common:
+                break
+        else:
+            return plan, skipped
+        subs, _, t, s, w = self._offers(kitchen_id, left, common, requested)
+        sub = fill_gap(plan, orig[0].pack, subs, requested, self._params(kitchen_id))
+        if sub is None:
+            return plan, skipped
+        tax.update(t), supplier_of.update(s), when.update(w)
+        used = {ln.product_id for ln in sub.lines}
+        rest = (sub.shortfall / orig[0].pack.size) if sub.shortfall > 0 else Decimal(0)
+        codes = [*plan.reason_codes, *sub.reason_codes]   # PARTIAL_STOCK stays: the original is short
+        plan = replace(plan, lines=(*plan.lines, *sub.lines), total=plan.total + sub.total, shortfall=rest,
+                       excluded=tuple(e for e in plan.excluded if e[0] not in used),
+                       reason_codes=tuple(dict.fromkeys(codes)))
+        return plan, [e for e in skipped if e[0] not in used]
 
     def _basket(self, kitchen_id: str, request: dict) -> dict:
         """One simulation for several needs (an order for a menu plan, #74): each product is
