@@ -14,6 +14,8 @@ import hashlib
 import hmac
 import secrets
 
+from pymongo.errors import DuplicateKeyError
+
 ROLES = ("approver", "chef", "viewer")
 COOKIE = "tkb_session"
 SESSION_TTL = timedelta(hours=12)
@@ -72,8 +74,29 @@ def seed_user(db, email: str | None, password: str | None, kitchen_id: str) -> b
     """The first approver, from the server .env. Does nothing if unset or already there."""
     if not email or not password or db.users.find_one({"_id": email.strip().lower()}):
         return False
-    create_user(db, email, password, name="Demo approver", role="approver", kitchen_id=kitchen_id)
+    try:
+        create_user(db, email, password, name="Demo approver", role="approver", kitchen_id=kitchen_id)
+    except DuplicateKeyError:   # a concurrent first login inserted it first
+        return False
     return True
+
+
+def _check_lock(user: dict, now: datetime) -> None:
+    locked = _aware(user.get("locked_until"))
+    if locked and locked > now:
+        raise AuthError("ACCOUNT_LOCKED", "too many wrong passwords; try again in a few minutes", 429)
+
+
+def _password_ok(user: dict, password) -> bool:
+    return isinstance(password, str) and hmac.compare_digest(_digest(password, user["salt"]), user["password"])
+
+
+def _count_fail(db, user: dict, now: datetime) -> None:
+    fails = user.get("fails", 0) + 1
+    change = {"fails": fails}
+    if fails >= MAX_FAILS:
+        change = {"fails": 0, "locked_until": now + LOCK}
+    db.users.update_one({"_id": user["_id"]}, {"$set": change})
 
 
 def login(db, email: str, password: str, now: datetime | None = None) -> tuple[dict, str]:
@@ -84,15 +107,9 @@ def login(db, email: str, password: str, now: datetime | None = None) -> tuple[d
     if user is None:
         _digest(password if isinstance(password, str) else "", b"0" * 16)   # same work either way
         raise AuthError("INVALID_LOGIN", "wrong email or password")
-    locked = _aware(user.get("locked_until"))
-    if locked and locked > now:
-        raise AuthError("ACCOUNT_LOCKED", "too many wrong passwords; try again in a few minutes", 429)
-    if not isinstance(password, str) or not hmac.compare_digest(_digest(password, user["salt"]), user["password"]):
-        fails = user.get("fails", 0) + 1
-        change = {"fails": fails}
-        if fails >= MAX_FAILS:
-            change = {"fails": 0, "locked_until": now + LOCK}
-        db.users.update_one({"_id": email}, {"$set": change})
+    _check_lock(user, now)
+    if not _password_ok(user, password):
+        _count_fail(db, user, now)
         raise AuthError("INVALID_LOGIN", "wrong email or password")
     db.users.update_one({"_id": email}, {"$set": {"fails": 0, "locked_until": None}})
     token = secrets.token_urlsafe(32)
@@ -115,10 +132,16 @@ def logout(db, token: str | None) -> None:
         db.sessions.delete_one({"_id": _sha(token)})
 
 
-def change_password(db, email: str, current: str, new: str, keep_token: str | None = None) -> None:
+def change_password(db, email: str, current: str, new: str, keep_token: str | None = None,
+                    now: datetime | None = None) -> None:
+    """A wrong current password counts toward the lockout, as in login."""
+    now = now or _now()
     user = db.users.find_one({"_id": email})
-    if user is None or not isinstance(current, str) or \
-            not hmac.compare_digest(_digest(current, user["salt"]), user["password"]):
+    if user is None:
+        raise AuthError("INVALID_LOGIN", "the current password is wrong")
+    _check_lock(user, now)
+    if not _password_ok(user, current):
+        _count_fail(db, user, now)
         raise AuthError("INVALID_LOGIN", "the current password is wrong")
     if current == new:
         raise AuthError("WEAK_PASSWORD", "the new password must differ from the current one", 422)
