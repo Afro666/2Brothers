@@ -57,6 +57,21 @@ class SearchAcceptance(unittest.TestCase):
         self.assertTrue(some)
         self.assertTrue(all(row["score"] < ALL_WORDS_BOOST for row in some))
 
+    def test_the_same_search_gives_the_same_list_every_time(self):
+        # #1657: equal scores cross the cut-off (seven rows tie around place 20 of "milk").
+        for query, filters in (("cheese", {}), ("laktoositon maito", {}), ("milk", {}),
+                               ("lactose free milk", {"category": "10400"})):  # the Buyer's kind search
+            fifty = search_products(self.db, query, filters, limit=50)
+            ids = [row["product_id"] for row in fifty]
+            self.assertEqual(ids, [row["product_id"] for row in search_products(self.db, query, filters, limit=50)])
+            self.assertEqual(fifty, sorted(fifty, key=lambda row: (-row["score"], row["product_id"])), query)
+            # A shorter list is the start of a longer one: a tie at the cut is broken the same way.
+            for limit in (5, 20):
+                short = search_products(self.db, query, filters, limit=limit)
+                self.assertEqual([row["product_id"] for row in short], ids[:limit], (query, limit))
+        milk = search_products(self.db, "milk", limit=21)
+        self.assertEqual(milk[19]["score"], milk[20]["score"])  # the tie this test is about is there
+
     def test_excluding_milk_removes_every_product_that_contains_it(self):
         self.assertTrue(any("AM" in row["allergens"]["contains"]
                             for row in search_products(self.db, "milk chocolate", limit=50)))
