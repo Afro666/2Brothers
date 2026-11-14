@@ -27,6 +27,13 @@ const ALLERGENS = [
   { code: "AP", name: "Peanuts" },
   { code: "AS", name: "Sesame" },
   { code: "AY", name: "Soy" },
+  { code: "AC", name: "Crustaceans" },
+  { code: "UM", name: "Molluscs" },
+  { code: "BC", name: "Celery" },
+  { code: "BM", name: "Mustard" },
+  { code: "AU", name: "Sulphites" },
+  { code: "NL", name: "Lupin" },
+  { code: "ML", name: "Lactose" },
 ] as const;
 
 const LABEL_OPTIONS = Object.keys(LABEL_META) as ProductLabel[];
