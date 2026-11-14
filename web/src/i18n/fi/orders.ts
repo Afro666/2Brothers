@@ -577,6 +577,7 @@ export default {
   "Delivery {date} · {exVat} ex VAT · {total}": "Toimitus {date} · {exVat} ilman alv · {total}",
   "Approved and recorded: {total} in all ({exVat} ex VAT). Nothing is sent to the supplier.": "Hyväksytty ja kirjattu: yhteensä {total} ({exVat} ilman alv). Toimittajalle ei lähetetä mitään.",
   "Delivery fee {amount}": "Toimitusmaksu {amount}",
+  "Free delivery": "Ilmainen toimitus",
   "Delivery fee {amount} (free from {threshold} ex VAT)": "Toimitusmaksu {amount} (ilmainen, kun summa on vähintään {threshold} ilman alv)",
   "Nothing could be ordered": "Mitään ei voitu tilata",
   "Nothing could be ordered. Left out: {count}": "Mitään ei voitu tilata. Jätetty pois: {count}",

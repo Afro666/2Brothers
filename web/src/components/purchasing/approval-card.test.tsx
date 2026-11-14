@@ -183,6 +183,14 @@ describe("ApprovalCard", () => {
     expect(screen.getByRole("button", { name: "Approve €62.74 incl VAT" })).toBeEnabled();
   });
 
+  it("says free delivery instead of a zero delivery fee", () => {
+    const freeOrder = { ...confirmedOrder, deliveryFee: 0, mov: { threshold: 300, current: 320, deliveryFee: 25 } };
+    render(<ApprovalCard request={approval} order={freeOrder} onApprove={vi.fn()} />);
+
+    expect(screen.getByText("Free delivery")).toBeVisible();
+    expect(screen.queryByText(/€0\.00/)).not.toBeInTheDocument();
+  });
+
   it("replaces empty order totals with the number of products left out", () => {
     const emptyRequest = {
       ...approval,

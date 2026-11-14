@@ -520,7 +520,9 @@ export function ApprovalCard({
               <>
                 <dt className="sr-only">{t("Delivery fee")}</dt>
                 <dd className="w-full font-mono text-xs text-muted-foreground tabular-nums">
-                  {order.mov
+                  {order.deliveryFee === 0
+                    ? t("Free delivery")
+                    : order.mov
                     ? t("Delivery fee {amount} (free from {threshold} ex VAT)", {
                         amount: formatEur(order.deliveryFee),
                         threshold: formatEur(order.mov.threshold),
