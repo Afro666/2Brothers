@@ -330,6 +330,15 @@ export function ApprovalCard({
     }
   }
 
+  async function chooseOption(optionId: string) {
+    setBusy(true);
+    try {
+      await onChooseOption?.(optionId);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function quantityValue(line: OrderLine) {
     return quantities[line.product.id] ?? String(line.quantity);
   }
@@ -432,6 +441,14 @@ export function ApprovalCard({
       await call();
       setStatus(next);
     } catch (e) {
+      // No answer, a 5xx or an unreadable answer: the decision may have landed (a retry replays the same key).
+      const unknownOutcome =
+        e instanceof ApiError &&
+        (e.code === "NETWORK" || e.code === "INVALID_RESPONSE" || (e.status != null && e.status >= 500));
+      if (unknownOutcome) {
+        setError(t("The outcome is unknown: reload before you try again"));
+        return;
+      }
       const what = next === "APPROVED" ? t("Approval") : t("Rejection");
       const recallBlocked = next === "APPROVED" && e instanceof ApiError && e.code === "BLOCKED_BY_RECALL";
       const message =
@@ -691,7 +708,7 @@ export function ApprovalCard({
                 <OptionCompare
                   options={request.options}
                   disabled={busy || !!approvalBlockedReason}
-                  onChoose={onChooseOption}
+                  onChoose={onChooseOption ? chooseOption : undefined}
                   onApprove={() => setOpen("approve")}
                 />
               ) : null}

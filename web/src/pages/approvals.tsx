@@ -103,7 +103,11 @@ function ApiApprovalsPage() {
         const supplier = waitingFor.map((supplierId) => supplierName(supplierId, supplierNames)).join(", ");
         toast.success(t("Order placed. Call {supplier} to confirm.", { supplier }), { testId: "approval-toast" });
       } else {
-        toast.success(t("Approved: {amount} incl VAT", { amount: formatEur(decision.expectedTotalInclVat) }), {
+        // The card's own approved sentence: the gateway's total "in all", never called incl VAT (#1817).
+        toast.success(t("Approved and recorded: {total} in all ({exVat} ex VAT). Nothing is sent to the supplier.", {
+          exVat: formatEur(decided.totalExVat),
+          total: formatEur(decided.totalInclVat),
+        }), {
           testId: "approval-toast",
         });
       }
@@ -135,7 +139,7 @@ function ApiApprovalsPage() {
     } finally {
       // Also after a failure: the gateway may have saved a change whose answer was lost, and the
       // card must show the gateway's basket and total before anyone approves.
-      approvals.reload();
+      await approvals.reload();
     }
   }
 
@@ -276,7 +280,7 @@ function ApiApprovalsPage() {
                             toast.success(t("Option chosen. Check the new total before you approve."));
                           } finally {
                             // A refused choice keeps its basket; reload that same proposal after either answer.
-                            approvals.reload();
+                            await approvals.reload();
                           }
                         })
                       }

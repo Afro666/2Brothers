@@ -3,9 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/api/types";
 
 export type AsyncState<T> =
-  | { status: "loading"; data: null; error: null; reload: () => void }
-  | { status: "error"; data: null; error: Error; reload: () => void }
-  | { status: "ready"; data: T; error: null; reload: () => void };
+  | { status: "loading"; data: null; error: null; reload: () => Promise<void> }
+  | { status: "error"; data: null; error: Error; reload: () => Promise<void> }
+  | { status: "ready"; data: T; error: null; reload: () => Promise<void> };
 /** Retry delays for a load whose request may have been lost in the venue wifi or a deploy restart. */
 const RETRY_DELAYS_MS = [500, 1500];
 
@@ -49,13 +49,24 @@ export function useAsync<T>(
   const { keep } = options;
   const [version, setVersion] = useState(0);
   const lastVersion = useRef(version);
+  const requested = useRef(0);
+  /** Each reload's promise and the version that answers it. */
+  const reloadWaiters = useRef<{ version: number; resolve: () => void }[]>([]);
   const [state, setState] = useState<{ status: "loading" | "error" | "ready"; data: T | null; error: Error | null }>(
     () =>
       keep !== undefined && kept.has(keep)
         ? { status: "ready", data: kept.get(keep) as T, error: null }
         : { status: "loading", data: null, error: null },
   );
-  const reload = useCallback(() => setVersion((value) => value + 1), []);
+  const reload = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        requested.current += 1;
+        reloadWaiters.current.push({ version: requested.current, resolve });
+        setVersion(requested.current);
+      }),
+    [],
+  );
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -70,11 +81,21 @@ export function useAsync<T>(
     const mine = keep === undefined ? 0 : (newest.get(keep) ?? 0) + 1;
     if (keep !== undefined) newest.set(keep, mine);
     const current = () => keep !== undefined && drops === dropsAtStart && newest.get(keep) === mine;
+    // Only the reloads this load answers: a load that began earlier and lands late must not end a newer one.
+    const finishReload = () => {
+      if (!active) return;
+      const done = reloadWaiters.current.filter((waiter) => waiter.version <= version);
+      reloadWaiters.current = reloadWaiters.current.filter((waiter) => waiter.version > version);
+      done.forEach((waiter) => waiter.resolve());
+    };
     const run = (attemptsLeft: number) => {
       load()
         .then((data) => {
           if (keep !== undefined && current()) kept.set(keep, data);
-          if (active) setState({ status: "ready", data, error: null });
+          if (active) {
+            setState({ status: "ready", data, error: null });
+            finishReload();
+          }
         })
         .catch((error: unknown) => {
           if (!active) return;
@@ -84,6 +105,7 @@ export function useAsync<T>(
           }
           if (keep !== undefined && current()) kept.delete(keep);
           setState({ status: "error", data: null, error: error instanceof Error ? error : new Error(String(error)) });
+          finishReload();
         });
     };
     run(RETRY_DELAYS_MS.length);

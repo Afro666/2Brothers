@@ -441,6 +441,24 @@ describe("ApprovalCard", () => {
     expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
   });
 
+  it.each([
+    ["a network error", new ApiError("NETWORK", "Could not reach the gateway.")],
+    ["a 5xx answer", new ApiError("GATEWAY_ERROR", "Gateway unavailable", {}, 500)],
+    ["an answer that is not JSON", new ApiError("INVALID_RESPONSE", "The gateway did not return JSON.")],
+  ])("says the approval outcome is unknown after %s", async (_case, failure) => {
+    const user = userEvent.setup();
+    const onApprove = vi.fn(() => Promise.reject(failure));
+    render(<ApprovalCard request={approval} order={confirmedOrder} onApprove={onApprove} />);
+
+    await user.click(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The outcome is unknown: reload before you try again");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("Approval failed");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("still pending");
+  });
+
   it("says a refused approval stays held when the gateway reports a recall", async () => {
     const user = userEvent.setup();
     const onApprove = vi.fn(() => Promise.reject(new ApiError("BLOCKED_BY_RECALL", "blocked by a recall")));
