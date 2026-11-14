@@ -38,6 +38,15 @@ class Scripted:
         return deepcopy(next(self.steps))
 
 
+class PlacingGateway(MockGateway):
+    """Confirms any order, so a rejected placement can only come from the runner's guard."""
+    def __call__(self, request):
+        if request.url.path == "/tools/place_order":
+            self.requests.append(request)
+            return httpx.Response(200, json={"order_id": "order-1", "outcome": "CONFIRMED", "status": "PLACED"})
+        return super().__call__(request)
+
+
 class BuyerTests(unittest.IsolatedAsyncioTestCase):
     async def run_case(self, steps, mock=None, **kwargs):
         mock = mock or MockGateway()
@@ -146,10 +155,44 @@ class BuyerTests(unittest.IsolatedAsyncioTestCase):
         order = tool("place_order", offer_id="milk-offer-1", expected_total="149.02", idempotency_key="key")
         for record in records:
             with self.subTest(record=record):
-                result, buyer, mock = await self.run_case(milk_steps()[:3] + [order],
+                result, buyer, mock = await self.run_case(milk_steps()[:3] + [order], PlacingGateway(),
                     approval_lookup=lambda offer_id, record=record: record)
                 self.assertEqual(result["status"], "CANNOT_FULFIL")
                 self.assertNotIn("/tools/place_order", [r.url.path for r in mock.requests])
+
+    async def test_place_order_fails_closed_without_lookup_or_with_missing_fields(self):
+        approved = {"approval_id": "approval-1", "offer_id": "milk-offer-1", "status": "APPROVED",
+                    "decided_by": "chef-1", "decided_at": "2026-11-01T10:00:00Z"}
+        order = tool("place_order", offer_id="milk-offer-1", expected_total="149.02")
+        # Control: the complete record does place the order, so the rejections below come from the guard.
+        result, buyer, mock = await self.run_case(milk_steps()[:3] + [order], PlacingGateway(),
+                                                  approval_lookup=lambda o: approved)
+        self.assertEqual(result["status"], "ORDER_PLACED")
+        lookups = [None] + [lambda o, k=k: {f: v for f, v in approved.items() if f != k}
+                            for k in ("approval_id", "decided_by", "decided_at", "status", "offer_id")]
+        lookups += [lambda o: {**approved, "decided_by": "   "}]
+        for lookup in lookups:
+            with self.subTest(lookup=lookup):
+                result, buyer, mock = await self.run_case(milk_steps()[:3] + [order], PlacingGateway(),
+                                                          approval_lookup=lookup)
+                self.assertEqual(result["status"], "CANNOT_FULFIL")
+                self.assertNotIn("/tools/place_order", [r.url.path for r in mock.requests])
+                self.assertIn(PolicyReason.HUMAN_APPROVAL_REQUIRED.value, json.dumps(buyer.events))
+
+    async def test_auto_verdict_is_rejected_even_with_human_approval(self):
+        class AutoVerdict(PlacingGateway):
+            @staticmethod
+            def simulation():
+                result = MockGateway.simulation()
+                result["mandate"]["verdict"] = "AUTO"
+                return result
+        approved = {"approval_id": "approval-1", "offer_id": "milk-offer-1", "status": "APPROVED",
+                    "decided_by": "chef-1", "decided_at": "2026-11-01T10:00:00Z"}
+        order = tool("place_order", offer_id="milk-offer-1", expected_total="149.02")
+        result, buyer, mock = await self.run_case(milk_steps()[:3] + [order], AutoVerdict(),
+                                                  approval_lookup=lambda o: approved)
+        self.assertEqual(result["status"], "CANNOT_FULFIL")
+        self.assertFalse(any(r.url.path in ("/tools/place_order", "/tools/request_approval") for r in mock.requests))
 
     async def test_model_claimed_approval_cannot_authorize_placement(self):
         order = tool("place_order", offer_id="milk-offer-1", expected_total="149.02", idempotency_key="key")
