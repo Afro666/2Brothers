@@ -172,8 +172,8 @@ and approves or rejects. A token that calls `.../approve` gets
 
 A person may also approve from their own chat (decision 2026-11-14), with a **personal
 approval token** (`tka_...`). It is not your agent's token: only a signed-in approver
-creates it (`POST /v1/kitchens/{kitchen_id}/approval-tokens`; the open demo cannot), it
-stands for that one person, it ends after 8 hours, it approves and rejects only and never
+creates it (`POST /v1/kitchens/{kitchen_id}/approval-tokens`; while the open demo is on, its
+shared approver may too, for the shared person `open-demo`), it stands for that one person, it ends after 8 hours, it approves and rejects only and never
 proposes, and every use is audited with `via: personal_token`. With it, `/mcp` also lists
 `list_proposals`, `get_proposal`, `list_orders`, `approve_proposal` and `reject_proposal`.
 The chat shows the person the total and gets an explicit yes first. Your agent's token

@@ -3,9 +3,9 @@ export default {
   "Approve from chat": "Hyväksy chatista",
   "Approve or reject orders from your own chat, such as Claude Desktop. A personal approval token stands for you, lasts a few hours and can never propose an order.":
     "Hyväksy tai hylkää tilauksia omasta chatistasi, esimerkiksi Claude Desktopista. Henkilökohtainen hyväksyntätunnus edustaa sinua, toimii muutaman tunnin eikä voi koskaan ehdottaa tilausta.",
-  "Not available in the open demo": "Ei käytettävissä avoimessa demossa",
-  "A personal approval token stands for one person. In the open demo everyone is the same demo approver, so there is no one person to give it to. Sign in with your own approver account to create one.":
-    "Henkilökohtainen hyväksyntätunnus edustaa yhtä ihmistä. Avoimessa demossa kaikki ovat sama demohyväksyjä, joten tunnusta ei voi antaa kenellekään yhdelle ihmiselle. Kirjaudu omalla hyväksyjätililläsi luodaksesi tunnuksen.",
+  "Open demo: these tokens are shared": "Avoin demo: nämä tunnukset ovat yhteisiä",
+  "In the open demo everyone is the same demo approver. A token you create here belongs to the open demo, not to you: every open-demo visitor sees its prefix and times and can revoke it. Sign in with your own approver account for a token of your own.":
+    "Avoimessa demossa kaikki ovat sama demohyväksyjä. Täällä luomasi tunnus kuuluu avoimelle demolle, ei sinulle: jokainen avoimen demon käyttäjä näkee sen alun ja ajat ja voi kumota sen. Kirjaudu omalla hyväksyjätililläsi saadaksesi oman tunnuksen.",
   "A personal approval token needs your own signed-in account.":
     "Henkilökohtainen hyväksyntätunnus vaatii oman kirjautuneen tilin.",
   "Only an approver can create an approval token.": "Vain hyväksyjä voi luoda hyväksyntätunnuksen.",

@@ -612,31 +612,41 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need("kitchen:read", kitchen_id)        # a session is bound to its kitchen
         if who.kind != "human":
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a signed-in person can create an approval token")
-        person = who.human                          # ROLE_REQUIRED for a chef or a viewer
-        if who.via != "session":
-            # The open demo's shared token is everyone at once: it stands for no one person.
-            raise GatewayError(403, "PERSONAL_TOKEN_NEEDS_SIGN_IN",
-                               "sign in with your own account to create a personal approval token")
+        person = approval_token_owner(who, kitchen_id)
         data = await body(request)
         try:
             out = approval_tokens.create(gw().db, person, kitchen_id, person, hours=data.get("hours"),
                                          name=data.get("name"), now=gw().now())
         except approval_tokens.ApprovalTokenError as exc:
             raise GatewayError(exc.status, exc.code, str(exc)) from None
+        for old in out.pop("capped", []):
+            gw()._audit(kitchen_id, "approval_token_revoked", person, token_id=old, person=person,
+                        reason=approval_tokens.CAP_REASON)
         gw()._audit(kitchen_id, "approval_token_created", person, token_id=out["token_id"],
                     person=out["person"], expires_at=out["expires_at"])
         return out
+
+    def approval_token_owner(who: Principal, kitchen_id: str) -> str:
+        """Whose approval tokens this caller makes, lists and revokes: a signed-in person's
+        own email, or `open-demo` for the open demo's shared token (decision 2026-11-14 18:08
+        UTC, #1446), in the open demo's kitchen only. The open demo never sees or revokes a
+        real person's token (#1575): every query is filtered by this person."""
+        from gateway import approval_tokens
+        person = who.human                          # ROLE_REQUIRED for a chef or a viewer
+        if who.via == "session":
+            return person
+        if who.via == "shared_token" and approval_tokens.open_demo_on():
+            if kitchen_id != approval_tokens.open_demo_kitchen():
+                raise GatewayError(403, "KITCHEN_SCOPE", "the open demo has approval tokens in its own kitchen only")
+            return approval_tokens.OPEN_DEMO
+        raise GatewayError(403, "PERSONAL_TOKEN_NEEDS_SIGN_IN",
+                           "sign in with your own account to manage your approval tokens")
 
     def approval_token_admin(who: Principal, kitchen_id: str) -> str:
         who.need("kitchen:read", kitchen_id)
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can manage approval tokens")
-        if who.via != "session":
-            # The open demo is everyone at once: it must not see a person's email or revoke
-            # their token (live check, 14 Nov). The operator CLI manages every token.
-            raise GatewayError(403, "PERSONAL_TOKEN_NEEDS_SIGN_IN",
-                               "sign in with your own account to see your approval tokens")
-        return who.human
+        return approval_token_owner(who, kitchen_id)
 
     @app.get(k + "/approval-tokens")
     def list_approval_tokens(kitchen_id: str, who: Principal = Depends(principal)):

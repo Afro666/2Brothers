@@ -71,11 +71,12 @@ export function ApproveChatSection() {
   const t = useT();
   const api = useApi();
   const { session } = useSession();
-  // The open demo's person has no email: everyone is the same demo approver, so no one person (#1052).
+  // The open demo's person has no email: everyone is the same demo approver (#1052). Its tokens
+  // belong to the shared `open-demo` person (docs/contract.md, "Personal approval tokens", #1446).
   const openDemo = session?.kind === "human" && !session.email;
   const canApprove = session?.canApprove === true;
   const createServed = !api.live || api.live.has("createApprovalToken");
-  const canCreate = canApprove && !openDemo && createServed;
+  const canCreate = canApprove && createServed;
   const tokens = useAsync(() => api.listApprovalTokens(), [api]);
   const [hours, setHours] = useState(String(DEFAULT_HOURS));
   const [created, setCreated] = useState<CreatedApprovalToken | null>(null);
@@ -144,11 +145,11 @@ export function ApproveChatSection() {
 
         {openDemo ? (
           <Alert data-testid="approve-chat-open-demo">
-            <AlertTitle>{t("Not available in the open demo")}</AlertTitle>
+            <AlertTitle>{t("Open demo: these tokens are shared")}</AlertTitle>
             <AlertDescription className="space-y-2">
               <p>
                 {t(
-                  "A personal approval token stands for one person. In the open demo everyone is the same demo approver, so there is no one person to give it to. Sign in with your own approver account to create one.",
+                  "In the open demo everyone is the same demo approver. A token you create here belongs to the open demo, not to you: every open-demo visitor sees its prefix and times and can revoke it. Sign in with your own approver account for a token of your own.",
                 )}
               </p>
               <Link to="/sign-in" className="inline-block underline underline-offset-4">
@@ -156,7 +157,9 @@ export function ApproveChatSection() {
               </Link>
             </AlertDescription>
           </Alert>
-        ) : !canApprove ? (
+        ) : null}
+
+        {!canApprove ? (
           <p className="text-sm text-muted-foreground">{t("Only an approver can create an approval token.")}</p>
         ) : !createServed ? (
           <p role="alert" className="text-sm text-destructive">

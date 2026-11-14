@@ -16,20 +16,28 @@ async function signedIn(email = "buyer@demo.kitchen") {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Approve from chat settings", () => {
-  it("explains in the open demo why there is no button, and never calls create", async () => {
+  it("creates a shared open-demo token in the open demo and shows it once", async () => {
+    const user = userEvent.setup();
     const api = createMockApi();
     const create = vi.spyOn(api, "createApprovalToken");
     renderApp("/settings/approve-chat", api);
 
-    expect(await screen.findByText("Not available in the open demo")).toBeVisible();
-    expect(screen.getByText(/everyone is the same demo approver/)).toBeVisible();
+    expect(await screen.findByText("Open demo: these tokens are shared")).toBeVisible();
+    expect(screen.getByText(/every open-demo visitor sees its prefix and times and can revoke it/)).toBeVisible();
     expect(within(screen.getByTestId("approve-chat-open-demo")).getByRole("link", { name: "Sign in" })).toHaveAttribute(
       "href",
       "/sign-in",
     );
-    expect(screen.queryByRole("button", { name: "Create approval token" })).not.toBeInTheDocument();
     expect(await screen.findByText("No approval tokens yet")).toBeVisible();
-    expect(create).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Create approval token" }));
+
+    expect(create).toHaveBeenCalledWith({ hours: 8 });
+    expect(await screen.findByText("tka_demo_0001", { selector: "code" })).toBeVisible();
+    const config = screen.getByLabelText("claude_desktop_config.json");
+    expect(config.textContent).toBe(desktopConfig(`${window.location.origin}/gateway/mcp`, "tka_demo_0001"));
+    const list = await screen.findByRole("list", { name: "Approval tokens" });
+    expect(within(list).getByText("open-demo")).toBeVisible();
+    expect(within(list).queryByText(/tka_demo_0001/)).not.toBeInTheDocument();
   });
 
   it("never calls the mock create when gateway mode does not serve it", async () => {
@@ -43,11 +51,18 @@ describe("Approve from chat settings", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("the mock refuses the open demo like the gateway does", async () => {
-    await expect(createMockApi().createApprovalToken({ hours: 8 })).rejects.toMatchObject({
-      status: 403,
-      code: "PERSONAL_TOKEN_NEEDS_SIGN_IN",
-    });
+  it("the mock keeps open-demo tokens and a person's tokens apart, like the gateway", async () => {
+    const api = createMockApi();
+    const demo = await api.createApprovalToken({ hours: 8 });
+    expect(demo.person).toBe("open-demo");
+    await api.signIn("buyer@demo.kitchen", "demo-kitchen-2026");
+    expect(await api.listApprovalTokens()).toEqual([]);
+    await expect(api.revokeApprovalToken(demo.id)).rejects.toMatchObject({ status: 404, code: "TOKEN_NOT_FOUND" });
+    const mine = await api.createApprovalToken({ hours: 8 });
+    await api.signOut();
+    expect((await api.listApprovalTokens()).map((row) => row.id)).toEqual([demo.id]);
+    await expect(api.revokeApprovalToken(mine.id)).rejects.toMatchObject({ status: 404, code: "TOKEN_NOT_FOUND" });
+    expect((await api.revokeApprovalToken(demo.id)).revokedAt).not.toBeNull();
   });
 
   it("creates a token for 8 hours by default, shows it once in the Desktop config, and lists it without the value", async () => {

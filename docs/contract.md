@@ -792,7 +792,7 @@ Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email, or
 | Status | Code | When |
 |---|---|---|
 | 401 | `UNAUTHENTICATED` | The token is expired, revoked or unknown, or its account is gone, or it is an `open-demo` token and the open demo is off. |
-| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | Create, list or revoke by a person who is neither a signed-in session nor the open demo's shared human token. |
+| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | Create, list or revoke without a signed-in session while the open demo is off. While it is on, the shared human token creates, lists and revokes `open-demo` tokens instead. |
 | 403 | `HUMAN_SESSION_REQUIRED` | Create, list or revoke by a token or the agent; any person-only route called with a personal token. |
 | 403 | `ROLE_REQUIRED` | The person is not an `approver`. |
 | 403 | `SCOPE_REQUIRED` | A personal token on a propose or write route. |
