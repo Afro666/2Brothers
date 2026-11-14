@@ -620,19 +620,24 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         who.need("kitchen:read", kitchen_id)
         if not who.human:
             raise GatewayError(403, "HUMAN_SESSION_REQUIRED", "only a person can manage approval tokens")
+        if who.via != "session":
+            # The open demo is everyone at once: it must not see a person's email or revoke
+            # their token (live check, 14 Nov). The operator CLI manages every token.
+            raise GatewayError(403, "PERSONAL_TOKEN_NEEDS_SIGN_IN",
+                               "sign in with your own account to see your approval tokens")
         return who.human
 
     @app.get(k + "/approval-tokens")
     def list_approval_tokens(kitchen_id: str, who: Principal = Depends(principal)):
         from gateway import approval_tokens
-        approval_token_admin(who, kitchen_id)
-        return {"tokens": approval_tokens.list_tokens(gw().db, kitchen_id)}
+        person = approval_token_admin(who, kitchen_id)
+        return {"tokens": approval_tokens.list_tokens(gw().db, kitchen_id, person=person)}
 
     @app.delete(k + "/approval-tokens/{token_id}")
     def revoke_approval_token(kitchen_id: str, token_id: str, who: Principal = Depends(principal)):
         from gateway import approval_tokens
         person = approval_token_admin(who, kitchen_id)
-        out = approval_tokens.revoke(gw().db, kitchen_id, token_id, gw().now())
+        out = approval_tokens.revoke(gw().db, kitchen_id, token_id, gw().now(), person=person)
         if out is None:
             raise GatewayError(404, "TOKEN_NOT_FOUND", "no such approval token")
         gw()._audit(kitchen_id, "approval_token_revoked", person, token_id=token_id, person=out["person"])

@@ -88,14 +88,20 @@ def create(db, person: str, kitchen_id: str, created_by: str, *, hours=None, nam
     return {**_out(doc), "token": token}
 
 
-def list_tokens(db, kitchen_id: str | None = None) -> list[dict]:
+def list_tokens(db, kitchen_id: str | None = None, person: str | None = None) -> list[dict]:
+    """`person` set: only that person's own tokens (the web); None: all (the operator command)."""
     query = {} if kitchen_id is None else {"kitchen_id": kitchen_id}
+    if person is not None:
+        query["person"] = person.strip().lower()
     return [_out(d) for d in db.approval_tokens.find(query).sort("created_at", -1)]
 
 
-def revoke(db, kitchen_id: str | None, token_id: str, now: datetime | None = None) -> dict | None:
-    """`kitchen_id` None: any kitchen (the operator command)."""
+def revoke(db, kitchen_id: str | None, token_id: str, now: datetime | None = None,
+           person: str | None = None) -> dict | None:
+    """`kitchen_id` None: any kitchen (the operator command). `person` set: only their own."""
     query = {"_id": token_id} if kitchen_id is None else {"_id": token_id, "kitchen_id": kitchen_id}
+    if person is not None:
+        query["person"] = person.strip().lower()
     doc = db.approval_tokens.find_one(query)
     if doc is None:
         return None
