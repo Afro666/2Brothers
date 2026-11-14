@@ -9,6 +9,7 @@ except ImportError:  # the `test` extra is not installed
 
 from store.search import (ALL_WORDS_BOOST, FOOD_BOOST, HOME_BOOST, SIZE_BOOST, TIE_ROOM, _reasons,
                           allergen_codes, build_pipeline, food_word_query, home_category, parse_query,
+                          plant_drink,
                           search_products)
 
 
@@ -268,6 +269,27 @@ class SearchQueryTests(unittest.TestCase):
         self.assertFalse(food_word_query(db, "cup", "64001"))
         self.assertFalse(food_word_query(db, "cheese", None))
         self.assertEqual(len(db.products.asked), 3)                   # no second count for one word
+
+    def test_a_plant_milk_is_also_searched_as_the_drink_the_catalog_names(self):
+        # #1699: the catalog says "Alpro Almond drink"; "kauramaito" is in no name at all.
+        for asked, named in (("almond milk", "almond drink"), ("Barista Oat Milk", "barista oat drink"),
+                             ("soy milk", "soya drink"), ("kauramaito", "kaurajuoma"),
+                             ("havremjölk", "havredryck"), ("oat milk chocolate", "oat drink chocolate")):
+            self.assertEqual(plant_drink(asked), named)
+        for cows_or_other in ("milk", "lactose free milk", "laktoositon maito", "coconut milk",
+                              "goat milk", "oat milkshake", "milk chocolate", "oat drink", ""):
+            self.assertIsNone(plant_drink(cows_or_other), cows_or_other)
+        plant = compound("oat milk 1 l")
+        either = plant["must"][0]["compound"]
+        self.assertEqual(either["minimumShouldMatch"], 1)
+        self.assertEqual([c["text"]["query"] for c in either["should"]], ["oat milk", "oat drink"])
+        first = plant["should"][-1]["text"]
+        self.assertEqual((first["query"], first["matchCriteria"]), ("oat drink", "all"))
+        self.assertEqual(first["fuzzy"], {"maxEdits": 1, "prefixLength": 3})  # "soya" is not "soda"
+        self.assertGreater(first["score"]["constant"]["value"], ALL_WORDS_BOOST + HOME_BOOST + SIZE_BOOST)
+        cows = compound("lactose free milk")  # no plant word: the query is built as before
+        self.assertEqual(list(cows["must"][0]), ["text"])
+        self.assertNotIn("drink", str(cows))
 
     def test_rows_never_carry_the_raw_record(self):
         pipeline = build_pipeline("milk", limit=5)

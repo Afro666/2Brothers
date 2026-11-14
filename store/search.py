@@ -59,6 +59,20 @@ _UNITS = {"l": ("L", 1), "dl": ("L", 0.1), "cl": ("L", 0.01), "ml": ("L", 0.001)
 _SIZE = re.compile(r"(?<![\w.,])(\d+(?:[.,]\d+)?)\s*(kg|g|dl|cl|ml|l)(?![\w])", re.IGNORECASE)
 _TEXT_PATHS = ["names.en", "names.fi", "names.sv", "brand"]
 _NAME_PATHS = ["names.en", "names.fi", "names.sv"]
+# What a kitchen calls a plant milk, and what the catalog calls it (#1699). Measured on the
+# catalog, 2026-11-14: these names are all plant drinks (category 10402): 36 oat, 5 almond,
+# 6 soya, 1 rice; 31 kaurajuoma, 4 mantelijuoma, 8 soijajuoma, 1 riisijuoma; the
+# Swedish names the same. Not coconut: "coconut milk" is its own product, in 12 names.
+PLANT_DRINKS = {
+    "almond milk": "almond drink", "oat milk": "oat drink", "soy milk": "soya drink",
+    "soya milk": "soya drink", "rice milk": "rice drink",
+    "kauramaito": "kaurajuoma", "mantelimaito": "mantelijuoma", "soijamaito": "soijajuoma",
+    "riisimaito": "riisijuoma", "havremjölk": "havredryck", "mandelmjölk": "mandeldryck",
+    "sojamjölk": "sojadryck", "rismjölk": "risdryck",
+}
+_PLANT_MILK = re.compile(r"(?<!\w)(" + "|".join(PLANT_DRINKS) + r")(?!\w)")
+# Over a name with the words as asked: "oat milk" is also in the name of a milk chocolate.
+PLANT_DRINK_BOOST = 200
 
 
 def allergen_codes(wanted) -> list[str]:
@@ -93,6 +107,14 @@ def _size(value, unit) -> dict:
     if value <= 0:
         raise ValueError("pack_size.value must be positive")
     return {"value": round(value, 6), "unit": unit}
+
+
+def plant_drink(text: str) -> str | None:
+    """'barista oat milk' -> 'barista oat drink': the query in the catalog's words, or None
+    when it names no plant milk. Cow's milk ("milk", "lactose free milk") gives None."""
+    low = " ".join(text.lower().split())
+    named = _PLANT_MILK.sub(lambda match: PLANT_DRINKS[match.group(1)], low)
+    return named if named != low else None
 
 
 def parse_query(query: str) -> tuple[str, dict | None]:
@@ -238,6 +260,16 @@ def build_pipeline(query: str, filters: dict | None = None, limit: int = 20,
             compound["should"].append({"compound": {
                 "filter": [all_words, {"equals": {"path": "category", "value": str(home)}}],
                 "score": {"constant": {"value": HOME_BOOST}}}})
+        named = plant_drink(text)
+        if named:
+            # A plant milk is a "drink" in the catalog: those names answer the query too, and
+            # come first. "kauramaito" is in no name at all.
+            compound["must"] = [{"compound": {"minimumShouldMatch": 1, "should": [
+                compound["must"][0], {"text": {"query": named, "path": _TEXT_PATHS, "fuzzy": _FUZZY}}]}}]
+            # Three letters must match: "soya" is one typo from "soda", and soft drinks came first.
+            compound["should"].append({"text": {
+                **_all_words(named)["text"], "fuzzy": {"maxEdits": 1, "prefixLength": 3},
+                "score": {"constant": {"value": ALL_WORDS_BOOST + PLANT_DRINK_BOOST}}}})
     elif not compound["filter"] and not compound["mustNot"]:
         raise ValueError("give a query or at least one filter")
     compound["filter"].append(scope_clause)
@@ -387,6 +419,9 @@ def search_products(db, query: str = "", filters: dict | None = None, limit: int
     for doc in db.products.aggregate(pipeline):
         doc["product_id"] = doc.pop("_id")
         doc["match_reasons"] = _reasons(doc, text, size, codes)
+        named = plant_drink(text)
+        if named and any(named in name.lower() for name in (doc.get("names") or {}).values()):
+            doc["match_reasons"].append(f'name contains "{named}"')
         ranks = {side.get("inputPipelineName"): side.get("rank")
                  for side in (doc.pop("fusion", None) or {}).get("details", [])}
         if ranks.get("vector") and not ranks.get("text"):
