@@ -24,6 +24,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from gateway.service import Gateway, GatewayError
+from gateway.valio_client import ValioBusy
 from gateway.request_docs import (CreateNeedRequest, GetOfferRequest, PlaceOrderRequest,
                                   RequestApprovalRequest, SearchProductsRequest,
                                   SimulateOrderRequest, document_body)
@@ -178,6 +179,12 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
                 pass                # a failed audit write never turns a refusal into a 500
         return JSONResponse(status_code=exc.status,
                             content={"error": {"code": exc.code, "message": exc.message, **exc.extra}})
+
+    @app.exception_handler(ValioBusy)   # #1237: Valio rests after a 429, or our queue is too long
+    async def _supplier_busy(_: Request, exc: ValioBusy) -> JSONResponse:
+        return JSONResponse(status_code=503, headers={"Retry-After": str(exc.retry_after)},
+                            content={"error": {"code": "SUPPLIER_BUSY", "message": str(exc),
+                                               "retry_after": exc.retry_after}})
 
     @app.exception_handler(ValueError)
     async def _invalid(_: Request, exc: ValueError) -> JSONResponse:

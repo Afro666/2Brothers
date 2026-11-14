@@ -132,6 +132,10 @@ def _validated(body: dict, today: date) -> dict:
 
 def _kitchen_demand(gw, supplier_id: str, kitchen_id: str, product_id: str, day: date) -> tuple[str, str] | None:
     """(quantity, unit): this kitchen's forecast demand in the SHORT row, or None."""
+    from gateway.valio_client import ValioBusy, ValioClient
+    left = gw.valio.resting() if isinstance(gw.valio, ValioClient) else 0
+    if left:        # #1237: the demand view would say UNKNOWN, and the offer NO_SHORTAGE
+        raise ValioBusy(left)
     answer = supplier_demand(gw.db, gw.valio, supplier_id, day, day, product_id)
     for row in answer["rows"]:
         if row["product_id"] != product_id or row["date"] != day.isoformat() or row["risk"] != "SHORT":

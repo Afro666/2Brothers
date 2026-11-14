@@ -249,6 +249,7 @@ async def run(gw, *, today: date, apply: bool, limit: int = 3, kitchen: str | No
     when the nearer one gave no offer."""
     from gateway.service import GatewayError
     from gateway.supplier_offers import create
+    from gateway.valio_client import ValioBusy
     from store import supplier_offers as store
     from store.history import consenting_kitchens
     if kitchen is not None and kitchen not in consenting_kitchens(gw.db, supplier_id):
@@ -275,7 +276,11 @@ async def run(gw, *, today: date, apply: bool, limit: int = 3, kitchen: str | No
                 done.add((kitchen_id, row["product_id"]))
                 continue
             demand = Decimal(part["demand"])
-            entries = shortlist(gw, row, kitchen_id, demand, not_ok)
+            try:
+                entries = shortlist(gw, row, kitchen_id, demand, not_ok)
+            except ValioBusy as exc:        # #1237: Valio rests after a 429; every next read fails too
+                entry.update(result="SUPPLIER_BUSY", retry_after=exc.retry_after)
+                return report
             entry["shortlist"] = [f"{e['product_id']} {e['name']}" for e in entries]
             if not entries:
                 entry["result"] = "NO_SUBSTITUTE"
