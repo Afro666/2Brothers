@@ -44,9 +44,13 @@ SCHEMA = {"type": "object", "additionalProperties": False, "required": ["index",
           "properties": {"index": {"type": "integer"}, "reason": {"type": "string"}}}
 SYSTEM = ("You work for a food wholesaler. One product is predicted to run short. Pick the one "
           "product from the shortlist that best replaces it for a professional kitchen: the same "
-          "kind of product, the closest pack size. Answer with the index of your pick and a reason "
-          "of one or two short sentences in plain English for the kitchen's chef. Use only the "
-          "facts given. Do not mention prices.")
+          "kind of product, sold in a similar way. Answer with the index of your pick and a reason "
+          "of one or two short sentences in plain English for the kitchen's chef. State only facts "
+          "that are in the data you got. `sold_as` says how a product is sold: 'by weight' means it "
+          "has no pack size, so do not write about a pack then. Do not state a number, an origin, a "
+          "quality or a stock level that is not in the data. Say how the short product is sold only "
+          "when its `sold_as` is not 'unknown'. Do not mention prices.")
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 
 
 def short_rows(gw, supplier_id: str, start: date, end: date) -> tuple[list[dict], set[tuple[str, str]]]:
@@ -67,6 +71,19 @@ def _words(name: str) -> set[str]:
 def _name(row: dict) -> str:
     names = row.get("names") or {}
     return names.get("en") or names.get("fi") or row["product_id"]
+
+
+def _sold_as(row: dict) -> str:
+    """How the catalog says a product is sold. A product sold by weight (base unit KG) has no
+    pack size: its net content of 1 KG is the unit of sale, not a pack. A size read from the
+    product name is a guess, so it is not given as a fact."""
+    content = row.get("net_content") or {}
+    source = row.get("net_content_source")
+    if source == "base_unit":
+        return "by weight, per KG"
+    if source in ("synkka", "synkka_case") and content.get("value"):
+        return f"pieces of {content['value']:g} {content.get('unit')}"
+    return "unknown"
 
 
 def _allergens_ok(policy, row: dict, short_known: bool) -> bool:
@@ -138,7 +155,8 @@ def shortlist(gw, row: dict, kitchen_id: str, demand: Decimal, not_ok: set) -> l
         if have < demand:               # confirmed stock must cover this kitchen's need
             continue
         out.append({"product_id": r["product_id"], "name": _name(r),
-                    "brand": r.get("brand"), "pack": r.get("net_content"), "lactose_free": r.get("lactose_free"),
+                    "brand": r.get("brand"), "sold_as": _sold_as(r), "lactose_free": r.get("lactose_free"),
+                    "replaces_sold_as": _sold_as(short),
                     "allergen_data_known": r.get("allergen_data_known") is True,
                     "available": f"{have.normalize():f}", "unit": row["unit"]})
         if len(out) == SHORTLIST:
@@ -148,20 +166,27 @@ def shortlist(gw, row: dict, kitchen_id: str, demand: Decimal, not_ok: set) -> l
 
 def _messages(row: dict, demand: Decimal, entries: list[dict]) -> list[dict]:
     facts = {"short_product": {"name": row["product_name"], "date": row["date"], "unit": row["unit"],
+                               "sold_as": entries[0].get("replaces_sold_as", "unknown"),
                                "demand_all_kitchens": row["demand"], "available": row["available"],
                                "shortage": row["shortage"]},
              "this_kitchen_needs": f"{demand.normalize():f}",
-             "shortlist": [{"index": i, **{k: e[k] for k in ("name", "brand", "pack", "lactose_free", "available")}}
+             "shortlist": [{"index": i, **{k: e[k] for k in ("name", "brand", "sold_as", "lactose_free", "available")}}
                            for i, e in enumerate(entries)]}
     return [{"role": "system", "content": SYSTEM},
             {"role": "user", "content": json.dumps(facts, ensure_ascii=False)}]
 
 
 async def model_pick(model, row: dict, demand: Decimal, entries: list[dict]) -> tuple[int, str] | None:
-    """Nemotron's pick, checked: an index inside the shortlist and a reason, or None."""
+    """Nemotron's pick, checked: an index inside the shortlist and a reason, or None.
+
+    The reason is the model's text, so two cheap checks keep invented facts out of it: no
+    word about a pack when the catalog gives the picked product no pack size (live, the model
+    wrote "the same 1kg pack size" about potatoes sold by weight), and no number that is not
+    in the data the model got. A reason that fails means no offer."""
     from gateway.supplier_offers import REASON_MAX, clean_text
+    messages = _messages(row, demand, entries)
     try:
-        reply = await model.complete_json(_messages(row, demand, entries), SCHEMA, "substitute_pick",
+        reply = await model.complete_json(messages, SCHEMA, "substitute_pick",
                                           max_tokens=300)
         data = json.loads(reply.get("content") or "")
     except Exception:           # no answer, a network error, not JSON: no offer
@@ -174,6 +199,11 @@ async def model_pick(model, row: dict, demand: Decimal, entries: list[dict]) -> 
     if not isinstance(reason, str):
         return None
     reason = clean_text(reason)[:REASON_MAX].strip()
+    if re.search(r"\bpack", reason, re.IGNORECASE) and not entries[index]["sold_as"].startswith("pieces"):
+        return None
+    given = {n.replace(",", ".") for n in _NUMBER.findall(messages[1]["content"])}
+    if any(n.replace(",", ".") not in given for n in _NUMBER.findall(reason)):
+        return None
     return (index, reason) if reason else None
 
 

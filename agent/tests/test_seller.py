@@ -40,7 +40,7 @@ def go(w, **kwargs):
 
 
 def test_dry_run_prints_the_pick_and_sends_nothing(w):
-    model = FakeModel({"index": 1, "reason": "Same pack size and in stock for Monday."})
+    model = FakeModel({"index": 1, "reason": "The same kind of drink, in stock for Monday."})
     report = go(w, model=model)
     assert len(report) == 1
     row = report[0]
@@ -54,7 +54,7 @@ def test_dry_run_prints_the_pick_and_sends_nothing(w):
 
 
 def test_apply_sends_the_models_pick_once_with_the_gateways_quantity(w):
-    model = FakeModel({"index": 1, "reason": "Same pack size and in stock for Monday."})
+    model = FakeModel({"index": 1, "reason": "The same kind of drink, in stock for Monday."})
     report = go(w, model=model, apply=True, limit=1)
     assert report[0]["result"] == "OPEN" and report[0]["quantity"] == "40"
     stored = w.db.supplier_offers.find_one({})
@@ -74,6 +74,33 @@ def test_a_pick_outside_the_shortlist_or_no_valid_answer_means_no_offer(w, answe
     report = go(w, model=FakeModel(answer), apply=True)
     assert report[0]["result"] == "NO_VALID_PICK" and "offered_product_id" not in report[0]
     assert w.db.supplier_offers.count_documents({}) == 0
+
+
+def test_a_reason_with_a_fact_the_model_was_not_given_means_no_offer(real):
+    """Live on 14 Nov the model wrote "the same 1kg pack size" about Rosamunda potatoes, which
+    the catalog sells by weight: there is no pack."""
+    def run(reason):
+        real.db.supplier_offers.delete_many({})
+        model = FakeModel({"index": 0, "reason": reason})
+        report = asyncio.run(seller.run(real.gw, today=TODAY, apply=True, kitchen="K1", limit=1, model=model))
+        return report[0]["result"], model
+
+    result, model = run("This is the same type of washed potato in the same 1kg pack size.")
+    assert result == "NO_VALID_PICK" and real.db.supplier_offers.count_documents({}) == 0
+    facts = json.loads(model.calls[0][1]["content"])
+    assert facts["shortlist"][0]["sold_as"] == "by weight, per KG"
+    assert "pack" not in facts["shortlist"][0]                        # 1 KG net content is not a pack
+    assert run("A washed potato like the one that is short, 500 kg in stock.")[0] == "NO_VALID_PICK"
+    assert run("Also a washed potato, sold by weight; 121 kg are in stock for the day.")[0] == "OPEN"
+
+
+def test_sold_as_gives_a_pack_size_only_when_the_catalog_has_one():
+    assert seller._sold_as({"net_content": {"value": 1.0, "unit": "KG"}, "net_content_source": "base_unit"}) \
+        == "by weight, per KG"
+    assert seller._sold_as({"net_content": {"value": 0.5, "unit": "L"}, "net_content_source": "synkka"}) \
+        == "pieces of 0.5 L"
+    assert seller._sold_as({"net_content": {"value": 1.0, "unit": "KG"}, "net_content_source": "name"}) == "unknown"
+    assert seller._sold_as({}) == "unknown"
 
 
 def test_the_models_reason_is_cleaned_and_cut(w):
