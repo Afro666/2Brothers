@@ -17,6 +17,17 @@ const confirmedOrder = {
 };
 
 describe("ApprovalCard", () => {
+  it("starts folded when asked: title and total show, the details open on a tap (#1142)", async () => {
+    render(<ApprovalCard request={{ ...approval, status: "REJECTED" }} order={confirmedOrder} folded />);
+    expect(screen.getByText(approval.summary)).toBeInTheDocument();
+    expect(screen.queryByText("What to check")).not.toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "Show details" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(toggle);
+    expect(screen.getByText("What to check")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide details" })).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("shows who asked and when when both are known", () => {
     render(<ApprovalCard request={approval} order={confirmedOrder} />);
     expect(screen.getByText(
