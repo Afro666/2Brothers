@@ -13,6 +13,9 @@ services:
         # the screens it does not serve yet stay on the mock, marked "Sample data".
         VITE_GATEWAY_URL: /api
         VITE_USE_MOCKS: "false"
+        # From deploy/update.sh: the VERSION file and the last commit that changed the web.
+        VITE_APP_VERSION: ${APP_VERSION:-}
+        VITE_GIT_SHA: ${WEB_GIT_SHA:-}
     restart: unless-stopped
     depends_on:
       - gateway

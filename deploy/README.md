@@ -74,6 +74,9 @@ not the human token or upstream Valio key. No worker port is published.
 
 ## One deploy at a time, and pausing deploys
 
+- Version on the site: `deploy/update.sh` passes the root `VERSION` file and the last commit that
+  changed `web/` or `VERSION` to the web image build; Settings > Developer shows both. Raise the
+  version with `make bump` (`PART=minor` or `major`).
 - Deploys never overlap: the workflow queues runs (`concurrency: deploy`) and `deploy/update.sh`
   takes a lock on the server, so a second deploy waits for the first.
 - A deploy always takes the newest commit on main and writes its sha to `/opt/2brothers.deployed`;
