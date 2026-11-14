@@ -132,7 +132,7 @@ input, mandate and authenticated kitchen; model arguments are untrusted.
 
 | MCP tool | Method and path | Request / query fields | Success response fields |
 |---|---|---|---|
-| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object`, `limit: integer`, `need_id: string` (optional; see below) | `products: object[]`; with `need_id` also `requested_date`, `measure`, `note` |
+| `search_products` | POST `/tools/search_products` | `query: string`, `filters: object`, `limit: integer`, `need_id: string` (optional; see below) | `products: object[]`, `search: "text" \| "hybrid"`; with `need_id` also `requested_date`, `measure`, `note` |
 | `get_offer` | POST `/tools/get_offer` | `product_ids: string[]`, `requested_date: YYYY-MM-DD`, `need_id: string` | `offer_id`, `valid_until`, `lines: object[]`, `signature`, `offer_hash` |
 | `simulate_order` | POST `/tools/simulate_order` | `offer_id: string` | `offer_id`, `expected_total`, `currency`, `mandate: object`, `lines: object[]`, `signature`, `offer_hash` |
 | `place_order` | POST `/tools/place_order` | `offer_id`, `expected_total: decimal string`, `idempotency_key: string` | `order_id`, `outcome`, `status` |
@@ -308,6 +308,15 @@ need (#639):
   `null` when nothing was filtered) and `note` (a short hint for the model).
 - An unknown `need_id` (not this kitchen's) is 422 `INVALID_NEED`; a `need_id` that is
   not a string is 422 `INVALID_REQUEST`. The offer step still checks every product.
+
+**Which search ran (`search`).** `"text"` is the Atlas Search text index. `"hybrid"` is
+the text search fused with Atlas Vector Search over product embeddings (`$rankFusion`),
+so a product can match by meaning without sharing a word; such a row has the match
+reason `"similar meaning, no word match"`. Hybrid runs only when the gateway has
+`SEARCH_HYBRID=true`; it is off by default. The hard filters (allergens, labels, kitchen
+scope) apply to both sides. When the vector side cannot answer in 2 seconds, or fails,
+the gateway answers with the text search and says `"text"`: a search never fails because
+of it.
 
 Product row (the catalog row from the shared repository, without the raw record):
 
