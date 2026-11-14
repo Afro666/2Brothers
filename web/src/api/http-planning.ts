@@ -166,10 +166,13 @@ export function createPlanningHttp(call: GatewayCall, kitchen: string): Planning
 
     getKitchenSettings: settings,
     async saveKitchenSettings(next, actor) {
-      const before = await settings();
+      const stored = object(await call(`${kitchen}/settings`), "the kitchen settings");
+      const before = mapKitchenSettings(stored);
       const body = settingsBody(before, next);
       if (Object.keys(body).length === 0) return before;
-      return mapKitchenSettings(await send("PUT", `${kitchen}/settings`, body, actor));
+      const saved = object(await send("PUT", `${kitchen}/settings`, body, actor), "the saved kitchen settings");
+      // The PUT answer has no `defaults`: the engine's defaults are the ones the GET just sent.
+      return mapKitchenSettings({ defaults: stored.defaults, ...saved });
     },
 
     async getAutoApproveLearning() {

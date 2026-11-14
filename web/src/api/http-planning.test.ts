@@ -94,6 +94,13 @@ const settingsRow = {
   stockout_cap: 1.8,
   budget_warning_order_eur: "1500",
   excluded_allergens: null,
+  defaults: {
+    service_level: { A: "0.975", B: "0.95", C: "0.9" },
+    max_cover_days: { fresh_dairy: 4, dry: 30 },
+    stockout_cap: 1.8,
+    budget_warning_order_eur: "1500",
+    budget_warning_week_eur: "5000",
+  },
 };
 
 afterEach(() => {
@@ -471,14 +478,20 @@ describe("planning methods of createHttpApi", () => {
   });
 
   it("reads the settings and saves only what changed, decimals as strings", async () => {
+    const { defaults: _defaults, ...stored } = settingsRow;
     const calls = gateway({
       [`GET ${K}/settings`]: () => settingsRow,
-      [`PUT ${K}/settings`]: () => ({ ...settingsRow, service_level: { A: "0.98" }, budget_warning_order_eur: null }),
+      // Like the gateway: the PUT answer is the stored settings, without `defaults`.
+      [`PUT ${K}/settings`]: () => ({ ...stored, service_level: { A: "0.98" }, budget_warning_order_eur: null }),
     });
     const api = createHttpApi("/api");
     const settings = await api.getKitchenSettings();
     expect(settings.serviceLevelPercent.A).toBe(97.5);
-    expect(settings.serviceLevelPercent.B).toBeNaN();
+    expect(settings.serviceLevelPercent.B).toBe(95);
+    expect(settings.stockOutDemandCap).toBe(1.8);
+    expect(settings.budgetWarningPerOrderExVat).toBe(1500);
+    expect(settings.engineDefaults).toEqual(expect.arrayContaining(["serviceLevelPercent.B", "budgetWarningPerWeekExVat"]));
+    expect(settings.engineDefaults).not.toContain("serviceLevelPercent.A");
     const next: KitchenSettings = {
       ...settings,
       serviceLevelPercent: { ...settings.serviceLevelPercent, A: 98 },
@@ -487,10 +500,33 @@ describe("planning methods of createHttpApi", () => {
     const saved = await api.saveKitchenSettings(next, "human");
     expect(saved.serviceLevelPercent.A).toBe(98);
     expect(saved.budgetWarningPerOrderExVat).toBeNull();
+    // The engine's defaults from the GET still fill what the kitchen never set.
+    expect(saved.serviceLevelPercent.B).toBe(95);
+    expect(saved.engineDefaults).toContain("serviceLevelPercent.B");
     expect(routesOf(calls)).toEqual([`GET ${K}/settings`, `GET ${K}/settings`, `PUT ${K}/settings`]);
-    // Not sent: the levels nobody set, and the allergen policy the gateway calls unknown.
+    // Not sent: unchanged levels and defaults, and the allergen policy the gateway calls unknown.
     expect(calls[2].body).toEqual({ service_level: { A: "0.98" }, budget_warning_order_eur: null });
     expect(calls[2].headers).toMatchObject({ "X-User": "human" });
+  });
+
+  it("never saves an untouched engine default, even when the default moved since the form loaded", async () => {
+    const page = await (async () => {
+      gateway({ [`GET ${K}/settings`]: () => settingsRow });
+      return createHttpApi("/api").getKitchenSettings();
+    })();
+    expect(page.engineDefaults).toEqual(expect.arrayContaining(["serviceLevelPercent.B", "budgetWarningPerWeekExVat"]));
+    for (const defaults of [{ ...settingsRow.defaults, budget_warning_week_eur: "7000", service_level: { B: "0.96" } }, undefined]) {
+      const calls = gateway({
+        [`GET ${K}/settings`]: () => ({ ...settingsRow, defaults }),
+        [`PUT ${K}/settings`]: () => ({ ...settingsRow, defaults: undefined, service_level: { A: "0.98" } }),
+      });
+      await createHttpApi("/api").saveKitchenSettings(
+        { ...page, serviceLevelPercent: { ...page.serviceLevelPercent, A: 98 } },
+        "human",
+      );
+      // Only the edited level: not the week budget or level B the form showed from the old defaults.
+      expect(calls.find((call) => call.route === `PUT ${K}/settings`)?.body).toEqual({ service_level: { A: "0.98" } });
+    }
   });
 
   it("sends no settings request when nothing changed", async () => {

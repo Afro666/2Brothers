@@ -3,19 +3,23 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { createMockApi } from "@/api/mock";
+import type { Api } from "@/api/types";
 import { renderApp } from "@/test/render";
 
 describe("Kitchen settings", () => {
   it("loads the profile and the shared hard allergen rules", async () => {
-    renderApp("/settings/kitchen");
+    const mock = createMockApi();
+    const api: Api = { ...mock, live: new Set<keyof Api>(["getKitchenSettings"]) };
+    renderApp("/settings/kitchen", api);
 
-    expect(await screen.findByLabelText("Kitchen name")).toHaveValue("Kuu School Kitchen");
-    expect(screen.getByLabelText("Kitchen type")).toHaveTextContent("School");
-    expect(screen.getByLabelText("Address")).toHaveValue("Koulukatu 12, 00100 Helsinki, Finland");
+    expect(await screen.findByLabelText("Kitchen name")).toHaveValue("Demo kitchen");
+    expect(screen.getByLabelText("Kitchen type")).toHaveTextContent("Restaurant");
+    expect(screen.getByLabelText("Address")).toHaveValue("Demokatu 1, 00100 Helsinki, Finland");
     expect(screen.getByLabelText("Timezone")).toHaveValue("Europe/Helsinki");
     expect(screen.getByLabelText("Delivery address")).toHaveValue(
-      "Kuu School, rear delivery entrance, Koulukatu 14, Helsinki",
+      "Demo kitchen, delivery entrance, Demokatu 1, Helsinki",
     );
+    expect(screen.getByText("Sample data")).toBeVisible();
     expect(screen.getByRole("checkbox", { name: "Peanuts (AP)" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Gluten cereals (AW)" })).not.toBeChecked();
     expect(screen.getByRole("link", { name: "ordering engine settings" })).toHaveAttribute("href", "/settings/engine");
@@ -32,7 +36,7 @@ describe("Kitchen settings", () => {
     await user.clear(name);
     await user.type(name, "  Coeliac School  ");
     await user.click(screen.getByRole("button", { name: "Save profile" }));
-    expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ name: "Coeliac School", type: "school" }), "human");
+    expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ name: "Coeliac School", type: "restaurant" }), "human");
     expect(await screen.findByText("Kitchen profile saved")).toBeVisible();
 
     await user.click(screen.getByRole("checkbox", { name: "Gluten cereals (AW)" }));
