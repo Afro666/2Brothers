@@ -48,6 +48,10 @@ async function copyReceipt(jws: string) {
   toast.error(translate(getLanguage(), "Copy failed. Select the receipt text and copy it."));
 }
 
+/** The gateway's standard NOT_SENT note (gateway/signing.py) has a Finnish entry; any other note is shown as sent (#1803). */
+const GATEWAY_NOT_SENT_NOTE =
+  "Recorded by the gateway. Nothing was sent to the supplier: its API has no order endpoint. The supplier has not accepted this order.";
+
 /** The signed receipt: claims decoded for display only. Anyone checks the signature with the public key. */
 function SignedReceipt({ receipt, placedBy }: { receipt?: OrderReceipt | null; placedBy?: Order["placedBy"] }) {
   const t = useT();
@@ -86,13 +90,20 @@ function SignedReceipt({ receipt, placedBy }: { receipt?: OrderReceipt | null; p
                   : t(receipt.supplierOutcome ?? "unknown")}
               </dd>
               {receipt.supplierNote ? (
-                <dd className="mt-1 break-words text-xs text-muted-foreground">{receipt.supplierNote}</dd>
+                <dd className="mt-1 break-words text-xs text-muted-foreground">
+                  {receipt.supplierNote === GATEWAY_NOT_SENT_NOTE ? t(GATEWAY_NOT_SENT_NOTE) : receipt.supplierNote}
+                </dd>
               ) : null}
             </div>
           </dl>
-          <Button type="button" variant="outline" size="sm" onClick={() => void copyReceipt(receipt.jws)}>
-            {t("Copy receipt")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => void copyReceipt(receipt.jws)}>
+              {t("Copy receipt")}
+            </Button>
+            <a className="text-sm text-muted-foreground underline underline-offset-4" href="/api/.well-known/jwks.json" target="_blank" rel="noreferrer">
+              {t("Public key")}
+            </a>
+          </div>
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -152,7 +163,13 @@ function OrderDocket({ order, supplierNames }: { order: Order; supplierNames: Ma
               <h3 id="order-lines-heading" className="label-caps">
                 {t("Lines")}
               </h3>
-              <OrderLinesTable lines={order.lines} now={new Date()} variant="receipt" offerDetails={!order.withoutProposal} />
+              <OrderLinesTable
+                lines={order.lines}
+                now={new Date()}
+                variant="receipt"
+                offerDetails={!order.withoutProposal}
+                decided={placedStatuses.has(order.status)}
+              />
               {order.withoutProposal ? (
                 <p className="text-xs text-muted-foreground">
                   {t("This order was recorded without its proposal, so the offer details are not shown.")}

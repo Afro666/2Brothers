@@ -74,7 +74,7 @@ export function shortOrderId(id: string): string {
 }
 
 /** Units a kitchen weighs or measures; every other unit (PCS, ST, KI, ...) is counted. */
-const MEASURED_UNITS = new Set(["KG", "G", "L", "DL", "CL", "ML"]);
+export const MEASURED_UNITS = new Set(["KG", "G", "L", "DL", "CL", "ML"]);
 
 /** Unit words in one place; an unrecognized catalog code stays as it is. */
 const PEOPLE_UNITS: Record<string, { one: string; many: string }> = {

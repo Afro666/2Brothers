@@ -1,14 +1,20 @@
-import { formatNumber, peopleUnit } from "@/lib/format";
+import { formatNumber, MEASURED_UNITS, peopleUnit } from "@/lib/format";
 import type { TranslationVariables } from "@/lib/i18n";
 import type { Order, OrderLine } from "@/types";
 
 type Translate = (text: string, vars?: TranslationVariables) => string;
 
+/** "…5kg MSC × 15 kg" reads as 5 kg times 15 kg (#1803): a name with a size before a quantity in kg or litres takes a comma. */
+const SIZE_IN_NAME = /\d\s*(?:kg|g|l|dl|cl|ml)\b/i;
+
 function lineTitle(line: OrderLine, t: Translate): string {
-  return t("{name} × {quantity}", {
+  const vars = {
     name: line.product.names.en || line.product.id,
     quantity: `${formatNumber(line.quantity)} ${peopleUnit(line.product.salesUnit, line.quantity)}`,
-  });
+  };
+  return MEASURED_UNITS.has(line.product.salesUnit.toUpperCase()) && SIZE_IN_NAME.test(vars.name)
+    ? t("{name}, {quantity}", vars)
+    : t("{name} × {quantity}", vars);
 }
 
 export function orderTitle(order: Pick<Order, "lines">, t: Translate): string {

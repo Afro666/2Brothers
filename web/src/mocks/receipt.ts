@@ -26,7 +26,8 @@ export function sampleReceipt(order: Order, approvedBy: string, signedAt: string
     approved_by: approvedBy,
     iat: Math.floor(Date.parse(signedAt) / 1000),
     supplier_outcome: "NOT_SENT",
-    supplier_note: "Valio's API has no order endpoint: the gateway recorded the order and sent nothing.",
+    supplier_note:
+      "Recorded by the gateway. Nothing was sent to the supplier: its API has no order endpoint. The supplier has not accepted this order.",
     supplier_must_confirm: [],
   };
   const jws = `${base64url({ alg: "EdDSA", kid: "demo-key-1" })}.${base64url(claims)}.c2FtcGxlLXNpZ25hdHVyZS1ub3QtdmFsaWQ`;

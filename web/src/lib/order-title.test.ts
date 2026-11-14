@@ -19,6 +19,15 @@ describe("orderTitle", () => {
     expect(orderTitle(order, t)).toBe("Arla 1 L lactose free fat free UHT milk drink × 51 pieces");
   });
 
+  it("puts a comma, not a ×, between a name with a size and a weighed quantity (#1803)", async () => {
+    const order = await createMockApi().getOrder("ORD-1042");
+    const line = namedLine(order.lines[0]!, "Flounderfillet fresh 5kg MSC");
+    const weighed = { ...line, quantity: 15, product: { ...line.product, salesUnit: "KG" } };
+    expect(orderTitle({ ...order, lines: [weighed] }, t)).toBe("Flounderfillet fresh 5kg MSC, 15 kg");
+    expect(orderTitle({ ...order, lines: [{ ...line, quantity: 15 }] }, t)).toBe("Flounderfillet fresh 5kg MSC × 15 pieces");
+    expect(orderTitle({ ...order, lines: [namedLine(weighed, "Flounderfillet")] }, t)).toBe("Flounderfillet × 15 kg");
+  });
+
   it("names both products on a two-line order", async () => {
     const order = await createMockApi().getOrder("ORD-1042");
     const lines = [namedLine(order.lines[0]!, "Milk"), namedLine(order.lines[0]!, "Cream")];

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/api";
 import { mapReceipt } from "@/api/gateway-map";
 import { createMockApi } from "@/api/mock";
+import { updateLanguage } from "@/lib/i18n";
 import { renderApp } from "@/test/render";
 
 describe("orders pages", () => {
@@ -121,7 +122,8 @@ describe("orders pages", () => {
     expect(within(block).getByText("Signed total").nextElementSibling).toHaveTextContent("148.76");
     expect(within(block).getByText("Signed at").nextElementSibling).not.toHaveTextContent("unknown");
     expect(within(block).getByText("Supplier").nextElementSibling).toHaveTextContent("Nothing sent to the supplier yet");
-    expect(within(block).getByText(/Valio's API has no order endpoint/)).toBeVisible();
+    expect(within(block).getByText(/^Recorded by the gateway\. Nothing was sent to the supplier/)).toBeVisible();
+    expect(within(block).getByRole("link", { name: "Public key" })).toHaveAttribute("href", "/api/.well-known/jwks.json");
 
     await user.click(within(block).getByRole("button", { name: "Copy receipt" }));
     expect(writeText).toHaveBeenCalledWith(receipt!.jws);
@@ -143,7 +145,7 @@ describe("orders pages", () => {
   it("maps the supplier note claim; an absent or empty note is null and renders nothing", async () => {
     const api = createMockApi();
     const order = await api.getOrder("ORD-1042");
-    expect(mapReceipt(order.receipt!.jws)?.supplierNote).toMatch(/^Valio's API has no order endpoint/);
+    expect(mapReceipt(order.receipt!.jws)?.supplierNote).toMatch(/^Recorded by the gateway\./);
 
     const [header, payload, signature] = order.receipt!.jws.split(".");
     const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
@@ -157,7 +159,86 @@ describe("orders pages", () => {
     renderApp("/orders/ORD-1042", api);
     const block = (await screen.findByRole("heading", { name: "Signed receipt" })).closest("section")!;
     expect(within(block).getByText("Supplier").nextElementSibling).toHaveTextContent("Nothing sent to the supplier yet");
-    expect(within(block).queryByText(/Valio's API has no order endpoint/)).not.toBeInTheDocument();
+    expect(within(block).queryByText(/Recorded by the gateway/)).not.toBeInTheDocument();
+  });
+
+  it("shows the gateway's standard supplier note in Finnish (#1803)", async () => {
+    updateLanguage("fi");
+    try {
+      renderApp("/orders/ORD-1042");
+      const block = (await screen.findByRole("heading", { name: "Allekirjoitettu kuitti" })).closest("section")!;
+      expect(within(block).getByText(/^Yhdyskäytävä kirjasi tilauksen\./)).toBeVisible();
+      expect(within(block).queryByText(/Recorded by the gateway/)).not.toBeInTheDocument();
+    } finally {
+      updateLanguage("en");
+    }
+  });
+
+  it("keeps any other supplier note as the gateway sent it, also in Finnish (#1803)", async () => {
+    const api = createMockApi();
+    const order = await api.getOrder("ORD-1042");
+    vi.spyOn(api, "getOrder").mockResolvedValue({
+      ...order,
+      receipt: { ...order.receipt!, supplierOutcome: "NOT_SENT", supplierNote: "Sent by e-mail to the sales desk." },
+    });
+    updateLanguage("fi");
+    try {
+      renderApp("/orders/ORD-1042", api);
+      const block = (await screen.findByRole("heading", { name: "Allekirjoitettu kuitti" })).closest("section")!;
+      expect(within(block).getByText("Sent by e-mail to the sales desk.")).toBeVisible();
+    } finally {
+      updateLanguage("en");
+    }
+  });
+
+  it("leaves no unknown offer row on an approved order and names the comparison price (#1803)", async () => {
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    api.getOrder = async (id) => ({
+      ...(await getOrder(id)),
+      lines: (await getOrder(id)).lines.map((line) => ({
+        ...line,
+        offer: { ...line.offer, comparisonPrice: null, availableDate: null, closingTime: null },
+        product: { ...line.product, salesUnit: "KG", baseUnit: "KG", baseUnitsPerSalesUnit: null },
+      })),
+    });
+    renderApp("/orders/ORD-1042", api);
+
+    const lines = await screen.findByRole("list", { name: "Lines" });
+    const mocked = (await api.getOrder("ORD-1042")).lines[0]!.offer;
+    expect(mocked.closingTime).toBeNull();
+    expect(lines.textContent).not.toContain("unknown");
+    expect(within(lines).queryByText(/^(Compare|Price per)/)).not.toBeInTheDocument();
+    expect(within(lines).queryByText("Available")).not.toBeInTheDocument();
+    expect(within(lines).queryByText("Order by")).not.toBeInTheDocument();
+    expect(within(lines).getByText(/Sold by weight, per kg/)).toBeVisible();
+    expect(within(lines).queryByText(/pack size not in the catalog/)).not.toBeInTheDocument();
+  });
+
+  it("names a recorded comparison price by the unit the offer carries (#1803)", async () => {
+    renderApp("/orders/ORD-1042", createMockApi());
+
+    const lines = await screen.findByRole("list", { name: "Lines" });
+    expect(within(lines).getByText("Price per l").nextElementSibling).toHaveTextContent("/ l");
+    expect(within(lines).queryByText("Compare")).not.toBeInTheDocument();
+  });
+
+  it("still shows an unknown offer row before approval (#1803)", async () => {
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    api.getOrder = async (id) => ({
+      ...(await getOrder(id)),
+      lines: (await getOrder(id)).lines.map((line) => ({
+        ...line,
+        offer: { ...line.offer, comparisonPrice: null, availableDate: null, closingTime: null },
+      })),
+    });
+    renderApp("/orders/ORD-1043", api);
+
+    const lines = await screen.findByRole("list", { name: "Lines" });
+    expect(within(lines).getByText("Price per l").nextElementSibling).toHaveTextContent("unknown");
+    expect(within(lines).getByText("Available").nextElementSibling).toHaveTextContent("unknown");
+    expect(within(lines).getByText("Order by").nextElementSibling).toHaveTextContent("unknown");
   });
 
   it("says when a placed order has no signed receipt", async () => {
@@ -298,7 +379,7 @@ describe("orders pages", () => {
     expect(within(lines).getAllByText(code, { exact: true })).toHaveLength(1);
   });
 
-  it("names an unknown pack size once without removing the sales unit", async () => {
+  it("says one plain line for a product sold by weight without a pack size (#1803)", async () => {
     const api = createMockApi();
     const getOrder = api.getOrder;
     api.getOrder = async (id) => {
@@ -317,9 +398,30 @@ describe("orders pages", () => {
     renderApp("/orders/ORD-1042", api);
 
     const lines = await screen.findByRole("list", { name: "Lines" });
+    expect(within(lines).getByText(/Sold by weight, per kg/)).toBeVisible();
+    expect(within(lines).queryByText(/pack size not in the catalog/)).not.toBeInTheDocument();
+    const code = (await api.getOrder("ORD-1042")).lines[0]!.product.id;
+    expect(within(lines).getByText(/Sold by weight, per kg/)).toHaveTextContent(code);
+  });
+
+  it("does not call a case product sold by weight because its base unit is kg (#1803)", async () => {
+    const api = createMockApi();
+    const getOrder = api.getOrder;
+    api.getOrder = async (id) => {
+      const order = await getOrder(id);
+      const [line] = order.lines;
+      return {
+        ...order,
+        lines: [{ ...line!, product: { ...line!.product, salesUnit: "KI", baseUnit: "KG", baseUnitsPerSalesUnit: null } }],
+      };
+    };
+    renderApp("/orders/ORD-1042", api);
+
+    const lines = await screen.findByRole("list", { name: "Lines" });
+    expect(within(lines).queryByText(/Sold by weight/)).not.toBeInTheDocument();
     expect(within(lines).getByText("pack size not in the catalog")).toHaveClass("unknown-value");
-    expect(within(lines).getByText("pack size not in the catalog").parentElement).toHaveTextContent("kg");
-    expect(within(lines).queryByText(/pack size unknown/)).not.toBeInTheDocument();
+    const code = (await api.getOrder("ORD-1042")).lines[0]!.product.id;
+    expect(within(lines).getByText("pack size not in the catalog").parentElement).toHaveTextContent(code);
   });
 
   it("shows the API error for an unknown id", async () => {
