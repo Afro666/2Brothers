@@ -355,16 +355,16 @@ class Gateway:
     def _save_offer(self, kitchen_id: str, request: dict, sim: dict) -> dict:
         now = self.now()
         offer_id = uuid4().hex
-        signed = {}
+        from gateway import signing
+        # offer_hash needs no key: always set it, so place_order always runs APPROVAL_MISMATCH (#753)
+        signed = {"signature": None, "offer_hash": signing.offer_hash(sim, request["requested_date"])}
         try:    # signed offers (#290): never a reason to fail a quote
-            from gateway import signing
             token, digest = signing.sign_offer(
                 self.db, offer_id=offer_id, kitchen_id=kitchen_id, simulation=sim,
                 requested_date=request["requested_date"], as_of=now, valid_until=now + OFFER_TTL)
             signed = {"signature": token, "offer_hash": digest}
         except Exception as exc:  # log the type only: never the key or the seed
             log.warning("offer signing failed: %s", type(exc).__name__)
-            signed = {}
         offer = orders.save_offer(self.db, {
             "offer_id": offer_id, "kitchen_id": kitchen_id, "supplier_id": VALIO,
             "request": request, "valid_until": (now + OFFER_TTL).isoformat(),
