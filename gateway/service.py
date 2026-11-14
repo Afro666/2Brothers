@@ -150,6 +150,11 @@ class Gateway:
             supplier_of.update({pid: supplier_id for pid in ids})
         return offers, skipped, tax, supplier_of, when
 
+    def _approve_unconfirmed_manual(self, kitchen_id: str) -> bool:
+        """#631: the kitchen's switch, stored with the engine settings. Off unless set to true."""
+        doc = self.db.kitchen_settings.find_one({"_id": kitchen_id}, {"engine.approve_unconfirmed_manual": 1}) or {}
+        return (doc.get("engine") or {}).get("approve_unconfirmed_manual") is True
+
     def _block(self, supplier: dict, lines: list, tax: dict) -> dict:
         """One supplier's part of a basket: its lines and its own user-set terms."""
         terms = supplier.get("terms") or {}
@@ -172,6 +177,7 @@ class Gateway:
                   supplier_of: dict[str, str] | None = None, when: dict | None = None) -> dict:
         supplier_of, when = supplier_of or {}, when or {}
         unknown = {"available_date": None, "cutoff_passed": None, "closing_time": None}
+        manual_ok = self._approve_unconfirmed_manual(kitchen_id)
         by_supplier: dict[str, list] = {}
         for ln in plan.lines:
             by_supplier.setdefault(supplier_of.get(ln.product_id, VALIO), []).append(ln)
@@ -196,7 +202,9 @@ class Gateway:
         for b in blocks:
             if b["supplier_id"] != VALIO:
                 reasons.append(f"{b['name']} is a price list the kitchen entered: its stock is not known "
-                               "until the supplier confirms.")
+                               "until the supplier confirms." + (
+                                   " You may approve it; the order then waits for the supplier's "
+                                   "confirmation (call or e-mail them)." if manual_ok else ""))
             if b["vat"] is None:
                 reasons.append(f"VAT for {b['name']} is not known: its total is ex VAT.")
         verdict = "NEEDS_APPROVAL" if plan.lines else "REFUSED"
@@ -638,8 +646,16 @@ class Gateway:
         sim = stored["simulation"]
         # A person's consent is not supplier stock confirmation. Keep unknown
         # lines visible in proposals, but never record a placed order for them.
-        if any(line.get("unknown_stock") is not False for line in sim["lines"]):
+        # One exception, off by default (#631): a manual/csv supplier's block, when the
+        # kitchen switched `approve_unconfirmed_manual` on; that order waits for the supplier.
+        blocks = sim.get("blocks") or [{"supplier_id": VALIO}]   # an offer stored before #73
+        manual = {ln["product_id"]: b["supplier_id"] for b in blocks if b["supplier_id"] != VALIO
+                  for ln in b.get("lines", [])}
+        unknown = [ln for ln in sim["lines"] if ln.get("unknown_stock") is not False]
+        if unknown and not (self._approve_unconfirmed_manual(kitchen_id)
+                            and all(ln["product_id"] in manual for ln in unknown)):
             raise GatewayError(409, "STOCK_UNKNOWN", "supplier stock must be confirmed before placement")
+        must_confirm = sorted({manual[ln["product_id"]] for ln in unknown})
         # Atomic commit point shared with the recall monitor. A notice arriving
         # during the live quote can still claim APPROVING and prevent this order.
         committed = self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
@@ -647,7 +663,6 @@ class Gateway:
             {'$set': {'status': 'COMMITTING', 'offer_id': stored['offer_id']}})
         if not committed.modified_count:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
-        blocks = sim.get("blocks") or [{"supplier_id": VALIO}]   # an offer stored before #73
         order, created = orders.record_attempt(
             self.db, kitchen_id=kitchen_id, idempotency_key=key, offer_id=stored["offer_id"],
             expected_total=Decimal128(sim["expected_total"]),   # exact decimal in any Mongo
@@ -657,7 +672,8 @@ class Gateway:
             # One order for the proposal (#73); the supplier split is stored on it.
             supplier_id=blocks[0]["supplier_id"] if len(blocks) == 1 else None,
             blocks=[{k: v for k, v in b.items() if k != "lines"}
-                    | {"product_ids": [ln["product_id"] for ln in b.get("lines", [])]} for b in blocks])
+                    | {"product_ids": [ln["product_id"] for ln in b.get("lines", [])]} for b in blocks],
+            supplier_must_confirm=must_confirm)
         if created:
             if doc.get("approval_id"):
                 orders.decide_approval(self.db, doc["approval_id"], status="APPROVED", decided_by=human)
@@ -719,6 +735,8 @@ class Gateway:
     @staticmethod
     def _order_out(order: dict) -> dict:
         return {"order_id": order["order_id"], "outcome": order["outcome"], "status": order["status"],
+                # #631: suppliers whose stock nobody confirmed yet; a person calls them
+                "supplier_must_confirm": list(order.get("supplier_must_confirm") or []),
                 "expected_total": _money(Decimal(str(order["expected_total"]))),
                 "lines": [_line_out(ln) for ln in order["lines"]], "created_at": order["created_at"].isoformat()
                 if hasattr(order["created_at"], "isoformat") else order["created_at"]}
