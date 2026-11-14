@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
 import { AppShell } from "@/components/purchasing/app-shell";
+import { ModelUsageCard } from "@/components/purchasing/model-usage-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const STEPS = [
@@ -92,6 +93,10 @@ export function AboutPage() {
               </li>
             ))}
           </ol>
+        </section>
+
+        <section aria-labelledby="about-model">
+          <ModelUsageCard />
         </section>
 
         <section aria-labelledby="about-sides" className="space-y-3">

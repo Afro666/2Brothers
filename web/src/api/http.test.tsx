@@ -124,6 +124,8 @@ describe("createHttpApi", () => {
         "verifyAuditChain",
         "tamperAuditRow",
         "restoreAuditRow",
+        // The model usage card on the About page (api/http-usage.ts).
+        "getModelUsage",
         // Supplier offers (api/http-offers.ts).
         "listSupplierOffers",
         "acceptSupplierOffer",

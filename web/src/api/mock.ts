@@ -18,6 +18,7 @@ import { createNotificationsMock } from "@/api/mock-notifications";
 import { createDeveloperMock } from "@/api/mock-developer";
 import { createPrivacyMock } from "@/api/mock-privacy";
 import { createTokensMock } from "@/api/mock-tokens";
+import { modelUsageMock } from "@/api/mock-usage";
 import {
   approval as seedApproval,
   confirmedDemoApproval,
@@ -268,6 +269,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     }),
     lookupKitchenBrand: lookupKitchenBrandMock,
     ...createTokensMock(),
+    getModelUsage: async () => modelUsageMock(),
     readShelfPhoto: readShelfPhotoMock,
     failNextApprove(code, message = "The gateway refused the approval.") {
       nextFailure = new ApiError(code, message);
