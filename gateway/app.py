@@ -500,6 +500,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     from gateway.onboarding import mount_onboarding
     mount_onboarding(app, principal, body)
 
+    # Recall list and "check now" (#358): views over the monitor's holds and replacements.
+    from gateway.recalls_view import mount_recalls
+    mount_recalls(app, gw, principal, body)
+
     # Kitchen planning routes (#74): stock, products, recipes, menu plans, suppliers, demand.
     from gateway.kitchen_routes import register as register_kitchen_routes
     register_kitchen_routes(app, gw, principal, body)

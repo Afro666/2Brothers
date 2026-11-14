@@ -66,22 +66,23 @@ class ContextDev:
         if not self.key:
             raise RuntimeError("CONTEXT_DEV_API_KEY is not set")
 
-    def scrape_json(self, url: str, schema: dict) -> dict:
+    def scrape_json(self, url: str, schema: dict, *, attempts: int = 6, timeout: float = 180) -> dict:
+        """`attempts=1` with a short `timeout` is one bounded call (the gateway's check now)."""
         body = {"url": url, "formats": {"json": True}, "sharedParams": {"mainContentOnly": True},
                 "jsonParams": {"schema": schema, "instructions": NEVER_GUESS},
                 "tags": ["recall-monitor"]}
         req = urllib.request.Request(API, data=json.dumps(body).encode(), method="POST", headers={
             "Authorization": "Bearer " + self.key, "Content-Type": "application/json",
             "User-Agent": "2brothers-recall-monitor/0.1"})
-        for attempt in range(6):
+        for attempt in range(attempts):
             try:
-                with urllib.request.urlopen(req, timeout=180) as r:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
                     data = json.load(r)
                 break
             except urllib.error.HTTPError as e:
                 # 429 = plan concurrency/rate limit; wait as told, else back off. A GET-like
                 # read, so retrying is safe; other 4xx are our mistake and are not retried.
-                if (e.code != 429 and e.code < 500) or attempt == 5:
+                if (e.code != 429 and e.code < 500) or attempt == attempts - 1:
                     raise RuntimeError(f"Context.dev HTTP {e.code} for {url}") from None
                 wait = e.headers.get("Retry-After") if e.headers else None
                 time.sleep(float(wait) if wait and wait.replace(".", "", 1).isdigit() else 2 ** (attempt + 1))

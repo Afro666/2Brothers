@@ -99,3 +99,25 @@ def reject_basket(db, kitchen_id, proposal_id, *, human, reason, at):
         except NotPending:
             pass
     return row
+
+
+# ---- read side of GET /recalls and POST /recalls/check (#358); additive ----
+
+def alerts(db, kitchen_id):
+    """Every recorded alert of one kitchen, newest first, with `event_id` and a status."""
+    rows = db.recall_alerts.find({'kitchen_id': kitchen_id}).sort('detected_at', -1).limit(200)
+    return [{'event_id': row.pop('_id'), **row, 'status': row.get('status', 'active')} for row in rows]
+
+
+def carrying(db, kitchen_id):
+    """This kitchen's proposals that carry a recall alert, newest first."""
+    return list(db.proposals.find({'kitchen_id': kitchen_id, 'recall_alerts.0': {'$exists': True}})
+                .sort('created_at', -1).limit(100))
+
+
+def check_entry(db, kitchen_id, event_id=None):
+    """The audit entry of one recall check (`event_id`), or of the newest one; else None."""
+    query = {'server.kitchen_id': kitchen_id, 'event.kind': 'recall_check'}
+    if event_id is not None:
+        query['event.event_id'] = event_id
+    return db.audit_log.find_one(query, sort=[('_id', -1)])
