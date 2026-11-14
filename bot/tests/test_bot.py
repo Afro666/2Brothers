@@ -4,7 +4,7 @@ from datetime import datetime
 import pytest
 
 from bot import render
-from bot.app import NOT_LINKED, Bot
+from bot.app import MAX_REMEMBERED, NOT_LINKED, Bot
 from bot.clients import GatewayError, SpeechError
 from bot.links import Links
 
@@ -160,6 +160,15 @@ def test_a_request_gives_a_summary_and_one_message_per_supplier(bot):
     assert "Lactose-free milk 1 L" in valio and "463380" not in valio
     assert "stock not confirmed: the order waits for the supplier's answer" in bakery
     assert "product own-1" in bakery                   # no name known: said so, never invented
+
+
+def test_summaries_and_heard_texts_are_capped(bot):
+    for n in range(MAX_REMEMBERED + 20):
+        bot.gw.current = proposal(proposal_id=f"p-{n}")
+        bot._voice(7, {"file_id": "f", "duration": 3})
+    assert len(bot._summaries) == MAX_REMEMBERED and len(bot._heard) == MAX_REMEMBERED
+    assert (7, "p-0") not in bot._summaries and (7, f"p-{MAX_REMEMBERED + 19}") in bot._summaries
+    assert (7, "p-19") not in bot._heard and (7, "p-20") in bot._heard
 
 
 def test_week_starts_on_the_next_working_day_and_names_it_as_the_delivery_day(bot):

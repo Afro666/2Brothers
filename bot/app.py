@@ -10,6 +10,7 @@ import os
 import sys
 import threading
 import time
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -23,10 +24,19 @@ HELP = ("Say or type what the kitchen needs, for example: <b>20 L oat drink for 
         "You approve on the approval card: press \"Open to approve\".")
 NOT_LINKED = "This chat is not linked to a kitchen yet. Ask the kitchen's admin for a link."
 MAX_VOICE_SECONDS = 30
+MAX_REMEMBERED = 500        # summaries and heard texts kept; older ones are no longer edited
 
 
 class NotConfigured(Exception):
     pass
+
+
+def _remember(store: OrderedDict, key, value) -> None:
+    """Keep at most MAX_REMEMBERED entries; the oldest goes first. Call under the lock."""
+    store[key] = value
+    store.move_to_end(key)
+    while len(store) > MAX_REMEMBERED:
+        store.popitem(last=False)
 
 
 class Bot:
@@ -36,8 +46,8 @@ class Bot:
         self.site_url = site_url.rstrip("/") if site_url else None
         self.now = now
         self._products: dict[str, dict] = {}                 # product_id -> {"name", "lot"}
-        self._summaries: dict[tuple[int, str], int] = {}     # (chat, proposal) -> summary message id
-        self._heard: dict[tuple[int, str], str] = {}
+        self._summaries: OrderedDict[tuple[int, str], int] = OrderedDict()  # (chat, proposal) -> summary id
+        self._heard: OrderedDict[tuple[int, str], str] = OrderedDict()
         self._lock = threading.Lock()
 
     # ---- entry -------------------------------------------------------------------------
@@ -126,9 +136,9 @@ class Bot:
         pid = proposal.get("proposal_id")
         if pid:
             with self._lock:
-                self._summaries[(chat, pid)] = status
+                _remember(self._summaries, (chat, pid), status)
                 if heard:
-                    self._heard[(chat, pid)] = heard
+                    _remember(self._heard, (chat, pid), heard)
         self._show_summary(chat, proposal)
         if proposal.get("status") == "REJECTED":
             return
