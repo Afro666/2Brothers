@@ -86,10 +86,11 @@ def _learned_out(info: dict | None) -> dict | None:
     if not isinstance(info, dict):
         return info
     out = dict(info)
-    try:
-        out["ratio"] = float(Decimal(str(out["ratio"])))
-    except (ArithmeticError, KeyError, TypeError, ValueError):
-        pass
+    for key in ("ratio", "sigma_lead_time"):       # stored as text: the store refuses floats
+        try:
+            out[key] = float(Decimal(str(out[key])))
+        except (ArithmeticError, KeyError, TypeError, ValueError):
+            pass
     return out
 
 
@@ -468,7 +469,7 @@ class Gateway:
                     continue
                 plan = plan_request(Decimal(str(n["quantity"])), measure, mine, requested, None,
                                     event=bool(request.get("event")))
-                lines += [_set_by(ln, n, mine[0].pack.lot_size) for ln in plan.lines]
+                lines += [_learned_why(_set_by(ln, n, mine[0].pack.lot_size), n) for ln in plan.lines]
                 excluded += list(plan.excluded)
                 codes += [c for c in plan.reason_codes if c not in codes]
                 if plan.shortfall > 0:
@@ -502,6 +503,16 @@ class Gateway:
                 if entry["product_id"] not in asked:
                     sim["excluded"].append(dict(entry))
                     sim["mandate"]["reasons"].append(f"{entry['product_id']}: {entry['reason']}")
+            # Learned safety stock (#1306) has no ratio: the same basis from its two quantities.
+            from gateway.learned_timing import unlearned_line_quantity
+            for need in needs:
+                if (need.get("learned") or {}).get("kind") != "SUPPLIER_LATE":
+                    continue
+                for line in sim["lines"]:
+                    if line["product_id"] == need["product_id"]:
+                        basis = unlearned_line_quantity(line["quantity"], need["learned"])
+                        if basis is not None:
+                            line["unlearned_quantity"] = basis
         sim["shortfalls"] = [{"product_id": p, "shortfall": f"{q.normalize():f}", "unit": u} for p, q, u in short]
         for p, q, u in short:
             sim["mandate"]["reasons"].append(f"{p}: {q.normalize():f} {u} of the plan's need cannot be covered for this date.")
@@ -896,6 +907,7 @@ class Gateway:
         rows, problems = demand_rows(self.db, kitchen_id, start, end, self.now().date(), self.now().tzinfo,
                                      entries_override=entries)
         total: dict[tuple[str, str], Decimal] = {}
+        gross: dict[tuple[str, str], Decimal] = {}      # the demand itself, for learned safety stock
         uncounted: set[str] = set()
         # A recipe of a planned day needs these: learning never leaves one out (#1307).
         recipe_products = {row["product_id"] for row in rows if row.get("source") == "menu_plan"}
@@ -906,6 +918,7 @@ class Gateway:
                 uncounted.add(row["product_id"])
             key = (row["product_id"], row["unit"])
             total[key] = total.get(key, Decimal(0)) + need
+            gross[key] = gross.get(key, Decimal(0)) + row["gross_need"]
         needs = [{"product_id": pid, "quantity": f"{q.normalize():f}", "unit": unit,
                   "stock_counted": pid not in uncounted}
                  for (pid, unit), q in sorted(total.items()) if q > 0]
@@ -915,7 +928,7 @@ class Gateway:
         # Learned facts are computed once for this plan. Only a plan proposal adjusts a
         # quantity; the stored need keeps the unlearned number as the correction basis.
         from engine.learning import apply_ratio
-        from gateway import learned as learned_facts
+        from gateway import learned as learned_facts, learned_timing
         # Learning is an extra: any error in it leaves the plan unlearned (#1522).
         left_out: list[dict] = []
         try:
@@ -940,6 +953,9 @@ class Gateway:
             # A product the kitchen keeps removing gets no line, and the proposal says so (#1307).
             learned_needs, learned_left_out = learned_facts.leave_out_declined(
                 facts, learned_needs, recipe_products)
+            # A late supplier's lead-time spread adds safety stock to the lines that stay (#1306).
+            learned_timing.add_safety_stock(self, kitchen_id, facts, learned_needs, gross,
+                                           (end - start).days + 1, self.now().date())
             learned_problems = [*problems, *learned_facts.plan_problems(
                 self, kitchen_id, facts, [need["product_id"] for need in learned_needs])]
         except Exception:
@@ -1887,6 +1903,18 @@ def _set_by(line, need: dict, lot: Decimal):
         note += (f": {asked.normalize():f} {line.unit} asked, rounded up to {line.quantity.normalize():f} "
                  f"{line.unit} (sold in steps of {lot.normalize():f})")
     return replace(line, why=f"{note}. {line.why}")
+
+
+def _learned_why(line, need: dict):
+    """A line with learned safety stock (#1306) says so first in its `why`: how much, from
+    which deliveries, and how to get the plain number back. Built from the stored need
+    only, so a re-quote at approve gives the same line."""
+    from gateway.learned_timing import safety_stock_sentence
+    sentence = None if need.get("set_by") else safety_stock_sentence(need.get("learned"))
+    if not sentence:
+        return line
+    from dataclasses import replace
+    return replace(line, why=f"{sentence} {line.why}")
 
 
 def _qty(x) -> str | None:
