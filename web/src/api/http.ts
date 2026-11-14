@@ -245,6 +245,7 @@ export function createHttpApi(baseUrl: string): Api {
       await post("/v1/auth/change-password", { current_password: current, new_password: next });
     },
     ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    // GET/PUT /learned is not served yet (404): api/http-learned.ts stays out of `real` so the page keeps its "Sample data" mock. Add `...createLearnedHttp(call, kitchen)` here when the gateway serves it.
     ...createBuyingNoteHttp((path, init) => gatewayRequest(baseUrl, path, init)),
     ...createNutritionHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
     ...createOnboardingHttp((path, init) => gatewayRequest(baseUrl, path, init)),

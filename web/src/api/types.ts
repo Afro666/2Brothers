@@ -34,6 +34,7 @@ import type {
   AutoApproveLearning,
   RecallList,
   KitchenBrandLookup,
+  LearnedFact,
   SupplierOffer,
   SupplierOfferAccepted,
 } from "@/types";
@@ -736,6 +737,8 @@ export interface Api {
   declineSupplierOffer(offerId: string, actor: AuditActor, reason?: string): Promise<SupplierOffer>;
   /** Progress only. There is no method to switch auto-approve on: a person approves every order. */
   getAutoApproveLearning(): Promise<AutoApproveLearning>;
+  listLearnedFacts(): Promise<LearnedFact[]>;
+  setLearnedFactActive(id: string, active: false, actor: AuditActor): Promise<LearnedFact>;
   /**
    * Recall alerts for this kitchen and its last check. Optional, like `checkRecalls`: the contract
    * routes are proposed (#358); a gateway that does not serve them answers `NOT_SERVED`, and the

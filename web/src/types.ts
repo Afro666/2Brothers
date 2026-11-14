@@ -113,6 +113,43 @@ export type Urgency =
   | "CAN_WAIT"
   | "UNKNOWN";
 
+export interface LearnedEvidence {
+  rows: number;
+  from: string;
+  to: string;
+  last: string;
+}
+
+export type LearnedFactKind = "CORRECTION_RATIO" | "DECLINED_PRODUCT" | "SUPPLIER_LATE" | "SUPPLIER_SHORT";
+
+export interface LearnedFact {
+  id: string;
+  kind: LearnedFactKind;
+  productId: string | null;
+  supplierId: string | null;
+  name: string;
+  value: number;
+  evidence: LearnedEvidence;
+  since: string;
+  active: boolean;
+  rawValue?: number;
+  applicable?: boolean;
+  meanDaysLate?: number;
+  onTimeRate?: number;
+  deliveries?: number;
+  meanLeadTime?: number | null;
+  sigmaLeadTime?: number | null;
+}
+
+export interface LearnedAdjustment {
+  factId: string;
+  fromQty: string;
+  toQty: string;
+  unit: string;
+  ratio: number;
+  evidence: LearnedEvidence;
+}
+
 export interface OrderLine {
   product: Product;
   offer: Offer;
@@ -121,6 +158,7 @@ export interface OrderLine {
   lineTotal: number | null;
   /** Deterministic one-sentence reason from the engine. */
   why: string;
+  learned?: LearnedAdjustment;
 }
 
 /** Free-delivery threshold (MOV), not a wall. */

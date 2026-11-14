@@ -7,6 +7,7 @@ import { DataPrivacySection } from "@/pages/settings/data-privacy";
 import { DeveloperSection } from "@/pages/settings/developer";
 import { EngineSection } from "@/pages/settings/engine";
 import { KitchenSection } from "@/pages/settings/kitchen";
+import { LearnedSection } from "@/pages/settings/learned";
 import { NotificationsSection } from "@/pages/settings/notifications";
 import { PermissionsSection } from "@/pages/settings/permissions";
 import { TeamSection } from "@/pages/settings/team";
@@ -28,6 +29,7 @@ export const SETTINGS_SECTIONS: { id: string; label: string; component: Componen
   { id: "developer", label: "Developer", component: DeveloperSection },
   { id: "data-privacy", label: "Data & privacy", component: DataPrivacySection },
   { id: "engine", label: "Ordering engine", component: EngineSection },
+  { id: "learned", label: "What the tool learned", component: LearnedSection },
 ];
 
 /** Where `/settings` lands on a wide screen: what the Settings link showed before the sections existed. */

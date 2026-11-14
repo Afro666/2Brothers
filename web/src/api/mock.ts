@@ -31,6 +31,7 @@ import { modelUsageMock } from "@/api/mock-usage";
 import { atlasFactsMock } from "@/api/mock-atlas";
 import { createWordsMock } from "@/api/mock-words";
 import { getProductPageMock } from "@/api/mock-product-page";
+import { createLearnedMock } from "@/api/mock-learned";
 import {
   approval as seedApproval,
   chefRequest,
@@ -306,6 +307,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
   };
 
   const auth = createMockAuth(options.signedOut);
+  const learned = createLearnedMock();
 
   return forgetKeptAnswersOnWrite({
     subscribeEvents() {
@@ -320,6 +322,7 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
     ...createNutritionMock(planning),
     ...createWordsMock(getProducts),
     ...createSettingsMock(recordAudit),
+    ...learned,
     getForecastAccuracy: async () => forecastAccuracyMock(),
     getDrift: async () => driftMock(),
     getSupplierDrift: async () => supplierDriftMock(),
