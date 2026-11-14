@@ -82,7 +82,8 @@ def _env_principal(request: Request, token: str) -> Principal:
 REFUSAL_WINDOW = 60.0          # seconds: one audit row per repeated refusal (#853)
 
 
-def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None) -> FastAPI:
+def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None,
+               delivery_note_worker=None) -> FastAPI:
     app = FastAPI(
         title="Trusted Kitchen Buyer gateway", version="0.1.0",
         description=("REST and MCP gateway between a kitchen's Buyer agent and its suppliers. "
@@ -205,7 +206,9 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
         response.set_cookie(users.COOKIE, token, max_age=int(users.SESSION_TTL.total_seconds()),
                             httponly=True, secure=https, samesite="strict", path="/")
-        gw()._audit(person["kitchen_id"], "signed_in", person["email"])
+        # An all-kitchens account (users.py) signs in to the default kitchen's log.
+        gw()._audit(person["kitchen_id"] or os.environ.get("GATEWAY_KITCHEN_ID", DEFAULT_KITCHEN),
+                    "signed_in", person["email"])
         return response
 
     @app.post("/v1/auth/logout")
@@ -235,7 +238,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
                                   data.get("new_password"), keep_token=token)
         except users.AuthError as exc:
             raise _auth_error(exc) from None
-        gw()._audit(person["kitchen_id"], "password_changed", person["email"])
+        gw()._audit(person["kitchen_id"] or os.environ.get("GATEWAY_KITCHEN_ID", DEFAULT_KITCHEN),
+                    "password_changed", person["email"])
         return {"changed": True}
 
     @app.get("/.well-known/jwks.json")
@@ -593,6 +597,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     # Count from a shelf photo (#373): Nemotron VL reads it in the worker; stores no count.
     from gateway.stock_photo import mount_stock_photo
     mount_stock_photo(app, gw, principal, shelf_worker)
+
+    # Check a delivery from a photo of its note (#362): read in the worker; stores nothing.
+    from gateway.delivery_note import mount_delivery_note
+    mount_delivery_note(app, gw, principal, delivery_note_worker)
 
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useT } from "@/lib/i18n";
 import type { OwnProduct, Product, ProductCode, Supplier } from "@/types";
 
 /** How long the picker waits after typing before it calls the catalog search. */
@@ -27,22 +28,22 @@ const IDLE: PickerResults = { status: "idle", products: [], error: "" };
 /** The first few of a long catalog result, so the row card stays short. */
 const MAX_CATALOG_RESULTS = 8;
 
-function ownChoices(ownProducts: readonly OwnProduct[], suppliers: readonly Supplier[]): PickerProduct[] {
+function ownChoices(ownProducts: readonly OwnProduct[], suppliers: readonly Supplier[], t: ReturnType<typeof useT>): PickerProduct[] {
   const supplierNames = new Map(suppliers.map((supplier) => [supplier.id, supplier.name]));
   return ownProducts.map((product) => ({
     product,
     name: product.name,
     unit: product.unit,
-    source: `own · ${supplierNames.get(product.supplierId) ?? "supplier not found"}`,
+    source: t("own · {supplier}", { supplier: supplierNames.get(product.supplierId) ?? t("supplier not found") }),
   }));
 }
 
-function catalogChoice(product: Product): PickerProduct {
+function catalogChoice(product: Product, t: ReturnType<typeof useT>): PickerProduct {
   return {
     product,
     name: product.names.en,
     unit: product.baseUnit,
-    source: product.vendorName || "supplier not set",
+    source: product.vendorName || t("supplier not set"),
   };
 }
 
@@ -77,6 +78,7 @@ export function ProductPicker({
   /** “Change” clears the row, so the picker shows again. */
   onChange: () => void;
 }) {
+  const t = useT();
   const inputId = useId();
   const [query, setQuery] = useState("");
   // Results carry the text they answer, so a list for old text never shows under new text.
@@ -108,7 +110,7 @@ export function ProductPicker({
           if (active) {
             setResults({
               query: trimmed,
-              state: { status: "ready", products: products.map(catalogChoice), error: "" },
+              state: { status: "ready", products: products.map((product) => catalogChoice(product, t)), error: "" },
             });
           }
         })
@@ -139,7 +141,7 @@ export function ProductPicker({
     loadProducts([id])
       .then(([product]) => {
         if (!active) return;
-        if (product) setChosen(catalogChoice(product));
+        if (product) setChosen(catalogChoice(product, t));
         else setUnavailableId(id);
       })
       .catch(() => {
@@ -164,7 +166,7 @@ export function ProductPicker({
         <span className="font-medium">{shown?.name ?? value.productName}</span>
         {shown ? <span className="text-muted-foreground">{`${shown.unit} · ${shown.source}`}</span> : null}
         {!shown && unavailableId === value.productId ? (
-          <span className="text-xs text-muted-foreground">details unavailable</span>
+          <span className="text-xs text-muted-foreground">{t("details unavailable")}</span>
         ) : null}
         <Button
           ref={changeRef}
@@ -172,14 +174,14 @@ export function ProductPicker({
           variant="outline"
           size="sm"
           className="ml-auto"
-          aria-label={`Change product, currently ${shown?.name ?? value.productName}`}
+          aria-label={t("Change product, currently {product}", { product: shown?.name ?? value.productName })}
           onClick={() => {
             moveFocus.current = true;
             setQuery("");
             onChange();
           }}
         >
-          Change
+          {t("Change")}
         </Button>
       </div>
     );
@@ -187,7 +189,7 @@ export function ProductPicker({
 
   const trimmed = query.trim();
   const words = trimmed.toLocaleLowerCase().split(/\s+/).filter(Boolean);
-  const own = trimmed.length >= 2 ? ownChoices(ownProducts, suppliers) : [];
+  const own = trimmed.length >= 2 ? ownChoices(ownProducts, suppliers, t) : [];
   const matchingOwn = own.filter((match) => matchesQuery(match, words));
   const ownIds = new Set(matchingOwn.map((match) => match.product.id));
   const found = results.query === trimmed ? results.state : IDLE;
@@ -196,24 +198,24 @@ export function ProductPicker({
   const catalog = catalogMatches.slice(0, MAX_CATALOG_RESULTS);
   const count = matchingOwn.length + catalog.length;
   let status = "";
-  if (trimmed.length < 2) status = "Type at least 2 characters to search.";
-  else if (found.status === "loading" || waiting) status = "Searching…";
-  else if (found.status === "ready" && count === 0) status = `No products match “${trimmed}”.`;
+  if (trimmed.length < 2) status = t("Type at least 2 characters to search.");
+  else if (found.status === "loading" || waiting) status = t("Searching…");
+  else if (found.status === "ready" && count === 0) status = t("No products match “{query}”.", { query: trimmed });
   else if (found.status === "ready" && catalogMatches.length > catalog.length)
-    status = `First ${count} products shown. Type more to narrow the list.`;
-  else if (found.status === "ready") status = `${count} ${count === 1 ? "product" : "products"} found.`;
+    status = t("First {count} products shown. Type more to narrow the list.", { count });
+  else if (found.status === "ready") status = count === 1 ? t("{count} product found.", { count }) : t("{count} products found.", { count });
 
   return (
     <div className="space-y-2">
       <label htmlFor={inputId} className="grid gap-1.5 text-sm font-medium">
-        Find a product
+        {t("Find a product")}
         <Input
           ref={inputRef}
           id={inputId}
           type="search"
           autoComplete="off"
           value={query}
-          placeholder="Start typing a product name"
+          placeholder={t("Start typing a product name")}
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>

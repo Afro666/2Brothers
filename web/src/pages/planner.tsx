@@ -19,6 +19,7 @@ import { isoWeekOf, shiftWeek, weekDates } from "@/lib/week";
 import type { DemandLine, MenuPlanEntry, PlanProposal, Recipe } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
 import { randomHex } from "@/lib/random-id";
+import { getLanguage, useT } from "@/lib/i18n";
 
 function todayIso(): string {
   const now = new Date();
@@ -33,19 +34,23 @@ function displayedWeek(week: string | undefined): string {
   return week ?? shiftWeek(isoWeekOf(todayIso()), 1);
 }
 
-function weekTitle(week: string): string {
+function weekTitle(week: string, t: ReturnType<typeof useT>): string {
   const dates = weekDates(week);
   const from = new Date(`${dates[0]}T12:00:00Z`);
   const to = new Date(`${dates[6]}T12:00:00Z`);
-  const month = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" });
-  const year = new Intl.DateTimeFormat("en-GB", { year: "numeric", timeZone: "UTC" });
-  return `Week ${Number(week.slice(-2))}, ${from.getUTCDate()} to ${to.getUTCDate()} ${month.format(to)} ${year.format(
-    to,
-  )}`;
+  const locale = getLanguage() === "fi" ? "fi-FI" : "en-GB";
+  const month = new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" });
+  return t("Week {week}, {from} to {to} {month} {year}", {
+    week: Number(week.slice(-2)),
+    from: from.getUTCDate(),
+    to: to.getUTCDate(),
+    month: month.format(to),
+    year: to.getUTCFullYear(),
+  });
 }
 
 function weekday(date: string): string {
-  return new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
+  return new Intl.DateTimeFormat(getLanguage() === "fi" ? "fi-FI" : "en-GB", { weekday: "long", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
 }
 
 function dateRange(date: string): string {
@@ -70,6 +75,7 @@ function sameEntries(left: MenuPlanEntry[], right: MenuPlanEntry[]): boolean {
 }
 
 function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) {
+  const t = useT();
   const products = new Map<string, DemandLine[]>();
   for (const line of lines) {
     const list = products.get(line.productId) ?? [];
@@ -77,7 +83,7 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
     products.set(line.productId, list);
   }
   if (products.size === 0) {
-    return <EmptyState title="No demand for this week">Add menu entries to see what the kitchen needs.</EmptyState>;
+    return <EmptyState title={t("No demand for this week")}>{t("Add menu entries to see what the kitchen needs.")}</EmptyState>;
   }
 
   return (
@@ -91,7 +97,7 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <h3 className="font-medium">{first.productName}</h3>
                 <p className="text-sm font-medium tabular-nums">
-                  {formatNumber(total)} {first.unit} total
+                  {t("{amount} {unit} total", { amount: formatNumber(total), unit: first.unit })}
                 </p>
               </div>
               <ul className="space-y-1 text-sm tabular-nums text-muted-foreground">
@@ -114,7 +120,8 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
   );
 }
 
-const products = (count: number) => `${formatNumber(count)} ${count === 1 ? "product" : "products"}`;
+const products = (count: number, t: ReturnType<typeof useT>) =>
+  count === 1 ? t("{count} product", { count: formatNumber(count) }) : t("{count} products", { count: formatNumber(count) });
 
 /** What the proposal call answered, for the week it was asked for. */
 type ProposeOutcome =
@@ -123,50 +130,55 @@ type ProposeOutcome =
   | { week: string; kind: "error"; message: string };
 
 function ProposeMessage({ outcome }: { outcome: ProposeOutcome }) {
-  if (outcome.kind === "nothing") return <p>Stock covers this week's plan. Nothing to order.</p>;
+  const t = useT();
+  if (outcome.kind === "nothing") return <p>{t("Stock covers this week's plan. Nothing to order.")}</p>;
   if (outcome.kind === "error") return <p className="text-destructive">{outcome.message}</p>;
   const { proposal } = outcome;
   const approvals = (
     <Link to="/approvals" className="font-medium text-primary underline underline-offset-4">
-      Orders &gt; To approve
+      {t("Orders > To approve")}
     </Link>
   );
   return (
     <div className="space-y-1">
       {proposal.status === "APPROVED" ? (
         <p>
-          Order placed automatically: {formatNumber(proposal.lineCount)} {proposal.lineCount === 1 ? "line" : "lines"},{" "}
-          {formatEur(proposal.totalInclVat)}. See it in{" "}
+          {proposal.lineCount === 1
+            ? t("Order placed automatically: {count} line, {total}. See it in ", { count: formatNumber(proposal.lineCount), total: formatEur(proposal.totalInclVat) })
+            : t("Order placed automatically: {count} lines, {total}. See it in ", { count: formatNumber(proposal.lineCount), total: formatEur(proposal.totalInclVat) })}
           <Link to="/orders" className="font-medium text-primary underline underline-offset-4">
-            Order history
+            {t("Order history")}
           </Link>
           .
         </p>
       ) : proposal.status === "READY" ? (
         <p>
-          Proposal ready: {formatNumber(proposal.lineCount)} {proposal.lineCount === 1 ? "line" : "lines"},{" "}
-          {formatEur(proposal.totalInclVat)}. A person approves it in {approvals}.
+          {(proposal.lineCount === 1
+            ? t("Proposal ready: {count} line, {total}. A person approves it in ", { count: formatNumber(proposal.lineCount), total: formatEur(proposal.totalInclVat) })
+            : t("Proposal ready: {count} lines, {total}. A person approves it in ", { count: formatNumber(proposal.lineCount), total: formatEur(proposal.totalInclVat) })
+          )}{approvals}.
         </p>
       ) : (
         <p>
-          The gateway could not build an order for this week
-          {proposal.reasonCodes.length ? ` (${proposal.reasonCodes.join(", ")})` : ""}. Nothing can be approved. See it
-          in {approvals}.
+          {t("The gateway could not build an order for this week{reason}. Nothing can be approved. See it in ", {
+            reason: proposal.reasonCodes.length ? ` (${proposal.reasonCodes.join(", ")})` : "",
+          })}{approvals}.
         </p>
       )}
       {proposal.uncountedCount > 0 ? (
         <p>
-          {products(proposal.uncountedCount)}{" "}
-          {proposal.uncountedCount === 1 ? "was never counted, so its" : "were never counted, so their"} full need is
-          proposed.
+          {proposal.uncountedCount === 1
+            ? t("{products} was never counted, so its full need is proposed.", { products: products(proposal.uncountedCount, t) })
+            : t("{products} were never counted, so their full need is proposed.", { products: products(proposal.uncountedCount, t) })}
         </p>
       ) : null}
-      {proposal.shortfallCount > 0 ? <p>{products(proposal.shortfallCount)} cannot be fully covered.</p> : null}
+      {proposal.shortfallCount > 0 ? <p>{t("{products} cannot be fully covered.", { products: products(proposal.shortfallCount, t) })}</p> : null}
     </div>
   );
 }
 
 export function PlannerPage() {
+  const t = useT();
   const api = useApi();
   const navigate = useNavigate();
   const search = useSearch({ from: "/planner" });
@@ -198,7 +210,7 @@ export function PlannerPage() {
   const dirty = !sameEntries(entries, saved);
 
   async function changeWeek(next: string) {
-    if (dirty && !window.confirm("Discard your unsaved changes and change week?")) return;
+    if (dirty && !window.confirm(t("Discard your unsaved changes and change week?"))) return;
     setDraft(null);
     setDraftWeek("");
     setError("");
@@ -224,15 +236,15 @@ export function PlannerPage() {
   function applyDialog() {
     const parsed = Number(covers);
     if (!meal.trim()) {
-      setError("Enter a meal name.");
+      setError(t("Enter a meal name."));
       return;
     }
     if (covers.trim() === "" || !Number.isInteger(parsed) || parsed < 0) {
-      setError("Covers must be a whole number greater than or equal to zero.");
+      setError(t("Covers must be a whole number greater than or equal to zero."));
       return;
     }
     if (!recipeId) {
-      setError("Choose a recipe.");
+      setError(t("Choose a recipe."));
       return;
     }
     const entry: MenuPlanEntry = {
@@ -262,7 +274,7 @@ export function PlannerPage() {
       setOutcome(null);
       menu.reload();
       demand.reload();
-      toast.success("Week saved");
+      toast.success(t("Week saved"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -274,9 +286,9 @@ export function PlannerPage() {
   const today = todayIso();
   const requestedDate = dates.find((date) => date >= today);
   const proposeBlocked = !requestedDate
-    ? "This week is in the past, so there is nothing to order for it."
+    ? t("This week is in the past, so there is nothing to order for it.")
     : dirty
-      ? "Save the week first: the proposal uses the saved plan."
+      ? t("Save the week first: the proposal uses the saved plan.")
       : "";
 
   /** Asks for a proposal only. Approving it is a person's step on the approvals page. */
@@ -304,35 +316,35 @@ export function PlannerPage() {
     <AppShell activeId="planner">
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Menu plan</h1>
+          <h1 className="text-2xl font-semibold">{t("Menu plan")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Plan the week's menus and covers. The needs below come from this plan.
+            {t("Plan the week's menus and covers. The needs below come from this plan.")}
           </p>
         </header>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Button variant="outline" onClick={() => void changeWeek(shiftWeek(week, -1))}>
-            Previous week
+            {t("Previous week")}
           </Button>
           <h2 className="text-lg font-semibold" aria-live="polite">
-            {weekTitle(week)}
+            {weekTitle(week, t)}
           </h2>
           <Button variant="outline" onClick={() => void changeWeek(shiftWeek(week, 1))}>
-            Next week
+            {t("Next week")}
           </Button>
         </div>
-        {menu.status === "loading" ? <LoadingState label="Loading menu plan" /> : null}
+        {menu.status === "loading" ? <LoadingState label={t("Loading menu plan")} /> : null}
         {menu.status === "error" ? <ErrorState message={menu.error.message} onRetry={menu.reload} /> : null}
         {menu.status === "ready" ? (
           <>
             {dirty ? (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 p-4">
-                <p className="font-medium">Unsaved changes</p>
+                <p className="font-medium">{t("Unsaved changes")}</p>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={discard}>
-                    Discard
+                    {t("Discard")}
                   </Button>
                   <Button onClick={() => void saveWeek()} disabled={saving}>
-                    {saving ? "Saving…" : "Save week"}
+                    {saving ? t("Saving…") : t("Save week")}
                   </Button>
                 </div>
               </div>
@@ -357,7 +369,7 @@ export function PlannerPage() {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {dayEntries.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No menu entries</p>
+                        <p className="text-sm text-muted-foreground">{t("No menu entries")}</p>
                       ) : null}
                       {dayEntries.map((entry) => {
                         const recipe = recipes.find((item) => item.id === entry.recipeId);
@@ -367,12 +379,12 @@ export function PlannerPage() {
                               <div className="min-w-0">
                                 <p className="font-medium">{entry.meal}</p>
                                 <p className="text-sm tabular-nums text-muted-foreground">
-                                  {recipe?.name ?? "Recipe unavailable"} · {formatNumber(entry.covers)} covers
+                                  {recipe?.name ?? t("Recipe unavailable")} · {t("{count} covers", { count: formatNumber(entry.covers) })}
                                 </p>
                               </div>
                               <div className="flex shrink-0 gap-1">
                                 <Button variant="ghost" size="sm" onClick={() => openEdit(entry)}>
-                                  Edit
+                                  {t("Edit")}
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -382,7 +394,7 @@ export function PlannerPage() {
                                     setDraft((current) => (current ?? saved).filter((item) => item.id !== entry.id))
                                   }
                                 >
-                                  Remove
+                                  {t("Remove")}
                                 </Button>
                               </div>
                             </div>
@@ -390,7 +402,7 @@ export function PlannerPage() {
                         );
                       })}
                       <Button className="w-full" variant="outline" onClick={() => openAdd(date)}>
-                        Add to {weekday(date)}
+                        {t("Add to {weekday}", { weekday: weekday(date) })}
                       </Button>
                     </CardContent>
                   </Card>
@@ -398,16 +410,16 @@ export function PlannerPage() {
               })}
             </div>
             {entries.length === 0 ? (
-              <EmptyState title="No menu entries this week">Add a meal to plan the kitchen’s needs.</EmptyState>
+              <EmptyState title={t("No menu entries this week")}>{t("Add a meal to plan the kitchen’s needs.")}</EmptyState>
             ) : null}
             <section className="space-y-4" aria-labelledby="needs-heading">
               <div>
                 <h2 id="needs-heading" className="text-xl font-semibold">
-                  What this week needs
+                  {t("What this week needs")}
                 </h2>
-                {dirty ? <p className="mt-1 text-sm text-muted-foreground">This table shows the saved plan.</p> : null}
+                {dirty ? <p className="mt-1 text-sm text-muted-foreground">{t("This table shows the saved plan.")}</p> : null}
               </div>
-              {demand.status === "loading" ? <LoadingState label="Loading weekly demand" /> : null}
+              {demand.status === "loading" ? <LoadingState label={t("Loading weekly demand")} /> : null}
               {demand.status === "error" ? <ErrorState message={demand.error.message} onRetry={demand.reload} /> : null}
               {demand.status === "ready" ? <DemandList lines={demand.data} dates={dates} /> : null}
               <div className="space-y-2">
@@ -417,7 +429,7 @@ export function PlannerPage() {
                   disabled={proposing || proposeBlocked !== ""}
                   aria-describedby={proposeBlocked ? "propose-blocked" : undefined}
                 >
-                  {proposing ? "Proposing…" : "Propose order for this week"}
+                  {proposing ? t("Proposing…") : t("Propose order for this week")}
                 </Button>
                 {proposeBlocked ? (
                   <p id="propose-blocked" className="text-sm text-muted-foreground">
@@ -430,10 +442,10 @@ export function PlannerPage() {
               </div>
               <div className="flex flex-wrap gap-4 text-sm">
                 <Link to="/stock" className="font-medium text-primary underline underline-offset-4">
-                  Check stock
+                  {t("Check stock")}
                 </Link>
                 <Link to="/requests" className="font-medium text-primary underline underline-offset-4">
-                  Ask the Buyer for an order
+                  {t("Ask the Buyer for an order")}
                 </Link>
               </div>
             </section>
@@ -448,18 +460,18 @@ export function PlannerPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{dialog?.entry ? "Edit menu entry" : "Add menu entry"}</DialogTitle>
+            <DialogTitle>{dialog?.entry ? t("Edit menu entry") : t("Add menu entry")}</DialogTitle>
           </DialogHeader>
           <DialogBody className="space-y-4">
             <label className="grid gap-2 text-sm font-medium" htmlFor="planner-meal">
-              Meal
+              {t("Meal")}
               <Input id="planner-meal" value={meal} onChange={(event) => setMeal(event.target.value)} />
             </label>
             <label className="grid gap-2 text-sm font-medium" htmlFor="planner-recipe">
-              Recipe
+              {t("Recipe")}
               <Select value={recipeId} onValueChange={setRecipeId}>
                 <SelectTrigger id="planner-recipe" className="w-full">
-                  <SelectValue placeholder="Choose a recipe" />
+                  <SelectValue placeholder={t("Choose a recipe")} />
                 </SelectTrigger>
                 <SelectContent>
                   {recipes.map((recipe) => (
@@ -471,7 +483,7 @@ export function PlannerPage() {
               </Select>
             </label>
             <label className="grid gap-2 text-sm font-medium" htmlFor="planner-covers">
-              Covers
+              {t("Covers")}
               <Input
                 id="planner-covers"
                 type="number"
@@ -489,9 +501,9 @@ export function PlannerPage() {
           </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(null)}>
-              Cancel
+              {t("Cancel")}
             </Button>
-            <Button onClick={applyDialog}>{dialog?.entry ? "Save entry" : "Add entry"}</Button>
+            <Button onClick={applyDialog}>{dialog?.entry ? t("Save entry") : t("Add entry")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

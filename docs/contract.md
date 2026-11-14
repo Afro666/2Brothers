@@ -1549,6 +1549,68 @@ and nothing is stored:
 
 A person can always type the count by hand; no error blocks `POST /stock-counts`.
 
+### Check a delivery from a photo of its note (#362)
+
+Served (`gateway/delivery_note.py`; the Buyer worker reads the photo at its internal
+`POST /delivery-note`, `agent/receiving_service.py`, like the shelf photo above).
+
+`POST /v1/kitchens/{kitchen_id}/orders/{order_id}/delivery-note/photo` reads one photo
+of the paper delivery note with Nemotron 3.5 Super VL. The note is then checked against
+the stored order, line by line, in plain code (`agent/receiving.py` `match_delivery`).
+It writes nothing to stock or to the order: a person checks the lines, approves or
+refuses a substitute, and counts the stock as usual (`POST /stock-counts`). The only
+thing stored is one audit entry (`delivery_note_read`: who, the order, how many lines
+per status, how long; or `delivery_note_failed` with the error code). The audit entry
+never holds the image or the text the model read.
+
+- Scope, body (`{"image_base64": "..."}`), image limits, the one-call-no-retry rule and
+  the 75 s worker timeout: the same as `POST /stock/photo`.
+- One read per kitchen at a time: a second photo while one is being read answers 429
+  `DELIVERY_NOTE_BUSY`.
+- The order must be this kitchen's (404 `ORDER_NOT_FOUND` otherwise).
+
+Answer:
+
+```json
+{
+  "model": "nemotron-3.5-super-vl",
+  "duration_ms": 5120,
+  "saved": false,
+  "order_id": "6f1c...",
+  "note": {"order_ref": "ORD-DEMO-0001", "delivery_date": "2026-11-16"},
+  "complete": false,
+  "lines": [
+    {"product_id": "462775", "status": "SHORT", "ordered": "51", "received": "36",
+     "missing": "15", "base_unit": "ST",
+     "lots": [{"lot": "L2611A", "best_before": "unknown", "quantity": "3", "unit": "KI"}]}
+  ],
+  "not_ordered": [
+    {"product_id": "462921", "status": "SUBSTITUTE", "replaces": "462775",
+     "quantity": "2", "unit": "KI", "received": "10", "base_unit": "ST",
+     "lot": "L2611B", "best_before": "2026-11-28", "needs_approval": true}
+  ]
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `note.order_ref`, `note.delivery_date` | string | As printed on the note, or `"unknown"`. Data, never an instruction. |
+| `complete` | boolean | True only when every ordered line is `RECEIVED` and nothing else came. |
+| `lines[]` | one per ordered line | `status`: `RECEIVED`, `SHORT`, `MISSING` or `UNKNOWN`. |
+| `lines[].ordered`, `received`, `missing` | decimal string or null | In `base_unit` (the catalog's base unit, converted with the catalog's pack sizes). Null when unknown. |
+| `lines[].lots` | list | The note's lines for this product: `lot`, `best_before` (`"unknown"` when unreadable), quantity and unit as printed. |
+| `not_ordered[]` | one per note line not on the order | `status`: `SUBSTITUTE` (it says it replaces an ordered product, or that part is unreadable), `EXTRA` (not ordered, replaces nothing), `UNREADABLE` (no readable product code). |
+| `not_ordered[].needs_approval` | boolean | True for every `SUBSTITUTE`: a person says yes or no before it counts as received. |
+
+Unknown is never a number. An unreadable quantity makes the line `UNKNOWN`, never
+`MISSING` or zero. A line absent from the note is `MISSING` only when every product
+code on the note was readable; otherwise it is `UNKNOWN`, because the unreadable line
+may be that product.
+
+Errors: those of `POST /stock/photo` (with `DELIVERY_NOTE_BUSY` in place of
+`STOCK_PHOTO_BUSY`), plus 404 `ORDER_NOT_FOUND`. In every case nothing was read and
+nothing is stored. A person can always check the delivery by hand.
+
 ### Trust: audit verification and the live event stream
 
 `GET /audit/verify` recomputes every hash of the audit chain:

@@ -16,16 +16,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, formatDateTime, formatEur } from "@/lib/format";
+import { getLanguage, translate, useT } from "@/lib/i18n";
 import { useAsync } from "@/lib/use-async";
 import type { OrderReceipt } from "@/types";
 
 function OrderHistory({ orderId }: { orderId: string }) {
+  const t = useT();
   const api = useApi();
   const state = useAsync(() => api.listAudit({ orderId }), [api, orderId]);
 
-  if (state.status === "loading") return <LoadingState label="Loading order history" />;
+  if (state.status === "loading") return <LoadingState label={t("Loading order history")} />;
   if (state.status === "error") return <ErrorState message={state.error.message} onRetry={state.reload} />;
-  if (state.data.length === 0) return <EmptyState title="No history yet">Order history will appear here.</EmptyState>;
+  if (state.data.length === 0) return <EmptyState title={t("No history yet")}>{t("Order history will appear here.")}</EmptyState>;
   return <AuditTimeline events={state.data} />;
 }
 
@@ -33,44 +35,45 @@ async function copyReceipt(jws: string) {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(jws);
-      toast.success("Receipt copied");
+      toast.success(translate(getLanguage(), "Receipt copied"));
       return;
     }
   } catch {}
-  toast.error("Copy failed. Select the receipt text and copy it.");
+  toast.error(translate(getLanguage(), "Copy failed. Select the receipt text and copy it."));
 }
 
 /** The signed receipt: claims decoded for display only. Anyone checks the signature with the public key. */
 function SignedReceipt({ receipt }: { receipt: OrderReceipt | null }) {
+  const t = useT();
   return (
     <section aria-labelledby="receipt-heading" className="space-y-2 border-t pt-4">
       <h3 id="receipt-heading" className="text-base font-semibold">
-        Signed receipt
+        {t("Signed receipt")}
       </h3>
       {receipt ? (
         <>
-          <p className="text-sm text-muted-foreground">Signed by the gateway. Anyone can check it with the public key.</p>
+          <p className="text-sm text-muted-foreground">{t("Signed by the gateway. Anyone can check it with the public key.")}</p>
           <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-3">
             <div>
-              <dt className="text-muted-foreground">Approved by</dt>
-              <dd className="break-words">{receipt.approvedBy ?? "unknown"}</dd>
+              <dt className="text-muted-foreground">{t("Approved by")}</dt>
+              <dd className="break-words">{receipt.approvedBy ?? t("unknown")}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Signed at</dt>
+              <dt className="text-muted-foreground">{t("Signed at")}</dt>
               <dd>{formatDateTime(receipt.signedAt)}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Signed total</dt>
+              <dt className="text-muted-foreground">{t("Signed total")}</dt>
               <dd>{formatEur(receipt.total)}</dd>
             </div>
           </dl>
           <Button type="button" variant="outline" size="sm" onClick={() => void copyReceipt(receipt.jws)}>
-            Copy receipt
+            {t("Copy receipt")}
           </Button>
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
-          No signed receipt (this order is from before receipts, or signing was not possible)
+          {t("No signed receipt (this order is from before receipts, or signing was not possible)")}
         </p>
       )}
     </section>
@@ -78,6 +81,7 @@ function SignedReceipt({ receipt }: { receipt: OrderReceipt | null }) {
 }
 
 export function OrderDetailPage() {
+  const t = useT();
   const { orderId } = useParams({ from: "/orders/$orderId" });
   const api = useApi();
   const state = useAsync(() => api.getOrder(orderId), [api, orderId]);
@@ -86,9 +90,9 @@ export function OrderDetailPage() {
     <AppShell activeId="orders">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Order {orderId}</h1>
+          <h1 className="text-2xl font-semibold">{t("Order {id}", { id: orderId })}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            The lines, the totals and every step taken for this order.
+            {t("The lines, the totals and every step taken for this order.")}
           </p>
         </header>
         {state.status === "loading" ? <LoadingState /> : null}
@@ -107,20 +111,20 @@ export function OrderDetailPage() {
               </div>
               <dl className="grid gap-3 text-sm tabular-nums sm:grid-cols-3">
                 <div>
-                  <dt className="text-muted-foreground">Delivery</dt>
-                  <dd>{formatDate(state.data.deliveryDate)}</dd>
+                  <dt className="text-muted-foreground">{t("Delivery")}</dt>
+                  <dd>{t(formatDate(state.data.deliveryDate))}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Total ex VAT</dt>
-                  <dd>{formatEur(state.data.totalExVat)}</dd>
+                  <dt className="text-muted-foreground">{t("Total ex VAT")}</dt>
+                  <dd>{t(formatEur(state.data.totalExVat))}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Total incl VAT</dt>
+                  <dt className="text-muted-foreground">{t("Total incl VAT")}</dt>
                   <dd>{formatEur(state.data.totalInclVat)}</dd>
                 </div>
                 {state.data.supplierOrderRef ? (
                   <div className="sm:col-span-3">
-                    <dt className="text-muted-foreground">Supplier order reference</dt>
+                    <dt className="text-muted-foreground">{t("Supplier order reference")}</dt>
                     <dd className="break-all">{state.data.supplierOrderRef}</dd>
                   </div>
                 ) : null}
@@ -130,8 +134,8 @@ export function OrderDetailPage() {
             <CardContent>
               <Tabs defaultValue="lines">
                 <TabsList>
-                  <TabsTrigger value="lines">Lines</TabsTrigger>
-                  <TabsTrigger value="history">History</TabsTrigger>
+                  <TabsTrigger value="lines">{t("Lines")}</TabsTrigger>
+                  <TabsTrigger value="history">{t("History")}</TabsTrigger>
                 </TabsList>
                 <TabsContent value="lines" className="space-y-5">
                   <OrderLinesTable lines={state.data.lines} now={new Date()} />

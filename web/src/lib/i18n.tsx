@@ -13,12 +13,23 @@ const LanguageContext = createContext<{
 const STORAGE_KEY = "purchasing-language";
 const listeners = new Set<() => void>();
 
-export function collectFinnishDictionaries(modules: Record<string, DictionaryModule>): Record<string, string> {
+/**
+ * One dictionary from all the files. Two files giving one English text different Finnish
+ * is an error for the tests ("throw"); the running app keeps the first and carries on
+ * ("keep-first"), because a wording clash must never take the site down.
+ */
+export function collectFinnishDictionaries(
+  modules: Record<string, DictionaryModule>,
+  onConflict: "throw" | "keep-first" = "throw",
+): Record<string, string> {
   const dictionary = Object.create(null) as Record<string, string>;
   for (const [path, module] of Object.entries(modules)) {
     for (const [text, translation] of Object.entries(module.default)) {
-      if (Object.prototype.hasOwnProperty.call(dictionary, text) && dictionary[text] !== translation) {
-        throw new Error(`Conflicting Finnish translations for ${JSON.stringify(text)} in ${path}`);
+      if (Object.prototype.hasOwnProperty.call(dictionary, text)) {
+        if (dictionary[text] !== translation && onConflict === "throw") {
+          throw new Error(`Conflicting Finnish translations for ${JSON.stringify(text)} in ${path}`);
+        }
+        continue;
       }
       dictionary[text] = translation;
     }
@@ -28,6 +39,7 @@ export function collectFinnishDictionaries(modules: Record<string, DictionaryMod
 
 const finnish = collectFinnishDictionaries(
   import.meta.glob("../i18n/fi/*.ts", { eager: true }) as Record<string, DictionaryModule>,
+  "keep-first",
 );
 
 export function translate(language: Language, text: string, vars: TranslationVariables = {}): string {

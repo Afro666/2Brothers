@@ -10,6 +10,7 @@ import {
   isPassed,
   isStockUnconfirmed,
 } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { OrderLine } from "@/types";
 
@@ -20,7 +21,11 @@ function lineFacts(line: OrderLine, now: Date) {
   return {
     code: product.id,
     name: product.names.en,
-    pack: formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit),
+    pack:
+      product.baseUnitsPerSalesUnit == null
+        ? null
+        : formatPack(product.salesUnit, product.baseUnitsPerSalesUnit, product.baseUnit),
+    salesUnit: product.salesUnit,
     quantity: `${formatNumber(line.quantity)} ${product.salesUnit}`,
     unitPrice: formatEur(offer.priceExVat),
     comparison:
@@ -41,30 +46,33 @@ function lineFacts(line: OrderLine, now: Date) {
 type Facts = ReturnType<typeof lineFacts>;
 
 function StockText({ f }: { f: Facts }) {
-  if (f.blocked) return <span className="font-medium text-danger">sales block</span>;
+  const t = useT();
+  if (f.blocked) return <span className="font-medium text-danger">{t("sales block")}</span>;
   return f.stockUnknown ? (
-    <span className="font-medium text-warning" title="Valio did not measure the stock for this product">
-      unknown
+    <span className="font-medium text-warning" title={t("Valio did not measure the stock for this product")}>
+      {t("unknown")}
     </span>
   ) : (
-    <span>{f.stock}</span>
+    <span>{t(f.stock)}</span>
   );
 }
 
 function ClosingText({ f }: { f: Facts }) {
+  const t = useT();
   return (
     <span className={cn(f.closed && "font-medium text-danger")} data-closed={f.closed || undefined}>
-      {f.closing}
-      {f.closed ? " (passed)" : null}
+      {t(f.closing)}
+      {f.closed ? t(" (passed)") : null}
     </span>
   );
 }
 
 function AvailableText({ f }: { f: Facts }) {
+  const t = useT();
   return (
     <span className={cn(f.late && "font-medium text-warning")}>
-      {f.available}
-      {f.late ? " (later than asked)" : null}
+      {t(f.available)}
+      {f.late ? t(" (later than asked)") : null}
     </span>
   );
 }
@@ -75,6 +83,7 @@ function AvailableText({ f }: { f: Facts }) {
  * engine's "why" sentence.
  */
 export function OrderLinesTable({ lines, now }: { lines: OrderLine[]; now: Date }) {
+  const t = useT();
   const facts = lines.map((l) => lineFacts(l, now));
   return (
     <div>
@@ -82,14 +91,14 @@ export function OrderLinesTable({ lines, now }: { lines: OrderLine[]; now: Date 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Product</TableHead>
-              <TableHead>Pack</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="text-right">Unit price ex VAT</TableHead>
-              <TableHead className="text-right">Compare</TableHead>
-              <TableHead>Stock</TableHead>
-              <TableHead>Available</TableHead>
-              <TableHead>Order by</TableHead>
+              <TableHead>{t("Product")}</TableHead>
+              <TableHead>{t("Pack")}</TableHead>
+              <TableHead className="text-right">{t("Qty")}</TableHead>
+              <TableHead className="text-right">{t("Unit price ex VAT")}</TableHead>
+              <TableHead className="text-right">{t("Compare")}</TableHead>
+              <TableHead>{t("Stock")}</TableHead>
+              <TableHead>{t("Available")}</TableHead>
+              <TableHead>{t("Order by")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -99,10 +108,12 @@ export function OrderLinesTable({ lines, now }: { lines: OrderLine[]; now: Date 
                   <div className="font-medium">{f.name}</div>
                   <div className="text-xs text-muted-foreground">{f.code}</div>
                 </TableCell>
-                <TableCell>{f.pack}</TableCell>
+                <TableCell>{f.pack ?? t("{unit} (pack size unknown)", { unit: f.salesUnit })}</TableCell>
                 <TableCell className="text-right tabular-nums">{f.quantity}</TableCell>
-                <TableCell className="text-right tabular-nums">{f.unitPrice}</TableCell>
-                <TableCell className="text-right tabular-nums">{f.comparison}</TableCell>
+                <TableCell className="text-right tabular-nums">{t(f.unitPrice)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {f.comparison === "unknown" ? t("unknown") : f.comparison}
+                </TableCell>
                 <TableCell>
                   <StockText f={f} />
                 </TableCell>
@@ -115,7 +126,7 @@ export function OrderLinesTable({ lines, now }: { lines: OrderLine[]; now: Date 
               </TableRow>,
               <TableRow key={`${f.code}-why`} className="hover:bg-transparent">
                 <TableCell colSpan={8} className="pt-0 whitespace-normal text-muted-foreground">
-                  <span className="font-medium text-foreground">Why: </span>
+                  <span className="font-medium text-foreground">{t("Why: ")}</span>
                   {f.why}
                 </TableCell>
               </TableRow>,
@@ -131,31 +142,31 @@ export function OrderLinesTable({ lines, now }: { lines: OrderLine[]; now: Date 
               <div>
                 <div className="font-medium">{f.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {f.code} · {f.pack}
+                  {f.code} · {f.pack ?? t("{unit} (pack size unknown)", { unit: f.salesUnit })}
                 </div>
               </div>
               <div className="text-right text-sm font-medium tabular-nums">{f.quantity}</div>
             </div>
             <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-              <dt className="text-muted-foreground">Unit price ex VAT</dt>
-              <dd className="tabular-nums">{f.unitPrice}</dd>
-              <dt className="text-muted-foreground">Compare</dt>
-              <dd className="tabular-nums">{f.comparison}</dd>
-              <dt className="text-muted-foreground">Stock</dt>
+              <dt className="text-muted-foreground">{t("Unit price ex VAT")}</dt>
+              <dd className="tabular-nums">{t(f.unitPrice)}</dd>
+              <dt className="text-muted-foreground">{t("Compare")}</dt>
+              <dd className="tabular-nums">{f.comparison === "unknown" ? t("unknown") : f.comparison}</dd>
+              <dt className="text-muted-foreground">{t("Stock")}</dt>
               <dd>
                 <StockText f={f} />
               </dd>
-              <dt className="text-muted-foreground">Available</dt>
+              <dt className="text-muted-foreground">{t("Available")}</dt>
               <dd>
                 <AvailableText f={f} />
               </dd>
-              <dt className="text-muted-foreground">Order by</dt>
+              <dt className="text-muted-foreground">{t("Order by")}</dt>
               <dd>
                 <ClosingText f={f} />
               </dd>
             </dl>
             <p className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">Why: </span>
+              <span className="font-medium text-foreground">{t("Why: ")}</span>
               {f.why}
             </p>
           </li>

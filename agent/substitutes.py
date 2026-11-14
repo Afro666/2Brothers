@@ -85,7 +85,13 @@ class SubstitutePlanner:
                 reason = ('Requested product, confirmed portion only.' if source == 'original'
                           else 'Supplier-linked substitute sized by the engine.' if source == 'supplier'
                           else 'Catalog alternative sized by the engine.')
-            if unknown and source != 'original':
+            gap = [line for line in lines if 'SUBSTITUTE_NEEDS_OK' in (line.get('reason_codes') or [])]
+            if gap:
+                # S02 (#731): the engine filled the original's gap by weight or volume. The
+                # gateway can do this on the first quote too (#1032), so it applies to every source.
+                reason = (f"Requested product for what is in stock; the missing part filled with "
+                          f"{_amounts(gap)} of the substitute, sized by weight or volume. A person says yes first.")
+            if unknown and (gap or source != 'original'):
                 reason += ' Supplier stock still needs confirmation.'
             if not allergens_known:
                 reason += ' Allergen data is unknown; chef review required.'

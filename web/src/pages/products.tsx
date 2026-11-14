@@ -30,12 +30,13 @@ import type {
 import { ProductPicker, type PickerProduct } from "@/pages/products/product-picker";
 import { recipeAllergens } from "@/pages/products/recipe-allergens";
 import { catalogProductIdsInRecipes } from "@/pages/products/recipe-products";
+import { useT } from "@/lib/i18n";
 
 /** How long whenSteady waits for a previous dialog to leave the DOM before it runs anyway. */
 const STEADY_LIMIT_MS = 400;
 const STEADY_RETRY_MS = 16;
 
-const ALLERGENS = [
+export const ALLERGENS = [
   ["AM", "Milk"],
   ["AW", "Gluten cereals"],
   ["AE", "Egg"],
@@ -74,17 +75,17 @@ async function loadData(api: ReturnType<typeof useApi>) {
 }
 
 /** The name, unit and origin a recipe row shows for one product. */
-function pickerProduct(product: Product | OwnProduct, suppliers: readonly Supplier[]): PickerProduct {
+function pickerProduct(product: Product | OwnProduct, suppliers: readonly Supplier[], t: ReturnType<typeof useT>): PickerProduct {
   if ("names" in product) {
     return {
       product,
       name: product.names.en,
       unit: product.baseUnit,
-      source: product.vendorName || "Supplier not set",
+      source: product.vendorName || t("Supplier not set"),
     };
   }
   const supplier = suppliers.find((candidate) => candidate.id === product.supplierId);
-  return { product, name: product.name, unit: product.unit, source: supplier?.name ?? "Supplier not found" };
+  return { product, name: product.name, unit: product.unit, source: supplier?.name ?? t("Supplier not found") };
 }
 
 function ProductsTable({
@@ -98,6 +99,7 @@ function ProductsTable({
   onEdit: (product: OwnProduct) => void;
   onDelete: (product: OwnProduct) => void;
 }) {
+  const t = useT();
   const supplierNames = new Map(suppliers.map((supplier) => [supplier.id, supplier.name]));
   return (
     <div className="space-y-3">
@@ -108,20 +110,20 @@ function ProductsTable({
               <p className="font-medium">{product.name}</p>
               <p className="text-sm text-muted-foreground">
                 {product.unit}
-                {product.packSize == null ? "" : ` · pack ${formatNumber(product.packSize)}`} ·{" "}
-                {product.priceEur == null ? "not set" : formatEur(product.priceEur)}
+                {product.packSize == null ? "" : ` · ${t("pack {size}", { size: formatNumber(product.packSize) })}`} ·{" "}
+                {product.priceEur == null ? t("not set") : formatEur(product.priceEur)}
               </p>
             </div>
             <div className="space-y-1 text-sm">
-              <p>{supplierNames.get(product.supplierId) ?? "Supplier not found"}</p>
+              <p>{supplierNames.get(product.supplierId) ?? t("Supplier not found")}</p>
               <AllergenList allergens={product.allergens} />
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" aria-label={`Edit ${product.name}`} onClick={() => onEdit(product)}>
-                Edit
+              <Button variant="outline" aria-label={t("Edit {name}", { name: product.name })} onClick={() => onEdit(product)}>
+                {t("Edit")}
               </Button>
-              <Button variant="destructive" aria-label={`Delete ${product.name}`} onClick={() => onDelete(product)}>
-                Delete
+              <Button variant="destructive" aria-label={t("Delete {name}", { name: product.name })} onClick={() => onDelete(product)}>
+                {t("Delete")}
               </Button>
             </div>
           </CardContent>
@@ -132,6 +134,7 @@ function ProductsTable({
 }
 
 function ProductsPageContent() {
+  const t = useT();
   const api = useApi();
   const [tab, setTab] = useState("products");
   const state = useAsync(() => loadData(api), [api]);
@@ -168,9 +171,9 @@ function ProductsPageContent() {
   const findPickerProduct = useCallback(
     (id: string) => {
       const product = productLookup.get(id);
-      return product ? pickerProduct(product, suppliers) : undefined;
+      return product ? pickerProduct(product, suppliers, t) : undefined;
     },
-    [productLookup, suppliers],
+    [productLookup, suppliers, t],
   );
 
   /** Opens or closes a dialog once the browser has removed its previous one; a remount would drop a half-typed form. */
@@ -250,7 +253,7 @@ function ProductsPageContent() {
         allergens: unknown ? null : allergens,
       } as Draft<OwnProduct>);
       resetProductForm();
-      toast.success("Product saved");
+      toast.success(t("Product saved"));
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -272,17 +275,17 @@ function ProductsPageContent() {
   async function saveRecipe(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (items.some((item) => item.productId === "")) {
-      setError("Choose a product for each item.");
+      setError(t("Choose a product for each item."));
       return;
     }
     if (items.length === 0) {
-      setError("Add at least one item to the recipe.");
+      setError(t("Add at least one item to the recipe."));
       return;
     }
     // A Finnish keypad types a decimal comma.
     const quantities = items.map((item) => Number(item.qtyPerPortion.replace(",", ".")));
     if (quantities.some((quantity) => !Number.isFinite(quantity) || quantity <= 0)) {
-      setError("Each quantity per portion must be greater than 0.");
+      setError(t("Each quantity per portion must be greater than 0."));
       return;
     }
     setBusy(true);
@@ -303,7 +306,7 @@ function ProductsPageContent() {
         items: resolved,
       } as Draft<Recipe>);
       setItems([]);
-      toast.success("Recipe saved");
+      toast.success(t("Recipe saved"));
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -318,7 +321,7 @@ function ProductsPageContent() {
     setError("");
     try {
       await api.deleteOwnProduct(deletingProduct.id);
-      toast.success("Product deleted");
+      toast.success(t("Product deleted"));
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -333,7 +336,7 @@ function ProductsPageContent() {
     setError("");
     try {
       await api.deleteRecipe(deletingRecipe.id);
-      toast.success("Recipe deleted");
+      toast.success(t("Recipe deleted"));
       whenSteady(() => setDialog(null));
       state.reload();
     } catch (cause) {
@@ -353,22 +356,22 @@ function ProductsPageContent() {
     <AppShell activeId="products">
       <div className="mx-auto max-w-5xl space-y-6">
         <header>
-          <h1 className="text-2xl font-semibold">Recipes</h1>
+          <h1 className="text-2xl font-semibold">{t("Recipes")}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Your recipes and the products you make in-house, with their purchasing data.
+            {t("Your recipes and the products you make in-house, with their purchasing data.")}
           </p>
         </header>
-        {state.status === "loading" ? <LoadingState label="Loading products and recipes" /> : null}
+        {state.status === "loading" ? <LoadingState label={t("Loading products and recipes")} /> : null}
         {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
         {state.status === "ready" ? (
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList>
-              <TabsTrigger value="products">Products</TabsTrigger>
-              <TabsTrigger value="recipes">Recipes</TabsTrigger>
+              <TabsTrigger value="products">{t("Products")}</TabsTrigger>
+              <TabsTrigger value="recipes">{t("Recipes")}</TabsTrigger>
             </TabsList>
             <TabsContent value="products" className="space-y-4">
               <div className="flex justify-end">
-                <Button onClick={() => openProduct()}>Add product</Button>
+                <Button onClick={() => openProduct()}>{t("Add product")}</Button>
               </div>
               {products.length ? (
                 <ProductsTable
@@ -382,12 +385,12 @@ function ProductsPageContent() {
                   }}
                 />
               ) : (
-                <EmptyState title="No own products yet">Add products the kitchen buys outside the catalog.</EmptyState>
+                <EmptyState title={t("No own products yet")}>{t("Add products the kitchen buys outside the catalog.")}</EmptyState>
               )}
             </TabsContent>
             <TabsContent value="recipes" className="space-y-4">
               <div className="flex justify-end">
-                <Button onClick={() => openRecipe()}>Add recipe</Button>
+                <Button onClick={() => openRecipe()}>{t("Add recipe")}</Button>
               </div>
               {recipes.length ? (
                 <div className="space-y-3">
@@ -399,7 +402,7 @@ function ProductsPageContent() {
                           <div>
                             <p className="font-medium">{recipe.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {recipe.items.length} {recipe.items.length === 1 ? "item" : "items"}
+                              {recipe.items.length === 1 ? t("{count} item", { count: recipe.items.length }) : t("{count} items", { count: recipe.items.length })}
                             </p>
                           </div>
                           <div className="flex flex-wrap gap-1">
@@ -409,21 +412,21 @@ function ProductsPageContent() {
                           <div className="flex gap-2">
                             <Button
                               variant="outline"
-                              aria-label={`Edit ${recipe.name}`}
+                              aria-label={t("Edit {name}", { name: recipe.name })}
                               onClick={() => openRecipe(recipe)}
                             >
-                              Edit
+                              {t("Edit")}
                             </Button>
                             <Button
                               variant="destructive"
-                              aria-label={`Delete ${recipe.name}`}
+                              aria-label={t("Delete {name}", { name: recipe.name })}
                               onClick={() => {
                                 setDeletingRecipe(recipe);
                                 setError("");
                                 setDialog("delete-recipe");
                               }}
                             >
-                              Delete
+                              {t("Delete")}
                             </Button>
                           </div>
                         </CardContent>
@@ -432,7 +435,7 @@ function ProductsPageContent() {
                   })}
                 </div>
               ) : (
-                <EmptyState title="No recipes yet">Add a recipe to calculate ingredient demand.</EmptyState>
+                <EmptyState title={t("No recipes yet")}>{t("Add a recipe to calculate ingredient demand.")}</EmptyState>
               )}
             </TabsContent>
           </Tabs>
@@ -441,21 +444,21 @@ function ProductsPageContent() {
         <Dialog open={dialog === "product"} onOpenChange={(open) => !open && !busy && setDialog(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingProduct ? "Edit product" : "Add product"}</DialogTitle>
+              <DialogTitle>{editingProduct ? t("Edit product") : t("Add product")}</DialogTitle>
             </DialogHeader>
             <form onSubmit={saveProduct} className="contents">
               <DialogBody className="space-y-4">
                 <label className={labelClass}>
-                  Name
+                  {t("Name")}
                   <Input required value={name} onChange={(event) => setName(event.target.value)} />
                 </label>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className={labelClass}>
-                    Unit
+                    {t("Unit")}
                     <Input required value={unit} onChange={(event) => setUnit(event.target.value)} />
                   </label>
                   <label className={labelClass}>
-                    Pack size
+                    {t("Pack size")}
                     <Input
                       type="number"
                       min="0"
@@ -465,7 +468,7 @@ function ProductsPageContent() {
                     />
                   </label>
                   <label className={labelClass}>
-                    Price (EUR)
+                    {t("Price (EUR)")}
                     <Input
                       type="number"
                       min="0"
@@ -475,10 +478,10 @@ function ProductsPageContent() {
                     />
                   </label>
                   <label className={labelClass}>
-                    Supplier
+                    {t("Supplier")}
                     <Select required value={supplierId} onValueChange={setSupplierId}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Choose supplier" />
+                        <SelectValue placeholder={t("Choose supplier")} />
                       </SelectTrigger>
                       <SelectContent>
                         {suppliers.map((supplier) => (
@@ -493,7 +496,7 @@ function ProductsPageContent() {
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-medium">
                     <Checkbox checked={unknown} onCheckedChange={(checked) => setUnknown(checked === true)} />
-                    Allergen data unknown
+                    {t("Allergen data unknown")}
                   </label>
                   {!unknown ? (
                     <div className="space-y-2">
@@ -511,7 +514,7 @@ function ProductsPageContent() {
                                 })
                               }
                             />
-                            {code} {allergenName}
+                            {code} {t(allergenName)}
                           </label>
                           <Select
                             value={allergenValues[code] ?? "CONTAINS"}
@@ -520,12 +523,12 @@ function ProductsPageContent() {
                               setAllergenValues((current) => ({ ...current, [code]: value as AllergenPresence }))
                             }
                           >
-                            <SelectTrigger aria-label={`${allergenName} presence`}>
+                            <SelectTrigger aria-label={t("{allergen} presence", { allergen: t(allergenName) })}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="CONTAINS">Contains</SelectItem>
-                              <SelectItem value="MAY_CONTAIN">May contain</SelectItem>
+                              <SelectItem value="CONTAINS">{t("Contains")}</SelectItem>
+                              <SelectItem value="MAY_CONTAIN">{t("May contain")}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -536,9 +539,9 @@ function ProductsPageContent() {
                 {actionError}
               </DialogBody>
               <DialogFooter>
-                <Button disabled={busy}>{busy ? "Saving…" : "Save product"}</Button>
+                <Button disabled={busy}>{busy ? t("Saving…") : t("Save product")}</Button>
                 <Button type="button" variant="outline" disabled={busy} onClick={() => setDialog(null)}>
-                  Cancel
+                  {t("Cancel")}
                 </Button>
               </DialogFooter>
             </form>
@@ -548,12 +551,12 @@ function ProductsPageContent() {
         <Dialog open={dialog === "recipe"} onOpenChange={(open) => !open && !busy && setDialog(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingRecipe ? "Edit recipe" : "Add recipe"}</DialogTitle>
+              <DialogTitle>{editingRecipe ? t("Edit recipe") : t("Add recipe")}</DialogTitle>
             </DialogHeader>
             <form onSubmit={saveRecipe} className="contents">
               <DialogBody className="space-y-4">
                 <label className={labelClass}>
-                  Name
+                  {t("Name")}
                   <Input required value={name} onChange={(event) => setName(event.target.value)} />
                 </label>
                 {items.map((item, index) => {
@@ -576,13 +579,13 @@ function ProductsPageContent() {
                           onChange={() => clearProduct(index)}
                         />
                         {item.productId === "" ? (
-                          <p className="mt-1 text-xs text-destructive">Choose a product for this item.</p>
+                          <p className="mt-1 text-xs text-destructive">{t("Choose a product for this item.")}</p>
                         ) : null}
                       </div>
                       <div className={labelClass}>
-                        Quantity per portion
+                        {t("Quantity per portion")}
                         <Input
-                          aria-label="Quantity per portion"
+                          aria-label={t("Quantity per portion")}
                           aria-describedby={`${item.key}-unit`}
                           type="text"
                           inputMode="decimal"
@@ -597,7 +600,7 @@ function ProductsPageContent() {
                           }
                         />
                         <span id={`${item.key}-unit`} className="text-xs text-muted-foreground">
-                          {unitName || "Unit from product"}
+                          {unitName || t("Unit from product")}
                         </span>
                       </div>
                       <Button
@@ -605,7 +608,7 @@ function ProductsPageContent() {
                         variant="outline"
                         onClick={() => setItems((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}
                       >
-                        Remove
+                        {t("Remove")}
                       </Button>
                     </div>
                   );
@@ -620,14 +623,14 @@ function ProductsPageContent() {
                     ])
                   }
                 >
-                  Add item
+                  {t("Add item")}
                 </Button>
                 {actionError}
               </DialogBody>
               <DialogFooter>
-                <Button disabled={busy}>{busy ? "Saving…" : "Save recipe"}</Button>
+                <Button disabled={busy}>{busy ? t("Saving…") : t("Save recipe")}</Button>
                 <Button type="button" variant="outline" disabled={busy} onClick={() => setDialog(null)}>
-                  Cancel
+                  {t("Cancel")}
                 </Button>
               </DialogFooter>
             </form>
@@ -640,10 +643,10 @@ function ProductsPageContent() {
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Delete {dialog === "delete-product" ? "product" : "recipe"}?</DialogTitle>
+              <DialogTitle>{dialog === "delete-product" ? t("Delete product?") : t("Delete recipe?")}</DialogTitle>
             </DialogHeader>
             <DialogBody>
-              <p>Delete {dialog === "delete-product" ? deletingProduct?.name : deletingRecipe?.name}?</p>
+              <p>{t("Delete {name}?", { name: (dialog === "delete-product" ? deletingProduct?.name : deletingRecipe?.name) ?? "" })}</p>
               {actionError}
             </DialogBody>
             <DialogFooter>
@@ -652,10 +655,10 @@ function ProductsPageContent() {
                 disabled={busy}
                 onClick={dialog === "delete-product" ? removeProduct : removeRecipe}
               >
-                Delete
+                {t("Delete")}
               </Button>
               <Button variant="outline" disabled={busy} onClick={() => setDialog(null)}>
-                Cancel
+                {t("Cancel")}
               </Button>
             </DialogFooter>
           </DialogContent>

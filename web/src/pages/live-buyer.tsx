@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatEur } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { randomHex } from "@/lib/random-id";
 import type { ChefRequest } from "@/types";
 
@@ -40,8 +41,8 @@ const validLine = (line: Proposal["lines"][number]) =>
   typeof line.why === "string" &&
   typeof line.unknown_stock === "boolean";
 
-function proposal(value: unknown): Proposal {
-  if (!value || typeof value !== "object") throw new Error("The Buyer returned an invalid proposal.");
+function proposal(value: unknown, t: (text: string) => string): Proposal {
+  if (!value || typeof value !== "object") throw new Error(t("The Buyer returned an invalid proposal."));
   const row = value as Proposal;
   const ready =
     row.status === "READY" && Array.isArray(row.lines) && row.lines.length > 0 && row.lines.every(validLine);
@@ -51,13 +52,13 @@ function proposal(value: unknown): Proposal {
     !row.proposal_id ||
     (!ready && !rejected)
   ) {
-    throw new Error("The Buyer did not return a ready proposal. Check the existing request before trying again.");
+    throw new Error(t("The Buyer did not return a ready proposal. Check the existing request before trying again."));
   }
   mapMoney(row.expected_total);
   mapMoney(row.total_ex_vat);
   if (row.substitute_options !== undefined) {
     if (!Array.isArray(row.substitute_options) || row.substitute_options.length > 3)
-      throw new Error("Invalid substitute choices.");
+      throw new Error(t("Invalid substitute choices."));
     for (const option of row.substitute_options) {
       if (
         !option ||
@@ -69,7 +70,7 @@ function proposal(value: unknown): Proposal {
         !Array.isArray(option.lines) ||
         !option.lines.every(validLine)
       )
-        throw new Error("Invalid substitute choice.");
+        throw new Error(t("Invalid substitute choice."));
       mapMoney(option.expected_total);
     }
   }
@@ -97,42 +98,45 @@ function productNames(row: Proposal) {
 const refusal = (row: Proposal) =>
   row.request?.refusal ? (text(row.request.refusal.message) ?? text(row.mandate?.reasons?.[0]) ?? "") : undefined;
 
-function proposedBy(row: Proposal) {
-  if (refusal(row) !== undefined) return "Refused by the kitchen’s allergen rule";
+function proposedBy(row: Proposal, t: (text: string, vars?: Record<string, string | number>) => string) {
+  if (refusal(row) !== undefined) return t("Refused by the kitchen’s allergen rule");
   if (row.status === "REJECTED" && row.request?.made_by === "parser")
-    return "Made by the fallback parser because the Buyer agent was not available";
+    return t("Made by the fallback parser because the Buyer agent was not available");
   const model = text(row.buyer_model);
   if (model)
-    return `Proposed by the Buyer agent (${model === "nemotron-3.5-super-vl" ? "Nemotron 3.5 Super VL" : model})`;
+    return t("Proposed by the Buyer agent ({model})", {
+      model: model === "nemotron-3.5-super-vl" ? "Nemotron 3.5 Super VL" : model,
+    });
   // The gateway marks a proposal made by its fallback parser: do not credit the Buyer for it.
-  if (row.request?.made_by === "parser") return "Proposed by the gateway’s request parser, not the Buyer model";
-  return "Proposed by the Buyer agent";
+  if (row.request?.made_by === "parser") return t("Proposed by the gateway’s request parser, not the Buyer model");
+  return t("Proposed by the Buyer agent");
 }
 
 function Decision({ row }: { row: Proposal }) {
+  const t = useT();
   const summary = row.decision_summary;
   const chosen = texts(summary?.chosen);
   const steps = [
-    ["What was asked", text(summary?.asked)],
-    ["What was searched", text(summary?.searched)],
+    [t("What was asked"), text(summary?.asked)],
+    [t("What was searched"), text(summary?.searched)],
   ].filter((step): step is [string, string] => Boolean(step[1]));
   const verdict = row.mandate?.verdict;
   const reasons = texts(row.mandate?.reasons);
   return (
     <>
-      <section className="space-y-2" aria-label="Why this basket">
-        <h2 className="label-caps">Why this basket</h2>
+      <section className="space-y-2" aria-label={t("Why this basket")}>
+        <h2 className="label-caps">{t("Why this basket")}</h2>
         <p className="max-w-[68ch] text-[15px] leading-[22px] break-words whitespace-pre-line">
-          {text(summary?.text) ?? <span className="unknown-value">unknown</span>}
+          {text(summary?.text) ?? <span className="unknown-value">{t("unknown")}</span>}
         </p>
         {text(summary?.text) ? (
           <p className="text-xs text-muted-foreground">
-            Built by the gateway from the stored request and figures. No model writes this text.
+            {t("Built by the gateway from the stored request and figures. No model writes this text.")}
           </p>
         ) : null}
         {steps.length || chosen?.length ? (
           <details className="text-sm">
-            <summary className="cursor-pointer font-medium">Step by step</summary>
+            <summary className="cursor-pointer font-medium">{t("Step by step")}</summary>
             <dl className="mt-2 space-y-2 break-words">
               {steps.map(([label, value]) => (
                 <div key={label}>
@@ -142,7 +146,7 @@ function Decision({ row }: { row: Proposal }) {
               ))}
               {chosen?.length ? (
                 <div>
-                  <dt className="font-medium">What was chosen</dt>
+                  <dt className="font-medium">{t("What was chosen")}</dt>
                   {chosen.map((item, index) => (
                     <dd key={index}>{item}</dd>
                   ))}
@@ -152,16 +156,16 @@ function Decision({ row }: { row: Proposal }) {
           </details>
         ) : null}
       </section>
-      <section className="space-y-2" aria-label="What the guards said">
-        <h2 className="label-caps">What the guards said</h2>
+      <section className="space-y-2" aria-label={t("What the guards said")}>
+        <h2 className="label-caps">{t("What the guards said")}</h2>
         <p className="text-sm">
-          Verdict:{" "}
+          {t("Verdict:")}{" "}
           {verdict === "NEEDS_APPROVAL" ? (
-            <Badge variant="secondary" className="stamp rounded-sm border-2 border-warning bg-transparent text-warning">Needs a person’s approval</Badge>
+            <Badge variant="secondary" className="stamp rounded-sm border-2 border-warning bg-transparent text-warning">{t("Needs a person’s approval")}</Badge>
           ) : verdict === "REFUSED" ? (
-            <Badge variant="destructive" className="stamp rounded-sm border-2 border-danger bg-transparent text-danger">Refused</Badge>
+            <Badge variant="destructive" className="stamp rounded-sm border-2 border-danger bg-transparent text-danger">{t("Refused")}</Badge>
           ) : (
-            <span className="unknown-value">unknown</span>
+            <span className="unknown-value">{t("unknown")}</span>
           )}
         </p>
         {reasons?.length ? (
@@ -171,7 +175,7 @@ function Decision({ row }: { row: Proposal }) {
             ))}
           </ul>
         ) : (
-          <p className="text-sm">{reasons ? "No reasons given." : <>Reasons: <span className="unknown-value">unknown</span></>}</p>
+          <p className="text-sm">{reasons ? t("No reasons given.") : <>{t("Reasons:")} <span className="unknown-value">{t("unknown")}</span></>}</p>
         )}
       </section>
     </>
@@ -180,18 +184,19 @@ function Decision({ row }: { row: Proposal }) {
 
 function Refusal({ row, message }: { row: Proposal; message: string }) {
   // The per-product lines are shown once, folded: the plain sentence is what a person reads.
+  const t = useT();
   const leftOut = texts(row.decision_summary?.left_out);
   const products = leftOut?.length ? leftOut : (texts(row.mandate?.reasons) ?? []).slice(1);
   return (
     <>
-      <section className="hatch space-y-3 break-words" role="status" aria-label="Nothing can be ordered">
-        <h2 className="label-caps">Nothing can be ordered</h2>
+      <section className="hatch space-y-3 break-words" role="status" aria-label={t("Nothing can be ordered")}>
+        <h2 className="label-caps">{t("Nothing can be ordered")}</h2>
         <p className="max-w-[68ch] text-lg font-semibold leading-7">
-          {message || <span className="unknown-value">unknown</span>}
+          {message || <span className="unknown-value">{t("unknown")}</span>}
         </p>
         {products.length ? (
           <details className="text-sm">
-            <summary className="cursor-pointer font-medium">Products that were left out</summary>
+            <summary className="cursor-pointer font-medium">{t("Products that were left out")}</summary>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {products.map((reason, index) => (
                 <li key={index}>{reason}</li>
@@ -200,29 +205,30 @@ function Refusal({ row, message }: { row: Proposal; message: string }) {
           </details>
         ) : null}
       </section>
-      <section className="space-y-2" aria-label="What the guards said">
-        <h2 className="label-caps">What the guards said</h2>
+      <section className="space-y-2" aria-label={t("What the guards said")}>
+        <h2 className="label-caps">{t("What the guards said")}</h2>
         <p className="text-sm">
-          Verdict:{" "}
-          <Badge variant="destructive" className="stamp rounded-sm border-2 border-danger bg-transparent text-danger">Refused</Badge>
+          {t("Verdict:")}{" "}
+          <Badge variant="destructive" className="stamp rounded-sm border-2 border-danger bg-transparent text-danger">{t("Refused")}</Badge>
         </p>
-        <p className="text-sm">The kitchen’s allergen rule refused this request before any agent ran.</p>
+        <p className="text-sm">{t("The kitchen’s allergen rule refused this request before any agent ran.")}</p>
       </section>
-      <p className="border-t border-dashed border-input pt-3 text-sm">No order has been placed.</p>
+      <p className="border-t border-dashed border-input pt-3 text-sm">{t("No order has been placed.")}</p>
     </>
   );
 }
 
 function Rejection({ row }: { row: Proposal }) {
+  const t = useT();
   const leftOut = texts(row.decision_summary?.left_out);
   const refused = refusal(row);
   if (refused !== undefined) return <Refusal row={row} message={refused} />;
   return (
     <>
-      <section className="hatch space-y-3 break-words" role="status" aria-label="Nothing can be ordered">
-        <h2 className="label-caps">Nothing can be ordered</h2>
+      <section className="hatch space-y-3 break-words" role="status" aria-label={t("Nothing can be ordered")}>
+        <h2 className="label-caps">{t("Nothing can be ordered")}</h2>
         <p className="max-w-[68ch] text-[15px] leading-[22px]">
-          {text(row.decision_summary?.asked) ?? <span className="unknown-value">unknown</span>}
+          {text(row.decision_summary?.asked) ?? <span className="unknown-value">{t("unknown")}</span>}
         </p>
         {leftOut?.length ? (
           <ul className="list-disc space-y-1 pl-5 text-sm">
@@ -231,17 +237,18 @@ function Rejection({ row }: { row: Proposal }) {
             ))}
           </ul>
         ) : (
-          <p className="text-sm">Left-out reasons: <span className="unknown-value">unknown</span></p>
+          <p className="text-sm">{t("Left-out reasons:")} <span className="unknown-value">{t("unknown")}</span></p>
         )}
       </section>
       <Decision row={row} />
-      <p className="border-t border-dashed border-input pt-3 text-sm">No order has been placed.</p>
+      <p className="border-t border-dashed border-input pt-3 text-sm">{t("No order has been placed.")}</p>
     </>
   );
 }
 
 /** Real purchasing request path; other demo screens keep their existing API. */
 export function LiveBuyerRequests() {
+  const t = useT();
   const keys = useRef(new Map<string, string>());
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<Proposal | null>(null);
@@ -267,7 +274,7 @@ export function LiveBuyerRequests() {
         credentials: "same-origin",
         body: JSON.stringify({ text: request.text.trim(), requested_date: request.deliveryDate, idempotency_key: key }),
       });
-      setResult(proposal(response));
+      setResult(proposal(response, t));
     } finally {
       setPending(false);
     }
@@ -277,10 +284,9 @@ export function LiveBuyerRequests() {
     <AppShell activeId="requests">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="page-title">Request an order</h1>
+          <h1 className="page-title">{t("Request an order")}</h1>
           <p className="max-w-[68ch] text-[15px] leading-[22px] text-muted-foreground">
-            Ask the Buyer for a proposal using live supplier prices and availability. A person approves before anything
-            is placed.
+            {t("Ask the Buyer for a proposal using live supplier prices and availability. A person approves before anything is placed.")}
           </p>
         </header>
         <Card>
@@ -291,16 +297,16 @@ export function LiveBuyerRequests() {
         {pending ? (
           <div className="space-y-3">
             <div className="print-bar" aria-hidden="true" />
-            <LoadingState label="Buyer is checking the catalog and preparing your proposal" />
+            <LoadingState label={t("Buyer is checking the catalog and preparing your proposal")} />
           </div>
         ) : null}
         {result?.status === "REJECTED" ? (
           <Card className="docket gap-4 p-4 sm:p-5">
             <CardHeader className="px-0">
-              <CardTitle className="label-caps leading-4">Buyer decision</CardTitle>
+              <CardTitle className="label-caps leading-4">{t("Buyer decision")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 px-0">
-              <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result)}</p>
+              <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result, t)}</p>
               <p className="break-all font-mono text-[11px] text-muted-foreground">{result.proposal_id}</p>
               <Rejection row={result} />
             </CardContent>
@@ -309,13 +315,16 @@ export function LiveBuyerRequests() {
         {result?.status === "READY" ? (
           <Card className="docket gap-4 p-4 sm:p-5">
             <CardHeader className="px-0">
-              <CardTitle className="label-caps leading-4">Proposal ready for human review</CardTitle>
+              <CardTitle className="label-caps leading-4">{t("Proposal ready for human review")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 px-0">
-              <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result)}</p>
+              <p className="font-mono text-xs leading-4 text-muted-foreground">{proposedBy(result, t)}</p>
               <p className="break-all font-mono text-[11px] text-muted-foreground">{result.proposal_id}</p>
               <p className="text-xl font-bold">
-                {formatEur(mapMoney(result.total_ex_vat))} ex VAT · {formatEur(mapMoney(result.expected_total))} total
+                {t("{exVat} ex VAT · {total} total", {
+                  exVat: formatEur(mapMoney(result.total_ex_vat)),
+                  total: formatEur(mapMoney(result.expected_total)),
+                })}
               </p>
               <Decision row={result} />
               <ul>
@@ -326,16 +335,16 @@ export function LiveBuyerRequests() {
                     </p>
                     <p className="max-w-[68ch] text-sm">{line.why}</p>
                     {line.unknown_stock ? (
-                      <p><span className="unknown-value">Waiting for supplier stock confirmation.</span></p>
+                      <p><span className="unknown-value">{t("Waiting for supplier stock confirmation.")}</span></p>
                     ) : null}
                   </li>
                 ))}
               </ul>
-              <p className="border-t border-dashed border-input pt-3 text-sm">No order has been placed. This proposal and the Buyer’s steps are recorded for human review.</p>
-              <a className="inline-block font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/approvals">Open live approval inbox</a>
+              <p className="border-t border-dashed border-input pt-3 text-sm">{t("No order has been placed. This proposal and the Buyer’s steps are recorded for human review.")}</p>
+              <a className="inline-block font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/approvals">{t("Open live approval inbox")}</a>
               {result.substitute_options?.length ? (
-                <section aria-label="Chef substitute choices">
-                  <h2 className="label-caps">Other baskets for the chef to consider</h2>
+                <section aria-label={t("Chef substitute choices")}>
+                  <h2 className="label-caps">{t("Other baskets for the chef to consider")}</h2>
                   {result.substitute_options.map((option) => (
                     <div key={option.tier} className="space-y-2 border-t py-3 first:border-t-0">
                       <p className="flex flex-wrap items-baseline gap-x-3">
@@ -346,25 +355,30 @@ export function LiveBuyerRequests() {
                       <p className="max-w-[68ch] text-sm">{option.why}</p>
                       <p className="font-mono text-[13px]">
                         {option.lines
-                          .map((line) => `${line.quantity} ${line.unit} of ${product(line.product_id)}`)
+                          .map((line) => t("{quantity} {unit} of {product}", {
+                            quantity: line.quantity,
+                            unit: line.unit,
+                            product: product(line.product_id),
+                          }))
                           .join("; ")}
                       </p>
-                      {option.stock_confirmed ? null : <p><span className="unknown-value">Stock not confirmed</span></p>}
-                      {option.allergen_data_known ? null : <p><span className="unknown-value">Allergen data unknown</span></p>}
+                      {option.stock_confirmed ? null : <p><span className="unknown-value">{t("Stock not confirmed")}</span></p>}
+                      {option.allergen_data_known ? null : <p><span className="unknown-value">{t("Allergen data unknown")}</span></p>}
                       <Button
                         variant="outline"
                         className="w-full aria-pressed:border-primary aria-pressed:bg-accent sm:w-auto"
                         aria-pressed={preferred === option.tier}
                         onClick={() => setPreferred(option.tier)}
                       >
-                        Prefer {option.tier}
+                        {t("Prefer {tier}", { tier: option.tier })}
                       </Button>
                     </div>
                   ))}
                   {preferred ? (
                     <p role="status">
-                      Preferred: {preferred}. This preference has not changed or approved an order. Re-simulate the
-                      chosen basket before human approval.
+                      {t("Preferred: {tier}. This preference has not changed or approved an order. Re-simulate the chosen basket before human approval.", {
+                        tier: preferred,
+                      })}
                     </p>
                   ) : null}
                 </section>

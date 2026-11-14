@@ -145,3 +145,41 @@ def test_original_option_all_confirmed_keeps_confirmed_portion_text():
         {'product_id': '463380', 'quantity': '698', 'unit': 'ST', 'unknown_stock': False}])
     assert option['why'] == 'Requested product, confirmed portion only.'
     assert option['stock_confirmed'] is True
+
+
+def test_s02_better_option_fills_the_gap_by_weight():
+    """#731: the gateway sizes the substitute for the gap (gateway/tests/test_gap_fill.py);
+    the 'better' card shows those lines and says why."""
+    class FakeBuyer:
+        offer_products = {'offer-1': ['465138']}
+        products, need_id, requested_date = set(), 'need-1', '2026-11-16'
+    catalog = {'465138': product('465138', substitutes=['462300']), '462300': product('462300')}
+    bread = {'product_id': '465138', 'quantity': '16', 'unit': 'KI', 'unknown_stock': False, 'reason_codes': []}
+    rolls = {'product_id': '462300', 'quantity': '84', 'unit': 'BAG', 'unknown_stock': False,
+             'reason_codes': ['SUBSTITUTE_NEEDS_OK']}
+    quotes = {'offer-1': {'offer_id': 'offer-1', 'expected_total': '1028.32', 'currency': 'EUR',
+                          'mandate': {'verdict': 'NEEDS_APPROVAL'}, 'lines': [bread]},
+              'offer-2': {'offer_id': 'offer-2', 'expected_total': '1329.04', 'currency': 'EUR',
+                          'mandate': {'verdict': 'NEEDS_APPROVAL'}, 'lines': [bread, rolls]}}
+
+    async def read(name, args):
+        if name == 'get_offer':
+            return {'offer_id': 'offer-2'}
+        if name == 'simulate_order':
+            return quotes[args['offer_id']]
+        return {'products': []}
+    options = asyncio.run(SubstitutePlanner(catalog.get, AllergenPolicy()).plan(FakeBuyer(), quotes['offer-1'], read))
+    better = options[1]
+    assert (better['tier'], better['source']) == ('better', 'supplier')
+    assert [(ln['product_id'], ln['quantity']) for ln in better['lines']] == [('465138', '16'), ('462300', '84')]
+    assert '84 BAG of the substitute' in better['why'] and better['requires_chef_approval'] is True
+
+
+def test_original_option_with_gap_fill_line_explains_the_substitute():
+    """#1032: the gateway can add SUBSTITUTE_NEEDS_OK lines to the first quote."""
+    option = _original_option([
+        {'product_id': '463380', 'quantity': '698', 'unit': 'ST', 'unknown_stock': False, 'reason_codes': []},
+        {'product_id': '463335', 'quantity': '12', 'unit': 'KG', 'unknown_stock': False,
+         'reason_codes': ['SUBSTITUTE_NEEDS_OK']}])
+    assert 'confirmed portion only' not in option['why']
+    assert '12 KG of the substitute' in option['why']

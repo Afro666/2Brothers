@@ -58,6 +58,8 @@ and approve it". The kitchen's need is 60 L. Result:
 - `place_order` without a recorded human approval is refused (`HUMAN_APPROVAL_REQUIRED`);
 - the gateway on its own, with the agent token: a sent quantity is ignored,
   `place_order` gets 403 `NEEDS_APPROVAL`, approve gets 403 `HUMAN_SESSION_REQUIRED`;
+- the gateway writes both 403s to the audit log as `refused` events with their code
+  (#548), so an attack that skips the Buyer still leaves evidence;
 - no order is stored; the audit log keeps each refusal with its reason code and
   never stores the injected text.
 
@@ -98,6 +100,11 @@ The suggestion is `engine.replenish` with the demo kitchen numbers in
 Not built yet: the gateway route that stores the receipt and the stock count, so the
 change shows on the live proposal (gateway and store, Aron's and Tymon's areas).
 Tests: `agent/tests/test_receiving.py` (offline, recorded replies).
+
+Served: the gateway's `POST /v1/kitchens/{k}/orders/{order_id}/delivery-note/photo`
+(`gateway/delivery_note.py`) hands the photo to this worker's `POST /delivery-note`
+(`agent/receiving_service.py`), which loads the stored order and the catalog's pack sizes,
+reads the note once and answers the checked lines. Nothing is stored but one audit entry.
 
 ## Snap the shelf (#373)
 
