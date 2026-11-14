@@ -1,0 +1,4 @@
+{
+  "role": "assistant",
+  "content": "{\"items\": [{\"label\": \"Valio Eila 3 % milk drink 1 l lactose free\", \"count\":   \"6\", \"confidence\": \"high\"}, {\"label\": \"Valio whipping cream 1 l UHT lactose free\", \"count\":   \"5\", \"confidence\": \"high\"}, {\"label\": \"Keiju Rapeseed oil 1 l\", \"count\":   \"4\", \"confidence\": \"high\"}, {\"label\": \"Valio Edam 17 %\", \"count\":   \"1\", \"confidence\": \"medium\"}, {\"label\": \"Valio Turkish cooking yoghurt 2 kg lactose free\", \"count\":   \"3\", \"confidence\": \"high\"}, {\"label\": \"Valio Eila butter 500 g salted lactose free\", \"count\":   \"4\", \"confidence\": \"high\"}]}"
+}

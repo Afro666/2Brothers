@@ -132,8 +132,23 @@ Nemotron's real reply, recorded live on 2026-11-14:
 | 463038 Valio Eila 10 L novobox | 2 | 2, high | `COUNTED` |
 | 464179 Arla 10 L novobox (half hidden) | 1 | "Arla L m", low | `UNMATCHED`, please count |
 
-Not built yet: the stock page's photo button and the `/stock-counts` route
-(web and gateway, Tymon's and Aron's areas). Tests: `agent/tests/test_shelf.py`.
+Tests: `agent/tests/test_shelf.py`.
+
+**On the site (#373).** The worker serves the internal `POST /shelf`
+(`agent/shelf_service.py`, mounted in `agent/service.py`; bearer `GATEWAY_AGENT_TOKEN`,
+body `{kitchen_id, image_base64}`). It loads the kitchen's stock list and own products
+from `store`, calls `read_shelf` with the live model and answers the contract's rows
+(`count` = packs x pack size in the kitchen's unit; unknown pack size = `PLEASE_COUNT`).
+The gateway's `POST /v1/kitchens/{k}/stock/photo` (`gateway/stock_photo.py`) is the
+public side, made for the Stock page's "Count from a photo". Nothing is stored until a
+person saves the count. `shelf.py`, `vision.py`, the schema and the prompts are unchanged.
+
+`shelf.png` shows milk the live demo kitchen does not stock, so there its labels match
+nothing. `fixtures/shelf/demo-shelf.png` (`make_demo_shelf.py`, also synthetic) prints the
+catalog names of six products on the demo kitchen's stock list; `demo-shelf.reply.json`
+is Nemotron's real reply, recorded live on 2026-11-14 in 2.2 s: 6, 5, 4, 3 and 4 packs
+read right, and the half hidden Edam ("Valio Edam 17 %") is `UNMATCHED`.
+Tests: `agent/tests/test_shelf_service.py`, `gateway/tests/test_stock_photo.py`.
 
 ## Internal worker (#279)
 

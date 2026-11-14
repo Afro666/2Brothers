@@ -27,8 +27,11 @@ async def run_buyer(kitchen_id, body):
                    'BUYER_INCOMPLETE', 'BUYER_UNAVAILABLE', 'BUYER_RECONCILIATION_REQUIRED', 'KITCHEN_SCOPE',
                    'KITCHEN_POLICY_INVALID'}
         code = error.get('code')
-        raise GatewayError(response.status_code if response.status_code in (400, 403, 409, 422, 503, 504) else 503,
-                           code if isinstance(code, str) and code in allowed else 'BUYER_UNAVAILABLE',
+        code = code if isinstance(code, str) and code in allowed else 'BUYER_UNAVAILABLE'
+        status = response.status_code if response.status_code in (400, 403, 409, 422, 503, 504) else 503
+        if code == 'KITCHEN_POLICY_INVALID':
+            status = 409    # one status per code, as docs/contract.md lists it
+        raise GatewayError(status, code,
                            'Buyer request did not complete; reconcile the existing request before retrying',
                            fallback_safe=error.get('fallback_safe') is True)
     if not isinstance(data, dict) or not isinstance(data.get('proposal_id'), str):

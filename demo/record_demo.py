@@ -74,9 +74,15 @@ def steps(base: str, text: str, needed_by: str, approve: bool) -> list[tuple[str
         page.wait_for_timeout(3500)
 
     def decide(page):
-        buttons = [b for b in page.get_by_role("button", name="Approve", exact=False).all() if b.is_enabled()]
+        """Approve only the proposal for `text`, never another one in the inbox.
+
+        Matching rule: an inbox card's title is the request text (trimmed by the gateway),
+        so only an Approve button inside a card whose title is exactly `text.strip()` counts.
+        """
+        cards = page.locator('[data-slot="card"]').filter(has=page.get_by_text(text.strip(), exact=True))
+        buttons = [b for b in cards.get_by_role("button", name="Approve", exact=False).all() if b.is_enabled()]
         if not buttons:
-            raise RuntimeError("no proposal in the inbox can be approved (unconfirmed stock on each)")
+            raise RuntimeError(f'no proposal for "{text.strip()}" in the inbox can be approved')
         buttons[0].scroll_into_view_if_needed()
         page.wait_for_timeout(1200)
         buttons[0].click()

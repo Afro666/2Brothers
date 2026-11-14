@@ -82,7 +82,7 @@ def _env_principal(request: Request, token: str) -> Principal:
 REFUSAL_WINDOW = 60.0          # seconds: one audit row per repeated refusal (#853)
 
 
-def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
+def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worker=None) -> FastAPI:
     app = FastAPI(
         title="Trusted Kitchen Buyer gateway", version="0.1.0",
         description=("REST and MCP gateway between a kitchen's Buyer agent and its suppliers. "
@@ -573,6 +573,10 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     # Kitchen planning routes (#74): stock, products, recipes, menu plans, suppliers, demand.
     from gateway.kitchen_routes import register as register_kitchen_routes
     register_kitchen_routes(app, gw, principal, body)
+
+    # Count from a shelf photo (#373): Nemotron VL reads it in the worker; stores no count.
+    from gateway.stock_photo import mount_stock_photo
+    mount_stock_photo(app, gw, principal, shelf_worker)
 
     # Remote MCP (#280): the same Buyer tools over HTTP at /mcp, agent token only.
     from gateway.mcp_http import mount_mcp

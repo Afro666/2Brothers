@@ -16,7 +16,16 @@ const PendingApprovalsContext = createContext<PendingApprovals>({ count: null, r
  * Approvals page calls `refresh()` after a decision. Without it the shell would fetch
  * the approvals again on every page.
  */
-export function PendingApprovalsProvider({ children }: { children: ReactNode }) {
+/** How often the count is asked again, so proposals the Buyer agent makes while the app is open show up. */
+export const PENDING_APPROVALS_REFRESH_MS = 30_000;
+
+export function PendingApprovalsProvider({
+  children,
+  intervalMs = PENDING_APPROVALS_REFRESH_MS,
+}: {
+  children: ReactNode;
+  intervalMs?: number;
+}) {
   const api = useApi();
   const [count, setCount] = useState<number | null>(null);
   const [version, setVersion] = useState(0);
@@ -36,6 +45,10 @@ export function PendingApprovalsProvider({ children }: { children: ReactNode }) 
     };
   }, [api, version]);
   const refresh = useCallback(() => setVersion((value) => value + 1), []);
+  useEffect(() => {
+    const timer = setInterval(refresh, intervalMs);
+    return () => clearInterval(timer);
+  }, [refresh, intervalMs]);
   const value = useMemo(() => ({ count, refresh }), [count, refresh]);
   return <PendingApprovalsContext.Provider value={value}>{children}</PendingApprovalsContext.Provider>;
 }
