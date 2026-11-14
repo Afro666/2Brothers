@@ -597,7 +597,7 @@ export default {
   "Asked: “{text}”": "Pyydetty: ”{text}”",
   "Ordered {time}": "Tilattu {time}",
   "not recorded": "ei tallennettu",
-  "incl VAT unknown: no VAT rate for {names}": "sis. alv ei tiedossa: tuotteen {names} alv-kanta puuttuu",
+  "incl VAT unknown: no VAT rate for {names}": "sis. alv ei tiedossa, alv-kanta puuttuu: {names}",
   "incl VAT: unknown": "sis. alv: ei tiedossa",
   "Partial fill: {shortfall} of the request cannot be covered for this date.": "Osittainen toimitus: pyynnöstä {shortfall} ei voida kattaa tälle päivälle.",
   "Delivery {date} · {total}": "Toimitus {date} · {total}",

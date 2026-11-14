@@ -126,7 +126,7 @@ describe("orders pages", () => {
     expect(within(row).queryByText(/unknown \(CHERRY/)).not.toBeInTheDocument();
   });
 
-  it("says when an order is a partial fill and leaves raw ids on the detail page", async () => {
+  it("says when an order is a partial fill and shows no raw id in the list", async () => {
     const api = createMockApi();
     const listOrders = api.listOrders;
     api.listOrders = async () => [(await listOrders()).find((order) => order.id === "ORD-1042")!];
