@@ -40,6 +40,8 @@ COMMIT_STALE = timedelta(seconds=60)   # older COMMITTING with no attempt row is
 log = logging.getLogger(__name__)
 OFFER_TTL = timedelta(minutes=15)   # Aron, 2026-11-14 (#19 answer F)
 KIND_SEARCHES = 3                   # extra catalog searches for a request's kind, one per category
+KINDS_TTL = timedelta(hours=1)      # the kinds snapshot is rebuilt after this: a reloaded catalog counts (#1026)
+KINDS_RETRY = timedelta(seconds=60) # after a failed catalog read, wait this long before reading again (#1026)
 
 
 class GatewayError(Exception):
@@ -81,6 +83,8 @@ class Gateway:
         self.db, self.valio, self.now = db, valio, now
         self._search = search          # catalog search; default: store.search (Atlas Search)
         self._kinds = None             # gateway/kind.py, read from the catalog on first use
+        self._kinds_at = None          # when the snapshot was read (rebuilt after KINDS_TTL)
+        self._kinds_failed_at = None   # when the last read failed (no new read for KINDS_RETRY)
         db.proposals.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
         db.orders.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
         db.approvals.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)
@@ -453,9 +457,18 @@ class Gateway:
         from gateway.candidates import SEARCH_LIMIT, of_kind
         from gateway.kind import Kinds, product_phrase
         filters = dict(filters or {})
+        now = self.now()
+        stale = self._kinds is None or self._kinds_at is None or now - self._kinds_at >= KINDS_TTL
+        backing_off = self._kinds_failed_at is not None and now - self._kinds_failed_at < KINDS_RETRY
+        if stale and not backing_off:
+            try:
+                self._kinds, self._kinds_at, self._kinds_failed_at = Kinds.from_db(self.db), now, None
+            except Exception:
+                self._kinds_failed_at = now
+                log.warning("kinds could not be read from the catalog", exc_info=True)
+        if self._kinds is None:
+            return rows
         try:
-            if self._kinds is None:
-                self._kinds = Kinds.from_db(self.db)
             categories = self._kinds.categories(text)
         except Exception:
             log.warning("kind of a request could not be read", exc_info=True)
