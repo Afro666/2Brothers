@@ -324,7 +324,7 @@ describe("mapAudit", () => {
         orderId: undefined,
         kind: "offer",
         actor: "agent",
-        summary: "Buyer called get_offer",
+        summary: "Buyer is asking for an offer",
         reason: 'product_ids: ["900001"]; requested_date: 2026-11-20',
       },
       {
@@ -333,7 +333,7 @@ describe("mapAudit", () => {
         orderId: undefined,
         kind: "approval",
         actor: "agent",
-        summary: "request_approval failed",
+        summary: "Buyer asked for approval: it failed",
         reason: "error: Rejected by buyer policy; reason_code: POLICY_VIOLATION",
       },
       {
