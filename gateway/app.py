@@ -495,6 +495,8 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None) -> FastAPI:
     # Standing-order drift (#377): kitchen and supplier views.
     from gateway.drift_routes import mount_drift
     mount_drift(app, gw, principal)
+    from gateway.supplier_routes import mount_supplier   # the wholesaler's demand view (#33)
+    mount_supplier(app, gw, principal)
 
     # Onboarding lookup (#375): Context.dev brand lookup for the sign-up form.
     from gateway.onboarding import mount_onboarding

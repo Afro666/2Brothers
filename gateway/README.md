@@ -317,3 +317,12 @@ a line:
 "write" = a signed-in person who is not a viewer, or an API token with the new scope
 `kitchen:write` (a POS or stock system). The Buyer agent token cannot write. `on_order` is
 0 with `on_order_known: false` until open orders are converted to kitchen units.
+
+## Supplier demand view (#33)
+
+`GET /v1/suppliers/{supplier_id}/demand?from=&to=[&product=]` and
+`GET .../demand/shortage-risk?from=&to=` (at most 14 days). Per product and day: the forecast
+`demand` summed over the kitchens whose consent names this supplier (`kitchens`, `by_kitchen`),
+the supplier's live `available` in kitchen units (null when unknown), `shortage`, `risk`
+(`OK`, `SHORT`, `UNKNOWN`) and `suggested_buy`. A kitchen without active consent is in no sum
+and no list. The Buyer agent token cannot read it (403).
