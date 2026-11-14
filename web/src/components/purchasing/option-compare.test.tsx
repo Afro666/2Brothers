@@ -229,6 +229,29 @@ describe("OptionCompare", () => {
     expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
   });
 
+  it("shows cut-off, lead time and reliability with (demo) only on demo values (#1453)", () => {
+    render(
+      <OptionCompare
+        options={[
+          {
+            ...choosable,
+            cutoffPassed: null,
+            cutoffAt: "2026-11-15T17:00:00+02:00",
+            cutoffSource: "demo",
+            leadTimeDays: 2,
+            leadTimeSource: "supplier_terms",
+            deliveryReliability: 0.9,
+            reliabilitySource: "demo",
+          },
+        ]}
+        onChoose={vi.fn()}
+      />,
+    );
+    expect(fact("A", "Order cut-off")).toHaveTextContent(/^order by Sun,? 15 Nov,? 17:00 \(demo\)$/);
+    expect(fact("A", "Lead time")).toHaveTextContent(/^2 days$/);
+    expect(fact("A", "Delivery reliability")).toHaveTextContent(/^90 % \(demo\)$/);
+  });
+
   it("shows the milk story: price, total, labels, the engine's sentence and the API's recommendation", async () => {
     const user = userEvent.setup();
     render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
@@ -402,6 +425,8 @@ describe("ApprovalCard with options", () => {
         onChooseOption={onChooseOption}
       />,
     );
+    // The options sit behind Inspect, which names how many there are.
+    await user.click(screen.getByRole("button", { name: "Inspect (2 options)" }));
     await user.click(screen.getByRole("button", { name: /^Choose option A/ }));
     expect(onChooseOption).toHaveBeenCalledWith(choosable.id);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -446,6 +471,7 @@ describe("ApprovalCard with options", () => {
         onApprove={onApprove}
       />,
     );
+    await user.click(screen.getByRole("button", { name: /^Inspect/ }));
     expect(screen.getByText(/wait for the supplier's stock confirmation/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: /^Choose option B/ }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
@@ -463,6 +489,7 @@ describe("Approvals page: the milk options", () => {
     const approve = vi.spyOn(api, "approve");
     renderApp("/approvals", api);
 
+    await user.click(await screen.findByRole("button", { name: "Inspect (3 options)" }));
     expect(await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ })).toBeVisible();
     await user.click(optionToggle("B"));
     await user.click(optionToggle("C"));
@@ -510,6 +537,7 @@ describe("Approvals page: the milk options", () => {
     api.chooseOption = vi.fn(() => Promise.reject(new ApiError("STOCK_UNKNOWN", "STOCK_UNKNOWN")));
     renderApp("/approvals", api);
 
+    await user.click(await screen.findByRole("button", { name: "Inspect (3 options)" }));
     await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ });
     await user.click(optionToggle("C"));
     const choose = await screen.findByRole("button", { name: /^Choose option C/ });

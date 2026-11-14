@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { ATLAS_INDEX_TYPES, ATLAS_LABELS, ATLAS_VERDICTS } from "@/components/purchasing/atlas-card";
 import { MODEL_USAGE_LABELS } from "@/components/purchasing/model-usage-card";
 import { CHOOSE_ERRORS } from "@/components/purchasing/option-compare";
+import { CHIP_TEXTS } from "@/lib/proposal-checks";
 import { MATCH_TEXT, REPLAN_ERROR_TEXT } from "@/components/purchasing/recall-lines";
 import { RISK_META } from "@/components/purchasing/risk-badge";
 import { STATUS_META } from "@/components/purchasing/status-badge";
@@ -26,6 +27,7 @@ const PART2_FILES = [
   "components/purchasing/order-resolution-panel.tsx",
   "components/purchasing/chef-request-box.tsx",
   "components/purchasing/order-lines-table.tsx",
+  "components/purchasing/proposal-lines.tsx",
   "components/purchasing/mandate-summary.tsx",
   "components/purchasing/mov-progress.tsx",
   "components/purchasing/risk-badge.tsx",
@@ -56,6 +58,7 @@ describe("part 2 translations", () => {
         Object.values(metadata).flatMap((meta) => [meta.label, meta.meaning]),
       ),
       ...Object.values(CHOOSE_ERRORS),
+      ...CHIP_TEXTS,
       ...Object.values(MATCH_TEXT),
       ...Object.values(REPLAN_ERROR_TEXT),
       "The replacement order could not be prepared.",

@@ -11,6 +11,7 @@ import { createOffersMock } from "@/api/mock-offers";
 import { forecastAccuracyMock } from "@/api/mock-forecast";
 import { createRecallMock } from "@/api/mock-recalls";
 import { coffeeApproval, coffeeOrder } from "@/mocks/coffee-recall";
+import { menuPlanApproval, menuPlanOrder } from "@/mocks/menu-plan-case";
 import { sampleReceipt } from "@/mocks/receipt";
 import { listBrandLogosMock } from "@/api/mock-brand-logos";
 import { lookupKitchenBrandMock } from "@/api/mock-onboarding";
@@ -82,6 +83,9 @@ export interface MockApiOptions {
 }
 
 /** The milk case held in memory. Each call makes its own state, so tests do not share it. */
+/** `VITE_MOCK_MENU_PLAN=true` adds a 14-line menu-plan proposal to the mock inbox. */
+const MENU_PLAN = import.meta.env.VITE_MOCK_MENU_PLAN === "true";
+
 export function createMockApi(options: MockApiOptions = {}): MockApi {
   const unknownOrder: Order = {
     ...structuredClone(seedOrders.placed),
@@ -125,12 +129,20 @@ export function createMockApi(options: MockApiOptions = {}): MockApi {
       coffeeApproval,
       unknownApproval,
       supplierConfirmationApproval,
+      // A long menu-plan order, only on request: the default inbox and its counts stay as they are.
+      ...(MENU_PLAN ? [menuPlanApproval] : []),
     ].map((row) => [row.id, structuredClone(row)]),
   );
   const demoOrders = new Map(
-    [placedOrder, seedOrders.needsApproval, confirmedDemoOrder, coffeeOrder, unknownOrder, supplierConfirmationOrder].map(
-      (row) => [row.id, structuredClone(row)],
-    ),
+    [
+      placedOrder,
+      seedOrders.needsApproval,
+      confirmedDemoOrder,
+      coffeeOrder,
+      unknownOrder,
+      supplierConfirmationOrder,
+      ...(MENU_PLAN ? [menuPlanOrder] : []),
+    ].map((row) => [row.id, structuredClone(row)]),
   );
   const resolutions = new Map<string, OrderResolution>([
     [

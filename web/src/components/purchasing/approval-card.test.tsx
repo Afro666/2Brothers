@@ -155,15 +155,15 @@ describe("ApprovalCard", () => {
     }
   });
 
-  it("starts folded when asked: title and total show, the details open on a tap (#1142)", async () => {
-    render(<ApprovalCard request={{ ...approval, status: "REJECTED" }} order={confirmedOrder} folded />);
+  it("starts compact: title and total show, the details open on Inspect (#1142)", async () => {
+    render(<ApprovalCard request={{ ...approval, status: "REJECTED" }} order={confirmedOrder} />);
     expect(screen.getByText(approval.summary)).toBeInTheDocument();
     expect(screen.queryByText("What to check")).not.toBeInTheDocument();
-    const toggle = screen.getByRole("button", { name: "Show details" });
+    const toggle = screen.getByRole("button", { name: "Inspect" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(toggle);
     expect(screen.getByText("What to check")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hide details" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Inspect" })).toHaveAttribute("aria-expanded", "true");
   });
 
   it("shows who asked and when when both are known", () => {
@@ -194,7 +194,7 @@ describe("ApprovalCard", () => {
     )).toBeVisible();
   });
 
-  it.each([false, true])("names suppliers that must confirm without changing Approve when stock is unconfirmed: %s", (unconfirmed) => {
+  it.each([false, true])("names suppliers that must confirm without changing Approve when stock is unconfirmed: %s", async (unconfirmed) => {
     const order = structuredClone(confirmedOrder);
     if (unconfirmed) order.lines[0].offer.availableAmount = 999999;
     const withoutNotice = { ...approval, suppliersToConfirm: [] };
@@ -211,22 +211,25 @@ describe("ApprovalCard", () => {
         order={order}
       />,
     );
+    expect(screen.getByText("Leipomo Demo must confirm")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     const checks = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
     expect(within(checks).getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
     expect((screen.getByRole("button", { name: /^Approve/ }) as HTMLButtonElement).disabled).toBe(disabledWithoutNotice);
   });
 
-  it("says the order is sent and waits for the supplier, with no kitchen setting (Aron, 2026-11-14)", () => {
+  it("says the order is sent and waits for the supplier, with no kitchen setting (Aron, 2026-11-14)", async () => {
     const request = {
       ...approval,
       suppliersToConfirm: [{ supplierId: "sup-bakery", name: "Leipomo Demo" }],
     };
     render(<ApprovalCard request={request} order={confirmedOrder} />);
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     expect(screen.getByText("Leipomo Demo must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.")).toBeVisible();
     expect(screen.queryByText(/before this order can be approved/)).toBeNull();
   });
 
-  it("shows the gateway's manual-supplier confirmation reason as sent under What to check", () => {
+  it("shows the gateway's manual-supplier confirmation reason as sent under What to check", async () => {
     const reason =
       "Töölö Bakery is a price list the kitchen entered: its stock is not known until the supplier confirms. You may approve it; the order then waits for the supplier's confirmation (call or e-mail them).";
     render(
@@ -235,7 +238,7 @@ describe("ApprovalCard", () => {
         order={orders.needsApproval}
       />,
     );
-
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     const checks = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
     expect(within(checks).getByText(reason)).toBeVisible();
   });
@@ -251,7 +254,10 @@ describe("ApprovalCard", () => {
         listAddableProducts={listAddableProducts}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Show order lines" }));
+    await user.click(screen.getByRole("button", { name: "Inspect" }));
+    // The addable list is asked for only once Add products is open.
+    expect(listAddableProducts).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Add products" }));
     await waitFor(() => expect(listAddableProducts).toHaveBeenCalledTimes(1));
     listAddableProducts.mockClear();
     await user.type(screen.getByLabelText("Search products"), "Arla 1 L");
@@ -267,13 +273,15 @@ describe("ApprovalCard", () => {
     const order = structuredClone(confirmedOrder);
     Object.assign(order.lines[0].offer, { availableAmount: amount });
     render(<ApprovalCard request={approval} order={order} onApprove={onApprove} />);
-    expect(screen.getByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
+    // Compact: a chip says who must confirm; the full sentence is in Inspect and in the confirmation.
+    expect(screen.getByText("Valio must confirm 1")).toBeVisible();
     expect(screen.queryByText(/approval is available once stock is confirmed/)).toBeNull();
     const approve = screen.getByRole("button", { name: /^Approve/ });
     expect(approve).toBeEnabled();
     expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
     await user.click(approve);
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
+    expect(within(dialog).getByText("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")).toBeVisible();
     await user.click(within(dialog).getByRole("button", { name: /^Yes, approve/ }));
     expect(onApprove).toHaveBeenCalledTimes(1);
   });
@@ -287,19 +295,23 @@ describe("ApprovalCard", () => {
     expect(button).toHaveAccessibleDescription(reason);
   });
 
-  it("lists what to check and never says an order can go without approval", () => {
+  it("lists what to check and never says an order can go without approval", async () => {
     render(<ApprovalCard request={approval} order={confirmedOrder} />);
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     expect(screen.getByRole("heading", { name: "What to check" })).toBeVisible();
     expect(screen.getByText("3 % fat instead of 0 % in the first choice.")).toBeVisible();
     expect(screen.queryByText(/without approval/)).not.toBeInTheDocument();
   });
 
-  it("shows missing allergen data under what to check", () => {
+  it("shows missing allergen data under what to check", async () => {
     const unknownAllergens = mapApproval({
       ...proposal,
       lines: [{ ...proposal.lines[0], reason_codes: ["ALLERGEN_DATA_MISSING"] }],
     });
     render(<ApprovalCard request={unknownAllergens} order={confirmedOrder} />);
+    // Short at the top of the compact card, in full under Inspect.
+    expect(screen.getByText("Allergen data missing", { selector: "li" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     const check = screen.getByRole("heading", { name: "What to check" }).closest("section")!;
     expect(within(check).getByText("Allergen data missing")).toBeVisible();
     expect(
@@ -430,13 +442,13 @@ describe("ApprovalCard", () => {
         listAddableProducts={vi.fn().mockResolvedValue([])}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Show order lines" }));
+    await user.click(screen.getByRole("button", { name: "Inspect" }));
     const quantity = screen.getAllByRole("spinbutton", { name: /^Quantity for / })[0];
     const originalQuantity = (quantity as HTMLInputElement).valueAsNumber;
 
     await user.click(screen.getAllByRole("button", { name: /^Remove / })[0]);
 
-    const orderSection = screen.getByRole("button", { name: "Hide order lines" }).closest("section")!;
+    const orderSection = screen.getByRole("region", { name: "Order lines" });
     expect(await within(orderSection).findByRole("alert")).toHaveTextContent(message);
     expect(within(orderSection).getByRole("alert")).toHaveTextContent("The proposal is unchanged.");
     expect(quantity).toHaveValue(originalQuantity);

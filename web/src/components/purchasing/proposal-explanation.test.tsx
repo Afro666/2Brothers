@@ -30,10 +30,11 @@ function apiWith(answers: (ProposalExplanation | null)[]): Api {
   return api;
 }
 
-function renderCard(api: Api, request = approval, folded = false) {
+// Every card starts compact (Aron, 2026-11-14): the decision record opens on Inspect.
+function renderCard(api: Api, request = approval) {
   return render(
     <ApiProvider api={api}>
-      <ApprovalCard request={request} order={confirmedOrder} folded={folded} />
+      <ApprovalCard request={request} order={confirmedOrder} />
     </ApiProvider>,
   );
 }
@@ -54,6 +55,11 @@ describe("the explanation at the top of the approval card (#1173)", () => {
   it("renders exactly as before while there is no explanation", async () => {
     const api = apiWith([null]);
     const { container } = renderCard(api);
+    // The compact card shows product pictures at once; let their brand logos arrive first,
+    // so only the explanation can change the card after this point.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
     const before = container.innerHTML;
     await act(async () => {
       await vi.advanceTimersByTimeAsync(EXPLANATION_POLL_MS * 6);
@@ -119,10 +125,10 @@ describe("the explanation at the top of the approval card (#1173)", () => {
     expect(within(shown).queryByTestId("nemotron-mark")).toBeNull();
   });
 
-  it("opens the full decision record from a folded card without duplicating it", async () => {
+  it("opens the full decision record from a compact card without duplicating it", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const api = apiWith([text]);
-    renderCard(api, approval, true);
+    renderCard(api, approval);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -134,7 +140,7 @@ describe("the explanation at the top of the approval card (#1173)", () => {
 
   it("does not ask for a decided proposal", async () => {
     const api = apiWith([text]);
-    renderCard(api, { ...approval, status: "REJECTED" }, true);
+    renderCard(api, { ...approval, status: "REJECTED" });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(EXPLANATION_POLL_MS * 6);
     });

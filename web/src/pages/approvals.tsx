@@ -318,14 +318,13 @@ function ApiApprovalsPage() {
                   {t("Decided")}
                 </h2>
                 <div className="space-y-4">
-                  {/* Decided cards start folded, and only the first few show: a phone stays short (#1142). */}
+                  {/* Every card starts compact, and only the first few decided ones show: a phone stays short (#1142). */}
                   {(allDecided ? decided : decided.slice(0, DECIDED_SHOWN)).map(({ approval, order }) => (
                     <ApprovalCard
                       key={approval.id}
                       request={approval}
                       order={order ?? undefined}
                       recalls={recallsFor(approval.orderId)}
-                      folded
                     />
                   ))}
                 </div>

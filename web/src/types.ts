@@ -60,6 +60,9 @@ export interface Product {
   deliveryReliability: number | null;
 }
 
+/** Where a delivery fact comes from (#1453): Valio, the supplier's own terms, or demo values. */
+export type DeliverySource = "valio" | "supplier_terms" | "demo";
+
 /** Price + availability for one product and one requested date (an offer). */
 export interface Offer {
   productId: ProductCode;
@@ -81,6 +84,14 @@ export interface Offer {
   /** Order cut-off for `availableDate`. Can already be in the past. */
   closingTime: string | null;
   salesBlock: boolean;
+  /** Where `closingTime` came from (#1453); absent or null when not said. */
+  cutoffSource?: DeliverySource | null;
+  /** Days from order to delivery (#1453); null when no source knows it. */
+  leadTimeDays?: number | null;
+  leadTimeSource?: DeliverySource | null;
+  /** Delivered versus ordered, 0..1, for this line (#1453). */
+  deliveryReliability?: number | null;
+  reliabilitySource?: DeliverySource | null;
 }
 
 export type OrderStatus =
@@ -285,7 +296,13 @@ export interface ProposalOption {
   stockConfirmed: boolean;
   /** true = the order cut-off is missed; null = the API did not say. */
   cutoffPassed: boolean | null;
+  /** The earliest line cut-off (#1453); null when no line says. */
   cutoffAt: string | null;
+  cutoffSource?: DeliverySource | null;
+  /** The longest line lead time in days (#1453). */
+  leadTimeDays?: number | null;
+  leadTimeSource?: DeliverySource | null;
+  reliabilitySource?: DeliverySource | null;
   /** Delivered vs ordered, 0..1, of the weakest line. */
   deliveryReliability: number | null;
   /** Product-group average (not this product's own figure): lowest and highest line. */

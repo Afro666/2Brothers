@@ -1075,7 +1075,7 @@ describe("the app on the gateway", () => {
 
     expect(await screen.findByText("50 L oat drink by Friday")).toBeVisible();
     expect(screen.queryByText("Sample data")).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    await user.click(await screen.findByRole("button", { name: /^Inspect/ }));
     expect(screen.getAllByText("confirmed").length).toBeGreaterThan(0);
     expect(screen.getByText(/Free-delivery threshold and delivery fee unknown/)).toBeVisible();
 
@@ -1116,7 +1116,7 @@ describe("the app on the gateway", () => {
     });
     renderApp("/approvals", createHttpApi("/api"));
 
-    await user.click(await screen.findByRole("button", { name: "Show order lines" }));
+    await user.click(await screen.findByRole("button", { name: /^Inspect/ }));
     const quantity = await screen.findByLabelText(/Quantity for 900001/);
     await user.clear(quantity);
     await user.type(quantity, "30");

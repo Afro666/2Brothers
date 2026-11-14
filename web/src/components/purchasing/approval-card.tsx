@@ -1,12 +1,12 @@
-import { Check, X } from "lucide-react";
+import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { MovProgress } from "@/components/purchasing/mov-progress";
 import { OptionCompare } from "@/components/purchasing/option-compare";
-import { OrderLinesTable } from "@/components/purchasing/order-lines-table";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { ProposalExplanationBlock, useCardExplanation } from "@/components/purchasing/proposal-explanation";
+import { ProposalLines } from "@/components/purchasing/proposal-lines";
 import { RecallLines, recallHold } from "@/components/purchasing/recall-lines";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,13 +27,12 @@ import {
   formatDateTime,
   formatEur,
   formatNumber,
-  formatOfferStock,
   formatStock,
   formatTime,
-  isPassed,
   isStockUnconfirmed,
 } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { splitChecks, statusChips } from "@/lib/proposal-checks";
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/tone";
 import { useAsync } from "@/lib/use-async";
@@ -81,13 +80,6 @@ function requestDescription(request: ApprovalRequest, t: ReturnType<typeof useT>
   return t(oneLine ? "{count} line · delivery {date}" : "{count} lines · delivery {date}", values);
 }
 
-/**
- * One order outside the mandate, waiting for a human. Approve names the
- * exact total on the button and again in the confirmation, because that
- * figure is what the gateway checks (`expected_total`) when it places the
- * order. The human's "yes" to that figure is the consent; the total alone
- * is not.
- */
 /** Wait this long after the last keystroke before searching addable products. */
 export const ADD_SEARCH_DEBOUNCE_MS = 250;
 
@@ -124,6 +116,11 @@ export function earliestCutoff(lines: readonly CutoffLine[], now: Date): Earlies
   };
 }
 
+/** Product pictures in the compact card before "+N". */
+const THUMBS_SHOWN = 4;
+/** Status chips in the compact card; the rest are in Inspect. */
+const CHIPS_SHOWN = 3;
+
 const CHANGE_ERRORS: Record<string, string> = {
   NOT_PENDING: "This proposal is no longer waiting for approval. Refresh the page to see its current status.",
   LINE_NOT_FOUND: "That product is not on this proposal. Add it as a new product instead.",
@@ -136,6 +133,16 @@ const CHANGE_ERRORS: Record<string, string> = {
   ROLE_REQUIRED: "Your role cannot change proposals. Ask a chef or approver to make this change.",
 };
 
+/**
+ * One order outside the mandate, waiting for a human. Compact by default: what it is,
+ * when it comes, the total, a few status chips and Approve / Reject, so a buyer decides
+ * in seconds. Inspect opens the rest: the lines table (editable), the options, the full
+ * "What to check" list and what the model did.
+ *
+ * Approve names the exact total on the button and again in the confirmation, because
+ * that figure is what the gateway checks (`expected_total`) when it places the order.
+ * The human's "yes" to that figure is the consent; the total alone is not.
+ */
 export function ApprovalCard({
   request,
   order,
@@ -148,7 +155,6 @@ export function ApprovalCard({
   editCount = 0,
   approvalBlockedReason,
   recalls = [],
-  folded = false,
 }: {
   request: ApprovalRequest;
   order?: Order;
@@ -162,8 +168,6 @@ export function ApprovalCard({
   approvalBlockedReason?: string;
   /** Recall alerts on this order; a blocked line still on it holds the approval. */
   recalls?: RecallAlert[];
-  /** A decided card starts folded: title, totals and status show, the details open on a tap (#1142). */
-  folded?: boolean;
 }) {
   const t = useT();
   const [open, setOpen] = useState<"approve" | "reject" | null>(null);
@@ -174,8 +178,9 @@ export function ApprovalCard({
   const [error, setError] = useState<string | null>(null);
   const [changeError, setChangeError] = useState<string | null>(null);
   const changing = useRef(false);
-  const [showOrder, setShowOrder] = useState(false);
-  const [showDetails, setShowDetails] = useState(!folded);
+  // Every card starts compact (#1142, Aron 2026-11-14): the details open on Inspect.
+  const [inspecting, setInspecting] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
   // The checked Nemotron explanation (#1173): asked after the card is drawn, never awaited.
   const explanation = useCardExplanation(
@@ -191,13 +196,12 @@ export function ApprovalCard({
     const timer = window.setTimeout(() => setDebouncedSearch(search), ADD_SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [search]);
-  const addables = useAsync(
-    () => listAddableProducts?.(debouncedSearch) ?? Promise.resolve([]),
-    [debouncedSearch],
-  );
-  const reasonId = useId();
-  const stockBlockId = useId();
-  const accountBlockId = useId();
+  const baseId = useId();
+  const reasonId = `${baseId}-reason`;
+  const inspectId = `${baseId}-inspect`;
+  const addId = `${baseId}-add`;
+  const stockBlockId = `${baseId}-stock-block`;
+  const accountBlockId = `${baseId}-account-block`;
   const pending = status === "PENDING";
   useEffect(() => {
     if (!pending) return;
@@ -207,16 +211,22 @@ export function ApprovalCard({
   // A proposal held by a recall cannot be approved, but it can be rejected to close it.
   const held = status === "BLOCKED_BY_RECALL";
   const canDecide = pending || (held && onReject != null);
+  const editing = pending && onChangeProposal != null && listAddableProducts != null;
+  // The addable list is asked for only once a person opens it.
+  const addables = useAsync(
+    () => (editing && adding ? listAddableProducts?.(debouncedSearch) ?? Promise.resolve([]) : Promise.resolve([])),
+    [debouncedSearch, editing && adding],
+  );
   // What holds the approval: a recall, or lines we cannot show.
+  const recallMessage = recallHold(recalls, order, t);
   const stockMessage =
-    recallHold(recalls, order, t) ??
+    recallMessage ??
     (!order || order.lines.length === 0 ? t("Order details are unavailable. Reload them before approving.") : null);
   // Unconfirmed supplier stock does not hold it (Aron, 2026-11-14): the order is sent and waits.
   const waitingNotice =
     order?.lines.some((line) => isStockUnconfirmed(line.offer))
       ? t("Some lines wait for the supplier's stock confirmation. You can still approve: the order is sent and marked as waiting for the supplier.")
       : null;
-  const editing = pending && onChangeProposal != null && listAddableProducts != null;
   const clock = now ?? new Date();
   const cutoff = earliestCutoff(
     request.cutoffs ?? order?.lines.map((line) => ({ closingTime: line.offer.closingTime, supplierName: null })) ?? [],
@@ -237,6 +247,20 @@ export function ApprovalCard({
     : null;
   const approveBlockDescription = [stockMessage ? stockBlockId : null, approvalBlockedReason ? accountBlockId : null]
     .filter(Boolean).join(" ") || undefined;
+  const lines = order?.lines ?? [];
+  const checks = splitChecks(request.reasons, lines);
+  const chips = statusChips({
+    request,
+    order,
+    now: clock,
+    heldByRecall: held || recallMessage != null,
+    leftOut: checks.leftOut.length,
+  });
+  const suppliers = [...new Set(["Valio", ...request.suppliersToConfirm.map((supplier) => supplier.name)])];
+  // One sentence on why: the checked Nemotron explanation (#1394) when there is one, else the
+  // engine's own reason for a one-line order.
+  const why = !explanation?.text && lines.length === 1 ? lines[0].why : null;
+  const optionCount = pending ? (request.options?.length ?? 0) : 0;
 
   async function changeProposal(change: ProposalChange) {
     // The ref closes the gap before `busy` disables the buttons: two fast presses are one change.
@@ -312,31 +336,79 @@ export function ApprovalCard({
     <Card
       id={`proposal-${request.orderId}`}
       tabIndex={-1}
-      className="docket scroll-mt-6 gap-4 p-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/70 sm:p-5"
+      className="docket scroll-mt-6 gap-3 p-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/70 sm:p-5"
     >
-      <CardHeader className="px-0">
-        <CardTitle className="text-[19px] leading-[25px] font-[650]">{request.summary}</CardTitle>
-        <CardDescription className="font-mono text-xs leading-4 font-[450]">
-          {requestDescription(request, t)}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 px-0">
-        <ProposalExplanationBlock
-          explanation={explanation}
-          openDetails={folded && !showDetails ? () => setShowDetails(true) : undefined}
-        />
-        <dl className="space-y-3 border-t pt-3">
-          <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-sm text-muted-foreground">{t("Total ex VAT")}</dt>
-            <dd className="font-mono text-sm tabular-nums">{formatEur(request.totalExVat)}</dd>
+      <CardHeader className="grid-cols-1 grid-rows-none items-start gap-x-4 gap-y-2 px-0 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="flex min-w-0 items-start gap-3">
+          {lines.length > 0 ? (
+            <span className="flex shrink-0 -space-x-3 pt-0.5 max-sm:hidden" data-testid="proposal-thumbs">
+              {lines.slice(0, THUMBS_SHOWN).map((line) => (
+                <ProductThumb
+                  key={line.product.id}
+                  en={line.product.names.en}
+                  fi={line.product.names.fi}
+                  brand={line.product.brand}
+                  size="sm"
+                  className="ring-2 ring-card"
+                />
+              ))}
+              {lines.length > THUMBS_SHOWN ? (
+                <span
+                  aria-hidden
+                  className="inline-flex size-8 items-center justify-center rounded-lg bg-muted font-mono text-[11px] text-muted-foreground ring-2 ring-card"
+                >
+                  +{lines.length - THUMBS_SHOWN}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+          <div className="min-w-0 space-y-1.5">
+            <CardTitle className="text-[17px] leading-[23px] font-[650] [overflow-wrap:anywhere]">
+              {request.summary}
+            </CardTitle>
+            <CardDescription className="font-mono text-xs leading-4 font-[450]">
+              {requestDescription(request, t)}
+              <span className="text-muted-foreground"> · {suppliers.join(", ")}</span>
+            </CardDescription>
+            <ProposalExplanationBlock
+              explanation={explanation}
+              openDetails={!inspecting ? () => setInspecting(true) : undefined}
+            />
+            {why ? (
+              <p data-slot="card-why" className="line-clamp-2 max-w-[80ch] text-sm text-muted-foreground" title={why}>
+                <span className="font-medium text-foreground">{t("Why: ")}</span>
+                {why}
+              </p>
+            ) : null}
           </div>
-          <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-sm text-muted-foreground">{t("Total incl VAT")}</dt>
-            <dd className="inline-block border-b-[3px] border-double border-foreground text-2xl leading-7 font-bold tabular-nums">
-              {formatEur(request.totalInclVat)}
-            </dd>
-          </div>
+        </div>
+        <dl className="flex items-baseline gap-3 sm:block sm:text-right">
+          <dt className="sr-only">{t("Total incl VAT")}</dt>
+          <dd className="inline-block border-b-[3px] border-double border-foreground text-xl leading-7 font-bold tabular-nums">
+            {formatEur(request.totalInclVat)}
+          </dd>
+          <dt className="sr-only">{t("Total ex VAT")}</dt>
+          <dd className="font-mono text-xs text-muted-foreground tabular-nums">
+            {t("{amount} ex VAT", { amount: formatEur(request.totalExVat) })}
+          </dd>
         </dl>
+      </CardHeader>
+      <CardContent className="space-y-3 px-0">
+        {chips.length > 0 ? (
+          <ul className="flex flex-wrap gap-1.5" aria-label={t("Status")}>
+            {chips.slice(0, CHIPS_SHOWN).map((chip) => (
+              <li
+                key={chip.key}
+                className={cn(
+                  "inline-flex items-center rounded-sm border px-1.5 py-px text-xs font-medium whitespace-nowrap",
+                  TONE_CLASSES[chip.tone],
+                )}
+              >
+                {t(chip.text, chip.values)}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {pending && cutoff ? (
           <p className={cn("break-words text-sm", cutoff.warning ? "hatch text-warning" : "text-muted-foreground")}>
             {cutoff.passed
@@ -346,220 +418,172 @@ export function ApprovalCard({
                 })}${cutoffOrigin}${cutoffEarliest}${cutoffTimeLeft ? ` · ${cutoffTimeLeft}` : ""}`}
           </p>
         ) : null}
-        {folded ? (
-          <Button
-            type="button"
-            variant="outline"
-            aria-expanded={showDetails}
-            onClick={() => setShowDetails((shown) => !shown)}
-          >
-            {showDetails ? t("Hide details") : t("Show details")}
-          </Button>
-        ) : null}
-        {showDetails ? (
-          <>
-        <ModelTracePanel trace={request.modelTrace} />
-        {editCount > 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {t("Changed by you: {count} edits. The Buyer learns from these.", { count: editCount })}
-          </p>
-        ) : null}
-        <section className="space-y-2">
-          <h4 className="label-caps">{t("What to check")}</h4>
-          <ul className="space-y-2">
-            {request.reasons.map((r) => (
-              <li key={r.rule} className="border-l-[3px] border-warning py-1 pl-3 text-sm">
-                <div className="font-semibold">{t(r.rule)}</div>
-                <div className="text-foreground">{t(r.detail)}</div>
-              </li>
-            ))}
-            {request.suppliersToConfirm.map((supplier) => (
-              <li
-                key={supplier.supplierId}
-                className="rounded-r-md border-l-[3px] border-warning bg-warning-surface px-3 py-2 text-sm text-warning"
-              >
-                {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", {
-                  supplier: supplier.name,
-                })}
-              </li>
-            ))}
-          </ul>
-        </section>
         <RecallLines alerts={recalls} />
-        {pending && (stockMessage ?? waitingNotice) ? (
-          <p id={stockMessage ? stockBlockId : undefined} className="hatch text-sm text-warning">
-            {stockMessage ?? waitingNotice}
+        {pending && stockMessage ? (
+          <p id={stockBlockId} className="hatch text-sm text-warning">
+            {stockMessage}
           </p>
         ) : null}
-        {pending && request.options?.length ? (
-          <OptionCompare
-            options={request.options}
-            disabled={busy || !!approvalBlockedReason}
-            onChoose={onChooseOption}
-            onApprove={() => setOpen("approve")}
-          />
-        ) : null}
-        {order ? (
-          <section className="space-y-3 border-t pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              aria-expanded={showOrder}
-              onClick={() => setShowOrder((shown) => !shown)}
-            >
-              {showOrder ? t("Hide order lines") : t("Show order lines")}
-            </Button>
-            {showOrder ? (
-              <div className="space-y-4">
-                {changeError ? (
-                  <p role="alert" className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.danger)}>
-                    {changeError}
-                  </p>
-                ) : null}
-                {editing ? (
-                  <ul className="divide-y">
-                    {order.lines.map((line) => (
-                      <li key={line.product.id} className="space-y-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <ProductThumb size="sm" en={line.product.names.en} fi={line.product.names.fi} brand={line.product.brand} />
-                          <div className="font-medium">{line.product.names.en}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">
-                            {line.product.id} · {line.product.salesUnit}
-                          </div>
-                        </div>
-                        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                          <dt className="text-muted-foreground">{t("Stock")}</dt>
-                          <dd>{t(formatOfferStock(line.offer))}</dd>
-                          <dt className="text-muted-foreground">{t("Cut-off")}</dt>
-                          <dd>
-                            {t(formatDateTime(line.offer.closingTime))}
-                            {isPassed(line.offer.closingTime, clock) ? t(" (passed)") : ""}
-                          </dd>
-                          <dt className="text-muted-foreground">{t("Unit price")}</dt>
-                          <dd>{t("{amount} ex VAT", { amount: t(formatEur(line.offer.priceExVat)) })}</dd>
-                        </dl>
-                        <p className="text-sm text-muted-foreground">{t("Why:")} {line.why}</p>
-                        <div className="flex items-end gap-2">
-                          <label
-                            className="grid min-w-0 flex-1 gap-1 text-sm font-medium"
-                            htmlFor={`qty-${request.id}-${line.product.id}`}
-                          >
-                            {t("Quantity for {product} ({unit})", {
-                              product: line.product.names.en,
-                              unit: line.product.salesUnit,
-                            })}
-                            <Input
-                              id={`qty-${request.id}-${line.product.id}`}
-                              type="number"
-                              min={1}
-                              step={1}
-                              value={quantityValue(line)}
-                              disabled={busy}
-                              onChange={(event) =>
-                                setQuantities((current) => ({ ...current, [line.product.id]: event.target.value }))
-                              }
-                            />
-                          </label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={
-                              busy ||
-                              !Number.isInteger(Number(quantityValue(line))) ||
-                              Number(quantityValue(line)) < 1 ||
-                              Number(quantityValue(line)) === line.quantity
-                            }
-                            aria-label={t("Update {product}", { product: line.product.names.en })}
-                            onClick={() =>
+        <div id={inspectId} hidden={!inspecting} className="space-y-5 border-t pt-4">
+          {inspecting ? (
+            <>
+              {pending && waitingNotice ? <p className="hatch text-sm text-warning">{waitingNotice}</p> : null}
+              {editCount > 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t("Changed by you: {count} edits. The Buyer learns from these.", { count: editCount })}
+                </p>
+              ) : null}
+              {order ? (
+                <section className="space-y-3" aria-label={t("Order lines")}>
+                  {changeError ? (
+                    <p role="alert" className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.danger)}>
+                      {changeError}
+                    </p>
+                  ) : null}
+                  <ProposalLines
+                    lines={order.lines}
+                    now={clock}
+                    confirmBy="Valio"
+                    checks={checks.perLine}
+                    leftOut={checks.leftOut}
+                    editing={
+                      editing
+                        ? {
+                            busy,
+                            value: quantityValue,
+                            onType: (line, value) =>
+                              setQuantities((current) => ({ ...current, [line.product.id]: value })),
+                            onUpdate: (line) =>
                               void changeProposal({
                                 type: "SET_QUANTITY",
                                 productId: line.product.id,
                                 quantity: Number(quantityValue(line)),
-                              })
-                            }
-                          >
-                            {t("Update")}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={busy}
-                            aria-label={t("Remove {product}", { product: line.product.names.en })}
-                            onClick={() => void changeProposal({ type: "REMOVE_LINE", productId: line.product.id })}
-                          >
-                            {t("Remove")}
-                          </Button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <OrderLinesTable lines={order.lines} now={clock} />
-                )}
-                {editing ? (
-                  <section className="space-y-3 border-t pt-4" aria-labelledby={`add-products-${request.id}`}>
-                    <h4 id={`add-products-${request.id}`} className="font-medium">
-                      {t("Add products")}
-                    </h4>
-                    <label className="grid gap-1 text-sm font-medium" htmlFor={`product-search-${request.id}`}>
-                      {t("Search products")}
-                      <Input
-                        id={`product-search-${request.id}`}
-                        type="search"
-                        value={search}
-                        disabled={busy}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder={t("Search by name")}
-                      />
-                    </label>
-                    {addables.status === "loading" ? (
-                      <p className="text-sm text-muted-foreground">{t("Loading products…")}</p>
-                    ) : null}
-                    {addables.status === "error" ? (
-                      <p role="alert" className="text-sm text-danger">
-                        {addables.error.message}
-                      </p>
-                    ) : null}
-                    {addables.status === "ready" ? (
-                      addables.data.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">{t("No products found.")}</p>
-                      ) : (
-                        <ul className="divide-y">
-                          {addables.data.map((item) => (
-                            <AddableRow
-                              key={item.product.id}
-                              item={item}
-                              disabled={busy}
-                              onAdd={(quantity) =>
-                                void changeProposal({ type: "ADD_LINE", productId: item.product.id, quantity })
-                              }
-                            />
-                          ))}
-                        </ul>
-                      )
-                    ) : null}
-                  </section>
-                ) : null}
-                <MovProgress mov={order.mov} />
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-          </>
-        ) : null}
+                              }),
+                            onRemove: (line) => void changeProposal({ type: "REMOVE_LINE", productId: line.product.id }),
+                            inputId: (line) => `qty-${request.id}-${line.product.id}`,
+                          }
+                        : undefined
+                    }
+                  />
+                  <MovProgress mov={order.mov} />
+                  {editing ? (
+                    <div className="space-y-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-expanded={adding}
+                        aria-controls={addId}
+                        onClick={() => setAdding((shown) => !shown)}
+                      >
+                        <Plus aria-hidden />
+                        {t("Add products")}
+                      </Button>
+                      <section id={addId} hidden={!adding} className="space-y-3" aria-label={t("Add products")}>
+                        {adding ? (
+                          <>
+                            <label className="grid gap-1 text-sm font-medium" htmlFor={`product-search-${request.id}`}>
+                              {t("Search products")}
+                              <Input
+                                id={`product-search-${request.id}`}
+                                type="search"
+                                value={search}
+                                disabled={busy}
+                                onChange={(event) => setSearch(event.target.value)}
+                                placeholder={t("Search by name")}
+                              />
+                            </label>
+                            {addables.status === "loading" ? (
+                              <p className="text-sm text-muted-foreground">{t("Loading products…")}</p>
+                            ) : null}
+                            {addables.status === "error" ? (
+                              <p role="alert" className="text-sm text-danger">
+                                {addables.error.message}
+                              </p>
+                            ) : null}
+                            {addables.status === "ready" ? (
+                              addables.data.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">{t("No products found.")}</p>
+                              ) : (
+                                <ul className="divide-y divide-dashed divide-input">
+                                  {addables.data.map((item) => (
+                                    <AddableRow
+                                      key={item.product.id}
+                                      item={item}
+                                      disabled={busy}
+                                      onAdd={(quantity) =>
+                                        void changeProposal({ type: "ADD_LINE", productId: item.product.id, quantity })
+                                      }
+                                    />
+                                  ))}
+                                </ul>
+                              )
+                            ) : null}
+                          </>
+                        ) : null}
+                      </section>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
+              {pending && request.options?.length ? (
+                <OptionCompare
+                  options={request.options}
+                  disabled={busy || !!approvalBlockedReason}
+                  onChoose={onChooseOption}
+                  onApprove={() => setOpen("approve")}
+                />
+              ) : null}
+              <section className="space-y-2">
+                <h4 className="label-caps">{t("What to check")}</h4>
+                <ul className="space-y-1.5">
+                  {checks.general.map((r) => (
+                    <li key={r.rule} className="border-l-[3px] border-warning py-0.5 pl-3 text-sm">
+                      <div className="font-semibold">{t(r.rule)}</div>
+                      {r.detail ? <div className="text-foreground">{t(r.detail)}</div> : null}
+                    </li>
+                  ))}
+                  {request.suppliersToConfirm.map((supplier) => (
+                    <li
+                      key={supplier.supplierId}
+                      className="rounded-r-md border-l-[3px] border-warning bg-warning-surface px-3 py-2 text-sm text-warning"
+                    >
+                      {t("{supplier} must confirm stock. If you approve, the order is sent and waits for their confirmation: call or e-mail them.", {
+                        supplier: supplier.name,
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <ModelTracePanel trace={request.modelTrace} />
+            </>
+          ) : null}
+        </div>
       </CardContent>
-      <CardFooter className="flex-col items-stretch gap-2 border-t border-dashed border-input px-0 pt-4 [.border-t]:pt-4 sm:flex-row sm:justify-end">
+      <CardFooter className="flex-col items-stretch gap-2 border-t border-dashed border-input px-0 pt-3 [.border-t]:pt-3 sm:flex-row sm:items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full justify-between sm:mr-auto sm:w-auto"
+          aria-expanded={inspecting}
+          aria-controls={inspectId}
+          onClick={() => setInspecting((shown) => !shown)}
+        >
+          {optionCount > 0 ? t("Inspect ({count} options)", { count: optionCount }) : t("Inspect")}
+          <ChevronDown
+            aria-hidden
+            className={cn("motion-safe:transition-transform motion-safe:duration-150", inspecting && "rotate-180")}
+          />
+        </Button>
         {canDecide ? (
           <>
             {held ? (
-              <p role="status" className="w-full text-sm text-muted-foreground sm:mr-auto">
+              <p role="status" className="w-full text-sm text-muted-foreground sm:w-auto">
                 {t("Blocked by a recall. This proposal cannot be approved as it is.")}
               </p>
             ) : null}
             {error && (
-              <p role="alert" className={cn("rounded-md border px-3 py-2 text-sm sm:mr-auto", TONE_CLASSES.danger)}>
+              <p role="alert" className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES.danger)}>
                 {error}
               </p>
             )}
@@ -607,7 +631,7 @@ export function ApprovalCard({
           </p>
         )}
         {canDecide && approvalBlockedReason ? (
-          <p id={accountBlockId} className="w-full text-sm text-muted-foreground sm:mr-auto">{approvalBlockedReason}</p>
+          <p id={accountBlockId} className="w-full text-sm text-muted-foreground">{approvalBlockedReason}</p>
         ) : null}
       </CardFooter>
 
@@ -622,6 +646,7 @@ export function ApprovalCard({
               })}
             </DialogDescription>
           </DialogHeader>
+          {waitingNotice ? <p className="hatch text-sm text-warning">{waitingNotice}</p> : null}
           <DialogFooter>
             <Button
               disabled={busy || !!stockMessage || !!approvalBlockedReason}
@@ -682,6 +707,7 @@ export function ApprovalCard({
   );
 }
 
+/** One product the person may add: one compact row, its quantity prefilled with the engine's suggestion. */
 function AddableRow({
   item,
   disabled,
@@ -695,50 +721,53 @@ function AddableRow({
   const [quantity, setQuantity] = useState(String(item.suggestedQuantity));
   const id = useId();
   return (
-    <li className="space-y-2 py-3">
-      <div className="flex items-center gap-2">
+    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-2">
+      <div className="flex min-w-0 items-center gap-2">
         <ProductThumb size="sm" en={item.product.names.en} fi={item.product.names.fi} brand={item.product.brand} />
         <div className="min-w-0">
-          <div className="font-medium break-words">{item.product.names.en}</div>
-          <div className="text-xs text-muted-foreground">
-            {item.product.id} · {item.product.salesUnit}
+          <div className="text-sm font-medium break-words">{item.product.names.en}</div>
+          <div className="font-mono text-[11px] leading-4 text-muted-foreground">
+            {item.product.id} · {t("{amount} ex VAT", { amount: t(formatEur(item.offer.priceExVat)) })} ·{" "}
+            {t("Stock on hand")}{" "}
+            {item.onHand == null ? t("not counted") : t(formatStock(item.onHand, item.product.salesUnit))} · {t("On order")}{" "}
+            {item.onOrder == null ? t("unknown") : `${formatNumber(item.onOrder)} ${item.product.salesUnit}`}
           </div>
+          <p className="text-xs text-muted-foreground">{item.why}</p>
         </div>
       </div>
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-        <dt className="text-muted-foreground">{t("Stock on hand")}</dt>
-        <dd>{item.onHand == null ? t("not counted") : t(formatStock(item.onHand, item.product.salesUnit))}</dd>
-        <dt className="text-muted-foreground">{t("On order")}</dt>
-        <dd>{item.onOrder == null ? t("unknown") : `${formatNumber(item.onOrder)} ${item.product.salesUnit}`}</dd>
-        <dt className="text-muted-foreground">{t("Price")}</dt>
-        <dd>{t("{amount} ex VAT", { amount: t(formatEur(item.offer.priceExVat)) })}</dd>
-      </dl>
-      <p className="text-sm text-muted-foreground">{item.why}</p>
-      <div className="flex items-end gap-2">
-        <label className="grid min-w-0 flex-1 gap-1 text-sm font-medium" htmlFor={id}>
+      <form
+        className="flex items-center gap-1"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (Number.isInteger(Number(quantity)) && Number(quantity) >= 1) onAdd(Number(quantity));
+        }}
+      >
+        <label className="sr-only" htmlFor={id}>
           {t("Quantity for {product} ({unit})", {
             product: item.product.names.en,
             unit: item.product.salesUnit,
           })}
-          <Input
-            id={id}
-            type="number"
-            min={1}
-            step={1}
-            value={quantity}
-            disabled={disabled}
-            onChange={(event) => setQuantity(event.target.value)}
-          />
         </label>
+        <Input
+          id={id}
+          type="number"
+          min={1}
+          step={1}
+          value={quantity}
+          disabled={disabled}
+          onChange={(event) => setQuantity(event.target.value)}
+          className="h-8 w-[4.5rem] px-2 text-right font-mono tabular-nums"
+        />
+        <span className="font-mono text-xs text-muted-foreground">{item.product.salesUnit}</span>
         <Button
-          type="button"
+          type="submit"
+          size="sm"
           aria-label={t("Add {product}", { product: item.product.names.en })}
           disabled={disabled || !Number.isInteger(Number(quantity)) || Number(quantity) < 1}
-          onClick={() => onAdd(Number(quantity))}
         >
           {t("Add")}
         </Button>
-      </div>
+      </form>
     </li>
   );
 }
