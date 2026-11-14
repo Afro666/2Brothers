@@ -49,6 +49,7 @@ export default {
   "Kitchens drifting": "Muuttuvat keittiöt",
   "No sharing kitchen is drifting this week.": "Ennustetta jakavien keittiöiden tilaukset ovat vakaita tällä viikolla.",
   "From your last 4 weeks of orders (MongoDB Atlas time-series aggregation)": "Viimeisten 4 viikon tilauksistasi (MongoDB Atlasin aikasarja-aggregaatio)",
+  "From each kitchen's last 4 weeks of orders (MongoDB Atlas time-series aggregation)": "Kunkin keittiön viimeisten 4 viikon tilauksista (MongoDB Atlasin aikasarja-aggregaatio)",
   "Your account cannot accept or decline offers.": "Tilisi ei voi hyväksyä tai hylätä tarjouksia.",
   "product {id}": "tuote {id}",
   "a supplier": "toimittaja",

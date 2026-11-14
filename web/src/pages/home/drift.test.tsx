@@ -39,6 +39,12 @@ describe("Standing-order drift tiles", () => {
       await screen.findByText(/K04 Hotel Aurora Helsinki/),
     ).toBeInTheDocument();
     expect(screen.getByText("Price creeping +22%")).toBeInTheDocument();
+    expect(
+      screen.getByText("From each kitchen's last 4 weeks of orders (MongoDB Atlas time-series aggregation)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("From your last 4 weeks of orders (MongoDB Atlas time-series aggregation)"),
+    ).not.toBeInTheDocument();
   });
 
   it("hides the tile while the gateway does not serve the route", async () => {
