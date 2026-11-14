@@ -151,6 +151,7 @@ describe("createHttpApi", () => {
         "declineSupplierOffer",
         // Nutrition from the label data and the kitchen's own words (api/http-nutrition.ts).
         "getRecipeNutrition",
+        "getRecipesNutrition",
         "getNutrition",
         "getKitchenWords",
         "linkWord",

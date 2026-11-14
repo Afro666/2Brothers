@@ -66,6 +66,11 @@ export function mapRecipeNutrition(body: unknown): RecipeNutrition {
   };
 }
 
+/** `GET /recipes/nutrition`: `{"recipes": [...]}`, each row in the single route's shape. */
+export function mapRecipesNutrition(body: unknown): RecipeNutrition[] {
+  return list(object(body, "the recipes' nutrition").recipes, "the recipes' nutrition").map(mapRecipeNutrition);
+}
+
 /** A sum the gateway could not count fully and that is 0 has counted nothing: unknown. */
 function counted(sum: number | null, complete: boolean): number | null {
   return sum === 0 && !complete ? null : sum;
