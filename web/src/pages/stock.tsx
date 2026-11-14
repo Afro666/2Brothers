@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { useAsync } from "@/lib/use-async";
@@ -40,12 +41,12 @@ function parseCount(value: string): number | null {
 }
 
 /** Why a touched row cannot be saved, or null when it can. */
-export function rowError(draft: RowDraft | undefined): string | null {
+export function rowError(draft: RowDraft | undefined, t: ReturnType<typeof useT> = (text) => text): string | null {
   if (!draft || draft.notCounted) return null;
-  if (draft.value.trim() === "") return "Enter a count or mark the product as not counted.";
+  if (draft.value.trim() === "") return t("Enter a count or mark the product as not counted.");
   const number = parseCount(draft.value);
-  if (number == null) return "Enter a number.";
-  if (number < 0) return "A count cannot be negative.";
+  if (number == null) return t("Enter a number.");
+  if (number < 0) return t("A count cannot be negative.");
   return null;
 }
 
@@ -68,10 +69,11 @@ function touchedCounts(rows: StockItem[], drafts: Drafts): CountsResult {
 }
 
 function OnHand({ item, className }: { item: StockItem; className?: string }) {
+  const t = useT();
   if (item.onHand == null) {
     return (
-      <span className={cn("font-medium text-warning", className)} title="Nobody has counted this product yet">
-        not counted
+      <span className={cn("font-medium text-warning", className)} title={t("Nobody has counted this product yet")}>
+        {t("not counted")}
       </span>
     );
   }
@@ -83,10 +85,11 @@ function OnHand({ item, className }: { item: StockItem; className?: string }) {
 }
 
 function OnOrder({ item }: { item: StockItem }) {
+  const t = useT();
   if (item.onOrder == null) {
     return (
-      <span className="font-medium text-warning" title="Open orders are not counted in kitchen units yet">
-        unknown
+      <span className="font-medium text-warning" title={t("Open orders are not counted in kitchen units yet")}>
+        {t("unknown")}
       </span>
     );
   }
@@ -98,6 +101,7 @@ function OnOrder({ item }: { item: StockItem }) {
 }
 
 export function StockPage() {
+  const t = useT();
   const api = useApi();
   const { role } = useRole();
   const actor = auditActorForRole(role);
@@ -148,7 +152,7 @@ export function StockPage() {
       setDrafts({});
       setFromPhoto(new Set());
       stock.reload();
-      toast.success("Count saved", { testId: "stock-count-saved-toast" });
+      toast.success(t("Count saved"), { testId: "stock-count-saved-toast" });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -160,15 +164,15 @@ export function StockPage() {
     <AppShell activeId="stock">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">Stock count</h1>
+          <h1 className="text-2xl font-semibold">{t("Stock count")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            What is on hand and on order. A product nobody counted is unknown, not zero.
+            {t("What is on hand and on order. A product nobody counted is unknown, not zero.")}
           </p>
         </header>
-        {stock.status === "loading" ? <LoadingState label="Loading stock" /> : null}
+        {stock.status === "loading" ? <LoadingState label={t("Loading stock")} /> : null}
         {stock.status === "error" ? <ErrorState message={stock.error.message} onRetry={stock.reload} /> : null}
         {stock.status === "ready" && rows.length === 0 ? (
-          <EmptyState title="No stock to count">Products you order will appear here for counting.</EmptyState>
+          <EmptyState title={t("No stock to count")}>{t("Products you order will appear here for counting.")}</EmptyState>
         ) : null}
         {stock.status === "ready" && rows.length > 0 ? (
           <div className="space-y-4">
@@ -179,8 +183,8 @@ export function StockPage() {
               )}
             >
               {uncounted > 0
-                ? `${uncounted} of ${rows.length} not counted: treated as unknown, not as zero`
-                : `All ${rows.length} products counted`}
+                ? t("{uncounted} of {total} not counted: treated as unknown, not as zero", { uncounted, total: rows.length })
+                : t("All {count} products counted", { count: rows.length })}
             </p>
 
             <ShelfPhotoCount items={rows} actor={actor} disabled={saving} onCounts={fillFromPhoto} />
@@ -191,20 +195,20 @@ export function StockPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Unit</TableHead>
-                        <TableHead className="text-right">On hand</TableHead>
-                        <TableHead className="text-right">On order</TableHead>
-                        <TableHead>Last delivery</TableHead>
-                        <TableHead>Counted at</TableHead>
-                        <TableHead>Count</TableHead>
-                        <TableHead>Not counted</TableHead>
+                        <TableHead>{t("Product")}</TableHead>
+                        <TableHead>{t("Unit")}</TableHead>
+                        <TableHead className="text-right">{t("On hand")}</TableHead>
+                        <TableHead className="text-right">{t("On order")}</TableHead>
+                        <TableHead>{t("Last delivery")}</TableHead>
+                        <TableHead>{t("Counted at")}</TableHead>
+                        <TableHead>{t("Count")}</TableHead>
+                        <TableHead>{t("Not counted")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rows.map((item) => {
                         const draft = draftFor(drafts, item.productId);
-                        const error = rowError(drafts[item.productId]);
+                        const error = rowError(drafts[item.productId], t);
                         const countId = `stock-count-${item.productId}`;
                         const unknownId = `stock-unknown-${item.productId}`;
                         const errorId = `stock-error-${item.productId}`;
@@ -225,14 +229,14 @@ export function StockPage() {
                             <TableCell>{formatDateTime(item.countedAt)}</TableCell>
                             <TableCell>
                               <label className="flex items-center gap-2 text-xs font-medium" htmlFor={countId}>
-                                Count
+                                {t("Count")}
                                 <Input
                                   id={countId}
                                   type="text"
                                   inputMode="decimal"
                                   autoComplete="off"
                                   className="h-8 w-24"
-                                  aria-label={`${item.productName} count in ${item.unit}`}
+                                  aria-label={t("{product} count in {unit}", { product: item.productName, unit: item.unit })}
                                   aria-invalid={error != null}
                                   aria-describedby={error ? errorId : undefined}
                                   value={draft.notCounted ? "" : draft.value}
@@ -253,7 +257,7 @@ export function StockPage() {
                               <span className="flex items-center gap-2">
                                 <Checkbox
                                   id={unknownId}
-                                  aria-label={`${item.productName} not counted`}
+                                  aria-label={t("{product} not counted", { product: item.productName })}
                                   checked={draft.notCounted}
                                   disabled={saving}
                                   onCheckedChange={(checked) =>
@@ -261,7 +265,7 @@ export function StockPage() {
                                   }
                                 />
                                 <label htmlFor={unknownId} className="text-sm">
-                                  Not counted
+                                  {t("Not counted")}
                                 </label>
                               </span>
                             </TableCell>
@@ -275,7 +279,7 @@ export function StockPage() {
                 <ul className="divide-y md:hidden">
                   {rows.map((item) => {
                     const draft = draftFor(drafts, item.productId);
-                    const error = rowError(drafts[item.productId]);
+                    const error = rowError(drafts[item.productId], t);
                     const countId = `stock-count-m-${item.productId}`;
                     const unknownId = `stock-unknown-m-${item.productId}`;
                     const errorId = `stock-error-m-${item.productId}`;
@@ -288,29 +292,29 @@ export function StockPage() {
                           </div>
                         </div>
                         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                          <dt className="text-muted-foreground">On hand</dt>
+                          <dt className="text-muted-foreground">{t("On hand")}</dt>
                           <dd className="text-right">
                             <OnHand item={item} />
                           </dd>
-                          <dt className="text-muted-foreground">On order</dt>
+                          <dt className="text-muted-foreground">{t("On order")}</dt>
                           <dd className="text-right tabular-nums">
                             <OnOrder item={item} />
                           </dd>
-                          <dt className="text-muted-foreground">Last delivery</dt>
+                          <dt className="text-muted-foreground">{t("Last delivery")}</dt>
                           <dd className="text-right">{formatDate(item.lastDelivery)}</dd>
-                          <dt className="text-muted-foreground">Counted at</dt>
+                          <dt className="text-muted-foreground">{t("Counted at")}</dt>
                           <dd className="text-right">{formatDateTime(item.countedAt)}</dd>
                         </dl>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                           <label className="flex items-center gap-2 text-sm font-medium" htmlFor={countId}>
-                            Count
+                            {t("Count")}
                             <Input
                               id={countId}
                               type="text"
                               inputMode="decimal"
                               autoComplete="off"
                               className="h-8 w-24"
-                              aria-label={`${item.productName} count in ${item.unit}`}
+                              aria-label={t("{product} count in {unit}", { product: item.productName, unit: item.unit })}
                               aria-invalid={error != null}
                               aria-describedby={error ? errorId : undefined}
                               value={draft.notCounted ? "" : draft.value}
@@ -321,7 +325,7 @@ export function StockPage() {
                           <span className="flex items-center gap-2">
                             <Checkbox
                               id={unknownId}
-                              aria-label={`${item.productName} not counted`}
+                              aria-label={t("{product} not counted", { product: item.productName })}
                               checked={draft.notCounted}
                               disabled={saving}
                               onCheckedChange={(checked) =>
@@ -329,7 +333,7 @@ export function StockPage() {
                               }
                             />
                             <label htmlFor={unknownId} className="text-sm">
-                              Not counted
+                              {t("Not counted")}
                             </label>
                           </span>
                         </div>
@@ -348,16 +352,16 @@ export function StockPage() {
 
             <div className="flex flex-wrap items-center gap-3">
               <Button onClick={saveCounts} disabled={!canSave} aria-busy={saving || undefined}>
-                {saving ? "Saving count" : "Save count"}
+                {saving ? t("Saving count") : t("Save count")}
               </Button>
               {pending.length === 0 && invalidCount === 0 ? (
-                <p className="text-sm text-muted-foreground">Enter a count or mark a product as not counted.</p>
+                <p className="text-sm text-muted-foreground">{t("Enter a count or mark a product as not counted.")}</p>
               ) : null}
               {invalidCount > 0 ? (
                 <p className="text-sm font-medium text-destructive">
                   {invalidCount === 1
-                    ? "Fix the count marked below before saving."
-                    : `Fix the ${invalidCount} counts marked below before saving.`}
+                    ? t("Fix the count marked below before saving.")
+                    : t("Fix the {count} counts marked below before saving.", { count: invalidCount })}
                 </p>
               ) : null}
             </div>
