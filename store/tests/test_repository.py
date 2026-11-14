@@ -95,6 +95,17 @@ class RepositoryTest(unittest.TestCase):
 
     # Kitchen isolation
 
+    def test_duplicate_id_in_one_kitchen_is_a_value_error(self):
+        self.repo.suppliers.create("k1", SUPPLIER)
+        with self.assertRaises(ValueError):
+            self.repo.suppliers.create("k1", SUPPLIER)
+        self.repo.recipes.create("k1", RECIPE)
+        with self.assertRaises(ValueError):
+            self.repo.recipes.create("k1", RECIPE)
+        self.repo.own_products.create("k1", {**OWN, "product_id": "own-rye"})
+        with self.assertRaises(ValueError):
+            self.repo.own_products.create("k1", {**OWN, "product_id": "own-rye"})
+
     def test_one_kitchen_never_sees_or_changes_another_kitchens_rows(self):
         self.repo.suppliers.create("k1", SUPPLIER)
         self.repo.suppliers.create("k2", {**SUPPLIER, "name": "Valio for kitchen 2"})  # same id
