@@ -1533,7 +1533,10 @@ when signing failed; signing never fails a quote.
   `python -m gateway.verify_offer --base-url <gateway> --offer offer.json` checks one
   offer; a changed line, price or total, another key or an expired offer fails.
 - The key is `GATEWAY_SIGNING_KEY` (base64 of a 32-byte seed) from the server
-  environment. Without it, the gateway creates one key and keeps it in the database.
+  environment, and the deployed gateway requires it (#755): the deploy does not start
+  without it, and the gateway never keeps a signing key in the database there. Only tests
+  and local runs, without `GATEWAY_SIGNING_KEY_REQUIRED=true`, create one key and keep it
+  in the database.
 - An approved order stores the `offer_hash` of the offer the person approved.
   `place_order` for an offer whose `offer_hash` differs is 409 `APPROVAL_MISMATCH`.
   An order without a stored `offer_hash` (older, or signing failed) skips this check.
