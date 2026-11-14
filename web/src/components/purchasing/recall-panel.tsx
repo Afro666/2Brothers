@@ -3,7 +3,7 @@ import { useId, useState } from "react";
 
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, formatQuantity } from "@/lib/format";
 import { useT, type TranslationVariables } from "@/lib/i18n";
 import { TONE_CLASSES } from "@/lib/tone";
 import { cn } from "@/lib/utils";
@@ -53,6 +53,11 @@ export function recallLots(lots: string, t: (text: string, vars?: TranslationVar
     : t("{items} and {last}", { items: lots.slice(0, conjunction), last: lots.slice(conjunction + 4) });
 }
 
+function recallAmount(text: string): string {
+  const match = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s+(\S+)$/.exec(text);
+  return match ? formatQuantity(match[1], match[2]) : text;
+}
+
 /**
  * The sentences the recall monitor sends for `where` and `next_step` (monitor/recalls.py),
  * through the dictionary. The lists of names, dates and lots inside stay as sent, and a
@@ -63,7 +68,8 @@ export function recallSentence(text: string, t: (text: string, vars?: Translatio
     const match = pattern.exec(text);
     if (match) {
       const value = match[1];
-      return t(template, value == null || name == null ? undefined : { [name]: name === "lots" ? recallLots(value, t) : value });
+      const formatted = name === "lots" ? recallLots(value, t) : name === "amount" ? recallAmount(value) : value;
+      return t(template, value == null || name == null ? undefined : { [name]: formatted });
     }
   }
   return text;
@@ -80,7 +86,7 @@ function oneRecall(alert: RecallAlert, t: Translate): [string, string, string] {
   const stock = alert.where.map((line) => /^in stock: (.+)$/.exec(line)?.[1]).find(Boolean);
   let sentence: string;
   if (alert.match === "review") sentence = t("1 recall notice may be about {product}.", { product: NAME });
-  else if (stock) sentence = t("1 recall: {product} is in your stock ({amount}).", { product: NAME, amount: stock });
+  else if (stock) sentence = t("1 recall: {product} is in your stock ({amount}).", { product: NAME, amount: recallAmount(stock) });
   else if (alert.where.includes("on the stock list: amount not counted"))
     sentence = t("1 recall: {product} is on your stock list.", { product: NAME });
   else if (alert.where.some((line) => line.startsWith("in recipes: ")))
