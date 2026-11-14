@@ -157,6 +157,17 @@ it("lets a person approve unknown stock and says the order waits for the supplie
   expect(screen.queryByText(/Approval is unavailable/)).toBeNull();
 });
 
+it("names the products each supplier must confirm, from the gateway's reasons (Valio, 14 Nov)", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => json({ proposals: [
+    { ...row, lines: [{ ...row.lines[0], unknown_stock: true }],
+      mandate: { reasons: ["Some lines have stock Valio does not report.", "Valio must confirm stock for: Valio Eila 3 % 1 L."] } },
+  ] })));
+  renderApp("/approvals");
+  expect(await screen.findByText("Valio must confirm stock for: Valio Eila 3 % 1 L.")).toBeVisible();
+  expect(screen.queryByText("Some lines have stock Valio does not report.")).toBeNull();
+  for (const button of screen.getAllByRole("button", { name: /Approve .*149/ })) expect(button).toBeEnabled();
+});
+
 it("recovers from an expired changed offer inside the inbox and confirms its new exact total", async () => {
   const fetch = vi.fn().mockResolvedValueOnce(json({ proposals: [{ ...row, valid_until: "2000-01-01T00:00:00Z" }] }))
     .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "TOTAL_MISMATCH", message: "Price changed; review the new total" } }), { status: 409 }))

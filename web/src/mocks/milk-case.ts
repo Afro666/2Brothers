@@ -277,6 +277,8 @@ export const approval: ApprovalRequest = {
       detail:
         "Valio did not measure the stock of 463335 (it returns the unknown-stock value). The delivery may arrive short.",
     },
+    // The gateway's sentence (Valio, 14 Nov): which products Valio must still confirm.
+    { rule: "Valio must confirm stock for: Valio Eila 3 % lactose free milk drink 1 L.", detail: "" },
   ],
   suppliersToConfirm: [],
   status: "PENDING",
