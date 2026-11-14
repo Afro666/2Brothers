@@ -1,0 +1,22 @@
+{
+  "fixture_type": "synthetic model message; not a recorded live Nemotron result",
+  "language": "en",
+  "reply": {
+    "sentences": [
+      {
+        "fact_id": "chosen:0",
+        "kind": "chosen",
+        "product_id": "milk",
+        "text": "The proposal includes 698 L of Milk; the supplier has confirmed availability.",
+        "numbers": ["698"]
+      },
+      {
+        "fact_id": "approval:3",
+        "kind": "approval",
+        "product_id": null,
+        "text": "Nothing is ordered until a person approves.",
+        "numbers": []
+      }
+    ]
+  }
+}

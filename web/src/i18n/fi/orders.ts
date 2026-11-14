@@ -1,7 +1,7 @@
 export default {
   "Examples": "Esimerkkejä",
   "100 L cream for Thursday": "100 litraa kermaa torstaiksi",
-  "400 pcs single-serve fruit yoghurt for Friday": "400 kpl annoshedelmäjogurtteja perjantaiksi",
+  "400 pcs single-serve fruit yoghurt for Friday": "400 kpl hedelmäjogurttia perjantaiksi",
   " (later than asked)": " (myöhemmin kuin pyydettiin)",
   " (needs approval)": " (vaatii hyväksynnän)",
   " (passed)": " (umpeutunut)",
@@ -20,7 +20,7 @@ export default {
   "Recalled products in your kitchen": "Takaisinvedetyt tuotteet keittiössäsi",
   "{count} recalls match products in your kitchen": "{count} takaisinvetoa koskee keittiösi tuotteita",
   "{product} is recalled.": "{product} on vedetty takaisin.",
-  "1,000 L lactose-free milk by Monday": "1 000 litraa laktoositonta maitoa maanantaihin mennessä",
+  "1,000 L lactose-free milk by Monday": "1 000 litraa laktoositonta maitoa maanantaiksi",
   "A fresh human approval is required.": "Ihmisen on hyväksyttävä se uudelleen.",
   "A warning only. It does not block the order.": "Tämä on vain varoitus. Se ei estä tilausta.",
   "A warning. It does not block the order.": "Varoitus. Se ei estä tilausta.",
