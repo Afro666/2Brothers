@@ -31,6 +31,9 @@ class Offer:
     cutoff_passed: bool | None          # None = no cut-off known
     available_date: date | None
     sales_block: bool = False
+    reliability: float | None = None    # delivered / ordered, 0-1; None = unknown
+    carbon: float | None = None         # kg CO2e per kg, product-group average; None = unknown
+    labels: tuple[str, ...] = ()
     allergen_data_known: bool | None = True   # False or None: ALLERGEN_DATA_MISSING (S02)
 
     @property
@@ -48,6 +51,9 @@ class PlanLine:
     unknown_stock: bool
     reason_codes: tuple[str, ...]
     why: str
+    reliability: float | None = None
+    carbon: float | None = None
+    labels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -90,15 +96,55 @@ def _line(o: Offer, qty: Decimal, codes: list[str], why: str) -> PlanLine:
     if not o.allergen_data_known:
         codes = [*codes, "ALLERGEN_DATA_MISSING"]
     return PlanLine(o.product_id, qty, o.pack.sales_unit, o.unit_price, total,
-                    o.available is None, tuple(codes), why)
+                    o.available is None, tuple(codes), why, o.reliability, o.carbon, o.labels)
+
+
+BAND = Decimal("0.03")   # offers within 3% per litre/kilo of the cheapest compete on more than price
+
+
+def rank(offers: list[Offer]) -> tuple[list[Offer], dict[str, str]]:
+    """Cheapest per measure first, except inside the 3% band: there higher delivery
+    reliability wins, then lower carbon (Valio bonus "compare more than price", #274).
+    Unknown reliability or carbon is never best. Returns the order and, for an offer that
+    beat a cheaper one, the sentence that says why."""
+    by_price = sorted(offers, key=lambda o: (o.price_per_measure, o.product_id))
+    if len(by_price) < 2:
+        return by_price, {}
+    cheapest = by_price[0].price_per_measure
+    band = [o for o in by_price if o.price_per_measure <= cheapest * (1 + BAND)]
+    rest = [o for o in by_price if o not in band]
+    def better(o: Offer):
+        return (-(o.reliability if o.reliability is not None else -1.0),
+                o.carbon if o.carbon is not None else float("inf"), o.price_per_measure, o.product_id)
+    band.sort(key=better)
+    notes: dict[str, str] = {}
+    top, cheap = band[0], by_price[0]
+    if top is not cheap:
+        diff = (top.price_per_measure / cheap.price_per_measure - 1) * 100
+        if (top.reliability or -1) > (cheap.reliability if cheap.reliability is not None else -1):
+            notes[top.product_id] = (f"chosen over {cheap.name} ({diff:.1f}% cheaper): delivery reliability "
+                                     f"{_pct(top.reliability)} vs {_pct(cheap.reliability)}")
+        else:
+            notes[top.product_id] = (f"chosen over {cheap.name} ({diff:.1f}% cheaper): lower carbon, "
+                                     f"{_co2(top.carbon)} vs {_co2(cheap.carbon)} kg CO2e/kg")
+    return band + rest, notes
+
+
+def _pct(x: float | None) -> str:
+    return "unknown" if x is None else f"{x * 100:.0f}%"
+
+
+def _co2(x: float | None) -> str:
+    return "unknown" if x is None else f"{x:.2f}"
 
 
 def _fill(need: Decimal, measure: str, usable: list[Offer], *, confirmed_first: bool) -> tuple[list[PlanLine], Decimal, set[str]]:
     lines: list[PlanLine] = []
     codes: set[str] = set()
     rest = need
-    confirmed = sorted((o for o in usable if o.available is not None), key=lambda o: o.price_per_measure)
-    unknown = sorted((o for o in usable if o.available is None), key=lambda o: o.price_per_measure)
+    confirmed, notes_c = rank([o for o in usable if o.available is not None])
+    unknown, notes_u = rank([o for o in usable if o.available is None])
+    notes = {**notes_c, **notes_u}
     if confirmed_first:
         for o in confirmed:
             if rest <= 0:
@@ -114,7 +160,8 @@ def _fill(need: Decimal, measure: str, usable: list[Offer], *, confirmed_first: 
                 continue
             got = qty * o.pack.size
             why = (f"{_n(qty)} {o.pack.sales_unit} of {o.name} = {_n(got)} {measure}, confirmed in stock"
-                   + (f" (all {_n(o.available)} available)" if "PARTIAL_STOCK" in line_codes else "") + ".")
+                   + (f" (all {_n(o.available)} available)" if "PARTIAL_STOCK" in line_codes else "")
+                   + (f"; {notes[o.product_id]}" if o.product_id in notes else "") + ".")
             lines.append(_line(o, qty, line_codes, why))
             codes.update(line_codes)
             rest -= got
@@ -123,8 +170,10 @@ def _fill(need: Decimal, measure: str, usable: list[Offer], *, confirmed_first: 
         qty, rounded = to_sales_units(rest, o.pack)
         line_codes = ["STOCK_UNKNOWN"] + (["LOT_SIZE_ROUNDED"] if rounded else [])
         why = (f"{_n(qty)} {o.pack.sales_unit} of {o.name} = {_n(qty * o.pack.size)} {measure}: "
-               f"cheapest per {measure} ({_n(o.price_per_measure.quantize(CENT))} EUR), "
-               "but Valio does not report its stock, so it is not confirmed.")
+               f"{'price' if o.product_id in notes else 'cheapest'} per {measure} "
+               f"({_n(o.price_per_measure.quantize(CENT))} EUR), "
+               "but Valio does not report its stock, so it is not confirmed"
+               + (f"; {notes[o.product_id]}" if o.product_id in notes else "") + ".")
         lines.append(_line(o, qty, line_codes, why))
         codes.update(line_codes)
         rest -= qty * o.pack.size
