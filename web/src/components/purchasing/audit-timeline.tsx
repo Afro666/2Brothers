@@ -253,7 +253,9 @@ export function groupSteps(events: AuditEvent[]): AuditStepGroup[] {
   const connected = new Map<number, AuditEvent[]>();
   sorted.forEach((event, index) => {
     const key = root(index);
-    connected.set(key, [...(connected.get(key) ?? []), event]);
+    const list = connected.get(key);
+    if (list) list.push(event);
+    else connected.set(key, [event]);
   });
   const groups = [...connected.values()].map((events, index) => makeGroup(events, index));
   const known = groups
