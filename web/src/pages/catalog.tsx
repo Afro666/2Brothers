@@ -199,7 +199,8 @@ export function CatalogPage() {
   useEffect(() => {
     if (firstSearchDone.current || currentResult.status !== "ready") return;
     firstSearchDone.current = true;
-    if (unfiltered && results.length === 0) runExample(t(EXAMPLE_SEARCHES[0]));
+    // Text typed while the first search loads is the person's own: never replace it.
+    if (unfiltered && results.length === 0 && !query.trim()) runExample(t(EXAMPLE_SEARCHES[0]));
   }, [currentResult.status]);
 
   return (
