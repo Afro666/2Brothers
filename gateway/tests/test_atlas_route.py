@@ -86,6 +86,17 @@ def test_a_failed_read_is_not_kept():
     assert cache.get("db") == {"products": 5}       # the next request reads again
 
 
+def test_an_all_unknown_answer_is_not_kept():
+    clock = [0.0]
+    unknown = {part: None for part in atlas_routes.READ_PARTS}
+    unknown["change_stream_collections"] = ["proposals", "approvals", "audit_log"]
+    answers = iter([unknown, {**unknown, "products": 5}, {**unknown, "products": 6}])
+    cache = atlas_routes.FactsCache(facts=lambda db: next(answers), clock=lambda: clock[0])
+    assert cache.get("db") == unknown               # Atlas down: every read part unknown
+    assert cache.get("db")["products"] == 5         # not kept: the next request reads again
+    assert cache.get("db")["products"] == 5         # partly known: kept for the minute
+
+
 def test_auth(env):
     client, db = env
     assert client.get(URL).status_code == 401

@@ -18,6 +18,9 @@ from fastapi import Depends, FastAPI
 from store.atlas import atlas_facts
 
 KEEP_SECONDS = 60.0
+# The parts the store reads from Atlas; when all are None the database was not reachable.
+READ_PARTS = ("mongodb_version", "data_mb", "products", "vectors", "search_indexes",
+              "time_series", "audit_entries")
 
 
 class FactsCache:
@@ -34,7 +37,11 @@ class FactsCache:
         with self._lock:
             now = self._clock()
             if self._answer is None or now - self._read_at >= self._keep:
-                self._answer = self._facts(db)
+                answer = self._facts(db)
+                if all(answer.get(part) is None for part in READ_PARTS):
+                    self._answer = None     # all unknown is a failed read: read again next time
+                    return answer
+                self._answer = answer
                 self._read_at = now
             return self._answer
 
