@@ -49,13 +49,15 @@ describe("money", () => {
 
 describe("demand and stock amounts", () => {
   it("rounds counted and measured units, keeps thousands and never loses a tiny amount", () => {
-    expect(formatAmount(6024.083, "PCS")).toBe("6,024 PCS");
-    expect(formatAmount(12.26, "KG")).toBe("12.3 KG");
-    expect(formatAmount(1987.64, "L")).toBe("1,987.6 L");
+    expect(formatAmount(6024.083, "PCS")).toBe("6,024 pieces");
+    expect(formatAmount(12.26, "KG")).toBe("12.3 kg");
+    expect(formatAmount(1987.64, "L")).toBe("1,987.6 l");
     expect(formatAmount(0.4, "BOX")).toBe("< 1 BOX");
-    expect(formatAmount(0.04, "ML")).toBe("< 0.1 ML");
+    expect(formatAmount(0.04, "ML")).toBe("< 0.1 ml");
     expect(formatAmount(2.26, "UNKNOWN")).toBe("2.3 UNKNOWN");
-    expect(formatAmount(0, "PCS")).toBe("0 PCS");
+    expect(formatAmount(0, "PCS")).toBe("0 pieces");
+    expect(formatAmount(12, "KG")).toBe("12 kg");
+    expect(formatAmount(1, "KI")).toBe("1 case");
   });
 });
 
@@ -145,14 +147,14 @@ describe("number format follows the language until the person picks one", () => 
 
 describe("formatAmount at the edges", () => {
   it("carries a rounded weight into the next whole number and the thousands", () => {
-    expect(formatAmount(0.95, "KG")).toBe("1 KG");
-    expect(formatAmount(999.96, "KG")).toBe("1,000 KG");
+    expect(formatAmount(0.95, "KG")).toBe("1 kg");
+    expect(formatAmount(999.96, "KG")).toBe("1,000 kg");
   });
 
   it("keeps the sign of a negative amount", () => {
-    expect(formatAmount(-0.95, "KG")).toBe("-1 KG");
-    expect(formatAmount(-12.4, "PCS")).toBe("-12 PCS");
-    expect(formatAmount(-0.04, "L")).toBe("> -0.1 L");
+    expect(formatAmount(-0.95, "KG")).toBe("-1 kg");
+    expect(formatAmount(-12.4, "PCS")).toBe("-12 pieces");
+    expect(formatAmount(-0.04, "L")).toBe("> -0.1 l");
   });
 });
 });

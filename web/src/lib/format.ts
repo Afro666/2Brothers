@@ -64,9 +64,9 @@ export function formatAmount(value: number, unit: string): string {
   // The size is rounded, the sign is kept: -0.95 KG is -1 KG, and a small negative is not "< 0.1".
   const size = Math.abs(value);
   const sign = value < 0 ? "-" : "";
-  if (size !== 0 && size < step) return `${value < 0 ? "> -" : "< "}${formatNumber(step)} ${unit}`;
+  if (size !== 0 && size < step) return `${value < 0 ? "> -" : "< "}${formatNumber(step)} ${peopleUnit(unit, step)}`;
   const rounded = measured ? Math.round(size * 10) / 10 : Math.round(size);
-  return `${sign}${formatNumber(rounded)} ${unit}`;
+  return `${sign}${formatNumber(rounded)} ${peopleUnit(unit, rounded)}`;
 }
 
 export function shortOrderId(id: string): string {
