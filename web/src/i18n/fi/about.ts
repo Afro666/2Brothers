@@ -22,7 +22,7 @@ export default {
   "Run the tamper check": "Suorita peukaloinnintarkistus",
   "Best Use of Nemotron": "Paras Nemotronin käyttö",
   "NVIDIA Nemotron 3.5 Super VL: the Buyer agent": "NVIDIA Nemotron 3.5 Super VL: Ostaja-agentti",
-  "Reads the chef's sentence, picks the products and calls the tools. It never sets a quantity or a price and it has no approve tool.": "Lukee kokin lauseen, valitsee tuotteet ja kutsuu työkaluja. Se ei koskaan määritä määrää tai hintaa, eikä sillä ole hyväksyntätyökalua.",
+  "Reads the chef's sentence and picks the products. Code calls the tools. It never sets a quantity or a price and it has no approve tool.": "Lukee kokin lauseen ja valitsee tuotteet. Koodi kutsuu työkaluja. Se ei koskaan määritä määrää tai hintaa, eikä sillä ole hyväksyntätyökalua.",
   "Reads photos: a shelf into stock counts, a delivery note against its order, a menu into a week plan": "Lukee valokuvia: hyllystä varastomäärät, vertaa toimituskuitin tilaukseen ja tekee ruokalistasta viikkosuunnitelman",
   "Works for the supplier too: Valio's selling agent picks a substitute before a shortage": "Toimii myös toimittajalle: Valion myyntiagentti valitsee korvikkeen ennen puutetta",
   "The offer on Home": "Tarjous etusivulla",
