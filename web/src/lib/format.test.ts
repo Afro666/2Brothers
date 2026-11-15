@@ -6,7 +6,7 @@ import { compareUrgency } from "@/components/purchasing/urgency-badge";
 
 import { updateLanguage } from "@/lib/i18n";
 
-import { formatAmount, formatDayAndDate, formatEur, formatNumber, formatPack, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
+import { formatAmount, formatCount, formatDayAndDate, formatEur, formatNumber, formatPack, formatPercentDecimal, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
 
 describe("stock sentinels", () => {
   it("treats both Valio sentinels and a missing value as unknown", () => {
@@ -129,6 +129,9 @@ describe("number format follows the language until the person picks one", () => 
     expect(formatQuantity(1, "KI")).toBe("1 laatikko");
     expect(formatQuantity(2, "BOT")).toBe("2 pulloa");
     expect(formatPack("PRK", 2, "ST")).toBe("1 pakkaus = 2 kpl");
+    expect(formatPercentDecimal(0.049)).toBe("4,9 %");
+    expect(formatPercentDecimal(-0.007, true)).toBe("\u22120,7 %");
+    expect(formatPercentDecimal(0.037, true)).toBe("+3,7 %");
   });
 
   it("keeps a choice the person made", () => {
@@ -144,6 +147,14 @@ describe("number format follows the language until the person picks one", () => 
     loadAppearance();
     expect(formatEur(2099.41)).toBe("€2,099.41");
     expect(formatNumber(2099.41)).toBe("2,099.41");
+    expect(formatPercentDecimal(0.049)).toBe("4.9 %");
+    expect(formatPercentDecimal(0.037, true)).toBe("+3.7 %");
+    expect(formatPercentDecimal(null, false, "not yet")).toBe("not yet");
+  });
+
+  it("counts pieces in whole numbers", () => {
+    expect(formatCount(668.35)).toBe("668");
+    expect(formatCount(609.5)).toBe("610");
   });
 });
 

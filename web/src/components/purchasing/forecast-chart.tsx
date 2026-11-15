@@ -17,6 +17,12 @@ const ACTUAL = "var(--foreground)";
 
 const compact = new Intl.NumberFormat("en-IE", { notation: "compact" });
 
+/** "unit": the series' own unit on the axis; "percent": a share (the weekly error), the one chart for a kitchen that mixes units. */
+export type ChartAxis = "unit" | "percent";
+
+/** What the chart needs of a week; a quantity week and an error week both fit. */
+export type ForecastChartWeek = Pick<ForecastWeek, "week" | "actual" | "ahead" | "engine" | "baseline">;
+
 export function formatQuantity(value: number | null, unit: string | null, missing = "unknown"): string {
   return value == null ? missing : `${formatNumber(value)}${unit ? ` ${unit}` : ""}`;
 }
@@ -55,7 +61,15 @@ function TipRow({ label, value, children }: { label: string; value: string; chil
  * Needed against predicted per week: dots for what the kitchen needed, the accent line for our
  * engine, the grey line for the weekday average. Weeks ahead sit in a "Forecast only" band.
  */
-export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: string | null }) {
+export function ForecastChart({
+  weeks,
+  unit,
+  axis = "unit",
+}: {
+  weeks: ForecastChartWeek[];
+  unit: string | null;
+  axis?: ChartAxis;
+}) {
   const t = useT();
   const titleId = useId();
   const descId = useId();
@@ -64,6 +78,11 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
   const values = weeks.flatMap((week) => [week.actual, week.engine, week.baseline]).filter((value) => value != null);
   if (values.length === 0) return null;
   const ticks = axisTicks(Math.min(...values), Math.max(...values));
+  // One unit, named on every tick and in the readout.
+  const tickText = (tick: number) =>
+    axis === "percent" ? `${compact.format(tick)} %` : `${compact.format(tick)}${unit ? ` ${unit}` : ""}`;
+  const shownValue = (value: number | null, missing: string) =>
+    value == null ? missing : axis === "percent" ? `${formatNumber(value)} %` : formatQuantity(value, unit);
   const low = ticks[0];
   const span = ticks[ticks.length - 1] - low;
   const count = weeks.length;
@@ -95,10 +114,12 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
   return (
     <div className="space-y-3">
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <li className="flex items-center gap-1.5">
-          <Key color={ACTUAL} dot />
-          {t("Needed (actual)")}
-        </li>
+        {axis === "percent" ? null : (
+          <li className="flex items-center gap-1.5">
+            <Key color={ACTUAL} dot />
+            {t("Needed (actual)")}
+          </li>
+        )}
         <li className="flex items-center gap-1.5">
           <Key color={ENGINE} />
           {t("Our engine")}
@@ -111,12 +132,12 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
       <div className="flex">
         <div
           aria-hidden
-          className="relative w-10 shrink-0 text-[11px] text-muted-foreground tabular-nums"
+          className="relative w-16 shrink-0 text-[11px] text-muted-foreground tabular-nums"
           style={{ height: HEIGHT }}
         >
           {ticks.map((tick) => (
             <span key={tick} className="absolute right-1.5 -translate-y-1/2" style={{ top: y(tick) }}>
-              {compact.format(tick)}
+              {tickText(tick)}
             </span>
           ))}
         </div>
@@ -131,9 +152,11 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
             onPointerLeave={() => setActive(null)}
           >
             <title id={titleId}>
-              {unit
-                ? t("Needed and predicted per week, in {unit}", { unit })
-                : t("Needed and predicted per week")}
+              {axis === "percent"
+                ? t("Weekly error per week, in %")
+                : unit
+                  ? t("Needed and predicted per week, in {unit}", { unit })
+                  : t("Needed and predicted per week")}
             </title>
             <desc id={descId}>
               {t(
@@ -224,16 +247,18 @@ export function ForecastChart({ weeks, unit }: { weeks: ForecastWeek[]; unit: st
                 <span className="font-medium">{t("Week {number}", { number: Number(shown.week.slice(6)) })}</span>
                 <span className="block text-muted-foreground">{weekRangeLabel(shown.week)}</span>
               </p>
-              <TipRow
-                label={t("Needed")}
-                value={formatQuantity(shown.actual, unit, shown.ahead ? t("not yet") : t("unknown"))}
-              >
-                <Key color={ACTUAL} dot />
-              </TipRow>
-              <TipRow label={t("Our engine")} value={formatQuantity(shown.engine, unit, t("unknown"))}>
+              {axis === "percent" ? null : (
+                <TipRow
+                  label={t("Needed")}
+                  value={shownValue(shown.actual, shown.ahead ? t("not yet") : t("unknown"))}
+                >
+                  <Key color={ACTUAL} dot />
+                </TipRow>
+              )}
+              <TipRow label={t("Our engine")} value={shownValue(shown.engine, t("unknown"))}>
                 <Key color={ENGINE} />
               </TipRow>
-              <TipRow label={t("Weekday average")} value={formatQuantity(shown.baseline, unit, t("unknown"))}>
+              <TipRow label={t("Weekday average")} value={shownValue(shown.baseline, t("unknown"))}>
                 <Key color={BASELINE} />
               </TipRow>
             </div>
