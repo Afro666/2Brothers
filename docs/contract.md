@@ -2205,13 +2205,34 @@ written by Nemotron 3.5 Super VL. Same scope, window rules and 403s as
 `shortage-risk` above. `lang` is `en` (default) or `fi`; anything else is 422
 `INVALID_REQUEST`.
 
-The model only chooses the words. Plain code picks the rows first: `SHORT` rows by the
-largest `shortage`, then `UNKNOWN` rows by the largest `demand`, at most 8. The model sees
+The model only chooses the words. Plain code first groups the window's risk rows by
+product: if a product has any `SHORT` days, only those days contribute; otherwise its
+`UNKNOWN` days contribute. Demand, known availability, shortage and suggested buy are
+summed over those included days before presentation rounding. `date` is the first
+included day (the first short day for a `SHORT` product), not a delivery date for the
+whole sum. The page labels it "from" that date. Kitchen counts are distinct consenting
+kitchens when the source identifies them, otherwise the largest daily count, never a
+sum of daily counts. Covered days do not contribute to a shortage note.
+
+Code then picks `SHORT` products by the largest aggregated `shortage`, then `UNKNOWN`
+products by the largest aggregated `demand`, at most 8. Each note line covers one
+product over its included days, not one product on one day. The model sees
 for each row only `product_id`, `product_name`, `date`, `unit`, `demand`, `kitchens`,
 `available`, `shortage`, `suggested_buy` and `risk`: never `by_kitchen`, a kitchen
 name, a menu, a recipe, a price or a pack size. It is told to write no dates and no
 product names (the answer shows both next to each line). A product name inside a line is not read for
 numbers, so the "1 l" of "Valio Eila 1 l" is not a quantity.
+
+The model and checker receive the same presentation values: whole `PCS`/`ST`, at
+most one decimal for `KG`/`L`. For a `SHORT` row, demand and shortage round up to that
+step and displayed availability is their difference. The suggested buy retains the
+supplier-demand recommendation summed over the included days; that source rounds
+each daily gap up to a whole kitchen unit. It can therefore exceed the displayed
+shortage. A line then states the shortage and the suggested buy separately, naming
+the latter as rounded up per day, so its buy agrees with the demand table rather
+than replacing it with the aggregated gap. These are presentation/planning figures,
+not supplier sales-unit sizing or order quantities. Unknown availability remains
+unknown and is never turned into a gap.
 
 The worker's model reply is validated against this strict internal shape:
 
