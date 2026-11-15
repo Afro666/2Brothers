@@ -90,6 +90,8 @@ describe("the visible model line on the approval card (#1867)", () => {
     expect(written).toHaveTextContent("Written by Nemotron 3.5 Super VL from the checked decision record · 1 call · 0.8 s");
     await user.click(screen.getByRole("button", { name: "Inspect" }));
     const panel = screen.getByText("What Nemotron did").closest("details")!;
+    // #2015: on a waiting card the steps are open without a second press.
+    expect(panel.open).toBe(true);
     expect(within(panel).getByText("2 model calls, 1 s, thinking off")).toBeInTheDocument();
     expect(within(panel).queryByText(/^1 model call/)).not.toBeInTheDocument();
   });
