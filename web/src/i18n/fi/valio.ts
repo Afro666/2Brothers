@@ -39,6 +39,7 @@ export default {
   "{count} kitchen": "{count} keittiö",
   "{count} kitchens": "{count} keittiötä",
   "for {product}, {date}": "tuotteelle {product}, {date}",
+  "from {date}": "{date} alkaen",
   "Forecast demand": "Ennustettu kysyntä",
   "Kitchens": "Keittiöt",
   "Available": "Saatavilla",

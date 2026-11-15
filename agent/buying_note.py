@@ -34,6 +34,8 @@ SYSTEM = (
     "- Write no dates, no weekday names and no product names: they are shown next to your line.\n"
     "- Write the row's unit after every quantity (for example 700 L, 12.5 KG).\n"
     "- risk SHORT: say the forecast demand, what is available and the suggested buy.\n"
+    "- If suggested_buy differs from shortage, state both separately: the suggested buy "
+    "was rounded up per day. Never replace it with the shortage or compute a new figure.\n"
     "- risk UNKNOWN: the available amount is not known. Say that, and that the planner should "
     "check it with the producer or the warehouse; you may say how many kitchens it concerns. "
     "Never call it a shortage and never write the demand as a gap.\n"
