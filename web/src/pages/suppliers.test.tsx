@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createMockApi } from "@/api/mock";
+import { updateLanguage } from "@/lib/i18n";
 import { renderApp } from "@/test/render";
 
 describe("SuppliersPage", () => {
@@ -23,21 +24,47 @@ describe("SuppliersPage", () => {
     const valio = (await screen.findByText("Valio Aimo")).closest("[data-slot=card]");
     expect(valio).not.toBeNull();
     const valioCard = within(valio as HTMLElement);
-    expect(valioCard.getByText("Live API")).toBeInTheDocument();
-    expect(valioCard.getByText("€250.00")).toBeInTheDocument();
-    expect(valioCard.getByText("€29.00")).toBeInTheDocument();
+    expect(valioCard.getByText("Live prices and stock from Valio Aimo")).toBeInTheDocument();
+    expect(valioCard.getByText("free from €250.00")).toBeInTheDocument();
     expect(valioCard.getByText("Mon, Tue, Wed, Thu, Fri")).toBeInTheDocument();
-    expect(valioCard.getByText("17:00")).toBeInTheDocument();
+    expect(valioCard.getByText("Order by 17:00")).toBeInTheDocument();
     expect(valioCard.getByText("1 day")).toBeInTheDocument();
 
     expect(await screen.findByRole("checkbox", { name: "Share our forecast with Valio Aimo" })).toBeEnabled();
     expect(await screen.findByRole("heading", { name: "Töölö Bakery" })).toBeInTheDocument();
-    expect(screen.getByText("Manual entry")).toBeInTheDocument();
+    const bakery = screen.getByRole("heading", { name: "Töölö Bakery" }).closest("[data-slot=card]");
+    const bakeryCard = within(bakery as HTMLElement);
+    expect(bakeryCard.getByText("Terms typed in by you")).toBeInTheDocument();
+    const feeRow = bakeryCard.getByText("Delivery fee, free from").closest("div");
+    expect(feeRow).toHaveTextContent("€12.00, free from €80.00");
 
     const fish = screen.getByRole("heading", { name: "Hakaniemi Fish" }).closest("[data-slot=card]");
     const fishCard = within(fish as HTMLElement);
     expect(fishCard.getByText("CSV price list")).toBeInTheDocument();
-    expect(fishCard.getAllByText("not set")).toHaveLength(5);
+    expect(fishCard.getAllByText("not set")).toHaveLength(4);
+    expect(fishCard.getByText("Delivery fee not set, free from")).toBeInTheDocument();
+  });
+
+  it("says once what sharing shows suppliers and keeps the switch on every card", async () => {
+    renderApp("/suppliers", createMockApi());
+
+    await screen.findByRole("heading", { name: "Töölö Bakery" });
+    expect(screen.getAllByText(/^They see our kitchen's name and what we expect to need/)).toHaveLength(1);
+    expect(screen.getAllByRole("checkbox", { name: /^Share our forecast with / })).toHaveLength(
+      (await screen.findAllByRole("heading", { level: 3 })).length,
+    );
+  });
+
+  it("names the cut-off as the last moment to order in Finnish", async () => {
+    updateLanguage("fi");
+    try {
+      renderApp("/suppliers", createMockApi());
+
+      const valio = (await screen.findByText("Valio Aimo")).closest("[data-slot=card]");
+      expect(within(valio as HTMLElement).getByText("Tilaa viimeistään klo 17:00")).toBeInTheDocument();
+    } finally {
+      updateLanguage("en", false);
+    }
   });
 
   it("adds a supplier with only a name and leaves the terms unset", async () => {
