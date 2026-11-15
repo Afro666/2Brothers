@@ -68,7 +68,7 @@ const BUILT_WITH = [
         to: "/",
       },
       {
-        text: "Every order stored once, money stored as exact decimals, never as floating point (Decimal128), and a tamper-evident log: a changed line or a cut end is detected (unique index, hash-chained audit log)",
+        text: "Every order stored once, money stored as exact decimals, never as floating point (Decimal128), and a tamper-evident log: a changed entry or a truncated end is detected (unique index, hash-chained audit log)",
         link: "Run the tamper check",
         to: "/trust",
       },

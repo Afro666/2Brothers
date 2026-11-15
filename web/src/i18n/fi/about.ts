@@ -18,7 +18,7 @@ export default {
   "New proposals reach the inbox without a refresh (change streams)": "Uudet ehdotukset saapuvat hyväksyttävien listaan ilman sivun päivittämistä (change streams)",
   "Portion creep in a standing order, this week against the weeks before (time-series collections and a $setWindowFields aggregation)": "Vakiotilauksen annoskoon kasvu, tämä viikko verrattuna aiempiin viikkoihin (aikasarjakokoelmat ja $setWindowFields-aggregaatio)",
   "See it on Home": "Katso etusivulla",
-  "Every order stored once, money stored as exact decimals, never as floating point (Decimal128), and a tamper-evident log: a changed line or a cut end is detected (unique index, hash-chained audit log)": "Jokainen tilaus tallennetaan vain kerran, rahasummat tallennetaan tarkkoina desimaalilukuina, ei koskaan liukulukuina (Decimal128), ja loki, josta muutos näkyy: muutettu rivi tai katkaistu loppu havaitaan (yksilöivä indeksi, hash-ketjuun perustuva toimintoloki)",
+  "Every order stored once, money stored as exact decimals, never as floating point (Decimal128), and a tamper-evident log: a changed entry or a truncated end is detected (unique index, hash-chained audit log)": "Jokainen tilaus tallennetaan vain kerran, rahasummat tallennetaan tarkkoina desimaalilukuina, ei koskaan liukulukuina (Decimal128), ja loki, josta muutos näkyy: muutettu rivi tai katkaistu loppu havaitaan (yksilöivä indeksi, hash-ketjuun perustuva toimintoloki)",
   "Run the tamper check": "Suorita peukaloinnintarkistus",
   "Best Use of Nemotron": "Paras Nemotronin käyttö",
   "NVIDIA Nemotron 3.5 Super VL: the Buyer agent": "NVIDIA Nemotron 3.5 Super VL: Ostaja-agentti",
