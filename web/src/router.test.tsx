@@ -42,8 +42,7 @@ describe("application routes", () => {
     const user = userEvent.setup();
     await renderAt("/requests");
     await screen.findByRole("heading", { level: 1, name: "Request an order" });
-    await user.click(screen.getAllByRole("combobox")[0]);
-    await user.click(await screen.findByRole("option", { name: "Valio planner" }));
+    await user.click(screen.getAllByRole("radio", { name: "Valio planner" })[0]!);
     expect(await screen.findByRole("heading", { level: 1, name: "Kitchen Buyer" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Demand" }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: "To approve" })).not.toBeInTheDocument();

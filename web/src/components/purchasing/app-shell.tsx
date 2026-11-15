@@ -27,12 +27,10 @@ import { LanguagePicker } from "@/components/purchasing/language-picker";
 import { SampleData } from "@/components/purchasing/sample-data";
 import { ThemePicker } from "@/components/purchasing/theme-picker";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useT } from "@/lib/i18n";
 import { usePendingApprovals } from "@/lib/pending-approvals";
-import { ROLE_LABELS, type Role, useRole } from "@/lib/role";
+import { type Role, useRole } from "@/lib/role";
 import { useSession } from "@/lib/session";
 import { inTelegram, readyTelegram } from "@/lib/telegram";
 import { cn } from "@/lib/utils";
@@ -266,28 +264,44 @@ function SectionTabs({ label, items, activeId }: { label: string; items: NavItem
   );
 }
 
-/** No login: the viewer picks a role, which also picks the side (Kitchen or Valio). */
+/**
+ * No login: the viewer picks the side. A chef and an approver see the same kitchen pages, and
+ * "the Buyer" is the agent in this app, so the kitchen is one option (#2005).
+ */
 function RolePicker() {
   const t = useT();
-  const { role, setRole } = useRole();
+  const { side, setRole } = useRole();
+  const { session } = useSession();
   const id = useId();
+  // Back from the Valio side: an account that is not an approver stays a chef; everyone else approves as a person, as before.
+  const kitchenRole: Role = session?.role && session.role !== "approver" ? "chef" : "buyer";
+  const options: { side: typeof side; role: Role; label: string }[] = [
+    { side: "kitchen", role: kitchenRole, label: "Kitchen" },
+    { side: "valio", role: "valio_planner", label: "Valio planner" },
+  ];
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id} className="label-caps">
+    <div role="radiogroup" aria-labelledby={id} className="space-y-1.5">
+      <span id={id} className="label-caps block">
         {t("Your role")}
-      </Label>
-      <Select value={role} onValueChange={(value) => setRole(value as Role)}>
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {(Object.keys(ROLE_LABELS) as Role[]).map((value) => (
-            <SelectItem key={value} value={value}>
-              {t(ROLE_LABELS[value])}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      </span>
+      <div className="grid grid-cols-2 gap-0.5 rounded-md border p-0.5">
+        {options.map((option) => (
+          <label
+            key={option.side}
+            className="relative flex cursor-pointer items-center justify-center rounded-sm px-2 py-1.5 text-center text-xs font-medium text-muted-foreground hover:bg-accent has-checked:bg-accent has-checked:text-accent-foreground has-focus-visible:ring-[3px] has-focus-visible:ring-ring/70"
+          >
+            <input
+              type="radio"
+              name={id}
+              value={option.side}
+              checked={side === option.side}
+              onChange={() => setRole(option.role)}
+              className="sr-only"
+            />
+            {t(option.label)}
+          </label>
+        ))}
+      </div>
     </div>
   );
 }
