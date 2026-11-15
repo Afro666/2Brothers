@@ -22,6 +22,7 @@ import { STATUS_META, StatusBadge } from "@/components/purchasing/status-badge";
 import { URGENCY_META, UrgencyBadge } from "@/components/purchasing/urgency-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatEur } from "@/lib/format";
+import { useLanguage } from "@/lib/i18n";
 import {
   MOCK_NOW,
   approval,
@@ -57,6 +58,7 @@ function Section({ id, title, usedIn, children }: { id: string; title: string; u
 }
 
 function OrderHeader({ order }: { order: Order }) {
+  useLanguage();
   return (
     <CardHeader>
       <div className="flex flex-wrap items-center gap-2">
@@ -73,6 +75,7 @@ function OrderHeader({ order }: { order: Order }) {
 }
 
 export function KitPage() {
+  useLanguage();
   const now = MOCK_NOW;
   return (
     <AppShell items={KIT_NAV} activeId="requests">

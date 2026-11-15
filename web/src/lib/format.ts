@@ -1,6 +1,8 @@
 /**
  * Formatting helpers. Every time is shown in Helsinki time, the zone of
  * Valio's server and of the restaurant, whatever the browser's zone is.
+ * React components evaluating these helpers must subscribe with useLanguage or useT
+ * so localized output updates without remounting the page or reloading its data.
  */
 import { getAppearance } from "@/lib/appearance";
 import { getLanguage, translate } from "@/lib/i18n";

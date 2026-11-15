@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { useState } from "react";
 
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -51,7 +52,13 @@ function FormatProbe() {
 }
 
 function DateOnlyProbe() {
+  useLanguage();
   return <output data-testid="date-only">{formatDate("2026-11-14")}</output>;
+}
+
+function DraftProbe() {
+  const [draft, setDraft] = useState("");
+  return <input aria-label="Draft" value={draft} onChange={(event) => setDraft(event.target.value)} />;
 }
 
 const TRANSLATED_FILES = [
@@ -108,7 +115,7 @@ describe("language", () => {
     expect(translate("fi", text)).toBe(text);
   });
 
-  it("re-renders a date-only component when the language changes", async () => {
+  it("re-renders a subscribed formatter-only component when the language changes", async () => {
     const user = userEvent.setup();
     render(
       <LanguageProvider>
@@ -120,6 +127,17 @@ describe("language", () => {
 
     await user.click(screen.getByRole("button", { name: "Finnish" }));
     expect(screen.getByTestId("date-only")).toHaveTextContent("la 14. marrask.");
+  });
+
+  it("keeps drafts and mounted children when the language changes", async () => {
+    const user = userEvent.setup();
+    render(<LanguageProvider><DraftProbe /><LanguageProbe /></LanguageProvider>);
+    const input = screen.getByRole("textbox", { name: "Draft" });
+    await user.type(input, "Keep this unsubmitted request");
+    await user.click(screen.getByRole("button", { name: "Finnish" }));
+    expect(screen.getByRole("textbox", { name: "Draft" })).toBe(input);
+    expect(input).toHaveValue("Keep this unsubmitted request");
+    expect(screen.getByText("Tarjous: Valio Aimo")).toBeInTheDocument();
   });
 
   it("keeps number and date choices while translating date names", async () => {
