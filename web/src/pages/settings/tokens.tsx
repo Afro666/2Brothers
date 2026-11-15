@@ -120,7 +120,7 @@ export function TokensSection() {
       setActionError(t("Select at least one token scope."));
       return;
     }
-    setCreated(null);
+    // The previous secret stays until a new one replaces it: it is shown once, and a failed create must not lose it (#1965).
     setCreating(true);
     try {
       const next = await api.createApiToken({ name: trimmed, scopes });
