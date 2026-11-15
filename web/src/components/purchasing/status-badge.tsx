@@ -48,10 +48,10 @@ export const STATUS_META: Record<OrderStatus, StatusMeta> = {
     meaning: "Breaks a hard rule, for example an excluded allergen. It cannot be placed, not even with approval.",
   },
   PLACED: {
-    label: "Placed",
+    label: "Recorded",
     tone: "info",
     icon: CircleCheck,
-    meaning: "The gateway placed the order and stored the confirmation.",
+    meaning: "The gateway recorded this order and stored the confirmation.",
   },
   NOT_SENT: {
     label: "Not sent",
@@ -73,7 +73,7 @@ export const STATUS_META: Record<OrderStatus, StatusMeta> = {
   },
 };
 
-/** A placed order whose receipt says the supplier got nothing: "Placed" alone would read as sent. */
+/** A recorded order whose receipt says the supplier got nothing: one label for both facts. */
 const RECORDED_NOT_SENT = {
   ...STATUS_META.PLACED,
   label: "Approved and recorded, not sent to the supplier",
