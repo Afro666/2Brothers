@@ -830,8 +830,8 @@ describe("ApprovalCard", () => {
   describe("the recommended option leads the card (#1866)", () => {
     const [mockA, mockB, mockC] = milkOptions;
     // The live milk proposal: A is recommended (confirmed stock), B is the proposal's own basket.
-    const optionA = { ...mockA, id: "offer-a", recommended: true, stockConfirmed: true, chosen: false, cutoffPassed: false, totalInclVat: 2099.41, held: { quantity: 302, unit: "L" } };
-    const optionB = { ...mockB, id: "offer-b", source: "original" as const, recommended: false, stockConfirmed: false, chosen: true, cutoffPassed: false, totalInclVat: 2634.13, held: null };
+    const optionA = { ...mockA, id: "offer-a", recommended: true, stockConfirmed: true, chosen: false, cutoffPassed: false, totalInclVat: 2099.41, totalExVat: 1849.7, held: { quantity: 302, unit: "L" } };
+    const optionB = { ...mockB, id: "offer-b", source: "original" as const, recommended: false, stockConfirmed: false, chosen: true, cutoffPassed: false, totalInclVat: 2634.13, totalExVat: 2320.82, held: null };
     const optionC = { ...mockC, id: "offer-c", recommended: false, stockConfirmed: false, chosen: false, cutoffPassed: false, totalInclVat: 2701.55, held: null };
     const proposed = {
       ...approval,
@@ -839,11 +839,16 @@ describe("ApprovalCard", () => {
       totalExVat: 2320.82,
       inclVat: 2634.13,
       totalInclVat: 2634.13,
+      asked: { quantity: 1000, unit: "L", confirmedPartOnly: false },
       options: [optionA, optionB, optionC],
     };
-    /** The proposal after the gateway made option A its basket: a new offer id, A's own totals. */
+    /**
+     * The proposal after the gateway made option A its basket: a new offer id, A's own totals, and
+     * the request rewritten to the confirmed part (gateway/options.py, `made_by: "confirmed_only"`; #1915).
+     */
     const afterA = {
       ...proposed,
+      asked: { quantity: 698, unit: "L", confirmedPartOnly: true },
       totalExVat: 1849.7,
       inclVat: 2099.41,
       totalInclVat: 2099.41,
@@ -856,26 +861,119 @@ describe("ApprovalCard", () => {
       const totals = screen.getByTestId("card-totals");
       expect(within(totals).getByText("€2,099.41")).toBeVisible();
       expect(within(totals).getByText("Option A, recommended by the Buyer")).toBeVisible();
-      expect(within(totals).getByText("302 l waits for stock confirmation")).toBeVisible();
+      // #1970: the title says 1,000 L and this total is for 698 L: the card says so beside the total.
+      expect(within(totals).getByTestId("coverage")).toHaveTextContent(/^698 of 1,000 l · 302 l not covered$/i);
       expect(within(totals).getByText("Option B, the basket proposed now: €2,634.13")).toBeVisible();
       expect(mainApprove()).toHaveAccessibleName("Approve option A: €2,099.41");
       expect(mainApprove()).toBeEnabled();
     });
 
-    it("keeps Over budget on the card and says which option its figures are for", () => {
-      const order = structuredClone(confirmedOrder);
-      order.lines[0].offer.availableAmount = 999999;
-      const request = {
-        ...proposed,
-        reasons: [{ rule: "The total is above your kitchen's budget warning.", detail: "A warning only. It does not block the order.", warning: true }],
+    describe("Over budget is about the option the main total shows (#1970)", () => {
+      const overBudget = { rule: "The total is above your kitchen's budget warning.", detail: "A warning only. It does not block the order.", warning: true };
+      const unconfirmed = () => {
+        const order = structuredClone(confirmedOrder);
+        order.lines[0].offer.availableAmount = 999999;
+        return order;
       };
-      render(<ApprovalCard request={request} order={order} onApprove={vi.fn()} onChooseOption={vi.fn()} budgetWarningExVat={1500} />);
-      expect(screen.getByText("Over budget")).toBeVisible();
-      expect(
-        screen.getByText("Option B: €2,320.82 ex VAT is €820.82 above your kitchen's budget warning of €1,500.00 per order. A warning only."),
-      ).toBeVisible();
-      // "Valio must confirm 1" is about option B's line: not beside option A's total.
-      expect(screen.queryByText("Valio must confirm 1")).toBeNull();
+
+      it("gives the recommended option's own figures while it leads the card", () => {
+        render(<ApprovalCard request={{ ...proposed, reasons: [overBudget] }} order={unconfirmed()} onApprove={vi.fn()} onChooseOption={vi.fn()} budgetWarningExVat={1500} />);
+        expect(screen.getByText("Over budget")).toBeVisible();
+        expect(
+          screen.getByText("Option A: €1,849.70 ex VAT is €349.70 above your kitchen's budget warning of €1,500.00 per order. A warning only."),
+        ).toBeVisible();
+        expect(screen.queryByText(/^Option B: .*budget warning/)).toBeNull();
+        // "Valio must confirm 1" is about option B's line: not beside option A's total.
+        expect(screen.queryByText("Valio must confirm 1")).toBeNull();
+      });
+
+      it("shows the chip also when only the recommended option's own total says so", () => {
+        // The proposal's basket carries no budget warning here; option A is over the kitchen's limit.
+        render(<ApprovalCard request={proposed} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} budgetWarningExVat={1500} />);
+        expect(screen.getByText("Over budget")).toBeVisible();
+        expect(screen.getByText(/^Option A: €1,849\.70 ex VAT is €349\.70 above/)).toBeVisible();
+      });
+
+      it("shows no chip and no line while the option on screen is under the limit, and follows the person's pick", async () => {
+        const user = userEvent.setup();
+        // Option B (the basket) is over a limit of 2,000; option A, which leads, is not.
+        render(<ApprovalCard request={{ ...proposed, reasons: [overBudget] }} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} budgetWarningExVat={2000} />);
+        expect(screen.queryByText("Over budget")).toBeNull();
+        expect(screen.queryByText(/budget warning/)).toBeNull();
+
+        await user.click(screen.getByRole("button", { name: "Inspect (3 options)" }));
+        await user.click(screen.getByRole("button", { name: /^Choose option B/ }));
+        await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" }));
+        expect(screen.getByText("Over budget")).toBeVisible();
+        expect(
+          screen.getByText("Option B: €2,320.82 ex VAT is €320.82 above your kitchen's budget warning of €2,000.00 per order. A warning only."),
+        ).toBeVisible();
+      });
+
+      it("says nothing about the budget of a leading option whose ex VAT total or limit is not known", () => {
+        const noExVat = { ...proposed, reasons: [overBudget], options: [{ ...optionA, totalExVat: null }, optionB, optionC] };
+        const { unmount } = render(<ApprovalCard request={noExVat} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} budgetWarningExVat={1500} />);
+        expect(screen.queryByText("Over budget")).toBeNull();
+        unmount();
+        render(<ApprovalCard request={{ ...proposed, reasons: [overBudget] }} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />);
+        expect(screen.queryByText("Over budget")).toBeNull();
+        expect(screen.queryByText(/budget warning/)).toBeNull();
+      });
+    });
+
+    describe("the asked and the covered quantity stay beside the total (#1970)", () => {
+      it("keeps the option's name, the 302 L and the letter on the button after option A is chosen", () => {
+        render(<ApprovalCard request={afterA} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />);
+        const totals = screen.getByTestId("card-totals");
+        expect(within(totals).getByText("€2,099.41")).toBeVisible();
+        expect(within(totals).getByText("Option A, recommended by the Buyer")).toBeVisible();
+        expect(within(totals).getByTestId("coverage")).toHaveTextContent(/^698 of 1,000 l · 302 l not covered$/i);
+        expect(mainApprove()).toHaveAccessibleName("Approve option A: €2,099.41");
+      });
+
+      it("reads the proposal's own shortfall once the gateway keeps the asked quantity (#1915)", () => {
+        const request = { ...afterA, asked: { quantity: 1000, unit: "L", confirmedPartOnly: false } };
+        const order = { ...confirmedOrder, shortfall: { amount: 302, unit: "L" } };
+        render(<ApprovalCard request={request} order={order} onApprove={vi.fn()} onChooseOption={vi.fn()} />);
+        expect(screen.getByTestId("coverage")).toHaveTextContent(/^698 of 1,000 l · 302 l not covered$/i);
+      });
+
+      it("says the basket covers all of it when nothing is left out, and names option B on the total and the button", async () => {
+        const user = userEvent.setup();
+        render(<ApprovalCard request={proposed} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />);
+        await user.click(screen.getByRole("button", { name: "Inspect (3 options)" }));
+        await user.click(screen.getByRole("button", { name: /^Choose option B/ }));
+        await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" }));
+        const totals = screen.getByTestId("card-totals");
+        expect(within(totals).getByText("Option B, the basket proposed now")).toBeVisible();
+        expect(within(totals).getByTestId("coverage")).toHaveTextContent(/^1,000 of 1,000 l$/i);
+        expect(mainApprove()).toHaveAccessibleName("Approve option B: €2,634.13");
+      });
+
+      it("shows a shortfall on a card with no options, and stays silent when the request has no single quantity", () => {
+        const request = { ...approval, asked: { quantity: 50, unit: "L", confirmedPartOnly: false } };
+        const order = { ...confirmedOrder, shortfall: { amount: 10, unit: "L" } };
+        const { unmount } = render(<ApprovalCard request={request} order={order} />);
+        expect(screen.getByTestId("coverage")).toHaveTextContent(/^40 of 50 l · 10 l not covered$/i);
+        unmount();
+        render(<ApprovalCard request={{ ...approval, asked: null }} order={confirmedOrder} />);
+        expect(screen.queryByTestId("coverage")).toBeNull();
+      });
+
+      it("never subtracts across units: it names only the part that is not covered", () => {
+        const request = { ...approval, asked: { quantity: 50, unit: "KI", confirmedPartOnly: false } };
+        render(<ApprovalCard request={request} order={{ ...confirmedOrder, shortfall: { amount: 10, unit: "L" } }} />);
+        expect(screen.getByTestId("coverage")).toHaveTextContent(/^10 l not covered$/i);
+      });
+
+      it("drops the line about the old basket as soon as the recommended option is chosen", async () => {
+        const user = userEvent.setup();
+        render(<ApprovalCard request={proposed} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn().mockResolvedValue(undefined)} />);
+        expect(screen.getByText("Option B, the basket proposed now: €2,634.13")).toBeVisible();
+        await user.click(mainApprove());
+        // The gateway's basket is option A now; the card still holds the old proposal until the reload.
+        expect(screen.queryByText(/the basket proposed now/)).toBeNull();
+      });
     });
 
     it("chooses the recommended option first, then asks for the yes to its new exact total", async () => {
@@ -915,7 +1013,7 @@ describe("ApprovalCard", () => {
       const totals = screen.getByTestId("card-totals");
       expect(within(totals).getByText("€2,634.13")).toBeVisible();
       expect(within(totals).queryByText("Option A, recommended by the Buyer")).toBeNull();
-      expect(mainApprove()).toHaveAccessibleName(/^Approve €2,634\.13/);
+      expect(mainApprove()).toHaveAccessibleName("Approve option B: €2,634.13");
     });
 
     it("says why when the gateway refuses the choice, and opens no approval", async () => {
@@ -947,10 +1045,10 @@ describe("ApprovalCard", () => {
 
     it("keeps the proposal's own basket when the options cannot be switched, or the recommended one is already it", () => {
       const { unmount } = render(<ApprovalCard request={proposed} order={confirmedOrder} onApprove={vi.fn()} />);
-      expect(mainApprove()).toHaveAccessibleName(/^Approve €2,634\.13/);
+      expect(mainApprove()).toHaveAccessibleName("Approve option B: €2,634.13");
       unmount();
       render(<ApprovalCard request={afterA} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />);
-      expect(mainApprove()).toHaveAccessibleName(/^Approve €2,099\.41/);
+      expect(mainApprove()).toHaveAccessibleName("Approve option A: €2,099.41");
       expect(screen.queryByText(/the basket proposed now/)).toBeNull();
     });
 
@@ -958,11 +1056,12 @@ describe("ApprovalCard", () => {
       // After an edit no option is the basket; after choosing C the basket is not the Buyer's own.
       const edited = [optionA, { ...optionB, chosen: false }, optionC];
       const choseC = [optionA, { ...optionB, chosen: false }, { ...optionC, source: "catalog" as const, chosen: true }];
-      for (const options of [edited, choseC]) {
+      // An edited basket is no option: no letter. A chosen option keeps its letter (#1970).
+      for (const [options, name] of [[edited, "Approve €2,634.13"], [choseC, "Approve option C: €2,634.13"]] as const) {
         const { unmount } = render(
-          <ApprovalCard request={{ ...proposed, options }} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />,
+          <ApprovalCard request={{ ...proposed, options: [...options] }} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />,
         );
-        expect(mainApprove()).toHaveAccessibleName(/^Approve €2,634\.13/);
+        expect(mainApprove()).toHaveAccessibleName(name);
         unmount();
       }
     });
@@ -971,7 +1070,7 @@ describe("ApprovalCard", () => {
       for (const blocked of [{ stockConfirmed: false }, { cutoffPassed: true }]) {
         const request = { ...proposed, options: [{ ...optionA, ...blocked }, optionB, optionC] };
         const { unmount } = render(<ApprovalCard request={request} order={confirmedOrder} onApprove={vi.fn()} onChooseOption={vi.fn()} />);
-        expect(mainApprove()).toHaveAccessibleName(/^Approve €2,634\.13/);
+        expect(mainApprove()).toHaveAccessibleName("Approve option B: €2,634.13");
         unmount();
       }
     });

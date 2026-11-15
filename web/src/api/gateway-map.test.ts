@@ -42,6 +42,7 @@ describe("mapApproval", () => {
       deliveryDate: "2026-11-20",
       totalExVat: 80,
       totalInclVat: 91.2,
+      asked: { quantity: 50, unit: "L", confirmedPartOnly: false },
       reasons: [
         { rule: "10 L of the request cannot be covered for this date.", detail: "" },
         {
@@ -58,6 +59,15 @@ describe("mapApproval", () => {
       options: [],
       modelTrace: null, // no model_trace on this proposal (#1197)
     });
+  });
+
+  it("reads the asked quantity from the request, and says when it is only the confirmed part (#1970)", () => {
+    // gateway/options.py: the confirmed-stock option is quoted for the part in stock, `made_by: "confirmed_only"`.
+    const chosen = { ...proposal, request: { ...proposal.request, quantity: "698", made_by: "confirmed_only" } };
+    expect(mapApproval(chosen).asked).toEqual({ quantity: 698, unit: "L", confirmedPartOnly: true });
+    // A request with no single quantity (a list of items) has no asked figure: never a guess.
+    const { quantity: _quantity, ...items } = proposal.request;
+    expect(mapApproval({ ...proposal, request: items }).asked).toBeNull();
   });
 
   it("lists non-Valio blocks with unknown stock whose supplier must confirm", () => {

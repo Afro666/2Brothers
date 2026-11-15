@@ -541,6 +541,14 @@ function productReason(rule: string, productNames: ReadonlyMap<string, string>):
   return name ? `${name}: ${rest}` : rule;
 }
 
+/** #1970: the request's own quantity and unit; null when it has no single quantity (a list of items). */
+function mapAsked(request: Json): ApprovalRequest["asked"] {
+  if (request.quantity == null || typeof request.unit !== "string" || !request.unit) return null;
+  const quantity = Number(request.quantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) return null;
+  return { quantity, unit: request.unit, confirmedPartOnly: request.made_by === "confirmed_only" };
+}
+
 /**
  * The approval card for one proposal. `events` is the kitchen's audit log: the proposal
  * itself does not say who asked or when, the event that created it does.
@@ -619,6 +627,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
     // The approve figure, sent back on approve; `inclVat` is what the screen calls incl VAT (#1630).
     totalInclVat: mapMoney(proposal.expected_total, "expected_total"),
     ...vatTotals(proposal, Array.isArray(proposal.lines) ? proposal.lines : []),
+    asked: mapAsked(request),
     reasons: reasons.length
       ? reasons
       : [{ rule: "A person approves every order", detail: "Nothing is sent until you approve the exact total." }],

@@ -296,6 +296,12 @@ export interface ApprovalRequest {
   inclVat?: number | null;
   /** Names of the lines whose VAT rate is unknown (`vat_unknown`). */
   vatUnknown?: string[];
+  /**
+   * #1970: the request's own `quantity` and `unit`; null or absent when the request has no single quantity.
+   * `confirmedPartOnly`: the gateway quoted the request for the part with confirmed stock
+   * (`made_by: "confirmed_only"`, gateway/options.py), so `quantity` is what the basket covers, not all that was asked.
+   */
+  asked?: { quantity: number; unit: string; confirmedPartOnly: boolean } | null;
   reasons: MandateReason[];
   /** Suppliers other than Valio with unconfirmed stock; `count` is how many of the proposal's lines (the gateway's `blocks`). */
   suppliersToConfirm: { supplierId: string; name: string; count?: number }[];
@@ -366,6 +372,8 @@ export interface ProposalOption {
   lines: ProposalOptionLine[];
   /** With fees and tax: the exact figure a person approves. */
   totalInclVat: number;
+  /** #1970: the sum of the gateway's line totals, ex VAT; null or absent when a line has none. */
+  totalExVat?: number | null;
   /** False unless every line's stock is measured. */
   stockConfirmed: boolean;
   /** true = the order cut-off is missed; null = the API did not say. */

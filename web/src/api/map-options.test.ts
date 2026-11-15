@@ -54,6 +54,7 @@ describe("mapProposalOptions", () => {
         kind: "FULL",
         lines: [{ productId: "P1", productName: null, productNameFi: null, brand: null, quantity: 51, unit: "ST", unitPrice: null }],
         totalInclVat: 148.76,
+        totalExVat: null,
         stockConfirmed: true,
         cutoffPassed: null,
         cutoffAt: null,
@@ -70,6 +71,15 @@ describe("mapProposalOptions", () => {
         chosen: true,
       },
     ]);
+  });
+
+  it("adds the gateway's line totals to the option's ex VAT total; unknown when one line has none (#1970)", () => {
+    const [known] = mapProposalOptions([
+      option({ lines: [line({ total: "1849.70" }), line({ product_id: "P2", total: "471.12" })] }),
+    ]);
+    expect(known.totalExVat).toBe(2320.82);
+    const [unknown] = mapProposalOptions([option({ lines: [line({ total: "1849.70" }), line({ product_id: "P2" })] })]);
+    expect(unknown.totalExVat).toBeNull();
   });
 
   it("reads the per-line extras: price, cut-off, reliability, carbon, labels, partial stock", () => {
