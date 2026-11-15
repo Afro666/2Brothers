@@ -101,7 +101,7 @@ describe("DemandPage", () => {
     expect(head).toHaveTextContent("Arla lactose-free milk");
     expect(head).not.toHaveTextContent("462775");
     expect(head).toHaveTextContent("Short on 3 of 3 days");
-    expect(head).toHaveTextContent(/Buy [\d,.]+ l/);
+    expect(head).toHaveTextContent(/Buy [\d,.]+ L/);
     expect(head).toHaveTextContent("kitchens: up to 4");
     expect(within(head).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
     expect(days).toHaveLength(3);
@@ -116,7 +116,7 @@ describe("DemandPage", () => {
       expect(within(day).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
       expect(within(day).getByText("Buy")).toBeInTheDocument();
       const forecast = within(day).getAllByRole("cell")[1].textContent ?? "";
-      expect(forecast).toMatch(/^\d+ l$/);
+      expect(forecast).toMatch(/^\d+ L$/);
     }
     const firstBody = productSections()[0];
     expect(firstBody).toHaveAttribute("data-product-section", "462775");
@@ -141,7 +141,7 @@ describe("DemandPage", () => {
     await demandTableReady();
     const [head, ...days] = productSection("462921");
     expect(head).toHaveTextContent("3 days with no stock figure");
-    expect(head).not.toHaveTextContent("Buy 0 l");
+    expect(head).not.toHaveTextContent("Buy 0 L");
     expect(head).toHaveTextContent("kitchens: up to 4");
     await openProduct("462921");
     expect(days).toHaveLength(3);
@@ -179,7 +179,7 @@ describe("DemandPage", () => {
 
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(within(firstDay).getByText("K00 Demo restaurant, Helsinki")).toBeVisible();
-    expect(within(firstDay).getByText("31 l")).toBeVisible();
+    expect(within(firstDay).getByText("31 L")).toBeVisible();
     expect(within(firstDay).getByText("K01 School 1 Tampere")).toBeVisible();
   });
 
@@ -209,10 +209,10 @@ describe("DemandPage", () => {
         .getAllByRole("listitem")
         .map((item) => item.textContent),
     ).toEqual([
-      "K07 Hospital kitchen Turku73.3 l",
-      "K01 School 1 Tampere73.3 l",
-      "K04 Hotel Aurora Helsinki73.3 l",
-      "K00 Demo restaurant, Helsinki16 l",
+      "K07 Hospital kitchen Turku73.3 L",
+      "K01 School 1 Tampere73.3 L",
+      "K04 Hotel Aurora Helsinki73.3 L",
+      "K00 Demo restaurant, Helsinki16 L",
     ]);
   });
 
@@ -661,7 +661,7 @@ describe("DemandPage on a phone (#1142)", () => {
     const [row] = phoneRows();
     const toggle = within(row).getByRole("button", { name: /Milk/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(toggle).toHaveTextContent("Buy 50 l");
+    expect(toggle).toHaveTextContent("Buy 50 L");
     expect(toggle).toHaveTextContent("1 day with no stock figure");
     expect(within(toggle).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
     // The short days and the kitchen count wait in the details.
@@ -680,17 +680,17 @@ describe("DemandPage on a phone (#1142)", () => {
     expect(details).toHaveTextContent("kitchens: up to 2");
     const [monday, tuesday] = [...details.querySelectorAll<HTMLElement>("li[data-phone-day]")];
     expect(monday).toHaveTextContent("Mon 16 Nov");
-    expect(monday).toHaveTextContent("Forecast demand100 l");
-    expect(monday).toHaveTextContent("Available50 l");
-    expect(monday).toHaveTextContent("Buy50 l");
+    expect(monday).toHaveTextContent("Forecast demand100 L");
+    expect(monday).toHaveTextContent("Available50 L");
+    expect(monday).toHaveTextContent("Buy50 L");
     expect(within(monday).getByText("Short")).toHaveAttribute("data-risk", "SHORT");
-    expect(tuesday).toHaveTextContent("Forecast demand80 l");
+    expect(tuesday).toHaveTextContent("Forecast demand80 L");
     expect(tuesday).toHaveTextContent("Availableunknown");
     expect(tuesday).toHaveTextContent("Buyunknown");
 
     await user.click(within(monday).getByRole("button", { name: /^2 kitchens for Milk, / }));
     expect(within(monday).getByText("K01 School")).toBeVisible();
-    expect(within(monday).getByText("60 l")).toBeVisible();
+    expect(within(monday).getByText("60 L")).toBeVisible();
   });
 
   it("keeps the unknown days of a product with no known buy in its details", async () => {

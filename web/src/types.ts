@@ -354,6 +354,10 @@ export interface ProposalOptionLine {
   unit: string;
   /** Ex VAT, per `unit`. */
   unitPrice: number | null;
+  /** #1982: the line's own `unknown_stock`; null or absent when the gateway does not say. */
+  stockUnknown?: boolean | null;
+  /** #1982: the line's cut-off comes from Valio's own offer (`cutoff_source: "valio"`): Valio answers for its stock. */
+  fromValio?: boolean;
 }
 
 /**

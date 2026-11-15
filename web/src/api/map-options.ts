@@ -88,6 +88,8 @@ export function mapProposalOptions(
         quantity: mapMoney(line.quantity, "quantity"),
         unit: text(line.unit, "unit"),
         unitPrice: line.unit_price == null ? null : mapMoney(line.unit_price, "unit_price"),
+        stockUnknown: typeof line.unknown_stock === "boolean" ? line.unknown_stock : null,
+        fromValio: readDeliveryFacts(line).cutoffSource === "valio",
       };
     });
     // Cut-off, lead time and reliability to show (#1453). Reliability is the line's

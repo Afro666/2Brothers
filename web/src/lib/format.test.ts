@@ -6,7 +6,7 @@ import { compareUrgency } from "@/components/purchasing/urgency-badge";
 
 import { updateLanguage } from "@/lib/i18n";
 
-import { formatAmount, formatCount, formatDayAndDate, formatEur, formatNumber, formatPack, formatPercentDecimal, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock } from "./format";
+import { formatAmount, formatCount, formatDayAndDate, formatEur, formatNumber, formatPack, formatPercentDecimal, formatQuantity, formatShortfall, formatStock, isLater, isPassed, isUnknownStock, peopleUnit, plainUnits } from "./format";
 
 describe("stock sentinels", () => {
   it("treats both Valio sentinels and a missing value as unknown", () => {
@@ -51,13 +51,34 @@ describe("demand and stock amounts", () => {
   it("rounds counted and measured units, keeps thousands and never loses a tiny amount", () => {
     expect(formatAmount(6024.083, "PCS")).toBe("6,024 pieces");
     expect(formatAmount(12.26, "KG")).toBe("12.3 kg");
-    expect(formatAmount(1987.64, "L")).toBe("1,987.6 l");
+    expect(formatAmount(1987.64, "L")).toBe("1,987.6 L");
     expect(formatAmount(0.4, "BOX")).toBe("< 1 BOX");
     expect(formatAmount(0.04, "ML")).toBe("< 0.1 ml");
     expect(formatAmount(2.26, "UNKNOWN")).toBe("2.3 UNKNOWN");
     expect(formatAmount(0, "PCS")).toBe("0 pieces");
     expect(formatAmount(12, "KG")).toBe("12 kg");
     expect(formatAmount(1, "KI")).toBe("1 case");
+  });
+});
+
+describe("one unit word everywhere (#1982)", () => {
+  it("writes litres as L, whatever the case of the code", () => {
+    expect(peopleUnit("L")).toBe("L");
+    expect(peopleUnit("l", 1)).toBe("L");
+    expect(formatQuantity(302, "L")).toBe("302 L");
+    expect(formatShortfall(302, "l")).toBe("302 L");
+  });
+
+  it("turns a raw unit code after a number in a gateway sentence into the same words", () => {
+    expect(plainUnits("698 ST of Arla Cafe milk 1 L UHT lactose free = 698 L, confirmed in stock.")).toBe(
+      "698 pieces of Arla Cafe milk 1 L UHT lactose free = 698 L, confirmed in stock.",
+    );
+    expect(plainUnits("The Buyer's basket as proposed: 698 ST confirmed, 302 ST waits for stock confirmation.")).toBe(
+      "The Buyer's basket as proposed: 698 pieces confirmed, 302 pieces waits for stock confirmation.",
+    );
+    expect(plainUnits("1 ST and 2 KI and 1.5 KG")).toBe("1 piece and 2 cases and 1.5 kg");
+    // Not a quantity: a code with no number before it, or letters that only start like a code.
+    expect(plainUnits("ST is the sales unit; 5 STARS; 3 Stück")).toBe("ST is the sales unit; 5 STARS; 3 Stück");
   });
 });
 
@@ -73,7 +94,7 @@ describe("urgency order", () => {
 describe("amounts for people", () => {
   it("rounds a weight to one decimal and writes the unit in small letters", () => {
     expect(formatQuantity(12.226, "KG")).toBe("12.2 kg");
-    expect(formatQuantity(151.64, "L")).toBe("151.6 l");
+    expect(formatQuantity(151.64, "L")).toBe("151.6 L");
     expect(formatQuantity(3, "KG")).toBe("3 kg");
   });
 
@@ -95,7 +116,7 @@ describe("amounts for people", () => {
 
   it("writes pack contents as a sentence with the numbers unchanged", () => {
     expect(formatPack("KI", 12, "KG")).toBe("1 case = 12 kg");
-    expect(formatPack("BOT", 0.75, "L")).toBe("1 bottle = 0.75 l");
+    expect(formatPack("BOT", 0.75, "L")).toBe("1 bottle = 0.75 L");
     expect(formatPack("PRK", 1, "ST")).toBe("1 pack = 1 piece");
   });
 
@@ -167,7 +188,7 @@ describe("formatAmount at the edges", () => {
   it("keeps the sign of a negative amount", () => {
     expect(formatAmount(-0.95, "KG")).toBe("-1 kg");
     expect(formatAmount(-12.4, "PCS")).toBe("-12 pieces");
-    expect(formatAmount(-0.04, "L")).toBe("> -0.1 l");
+    expect(formatAmount(-0.04, "L")).toBe("> -0.1 L");
   });
 });
 

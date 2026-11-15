@@ -478,7 +478,7 @@ describe("catalog page: a short result list on a phone (#1142)", () => {
     const toggle = within(second).getByRole("button", { name: /Product 02/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveTextContent("900002");
-    expect(toggle).toHaveTextContent("1 case = 10 l");
+    expect(toggle).toHaveTextContent("1 case = 10 L");
     expect(toggle).toHaveTextContent(/12[.,]50.* per KI ex VAT/);
     // A supplier's search row has no price: the closed row shows none, the card says where it comes from.
     expect(within(third).getByRole("button", { name: /Product 03/ })).not.toHaveTextContent("ex VAT");

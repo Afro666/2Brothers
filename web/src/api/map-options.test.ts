@@ -52,7 +52,7 @@ describe("mapProposalOptions", () => {
         tier: "good",
         source: "original",
         kind: "FULL",
-        lines: [{ productId: "P1", productName: null, productNameFi: null, brand: null, quantity: 51, unit: "ST", unitPrice: null }],
+        lines: [{ productId: "P1", productName: null, productNameFi: null, brand: null, quantity: 51, unit: "ST", unitPrice: null, stockUnknown: false, fromValio: false }],
         totalInclVat: 148.76,
         totalExVat: null,
         stockConfirmed: true,
@@ -80,6 +80,24 @@ describe("mapProposalOptions", () => {
     expect(known.totalExVat).toBe(2320.82);
     const [unknown] = mapProposalOptions([option({ lines: [line({ total: "1849.70" }), line({ product_id: "P2" })] })]);
     expect(unknown.totalExVat).toBeNull();
+  });
+
+  it("keeps each line's own stock answer, and says when the line is Valio's own offer (#1982)", () => {
+    const [mapped] = mapProposalOptions([
+      option({
+        stock_confirmed: false,
+        lines: [
+          line({ unknown_stock: false, cutoff_at: "2026-11-15T17:00:00+02:00", cutoff_source: "valio" }),
+          line({ product_id: "P2", unknown_stock: true, cutoff_at: "2026-11-15T17:00:00+02:00", cutoff_source: "supplier_terms" }),
+          line({ product_id: "P3", unknown_stock: undefined }),
+        ],
+      }),
+    ]);
+    expect(mapped.lines.map((row) => [row.productId, row.stockUnknown, row.fromValio])).toEqual([
+      ["P1", false, true],
+      ["P2", true, false],
+      ["P3", null, false],
+    ]);
   });
 
   it("reads the per-line extras: price, cut-off, reliability, carbon, labels, partial stock", () => {

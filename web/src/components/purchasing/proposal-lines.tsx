@@ -15,6 +15,7 @@ import {
   isPassed,
   isStockUnconfirmed,
   peopleUnit,
+  plainUnits,
 } from "@/lib/format";
 import { translateReason } from "@/lib/codes";
 import { useT } from "@/lib/i18n";
@@ -135,11 +136,25 @@ function CutoffText({ line, now }: { line: OrderLine; now: Date }) {
           {t("Cut-off passed")}
         </span>
       ) : (
-        <span className="text-xs text-muted-foreground tabular-nums">
-          <span className="md:sr-only">{t("order by")} </span>
-          {t(formatDateTime(line.offer.closingTime))}
-          {hasFacts ? null : <DemoNote values={shown} />}
-        </span>
+        <>
+          {/* #1982: under "Delivery" the delivery day comes first; the order-by time has its own label. */}
+          {late ? (
+            <span className="text-xs font-medium text-warning">
+              {t("arrives {date}", { date: t(formatDate(line.offer.availableDate)) })}
+            </span>
+          ) : line.offer.availableDate != null ? (
+            <span className="text-xs tabular-nums">
+              <span className="md:sr-only">{t("delivery")} </span>
+              {t(formatDate(line.offer.availableDate))}
+            </span>
+          ) : null}
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {t("order by {date}", {
+              date: line.offer.closingTime == null ? t("unknown") : formatDateTime(line.offer.closingTime),
+            })}
+            {hasFacts ? null : <DemoNote values={shown} />}
+          </span>
+        </>
       )}
       {hasFacts ? (
         <span className="text-[11px] leading-4 text-muted-foreground tabular-nums">
@@ -153,7 +168,7 @@ function CutoffText({ line, now }: { line: OrderLine; now: Date }) {
           <DemoNote values={shown} />
         </span>
       ) : null}
-      {late ? (
+      {late && passed ? (
         <span className="text-xs font-medium text-warning">
           {t("arrives {date}", { date: t(formatDate(line.offer.availableDate)) })}
         </span>
@@ -169,7 +184,7 @@ function WhyText({ why, product }: { why: string; product: string }) {
   return (
     <div className="flex items-start gap-1">
       <p title={why} className={cn("min-w-0 text-xs leading-4 text-muted-foreground", !open && "line-clamp-2")}>
-        {why}
+        {plainUnits(why)}
       </p>
       {long ? (
         <button

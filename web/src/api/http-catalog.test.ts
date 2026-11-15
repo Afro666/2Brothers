@@ -234,9 +234,9 @@ describe("Products by code on the real gateway", () => {
 
 describe("mapCatalogProduct", () => {
   it.each([
-    ["Arla 10 L Novobox", "ST", 1, { value: 10, unit: "L" }, "1 piece = 10 l"],
-    ["6 × Arla 5 dl", "KI", 6, { value: 0.5, unit: "L" }, "1 case = 3 l"],
-    ["Valio coffee milk 5 dl", "KI", 10, { value: 0.5, unit: "L" }, "1 case = 5 l"],
+    ["Arla 10 L Novobox", "ST", 1, { value: 10, unit: "L" }, "1 piece = 10 L"],
+    ["6 × Arla 5 dl", "KI", 6, { value: 0.5, unit: "L" }, "1 case = 3 L"],
+    ["Valio coffee milk 5 dl", "KI", 10, { value: 0.5, unit: "L" }, "1 case = 5 L"],
     ["Valio skimmed sour milk 5 kg", "ST", 1, { value: 5, unit: "KG" }, "1 piece = 5 kg"],
   ])("uses pieces and net content for the pack line: %s", (_name, salesUnit, pieces, netContent, expected) => {
     const product = mapCatalogProduct({

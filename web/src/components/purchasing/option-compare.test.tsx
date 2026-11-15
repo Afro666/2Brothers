@@ -206,6 +206,53 @@ describe("OptionCompare", () => {
     expect(within(row("A")).queryByText(/Cannot be approved now/)).toBeNull();
   });
 
+  describe("the milk card's options as the judges read them (#1982)", () => {
+    const [arla, valio] = [
+      { ...optionA.lines[0], productId: "463380", productName: "Arla Cafe milk 1 L UHT lactose free", quantity: 698, unit: "ST", unitPrice: 2.65, stockUnknown: false, fromValio: true },
+      { ...optionA.lines[0], productId: "464201", productName: "Valio semi skimmed milk 1 l lactose free UHT", quantity: 302, unit: "ST", unitPrice: 1.56, stockUnknown: true, fromValio: true },
+    ];
+    const optionWithBoth: ProposalOption = {
+      ...optionC, id: "offer-b", tier: "better", lines: [arla, valio], stockConfirmed: false, chosen: true, cutoffPassed: false, recommended: false, held: null,
+      tradeOff: "The Buyer's basket as proposed: 698 ST confirmed, 302 ST waits for stock confirmation.",
+    };
+
+    it("names the supplier that must confirm stock: from the proposal's blocks, else Valio's own offer line", () => {
+      const { unmount } = render(<OptionCompare options={[optionWithBoth]} confirmBy={(id) => (id === "464201" ? "Leipomo Demo" : null)} />);
+      expect(within(row("A")).getByText("Leipomo Demo must confirm stock")).toBeVisible();
+      expect(screen.queryByText("The supplier must confirm stock")).toBeNull();
+      unmount();
+      render(<OptionCompare options={[optionWithBoth]} />);
+      expect(within(row("A")).getByText("Valio must confirm stock")).toBeVisible();
+    });
+
+    it("keeps the plain sentence when nothing names the supplier of an unconfirmed line", () => {
+      const nameless = { ...optionWithBoth, lines: [arla, { ...valio, fromValio: false }] };
+      render(<OptionCompare options={[nameless]} />);
+      expect(within(row("A")).getByText("The supplier must confirm stock")).toBeVisible();
+    });
+
+    it("says how much is confirmed and how much waits, not unknown", () => {
+      render(<OptionCompare options={[optionWithBoth]} />);
+      expect(fact("A", "Stock")).toHaveTextContent(/^698 pieces confirmed, 302 pieces waiting$/);
+    });
+
+    it("prints the unit price once in an open option, and once in a closed one", async () => {
+      const single = { ...optionWithBoth, lines: [arla] };
+      render(<OptionCompare options={[single]} />);
+      expect(optionToggle("A")).toHaveAttribute("aria-expanded", "true");
+      expect(within(row("A")).getAllByText("€2.65 per piece")).toHaveLength(1);
+      expect(fact("A", "Price ex VAT")).toHaveTextContent("€2.65 per piece");
+      await userEvent.click(optionToggle("A"));
+      expect(within(optionToggle("A")).getAllByText("€2.65 per piece")).toHaveLength(1);
+    });
+
+    it("shows the engine's sentence with the site's unit words, never the raw code ST", () => {
+      render(<OptionCompare options={[optionWithBoth]} />);
+      expect(within(row("A")).getByText("The Buyer's basket as proposed: 698 pieces confirmed, 302 pieces waits for stock confirmation.")).toBeVisible();
+      expect(row("A")).not.toHaveTextContent(/\bST\b/);
+    });
+  });
+
   it("lets a person choose an option with unknown stock and names who must confirm it (#1221, #1434)", async () => {
     const user = userEvent.setup();
     const onChoose = vi.fn(() => Promise.resolve());
@@ -260,7 +307,7 @@ describe("OptionCompare", () => {
     render(<OptionCompare options={milkOptions} onChoose={vi.fn()} onApprove={vi.fn()} />);
     await user.click(optionToggle("B"));
     await user.click(optionToggle("C"));
-    expect(fact("A", "Price ex VAT")).toHaveTextContent("€2.57 per l");
+    expect(fact("A", "Price ex VAT")).toHaveTextContent("€2.57 per L");
     expect(fact("A", "Total")).toHaveTextContent("€148.76 in all");
     expect(fact("A", "Delivery reliability")).toHaveTextContent("97 %");
     expect(fact("B", "Labels")).toHaveTextContent("Organic (EU)");
@@ -269,7 +316,7 @@ describe("OptionCompare", () => {
     expect(within(row("C")).getByText(optionC.tradeOff)).toBeVisible();
     expect(within(row("A")).getByText("Part now, the rest later")).toBeVisible();
     expect(within(row("A")).getByText("Recommended by the Buyer")).toBeVisible();
-    const held = within(row("A")).getByText("949 l waits for stock confirmation");
+    const held = within(row("A")).getByText("949 L waits for stock confirmation");
     expect(held).toBeVisible();
     expect(held).toHaveClass("hatch", "text-warning");
     expect(within(row("C")).queryByText("Recommended by the Buyer")).toBeNull();
@@ -509,7 +556,7 @@ describe("Approvals page: the milk options", () => {
     renderApp("/approvals", api);
 
     await user.click(await screen.findByRole("button", { name: "Inspect (3 options)" }));
-    expect(await screen.findByRole("heading", { name: /^Option A: 51 l Arla 1 L/ })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ })).toBeVisible();
     await user.click(optionToggle("B"));
     await user.click(optionToggle("C"));
     expect(fact("A", "Stock")).toHaveTextContent(/^confirmed$/);
@@ -557,7 +604,7 @@ describe("Approvals page: the milk options", () => {
     renderApp("/approvals", api);
 
     await user.click(await screen.findByRole("button", { name: "Inspect (3 options)" }));
-    await screen.findByRole("heading", { name: /^Option A: 51 l Arla 1 L/ });
+    await screen.findByRole("heading", { name: /^Option A: 51 L Arla 1 L/ });
     await user.click(optionToggle("C"));
     const choose = await screen.findByRole("button", { name: /^Choose option C/ });
     const initialLoads = listSpy.mock.calls.length;
@@ -565,7 +612,7 @@ describe("Approvals page: the milk options", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Stock is not confirmed for this option");
     await waitFor(() => expect(listSpy.mock.calls.length).toBeGreaterThan(initialLoads));
-    expect(screen.getByRole("heading", { name: /^Option A: 51 l Arla 1 L/ })).toBeVisible();
+    expect(screen.getByRole("heading", { name: /^Option A: 51 L Arla 1 L/ })).toBeVisible();
     expect(within(row("A")).getByText("Proposed now")).toBeVisible();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
