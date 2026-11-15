@@ -104,18 +104,13 @@ def test_coverage_hint_uses_rounded_packs_without_mutating_evidence_or_overridin
     assert minimal_indices([0, 1], enriched, need) == [0]
 
 
-def test_full_stock_cannot_make_a_non_alias_cover_an_explicit_alias_request_alone():
+def test_alias_inputs_are_left_unchanged_by_the_optional_hint():
     need = {'unit': 'L', 'needed_by': '2026-11-16'}
     full = selection_facts([offer(stock='100')], D(51), 'L')['milk']
-    partial = {**full, 'stock_quantity_base': '20'}
-    rows = [{'selection': partial, 'alias': True}, {'selection': None, 'alias': True},
-            {'selection': full, 'alias': False}]
-    assert [row['covers_need_alone'] for row in coverage_rows(rows, need)] == [False, False, False]
+    rows = [{'selection': {**full, 'stock_quantity_base': '20'}, 'alias': True},
+            {'selection': None, 'alias': True}, {'selection': full, 'alias': False}]
+    assert coverage_rows(rows, need) == rows
     assert minimal_indices([0, 1], rows, need) == [0, 1]
-    assert minimal_indices([2, 0], rows, need) == [2, 0]  # no pruning away the actual alias
-    rows[0]['selection'] = full
-    assert coverage_rows(rows, need)[0]['covers_need_alone'] is True
-    assert minimal_indices([0, 1], rows, need) == [0]
 
 
 def test_fractional_weighted_sales_units_are_valid_and_missing_evidence_is_not():
@@ -129,11 +124,13 @@ def test_fractional_weighted_sales_units_are_valid_and_missing_evidence_is_not()
         assert covers_need_alone({'selection': malformed}, need) is False
 
 
-def test_requested_diet_proof_is_required_before_a_full_stock_hint_or_pruning():
+def test_diet_history_and_partial_only_inputs_are_unchanged():
     need = {'unit': 'L', 'needed_by': '2026-11-16'}
     fact = selection_facts([offer(stock='100')], D(51), 'L')['milk']
     rows = [{'selection': {**fact, 'diet_claims': {'lactose_free': claim}}} for claim in (False, None, True)]
-    hint = coverage_rows(rows, need, request_text='51 L lactose-free milk')
-    assert [row['covers_need_alone'] for row in hint] == [False, False, True]
-    assert minimal_indices([0, 2], rows, need, request_text='51 L lactose-free milk') == [0, 2]
-    assert minimal_indices([2, 0], rows, need, request_text='51 L lactose-free milk') == [2]
+    assert coverage_rows(rows, need, request_text='51 L lactose-free milk') == rows
+    history = [{'selection': {**fact, 'ordered_before': n}} for n in (0, 3)]
+    assert coverage_rows(history, need) == history
+    partial = [{'selection': {**fact, 'stock_quantity_base': '20'}}, {'selection': None}]
+    assert coverage_rows(partial, need) == partial
+    assert coverage_rows([], need) == []

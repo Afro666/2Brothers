@@ -14,7 +14,7 @@ from agent.single_pick import PICK_SCHEMA, SYSTEM, checked_reason, coverage_rows
 from agent.vision import parse_reply
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / 'agent/fixtures/coverage-pick-v2.json'
+FIXTURE = ROOT / 'agent/fixtures/coverage-pick-v3.json'
 
 
 def inputs(fixture, case, mode):
@@ -42,7 +42,7 @@ def score(case, rows, answer):
             checked_reason(pick['reason'], rows[pick['index']], case['need'])
         except ValueError:
             reasons = False  # production drops the reason, not the selected products
-    guarded = [rows[i]['product_id'] for i in minimal_indices(indices, rows, case['need'], request_text=case['request'])]
+    guarded = [rows[i]['product_id'] for i in minimal_indices(indices, rows, case['need'])]
     return {'schema_valid': True, 'reasons_valid': reasons, 'raw_picks': ids,
             'guarded_picks': guarded, 'raw_exact': set(ids) == expected,
             'guarded_exact': set(guarded) == expected, 'first_correct': ids[0] == case['expected_first'],
@@ -58,7 +58,10 @@ def summarize(results):
             summary[group][mode] = {'runs': len(rows), 'cases': len({r['case'] for r in rows}),
                 **{key: sum(bool(r.get(key)) for r in rows) for key in
                    ('schema_valid', 'reasons_valid', 'raw_exact', 'guarded_exact', 'first_correct', 'redundant')},
-                'incomplete': sum(r['attempt_state'] == 'started' for r in rows)}
+                'incomplete': sum(r['attempt_state'] == 'started' for r in rows),
+                'hinted_runs': sum(r.get('input_changed', False) for r in rows),
+                'hinted_raw_exact': sum(r.get('input_changed', False) and r.get('raw_exact', False) for r in rows),
+                'hinted_first_correct': sum(r.get('input_changed', False) and r.get('first_correct', False) for r in rows)}
     return summary
 
 
@@ -71,7 +74,7 @@ async def run(path, *, factory=Nemotron):
               'after_system_sha256': digest(SYSTEM.encode()), 'endpoint': endpoint, 'model': model_id,
               'thinking': False, 'temperature': 0, 'attempts_per_trial': 1, 'max_tokens': 512,
               'source_sha256': {name: digest((ROOT / name).read_bytes()) for name in
-                  ('agent/coverage_pick_bench.py', 'agent/single_pick.py', 'agent/model.py', 'gateway/diet.py')}}
+                  ('agent/coverage_pick_bench.py', 'agent/single_pick.py', 'agent/model.py', 'gateway/diet.py', 'store/buyer_picks.py')}}
     if path.exists():
         report = json.loads(path.read_text(encoding='utf-8'))
         if report['frozen'] != frozen:
@@ -96,11 +99,12 @@ async def run(path, *, factory=Nemotron):
             continue
         case = cases[trial['case']]
         rows, messages = inputs(fixture, case, trial['mode'])
+        input_changed = inputs(fixture, case, 'before')[1] != inputs(fixture, case, 'after')[1]
         model = factory(timeout=30, max_attempts=1)
         if model.thinking:
             await model.close()
             raise ValueError('Comparison requires thinking off')
-        result = {**trial, 'attempt_state': 'started', 'error_type': 'InterruptedAttempt',
+        result = {**trial, 'input_changed': input_changed, 'input_sha256': digest(json.dumps(messages, sort_keys=True).encode()), 'attempt_state': 'started', 'error_type': 'InterruptedAttempt',
                   'schema_valid': False, 'raw_exact': False, 'guarded_exact': False}
         report['results'].append(result)
         save(path, report)  # checkpoint before network I/O; uncertain attempts are never reissued

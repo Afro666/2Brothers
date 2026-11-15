@@ -23,8 +23,7 @@ PICK_SCHEMA = {'type': 'object', 'additionalProperties': False, 'required': ['pi
         'additionalProperties': False, 'required': ['index', 'reason'], 'properties': {
             'index': {'type': 'integer', 'minimum': 0, 'maximum': 19},
             'reason': {'type': 'string', 'minLength': 1, 'maxLength': 200}}}}}}
-SYSTEM = ('Pick a minimal purchase basket of up to three products from this numbered shortlist, '
-          'not a list of alternatives or backup recommendations. '
+SYSTEM = ('Pick up to three products that best match the kitchen request from this numbered shortlist. '
           'Rank by these rules in strict order: a later rule must never overturn an earlier rule. '
           '(1) requested product kind and explicit alias intent: a requested alias=true match '
           'outranks alias=false; '
@@ -44,15 +43,7 @@ SYSTEM = ('Pick a minimal purchase basket of up to three products from this numb
           'A null price_per_unit does not negate a known selection.price_per_base_unit. '
           'price_per_unit and engine_selected describe the original basket, not whether another '
           'product is eligible. Never use those fields to overturn any earlier ranked rule. '
-          'After ranking, when your first preference has covers_need_alone=true, return exactly '
-          'that single pick. Do not add a backup, even if the backup was not declined or is cheaper. '
-          'covers_need_alone is computed by code from timely confirmed stock for the rounded purchase '
-          'requirement; it never overrides the ranking rules. False means coverage is not proven, '
-          'not that the product is unsuitable. False does not require extra picks. '
-          'When an explicit alias match exists, a non-alias product cannot cover that request alone. '
-          'A row without proof of a requested diet also cannot cover the request alone. '
-          'Never replace or complement an alias match with a non-alias row merely because the '
-          'non-alias row is engine-selected; choose a suitable alias complement when available. '
+          'Use the fewest products needed: return only the best product when it can cover the need. '
           'When confirmed stock covers only part, include that product and the useful engine-selected '
           'complement. Never discard useful confirmed partial stock just because an unknown-stock '
           'product might cover the remainder or is cheaper: return BOTH the partial-stock product '
@@ -157,16 +148,11 @@ def checked_reason(reason, row, need=None):
         raise ValueError(f'Product-choice reason has an unsupported number ({rule})')
 
 
-def covers_need_alone(row, need, *, alias_required=False, diets=()):
+def covers_need_alone(row, need):
     """The shared quote proof used for both the model hint and deterministic pruning."""
     fact = row.get('selection') or {}
     if (not isinstance(fact, dict) or not isinstance(need, dict)
             or not isinstance(need.get('unit'), str) or not need['unit']):
-        return False
-    if alias_required and row.get('alias') is not True:
-        return False
-    claims = fact.get('diet_claims') or {}
-    if diets and (not isinstance(claims, dict) or any(claims.get(diet.key) is not True for diet in diets)):
         return False
     try:
         if (fact.get('stock_state') != 'confirmed' or fact.get('cutoff_passed') is not False
@@ -185,18 +171,27 @@ def covers_need_alone(row, need, *, alias_required=False, diets=()):
 
 
 def coverage_rows(rows, need, *, request_text=''):
-    """Expose a proof, not a new ranking signal; unknown or partial stock is never full."""
-    alias_required = any(row.get('alias') is True for row in rows)
-    diets = asked_diets(request_text)
-    return [{**row, 'covers_need_alone': covers_need_alone(row, need, alias_required=alias_required, diets=diets)}
-            for row in rows]
+    """Add only an unambiguous quantity hint; keep complex ranking inputs unchanged.
+
+    The original prompt already says to use the fewest products. Earlier trials
+    showed broader hints/instructions could distract from alias, diet or history
+    precedence. Partial-only baskets therefore also keep their original input.
+    """
+    clean = [{k: v for k, v in row.items() if k != 'covers_need_alone'} for row in rows]
+    history = [row.get('selection', {}).get('ordered_before') if isinstance(row.get('selection'), dict)
+               else None for row in clean]
+    if (any(row.get('alias') is True for row in clean) or asked_diets(request_text)
+            or any(value != history[0] for value in history[1:])):
+        return clean
+    proofs = [covers_need_alone(row, need) for row in clean]
+    if not any(proofs):
+        return clean
+    return [{**row, 'covers_need_alone': proof} for row, proof in zip(clean, proofs)]
 
 
-def minimal_indices(indices, rows, need, *, request_text=''):
+def minimal_indices(indices, rows, need):
     """Keep the model's first preference alone only when the quote proves it is enough."""
-    alias_required = any(row.get('alias') is True for row in rows)
-    return indices[:1] if covers_need_alone(rows[indices[0]], need, alias_required=alias_required,
-                                           diets=asked_diets(request_text)) else indices
+    return indices[:1] if covers_need_alone(rows[indices[0]], need) else indices
 
 
 class SinglePickModel:
@@ -306,8 +301,7 @@ class SinglePickModel:
                             log.warning('Dropped an unsupported pick reason: %s', rule)
                     self.raw_pick_count = len(indices)
                     indices = minimal_indices(indices, rows, {
-                        'unit': self.need['unit'], 'needed_by': self.need['requested_date']},
-                        request_text=self.need['text'])
+                        'unit': self.need['unit'], 'needed_by': self.need['requested_date']})
                     self.pruned = len(indices) < self.raw_pick_count
                     ids = [rows[i]['product_id'] for i in indices]
                     owned = await asyncio.to_thread(buyer_picks.finish, self.db, key, token, ids)

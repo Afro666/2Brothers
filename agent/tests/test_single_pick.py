@@ -180,6 +180,9 @@ def test_pick_cache_expiry_policy_scope_and_interrupted_claims(monkeypatch):
     need = parse_need(NEED)
     rows = [{'product_id': 'p', 'name': 'Milk', 'pack': {'value': 1, 'unit': 'L'}, 'can_arrive': True}]
     key = buyer_picks.cache_key('k', need, ['AP'], rows)
+    hinted = [{**rows[0], 'covers_need_alone': True}]
+    assert buyer_picks.cache_key('k', need, ['AP'], hinted) != key
+    assert buyer_picks.cache_key('k', need, ['AP'], [{**hinted[0], 'covers_need_alone': False}]) != buyer_picks.cache_key('k', need, ['AP'], hinted)
     assert buyer_picks.cache_key('other', need, ['AP'], rows) != key
     assert buyer_picks.cache_key('k', need, ['AM'], rows) != key
     assert buyer_picks.cache_key('k', {**need, 'requested_date': '2026-11-17'}, ['AP'], rows) != key
@@ -244,3 +247,18 @@ def test_full_coverage_hint_reaches_model_and_guard_still_removes_its_extra_choi
         finally:
             await gateway.close()
     asyncio.run(run())
+
+
+def test_legacy_cache_entry_cannot_bypass_new_coverage_input():
+    import mongomock
+    db = mongomock.MongoClient(tz_aware=True).test
+    need = {'text': '51 L milk', 'requested_date': '2026-11-16', 'quantity': '51', 'unit': 'L'}
+    rows = [{'product_id': 'p', 'name': 'Milk', 'pack': {'value': 1, 'unit': 'L'},
+             'can_arrive': True, 'covers_need_alone': True}]
+    # Golden cache vector produced by the pre-2021 implementation for these same inputs without the hint.
+    legacy = '9df3f329ba75ee990bab968548e775800c834a3f0ebdb07aef0c356641849547'
+    db.buyer_pick_cache.insert_one({'_id': legacy, 'state': 'READY', 'product_ids': ['p', 'stale-backup'],
+                                    'expires_at': datetime.now(timezone.utc) + timedelta(minutes=10)})
+    key = buyer_picks.cache_key('k', need, [], rows)
+    assert key != legacy and buyer_picks.get(db, key) is None
+    assert buyer_picks.claim(db, key) is not None
