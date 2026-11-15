@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -222,6 +222,40 @@ describe("ForecastPage", () => {
       .getAllByRole("cell")
       .map((cell) => cell.textContent);
     expect(gap.slice(1)).toEqual(["unknown", "unknown"]);
+  });
+
+  it("says what the engine wins and what it costs only when the gateway's euros show exactly that", async () => {
+    const row = (wape: number, under: string, over: string) => ({
+      predicted: 100, actual: 100, wape, bias: 0, under: null, over: null, series: 3, under_eur: under, over_eur: over, unpriced_series: 0,
+      by_unit: [
+        { unit: "KG", under: 1, over: 1, under_eur: under, over_eur: over },
+        { unit: "L", under: 1, over: 1, under_eur: "0.00", over_eur: "0.00" },
+      ],
+    });
+    const make = (engine: ReturnType<typeof row>, baseline: ReturnType<typeof row>) => ({
+      methods: {
+        engine: { total: engine, weeks: [{ week: "2026-W45", ...engine }] },
+        "weekday-average": { total: baseline, weeks: [{ week: "2026-W45", ...baseline }] },
+      },
+    });
+    renderApp(
+      "/forecast",
+      apiWith(async () => mapForecastAccuracy(make(row(0.05, "1413.80", "1155.00"), row(0.083, "1002.89", "2925.00")), { lines: [] })),
+    );
+    expect(
+      await screen.findByText(
+        "In total the engine misses less (WAPE 5 %) and its waste is about €1,155.00 against €2,925.00, at the cost of more short: about €1,413.80 against €1,002.89.",
+      ),
+    ).toBeInTheDocument();
+    cleanup();
+
+    // The engine wastes more: nothing is claimed.
+    renderApp(
+      "/forecast",
+      apiWith(async () => mapForecastAccuracy(make(row(0.05, "1413.80", "3155.00"), row(0.083, "1002.89", "2925.00")), { lines: [] })),
+    );
+    await screen.findByRole("heading", { level: 2, name: "Whole kitchen: the last week" });
+    expect(screen.queryByText(/In total the engine misses less/)).not.toBeInTheDocument();
   });
 
   it("says so when the kitchen has no forecast history", async () => {

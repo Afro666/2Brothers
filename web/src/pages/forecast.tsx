@@ -21,7 +21,7 @@ const KITCHEN = "kitchen";
 
 /** What the engine wins and what it costs, said only when the gateway's own numbers show exactly that. */
 const EURO_SUMMARY =
-  "In total the engine misses less (WAPE {wape}) and short is {short} against {baselineShort}, while waste is {waste} against {baselineWaste}: far less thrown away, at the cost of a little more short.";
+  "In total the engine misses less (WAPE {wape}) and its waste is about {waste} against {baselineWaste}, at the cost of more short: about {short} against {baselineShort}.";
 
 export const GROUPS = ["Weekly error", "Stock-out days", "Waste"];
 
@@ -40,8 +40,6 @@ export const TILES: {
   value: (score: ForecastScore, unit: string | null, t: ReturnType<typeof useT>) => string;
   /** Short or waste over two or more units: one line per unit, never one sum (#1618). */
   units?: "short" | "waste";
-  /** Without the gateway's number the tile would only say "unknown": then it is left out. */
-  stockOut?: boolean;
 }[] = [
   {
     label: "Weekly error",
@@ -58,7 +56,6 @@ export const TILES: {
     label: "Stock-out days",
     hint: "Days a product would have run out.",
     value: (score, _unit, t) => formatQuantity(score.stockOutDays, null, t("unknown")),
-    stockOut: true,
   },
   {
     label: "Short",
@@ -126,8 +123,13 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
   }
 
   const past = series.weeks.filter((week) => !week.ahead).length;
-  // Stock-out days are not on the whole-kitchen series at all: a tile that only says "unknown" says nothing.
-  const tiles = TILES.filter((tile) => !tile.stockOut || series.engine.stockOutDays != null || series.baseline.stockOutDays != null);
+  // A tile that would only say "unknown" for both methods says nothing: it is left out.
+  const unknown = t("unknown");
+  const tiles = TILES.filter((tile) =>
+    [series.engine, series.baseline].some(
+      (score) => (tile.units && score.byUnit?.length) || (tile.value(score, series.unit, t) && tile.value(score, series.unit, t) !== unknown),
+    ),
+  );
   const { engine, baseline } = series;
   const engineWins =
     engine.wape != null && baseline.wape != null && engine.wape < baseline.wape &&
@@ -183,8 +185,8 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
           {series.productId ? <ProductThumb en={series.name} size="md" /> : null}
           <h2 id={`${selectId}-summary`} className="min-w-0 text-lg font-semibold break-words">
             {past === 1
-              ? t("{name}: the last week", { name: t(series.name) })
-              : t("{name}: the last {count} weeks", { name: t(series.name), count: past })}
+              ? t("{name}: the last week", { name: series.productId ? series.name : t(series.name) })
+              : t("{name}: the last {count} weeks", { name: series.productId ? series.name : t(series.name), count: past })}
           </h2>
         </div>
         <ul className="grid grid-cols-2 gap-3 lg:grid-cols-5">

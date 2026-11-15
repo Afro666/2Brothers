@@ -80,7 +80,7 @@ export function ForecastChart({
   const ticks = axisTicks(Math.min(...values), Math.max(...values));
   // One unit, named on every tick and in the readout.
   const tickText = (tick: number) =>
-    axis === "percent" ? `${compact.format(tick)} %` : `${compact.format(tick)}${unit ? ` ${unit}` : ""}`;
+    axis === "percent" ? `${formatNumber(tick)} %` : `${compact.format(tick)}${unit ? ` ${unit}` : ""}`;
   const shownValue = (value: number | null, missing: string) =>
     value == null ? missing : axis === "percent" ? `${formatNumber(value)} %` : formatQuantity(value, unit);
   const low = ticks[0];
@@ -159,10 +159,12 @@ export function ForecastChart({
                   : t("Needed and predicted per week")}
             </title>
             <desc id={descId}>
-              {t(
-                "{past} past weeks with what the kitchen needed and both forecasts. {future} future weeks with the forecast only. The table below has the same numbers.",
-                { past, future: count - past },
-              )}
+              {axis === "percent"
+                ? t("{past} past weeks, the share of the need each forecast missed. The table below has the same numbers.", { past })
+                : t(
+                    "{past} past weeks with what the kitchen needed and both forecasts. {future} future weeks with the forecast only. The table below has the same numbers.",
+                    { past, future: count - past },
+                  )}
             </desc>
             {past < count ? (
               <>
