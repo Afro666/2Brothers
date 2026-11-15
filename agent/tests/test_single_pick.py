@@ -72,7 +72,8 @@ def test_one_model_call_then_cached_ids_with_fresh_price_and_new_offer(monkeypat
             assert len(json.dumps(model.prompts[0])) < 6000
             assert set(sent['products'][0]) == {'index', 'product_id', 'name', 'pack', 'can_arrive', 'alias',
                                                'price_per_unit', 'price_unit', 'engine_selected', 'selection',
-                                               'kitchen_declined'}
+                                               'kitchen_declined', 'covers_need_alone'}
+            assert sent['products'][0]['covers_need_alone'] is True
         finally:
             await gateway.close()
     asyncio.run(run())
@@ -209,6 +210,37 @@ def test_lost_cache_claim_never_requests_approval(monkeypatch):
             with pytest.raises(WorkerError) as err:
                 await BuyerWorker(db, gateway, model_factory=Pick, now=lambda: NOW).run('demo-kitchen', NEED)
             assert err.value.fallback_safe and db.proposals.count_documents({}) == 0
+        finally:
+            await gateway.close()
+    asyncio.run(run())
+
+
+def test_full_coverage_hint_reaches_model_and_guard_still_removes_its_extra_choice(monkeypatch):
+    async def run():
+        db, gateway = environment(monkeypatch)
+        original = gateway.request
+        offers = []
+        async def request(method, path, **kwargs):
+            if path == '/tools/get_offer':
+                offers.append(kwargs['payload']['product_ids'])
+            result = await original(method, path, **kwargs)
+            if path == '/tools/search_products':
+                result['products'].append({'product_id': '462921'})
+            return result
+        monkeypatch.setattr(gateway, 'request', request)
+        model = Pick({'picks': [{'index': 0, 'reason': 'Best match'},
+                                {'index': 1, 'reason': 'Backup alternative'}]})
+        try:
+            result = await BuyerWorker(db, gateway, model_factory=lambda: model,
+                                       now=lambda: NOW).run('demo-kitchen', NEED)
+            sent = json.loads(model.prompts[0][1]['content'])
+            assert sent['products'][0]['covers_need_alone'] is True
+            assert all(type(row['covers_need_alone']) is bool for row in sent['products'])
+            assert [line['product_id'] for line in result['lines']] == [sent['products'][0]['product_id']]
+            assert result['status'] == 'READY' and model.calls == 1
+            assert db.orders.count_documents({}) == 0
+            assert db.proposals.count_documents({}) == 1
+            assert len(offers[0]) == 2 and offers[-1] == [sent['products'][0]['product_id']]
         finally:
             await gateway.close()
     asyncio.run(run())
