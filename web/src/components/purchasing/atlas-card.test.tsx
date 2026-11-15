@@ -156,7 +156,7 @@ describe("the Atlas card on the About page", () => {
     );
     const shown = await figures(await card());
     expect(shown["Product vectors"]).toBe("17,666");
-    // 17,666 vectors of two models do not say how many of the 17,548 products have one.
+    // More vectors than the (estimated) product count: the sentence does not guess.
     expect(screen.getByText(/how many products have one is unknown right now/)).toBeInTheDocument();
     expect(shown["Embedding model"]).toBe(
       "voyage-4, 1,024 numbers per product; nemotron-embed, 2,048 numbers per product",

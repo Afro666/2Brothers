@@ -62,8 +62,9 @@ const vectorCount = (facts: AtlasFacts) =>
 function vectorSentence(facts: AtlasFacts | null, t: T): string {
   const vectors = facts ? vectorCount(facts) : null;
   const products = facts ? facts.products : null;
-  // Two models during a replacement: the sum of their vectors does not say how many products have one.
-  if (vectors === null || products === null || vectors > products || (facts?.vectors?.length ?? 0) > 1) {
+  // Each vector row counts products (store/atlas.py), so the sum is products with a vector. The
+  // product count is an estimate: when it comes out below the vectors, the page does not guess.
+  if (vectors === null || products === null || vectors > products) {
     return t("Product vectors come from MongoDB's own embedding API; how many products have one is unknown right now.");
   }
   return t("{vectors} of {products} products have a vector from MongoDB's own embedding API.", {
