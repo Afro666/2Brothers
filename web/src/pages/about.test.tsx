@@ -70,11 +70,11 @@ describe("AboutPage", () => {
     }
   });
 
-  it.each(["Chef", "Valio planner"])("is linked from the nav when viewing as %s", async (role) => {
+  it.each(["Kitchen", "Valio planner"])("is linked from the nav when viewing as %s", async (role) => {
     const user = userEvent.setup();
     renderApp("/");
-    await user.click(await screen.findByRole("combobox", { name: "Your role" }));
-    await user.click(await screen.findByRole("option", { name: role }));
+    const picker = (await screen.findAllByRole("radiogroup", { name: "Your role" }))[0]!;
+    await user.click(within(picker).getByRole("radio", { name: role }));
     await user.click(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "About" }));
     expect(await screen.findByRole("heading", { level: 1, name: "About Kitchen Buyer" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("aria-current", "page");

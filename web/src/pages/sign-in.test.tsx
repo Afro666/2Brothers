@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -160,8 +160,10 @@ describe("authentication", () => {
     });
     renderApp("/", api);
 
-    const picker = (await screen.findAllByLabelText("Your role"))[0];
-    expect(picker).toHaveTextContent("Chef");
+    const picker = (await screen.findAllByRole("radiogroup", { name: "Your role" }))[0]!;
+    // #2005: one Kitchen option for chef and approver; no option is called Buyer.
+    expect(within(picker).getByRole("radio", { name: "Kitchen" })).toBeChecked();
+    expect(within(picker).queryByRole("radio", { name: "Buyer" })).not.toBeInTheDocument();
     expect(localStorage.getItem("purchasing-role")).toBe("chef");
   });
 
@@ -177,8 +179,10 @@ describe("authentication", () => {
     });
     renderApp("/", api);
 
-    const picker = (await screen.findAllByLabelText("Your role"))[0];
-    expect(picker).toHaveTextContent("Chef");
+    const picker = (await screen.findAllByRole("radiogroup", { name: "Your role" }))[0]!;
+    // #2005: one Kitchen option for chef and approver; no option is called Buyer.
+    expect(within(picker).getByRole("radio", { name: "Kitchen" })).toBeChecked();
+    expect(within(picker).queryByRole("radio", { name: "Buyer" })).not.toBeInTheDocument();
     expect(screen.getByText("What needs you today.")).toBeVisible();
     expect(screen.queryByText("Where demand may outrun supply.")).not.toBeInTheDocument();
   });
