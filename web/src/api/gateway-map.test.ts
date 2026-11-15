@@ -88,6 +88,18 @@ describe("mapApproval", () => {
     expect(result.suppliersToConfirm).toEqual([{ supplierId: "sup-fish", name: "Baltic Catch", count: 2 }]);
   });
 
+  it("counts Valio's own block's unknown-stock lines, and none without blocks (#1899)", () => {
+    const unknown = { ...proposal.lines[0], unknown_stock: true };
+    const confirmed = { ...proposal.lines[0], unknown_stock: false };
+    const blocks = [
+      { supplier_id: "sup-valio", name: "Valio Aimo", lines: [unknown, confirmed, unknown] },
+      { supplier_id: "sup-fish", name: "Baltic Catch", lines: [unknown] },
+    ];
+    expect(mapApproval({ ...proposal, blocks }).valioToConfirm).toBe(2);
+    expect(mapApproval({ ...proposal, blocks: [blocks[1]] }).valioToConfirm).toBe(0);
+    expect(mapApproval(proposal).valioToConfirm).toBeUndefined();
+  });
+
   it("shows the gateway's must-confirm sentence as it is (Valio, 14 Nov)", () => {
     const sentence = "Valio must confirm stock for: Valio Eila 3 % 1 L.";
     const result = mapApproval({ ...proposal, mandate: { ...proposal.mandate, reasons: [sentence] } });
