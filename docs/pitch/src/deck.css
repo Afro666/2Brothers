@@ -124,11 +124,23 @@ h3 { font-size: 44px; font-weight: 700; line-height: 1.15; }
 /* close: the picture, the caption, the cauldron */
 .bleed { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; object-fit: cover; }
 .shade { position: absolute; left: 0; top: 430px; width: 1920px; height: 650px; background: linear-gradient(180deg, rgba(21,20,16,0) 0%, rgba(21,20,16,0.88) 38%, rgba(21,20,16,0.97) 100%); }
-.close-h { position: absolute; left: 128px; top: 580px; width: 1000px; }
-.close-cta { position: absolute; left: 128px; top: 836px; width: 1090px; font-size: 32px; font-weight: 600; line-height: 1.4; }
-.close-try { position: absolute; left: 128px; top: 884px; width: 1090px; font-size: 32px; line-height: 1.4; color: #ede9df; }
+.shade-top { position: absolute; left: 0; top: 0; width: 1920px; height: 300px; background: linear-gradient(180deg, rgba(21,20,16,0.92) 0%, rgba(21,20,16,0.6) 60%, rgba(21,20,16,0) 100%); }
+.close-h { position: absolute; left: 128px; top: 72px; width: 1664px; }
+.close-cta { position: absolute; left: 128px; top: 926px; width: 1664px; font-size: 32px; font-weight: 600; line-height: 1.4; }
 .link { color: #7fc08a; }
-.pot { position: absolute; left: 1240px; top: 570px; }
-.potnum { position: absolute; left: 1300px; top: 676px; width: 400px; text-align: center; font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 120px; font-weight: 800; line-height: 1.02; color: #7fc08a; }
-.potlabel { position: absolute; left: 1300px; top: 806px; width: 400px; text-align: center; font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; font-weight: 600; letter-spacing: 1px; line-height: 1.4; color: #ede9df; }
-.close-foot { position: absolute; left: 128px; bottom: 64px; width: 1664px; font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; letter-spacing: 1px; line-height: 1.4; color: #a9a395; }
+.pot { position: absolute; left: 128px; top: 590px; }
+.potnum { position: absolute; left: 128px; top: 658px; width: 300px; text-align: center; font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 72px; font-weight: 800; line-height: 1.02; color: #7fc08a; }
+.potlabel { position: absolute; left: 128px; top: 800px; width: 300px; text-align: center; font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; font-weight: 600; letter-spacing: 1px; line-height: 1.4; color: #ede9df; }
+.close-foot { position: absolute; left: 128px; bottom: 44px; width: 1664px; font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; letter-spacing: 1px; line-height: 1.4; color: #a9a395; }
+
+/* close: three tickets to scan, one per person, all the same */
+.qr-ticket { position: absolute; top: 524px; width: 420px; padding: 24px 20px 24px; gap: 12px; }
+.qr-1 { left: 472px; }
+.qr-2 { left: 922px; }
+.qr-3 { left: 1372px; }
+.who { display: flex; align-items: center; gap: 14px; }
+.avatar { border-radius: 34px; }
+.who-name { font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 32px; font-weight: 800; line-height: 1.05; color: #1c1a16; }
+.who-role { font-size: 24px; line-height: 1.4; color: #5c574c; height: 68px; }
+.qr-row { display: flex; align-items: center; gap: 18px; }
+.qr-box { background: #ffffff; border: 2px solid #1c1a16; padding: 8px; }

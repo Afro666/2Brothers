@@ -131,7 +131,7 @@ and 9; NVIDIA on 5 and 6; MongoDB on 7.
 
 ![We cooked. Will you?](slides/10-close.jpg)
 
-> So: the agent proposes, a person signs. Three of us and our coding agents cooked eleven hundred pull requests in two days. Now you. Open kitchenbuyer dot P L, ask for a hundred litres of cream, and try to make the agent approve it.
+> So: the agent proposes, a person signs. Three of us and our coding agents cooked eleven hundred pull requests in two days. Now you. Open kitchenbuyer dot P L, ask for a hundred litres of cream, and try to make the agent approve it. And scan a code if you want to stay in touch.
 
 - **Valio:** Or type your own example: a thousand litres of lactose-free milk by Monday.
 - **NVIDIA:** Open "What Nemotron did" on any card: it shows the model call and every code step.
@@ -197,6 +197,8 @@ artifact, where pictures are stored by id; the same pictures are in `src/img/`:
 | `/_blob/23deeb79…` | `cooks.jpg` | AI-generated picture of the team, slide 10 |
 | `/_blob/2b4d4f59…` | `option-a.png` | The milk proposal card, 15 Nov 00:03 |
 | `/_blob/b32bdeac…` | `receipt.png` | The signed receipt, 15 Nov 00:18 |
+| `/_blob/2941f5bc…`, `5b1e9bae…`, `b2fc840a…` | `av-aron.jpg`, `av-tymon.jpg`, `av-maciej.jpg` | Our LinkedIn profile pictures, slide 10 |
+| `/_blob/49fbe93a…`, `06912faf…`, `e463cf52…` | `qr-aron.png`, `qr-tymon.png`, `qr-maciej.png` | Our LinkedIn QR codes, slide 10 |
 
 The look follows the product's own design direction: paper dockets, printer type, stamps, and
 dashed ochre for what is not there yet.
