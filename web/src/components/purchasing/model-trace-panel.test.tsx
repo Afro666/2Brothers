@@ -32,6 +32,15 @@ const show = (value: unknown) =>
   );
 
 describe("ModelTracePanel", () => {
+  it("starts open when asked, so a waiting card shows the model's steps without a second press (#2015)", () => {
+    render(
+      <LanguageProvider>
+        <ModelTracePanel trace={mapModelTrace(BUYER)} defaultOpen />
+      </LanguageProvider>,
+    );
+    expect(screen.getByText("What Nemotron did").closest("details")!.open).toBe(true);
+  });
+
   it("shows one folded line and the steps when unfolded, with the engine line last", async () => {
     show(BUYER);
     const summary = screen.getByText("4 model calls, 6.2 s, thinking off");

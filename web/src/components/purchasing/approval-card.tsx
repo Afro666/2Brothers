@@ -979,7 +979,7 @@ export function ApprovalCard({
                   ))}
                 </ul>
               </section>
-              <ModelTracePanel trace={request.modelTrace} explanation={explanation} />
+              <ModelTracePanel trace={request.modelTrace} explanation={explanation} defaultOpen={pending} />
             </>
           ) : null}
         </div>

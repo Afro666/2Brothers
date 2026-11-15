@@ -200,7 +200,6 @@ export function AtlasCard() {
                 <thead>
                   <tr className="border-b">
                     <th scope="col" className="py-1 pr-2">{t("Search")}</th>
-                    <th scope="col" className="py-1 pr-2">{t("Words find")}</th>
                     <th scope="col" className="py-1 pr-2">{t("Hybrid finds")}</th>
                     <th scope="col" className="py-1">{t("Hybrid is")}</th>
                   </tr>
@@ -209,7 +208,6 @@ export function AtlasCard() {
                   {comparison.queries.map((row) => (
                     <tr key={row.query} className="border-b align-top last:border-0">
                       <th scope="row" className="py-1 pr-2 font-medium">{row.query}</th>
-                      <td className="py-1 pr-2">{row.words}</td>
                       <td className="py-1 pr-2">{row.hybrid}</td>
                       <td className="py-1">{t(ATLAS_VERDICTS[row.verdict] ?? row.verdict)}</td>
                     </tr>

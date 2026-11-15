@@ -79,7 +79,6 @@ export default {
   "The Buyer searches by words on stage; the Catalog page can search by meaning": "Ostaja hakee lavalla sanoilla; Tuoteluettelo-sivu osaa hakea merkityksellä",
   "Hybrid was better on {better} searches, equal on {equal} and slightly worse on {worse}.": "Hybridihaku oli parempi {better} haussa, yhtä hyvä {equal} haussa ja hieman huonompi {worse} haussa.",
   "The top 8 results for 10 searches, measured on the server on {date}.": "10 haun 8 parasta tulosta, mitattu palvelimella {date}.",
-  "Words find": "Sanahaku löytää",
   "Hybrid finds": "Hybridihaku löytää",
   "Hybrid is": "Hybridihaku on",
   "Equal": "Yhtä hyvä",

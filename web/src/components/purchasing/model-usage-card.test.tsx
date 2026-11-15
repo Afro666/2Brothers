@@ -64,7 +64,7 @@ describe("the model usage card on the About page", () => {
     const view = await card();
     expect(
       await view.findByText(
-        "85 Buyer runs in all. 63 ended with a proposal for a person to approve.",
+        "63 proposals from the Buyer so far, each for a person to approve.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -82,7 +82,7 @@ describe("the model usage card on the About page", () => {
     const view = await card();
     expect(
       await view.findByText(
-        "9 Buyer runs in all. 7 ended with a proposal for a person to approve.",
+        "7 proposals from the Buyer so far, each for a person to approve.",
       ),
     ).toBeInTheDocument();
     expect(view.queryByText(/carry no count/)).not.toBeInTheDocument();
