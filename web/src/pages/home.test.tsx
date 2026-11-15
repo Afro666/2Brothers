@@ -75,6 +75,33 @@ describe("HomePage", () => {
     expect(screen.queryByText("€37.74 incl VAT")).not.toBeInTheDocument();
   });
 
+  it("names the recommended option's total while the basket is still the Buyer's own, as the card does (#1911)", async () => {
+    const [a, b] = approval.options!;
+    const options = [
+      { ...a!, recommended: true, stockConfirmed: true, chosen: false, cutoffPassed: false, totalInclVat: 2099.41 },
+      { ...b!, recommended: false, chosen: true, source: "original" as const, totalInclVat: 2634.13 },
+    ];
+    const api = createMockApi();
+    api.listApprovals = async () => [{ ...approval, totalInclVat: 2634.13, options }];
+    renderApp(`/?now=${DEMO_NOW}`, api);
+
+    expect(await screen.findByText("€2,099.41 incl VAT")).toBeInTheDocument();
+    expect(screen.queryByText("€2,634.13 incl VAT")).not.toBeInTheDocument();
+  });
+
+  it("keeps the basket total once a person chose the basket (#1911)", async () => {
+    const [a, b] = approval.options!;
+    const options = [
+      { ...a!, recommended: true, stockConfirmed: true, chosen: false, cutoffPassed: false, totalInclVat: 2099.41 },
+      { ...b!, recommended: false, chosen: true, source: "supplier" as const, totalInclVat: 2634.13 },
+    ];
+    const api = createMockApi();
+    api.listApprovals = async () => [{ ...approval, totalInclVat: 2634.13, options }];
+    renderApp(`/?now=${DEMO_NOW}`, api);
+
+    expect(await screen.findByText("€2,634.13 incl VAT")).toBeInTheDocument();
+  });
+
   it.each<keyof Api>(["listAudit", "getDrift"])("marks only the tile fed by %s as MongoDB Atlas", async (method) => {
     const api = Object.assign(createMockApi(), { live: new Set<keyof Api>([method]) });
     renderApp(`/?now=${DEMO_NOW}`, api);

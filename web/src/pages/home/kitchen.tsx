@@ -7,6 +7,7 @@ import type { ApprovalRequest, AuditEvent, DemandLine, StockItem, Supplier } fro
 
 import { AtlasMark } from "@/components/atlas-mark";
 import { isNemotron, NemotronMark } from "@/components/nemotron-mark";
+import { leadOption } from "@/components/purchasing/option-compare";
 import { DecisionStrip } from "@/components/purchasing/decision-strip";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { SampleData } from "@/components/purchasing/sample-data";
@@ -55,6 +56,8 @@ export function ApprovalTile({ api }: { api: Api }) {
         {(approvals: ApprovalRequest[]) => {
           const pending = approvals.filter((approval) => approval.status === "PENDING");
           const oldest = oldestWaiting(pending);
+          // The card on /approvals leads with the recommended option's total (#1866): Home names the same figure.
+          const total = leadOption(oldest?.options ?? [])?.totalInclVat ?? oldest?.totalInclVat;
           const byNemotron = oldest?.modelTrace?.madeBy === "model" && isNemotron(oldest.modelTrace.model);
           return pending.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("Nothing is waiting.")}</p>
@@ -74,8 +77,8 @@ export function ApprovalTile({ api }: { api: Api }) {
               <p className="w-fit border-b-[3px] border-double border-foreground text-2xl font-bold tabular-nums sm:justify-self-end">
                 {oldest
                   ? inclVatOf(oldest) === null
-                    ? t("Approve {amount}", { amount: formatEur(oldest.totalInclVat) })
-                    : t("{amount} incl VAT", { amount: formatEur(oldest.totalInclVat) })
+                    ? t("Approve {amount}", { amount: formatEur(total ?? null) })
+                    : t("{amount} incl VAT", { amount: formatEur(total ?? null) })
                   : `${t(formatEur(null))} ${t("incl VAT")}`}
               </p>
             </div>
