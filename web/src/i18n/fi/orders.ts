@@ -624,7 +624,7 @@ export default {
   "Delivery fee {amount} (free from {threshold} ex VAT)": "Toimitusmaksu {amount} (ilmainen, kun summa on vähintään {threshold} ilman alv)",
   "Nothing could be ordered": "Mitään ei voitu tilata",
   "Nothing could be ordered. Left out: {count}": "Mitään ei voitu tilata. Jätetty pois: {count}",
-  "Left out: {count}": "Jätetty pois: {count}",
+  "Products left out: {count}": "Tuotteita jätetty pois: {count}",
   "You approve exactly {exVat} ex VAT, {amount} in all ({total}). If the price or stock moves before it is placed, the gateway refuses it and asks again.": "Hyväksyt tasan {exVat} ilman alv, yhteensä {amount} ({total}). Jos hinta tai varasto muuttuu ennen tilaamista, yhdyskäytävä hylkää sen ja pyytää uuden hyväksynnän.",
   "Learned from your changes": "Opittu muutoksistasi",
   "Quantity change": "Määrän muutos",

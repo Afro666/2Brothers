@@ -68,7 +68,7 @@ export const CHIP_TEXTS = [
   "Valio must confirm {count}",
   "{supplier} must confirm",
   "{supplier} must confirm {count}",
-  "Left out: {count}",
+  "Products left out: {count}",
 ] as const;
 
 const BUDGET = /budget/i;
@@ -123,6 +123,6 @@ export function statusChips({
           },
     );
   }
-  if (leftOut) chips.push({ key: "left-out", tone: "neutral", text: "Left out: {count}", values: { count: leftOut } });
+  if (leftOut) chips.push({ key: "left-out", tone: "neutral", text: "Products left out: {count}", values: { count: leftOut } });
   return chips;
 }
