@@ -5,7 +5,56 @@ from decimal import Decimal, InvalidOperation
 
 MAX_FACTS = 20  # the explanation wire contract accepts at most this many facts
 MAX_SENTENCES = 3  # agent/explanation.py SCHEMA: a reply has at most this many sentences
-FACTS_VERSION = 2  # the sentences changed (#1868): a text cached from the old ones is not served
+FACTS_VERSION = 3  # the sentences changed (#1868, #1973): a text cached from the old ones is not served
+
+# A counted sales unit in the words the web uses (web/src/lib/format.ts PEOPLE_UNITS,
+# web/src/i18n/fi/common.ts): (one, many). A measured unit (L, KG) stays as it is.
+UNIT_WORDS = {
+    'en': {'ST': ('piece', 'pieces'), 'PCS': ('piece', 'pieces'), 'KI': ('case', 'cases'),
+           'BOT': ('bottle', 'bottles'), 'PRK': ('pack', 'packs')},
+    'fi': {'ST': ('kpl', 'kpl'), 'PCS': ('kpl', 'kpl'), 'KI': ('laatikko', 'laatikkoa'),
+           'BOT': ('pullo', 'pulloa'), 'PRK': ('pakkaus', 'pakkausta')}}
+# With a pack size from the catalog a piece is a pack: "698 x 1 L packs" (#1973).
+PACK_WORDS = {'en': {'ST': ('pack', 'packs'), 'PCS': ('pack', 'packs')},
+              'fi': {'ST': ('pakkaus', 'pakkausta'), 'PCS': ('pakkaus', 'pakkausta')}}
+MAX_REQUEST_TEXT = 200  # a longer request text is not quoted
+
+
+def positive(value):
+    try:
+        number = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    return number if number.is_finite() and number > 0 else None
+
+
+def coverage(proposal):
+    """What the record says about a request that is only partly covered (#1973), or None.
+
+    Every quantity is copied from the record, never calculated:
+    - 'partial': `partial_fill` gives the asked, the confirmed and the remaining quantity;
+    - 'short': `shortfall` against the asked `request.quantity`;
+    - 'only': the request was re-made for the confirmed stock alone (`made_by`
+      `confirmed_only`, gateway/options.py), so the asked quantity is only in its text."""
+    request = proposal.get('request') if isinstance(proposal.get('request'), dict) else {}
+    part = proposal.get('partial_fill')
+    if isinstance(part, dict) and isinstance(part.get('now'), dict) and part.get('measure') and all(
+            positive(v) for v in (part.get('need'), part.get('remaining'), part['now'].get('quantity'))):
+        return {'kind': 'partial', 'asked': part['need'], 'covered': part['now']['quantity'],
+                'rest': part['remaining'], 'measure': part['measure']}
+    short, asked = positive(proposal.get('shortfall')), positive(request.get('quantity'))
+    if short and proposal.get('measure'):
+        if asked and asked > short and request.get('unit') == proposal['measure']:
+            return {'kind': 'short', 'asked': request['quantity'], 'rest': proposal['shortfall'],
+                    'measure': proposal['measure']}
+        return None
+    text = request.get('text')
+    lines = proposal.get('lines') or []
+    if (request.get('made_by') == 'confirmed_only' and asked and request.get('unit') and isinstance(text, str)
+            and 0 < len(text.strip()) <= MAX_REQUEST_TEXT and '\n' not in text.strip()
+            and lines and all(line.get('unknown_stock') is False for line in lines)):
+        return {'kind': 'only', 'text': text.strip(), 'covered': request['quantity'], 'measure': request['unit']}
+    return None
 
 
 def cheaper(proposal, name, amount, fi):
@@ -39,8 +88,10 @@ def cheaper(proposal, name, amount, fi):
             f'{label}, but its stock is not confirmed and the purchasing engine uses confirmed stock before price')
 
 
-def context(proposal, names, language):
+def context(proposal, names, language, packs=None):
+    """`packs`: {product_id: {'unit', 'size', 'measure'}}, one sales unit's content from the catalog."""
     fi = language == 'fi'
+    packs = packs or {}
     facts = []
     def add(kind, pid, text, required=False, alternative=None):
         facts.append({'fact_id': f'{kind}:{len(facts)}', 'kind': kind, 'product_id': pid,
@@ -50,17 +101,42 @@ def context(proposal, names, language):
         return text.replace('.', ',') if fi else text
     def name(pid):
         return names.get(pid) or pid
+    def word(unit, quantity=None):
+        """The unit in plain words: "pieces" for ST, never the raw code (#1973)."""
+        words = UNIT_WORDS['fi' if fi else 'en'].get(str(unit).upper())
+        return (words[0] if positive(quantity) == 1 else words[1]) if words else unit
+    def packed(pid, unit, quantity):
+        """("698 x 1 L packs", "1 L pack") when the catalog gives the pack size, else the unit word twice."""
+        pack, code = packs.get(pid), str(unit).upper()
+        if code not in UNIT_WORDS['en'] or not isinstance(pack, dict) or pack.get('unit') != unit:
+            return f'{amount(quantity)} {word(unit, quantity)}', word(unit, 1)
+        one, many = PACK_WORDS['fi' if fi else 'en'].get(code) or UNIT_WORDS['fi' if fi else 'en'][code]
+        size = f"{amount(pack['size'])} {pack['measure']}"
+        return f'{amount(quantity)} x {size} {one if positive(quantity) == 1 else many}', f'{size} {one}'
+    cover = coverage(proposal)
 
     for line in proposal.get('lines', [])[:8]:
-        pid, qty, unit = line['product_id'], amount(line['quantity']), line['unit']
+        pid = line['product_id']
+        qty, unit = packed(pid, line['unit'], line['quantity'])
         confirmed = line.get('unknown_stock') is False
-        text = (f'Ehdotuksessa on {qty} {unit} tuotetta {name(pid)}' if fi else
-                f'The proposal includes {qty} {unit} of {name(pid)}')
+        text = (f'Ehdotuksessa on {qty} tuotetta {name(pid)}' if fi else
+                f'The proposal includes {qty} of {name(pid)}')
         if line.get('unit_price') is not None:
             # The line's own price, per its sales unit (#1868): copied, never calculated.
             price = amount(line['unit_price'])
             text += f' hintaan {price} EUR / {unit} ilman ALV:a' if fi else f' at EUR {price} per {unit} ex VAT'
-        reason = ('; toimittaja on vahvistanut saatavuuden' if fi else '; the supplier has confirmed availability') if confirmed else ''
+        if not confirmed:
+            reason = ''
+        elif cover and cover['kind'] == 'partial':
+            # Confirmed for a part of what was asked, never for the whole request (#1973).
+            done, asked = f"{amount(cover['covered'])} {cover['measure']}", f"{amount(cover['asked'])} {cover['measure']}"
+            reason = (f'; toimittaja on vahvistanut saatavuuden määrälle {done}, pyydetty määrä on {asked}' if fi else
+                      f'; the supplier has confirmed stock for {done} of the {asked} asked')
+        elif cover:
+            reason = ('; toimittaja on vahvistanut tämän rivin saatavuuden' if fi else
+                      '; the supplier has confirmed availability for this line')
+        else:
+            reason = '; toimittaja on vahvistanut saatavuuden' if fi else '; the supplier has confirmed availability'
         add('chosen', pid, text + reason + '.', required=len(facts) == 0, alternative=text +
             ('; määrä on ostomoottorin laskema.' if fi else '; the purchasing engine sized this quantity.'))
     for row in proposal.get('excluded', [])[:4]:
@@ -73,12 +149,23 @@ def context(proposal, names, language):
         add('left_out', pid, f'Tuote {name(pid)} jätettiin pois: {why}.' if fi else f'{name(pid)} was left out; {why}.')
     unknown = [name(l['product_id']) for l in proposal.get('lines', []) if l.get('unknown_stock') is not False]
     warnings = []
+    if cover and cover['kind'] == 'partial':
+        rest, asked = f"{amount(cover['rest'])} {cover['measure']}", f"{amount(cover['asked'])} {cover['measure']}"
+        warnings.append(f'pyydetystä määrästä {asked} jää {rest} ilman vahvistettua varastoa' if fi else
+                        f'{rest} of the {asked} asked is not covered by confirmed stock')
+    elif cover and cover['kind'] == 'only':
+        # The asked quantity is only in the request's own words: quoted, never read as a number.
+        done = f"{amount(cover['covered'])} {cover['measure']}"
+        warnings.append(f'pyyntö oli "{cover["text"]}"; tämä ehdotus kattaa vain toimittajan vahvistaman määrän '
+                        f'{done}, eikä pyynnön loppuosa ole siinä mukana' if fi else
+                        f'the request was "{cover["text"]}"; this proposal covers only the {done} the supplier '
+                        'confirms in stock, and the rest of the request is not in it')
     if unknown:
         label = ', '.join(unknown[:8])
         if len(unknown) > 8:
             label += f' (+{len(unknown)-8})'
-        warnings.append(f'Toimittajan saatavuus on vahvistamatta: {label}' if fi else
-                        f'Supplier availability is unconfirmed for {label}')
+        warnings.append(f'toimittajan saatavuus on vahvistamatta: {label}' if fi else
+                        f'supplier availability is unconfirmed for {label}')
     short = proposal.get('shortfall')
     try:
         has_short = short is not None and Decimal(str(short)) > 0
@@ -86,18 +173,24 @@ def context(proposal, names, language):
         has_short = False
     if has_short and proposal.get('measure'):
         gap, unit = amount(short), proposal['measure']
-        warnings.append(f'tälle päivälle jää kattamatta {gap} {unit}' if fi else
-                        f'{gap} {unit} cannot be covered for this date')
+        if cover and cover['kind'] == 'short':
+            asked = f"{amount(cover['asked'])} {unit}"
+            warnings.append(f'pyydetystä määrästä {asked} jää tälle päivälle kattamatta {gap} {unit}' if fi else
+                            f'{gap} {unit} of the {asked} asked cannot be covered for this date')
+        else:
+            warnings.append(f'tälle päivälle jää kattamatta {gap} {unit}' if fi else
+                            f'{gap} {unit} cannot be covered for this date')
     elif proposal.get('shortfalls'):
         for row in proposal['shortfalls']:
-            label = f"{name(row['product_id'])}: {amount(row['shortfall'])} {row['unit']}"
+            label = f"{name(row['product_id'])}: {amount(row['shortfall'])} {word(row['unit'], row['shortfall'])}"
             warnings.append(f'kattamatta jää {label}' if fi else f'uncovered need for {label}')
     why = cheaper(proposal, name, amount, fi)
     if why:
-        warnings.append(why if warnings else why[0].upper() + why[1:])
+        warnings.append(why)
     if warnings:
         # One bound warning sentence leaves room for the chosen line and human approval.
-        add('held', None, '; '.join(warnings) + '.', required=True)
+        text = '; '.join(warnings) + '.'
+        add('held', None, text[0].upper() + text[1:], required=True)
     if proposal.get('lines') and proposal.get('expected_total') is not None:
         total = amount(proposal['expected_total'])
         fee = ('; toimitusmaksu ei ole tiedossa' if fi else '; the delivery fee is unknown') if proposal.get('delivery_fee') is None else ''
@@ -113,7 +206,7 @@ def context(proposal, names, language):
         if not isinstance(info, dict):
             continue
         pid = line['product_id']
-        unit = info.get('unit') or line['unit']
+        unit = word(info.get('unit') or line['unit'])
         rows = (info.get('evidence') or {}).get('rows', 0)
         try:
             percent = round(float(info.get('ratio')) * 100)
@@ -143,8 +236,9 @@ def context(proposal, names, language):
         keep = set((required + learned + optional)[:MAX_FACTS])
         facts = [fact for i, fact in enumerate(facts) if i in keep]
     source = {k: proposal.get(k) for k in ('proposal_id', 'offer_id', 'offer_hash', 'status', 'request',
-        'lines', 'excluded', 'alternative', 'total_ex_vat', 'expected_total', 'delivery_fee', 'shortfall', 'shortfalls', 'measure', 'mandate', 'recall_alerts', 'valid_until')}
+        'lines', 'excluded', 'alternative', 'total_ex_vat', 'expected_total', 'delivery_fee', 'shortfall', 'shortfalls', 'measure', 'mandate', 'recall_alerts', 'valid_until', 'partial_fill')}
     source['names'] = names
+    source['packs'] = packs
     source['facts'] = FACTS_VERSION
     digest = hashlib.sha256(json.dumps(source, sort_keys=True, default=str).encode()).hexdigest()
     return {'source_hash': digest, 'language': language, 'facts': facts}

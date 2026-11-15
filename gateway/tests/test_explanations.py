@@ -60,8 +60,10 @@ def test_invalid_unavailable_and_changed_proposal_never_publish_text(env, failur
     for _ in range(2):
         r = client.get(url, headers=AGENT, params={'explanation_language': 'en'})
         assert r.status_code == 200 and r.json()['explanation'] is None
-    assert len(calls) == 1
+    # A refused or broken reply is asked for once more (#1973); a changed proposal is not.
+    assert len(calls) == (1 if failure == 'stale' else 2)
     assert env[2].proposal_explanations.count_documents({'state': 'ready'}) == 0
+    assert env[2].audit_log.count_documents({'event.kind': 'proposal_explanation_failed'}) == 1
 
 
 def test_response_does_not_await_the_model_and_parallel_viewers_share_claim(env):
@@ -99,3 +101,100 @@ def test_source_hash_changes_when_option_or_status_changes(env):
     old = context(p, {}, 'en')['source_hash']
     assert context({**p, 'offer_id': 'another'}, {}, 'en')['source_hash'] != old
     assert context({**p, 'status': 'APPROVED'}, {}, 'en')['source_hash'] != old
+
+
+@pytest.mark.parametrize('first', ['worker_503', 'refused', 'broken'])
+def test_a_failed_first_call_gets_one_retry_and_the_text_is_published(env, first, caplog):
+    """Live 14 and 15 Nov (#1973): the first call for a new card failed in under one second."""
+    import httpx
+    calls = []
+    async def worker(kitchen, payload):
+        calls.append(1)
+        reply = reply_for(payload)
+        if len(calls) > 1:
+            return reply
+        if first == 'worker_503':
+            request = httpx.Request('POST', 'http://worker/explain')
+            raise httpx.HTTPStatusError('503', request=request, response=httpx.Response(503, request=request))
+        if first == 'refused':
+            reply['sentences'][0]['numbers'] = ['99999']
+            return reply
+        return {'duration_ms': 1}
+    _, client = setup(env, worker)
+    url = K + '/proposals/' + milk(client)['proposal_id']
+    with caplog.at_level('WARNING', logger='gateway.explanations'):
+        assert client.get(url, headers=AGENT, params={'explanation_language': 'en'}).json()['explanation'] is None
+    result = client.get(url, headers=AGENT, params={'explanation_language': 'en'}).json()['explanation']
+    assert result['checked'] and 'Nothing is ordered' in result['text'] and len(calls) == 2
+    kinds = [e['event']['kind'] for e in env[2].audit_log.find({'event.kind': {'$regex': 'explanation'}})]
+    assert kinds == ['proposal_explanation_ready']
+    logged = [r.getMessage() for r in caplog.records if 'one retry' in r.getMessage()]
+    assert len(logged) == 1 and 'attempt 1 failed' in logged[0]
+    assert {'worker_503': 'reason=worker status 503', 'refused': 'reason=explanation sentence or numbers changed',
+            'broken': 'error=KeyError'}[first] in logged[0]
+
+
+@pytest.mark.parametrize('failure', ['timeout', 'rejected_request', 'not_configured'])
+def test_no_retry_when_a_second_call_cannot_help(env, failure, monkeypatch):
+    import httpx
+    from gateway import explanations as module
+    calls = []
+    async def worker(kitchen, payload):
+        calls.append(1)
+        if failure == 'timeout':
+            raise httpx.ReadTimeout('slow')
+        if failure == 'not_configured':
+            raise module.NotConfigured('explanation worker is not configured')
+        request = httpx.Request('POST', 'http://worker/explain')
+        raise httpx.HTTPStatusError('422', request=request, response=httpx.Response(422, request=request))
+    _, client = setup(env, worker)
+    url = K + '/proposals/' + milk(client)['proposal_id']
+    for _ in range(2):
+        assert client.get(url, headers=AGENT, params={'explanation_language': 'en'}).json()['explanation'] is None
+    assert len(calls) == 1
+
+
+def test_the_retry_is_bounded_at_two_calls_per_claim(env):
+    calls = []
+    async def worker(kitchen, payload):
+        calls.append(1)
+        raise RuntimeError('unavailable')
+    _, client = setup(env, worker)
+    url = K + '/proposals/' + milk(client)['proposal_id']
+    for _ in range(5):          # five views: one claim, then the 5 minute cooldown
+        assert client.get(url, headers=AGENT, params={'explanation_language': 'en'}).json()['explanation'] is None
+    assert len(calls) == 2
+
+
+def test_a_stored_text_is_still_returned_after_the_offer_expires(env):
+    """It explains a past decision (#1973); only a new text needs a valid offer."""
+    calls, clock = [], {'now': NOW}
+    async def worker(kitchen, payload):
+        calls.append(1)
+        return reply_for(payload)
+    _, fake, db = env
+    gw = Gateway(db, ValioClient('fixture', transport=fake.transport, ttl=0, now=lambda: NOW), now=lambda: clock['now'])
+    client = TestClient(create_app(gw, explanation_worker=worker))
+    url = K + '/proposals/' + milk(client)['proposal_id']
+    client.get(url, headers=AGENT, params={'explanation_language': 'en'})
+    live = client.get(url, headers=AGENT, params={'explanation_language': 'en'}).json()['explanation']
+    assert live['checked'] and len(calls) == 1
+    clock['now'] = NOW + timedelta(minutes=16)
+    late = client.get(url, headers=AGENT, params={'explanation_language': 'en'}).json()
+    assert late['explanation'] == live and len(calls) == 1
+    # No stored text in the other language: an expired offer starts no new model call.
+    assert client.get(url, headers=AGENT, params={'explanation_language': 'fi'}).json()['explanation'] is None
+    assert len(calls) == 1
+
+
+def test_the_live_text_uses_the_catalog_pack_size_not_the_unit_code(env):
+    calls = []
+    async def worker(kitchen, payload):
+        calls.append(payload)
+        return reply_for(payload)
+    _, client = setup(env, worker)
+    url = K + '/proposals/' + milk(client)['proposal_id']
+    client.get(url, headers=AGENT, params={'explanation_language': 'en'})
+    text = client.get(url, headers=AGENT, params={'explanation_language': 'en'}).json()['explanation']['text']
+    assert ' ST ' not in text and 'per ST' not in text
+    assert ' x ' in text or ' pieces of ' in text or ' piece of ' in text
