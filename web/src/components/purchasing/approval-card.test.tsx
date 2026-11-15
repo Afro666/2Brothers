@@ -211,7 +211,7 @@ describe("ApprovalCard", () => {
     render(<ApprovalCard request={emptyRequest} order={emptyOrder} />);
 
     expect(screen.getByText("Nothing could be ordered. Left out: 35")).toBeVisible();
-    expect(screen.getByText("Left out: 35")).toBeVisible();
+    expect(screen.getByText("Products left out: 35")).toBeVisible();
     expect(screen.queryByText("€0.00")).not.toBeInTheDocument();
   });
 
@@ -220,7 +220,7 @@ describe("ApprovalCard", () => {
     render(<ApprovalCard request={emptyRequest} order={{ ...confirmedOrder, lines: [] }} />);
 
     expect(screen.getByText("Nothing could be ordered")).toBeVisible();
-    expect(screen.queryByText(/Left out: 0/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/left out: 0/i)).not.toBeInTheDocument();
     expect(screen.queryByText("€0.00")).not.toBeInTheDocument();
   });
 
