@@ -36,7 +36,7 @@ describe("the proposals list of one page load (#1944)", () => {
     const api = createHttpApi("/api");
     await api.listApprovals();
     // Any write drops the kept list; this one fails on the stub's answer, which is enough.
-    await api.reject("p-1", "no", "Chef").catch(() => undefined);
+    await api.reject("p-1", "no", "human").catch(() => undefined);
     await api.listApprovals();
     expect(asked.proposals).toBe(2);
   });
