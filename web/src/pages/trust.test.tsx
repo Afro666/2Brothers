@@ -135,6 +135,22 @@ describe("trust page", () => {
     expect(await suomi.findByText("Ehdotusta muutettiin")).toBeInTheDocument();
   });
 
+  it("calls a human actor a person, or by the account's name, never Buyer (#1978)", async () => {
+    const api = createMockApi();
+    const row = (seq: number, actorName?: string): AuditChainRow => ({
+      seq,
+      event: { id: `step-${seq}`, at: "2026-11-14T10:00:00Z", kind: "approval", actor: "human", summary: "A person chose an option", reason: "", ...(actorName ? { actorName } : {}) },
+      prevHash: "a".repeat(64),
+      hash: "b".repeat(64),
+    });
+    api.listAuditChain = async () => [row(1), row(2, "approver@example.test")];
+    renderApp("/trust", api);
+    const lines = within(await screen.findByRole("region", { name: "Newest audit lines" }));
+    expect(await lines.findByText("A person")).toBeInTheDocument();
+    expect(lines.getByText("approver@example.test")).toBeInTheDocument();
+    expect(lines.queryByText("Buyer")).not.toBeInTheDocument();
+  });
+
   it("shows loading instead of an unchecked result during the opening check", async () => {
     const api = createMockApi();
     api.verifyAuditChain = () => new Promise(() => {});

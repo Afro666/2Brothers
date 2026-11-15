@@ -214,7 +214,9 @@ export function AuditTile({ api }: { api: Api }) {
         {(events: AuditEvent[]) => (
           <ul className="divide-y text-sm">
             {/* Newest first; a step with no recorded time keeps the order the API recorded it in. */}
-            {[...events]
+            {/* #1978: the demo's own housekeeping steps are in the full log, not here. */}
+            {events
+              .filter((event) => !event.internal)
               .reverse()
               .sort((a, b) => (a.at && b.at ? Date.parse(b.at) - Date.parse(a.at) : 0))
               .slice(0, 5)

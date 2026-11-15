@@ -437,6 +437,8 @@ export interface AuditEvent {
   actorName?: string;
   /** What happened, short. */
   summary: string;
+  /** #1978: the demo's own housekeeping (inbox reset, a model sentence that did not come): in the full log, not in Home's Latest steps. */
+  internal?: true;
   /** Why, in the words of the engine, the gateway or the human. */
   reason: string;
   orderId?: string;

@@ -217,6 +217,19 @@ describe("HomePage", () => {
     expect(screen.queryByText(/kitchen_brief_read|proposal_explanation_failed/)).not.toBeInTheDocument();
   });
 
+  it("leaves the demo's own housekeeping steps out of Latest steps (#1978)", async () => {
+    const api = createMockApi();
+    const kinds = ["proposal_created", "demo_inbox_cleared", "proposal_explanation_failed", "demo_inbox_cleared", "option_chosen"];
+    api.listAudit = async () =>
+      mapAudit(kinds.map((kind, i) => ({ event_id: `e-${i}`, kind, actor: "human", at: `2026-11-14T10:0${i}:00Z` })));
+    renderApp(`/?now=${DEMO_NOW}`, api);
+
+    expect(await screen.findByText("A person chose an option")).toBeInTheDocument();
+    expect(screen.getByText("Proposal created")).toBeInTheDocument();
+    expect(screen.queryByText("No model sentence for a proposal")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Demo inbox reset|Inbox cleared/)).not.toBeInTheDocument();
+  });
+
   describe("Latest steps in Finnish (#1776)", () => {
     afterEach(() => {
       updateLanguage("en", false);

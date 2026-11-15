@@ -217,7 +217,9 @@ export function TrustPage() {
                             {t("Line {line}", { line: row.seq })}
                           </span>
                           <span>
-                            {ACTOR_LABEL[row.event.actor] ? t(ACTOR_LABEL[row.event.actor]) : stepWords(row.event.actor, t)}
+                            {/* #1978: the account's name when the gateway names one, else the actor in words. */}
+                            {row.event.actorName ??
+                              (ACTOR_LABEL[row.event.actor] ? t(ACTOR_LABEL[row.event.actor]) : stepWords(row.event.actor, t))}
                           </span>
                           {broken ? (
                             <Badge variant="destructive">
