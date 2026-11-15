@@ -366,7 +366,7 @@ export function ForecastPage() {
           <h1 className="text-2xl font-semibold">{t("Forecast vs actual")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
             {t(
-              "What the kitchen needed each week against what was predicted. Our engine (menu x covers x recipe) is next to the plain weekday average. Future weeks show the forecast only.",
+              "What the kitchen needed each week against what was predicted. Our engine (menu x covers x recipe) is next to the plain weekday average.",
             )}
           </p>
         </header>
