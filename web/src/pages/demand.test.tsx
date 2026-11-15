@@ -412,6 +412,23 @@ describe("DemandPage", () => {
     expect(getBuyingNote).toHaveBeenCalledTimes(1);
   });
 
+  // The loader no longer depends on the language (#1011). The demand is still asked again on a
+  // switch while LanguageProvider remounts the whole app (lib/i18n.tsx, `key={language}`).
+  it("switches the week title and summary to Finnish (#1011)", async () => {
+    const api = createMockApi();
+    const getSupplierDemand = vi.spyOn(api, "getSupplierDemand");
+    renderApp("/demand?week=2026-W47", api);
+    expect(await screen.findByRole("heading", { name: "Week 47, 16 to 22 Nov 2026" })).toBeInTheDocument();
+    await demandTableReady();
+    expect(getSupplierDemand).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getAllByRole("radio", { name: "FI", hidden: true })[0]);
+
+    expect(await screen.findByRole("heading", { name: "Viikko 47, 16–22. marras 2026" })).toBeInTheDocument();
+    expect(await screen.findByText("5 tuotetta: 1 puutteessa, 4 tuntematonta")).toBeInTheDocument();
+    expect(productSections().length).toBeGreaterThan(0);
+  });
+
   it.each(["banana", "2026-W99"])("does not ask the API for the invalid week %s", async (week) => {
     const api: Api = createMockApi();
     let demandCalls = 0;
