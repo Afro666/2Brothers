@@ -749,8 +749,9 @@ Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email, or
 (the person, `open-demo`, or `operator-cli`), `expires_at`, `last_used_at` (or null),
 `revoked_at` (or null).
 
-- Who creates one: only a person signed in with the session cookie, role `approver`,
-  whose account is in the `users` collection, for their own kitchen. The token is that
+- Who creates one: a person signed in with the session cookie, role `approver`,
+  whose account is in the `users` collection, for their own kitchen; or, while the
+  open demo is on, its shared human token (see below). A session-created token is that
   person's, bound to that kitchen. An agent, a kitchen token or a personal token: 403
   `HUMAN_SESSION_REQUIRED`. A chef or a viewer: 403 `ROLE_REQUIRED`. A signed-in person
   lists and revokes only their own tokens.
@@ -840,7 +841,7 @@ So a person adds approve-from-chat in Claude without editing a config file:
 | Status | Code | When |
 |---|---|---|
 | 401 | `UNAUTHENTICATED` | The token is expired, revoked or unknown, or its account is gone, or it is an `open-demo` token and the open demo is off. |
-| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | Create, list or revoke without a signed-in session while the open demo is off. While it is on, the shared human token creates, lists and revokes `open-demo` tokens instead. |
+| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | A human caller reaches token management without a signed-in session and cannot use the open-demo exception; for example, the demo was switched off after shared-token authentication. A fresh shared-token request while login is required is rejected earlier with 401 `UNAUTHENTICATED`. While the demo is on, its shared human token manages `open-demo` tokens instead. |
 | 403 | `HUMAN_SESSION_REQUIRED` | Create, list or revoke by a token or the agent; any person-only route called with a personal token. |
 | 403 | `ROLE_REQUIRED` | The person is not an `approver`. |
 | 403 | `SCOPE_REQUIRED` | A personal token on a propose or write route. |
