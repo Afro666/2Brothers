@@ -102,6 +102,7 @@ export function useAsync<T>(
     });
     let dropsAtStart = drops;
     let mine = 0;
+    let invalidationsLeft = 2;
     const current = () => keep !== undefined && drops === dropsAtStart && newest.get(keep) === mine;
     // Only the reloads this load answers: a load that began earlier and lands late must not end a newer one.
     const finishReload = () => {
@@ -109,6 +110,15 @@ export function useAsync<T>(
       const done = reloadWaiters.current.filter((waiter) => waiter.version <= version);
       reloadWaiters.current = reloadWaiters.current.filter((waiter) => waiter.version > version);
       done.forEach((waiter) => waiter.resolve());
+    };
+    const restartInvalidated = (revision: number): boolean => {
+      if (keep === undefined || revision === drops) return false;
+      if (invalidationsLeft-- > 0) run(RETRY_DELAYS_MS.length);
+      else {
+        setState({ status: "error", data: null, error: new ApiError("DATA_CHANGED", "The data changed while loading. Try again."), refreshing: false, key: keep });
+        finishReload();
+      }
+      return true;
     };
     const run = (attemptsLeft: number) => {
       if (!active) return;
@@ -123,10 +133,7 @@ export function useAsync<T>(
       load()
         .then((data) => {
           // An invalidated display read must ask again, not present a pre-change answer as current.
-          if (active && keep !== undefined && revision !== drops) {
-            run(RETRY_DELAYS_MS.length);
-            return;
-          }
+          if (active && restartInvalidated(revision)) return;
           if (keep !== undefined && current()) {
             kept.delete(keep);
             if (kept.size >= MAX_KEPT) kept.delete(kept.keys().next().value!);
@@ -139,10 +146,7 @@ export function useAsync<T>(
         })
         .catch((error: unknown) => {
           if (!active) return;
-          if (keep !== undefined && revision !== drops) {
-            run(RETRY_DELAYS_MS.length);
-            return;
-          }
+          if (restartInvalidated(revision)) return;
           if (attemptsLeft > 0 && isUnreachable(error)) {
             timer = setTimeout(() => run(attemptsLeft - 1), RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - attemptsLeft]);
             return;

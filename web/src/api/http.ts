@@ -185,6 +185,7 @@ export const AUDIT_LIMIT = 1000;
 
 export function createHttpApi(baseUrl: string): Api {
   let currentSession: Session | null = null;
+  let sessionKnown = false;
   const requestScope = {};
   const request = (path: string, init?: RequestInit) => gatewayRequest(baseUrl, path, init, requestScope);
   const mock = createMockApi();
@@ -271,17 +272,19 @@ export function createHttpApi(baseUrl: string): Api {
     async getSession() {
       try {
         const next = toSession((await get("/v1/me")) as Json);
-        if (JSON.stringify(currentSession) !== JSON.stringify(next)) {
+        if (sessionKnown && JSON.stringify(currentSession) !== JSON.stringify(next)) {
           dropKeptAnswers();
           dropReads();
         }
         currentSession = next;
+        sessionKnown = true;
         return currentSession;
       } catch (error) {
         if (error instanceof ApiError && (error.code === "UNAUTHENTICATED" || error.status === 401)) {
           dropKeptAnswers();
           dropReads();
           currentSession = null;
+          sessionKnown = true;
           return null;
         }
         throw error;
@@ -289,6 +292,7 @@ export function createHttpApi(baseUrl: string): Api {
     },
     async signIn(email, password) {
       currentSession = toSession((await post("/v1/auth/login", { email, password })) as Json);
+      sessionKnown = true;
       window.dispatchEvent(new Event(SIGNED_IN_EVENT));
       return currentSession;
     },
@@ -298,6 +302,7 @@ export function createHttpApi(baseUrl: string): Api {
       } catch {
       } finally {
         currentSession = null;
+        sessionKnown = true;
       }
     },
     async changePassword(current, next) {

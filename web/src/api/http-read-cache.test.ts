@@ -48,22 +48,20 @@ it("does not retain failures or share abortable requests", async () => {
   expect(d.fetch).toHaveBeenCalledTimes(2); d.answer(0, {}); d.answer(1, {}); await Promise.all([a, b]);
 });
 
-it("a detected account change or expired session invalidates existing reads", async () => {
-  const d = deferredFetch();
-  const api = createHttpApi("/api");
+it("keeps first-session cold reads and invalidates a detected account change", async () => {
+  const d = deferredFetch(); const api = createHttpApi("/api");
   const old = gatewayRequest("/api", "/read");
   const loginCheck = api.getSession();
   d.answer(1, { kind: "human", name: "one@example.test", role: "chef", can_approve: false });
   await loginCheck;
-  const after = gatewayRequest("/api", "/read");
-  expect(d.fetch).toHaveBeenCalledTimes(3);
+  const same = gatewayRequest("/api", "/read");
+  expect(d.fetch).toHaveBeenCalledTimes(2);
   const checkAgain = api.getSession();
-  d.answer(3, { kind: "human", name: "two@example.test", role: "viewer", can_approve: false });
+  d.answer(2, { kind: "human", name: "two@example.test", role: "viewer", can_approve: false });
   await checkAgain;
   const changed = gatewayRequest("/api", "/read");
-  expect(d.fetch).toHaveBeenCalledTimes(5);
-  d.answer(0, {}); d.answer(2, {}); d.answer(4, {});
-  await Promise.all([old, after, changed]);
+  expect(d.fetch).toHaveBeenCalledTimes(4);
+  d.answer(0, {}); d.answer(3, {}); await Promise.all([old, same, changed]);
 });
 
 it("never coalesces reads across different API instances", async () => {
