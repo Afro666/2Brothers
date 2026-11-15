@@ -348,6 +348,17 @@ limitations and the raw miss are in `benchmarks/pick-holdout-20-v1.md`; per-case
 results and hashes are in `benchmarks/pick-holdout-20-v1-report.json`. Real-phone-
 photo accuracy is pending; prepared demo images do not establish it.
 
+The optional full-coverage hint (#2021) keeps the original system prompt and adds
+`covers_need_alone` only to simple quote snapshots with proven full coverage. Alias,
+requested-diet, differing-order-history and partial-only inputs remain unchanged.
+The hint and existing pruning guard share the same rounded-demand proof; the pick
+cache includes the hint. In a paired seven-name diagnostic, redundant raw picks
+fell from 14/21 to 0/21. New hinted validation cases were 7/8 raw exact, 8/8 after
+the guard, so the guard remains necessary. Earlier prompt candidates caused ranking
+regressions and were rejected; all three trials and limits are retained in
+`benchmarks/coverage-pick.md`. This is synthetic selection evidence, not real-world
+or vision accuracy.
+
 Set `NEMOTRON_BUYER_STRATEGY=loop` to retain the previous multi-turn implementation.
 The CLI tool agent still uses that audited loop. The legacy worker-mode tests set
 `strategy="loop"` explicitly; `test_single_pick.py` covers the new default, cache

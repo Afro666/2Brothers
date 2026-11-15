@@ -72,7 +72,8 @@ def test_one_model_call_then_cached_ids_with_fresh_price_and_new_offer(monkeypat
             assert len(json.dumps(model.prompts[0])) < 6000
             assert set(sent['products'][0]) == {'index', 'product_id', 'name', 'pack', 'can_arrive', 'alias',
                                                'price_per_unit', 'price_unit', 'engine_selected', 'selection',
-                                               'kitchen_declined'}
+                                               'kitchen_declined', 'covers_need_alone'}
+            assert sent['products'][0]['covers_need_alone'] is True
         finally:
             await gateway.close()
     asyncio.run(run())
@@ -179,6 +180,9 @@ def test_pick_cache_expiry_policy_scope_and_interrupted_claims(monkeypatch):
     need = parse_need(NEED)
     rows = [{'product_id': 'p', 'name': 'Milk', 'pack': {'value': 1, 'unit': 'L'}, 'can_arrive': True}]
     key = buyer_picks.cache_key('k', need, ['AP'], rows)
+    hinted = [{**rows[0], 'covers_need_alone': True}]
+    assert buyer_picks.cache_key('k', need, ['AP'], hinted) != key
+    assert buyer_picks.cache_key('k', need, ['AP'], [{**hinted[0], 'covers_need_alone': False}]) != buyer_picks.cache_key('k', need, ['AP'], hinted)
     assert buyer_picks.cache_key('other', need, ['AP'], rows) != key
     assert buyer_picks.cache_key('k', need, ['AM'], rows) != key
     assert buyer_picks.cache_key('k', {**need, 'requested_date': '2026-11-17'}, ['AP'], rows) != key
@@ -212,3 +216,49 @@ def test_lost_cache_claim_never_requests_approval(monkeypatch):
         finally:
             await gateway.close()
     asyncio.run(run())
+
+
+def test_full_coverage_hint_reaches_model_and_guard_still_removes_its_extra_choice(monkeypatch):
+    async def run():
+        db, gateway = environment(monkeypatch)
+        original = gateway.request
+        offers = []
+        async def request(method, path, **kwargs):
+            if path == '/tools/get_offer':
+                offers.append(kwargs['payload']['product_ids'])
+            result = await original(method, path, **kwargs)
+            if path == '/tools/search_products':
+                result['products'].append({'product_id': '462921'})
+            return result
+        monkeypatch.setattr(gateway, 'request', request)
+        model = Pick({'picks': [{'index': 0, 'reason': 'Best match'},
+                                {'index': 1, 'reason': 'Backup alternative'}]})
+        try:
+            result = await BuyerWorker(db, gateway, model_factory=lambda: model,
+                                       now=lambda: NOW).run('demo-kitchen', NEED)
+            sent = json.loads(model.prompts[0][1]['content'])
+            assert sent['products'][0]['covers_need_alone'] is True
+            assert all(type(row['covers_need_alone']) is bool for row in sent['products'])
+            assert [line['product_id'] for line in result['lines']] == [sent['products'][0]['product_id']]
+            assert result['status'] == 'READY' and model.calls == 1
+            assert db.orders.count_documents({}) == 0
+            assert db.proposals.count_documents({}) == 1
+            assert len(offers[0]) == 2 and offers[-1] == [sent['products'][0]['product_id']]
+        finally:
+            await gateway.close()
+    asyncio.run(run())
+
+
+def test_legacy_cache_entry_cannot_bypass_new_coverage_input():
+    import mongomock
+    db = mongomock.MongoClient(tz_aware=True).test
+    need = {'text': '51 L milk', 'requested_date': '2026-11-16', 'quantity': '51', 'unit': 'L'}
+    rows = [{'product_id': 'p', 'name': 'Milk', 'pack': {'value': 1, 'unit': 'L'},
+             'can_arrive': True, 'covers_need_alone': True}]
+    # Golden cache vector produced by the pre-2021 implementation for these same inputs without the hint.
+    legacy = '9df3f329ba75ee990bab968548e775800c834a3f0ebdb07aef0c356641849547'
+    db.buyer_pick_cache.insert_one({'_id': legacy, 'state': 'READY', 'product_ids': ['p', 'stale-backup'],
+                                    'expires_at': datetime.now(timezone.utc) + timedelta(minutes=10)})
+    key = buyer_picks.cache_key('k', need, [], rows)
+    assert key != legacy and buyer_picks.get(db, key) is None
+    assert buyer_picks.claim(db, key) is not None

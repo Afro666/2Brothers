@@ -4,7 +4,7 @@ from decimal import Decimal as D
 import mongomock
 import pytest
 
-from agent.single_pick import checked_reason, minimal_indices
+from agent.single_pick import checked_reason, covers_need_alone, coverage_rows, minimal_indices
 from engine.offers import Offer
 from engine.packs import PackInfo
 from engine.selection_facts import selection_facts
@@ -68,3 +68,69 @@ def test_single_preference_is_kept_only_with_proven_full_delivery_coverage():
     for change in ({'stock_state': 'unknown'}, {'stock_quantity_base': '50'},
                    {'cutoff_passed': True}, {'first_arrival': '2026-11-17'}, {'base_unit': 'KG'}):
         assert minimal_indices([0, 1], [{'selection': {**fact, **change}}, rows[1]], need) == [0, 1]
+
+
+@pytest.mark.parametrize('change', [
+    {'stock_state': 'unknown'}, {'stock_state': 'none'}, {'stock_quantity_base': None},
+    {'stock_quantity_base': 'Infinity'}, {'stock_quantity_base': 'NaN'},
+    {'stock_quantity_base': True}, {'stock_quantity_base': '-1'},
+    {'packs_needed': '0'}, {'packs_needed': '-1'}, {'packs_needed': 'Infinity'},
+    {'base_per_sales_unit': '0'}, {'base_per_sales_unit': 'NaN'},
+    {'cutoff_passed': True}, {'cutoff_passed': None}, {'cutoff_passed': 0}, {'cutoff_passed': 'false'},
+    {'packs_needed': '1e999999999'}, {'first_arrival': None},
+    {'first_arrival': 'not-a-date'}, {'first_arrival': '2026-11-17'}, {'base_unit': 'KG'},
+])
+def test_coverage_hint_never_proves_full_coverage_from_ineligible_or_malformed_evidence(change):
+    need = {'unit': 'L', 'needed_by': '2026-11-16'}
+    fact = selection_facts([offer(size='10', stock='6')], D(53), 'L')['milk']
+    row = {'selection': {**fact, **change}, 'covers_need_alone': True}
+    assert covers_need_alone(row, need) is False
+    assert minimal_indices([0, 1], [row, {'selection': None}], need) == [0, 1]
+
+
+def test_coverage_hint_uses_rounded_packs_without_mutating_evidence_or_overriding_rank():
+    need = {'unit': 'L', 'needed_by': '2026-11-16'}
+    fact = selection_facts([offer(size='10', stock='6')], D(53), 'L')['milk']
+    rows = [{'selection': fact, 'alias': False, 'kitchen_declined': True}, {'selection': None, 'alias': False}]
+    enriched = coverage_rows(rows, need)
+    assert enriched[0]['covers_need_alone'] is True and enriched[1]['covers_need_alone'] is False
+    assert 'covers_need_alone' not in rows[0] and enriched[0]['selection'] is fact
+    # 53 L on the shelf is insufficient: buying six ten-litre packs needs 60 L.
+    assert covers_need_alone({'selection': {**fact, 'stock_quantity_base': '53'}}, need) is False
+    # The hint cannot make a later product override the model's higher-priority first preference.
+    assert minimal_indices([1, 0], enriched, need) == [1, 0]
+    # Pruning recomputes proof, ignoring a forged/precomputed root flag.
+    enriched[0]['covers_need_alone'] = False
+    assert minimal_indices([0, 1], enriched, need) == [0]
+
+
+def test_alias_inputs_are_left_unchanged_by_the_optional_hint():
+    need = {'unit': 'L', 'needed_by': '2026-11-16'}
+    full = selection_facts([offer(stock='100')], D(51), 'L')['milk']
+    rows = [{'selection': {**full, 'stock_quantity_base': '20'}, 'alias': True},
+            {'selection': None, 'alias': True}, {'selection': full, 'alias': False}]
+    assert coverage_rows(rows, need) == rows
+    assert minimal_indices([0, 1], rows, need) == [0, 1]
+
+
+def test_fractional_weighted_sales_units_are_valid_and_missing_evidence_is_not():
+    need = {'unit': 'KG', 'needed_by': '2026-11-16'}
+    fact = {'stock_state': 'confirmed', 'cutoff_passed': False, 'first_arrival': '2026-11-16',
+            'base_unit': 'KG', 'stock_quantity_base': '3.5', 'packs_needed': '3.5',
+            'base_per_sales_unit': '1'}
+    assert covers_need_alone({'selection': fact}, need) is True
+    assert covers_need_alone({'selection': {**fact, 'stock_quantity_base': '3.49'}}, need) is False
+    for malformed in (None, [], 'not-facts', 1):
+        assert covers_need_alone({'selection': malformed}, need) is False
+
+
+def test_diet_history_and_partial_only_inputs_are_unchanged():
+    need = {'unit': 'L', 'needed_by': '2026-11-16'}
+    fact = selection_facts([offer(stock='100')], D(51), 'L')['milk']
+    rows = [{'selection': {**fact, 'diet_claims': {'lactose_free': claim}}} for claim in (False, None, True)]
+    assert coverage_rows(rows, need, request_text='51 L lactose-free milk') == rows
+    history = [{'selection': {**fact, 'ordered_before': n}} for n in (0, 3)]
+    assert coverage_rows(history, need) == history
+    partial = [{'selection': {**fact, 'stock_quantity_base': '20'}}, {'selection': None}]
+    assert coverage_rows(partial, need) == partial
+    assert coverage_rows([], need) == []

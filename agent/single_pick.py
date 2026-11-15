@@ -1,14 +1,15 @@
 """One model selection; deterministic tool steps still pass through Buyer's audited guards."""
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import json
 import logging
 import re
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, DecimalException, InvalidOperation
 
 from jsonschema import validate
 
 from gateway.parse import parse_request
+from gateway.diet import asked as asked_diets
 from agent.vision import parse_reply
 from agent.memory import kitchen_memory, prompt_block
 from agent.memory_cache import KitchenFactsCache
@@ -147,20 +148,50 @@ def checked_reason(reason, row, need=None):
         raise ValueError(f'Product-choice reason has an unsupported number ({rule})')
 
 
+def covers_need_alone(row, need):
+    """The shared quote proof used for both the model hint and deterministic pruning."""
+    fact = row.get('selection') or {}
+    if (not isinstance(fact, dict) or not isinstance(need, dict)
+            or not isinstance(need.get('unit'), str) or not need['unit']):
+        return False
+    try:
+        if (fact.get('stock_state') != 'confirmed' or fact.get('cutoff_passed') is not False
+                or fact.get('base_unit') != need['unit']
+                or date.fromisoformat(fact['first_arrival']) > date.fromisoformat(need['needed_by'])):
+            return False
+        stock = Decimal(str(fact['stock_quantity_base']))
+        packs = Decimal(str(fact['packs_needed']))
+        size = Decimal(str(fact['base_per_sales_unit']))
+        if not all(value.is_finite() for value in (stock, packs, size)) or packs <= 0 or size <= 0:
+            return False
+        required = packs * size
+        return required.is_finite() and required > 0 and stock >= required
+    except (KeyError, TypeError, ValueError, DecimalException):
+        return False
+
+
+def coverage_rows(rows, need, *, request_text=''):
+    """Add only an unambiguous quantity hint; keep complex ranking inputs unchanged.
+
+    The original prompt already says to use the fewest products. Earlier trials
+    showed broader hints/instructions could distract from alias, diet or history
+    precedence. Partial-only baskets therefore also keep their original input.
+    """
+    clean = [{k: v for k, v in row.items() if k != 'covers_need_alone'} for row in rows]
+    history = [row.get('selection', {}).get('ordered_before') if isinstance(row.get('selection'), dict)
+               else None for row in clean]
+    if (any(row.get('alias') is True for row in clean) or asked_diets(request_text)
+            or any(value != history[0] for value in history[1:])):
+        return clean
+    proofs = [covers_need_alone(row, need) for row in clean]
+    if not any(proofs):
+        return clean
+    return [{**row, 'covers_need_alone': proof} for row, proof in zip(clean, proofs)]
+
+
 def minimal_indices(indices, rows, need):
     """Keep the model's first preference alone only when the quote proves it is enough."""
-    first = rows[indices[0]]
-    fact = first.get('selection') or {}
-    try:
-        full = (fact.get('stock_state') == 'confirmed' and fact.get('cutoff_passed') is False
-                and fact.get('first_arrival') is not None
-                and fact['first_arrival'] <= need['needed_by']
-                and fact.get('base_unit') == need['unit']
-                and Decimal(fact['stock_quantity_base']) >=
-                    Decimal(fact['packs_needed']) * Decimal(fact['base_per_sales_unit']))
-    except (KeyError, TypeError, InvalidOperation):
-        full = False
-    return indices[:1] if full else indices
+    return indices[:1] if covers_need_alone(rows[indices[0]], need) else indices
 
 
 class SinglePickModel:
@@ -220,6 +251,8 @@ class SinglePickModel:
             entries = await self.memory_entries(rows, result)
             memory = prompt_block(entries)
             rows = feedback_rows(rows, entries)
+            rows = coverage_rows(rows, {'unit': self.need['unit'], 'needed_by': self.need['requested_date']},
+                                 request_text=self.need['text'])
             system = SYSTEM if not memory else SYSTEM + '\n' + MEMORY_NOTE + '\n' + memory
             # Prompt revisions must not reuse a choice made under an older ranking policy.
             key = buyer_picks.cache_key(self.kitchen, self.need, self.exclusions, rows, memory=system)
