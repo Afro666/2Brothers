@@ -1,6 +1,6 @@
 import asyncio
+import hashlib
 import json
-from pathlib import Path
 
 import pytest
 
@@ -95,3 +95,27 @@ def test_one_pass_persists_failures_resumes_without_reruns_and_rejects_changed_i
     with pytest.raises(ValueError, match='refuse to mix'):
         asyncio.run(bench.run(path, factory=Fake))
     assert len(instances) == 20
+
+
+def test_saved_live_report_matches_frozen_oracles_and_keeps_raw_miss_visible():
+    report = json.loads((bench.ROOT / 'agent/benchmarks/pick-holdout-20-v1-report.json')
+                        .read_text(encoding='utf-8'))
+    fixture = json.loads(bench.FIXTURE.read_text(encoding='utf-8'))
+    canonical = json.dumps(fixture, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
+    assert hashlib.sha256(canonical).hexdigest() == report['fixture_canonical_sha256']
+    by_id = {c['id']: c for c in fixture['cases']}
+    assert len(report['results']) == len({r['case'] for r in report['results']}) == 20
+    assert report['summary'] == bench.summarize(report['results'])
+    assert report['summary']['raw_exact'] == 19
+    assert report['summary']['guarded_exact'] == 20
+    assert report['summary']['incomplete_attempts'] == 0
+    for row in report['results']:
+        case = by_id[row['case']]
+        expected = set(case['expected_includes'])
+        assert row['raw_exact'] == (set(row['raw_picks']) == expected)
+        assert row['guarded_exact'] == (set(row['guarded_picks']) == expected)
+        assert row['first_correct'] == (row['raw_picks'][0] == case['expected_first'])
+        assert row['usage']['calls'] == 1 and row['attempt_state'] == 'completed'
+    miss = next(r for r in report['results'] if not r['raw_exact'])
+    assert miss['case'] == 'feedback-cover'
+    assert len(miss['raw_picks']) == 2 and len(miss['guarded_picks']) == 1

@@ -1,0 +1,748 @@
+{
+  "label": "Fresh synthetic 20-case selection holdout, one pass (#2000)",
+  "started_utc": "2026-11-15T02:11:26.764592+00:00",
+  "git_commit": "a23a79501531e3315e4d72df0ec4fb79000931d3",
+  "limitations": [
+    "Three synthetic candidates per request; no live catalog or whole-Buyer test.",
+    "Known policy families, fresh combinations: not a representative real-world accuracy estimate.",
+    "No real-phone-photo evidence. No model or prompt tuning from these replies.",
+    "Engine comparator omits upstream parser kind/diet filters; not a full parser comparison.",
+    "Raw and guarded scores reuse the same model reply; not independent experiments."
+  ],
+  "frozen": {
+    "fixture_sha256": "fe262de33fbe7ca80e99c3c7623db3dbfc8f47eec5c6a06263bb124fb14ac430",
+    "system_sha256": "1b6644bb28f3398dd54ab39b3b2932641b50afe8fcf263d2175f01fb14478a60",
+    "source_sha256": {
+      "agent/single_pick.py": "63c7c05ac05a42852e7704dd19108a1b8f3ff435a1de8f245843b2423780b75b",
+      "agent/pick_context_bench.py": "436960fadb6d272d66009b6eaba95af2c353887a3b80e4ba1d040b8723e2a316",
+      "agent/pick_holdout_bench.py": "e42c501fea1d67fb8d5c71267d467871d7c27718a191b32ae5364b3ad2ca584b",
+      "agent/memory.py": "b4838987c9de2bf286eb5eaa69527736b0fdc3ffee7fe45e8181f23e373bc316",
+      "agent/model.py": "9bd098b3ef53e7466ea90d341e7170ec3a7a7231424d7254fbf1a6c1316473f8",
+      "engine/offers.py": "49b36cb3c5f03b51b9eac0b23de14b6df3091817ede58344dac74b8277f5804a",
+      "engine/packs.py": "93432629c1d3921309971c8e9ce9862f6b5e5b7ae9cdc476b64a6823a04c2ffe",
+      "engine/selection_facts.py": "9af1623612e6991da7ba8613f122de964dfb7520c63ec387339114be520c16f3"
+    },
+    "model": "nemotron-3.5-super-vl",
+    "endpoint": "https://containers.datacrunch.io/nemotron-3-5-super-vl-b300/v1/",
+    "temperature": 0,
+    "thinking": false,
+    "attempts_per_case": 1,
+    "timeout_seconds": 30,
+    "max_tokens": 512,
+    "case_ids": [
+      "price-oil",
+      "price-rice",
+      "history-tea",
+      "history-oats",
+      "kind-carrot",
+      "kind-bread",
+      "kind-salmon",
+      "kind-almond",
+      "diet-milk",
+      "diet-pasta",
+      "diet-yoghurt",
+      "diet-bread",
+      "partial-cream",
+      "partial-flour",
+      "partial-lentils",
+      "partial-juice",
+      "feedback-oil",
+      "alias-sauce",
+      "feedback-cover",
+      "feedback-partial"
+    ]
+  },
+  "results": [
+    {
+      "case": "price-oil",
+      "family": "price",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-price-oil-1"
+        ],
+        "exact": true
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-price-oil-1"
+      ],
+      "guarded_picks": [
+        "h20-price-oil-1"
+      ],
+      "seconds": 0.313,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1269,
+        "completion_tokens": 57,
+        "reasoning_tokens": 0,
+        "seconds": 0.313
+      }
+    },
+    {
+      "case": "price-rice",
+      "family": "price",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-price-rice-2"
+        ],
+        "exact": true
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-price-rice-2"
+      ],
+      "guarded_picks": [
+        "h20-price-rice-2"
+      ],
+      "seconds": 0.234,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1285,
+        "completion_tokens": 55,
+        "reasoning_tokens": 0,
+        "seconds": 0.219
+      }
+    },
+    {
+      "case": "history-tea",
+      "family": "history",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-history-tea-0"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-history-tea-2"
+      ],
+      "guarded_picks": [
+        "h20-history-tea-2"
+      ],
+      "seconds": 0.266,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1266,
+        "completion_tokens": 49,
+        "reasoning_tokens": 0,
+        "seconds": 0.266
+      }
+    },
+    {
+      "case": "history-oats",
+      "family": "history",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-history-oats-0"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-history-oats-1"
+      ],
+      "guarded_picks": [
+        "h20-history-oats-1"
+      ],
+      "seconds": 0.282,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1277,
+        "completion_tokens": 56,
+        "reasoning_tokens": 0,
+        "seconds": 0.282
+      }
+    },
+    {
+      "case": "kind-carrot",
+      "family": "kind",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-kind-carrot-2"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-kind-carrot-1"
+      ],
+      "guarded_picks": [
+        "h20-kind-carrot-1"
+      ],
+      "seconds": 0.235,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1279,
+        "completion_tokens": 50,
+        "reasoning_tokens": 0,
+        "seconds": 0.235
+      }
+    },
+    {
+      "case": "kind-bread",
+      "family": "kind",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-kind-bread-2"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-kind-bread-1"
+      ],
+      "guarded_picks": [
+        "h20-kind-bread-1"
+      ],
+      "seconds": 0.25,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1277,
+        "completion_tokens": 50,
+        "reasoning_tokens": 0,
+        "seconds": 0.25
+      }
+    },
+    {
+      "case": "kind-salmon",
+      "family": "kind",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-kind-salmon-1"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-kind-salmon-2"
+      ],
+      "guarded_picks": [
+        "h20-kind-salmon-2"
+      ],
+      "seconds": 0.281,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1265,
+        "completion_tokens": 57,
+        "reasoning_tokens": 0,
+        "seconds": 0.281
+      }
+    },
+    {
+      "case": "kind-almond",
+      "family": "kind",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-kind-almond-1"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-kind-almond-2"
+      ],
+      "guarded_picks": [
+        "h20-kind-almond-2"
+      ],
+      "seconds": 0.188,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1286,
+        "completion_tokens": 41,
+        "reasoning_tokens": 0,
+        "seconds": 0.188
+      }
+    },
+    {
+      "case": "diet-milk",
+      "family": "diet",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-diet-milk-1"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-diet-milk-2"
+      ],
+      "guarded_picks": [
+        "h20-diet-milk-2"
+      ],
+      "seconds": 0.25,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1268,
+        "completion_tokens": 34,
+        "reasoning_tokens": 0,
+        "seconds": 0.25
+      }
+    },
+    {
+      "case": "diet-pasta",
+      "family": "diet",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-diet-pasta-1"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-diet-pasta-2"
+      ],
+      "guarded_picks": [
+        "h20-diet-pasta-2"
+      ],
+      "seconds": 0.187,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1264,
+        "completion_tokens": 41,
+        "reasoning_tokens": 0,
+        "seconds": 0.187
+      }
+    },
+    {
+      "case": "diet-yoghurt",
+      "family": "diet",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-diet-yoghurt-2"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-diet-yoghurt-0"
+      ],
+      "guarded_picks": [
+        "h20-diet-yoghurt-0"
+      ],
+      "seconds": 0.25,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1294,
+        "completion_tokens": 43,
+        "reasoning_tokens": 0,
+        "seconds": 0.234
+      }
+    },
+    {
+      "case": "diet-bread",
+      "family": "diet",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-diet-bread-2"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-diet-bread-1"
+      ],
+      "guarded_picks": [
+        "h20-diet-bread-1"
+      ],
+      "seconds": 0.219,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1270,
+        "completion_tokens": 43,
+        "reasoning_tokens": 0,
+        "seconds": 0.219
+      }
+    },
+    {
+      "case": "partial-cream",
+      "family": "coverage",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-partial-cream-0",
+          "h20-partial-cream-1"
+        ],
+        "exact": true
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-partial-cream-0",
+        "h20-partial-cream-1"
+      ],
+      "guarded_picks": [
+        "h20-partial-cream-0",
+        "h20-partial-cream-1"
+      ],
+      "seconds": 0.235,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1267,
+        "completion_tokens": 74,
+        "reasoning_tokens": 0,
+        "seconds": 0.235
+      }
+    },
+    {
+      "case": "partial-flour",
+      "family": "coverage",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-partial-flour-0",
+          "h20-partial-flour-1"
+        ],
+        "exact": true
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-partial-flour-0",
+        "h20-partial-flour-1"
+      ],
+      "guarded_picks": [
+        "h20-partial-flour-0",
+        "h20-partial-flour-1"
+      ],
+      "seconds": 0.25,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1264,
+        "completion_tokens": 70,
+        "reasoning_tokens": 0,
+        "seconds": 0.235
+      }
+    },
+    {
+      "case": "partial-lentils",
+      "family": "coverage",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-partial-lentils-0",
+          "h20-partial-lentils-1"
+        ],
+        "exact": true
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-partial-lentils-0",
+        "h20-partial-lentils-1"
+      ],
+      "guarded_picks": [
+        "h20-partial-lentils-0",
+        "h20-partial-lentils-1"
+      ],
+      "seconds": 0.422,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1283,
+        "completion_tokens": 76,
+        "reasoning_tokens": 0,
+        "seconds": 0.407
+      }
+    },
+    {
+      "case": "partial-juice",
+      "family": "coverage",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-partial-juice-0",
+          "h20-partial-juice-1"
+        ],
+        "exact": true
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-partial-juice-0",
+        "h20-partial-juice-1"
+      ],
+      "guarded_picks": [
+        "h20-partial-juice-0",
+        "h20-partial-juice-1"
+      ],
+      "seconds": 0.282,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1274,
+        "completion_tokens": 58,
+        "reasoning_tokens": 0,
+        "seconds": 0.266
+      }
+    },
+    {
+      "case": "feedback-oil",
+      "family": "feedback",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-feedback-oil-0"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-feedback-oil-1"
+      ],
+      "guarded_picks": [
+        "h20-feedback-oil-1"
+      ],
+      "seconds": 0.219,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1414,
+        "completion_tokens": 55,
+        "reasoning_tokens": 0,
+        "seconds": 0.219
+      }
+    },
+    {
+      "case": "alias-sauce",
+      "family": "feedback",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-alias-sauce-0"
+        ],
+        "exact": false
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-alias-sauce-1"
+      ],
+      "guarded_picks": [
+        "h20-alias-sauce-1"
+      ],
+      "seconds": 0.234,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1257,
+        "completion_tokens": 49,
+        "reasoning_tokens": 0,
+        "seconds": 0.234
+      }
+    },
+    {
+      "case": "feedback-cover",
+      "family": "feedback",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": false,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-feedback-cover-0"
+        ],
+        "exact": true
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-feedback-cover-0",
+        "h20-feedback-cover-1"
+      ],
+      "guarded_picks": [
+        "h20-feedback-cover-0"
+      ],
+      "seconds": 0.421,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1401,
+        "completion_tokens": 92,
+        "reasoning_tokens": 0,
+        "seconds": 0.421
+      }
+    },
+    {
+      "case": "feedback-partial",
+      "family": "feedback",
+      "schema_valid": true,
+      "reasons_valid": true,
+      "raw_exact": true,
+      "guarded_exact": true,
+      "first_correct": true,
+      "engine": {
+        "picks": [
+          "h20-feedback-partial-0",
+          "h20-feedback-partial-1"
+        ],
+        "exact": true
+      },
+      "attempt_state": "completed",
+      "raw_picks": [
+        "h20-feedback-partial-0",
+        "h20-feedback-partial-1"
+      ],
+      "guarded_picks": [
+        "h20-feedback-partial-0",
+        "h20-feedback-partial-1"
+      ],
+      "seconds": 0.594,
+      "usage": {
+        "calls": 1,
+        "failed": 0,
+        "prompt_tokens": 1409,
+        "completion_tokens": 99,
+        "reasoning_tokens": 0,
+        "seconds": 0.594
+      }
+    }
+  ],
+  "summary": {
+    "cases": 20,
+    "schema_valid": 20,
+    "reason_valid": 20,
+    "raw_exact": 19,
+    "guarded_exact": 20,
+    "engine_exact": 8,
+    "incomplete_attempts": 0,
+    "median_model_roundtrip_seconds": 0.25,
+    "usage": {
+      "calls": 20,
+      "failed": 0,
+      "prompt_tokens": 25869,
+      "completion_tokens": 1149
+    },
+    "by_family": {
+      "coverage": {
+        "cases": 4,
+        "raw_exact": 4,
+        "guarded_exact": 4,
+        "engine_exact": 4
+      },
+      "diet": {
+        "cases": 4,
+        "raw_exact": 4,
+        "guarded_exact": 4,
+        "engine_exact": 0
+      },
+      "feedback": {
+        "cases": 4,
+        "raw_exact": 3,
+        "guarded_exact": 4,
+        "engine_exact": 2
+      },
+      "history": {
+        "cases": 2,
+        "raw_exact": 2,
+        "guarded_exact": 2,
+        "engine_exact": 0
+      },
+      "kind": {
+        "cases": 4,
+        "raw_exact": 4,
+        "guarded_exact": 4,
+        "engine_exact": 0
+      },
+      "price": {
+        "cases": 2,
+        "raw_exact": 2,
+        "guarded_exact": 2,
+        "engine_exact": 2
+      }
+    }
+  },
+  "fixture_canonical_sha256": "b116d8cdcb1153aa5b1b49094d782acf8acc4c8a37b4c3227c6227dc6c91c58d"
+}

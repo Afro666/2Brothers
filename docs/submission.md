@@ -8,7 +8,7 @@ path in this repo or a live URL. Checked against `main` on 2026-11-14. A line ma
 
 Copy each block as it is. Every sentence was checked on 2026-11-14 at about 21:50 UTC
 against the code on `main` and against GET calls on the live site, and the changed
-sentences again on 2026-11-15 at 00:59 UTC (#1969); the sources are under the blocks. Do not add these claims by hand, because they are not true:
+sentences again on 2026-11-15 at 00:59 UTC (#1969). The Nemotron evidence was updated on 15 November after the fresh selection holdout (#2000); the sources are under the blocks. Do not add these claims by hand, because they are not true:
 
 - "Context.dev reads supplier price pages." It does not. Context.dev reads the food recall
   list, one manufacturer page, a producer register and brand data. The price list of
@@ -67,11 +67,13 @@ Valio Aimo is the only real supplier; the other suppliers in the demo kitchen ar
 ```
 Model: NVIDIA Nemotron 3.5 Super VL (nemotron-3.5-super-vl) on Verda's shared inference endpoint. We did not train or fine-tune it.
 
-What it does: it is the Buyer. For each request, code searches the catalog and gets a live offer. Then one Nemotron call picks up to three products from that shortlist. On the live site that call takes about 0.3 seconds. Code does every tool step after that: a fresh offer for the picked products, the check against the guards, and the request for a person's approval. The same model also reads photos (a menu, a shelf, a delivery note, a supplier's price list) and picks the substitute in the offer from Valio's selling agent.
+What it does: it is the Buyer. For each request, code searches the catalog and gets a live offer. Then one Nemotron call picks up to three products from that shortlist. Our small recorded runs measured that model call at about 0.3 seconds; this excludes gateway, catalog and database time. Code does every tool step after that: a fresh offer for the picked products, the check against the guards, and the request for a person's approval. The same model also reads photos (a menu, a shelf, a delivery note, a supplier's price list) and picks the substitute in the offer from Valio's selling agent.
+
+Why this model: one hosted vision-language model serves semantic product selection, menu reading, shelf counting, delivery-note reading and the supplier-side substitute choice. It adds text/image interpretation to the deterministic purchasing engine; the plain parser remains an available fallback. We have not established superiority over the full parser in an end-to-end comparison.
 
 Why it matters: a chef writes a sentence, not product codes. A wrong model answer cannot become a wrong order, because the model sets no quantity, no price and no total, it has no approve tool, and a person approves every order. Each proposal the Buyer agent made has a panel "What Nemotron did" that shows the model call and the code steps. The card can also show a short explanation that Nemotron writes from the decision record; code checks it against the facts, and an explanation that fails the check is not shown.
 
-How we improved its outputs: we measured, then changed. On our development benchmark (30 synthetic requests, three repeats each, 90 replies) the pick was exactly the expected products in 27 of 90 replies at the start. With the live quote facts and the ranked prompt it was 54 of 90. With a code guard that keeps the model's first choice alone when confirmed stock covers the need, it is 69 of 90. This is a development set, not held-out evidence. The model replies in a strict JSON schema, and a reply outside the schema is refused. Thinking is off for the pick, with one call and no retry. The prompt ranks the rules in a fixed order (product kind, diet, arrival, confirmed stock, price). Code checks the reply after the model: a pick outside the shortlist is refused, and so is a reason with a number that is not in the data. If the model does not answer in time, a plain parser makes the proposal and the card says so.
+How we improved its outputs: we measured, then changed. On our development benchmark (30 synthetic requests, three repeats each, 90 replies) the pick was exactly the expected products in 27 of 90 replies at the start. With the live quote facts and the ranked prompt it was 54 of 90. With a code guard that keeps the model's first choice alone when confirmed stock covers the need, it is 69 of 90. This is a development set, not held-out evidence. A separate fresh 20-case synthetic shortlist holdout, frozen before its one-pass run on 15 November with no prompt tuning from the replies, scored 19/20 raw exact product sets and 20/20 using the existing guard on those same replies. Each case has three synthetic candidates in known policy families; this is not live-catalog, whole-Buyer or real-photo accuracy. Median model round trip was 0.25 s, not end-to-end latency. Real phone-photo evaluation remains pending. The model replies in a strict JSON schema, and a reply outside the schema is refused. Thinking is off for the pick, with one call and no retry. The prompt ranks the rules in a fixed order (product kind, diet, arrival, confirmed stock, price). Code checks the reply after the model: a pick outside the shortlist is refused, and so is a reason with a number that is not in the data. If the model does not answer in time, a plain parser makes the proposal and the card says so.
 ```
 
 **Best Use of MongoDB Atlas** (one sentence)
@@ -316,7 +318,7 @@ sets a quantity, a price or a total, and it has no approve tool.
    person made a proposal from the tile, and that proposal waits for approval like any
    other (`docs/demo.md` "Selling-agent beat").
 4. **Count: a shelf photo** (#373). The shelf reader is live on the Stock page ("Count
-   from a photo"): on a prepared test photo it filled five counts in about 2 s, and the
+   from a photo"): on the stored prepared test-photo run it filled five counts in 2.2 s, and the
    half hidden pack got "please count" and no number; a person saves
    (`gateway/stock_photo.py`, `agent/shelf_service.py`, `docs/demo.md` "Photo beat").
 5. **Receive: a delivery-note photo** (#1198; #1231, #1314). Nemotron reads the note into
@@ -423,6 +425,8 @@ tokens per request; the single pick took 1 call and 741 to 742 prompt tokens
 (`agent/README.md` "Live measurements, 14 November 2026", 3 requests per row). The
 "Buyer read context" part below measures that pick.
 
+These are two different experiments and token metrics. The video's almost-eight-times reduction is **completion tokens in the older loop**, 2,251 to 289 (about 7.8x). The deck's **prompt tokens per request** compare the loop with single pick, about 43,500 to 741-742 (about 58.6x), three live requests per row. Neither ratio is a universal cost or end-to-end latency improvement. The current slide 5 says 0.3 s for the **Buyer model call**, not the shelf read; the stored prepared shelf run took 2.2 s.
+
 **It learns from the kitchen, without fine-tuning.** We have only API access to Nemotron,
 so nothing is trained. The tool learns from the reasons people give when they change a
 plan proposal: *too much*, *too little*, *still in stock*, *menu changed*.
@@ -487,6 +491,33 @@ its claim validator omitted trusted pack/need numbers; the report retains that f
 On a separate live-quote milk snapshot, both prompts retained the confirmed-stock
 product in all three repeats; that snapshot had 51 L confirmed, not the older 698 L.
 The frozen stock cases also cover the saved 698 L scenario. No order was placed.
+
+### Fresh selection holdout (#2000, 15 November)
+
+The fixture and runner were committed before calls; production prompts and guards
+were unchanged. Twenty new synthetic requests each have three candidates in six
+known policy families. One attempt each, no failures/retries. Exact product sets:
+**19/20 raw**, **20/20 after the existing guard on the same replies**. All first
+preferences, schemas and production numeric-claim reason checks passed (20/20).
+The one raw miss added an unnecessary unknown-stock complement to confirmed-full
+orange juice; code removed it. Median model round trip was **0.250 s**, with 25,869
+prompt and 1,149 completion tokens across 20 calls. Nothing was proposed or ordered.
+
+The engine-offer-only comparator scored 8/20 here and 6/30 on the unchanged earlier
+development fixture, offline. It omits the full parser's semantic/diet/alias filters,
+so these numbers establish no model-versus-parser superiority. The two datasets,
+prompt versions and repeat counts differ: do not call 19/20 an improvement over
+27/90. See `agent/benchmarks/pick-holdout-20-v1.md`, the per-case JSON report, and the
+frozen `agent/fixtures/pick-holdout-20-v1.json` for hashes, settings and limitations.
+
+**Real-photo evidence is still missing.** Prepared images are not genuine phone
+photos. The stored shelf fixture has five COUNTED rows and an UNMATCHED Edam label.
+The jury reported duplicate butter in the video run; that different run is not the
+stored reply or an accuracy result. UNMATCHED means the label did not match the
+kitchen's list, not proof that occlusion alone caused the failure. The current
+pitch notes already say no match on the stock list. A person must review every
+suggested count. #2000 stays open until five to ten real photos with independently
+checked expected counts/text are evaluated once and the per-item errors reported.
 
 ## MongoDB Atlas
 

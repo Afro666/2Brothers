@@ -338,6 +338,16 @@ matches were 27/90 baseline, 54/90 enriched model alone, 69/90 with the determin
 full-coverage guard; tokens increased from 346 to 964 per call. This is development-set
 evidence, not a held-out generalization claim.
 
+A separate fresh one-pass 20-case selection holdout (#2000, 15 Nov) scored **19/20
+raw exact sets, 20/20 with the existing guard on the same replies**, with no prompt
+changes based on the replies. Three synthetic candidates per case, known policy
+families, no live catalog or end-to-end/vision claim. Median model round trip:
+0.250 s; 20 calls, 25,869 prompt and 1,149 completion tokens. The offer-sizing-only
+reference was 8/20, excluding the full parser's semantic filters. Full setup,
+limitations and the raw miss are in `benchmarks/pick-holdout-20-v1.md`; per-case
+results and hashes are in `benchmarks/pick-holdout-20-v1-report.json`. Real-phone-
+photo accuracy is pending; prepared demo images do not establish it.
+
 Set `NEMOTRON_BUYER_STRATEGY=loop` to retain the previous multi-turn implementation.
 The CLI tool agent still uses that audited loop. The legacy worker-mode tests set
 `strategy="loop"` explicitly; `test_single_pick.py` covers the new default, cache
