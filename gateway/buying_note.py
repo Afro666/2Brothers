@@ -42,8 +42,9 @@ def presentation_row(row: dict) -> dict:
     """Round note facts only; the worker and checker receive this same copy.
 
     A SHORT row's figures are derived from each other (#1767), so the line adds up as printed:
-    demand and the gap round up to the unit's step (a real gap is never 0), the buy is that
-    gap, and available is demand minus the gap. Each figure stays within one step of its source."""
+    demand and the gap round up to the unit's step (a real gap is never 0), and available
+    is demand minus the gap. The suggested buy retains the source recommendation, whose
+    daily rounding also drives the demand table; it may exceed the aggregate gap."""
     out = {k: row.get(k) for k in MODEL_FIELDS}
     step = {"PCS": "1", "ST": "1", "KG": "0.1", "L": "0.1"}.get(row.get("unit"))
 
@@ -55,7 +56,8 @@ def presentation_row(row: dict) -> dict:
         demand = rounded("demand", ROUND_CEILING)
         gap = min(rounded("shortage", ROUND_CEILING), demand)
         out.update(demand=_text(demand), available=_text(demand - gap), shortage=_text(gap),
-                   suggested_buy=_text(gap))
+                   suggested_buy=None if out["suggested_buy"] is None else
+                   _text(rounded("suggested_buy", ROUND_CEILING)))
     elif step is not None:
         for key in ("demand", "available", "shortage", "suggested_buy"):
             if out[key] is not None:

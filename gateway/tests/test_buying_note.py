@@ -117,13 +117,13 @@ def test_note_rounding_preserves_unknowns_kitchen_count_and_original_priority():
     ("KG", "6024.083", "229.5", "5794.583"), ("L", "1250", "1012.44", "237.56"), ("KG", "0.44", "0.4", "0.04"),
     ("BOX", "10.25", "4.125", "6.125"),
 ])
-def test_the_printed_figures_of_a_short_row_add_up(unit, demand, available, shortage):
+def test_the_printed_shortage_adds_up_and_buy_keeps_the_source_recommendation(unit, demand, available, shortage):
     """#1767: "Demand 6024, available 230, buy 5795" was each figure rounded on its own."""
     whole = str(Decimal(shortage).to_integral_value(rounding="ROUND_CEILING"))
     row = pick([{**ROWS[0], "unit": unit, "demand": demand, "available": available,
                  "shortage": shortage, "suggested_buy": whole}])[0]
-    assert Decimal(row["demand"]) - Decimal(row["available"]) == Decimal(row["suggested_buy"])
-    assert row["shortage"] == row["suggested_buy"] and Decimal(row["suggested_buy"]) > 0
+    assert Decimal(row["demand"]) - Decimal(row["available"]) == Decimal(row["shortage"])
+    assert row["suggested_buy"] == whole and Decimal(row["suggested_buy"]) >= Decimal(row["shortage"])
     assert Decimal(row["available"]) >= 0
     assert abs(Decimal(row["demand"]) - Decimal(demand)) < 1 and abs(Decimal(row["available"]) - Decimal(available)) < 1
 
@@ -142,9 +142,23 @@ def test_one_product_on_many_days_is_one_row_with_the_days_summed():
     assert [r["row"] for r in rows] == [0, 1, 2]
     rye = rows[0]
     assert rye["date"] == "2026-11-16" and rye["risk"] == "SHORT" and rye["kitchens"] == 3
-    assert (rye["demand"], rye["available"], rye["shortage"], rye["suggested_buy"]) == ("703", "281", "422", "422")
+    assert (rye["demand"], rye["available"], rye["shortage"], rye["suggested_buy"]) == ("703", "281", "422", "427")
     assert rows[2]["demand"] == "761" and rows[2]["kitchens"] == 3 and rows[2]["date"] == "2026-11-17"
     assert days == before and "by_kitchen" not in json.dumps(rows)
+
+
+@pytest.mark.parametrize("lang", ["en", "fi"])
+def test_note_and_table_share_the_rounded_buy_without_replacing_it_with_the_gap(lang):
+    source = {**ROWS[1], "demand": "1250", "available": "1012.44", "shortage": "237.56",
+              "suggested_buy": "238", "unit": "L"}
+    rows = pick([source])
+    assert rows[0]['shortage'] == '237.6' and rows[0]['suggested_buy'] == source['suggested_buy']
+    gap = '237,6' if lang == 'fi' else '237.6'
+    text = (f"Vaje {gap} L, ostoehdotus 238 L, pyöristetty päivittäin."
+            if lang == 'fi' else f"Shortage {gap} L; suggested buy 238 L, rounded up per day.")
+    answer = {'lines': [{'row': 0, 'product_id': source['product_id'], 'text': text,
+                         'numbers': [gap, '238']}]}
+    assert check(answer, rows, lang)[1] is None
 
 
 def test_a_product_with_short_and_unknown_days_is_one_short_row_of_its_short_days():
