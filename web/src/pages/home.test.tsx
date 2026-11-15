@@ -99,7 +99,7 @@ describe("HomePage", () => {
     api.listApprovals = async () => [{ ...approval, totalInclVat: 2634.13, options }];
     renderApp(`/?now=${DEMO_NOW}`, api);
 
-    expect(await screen.findByText("€2,634.13 in all")).toBeInTheDocument();
+    expect(await screen.findByText("€2,634.13 incl VAT")).toBeInTheDocument();
   });
 
   it.each<keyof Api>(["listAudit", "getDrift"])("marks only the tile fed by %s as MongoDB Atlas", async (method) => {
