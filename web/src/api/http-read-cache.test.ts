@@ -85,3 +85,14 @@ it("uses the same effective headers for Headers, tuples and plain objects", asyn
   expect(new Headers(init.headers).get("X-User")).toBe("chef");
   d.answer(0, {}); await Promise.all([first, second, third]);
 });
+
+it("gives each subscriber its own JSON object even when the network call is shared", async () => {
+  const d = deferredFetch();
+  const first = gatewayRequest("/api", "/read"), second = gatewayRequest("/api", "/read");
+  expect(d.fetch).toHaveBeenCalledTimes(1);
+  d.answer(0, { rows: [{ name: "original" }] });
+  const a = await first as { rows: { name: string }[] };
+  const b = await second as typeof a;
+  a.rows[0].name = "changed";
+  expect(b.rows[0].name).toBe("original");
+});

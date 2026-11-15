@@ -89,13 +89,14 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
     const headers = [...new Headers(requestHeaders(init?.headers)).entries()].sort(([a], [b]) => a.localeCompare(b));
     const key = JSON.stringify([baseUrl, path, headers]);
     const existing = pendingReads.get(key);
-    if (existing) return existing;
+    if (existing) return existing.then((value) => structuredClone(value));
     if (pendingReads.size >= 64) return send(baseUrl, path, init);
     const request = send(baseUrl, path, init);
     pendingReads.set(key, request);
     const forget = () => { if (pendingReads.get(key) === request) pendingReads.delete(key); };
     void request.then(forget, forget);
-    return request;
+    // Share the network work, not mutable JSON owned by independent callers.
+    return request.then((value) => structuredClone(value));
   }
   beforeWrite.forEach((drop) => drop());
   try {
