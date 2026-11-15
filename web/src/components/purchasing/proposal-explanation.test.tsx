@@ -6,7 +6,7 @@ import { createMockApi } from "@/api/mock";
 import { ApiProvider } from "@/api";
 import type { Api, ProposalExplanation } from "@/api/types";
 import { ApprovalCard } from "@/components/purchasing/approval-card";
-import { EXPLANATION_POLL_MS } from "@/lib/proposal-explanation";
+import { EXPLANATION_POLL_LIMIT, EXPLANATION_POLL_MS } from "@/lib/proposal-explanation";
 import { approval, orders } from "@/mocks/milk-case";
 
 const confirmedOrder = {
@@ -62,13 +62,13 @@ describe("the explanation at the top of the approval card (#1173)", () => {
     });
     const before = container.innerHTML;
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(EXPLANATION_POLL_MS * 6);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);   // long after the backoff ends (#1399)
     });
     expect(explanationText()).toBeNull();
     expect(screen.queryByText("Short explanation")).toBeNull();
     expect(container.innerHTML).toBe(before);
-    // The five empty answers changed nothing, and asking stopped.
-    expect(api.getProposalExplanation).toHaveBeenCalledTimes(5);
+    // The empty answers changed nothing, and asking stopped.
+    expect(api.getProposalExplanation).toHaveBeenCalledTimes(EXPLANATION_POLL_LIMIT);
     expect((api.getProposalExplanation as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([approval.id, "en"]);
   });
 
