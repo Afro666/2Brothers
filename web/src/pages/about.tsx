@@ -29,7 +29,7 @@ export const STEPS = [
 export const RULES = [
   {
     title: "A person approves every order",
-    text: "The agent proposes. It never approves, however small the order is. Auto-approve, if a kitchen switches it on later, applies that kitchen's own limit; the agent still has no way to approve.",
+    text: "The agent proposes. It never approves, however small the order is.",
   },
   {
     title: "Unknown is never treated as zero or safe",

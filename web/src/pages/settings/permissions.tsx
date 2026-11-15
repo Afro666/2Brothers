@@ -36,15 +36,16 @@ export const PERMISSION_ACTIONS = [
   "Cancel an order",
   "Change a quantity",
   "Act for another kitchen",
-  "Routine orders up to {limit} EUR: approved by your auto-approve rule, never by the Buyer",
+  "Approve routine orders up to {limit} EUR",
 ] as const;
+
+/** The gateway's auto-approve row (gateway/permissions.py) sits in `alone`; the Buyer never approves. */
+const AUTO_APPROVE_ROW = /^Approve routine orders up to (.+) EUR$/;
 
 /** A gateway row through the dictionary; a row not listed above is shown as sent (t() does that). */
 export function permissionText(action: string, t: (text: string, vars?: TranslationVariables) => string) {
-  // #1844: this row sits under "The Buyer does alone" once auto-approve is on, yet the Buyer never
-  // approves: the gateway applies the limit a person set. The row says so.
-  const limit = /^Approve routine orders up to (.+) EUR$/.exec(action);
-  if (limit) return t("Routine orders up to {limit} EUR: approved by your auto-approve rule, never by the Buyer", { limit: limit[1] });
+  const limit = AUTO_APPROVE_ROW.exec(action);
+  if (limit) return t("Approve routine orders up to {limit} EUR", { limit: limit[1] });
   if (action === "Approve with the credential that proposed") return t("Approve with the same token or session that proposed it");
   // The catalog's field label uses the same text, so both share one Finnish entry ("Hae tuoteluettelosta").
   if (action === "Search the catalog") return t("Search the catalog");
@@ -104,7 +105,10 @@ export function PermissionsSection() {
               </CardHeader>
               <CardContent>
                 <ul aria-labelledby={`permissions-${key}`} className="divide-y">
-                  {permissions.data[key].map((row) => (
+                  {/* #1844: auto-approve is not something the Buyer does: the card below says who approves. */}
+                  {permissions.data[key]
+                    .filter((row) => !(key === "alone" && AUTO_APPROVE_ROW.test(row.action)))
+                    .map((row) => (
                     <li key={row.action}>
                       <Link
                         to="/audit"
@@ -118,7 +122,7 @@ export function PermissionsSection() {
                         </span>
                       </Link>
                     </li>
-                  ))}
+                    ))}
                 </ul>
               </CardContent>
             </Card>
@@ -180,7 +184,7 @@ export function PermissionsSection() {
                   }),
                 },
                 {
-                  term: t("Your approve and reject decisions"),
+                  term: t("Your decisions to approve or reject"),
                   value: t("{value} of {needed}", {
                     value: formatNumber(learning.data.decisions),
                     needed: formatNumber(learning.data.decisionsNeeded),

@@ -15,7 +15,7 @@ describe("Permissions settings", () => {
 
   it.each([
     ["Search the catalog", "Hae tuoteluettelosta"],
-    ["Approve routine orders up to 250 EUR", "Rutiinitilaukset 250 euroon asti: hyväksyy oma automaattisen hyväksynnän sääntösi, ei koskaan Ostaja"],
+    ["Approve routine orders up to 250 EUR", "Hyväksyy rutiinitilaukset 250 euroon asti"],
     ["Approve with the credential that proposed", "Hyväksyä samalla tunnisteella tai istunnolla, jolla ehdotus tehtiin"],
     ["A row the gateway adds later", "A row the gateway adds later"],
   ])("reads %s through the dictionary", (action, finnish) => {
@@ -89,7 +89,7 @@ describe("Permissions settings", () => {
     expect(screen.getByText(/unlocks after the learning period and is not available yet/)).toBeInTheDocument();
     const progress = await screen.findByLabelText("Learning progress");
     expect(progress).toHaveTextContent("Weeks since your first decision1 of 4");
-    expect(progress).toHaveTextContent("Your approve and reject decisions6 of 20");
+    expect(progress).toHaveTextContent("Your decisions to approve or reject6 of 20");
     expect(progress).toHaveTextContent("Approved orders you edited before approving33 % (needs 10 % or less)");
   });
 
@@ -136,9 +136,8 @@ describe("Permissions settings", () => {
 
     const alone = await screen.findByRole("list", { name: "Ostaja tekee yksin" });
     expect(within(alone).getByText("Hae tuoteluettelosta")).toBeInTheDocument();
-    expect(
-      within(alone).getByText("Rutiinitilaukset 250 euroon asti: hyväksyy oma automaattisen hyväksynnän sääntösi, ei koskaan Ostaja"),
-    ).toBeInTheDocument();
+    // #1844: the Buyer never approves, so the gateway's auto-approve row is not listed as the Buyer's.
+    expect(within(alone).queryByText("Hyväksyy rutiinitilaukset 250 euroon asti")).not.toBeInTheDocument();
     expect(screen.getByText("A row the gateway adds later")).toBeInTheDocument();
     localStorage.clear();
     updateLanguage("en", false);
