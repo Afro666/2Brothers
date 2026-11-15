@@ -75,10 +75,10 @@ export function ModelUsageCard() {
         )}
         {usage.status === "ready" && usage.data.runs > 0 && (
           <p>
-            {t("{runs} Buyer runs in all: {finished} ended with a proposal, {open} did not (an error, a time limit, or still running).", {
+            {/* #1998: no "N did not": it read as a failure rate, and the count mixes errors, time limits and runs still going. */}
+            {t("{runs} Buyer runs in all. {finished} ended with a proposal for a person to approve.", {
               runs: formatNumber(usage.data.runs),
               finished: formatNumber(usage.data.finishedRuns),
-              open: formatNumber(Math.max(0, usage.data.runs - usage.data.finishedRuns)),
             })}
           </p>
         )}

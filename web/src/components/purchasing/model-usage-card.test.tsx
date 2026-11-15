@@ -64,7 +64,7 @@ describe("the model usage card on the About page", () => {
     const view = await card();
     expect(
       await view.findByText(
-        "85 Buyer runs in all: 63 ended with a proposal, 22 did not (an error, a time limit, or still running).",
+        "85 Buyer runs in all. 63 ended with a proposal for a person to approve.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -82,10 +82,11 @@ describe("the model usage card on the About page", () => {
     const view = await card();
     expect(
       await view.findByText(
-        "9 Buyer runs in all: 7 ended with a proposal, 2 did not (an error, a time limit, or still running).",
+        "9 Buyer runs in all. 7 ended with a proposal for a person to approve.",
       ),
     ).toBeInTheDocument();
     expect(view.queryByText(/carry no count/)).not.toBeInTheDocument();
+    expect(view.queryByText(/did not/)).not.toBeInTheDocument();
   });
 
   it("shows the mock's sample numbers by default", async () => {
