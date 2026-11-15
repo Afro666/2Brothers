@@ -40,7 +40,7 @@ export const ATLAS_SERIES_NAMES: Record<string, string> = {
   orders_history: "order history",
 };
 
-/** The day the store's search ranking changed (#1646 and after): ISO dates compare as text. */
+/** The day the store's search ranking changed, in the evening (#1646 and after): ISO dates compare as text. */
 export const RANKING_CHANGED_ON = "2026-11-14";
 
 /** True while the checked-in comparison is from before that change, so the page says so (#1953). */
@@ -180,8 +180,9 @@ export function AtlasCard() {
           </p>
           {measuredBeforeRankingChange(comparison.measured_on) && (
             <p className="text-muted-foreground">
-              {t("Measured on the server on {date}, before the search ranking was changed later that day: the Catalog can show other results now.", {
+              {t("Measured on the server on {date}, before the search ranking was changed on the evening of {changed}: the Catalog can show other results now.", {
                 date: comparison.measured_on,
+                changed: RANKING_CHANGED_ON,
               })}
             </p>
           )}

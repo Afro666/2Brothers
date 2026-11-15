@@ -63,7 +63,11 @@ describe("the Atlas card on the About page", () => {
     const fold = table.closest("details")!;
     expect(fold).not.toHaveAttribute("open");
     expect(within(fold).getByText("Show the 10 searches").tagName).toBe("SUMMARY");
-    expect(view.getByText(/^Measured on the server on 2026-11-14, before the search ranking was changed/)).toBeInTheDocument();
+    expect(
+      view.getByText(
+        "Measured on the server on 2026-11-14, before the search ranking was changed on the evening of 2026-11-14: the Catalog can show other results now.",
+      ),
+    ).toBeInTheDocument();
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(10);
     expect(rows[0]).toHaveTextContent("lactose-free milk");

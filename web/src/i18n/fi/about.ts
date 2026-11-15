@@ -74,7 +74,7 @@ export default {
   "{vectors} of {products} products have a vector from MongoDB's own embedding API.": "{vectors} tuotteella {products} tuotteesta on vektori MongoDB:n omasta upotusrajapinnasta.",
   "Product vectors come from MongoDB's own embedding API; how many products have one is unknown right now.": "Tuotevektorit tulevat MongoDB:n omasta upotusrajapinnasta; juuri nyt ei tiedetä, kuinka monella tuotteella sellainen on.",
   "Hybrid search joins Atlas Search (words) and Atlas Vector Search (meaning) with $rankFusion.": "Hybridihaku yhdistää Atlas Searchin (sanat) ja Atlas Vector Searchin (merkitys) $rankFusion-vaiheella.",
-  "Measured on the server on {date}, before the search ranking was changed later that day: the Catalog can show other results now.": "Mitattu palvelimella {date}, ennen kuin haun järjestystä muutettiin myöhemmin samana päivänä: Tuoteluettelo voi nyt näyttää muita tuloksia.",
+  "Measured on the server on {date}, before the search ranking was changed on the evening of {changed}: the Catalog can show other results now.": "Mitattu palvelimella {date}, ennen kuin haun järjestystä muutettiin {changed} illalla: Tuoteluettelo voi nyt näyttää muita tuloksia.",
   "Show the {count} searches": "Näytä {count} hakua (haut ja tulokset englanniksi, kuten ne mitattiin)",
   "The Buyer searches by words on stage; the Catalog page can search by meaning": "Ostaja hakee lavalla sanoilla; Tuoteluettelo-sivu osaa hakea merkityksellä",
   "Hybrid was better on {better} searches, equal on {equal} and slightly worse on {worse}.": "Hybridihaku oli parempi {better} haussa, yhtä hyvä {equal} haussa ja hieman huonompi {worse} haussa.",
