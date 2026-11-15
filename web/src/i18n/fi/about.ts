@@ -48,7 +48,7 @@ export default {
   "Switch sides with “Your role” in the menu.": "Vaihda puolta valikon ”Roolisi”-kohdasta.",
   "Trust rules": "Turvasäännöt",
   "A person approves every order": "Ihminen hyväksyy jokaisen tilauksen",
-  "The agent proposes. It never approves, however small the order is.": "Agentti ehdottaa. Se ei koskaan hyväksy, ei pientäkään tilausta.",
+  "The agent proposes. It never approves, however small the order is. Auto-approve, if a kitchen switches it on later, applies that kitchen's own limit; the agent still has no way to approve.": "Agentti ehdottaa. Se ei koskaan hyväksy, ei pientäkään tilausta. Jos keittiö myöhemmin kytkee automaattisen hyväksynnän päälle, se noudattaa keittiön omaa rajaa; agentilla ei silti ole keinoa hyväksyä.",
   "Unknown is never treated as zero or safe": "Tuntematonta ei pidetä nollana tai turvallisena",
   "Stock that was not measured, a missing price or missing allergen data is shown as “unknown”, and a person has to check it.": "Mittaamaton varasto, puuttuva hinta tai allergeenitiedot näkyvät tuntemattomina, ja ihmisen on tarkistettava ne.",
   "Everything is audited": "Kaikki tallennetaan lokiin",

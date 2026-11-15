@@ -15,7 +15,8 @@ describe("Permissions settings", () => {
 
   it.each([
     ["Search the catalog", "Hae tuoteluettelosta"],
-    ["Approve routine orders up to 250 EUR", "Hyväksyy rutiinitilaukset 250 euroon asti"],
+    ["Approve routine orders up to 250 EUR", "Rutiinitilaukset 250 euroon asti: hyväksyy oma automaattisen hyväksynnän sääntösi, ei koskaan Ostaja"],
+    ["Approve with the credential that proposed", "Hyväksyä samalla tunnisteella tai istunnolla, jolla ehdotus tehtiin"],
     ["A row the gateway adds later", "A row the gateway adds later"],
   ])("reads %s through the dictionary", (action, finnish) => {
     expect(permissionText(action, (text: string, vars?: Record<string, string | number>) => translate("fi", text, vars))).toBe(
@@ -82,14 +83,14 @@ describe("Permissions settings", () => {
 
     expect(
       screen.getByText(
-        "Let the Buyer learn your kitchen first. After about 4 weeks of your approvals and corrections it can approve routine orders under your limit. Substitutes, unknown stock, allergens and anything over budget always come to you.",
+        "Let the Buyer learn your kitchen first. After about 4 weeks of your approvals and corrections, an approver can switch this on: the gateway then approves routine orders under the limit that person sets. The Buyer itself never approves. Substitutes, unknown stock, allergens and anything over budget always come to you.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/unlocks after the learning period and is not available yet/)).toBeInTheDocument();
     const progress = await screen.findByLabelText("Learning progress");
-    expect(progress).toHaveTextContent("Weeks1 of 4");
-    expect(progress).toHaveTextContent("Decisions6 of 20");
-    expect(progress).toHaveTextContent("Edit rate33 % (needs 10 % or less)");
+    expect(progress).toHaveTextContent("Weeks since your first decision1 of 4");
+    expect(progress).toHaveTextContent("Your approve and reject decisions6 of 20");
+    expect(progress).toHaveTextContent("Approved orders you edited before approving33 % (needs 10 % or less)");
   });
 
   it("stays off and disabled past the learning thresholds, and shows an unknown edit rate as unknown", async () => {
@@ -104,7 +105,7 @@ describe("Permissions settings", () => {
     });
     renderApp("/settings/permissions", api);
 
-    expect(await screen.findByLabelText("Learning progress")).toHaveTextContent("Edit rateunknown");
+    expect(await screen.findByLabelText("Learning progress")).toHaveTextContent("Approved orders you edited before approvingunknown");
     const toggle = screen.getByRole("switch", { name: "Auto-approve small routine orders" });
     expect(toggle).toBeDisabled();
     expect(toggle).not.toBeChecked();
@@ -135,7 +136,9 @@ describe("Permissions settings", () => {
 
     const alone = await screen.findByRole("list", { name: "Ostaja tekee yksin" });
     expect(within(alone).getByText("Hae tuoteluettelosta")).toBeInTheDocument();
-    expect(within(alone).getByText("Hyväksyy rutiinitilaukset 250 euroon asti")).toBeInTheDocument();
+    expect(
+      within(alone).getByText("Rutiinitilaukset 250 euroon asti: hyväksyy oma automaattisen hyväksynnän sääntösi, ei koskaan Ostaja"),
+    ).toBeInTheDocument();
     expect(screen.getByText("A row the gateway adds later")).toBeInTheDocument();
     localStorage.clear();
     updateLanguage("en", false);
