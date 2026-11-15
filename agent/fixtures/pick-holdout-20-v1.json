@@ -1,0 +1,1988 @@
+{
+  "version": 1,
+  "label": "fresh-20 one-pass synthetic selection holdout for #2000",
+  "authored_on": "2026-11-15",
+  "description": "Authored after the production prompt was fixed; requests and expected product sets frozen before live calls. Same policy families, unseen combinations/numbers/names. No live catalog, real photos, whole-Buyer/end-to-end claim, or generalization estimate from a representative sample.",
+  "cases": [
+    {
+      "id": "price-oil",
+      "family": "price",
+      "request": "11 L rapeseed oil for Monday 23 November.",
+      "need": {
+        "quantity": "11",
+        "unit": "L",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-price-oil-0",
+          "name": "Rapeseed oil bottle",
+          "names": {
+            "en": "Rapeseed oil bottle"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-price-oil-1",
+          "name": "Rapeseed oil catering tin",
+          "names": {
+            "en": "Rapeseed oil catering tin"
+          },
+          "net_content": {
+            "value": 10.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-price-oil-2",
+          "name": "Rapeseed oil jug",
+          "names": {
+            "en": "Rapeseed oil jug"
+          },
+          "net_content": {
+            "value": 5.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-price-oil-0",
+          "size": "1",
+          "price": "3.4",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-price-oil-1",
+          "size": "10",
+          "price": "27",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-price-oil-2",
+          "size": "5",
+          "price": "15",
+          "stock": "100",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-price-oil-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-price-oil-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-price-oil-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-price-oil-0": 0,
+        "h20-price-oil-1": 0,
+        "h20-price-oil-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-price-oil-1",
+      "expected_includes": [
+        "h20-price-oil-1"
+      ]
+    },
+    {
+      "id": "price-rice",
+      "family": "price",
+      "request": "Maanantaiksi 23.11. tarvitsen 47 kg pitkäjyväistä riisiä.",
+      "need": {
+        "quantity": "47",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-price-rice-0",
+          "name": "Long-grain rice small bag",
+          "names": {
+            "en": "Long-grain rice small bag"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-price-rice-1",
+          "name": "Long-grain rice sack",
+          "names": {
+            "en": "Long-grain rice sack"
+          },
+          "net_content": {
+            "value": 20.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-price-rice-2",
+          "name": "Long-grain rice medium bag",
+          "names": {
+            "en": "Long-grain rice medium bag"
+          },
+          "net_content": {
+            "value": 5.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-price-rice-0",
+          "size": "1",
+          "price": "2.2",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-price-rice-1",
+          "size": "20",
+          "price": "50",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-price-rice-2",
+          "size": "5",
+          "price": "9",
+          "stock": "100",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-price-rice-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-price-rice-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-price-rice-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-price-rice-0": 0,
+        "h20-price-rice-1": 0,
+        "h20-price-rice-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-price-rice-2",
+      "expected_includes": [
+        "h20-price-rice-2"
+      ]
+    },
+    {
+      "id": "history-tea",
+      "family": "history",
+      "request": "Restock 13 kg plain black tea for Monday 23 November.",
+      "need": {
+        "quantity": "13",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-history-tea-0",
+          "name": "Black tea kitchen pack",
+          "names": {
+            "en": "Black tea kitchen pack"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-history-tea-1",
+          "name": "Black tea catering pack",
+          "names": {
+            "en": "Black tea catering pack"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-history-tea-2",
+          "name": "Black tea service pack",
+          "names": {
+            "en": "Black tea service pack"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-history-tea-0",
+          "size": "1",
+          "price": "12",
+          "stock": "50",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-history-tea-1",
+          "size": "1",
+          "price": "12",
+          "stock": "50",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-history-tea-2",
+          "size": "1",
+          "price": "12",
+          "stock": "50",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-history-tea-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-history-tea-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-history-tea-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-history-tea-0": 1,
+        "h20-history-tea-1": 3,
+        "h20-history-tea-2": 11
+      },
+      "declined_products": [],
+      "expected_first": "h20-history-tea-2",
+      "expected_includes": [
+        "h20-history-tea-2"
+      ]
+    },
+    {
+      "id": "history-oats",
+      "family": "history",
+      "request": "29 kg rolled oats for Monday 23 November, please.",
+      "need": {
+        "quantity": "29",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-history-oats-0",
+          "name": "Rolled oats large flakes A",
+          "names": {
+            "en": "Rolled oats large flakes A"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-history-oats-1",
+          "name": "Rolled oats large flakes B",
+          "names": {
+            "en": "Rolled oats large flakes B"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-history-oats-2",
+          "name": "Rolled oats large flakes C",
+          "names": {
+            "en": "Rolled oats large flakes C"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-history-oats-0",
+          "size": "1",
+          "price": "2",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-history-oats-1",
+          "size": "1",
+          "price": "2",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-history-oats-2",
+          "size": "1",
+          "price": "2",
+          "stock": "100",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-history-oats-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-history-oats-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-history-oats-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-history-oats-0": 0,
+        "h20-history-oats-1": 8,
+        "h20-history-oats-2": 2
+      },
+      "declined_products": [],
+      "expected_first": "h20-history-oats-1",
+      "expected_includes": [
+        "h20-history-oats-1"
+      ]
+    },
+    {
+      "id": "kind-carrot",
+      "family": "kind",
+      "request": "Need 17 kg fresh whole carrots for Monday 23 November, not potatoes or carrot juice.",
+      "need": {
+        "quantity": "17",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-kind-carrot-0",
+          "name": "Potatoes washed",
+          "names": {
+            "en": "Potatoes washed"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-kind-carrot-1",
+          "name": "Whole fresh carrots washed",
+          "names": {
+            "en": "Whole fresh carrots washed"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-kind-carrot-2",
+          "name": "Carrot juice concentrate",
+          "names": {
+            "en": "Carrot juice concentrate"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-kind-carrot-0",
+          "size": "1",
+          "price": "0.6",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-kind-carrot-1",
+          "size": "1",
+          "price": "1.8",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-kind-carrot-2",
+          "size": "1",
+          "price": "0.5",
+          "stock": "100",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-kind-carrot-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-kind-carrot-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-kind-carrot-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-kind-carrot-0": 0,
+        "h20-kind-carrot-1": 0,
+        "h20-kind-carrot-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-kind-carrot-1",
+      "expected_includes": [
+        "h20-kind-carrot-1"
+      ]
+    },
+    {
+      "id": "kind-bread",
+      "family": "kind",
+      "request": "Order 23 kg sliced rye bread for Monday 23 November; breadcrumbs are not a replacement.",
+      "need": {
+        "quantity": "23",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-kind-bread-0",
+          "name": "Rye breadcrumbs",
+          "names": {
+            "en": "Rye breadcrumbs"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-kind-bread-1",
+          "name": "Sliced rye bread",
+          "names": {
+            "en": "Sliced rye bread"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-kind-bread-2",
+          "name": "Breaded onion rings",
+          "names": {
+            "en": "Breaded onion rings"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-kind-bread-0",
+          "size": "1",
+          "price": "1",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-kind-bread-1",
+          "size": "1",
+          "price": "3",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-kind-bread-2",
+          "size": "1",
+          "price": "0.9",
+          "stock": "100",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-kind-bread-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-kind-bread-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-kind-bread-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-kind-bread-0": 0,
+        "h20-kind-bread-1": 0,
+        "h20-kind-bread-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-kind-bread-1",
+      "expected_includes": [
+        "h20-kind-bread-1"
+      ]
+    },
+    {
+      "id": "kind-salmon",
+      "family": "kind",
+      "request": "Need 9 kg raw salmon fillet for Monday 23 November, not smoked salmon or salmon cubes.",
+      "need": {
+        "quantity": "9",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-kind-salmon-0",
+          "name": "Cold smoked salmon slices",
+          "names": {
+            "en": "Cold smoked salmon slices"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-kind-salmon-1",
+          "name": "Salmon cubes",
+          "names": {
+            "en": "Salmon cubes"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-kind-salmon-2",
+          "name": "Raw salmon fillet",
+          "names": {
+            "en": "Raw salmon fillet"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-kind-salmon-0",
+          "size": "1",
+          "price": "6",
+          "stock": "40",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-kind-salmon-1",
+          "size": "1",
+          "price": "5",
+          "stock": "40",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-kind-salmon-2",
+          "size": "1",
+          "price": "19",
+          "stock": "40",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-kind-salmon-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-kind-salmon-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-kind-salmon-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-kind-salmon-0": 0,
+        "h20-kind-salmon-1": 0,
+        "h20-kind-salmon-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-kind-salmon-2",
+      "expected_includes": [
+        "h20-kind-salmon-2"
+      ]
+    },
+    {
+      "id": "kind-almond",
+      "family": "kind",
+      "request": "Maanantaiksi 23.11. 31 L mantelijuomaa, ei kaurajuomaa eikä lehmänmaitoa.",
+      "need": {
+        "quantity": "31",
+        "unit": "L",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-kind-almond-0",
+          "name": "Oat drink",
+          "names": {
+            "en": "Oat drink"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-kind-almond-1",
+          "name": "Cow milk",
+          "names": {
+            "en": "Cow milk"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-kind-almond-2",
+          "name": "Almond drink",
+          "names": {
+            "en": "Almond drink"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-kind-almond-0",
+          "size": "1",
+          "price": "1.1",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-kind-almond-1",
+          "size": "1",
+          "price": "0.8",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-kind-almond-2",
+          "size": "1",
+          "price": "2.2",
+          "stock": "100",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-kind-almond-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-kind-almond-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-kind-almond-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-kind-almond-0": 0,
+        "h20-kind-almond-1": 0,
+        "h20-kind-almond-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-kind-almond-2",
+      "expected_includes": [
+        "h20-kind-almond-2"
+      ]
+    },
+    {
+      "id": "diet-milk",
+      "family": "diet",
+      "request": "83 L lactose-free milk for Monday 23 November.",
+      "need": {
+        "quantity": "83",
+        "unit": "L",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-diet-milk-0",
+          "name": "Northfield milk",
+          "names": {
+            "en": "Northfield milk"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-diet-milk-1",
+          "name": "Lakeland milk",
+          "names": {
+            "en": "Lakeland milk"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-diet-milk-2",
+          "name": "Farmhouse milk",
+          "names": {
+            "en": "Farmhouse milk"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-diet-milk-0",
+          "size": "1",
+          "price": "0.8",
+          "stock": "200",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-diet-milk-1",
+          "size": "1",
+          "price": "0.7",
+          "stock": "200",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-diet-milk-2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "200",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-diet-milk-0": {
+          "lactose_free": false,
+          "gluten_free": null
+        },
+        "h20-diet-milk-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-diet-milk-2": {
+          "lactose_free": true,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-diet-milk-0": 0,
+        "h20-diet-milk-1": 0,
+        "h20-diet-milk-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-diet-milk-2",
+      "expected_includes": [
+        "h20-diet-milk-2"
+      ]
+    },
+    {
+      "id": "diet-pasta",
+      "family": "diet",
+      "request": "21 kg gluten-free penne for Monday 23 November.",
+      "need": {
+        "quantity": "21",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-diet-pasta-0",
+          "name": "Roma penne",
+          "names": {
+            "en": "Roma penne"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-diet-pasta-1",
+          "name": "Napoli penne",
+          "names": {
+            "en": "Napoli penne"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-diet-pasta-2",
+          "name": "Siena penne",
+          "names": {
+            "en": "Siena penne"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-diet-pasta-0",
+          "size": "1",
+          "price": "1",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-diet-pasta-1",
+          "size": "1",
+          "price": "0.9",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-diet-pasta-2",
+          "size": "1",
+          "price": "3",
+          "stock": "100",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-diet-pasta-0": {
+          "lactose_free": null,
+          "gluten_free": false
+        },
+        "h20-diet-pasta-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-diet-pasta-2": {
+          "lactose_free": null,
+          "gluten_free": true
+        }
+      },
+      "order_counts": {
+        "h20-diet-pasta-0": 0,
+        "h20-diet-pasta-1": 0,
+        "h20-diet-pasta-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-diet-pasta-2",
+      "expected_includes": [
+        "h20-diet-pasta-2"
+      ]
+    },
+    {
+      "id": "diet-yoghurt",
+      "family": "diet",
+      "request": "Maanantaiksi 23.11. tarvitsen 19 kg laktoositonta maustamatonta jogurttia.",
+      "need": {
+        "quantity": "19",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-diet-yoghurt-0",
+          "name": "Lakeside plain yoghurt",
+          "names": {
+            "en": "Lakeside plain yoghurt"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-diet-yoghurt-1",
+          "name": "Valley plain yoghurt",
+          "names": {
+            "en": "Valley plain yoghurt"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-diet-yoghurt-2",
+          "name": "Meadow plain yoghurt",
+          "names": {
+            "en": "Meadow plain yoghurt"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-diet-yoghurt-0",
+          "size": "1",
+          "price": "2.8",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-diet-yoghurt-1",
+          "size": "1",
+          "price": "1.1",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-diet-yoghurt-2",
+          "size": "1",
+          "price": "1",
+          "stock": "100",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-diet-yoghurt-0": {
+          "lactose_free": true,
+          "gluten_free": null
+        },
+        "h20-diet-yoghurt-1": {
+          "lactose_free": false,
+          "gluten_free": null
+        },
+        "h20-diet-yoghurt-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-diet-yoghurt-0": 0,
+        "h20-diet-yoghurt-1": 0,
+        "h20-diet-yoghurt-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-diet-yoghurt-0",
+      "expected_includes": [
+        "h20-diet-yoghurt-0"
+      ]
+    },
+    {
+      "id": "diet-bread",
+      "family": "diet",
+      "request": "11 kg gluten-free sandwich bread for Monday 23 November.",
+      "need": {
+        "quantity": "11",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-diet-bread-0",
+          "name": "Baker Street sandwich bread",
+          "names": {
+            "en": "Baker Street sandwich bread"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-diet-bread-1",
+          "name": "Harvest sandwich bread",
+          "names": {
+            "en": "Harvest sandwich bread"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-diet-bread-2",
+          "name": "Orchard sandwich bread",
+          "names": {
+            "en": "Orchard sandwich bread"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-diet-bread-0",
+          "size": "1",
+          "price": "1.2",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-diet-bread-1",
+          "size": "1",
+          "price": "3.3",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-diet-bread-2",
+          "size": "1",
+          "price": "1.1",
+          "stock": "100",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-diet-bread-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-diet-bread-1": {
+          "lactose_free": null,
+          "gluten_free": true
+        },
+        "h20-diet-bread-2": {
+          "lactose_free": null,
+          "gluten_free": false
+        }
+      },
+      "order_counts": {
+        "h20-diet-bread-0": 0,
+        "h20-diet-bread-1": 0,
+        "h20-diet-bread-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-diet-bread-1",
+      "expected_includes": [
+        "h20-diet-bread-1"
+      ]
+    },
+    {
+      "id": "partial-cream",
+      "family": "coverage",
+      "request": "67 L cooking cream for Monday 23 November.",
+      "need": {
+        "quantity": "67",
+        "unit": "L",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-partial-cream-0",
+          "name": "Northfield cooking cream",
+          "names": {
+            "en": "Northfield cooking cream"
+          },
+          "net_content": {
+            "value": 5.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-partial-cream-1",
+          "name": "Lakeland cooking cream",
+          "names": {
+            "en": "Lakeland cooking cream"
+          },
+          "net_content": {
+            "value": 5.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-partial-cream-2",
+          "name": "Farmhouse cooking cream",
+          "names": {
+            "en": "Farmhouse cooking cream"
+          },
+          "net_content": {
+            "value": 5.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-partial-cream-0",
+          "size": "5",
+          "price": "8",
+          "stock": "7",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-partial-cream-1",
+          "size": "5",
+          "price": "7",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-partial-cream-2",
+          "size": "5",
+          "price": "6",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-partial-cream-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-partial-cream-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-partial-cream-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-partial-cream-0": 0,
+        "h20-partial-cream-1": 0,
+        "h20-partial-cream-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-partial-cream-0",
+      "expected_includes": [
+        "h20-partial-cream-0",
+        "h20-partial-cream-1"
+      ]
+    },
+    {
+      "id": "partial-flour",
+      "family": "coverage",
+      "request": "37 kg bread flour for Monday 23 November.",
+      "need": {
+        "quantity": "37",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-partial-flour-0",
+          "name": "Millhouse bread flour",
+          "names": {
+            "en": "Millhouse bread flour"
+          },
+          "net_content": {
+            "value": 4.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-partial-flour-1",
+          "name": "Harvest bread flour",
+          "names": {
+            "en": "Harvest bread flour"
+          },
+          "net_content": {
+            "value": 4.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-partial-flour-2",
+          "name": "Greenfield bread flour",
+          "names": {
+            "en": "Greenfield bread flour"
+          },
+          "net_content": {
+            "value": 4.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-partial-flour-0",
+          "size": "4",
+          "price": "8",
+          "stock": "6",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-partial-flour-1",
+          "size": "4",
+          "price": "7",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-partial-flour-2",
+          "size": "4",
+          "price": "6",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-partial-flour-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-partial-flour-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-partial-flour-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-partial-flour-0": 0,
+        "h20-partial-flour-1": 0,
+        "h20-partial-flour-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-partial-flour-0",
+      "expected_includes": [
+        "h20-partial-flour-0",
+        "h20-partial-flour-1"
+      ]
+    },
+    {
+      "id": "partial-lentils",
+      "family": "coverage",
+      "request": "53 kg red lentils for Monday 23 November.",
+      "need": {
+        "quantity": "53",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-partial-lentils-0",
+          "name": "Saffron red lentils",
+          "names": {
+            "en": "Saffron red lentils"
+          },
+          "net_content": {
+            "value": 3.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-partial-lentils-1",
+          "name": "Spice Yard red lentils",
+          "names": {
+            "en": "Spice Yard red lentils"
+          },
+          "net_content": {
+            "value": 3.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-partial-lentils-2",
+          "name": "Cedar red lentils",
+          "names": {
+            "en": "Cedar red lentils"
+          },
+          "net_content": {
+            "value": 3.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-partial-lentils-0",
+          "size": "3",
+          "price": "8",
+          "stock": "11",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-partial-lentils-1",
+          "size": "3",
+          "price": "7",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-partial-lentils-2",
+          "size": "3",
+          "price": "6",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-partial-lentils-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-partial-lentils-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-partial-lentils-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-partial-lentils-0": 0,
+        "h20-partial-lentils-1": 0,
+        "h20-partial-lentils-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-partial-lentils-0",
+      "expected_includes": [
+        "h20-partial-lentils-0",
+        "h20-partial-lentils-1"
+      ]
+    },
+    {
+      "id": "partial-juice",
+      "family": "coverage",
+      "request": "41 L apple juice for Monday 23 November.",
+      "need": {
+        "quantity": "41",
+        "unit": "L",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-partial-juice-0",
+          "name": "Orchard apple juice",
+          "names": {
+            "en": "Orchard apple juice"
+          },
+          "net_content": {
+            "value": 6.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-partial-juice-1",
+          "name": "Meadow apple juice",
+          "names": {
+            "en": "Meadow apple juice"
+          },
+          "net_content": {
+            "value": 6.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-partial-juice-2",
+          "name": "Valley apple juice",
+          "names": {
+            "en": "Valley apple juice"
+          },
+          "net_content": {
+            "value": 6.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-partial-juice-0",
+          "size": "6",
+          "price": "8",
+          "stock": "4",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-partial-juice-1",
+          "size": "6",
+          "price": "7",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-partial-juice-2",
+          "size": "6",
+          "price": "6",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-partial-juice-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-partial-juice-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-partial-juice-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-partial-juice-0": 0,
+        "h20-partial-juice-1": 0,
+        "h20-partial-juice-2": 0
+      },
+      "declined_products": [],
+      "expected_first": "h20-partial-juice-0",
+      "expected_includes": [
+        "h20-partial-juice-0",
+        "h20-partial-juice-1"
+      ]
+    },
+    {
+      "id": "feedback-oil",
+      "family": "feedback",
+      "request": "26 L sunflower oil for Monday 23 November.",
+      "need": {
+        "quantity": "26",
+        "unit": "L",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-feedback-oil-0",
+          "name": "Northfield sunflower oil",
+          "names": {
+            "en": "Northfield sunflower oil"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-feedback-oil-1",
+          "name": "Lakeland sunflower oil",
+          "names": {
+            "en": "Lakeland sunflower oil"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-feedback-oil-2",
+          "name": "Farmhouse sunflower oil",
+          "names": {
+            "en": "Farmhouse sunflower oil"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-feedback-oil-0",
+          "size": "1",
+          "price": "1.8",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-feedback-oil-1",
+          "size": "1",
+          "price": "2.2",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-feedback-oil-2",
+          "size": "1",
+          "price": "2.6",
+          "stock": "100",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-feedback-oil-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-feedback-oil-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-feedback-oil-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-feedback-oil-0": 0,
+        "h20-feedback-oil-1": 0,
+        "h20-feedback-oil-2": 0
+      },
+      "declined_products": [
+        "h20-feedback-oil-0"
+      ],
+      "expected_first": "h20-feedback-oil-1",
+      "expected_includes": [
+        "h20-feedback-oil-1"
+      ]
+    },
+    {
+      "id": "alias-sauce",
+      "family": "feedback",
+      "request": "8 kg our house tomato sauce for Monday 23 November.",
+      "need": {
+        "quantity": "8",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-alias-sauce-0",
+          "name": "Roma tomato sauce",
+          "names": {
+            "en": "Roma tomato sauce"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-alias-sauce-1",
+          "name": "Napoli tomato sauce",
+          "names": {
+            "en": "Napoli tomato sauce"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": true
+        },
+        {
+          "product_id": "h20-alias-sauce-2",
+          "name": "Siena tomato sauce",
+          "names": {
+            "en": "Siena tomato sauce"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-alias-sauce-0",
+          "size": "1",
+          "price": "1",
+          "stock": "40",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-alias-sauce-1",
+          "size": "1",
+          "price": "4",
+          "stock": "40",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-alias-sauce-2",
+          "size": "1",
+          "price": "1.1",
+          "stock": "40",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-alias-sauce-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-alias-sauce-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-alias-sauce-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-alias-sauce-0": 0,
+        "h20-alias-sauce-1": 0,
+        "h20-alias-sauce-2": 0
+      },
+      "declined_products": [
+        "h20-alias-sauce-1"
+      ],
+      "expected_first": "h20-alias-sauce-1",
+      "expected_includes": [
+        "h20-alias-sauce-1"
+      ]
+    },
+    {
+      "id": "feedback-cover",
+      "family": "feedback",
+      "request": "58 L orange juice for Monday 23 November.",
+      "need": {
+        "quantity": "58",
+        "unit": "L",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-feedback-cover-0",
+          "name": "Orchard orange juice",
+          "names": {
+            "en": "Orchard orange juice"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-feedback-cover-1",
+          "name": "Meadow orange juice",
+          "names": {
+            "en": "Meadow orange juice"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-feedback-cover-2",
+          "name": "Valley orange juice",
+          "names": {
+            "en": "Valley orange juice"
+          },
+          "net_content": {
+            "value": 1.0,
+            "unit": "L"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-feedback-cover-0",
+          "size": "1",
+          "price": "2.2",
+          "stock": "100",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-feedback-cover-1",
+          "size": "1",
+          "price": "1.8",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-feedback-cover-2",
+          "size": "1",
+          "price": "1.5",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-feedback-cover-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-feedback-cover-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-feedback-cover-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-feedback-cover-0": 0,
+        "h20-feedback-cover-1": 0,
+        "h20-feedback-cover-2": 0
+      },
+      "declined_products": [
+        "h20-feedback-cover-0"
+      ],
+      "expected_first": "h20-feedback-cover-0",
+      "expected_includes": [
+        "h20-feedback-cover-0"
+      ]
+    },
+    {
+      "id": "feedback-partial",
+      "family": "feedback",
+      "request": "46 kg brown sugar for Monday 23 November.",
+      "need": {
+        "quantity": "46",
+        "unit": "KG",
+        "needed_by": "2026-11-23"
+      },
+      "products": [
+        {
+          "product_id": "h20-feedback-partial-0",
+          "name": "Millhouse brown sugar",
+          "names": {
+            "en": "Millhouse brown sugar"
+          },
+          "net_content": {
+            "value": 2.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-feedback-partial-1",
+          "name": "Harvest brown sugar",
+          "names": {
+            "en": "Harvest brown sugar"
+          },
+          "net_content": {
+            "value": 2.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        },
+        {
+          "product_id": "h20-feedback-partial-2",
+          "name": "Greenfield brown sugar",
+          "names": {
+            "en": "Greenfield brown sugar"
+          },
+          "net_content": {
+            "value": 2.0,
+            "unit": "KG"
+          },
+          "can_arrive": true,
+          "alias": false
+        }
+      ],
+      "offers": [
+        {
+          "product_id": "h20-feedback-partial-0",
+          "size": "2",
+          "price": "3.2",
+          "stock": "13",
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-feedback-partial-1",
+          "size": "2",
+          "price": "3",
+          "stock": null,
+          "sales_unit": "ST"
+        },
+        {
+          "product_id": "h20-feedback-partial-2",
+          "size": "2",
+          "price": "2.5",
+          "stock": "0",
+          "sales_unit": "ST"
+        }
+      ],
+      "diet_claims": {
+        "h20-feedback-partial-0": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-feedback-partial-1": {
+          "lactose_free": null,
+          "gluten_free": null
+        },
+        "h20-feedback-partial-2": {
+          "lactose_free": null,
+          "gluten_free": null
+        }
+      },
+      "order_counts": {
+        "h20-feedback-partial-0": 0,
+        "h20-feedback-partial-1": 0,
+        "h20-feedback-partial-2": 0
+      },
+      "declined_products": [
+        "h20-feedback-partial-0"
+      ],
+      "expected_first": "h20-feedback-partial-0",
+      "expected_includes": [
+        "h20-feedback-partial-0",
+        "h20-feedback-partial-1"
+      ]
+    }
+  ],
+  "semantics": {
+    "prices": "EUR ex VAT per ST sales pack; sizes are requested base units per ST. Stock is sales packs, not base units.",
+    "unknown_stock": "null remains unknown but quotable as an unconfirmed complement, never confirmed full coverage.",
+    "scoring": "Exact product-set equality, not subset inclusion; first preference scored separately. No quantity-correctness metric.",
+    "stage_scores": "Raw model membership, same reply plus production guard/reason check, and engine offer alone reported separately.",
+    "scope": "3 candidates per case, timely arrivals only. No permutation/stability/late-cutoff coverage. Unit-price policy may differ from lowest pack-rounded basket total."
+  }
+}
