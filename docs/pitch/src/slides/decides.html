@@ -1,0 +1,32 @@
+<section id="decides">
+<div class="rail"><p class="rail-l">TICKET 03 · WHAT YOU JUST SAW</p><p>THE STRIP IS FROM OUR HOME PAGE</p></div>
+<h2>The model sets no number.<br>No agent can approve.</h2>
+<img class="snap" src="/_blob/a0cc9bb49cfa1432562c0f5a556081fa" alt="The strip Who decides what from the Home page: the Buyer agent, Nemotron 3.5 Super VL, chooses the products; the ordering engine sets the quantities, fixed rules, no model; you approve the exact total, nothing is sent before that." style="width:1664px;height:112px;object-fit:contain">
+<div class="row3 tickets">
+<div class="docket ticket-pad tilt-s">
+<p class="print">AN OUTSIDE AGENT TRIES TO APPROVE ITS OWN PROPOSAL</p>
+<p class="total">HTTP 403</p>
+<p class="print-b">HUMAN_SESSION_REQUIRED</p>
+<p class="stamp stamp-s st-red pin-br tilt-stamp">REFUSED</p>
+</div>
+<div class="docket ticket-pad tilt-sr">
+<p class="print">THE PRICE MOVES AFTER THE PERSON SAID YES</p>
+<p class="total">HTTP 409</p>
+<p class="print-b">TOTAL_MISMATCH</p>
+<p class="stamp stamp-s st-red pin-br tilt-stamp">REFUSED</p>
+</div>
+<div class="docket ticket-pad tilt-s">
+<p class="print">“15 KG PEANUT BUTTER” IN A PEANUT-FREE KITCHEN</p>
+<p class="total">0 CALLS</p>
+<p class="print-b">NO MODEL RAN</p>
+<p class="stamp stamp-s st-red pin-br tilt-stamp">REFUSED</p>
+</div>
+</div>
+<aside>SAY (20 seconds): What you just saw, in one line. Nemotron chooses the products. Plain code sets every quantity and every total. A person approves the exact total. And three things are refused by code, not by a prompt: an agent that tries to approve its own order, a yes for a price that has moved, and peanut butter in a kitchen that bans peanuts.
+
+CUE: the strip is the real "Who decides what" line from our Home page. The middle ticket, 409, is the one thing here the demo does not show.
+
+IF ASKED "who is the approver?": sign-in with roles is built and switched off for judging, so every visitor is the demo approver (slide 10). Say it before a judge finds it.
+
+SOURCES: docs/submission.md, "Core requirements" point 3 and the rubric rows C and D. The 403: /llms.txt on the live site and python -m demo.second_agent (docs/demo.md, beat 8). The 409 TOTAL_MISMATCH: golden scenario S07 in docs/submission.md ("old yes is refused = (409, 'TOTAL_MISMATCH')"). The peanut refusal: docs/demo.md beat 7; the page says "The gateway's request parser answered. No model ran." and "Verdict: REFUSED" (video/public/peanut.png). One model call per request: agent/single_pick.py. Auto-approve exists and is off by default: gateway/autoapprove.py:21-25. The strip: video/public/home.png.</aside>
+</section>

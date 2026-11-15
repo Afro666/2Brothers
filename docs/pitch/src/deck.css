@@ -1,0 +1,133 @@
+/* Kitchen Buyer pitch deck: "the pass".
+   Every slide is a ticket on the kitchen's order rail. The look is the product's own: dark steel, paper dockets
+   printed in mono with a perforated top edge, rubber stamps, real screenshots held with tape, and one handwriting
+   voice for the notes in the margin. Dashed ochre means "not yet", as it does in the app.
+   Type: Archivo (stamp), Atkinson Hyperlegible Next (reader), Atkinson Hyperlegible Mono (printer), Caveat (hand).
+   Sizes: 144 cover / 72 / 44 / 32 / 24, handwriting 52. */
+
+section { background: #151410; color: #ede9df; font-family: 'Atkinson Hyperlegible Next', Arial, sans-serif; padding: 96px 128px; display: flex; flex-direction: column; gap: 36px; }
+.paper { background: #f4f1e9; color: #1c1a16; }
+
+h1 { font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 120px; font-weight: 800; line-height: 1.02; letter-spacing: -2px; }
+h2 { font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 72px; font-weight: 800; line-height: 1.08; letter-spacing: -1px; }
+h3 { font-size: 44px; font-weight: 700; line-height: 1.15; }
+.mega { font-size: 144px; line-height: 0.98; letter-spacing: -3px; }
+
+.head { display: flex; flex-direction: column; gap: 16px; }
+.spacer { flex: 1; }
+.stack { display: flex; flex-direction: column; gap: 24px; }
+.stack-s { display: flex; flex-direction: column; gap: 8px; }
+.titles { display: flex; flex-direction: column; gap: 24px; }
+
+.eyebrow { font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; font-weight: 600; letter-spacing: 3px; line-height: 1.4; color: #7fc08a; }
+.green { color: #7fc08a; }
+.muted { color: #a9a395; }
+.ink { color: #1c1a16; }
+.body { font-size: 32px; line-height: 1.4; }
+.mono { font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; line-height: 1.4; letter-spacing: 1px; }
+.label { font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; font-weight: 600; letter-spacing: 2px; line-height: 1.4; color: #7fc08a; }
+
+/* the rail: the one line every ticket hangs from */
+.rail { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #36332d; padding-bottom: 14px; font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; font-weight: 600; letter-spacing: 3px; line-height: 1.4; color: #a9a395; }
+.rail-l { color: #7fc08a; }
+.rail-paper { border-bottom: 3px solid #1c1a16; color: #5c574c; }
+.rail-ink { color: #2f6b3a; }
+
+/* two-column bodies */
+.cols { display: grid; gap: 64px; align-items: start; }
+.c-problem { grid-template-columns: 740px 1fr; align-items: center; }
+.c-valio { grid-template-columns: 600px 1fr; }
+.c-nemo { grid-template-columns: 860px 1fr; }
+.c-meas { grid-template-columns: 620px 1fr; }
+.c-chan { grid-template-columns: 820px 1fr; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 32px; }
+.tickets { align-items: start; }
+
+/* the docket: a printed paper slip */
+.docket { position: relative; background: #f4f1e9; color: #1c1a16; border-top: 8px dashed #151410; border-radius: 2px; padding: 36px 44px 40px; box-shadow: 0 18px 50px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 14px; }
+.ticket-pad { padding: 36px 44px 92px; }
+.print { font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; line-height: 1.4; letter-spacing: 1px; color: #5c574c; }
+.print-b { font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; font-weight: 600; line-height: 1.4; letter-spacing: 1px; color: #1c1a16; }
+.stampface { font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 32px; font-weight: 800; letter-spacing: 2px; line-height: 1.2; color: #1c1a16; }
+.dline { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; border-bottom: 2px dashed #b9b2a2; padding-bottom: 10px; }
+.dtotal { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; border-bottom: 2px dashed #b9b2a2; padding-bottom: 14px; }
+.dtext { font-size: 32px; font-weight: 600; line-height: 1.4; color: #1c1a16; text-align: right; }
+.total { font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 72px; font-weight: 800; line-height: 1; letter-spacing: -1px; color: #1c1a16; }
+.cover-docket { position: absolute; left: 1150px; top: 214px; width: 600px; }
+
+/* stamps: a person's or a rule's mark on a ticket */
+.stamp { font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 44px; font-weight: 800; letter-spacing: 3px; line-height: 1; padding: 10px 22px 8px; border-radius: 6px; white-space: nowrap; align-self: flex-start; }
+.stamp-s { font-size: 32px; padding: 8px 16px 6px; }
+.st-green { color: #23703c; border: 6px solid #23703c; }
+.st-red { color: #b3261e; border: 6px solid #b3261e; }
+.st-ochre-dash { color: #8a5300; border: 4px dashed #8a5300; }
+.st-ochre-d { color: #e5b85e; border: 4px dashed #e5b85e; }
+.pin-br { position: absolute; right: 28px; bottom: 22px; }
+.pin-tr { position: absolute; right: 28px; top: 30px; }
+.tilt-l { transform: rotate(-3deg); }
+.tilt-r { transform: rotate(2deg); }
+.tilt-s { transform: rotate(-1deg); }
+.tilt-sr { transform: rotate(1deg); }
+.tilt-stamp { transform: rotate(-8deg); }
+
+/* real screenshots, taped on */
+.taped { position: relative; }
+.snap { border: 2px solid #36332d; border-radius: 8px; box-shadow: 0 18px 50px rgba(0,0,0,0.55); }
+.tape { position: absolute; width: 160px; height: 46px; background: rgba(229,184,94,0.82); }
+.tape-tl { left: -44px; top: -14px; transform: rotate(-28deg); }
+.tape-top { left: 290px; top: -26px; transform: rotate(-4deg); }
+.tape-tr { right: -44px; top: -14px; transform: rotate(28deg); }
+.polaroid { position: relative; background: #fffefa; padding: 20px 20px 24px; box-shadow: 0 18px 50px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 14px; }
+
+/* the note in the margin */
+.hand { font-family: 'Caveat', 'Brush Script MT', cursive; font-size: 52px; font-weight: 700; line-height: 1.05; }
+.hand-ink { color: #1c1a16; }
+.hand-ochre { color: #e5b85e; }
+
+/* round sticker */
+.sticker { position: absolute; width: 210px; height: 210px; border-radius: 105px; background: #7fc08a; border: 8px solid #fffefa; box-shadow: 0 10px 30px rgba(0,0,0,0.45); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.sticker-big { font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 44px; font-weight: 800; line-height: 1; color: #0b1f10; text-align: center; }
+.sticker-small { font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; font-weight: 600; line-height: 1.1; color: #0b1f10; text-align: center; }
+.st-pos-atlas { right: 40px; top: -96px; }
+
+/* what Valio gets */
+.step2 { display: flex; flex-direction: column; gap: 4px; border-top: 3px solid #36332d; padding-top: 14px; }
+
+/* measured: the bill */
+.mrow { display: grid; grid-template-columns: 1fr 200px 240px; align-items: center; border-bottom: 2px dashed #b9b2a2; padding-bottom: 10px; }
+.was { font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 32px; line-height: 1.2; color: #5c574c; text-decoration: line-through; text-align: right; }
+.now { font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 72px; font-weight: 800; line-height: 1; color: #23703c; text-align: right; }
+
+/* Atlas: the printed list */
+.arow { display: grid; grid-template-columns: 440px 1fr; align-items: baseline; border-bottom: 2px dashed #b9b2a2; padding-bottom: 10px; }
+.atext { font-size: 32px; line-height: 1.4; color: #1c1a16; }
+
+/* terminal */
+.term { background: #0b0a08; border: 2px solid #36332d; border-radius: 8px; padding: 28px 32px; display: flex; flex-direction: column; gap: 10px; }
+.term-line { font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; line-height: 1.4; color: #a9a395; }
+.term-bad { color: #f2907d; }
+.term-ok { color: #7fc08a; }
+
+/* limits, on paper */
+.lrows { display: flex; flex-direction: column; gap: 30px; }
+.lrow { display: flex; justify-content: space-between; align-items: center; gap: 40px; border-bottom: 2px dashed #b9b2a2; padding-bottom: 30px; }
+.pnote { font-size: 32px; line-height: 1.4; color: #5c574c; }
+
+/* backup slides: the milk request and the proof */
+.step { display: flex; flex-direction: column; gap: 8px; border-top: 4px solid #7fc08a; padding-top: 16px; }
+.steptext { font-size: 32px; font-weight: 600; line-height: 1.3; }
+.shot { align-self: flex-start; border: 2px solid #36332d; border-radius: 8px; box-shadow: 0 18px 50px rgba(0,0,0,0.55); }
+.split { display: grid; grid-template-columns: 1fr 800px; gap: 64px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 40px; }
+.block { display: flex; flex-direction: column; gap: 12px; }
+
+/* close: the picture, the caption, the cauldron */
+.bleed { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; object-fit: cover; }
+.shade { position: absolute; left: 0; top: 430px; width: 1920px; height: 650px; background: linear-gradient(180deg, rgba(21,20,16,0) 0%, rgba(21,20,16,0.88) 38%, rgba(21,20,16,0.97) 100%); }
+.close-h { position: absolute; left: 128px; top: 610px; width: 1000px; }
+.close-cta { position: absolute; left: 128px; top: 868px; width: 1000px; font-size: 32px; font-weight: 600; line-height: 1.4; }
+.link { color: #7fc08a; }
+.pot { position: absolute; left: 1240px; top: 570px; }
+.potnum { position: absolute; left: 1300px; top: 676px; width: 400px; text-align: center; font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 120px; font-weight: 800; line-height: 1.02; color: #7fc08a; }
+.potlabel { position: absolute; left: 1300px; top: 806px; width: 400px; text-align: center; font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; font-weight: 600; letter-spacing: 1px; line-height: 1.4; color: #ede9df; }
+.close-foot { position: absolute; left: 128px; bottom: 64px; width: 1664px; font-family: 'Atkinson Hyperlegible Mono', 'Courier New', monospace; font-size: 24px; letter-spacing: 1px; line-height: 1.4; color: #a9a395; }

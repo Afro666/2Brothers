@@ -1,0 +1,20 @@
+<section id="proof">
+<div class="head">
+<p class="eyebrow">BACKUP · WHAT AN APPROVAL LEAVES BEHIND</p>
+<h2>Every yes leaves proof</h2>
+</div>
+<div class="split">
+<div class="col">
+<div class="block"><h3>A signed receipt</h3><p class="body">It names the offer, the exact total, the lines and who approved. One public key checks it; change one number and the check fails.</p></div>
+<div class="block"><h3>A hash-chained audit log</h3><p class="body">Each line carries the hash of the line before. A changed line breaks the chain; a cut or rewritten end is detected against a head record.</p></div>
+</div>
+<img class="shot" src="/_blob/b32bdeac763cda418bc9abdc2b1a1c7b" alt="The signed receipt on the order page: Signed. Signed by the gateway, anyone can check it with the public key. Approved by a person. Signed at Sun 15 Nov, 00:18. Signed total €2,099.41. Supplier: nothing sent to the supplier yet, its API has no order endpoint." style="width:800px;height:369px;object-fit:contain">
+</div>
+<aside>BACKUP SLIDE: the demo’s beat 5 as one picture, and the answer when a technical judge asks "what if someone cuts lines off the end of the log?".
+
+SAY: Every approved order gets a signed receipt: the offer, the exact total, the lines, who approved. Anyone can check it with one public key. And every step is in a hash-chained log in MongoDB Atlas: change a line and the chain breaks, and a cut or rewritten end is detected against a head record. The receipt also says plainly that nothing was sent to the supplier.
+
+DO NOT SAY "anchored": the head record is not signed yet (issue #1886, open). Say "a cut or rewritten end is detected against a head record".
+
+SOURCES: the picture is the receipt of the €2,099.41 milk order on the live site, signed Sun 15 Nov 00:18 Helsinki (video/public/receipt2.png). What the receipt names, and that it is a JWS (EdDSA) checkable with the one public key at /api/.well-known/jwks.json: docs/submission.md, "Trust protocol", and gateway/signing.py. "Change one number and the check fails": README, "An order has a signed receipt" (python -m gateway.verify_offer). The audit log: docs/submission.md "Traceability", store/audit.py. The cut or rewritten end: PR #1882, merged 14 Nov 23:07 UTC, with successful deploys after it; the live check GET /api/v1/kitchens/demo-kitchen/audit/verify answered ok: true for 1,726 lines on 15 Nov at 01:35 Helsinki. On the site: Reports, Tamper check, "Verify audit chain".</aside>
+</section>
