@@ -95,7 +95,7 @@ export function useAsync<T>(
     const isReload = lastVersion.current !== version;
     lastVersion.current = version;
     setState((previous) => {
-      if (isReload && previous.status === "ready" && previous.key === keep) return { ...previous, refreshing: true };
+      if (isReload && previous.status === "ready" && previous.key === keep) return previous;
       const answer = keptAnswer(keep);
       if (answer) return { status: "ready", data: answer.data as T, error: null, refreshing: true, key: keep };
       return { status: "loading", data: null, error: null, refreshing: false, key: keep };

@@ -67,12 +67,17 @@ const BUSY_429 = new Map<unknown, string>([
 ]);
 
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
-const pendingReads = new Map<string, Promise<unknown>>();
-let pendingRevision = -1;
-export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
+const defaultReadScope = {};
+const readScopes = new WeakMap<object, { revision: number; pending: Map<string, Promise<unknown>> }>();
+export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit, scope: object = defaultReadScope): Promise<unknown> {
   if ((init?.method ?? "GET").toUpperCase() === "GET") {
     const revision = readCacheRevision();
-    if (pendingRevision !== revision) { pendingReads.clear(); pendingRevision = revision; }
+    let reads = readScopes.get(scope);
+    if (!reads || reads.revision !== revision) {
+      reads = { revision, pending: new Map() };
+      readScopes.set(scope, reads);
+    }
+    const pendingReads = reads.pending;
     // Aborting one subscriber must not cancel another's request. Custom RequestInit options bypass sharing.
     if (init && Object.keys(init).some((key) => key !== "method" && key !== "headers")) return send(baseUrl, path, init);
     const headers = [...new Headers(init?.headers).entries()].sort(([a], [b]) => a.localeCompare(b));
@@ -173,14 +178,16 @@ export const AUDIT_LIMIT = 1000;
 
 export function createHttpApi(baseUrl: string): Api {
   let currentSession: Session | null = null;
+  const requestScope = {};
+  const request = (path: string, init?: RequestInit) => gatewayRequest(baseUrl, path, init, requestScope);
   const mock = createMockApi();
   const kitchen = `/v1/kitchens/${encodeURIComponent(import.meta.env.VITE_GATEWAY_KITCHEN_ID || "demo-kitchen")}`;
   const proposalPath = (id: string) => `${kitchen}/proposals/${encodeURIComponent(id)}`;
-  const get = (path: string) => gatewayRequest(baseUrl, path);
+  const get = (path: string) => request(path);
   // X-User names the acting role only while there is no signed-in account; with an account,
   // the gateway takes the person from the session cookie.
   const post = (path: string, body: Json, actor?: AuditActor | string) =>
-    gatewayRequest(baseUrl, path, {
+    request(path, {
       method: "POST",
       headers: actor && !currentSession?.email ? { "X-User": actor } : undefined,
       body: JSON.stringify(body),
@@ -238,6 +245,8 @@ export function createHttpApi(baseUrl: string): Api {
   const proposals = () => proposalsRead.get();
   const auditEvents = () => auditRead.get();
   const dropReads = () => {
+    // Invalidate both layers: the 3 s proposal answer and any pre-event transport read.
+    dropKeptAnswers();
     proposalsRead.drop();
     auditRead.drop();
   };
@@ -287,26 +296,26 @@ export function createHttpApi(baseUrl: string): Api {
     async changePassword(current, next) {
       await post("/v1/auth/change-password", { current_password: current, new_password: next });
     },
-    ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createPlanningHttp((path, init) => request(path, init), kitchen),
     // GET/PUT /learned is not served yet (404): api/http-learned.ts stays out of `real` so the page keeps its "Sample data" mock. Add `...createLearnedHttp(call, kitchen)` here when the gateway serves it.
-    ...createBuyingNoteHttp((path, init) => gatewayRequest(baseUrl, path, init)),
-    ...createNutritionHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createOnboardingHttp((path, init) => gatewayRequest(baseUrl, path, init)),
-    ...createBrandLogosHttp((path, init) => gatewayRequest(baseUrl, path, init)),
-    ...createShelfHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createMenuPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createPriceListHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createDeliveryNoteHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createLabelPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createUsageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createAtlasHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createApprovalTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createProductPageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createBuyingNoteHttp((path, init) => request(path, init)),
+    ...createNutritionHttp((path, init) => request(path, init), kitchen),
+    ...createOnboardingHttp((path, init) => request(path, init)),
+    ...createBrandLogosHttp((path, init) => request(path, init)),
+    ...createShelfHttp((path, init) => request(path, init), kitchen),
+    ...createMenuPhotoHttp((path, init) => request(path, init), kitchen),
+    ...createPriceListHttp((path, init) => request(path, init), kitchen),
+    ...createDeliveryNoteHttp((path, init) => request(path, init), kitchen),
+    ...createLabelPhotoHttp((path, init) => request(path, init), kitchen),
+    ...createTrustHttp((path, init) => request(path, init), kitchen),
+    ...createUsageHttp((path, init) => request(path, init), kitchen),
+    ...createAtlasHttp((path, init) => request(path, init), kitchen),
+    ...createOffersHttp((path, init) => request(path, init), kitchen),
+    ...createTokensHttp((path, init) => request(path, init), kitchen),
+    ...createApprovalTokensHttp((path, init) => request(path, init), kitchen),
+    ...createDeveloperHttp((path, init) => request(path, init), kitchen),
+    ...createCatalogHttp((path, init) => request(path, init), kitchen),
+    ...createProductPageHttp((path, init) => request(path, init), kitchen),
     // A live event or a new connection means the lists may have changed since a request began.
     subscribeEvents: (onEvent, onStatus) =>
       events.subscribeEvents!(
@@ -319,7 +328,7 @@ export function createHttpApi(baseUrl: string): Api {
           onStatus?.(connected);
         },
       ),
-    ...createExplanationHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createExplanationHttp((path, init) => request(path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents().catch(() => [])]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));

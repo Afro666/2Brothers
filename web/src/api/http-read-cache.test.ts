@@ -65,3 +65,12 @@ it("a detected account change or expired session invalidates existing reads", as
   d.answer(0, {}); d.answer(2, {}); d.answer(4, {});
   await Promise.all([old, after, changed]);
 });
+
+it("never coalesces reads across different API instances", async () => {
+  const d = deferredFetch();
+  const a = createHttpApi("/api"), b = createHttpApi("/api");
+  const first = a.countPendingApprovals!(), second = b.countPendingApprovals!();
+  expect(d.fetch).toHaveBeenCalledTimes(2);
+  d.answer(0, { proposals: [] }); d.answer(1, { proposals: [] });
+  await Promise.all([first, second]);
+});
