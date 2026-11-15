@@ -179,7 +179,7 @@ export default {
   "The photo was not read: {error} You can still type the counts by hand.": "Kuvaa ei luettu: {error} Voit silti syöttää määrät käsin.",
   "The sample photo could not be loaded.": "Mallikuvaa ei voitu ladata.",
   "The supplier is removed from this list. A supplier that still supplies your products cannot be deleted.": "Toimittaja poistetaan tästä listasta. Tuotteitasi edelleen toimittavaa toimittajaa ei voi poistaa.",
-  "A supplier you share with sees our kitchen's name and what we expect to need, never our menus or prices. Every change is in the audit log.": "Toimittaja, jonka kanssa jaat, näkee keittiömme nimen ja odotetun tarpeemme, eivät koskaan ruokalistojamme tai hintojamme. Jokainen muutos tallentuu toimintolokiin.",
+  "A supplier you share with sees our kitchen's name and what we expect to need, never our menus or prices. Every change is in the audit log.": "Toimittaja, jonka kanssa jaat, näkee keittiömme nimen ja odotetun tarpeemme, ei koskaan ruokalistojamme tai hintojamme. Jokainen muutos tallentuu toimintolokiin.",
   "This table shows the saved plan.": "Taulukossa näkyy tallennettu suunnitelma.",
   "This week is in the past, so there is nothing to order for it.": "Tämä viikko on menneisyydessä, joten sille ei ole mitään tilattavaa.",
   "Too many lookups just now. Wait a minute, or fill in the form yourself.": "Liian monta hakua juuri nyt. Odota minuutti tai täytä lomake itse.",
