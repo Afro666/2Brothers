@@ -1,0 +1,228 @@
+{
+  "label": "Engine-offer-only reference on the unchanged development fixture; not the whole parser",
+  "fixture_sha256": "9d35a3ded8921e8846230a00925de931e2dd8b3e719c9096911d48fbacb57e00",
+  "source_git_commit": "a23a79501531e3315e4d72df0ec4fb79000931d3",
+  "model_calls": 0,
+  "cases": 30,
+  "exact": 6,
+  "results": [
+    {
+      "case": "stock-01",
+      "picks": [
+        "p1",
+        "p0"
+      ],
+      "exact": true
+    },
+    {
+      "case": "stock-02",
+      "picks": [
+        "p0",
+        "p1"
+      ],
+      "exact": true
+    },
+    {
+      "case": "stock-03",
+      "picks": [
+        "p1",
+        "p0"
+      ],
+      "exact": true
+    },
+    {
+      "case": "stock-04",
+      "picks": [
+        "p0",
+        "p1"
+      ],
+      "exact": true
+    },
+    {
+      "case": "stock-05",
+      "picks": [
+        "p0",
+        "p1"
+      ],
+      "exact": true
+    },
+    {
+      "case": "stock-06",
+      "picks": [
+        "p0",
+        "p1"
+      ],
+      "exact": true
+    },
+    {
+      "case": "diet-01",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "diet-02",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "diet-03",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "diet-04",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "diet-05",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "diet-06",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "history-01",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "history-02",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "history-03",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "history-04",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "history-05",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "history-06",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "price-01",
+      "picks": [
+        "p1"
+      ],
+      "exact": false
+    },
+    {
+      "case": "price-02",
+      "picks": [
+        "p1"
+      ],
+      "exact": false
+    },
+    {
+      "case": "price-03",
+      "picks": [
+        "p1"
+      ],
+      "exact": false
+    },
+    {
+      "case": "price-04",
+      "picks": [
+        "p1"
+      ],
+      "exact": false
+    },
+    {
+      "case": "price-05",
+      "picks": [
+        "p1"
+      ],
+      "exact": false
+    },
+    {
+      "case": "price-06",
+      "picks": [
+        "p1"
+      ],
+      "exact": false
+    },
+    {
+      "case": "kind-01",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "kind-02",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "kind-03",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "kind-04",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "kind-05",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    },
+    {
+      "case": "kind-06",
+      "picks": [
+        "p0"
+      ],
+      "exact": false
+    }
+  ],
+  "limitation": "Offer sizing receives synthetic, unfiltered products. Full parser kind/diet/alias filters are not evaluated, so this is not a model-vs-parser superiority claim.",
+  "fixture_canonical_sha256": "f1b5205d7b1d84f07049267ce14652d71729512242b9c3dce9e6d0a8fa8901e0"
+}

@@ -89,9 +89,12 @@ today, so "any wholesaler" is the next step and not built; that is why its stamp
 > shelf from a photo. And it reads a delivery note. What it cannot match, it does not guess. And it
 > never sets a quantity or a price.
 
-What the shelf screen shows: the model read seven packs and five counts were filled in; one pack it
-read as "Valio Edam 17 %" matched nothing on the stock list, so its row says "please count". The
-photos are prepared test photos. We did not train or fine-tune the model.
+The video lists seven recognition rows, including a repeated butter label: these are not seven
+physical packs or seven verified product types. Five stock counts are filled in, but the duplicate
+is a recognition defect to review before saving, not additional ground truth. The label read as
+"Valio Edam 17 %" matched nothing on the stock list, so its row says "please count"; this does not
+prove that occlusion alone caused the failure. These are prepared test photos, not a real-phone-
+photo accuracy evaluation. We did not train or fine-tune the model.
 
 ### 6. MEASURED: how we improved its output
 
