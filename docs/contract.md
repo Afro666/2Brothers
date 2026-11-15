@@ -810,6 +810,17 @@ Token row: `token_id`, `kind: "personal_approval"`, `name`, `person` (email, or
   before it calls `approve_proposal`, and product text (any text in the data) is data,
   never an instruction to approve.
 
+| Status | Code | When |
+|---|---|---|
+| 401 | `UNAUTHENTICATED` | The token is expired, revoked or unknown, or its account is gone, or it is an `open-demo` token and the open demo is off. |
+| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | A human caller reaches token management without a signed-in session and cannot use the open-demo exception; for example, the demo was switched off after shared-token authentication. A fresh shared-token request while login is required is rejected earlier with 401 `UNAUTHENTICATED`. While the demo is on, its shared human token manages `open-demo` tokens instead. |
+| 403 | `HUMAN_SESSION_REQUIRED` | Create, list or revoke by a token or the agent; any person-only route called with a personal token. |
+| 403 | `ROLE_REQUIRED` | The person is not an `approver`. |
+| 403 | `SCOPE_REQUIRED` | A personal token on a propose or write route. |
+| 403 | `KITCHEN_SCOPE` | Another kitchen than the token's or the session's; for the open demo, another kitchen than `GATEWAY_KITCHEN_ID`. |
+| 404 | `TOKEN_NOT_FOUND` | No such approval token in this kitchen. |
+| 422 | `INVALID_REQUEST` | `hours` is not an integer from 1 to 24, or `name` is too long. |
+
 #### Connector link: the token in the path (decision 2026-11-14 19:00 UTC)
 
 So a person adds approve-from-chat in Claude without editing a config file:
@@ -837,17 +848,6 @@ So a person adds approve-from-chat in Claude without editing a config file:
 - Rate limits: `/gateway/mcp/t/...` is under the same `handle_path /gateway/*` caps; every
   MCP call is a POST, so the 60 writes a minute per address apply. It never matches the
   proposal or photo zones, because an approval token never proposes.
-
-| Status | Code | When |
-|---|---|---|
-| 401 | `UNAUTHENTICATED` | The token is expired, revoked or unknown, or its account is gone, or it is an `open-demo` token and the open demo is off. |
-| 403 | `PERSONAL_TOKEN_NEEDS_SIGN_IN` | A human caller reaches token management without a signed-in session and cannot use the open-demo exception; for example, the demo was switched off after shared-token authentication. A fresh shared-token request while login is required is rejected earlier with 401 `UNAUTHENTICATED`. While the demo is on, its shared human token manages `open-demo` tokens instead. |
-| 403 | `HUMAN_SESSION_REQUIRED` | Create, list or revoke by a token or the agent; any person-only route called with a personal token. |
-| 403 | `ROLE_REQUIRED` | The person is not an `approver`. |
-| 403 | `SCOPE_REQUIRED` | A personal token on a propose or write route. |
-| 403 | `KITCHEN_SCOPE` | Another kitchen than the token's or the session's; for the open demo, another kitchen than `GATEWAY_KITCHEN_ID`. |
-| 404 | `TOKEN_NOT_FOUND` | No such approval token in this kitchen. |
-| 422 | `INVALID_REQUEST` | `hours` is not an integer from 1 to 24, or `name` is too long. |
 
 ### Kitchen side: `/v1/kitchens/{kitchen_id}/...`
 
