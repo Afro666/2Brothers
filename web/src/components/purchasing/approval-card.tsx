@@ -971,9 +971,7 @@ export function ApprovalCard({
                 <Check aria-hidden />
                 {stockMessage || approvalBlockedReason
                   ? t("Approve")
-                  : inclVat === null
-                    ? t("Approve {amount}", { amount: formatEur(request.totalInclVat) })
-                    : t("Approve {amount} incl VAT", { amount: formatEur(request.totalInclVat) })}
+                  : t("Approve {amount}", { amount: formatEur(request.totalInclVat) })}
               </Button>
             ) : null}
           </>
@@ -1017,7 +1015,8 @@ export function ApprovalCard({
           <DialogHeader>
             <DialogTitle>{t("Approve this order?")}</DialogTitle>
             <DialogDescription>
-              {inclVat === null
+              {/* #1738: an approve figure unlike the incl VAT total may hold a delivery fee: never called incl VAT. */}
+              {approveDiffers
                 ? t("You approve exactly {exVat} ex VAT, {amount} in all ({total}). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
                     exVat: formatEur(request.totalExVat),
                     amount: formatEur(request.totalInclVat),

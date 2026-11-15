@@ -1192,12 +1192,12 @@ describe("the app on the gateway", () => {
     expect(screen.getAllByText("confirmed").length).toBeGreaterThan(0);
     expect(screen.getByText(/Free-delivery threshold and delivery fee unknown/)).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: /Approve €91\.20 incl VAT/ }));
+    await user.click(screen.getByRole("button", { name: "Approve €91.20" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €91.20" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The total is now €95.00. Nothing was sent.");
-    expect(await screen.findByRole("button", { name: /Approve €95\.00 incl VAT/ })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "Approve €95.00" })).toBeEnabled();
     expect(screen.getByRole("heading", { name: "Waiting for you (1)" })).toBeVisible();
   });
 
@@ -1256,7 +1256,7 @@ describe("the app on the gateway", () => {
     });
     renderApp("/approvals", createHttpApi("/api"));
 
-    await user.click(await screen.findByRole("button", { name: /Approve €91\.20 incl VAT/ }));
+    await user.click(await screen.findByRole("button", { name: "Approve €91.20" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €91.20" }));
 
@@ -1276,8 +1276,9 @@ describe("the app on the gateway", () => {
     renderApp("/approvals", createHttpApi("/api"));
 
     expect(await screen.findByText("€91.20")).toBeVisible();
-    // The approve button keeps the exact figure a person approves.
-    expect(screen.getByRole("button", { name: /Approve €101\.10 incl VAT/ })).toBeVisible();
+    // The approve button keeps the exact figure a person approves, and never calls it incl VAT (#1738).
+    expect(screen.getByRole("button", { name: "Approve €101.10" })).toBeVisible();
+    expect(screen.queryByText(/€101\.10 incl VAT/)).toBeNull();
   });
 
   it("shows goods incl VAT + the delivery fee = the amount a person approves, on one card (mock jury, 14 Nov)", async () => {
@@ -1309,7 +1310,7 @@ describe("the app on the gateway", () => {
     ).toBeVisible();
     expect(screen.queryByText(/Delivery fee/)).not.toBeInTheDocument();
     expect(screen.queryByText(/€25\.00/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Approve €372\.74 incl VAT/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Approve €372.74" })).toBeEnabled();
   });
 
   it("shows each supplier block's own delivery fee when the proposal sends no single fee (#1858)", async () => {
@@ -1331,7 +1332,7 @@ describe("the app on the gateway", () => {
     expect(screen.getByText("Total to approve €372.74")).toBeVisible();
     expect(screen.queryByText(/^= /)).not.toBeInTheDocument();
     expect(screen.queryByText(/does not itemise/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Approve €372\.74 incl VAT/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Approve €372.74" })).toBeEnabled();
   });
 
   it("names the figures without the note when the approve total is below the lines total (#1858)", async () => {
@@ -1345,7 +1346,7 @@ describe("the app on the gateway", () => {
     expect(await screen.findByText("Total to approve €340.00")).toBeVisible();
     expect(screen.getByText("Lines incl VAT")).toBeVisible();
     expect(screen.queryByText(/does not itemise/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Approve €340\.00 incl VAT/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Approve €340.00" })).toBeEnabled();
   });
 
   it("reads each card's proposal from the list, not one by one (#1858)", async () => {
@@ -1356,7 +1357,7 @@ describe("the app on the gateway", () => {
     });
     renderApp("/approvals", createHttpApi("/api"));
 
-    expect(await screen.findByRole("button", { name: /Approve €91\.20 incl VAT/ })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "Approve €91.20" })).toBeEnabled();
     expect(calls.filter((call) => call.route === `GET ${K}/proposals/prop-1`)).toEqual([]);
   });
 
@@ -1422,14 +1423,14 @@ describe("the app on the gateway", () => {
     await user.type(quantity, "30");
     await user.click(screen.getByRole("button", { name: "Update 900001" }));
 
-    expect(await screen.findByRole("button", { name: /Approve €68\.40 incl VAT/ })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "Approve €68.40" })).toBeEnabled();
     const change = calls.find((call) => call.route === `POST ${K}/proposals/prop-1/change`);
     expect(change?.body).toEqual({
       lines: [{ product_id: "900001", quantity: "30" }],
       idempotency_key: expect.stringMatching(/^web-change:/),
     });
 
-    await user.click(screen.getByRole("button", { name: /Approve €68\.40 incl VAT/ }));
+    await user.click(screen.getByRole("button", { name: "Approve €68.40" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €68.40" }));
 

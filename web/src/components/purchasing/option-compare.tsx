@@ -272,7 +272,8 @@ export function OptionCompare({
                   {priceLabel}
                 </Fact>
                 <Fact label={t("Total")} className="font-semibold">
-                  {t("{amount} incl VAT", { amount: formatEur(option.totalInclVat) })}
+                  {/* #1738: an option's expected_total may hold a delivery fee: never called incl VAT. */}
+                  {t("{amount} in all", { amount: formatEur(option.totalInclVat) })}
                 </Fact>
               </dl>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-3">
@@ -356,7 +357,7 @@ export function OptionCompare({
                   onClick={() => void choose(option)}
                 >
                   <Check aria-hidden />
-                  {t("Choose option {letter}: approve {amount} incl VAT", {
+                  {t("Choose option {letter}: approve {amount}", {
                     letter,
                     amount: formatEur(option.totalInclVat),
                   })}

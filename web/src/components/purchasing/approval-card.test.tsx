@@ -114,7 +114,7 @@ describe("ApprovalCard", () => {
       now={new Date("2026-11-15T17:00:00+02:00")}
     />);
     expect(screen.getByText("The cut-off has passed · Valio's cut-off")).toHaveClass("hatch", "text-warning");
-    expect(screen.getByRole("button", { name: "Approve €2,210.41 incl VAT" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Approve €2,210.41" })).toBeEnabled();
     passed.unmount();
 
     render(<ApprovalCard
@@ -194,7 +194,7 @@ describe("ApprovalCard", () => {
 
     expect(screen.getByText("€37.74")).toBeVisible();
     expect(screen.getByText("Delivery fee €25.00 (free from €300.00 ex VAT)")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Approve €62.74 incl VAT" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Approve €62.74" })).toBeEnabled();
   });
 
   it("replaces empty order totals with the number of products left out", () => {
@@ -410,7 +410,7 @@ describe("ApprovalCard", () => {
   it("keeps an enabled total but omits it from a button disabled for a stated reason", () => {
     const reason = "Your account cannot approve or reject orders.";
     const { rerender } = render(<ApprovalCard request={approval} order={confirmedOrder} />);
-    expect(screen.getByRole("button", { name: "Approve €2,210.41 incl VAT" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Approve €2,210.41" })).toBeEnabled();
     rerender(<ApprovalCard request={approval} order={confirmedOrder} approvalBlockedReason={reason} />);
     const approve = screen.getByRole("button", { name: "Approve" });
     expect(approve).toBeDisabled();
@@ -443,7 +443,7 @@ describe("ApprovalCard", () => {
     const onApprove = vi.fn(() => new Promise<void>((resolve) => (confirm = resolve)));
     render(<ApprovalCard request={approval} order={confirmedOrder} onApprove={onApprove} />);
 
-    await user.click(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    await user.click(screen.getByRole("button", { name: "Approve €2,210.41" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     const yes = within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" });
     await user.click(yes);
@@ -469,13 +469,13 @@ describe("ApprovalCard", () => {
     const onApprove = vi.fn(() => Promise.reject(new Error("expected_total mismatch")));
     render(<ApprovalCard request={approval} order={confirmedOrder} onApprove={onApprove} />);
 
-    await user.click(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    await user.click(screen.getByRole("button", { name: "Approve €2,210.41" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Approval failed: expected_total mismatch");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Approve €2,210.41" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
   });
 
@@ -488,7 +488,7 @@ describe("ApprovalCard", () => {
     const onApprove = vi.fn(() => Promise.reject(failure));
     render(<ApprovalCard request={approval} order={confirmedOrder} onApprove={onApprove} />);
 
-    await user.click(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    await user.click(screen.getByRole("button", { name: "Approve €2,210.41" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
 
@@ -502,7 +502,7 @@ describe("ApprovalCard", () => {
     const onApprove = vi.fn(() => Promise.reject(new ApiError("BLOCKED_BY_RECALL", "blocked by a recall")));
     render(<ApprovalCard request={approval} order={confirmedOrder} onApprove={onApprove} />);
 
-    await user.click(screen.getByRole("button", { name: /Approve €2,210\.41 incl VAT/ }));
+    await user.click(screen.getByRole("button", { name: "Approve €2,210.41" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €2,210.41" }));
 

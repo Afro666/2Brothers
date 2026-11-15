@@ -261,7 +261,7 @@ describe("OptionCompare", () => {
     await user.click(optionToggle("B"));
     await user.click(optionToggle("C"));
     expect(fact("A", "Price ex VAT")).toHaveTextContent("€2.57 per l");
-    expect(fact("A", "Total")).toHaveTextContent("€148.76 incl VAT");
+    expect(fact("A", "Total")).toHaveTextContent("€148.76 in all");
     expect(fact("A", "Delivery reliability")).toHaveTextContent("97 %");
     expect(fact("B", "Labels")).toHaveTextContent("Organic (EU)");
     expect(fact("C", "Order cut-off")).toHaveTextContent(/^met \(order by Sun,? 15 Nov,? 17:00\)$/);
@@ -281,7 +281,7 @@ describe("OptionCompare", () => {
     const onChoose = vi.fn();
     const onApprove = vi.fn();
     render(<OptionCompare options={milkOptions} onChoose={onChoose} onApprove={onApprove} />);
-    await user.click(screen.getByRole("button", { name: "Choose option A: approve €148.76 incl VAT" }));
+    await user.click(screen.getByRole("button", { name: "Choose option A: approve €148.76" }));
     expect(onApprove).toHaveBeenCalledTimes(1);
     expect(onChoose).not.toHaveBeenCalled();
   });
@@ -293,7 +293,7 @@ describe("OptionCompare", () => {
     const { rerender } = render(
       <OptionCompare options={[choosable, optionC]} onChoose={onChoose} onApprove={onApprove} />,
     );
-    await user.click(screen.getByRole("button", { name: "Choose option A: approve €148.76 incl VAT" }));
+    await user.click(screen.getByRole("button", { name: "Choose option A: approve €148.76" }));
     expect(onChoose).toHaveBeenCalledWith(choosable.id);
     expect(onApprove).not.toHaveBeenCalled();
 
@@ -521,7 +521,7 @@ describe("Approvals page: the milk options", () => {
     expect(fact("B", "Order cut-off")).toHaveTextContent(/^missed/);
     expect(within(row("B")).getAllByRole("button")).toEqual([optionToggle("B")]);
 
-    await user.click(screen.getByRole("button", { name: "Choose option A: approve €148.76 incl VAT" }));
+    await user.click(screen.getByRole("button", { name: "Choose option A: approve €148.76" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     expect(approve).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
