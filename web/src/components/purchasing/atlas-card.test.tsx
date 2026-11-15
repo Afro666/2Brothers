@@ -76,6 +76,19 @@ describe("the Atlas card on the About page", () => {
     expect(verdicts.filter((v) => v === "slightly_worse")).toHaveLength(comparison.totals.slightly_worse);
   });
 
+  it("says the ranking changed later only for a comparison measured on or before that day (#1953)", async () => {
+    const measuredOn = comparison.measured_on;
+    try {
+      comparison.measured_on = "2026-11-15";
+      renderApp("/about", withAtlas(async () => atlasFactsMock()));
+      const view = await card();
+      expect(view.queryByText(/before the search ranking was changed/)).not.toBeInTheDocument();
+      expect(view.getByText(/measured on the server on 2026-11-15\./)).toBeInTheDocument();
+    } finally {
+      comparison.measured_on = measuredOn;
+    }
+  });
+
   it("lists the other Atlas features with their live counts", async () => {
     renderApp("/about", withAtlas(async () => atlasFactsMock()));
     const view = await card();
