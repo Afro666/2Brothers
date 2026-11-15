@@ -11,13 +11,12 @@
 <div class="sticker st-pos-atlas tilt-r"><p class="sticker-big">17,546</p><p class="sticker-small">PRODUCTS</p></div>
 </div>
 <img class="snap tilt-s" src="/_blob/67e4cbdc126ad219267575dfff326b80" alt="The result line of the Tamper check on the live site: Audit log intact, each of the 1752 entries carries the hash of the one before it. Checked at 02:47." style="width:1100px;height:97px;object-fit:contain">
-<aside>SAY (20 seconds, one word to remember: ATLAS): All of it runs on MongoDB Atlas. The catalog search is Atlas Search over 17,546 products. The inbox fills live, over a change stream. The audit log is hash-chained. And no order is ever stored twice.
+<aside>SAY:
+All of it runs on MongoDB Atlas. The catalog search is Atlas Search over 17,546 products. The inbox fills live, over a change stream. The audit log is hash-chained. And no order is ever stored twice.
 
-TWO WORDS TO WATCH: say "stored twice", never "sent twice": nothing is ever sent. And say "even with a typo" only if you type the typo in front of them ("lactose fre milk" in the Catalog).
+TO MONGODB, ADD: Atlas Search is one index over English, Finnish and Swedish names, and it allows one typo. Vector Search has 17,546 voyage-4 vectors behind the Catalog switch; the Buyer uses it only when the words find nothing. Stock, deliveries and forecasts are time-series collections, and the drift tile is one aggregation with setWindowFields. Money is Decimal128.
 
-CUE: for a MongoDB judge with time, open the Catalog and type "lactose fre milk" with the typo, then About, the card "The data lives in MongoDB Atlas". Check the Catalog loads before you do: on 15 Nov at 02:47 one load of it answered "Could not reach the gateway".
+TO VALIO, ADD: Your whole catalog, 17,546 products, is searchable in English, Finnish and Swedish.
 
-SAY IT STRAIGHT IF ASKED: vector search is real (17,546 voyage-4 vectors, 1,024 dimensions) and sits behind the Catalog switch. The Buyer searches by words and uses the vectors only when the words find nothing. Hybrid search ($rankFusion) was better on 6 of 10 searches, equal on 2, slightly worse on 2; a written-down measurement. The collection holds 17,563 product documents, 17 more than the vectors.
-
-SOURCES: docs/submission.md, "MongoDB Atlas", the table of features with their code paths (store/search.py:153, store/history.py:35, store/drift.py:62, store/trust.py:112, store/db.py:21 and :63, store/audit.py:91). The line at the bottom is the live Tamper check, captured on Sun 15 Nov at 02:47 Helsinki: "Audit log intact: each of the 1752 entries carries the hash of the one before it". About card, 15 Nov 00:03: 222 MB of data and indexes, MongoDB 8.0.37.</aside>
+TO NVIDIA, ADD: The vectors are MongoDB’s voyage-4, not Nemotron: our endpoint serves no embedding model.</aside>
 </section>

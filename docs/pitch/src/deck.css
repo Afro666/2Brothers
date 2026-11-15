@@ -110,7 +110,7 @@ h3 { font-size: 44px; font-weight: 700; line-height: 1.15; }
 
 /* limits, on paper */
 .lrows { display: flex; flex-direction: column; gap: 30px; }
-.lrow { display: flex; justify-content: space-between; align-items: center; gap: 40px; border-bottom: 2px dashed #b9b2a2; padding-bottom: 30px; }
+.lrow { display: flex; justify-content: space-between; align-items: center; gap: 40px; border-bottom: 2px dashed #5c574c; padding-bottom: 30px; }
 .pnote { font-size: 32px; line-height: 1.4; color: #5c574c; }
 
 /* backup slides: the milk request and the proof */
