@@ -126,7 +126,13 @@ describe("ForecastPage", () => {
     expect(chart.querySelectorAll("circle")).toHaveLength(12);
     expect(within(chart).getByText("Forecast only")).toBeInTheDocument();
     expect(within(chart.closest("div")!.parentElement!).getAllByText(/ KG$/).length).toBeGreaterThan(1);
-    expect(weekRows()).toHaveLength(16);
+    const rows = weekRows();
+    expect(rows).toHaveLength(16);
+    // A week ahead has a forecast and nothing to compare with yet.
+    expect(rows[12]).toHaveTextContent("Forecast only");
+    expect(within(rows[12]).getAllByRole("cell")[1]).toHaveTextContent("not yet");
+    expect(within(rows[12]).getAllByRole("cell").slice(-2).map((cell) => cell.textContent)).toEqual(["not yet", "not yet"]);
+    expect(rows[11]).not.toHaveTextContent("Forecast only");
   });
 
   it("follows the chosen product", async () => {
@@ -244,7 +250,7 @@ describe("ForecastPage", () => {
     );
     expect(
       await screen.findByText(
-        "In total the engine misses less (WAPE 5 %) and its waste is about €1,155.00 against €2,925.00, at the cost of more short: about €1,413.80 against €1,002.89.",
+        "In total the engine misses less (weekly error 5 %) and wastes less, about €1,155.00 against €2,925.00, but with a larger shortfall: about €1,413.80 against €1,002.89.",
       ),
     ).toBeInTheDocument();
     cleanup();

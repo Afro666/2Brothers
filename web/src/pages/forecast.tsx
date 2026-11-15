@@ -21,7 +21,7 @@ const KITCHEN = "kitchen";
 
 /** What the engine wins and what it costs, said only when the gateway's own numbers show exactly that. */
 const EURO_SUMMARY =
-  "In total the engine misses less (WAPE {wape}) and its waste is about {waste} against {baselineWaste}, at the cost of more short: about {short} against {baselineShort}.";
+  "In total the engine misses less (weekly error {wape}) and wastes less, about {waste} against {baselineWaste}, but with a larger shortfall: about {short} against {baselineShort}.";
 
 export const GROUPS = ["Weekly error", "Stock-out days", "Waste"];
 
@@ -145,7 +145,7 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
       })
     : null;
   // A kitchen that mixes kg, l and pieces has no amount to plot: its chart is the weekly error, a share.
-  const mixed = series.unit == null;
+  const mixed = series.productId == null;
   const share = (fraction: number | null) => (fraction == null ? null : Math.round(fraction * 1000) / 10);
   const errorWeeks = series.weeks
     .filter((week) => !week.ahead)

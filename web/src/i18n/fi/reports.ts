@@ -36,7 +36,7 @@ export default {
   "Stock-out days": "Varaston loppumispäivät",
   "Waste": "Hävikki",
   "Weekly error (WAPE)": "Viikkovirhe (WAPE)",
-  "In total the engine misses less (WAPE {wape}) and its waste is about {waste} against {baselineWaste}, at the cost of more short: about {short} against {baselineShort}.": "Kaiken kaikkiaan moottori osuu lähemmäs (WAPE {wape}) ja sen hävikki on noin {waste} vastaan {baselineWaste}, mutta puutetta on enemmän: noin {short} vastaan {baselineShort}.",
+  "In total the engine misses less (weekly error {wape}) and wastes less, about {waste} against {baselineWaste}, but with a larger shortfall: about {short} against {baselineShort}.": "Kaiken kaikkiaan moottori osuu lähemmäs (viikkovirhe {wape}) ja hukkaa vähemmän, noin {waste} vastaan {baselineWaste}, mutta puute on suurempi: noin {short} vastaan {baselineShort}.",
   "{past} past weeks, the share of the need each forecast missed. The table below has the same numbers.": "{past} mennyttä viikkoa, kuinka suuren osan tarpeesta kumpikin ennuste ohitti. Alla oleva taulukko sisältää samat luvut.",
   "The share of the need the forecast missed. Lower is better.": "Ennusteen ohi menneen tarpeen osuus. Pienempi on parempi.",
   "Bias": "Harha",
