@@ -22,7 +22,7 @@ LANGUAGES = {'en': 'English', 'fi': 'Finnish'}
 
 SYSTEM = (
     "You write a short buying note for a food wholesaler's planner. You get rows: one product "
-    "on one delivery day, with the forecast demand of the kitchens that share their forecast, "
+    "over the short days of the window, summed over those days, with the forecast demand of the kitchens that share their forecast, "
     "the supplier's available amount, the shortage and the suggested buy.\n"
     "Write one line per row, most urgent first, at most one sentence of 20 words each.\n"
     "Rules:\n"
