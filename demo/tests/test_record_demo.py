@@ -68,7 +68,8 @@ def test_approve_is_scoped_to_the_card_of_the_request_it_sent():
     with pytest.raises(RuntimeError, match="200 L milk"):
         decide(_Fake(log))     # no card for this request: nothing is clicked
     assert log == [("locator", '[data-slot="card"]'), ("text", "200 L milk", True), ("filter",),
-                   ("role", "button", "Choose option"), ("role", "button", "Option A"),
+                   ("role", "button", "Approve option"), ("role", "button", "Choose option"),
+                   ("role", "button", "Inspect ("), ("role", "button", "Option A"),
                    ("role", "button", "Choose option"), ("role", "button", "Approve")]
 
 
@@ -90,9 +91,9 @@ class _Button:
     def click(self):
         self.clicks.append(self.name)
         if self.reveals:
-            group, button = self.reveals
-            group.append(button)
-            self.expanded = "true"
+            group, *shown = self.reveals
+            group.extend(shown)
+            self.reveals, self.expanded = None, "true"
 
 
 class _Group:
@@ -105,7 +106,8 @@ class _Group:
         return self
 
     def get_by_role(self, role, name=None, exact=False):
-        return _Group([b for b in self.buttons if name in b.name])
+        # Playwright matches a name without `exact` as a substring, in any letter case.
+        return _Group([b for b in self.buttons if name.lower() in b.name.lower()])
 
     def all(self):
         return list(self.buttons)
@@ -151,6 +153,78 @@ def test_a_folded_option_a_is_opened_to_reach_choose_option():
                 _Button("Approve", clicks, enabled=False)]
     _decide()(_Page(buttons, clicks))
     assert clicks == ["Option A: 698 ST 463380", "Choose option A: approve", "Yes, approve"]
+
+
+def _compact_card(clicks, main, option_a_open=False, count=3):
+    """One compact inbox card (#1142): the options are not on the page until Inspect is opened.
+    `main` is the name of the card's main button. Option A is folded unless it holds the basket."""
+    buttons = []
+    choose = _Button("Choose option A: approve €131.07 incl VAT", clicks)
+    if option_a_open:
+        inside = [_Button("Option A: 51 L milk", clicks, expanded="true"), choose]
+    else:
+        inside = [_Button("Option A: 51 L milk", clicks, expanded="false", reveals=(buttons, choose))]
+    inside.append(_Button("Option B: 1,000 L organic milk", clicks, expanded="false"))
+    buttons += [_Button(f"Inspect ({count} options)", clicks, expanded="false", reveals=(buttons, *inside)),
+                _Button("Reject", clicks), _Button(main, clicks)]
+    return buttons
+
+
+def test_the_new_card_is_approved_from_its_main_button():
+    """#1866: the main button reads "Approve option A: <amount>"; one press chooses the
+    recommended option and opens the dialog. Inspect stays folded, and the main button is
+    not taken for a folded "Option A" header."""
+    clicks = []
+    _decide()(_Page(_compact_card(clicks, "Approve option A: €131.07"), clicks))
+    assert clicks == ["Approve option A: €131.07", "Yes, approve"]
+
+
+def test_the_main_button_is_for_whatever_letter_is_recommended():
+    clicks = []
+    _decide()(_Page(_compact_card(clicks, "Approve option B: €2,485.65"), clicks))
+    assert clicks == ["Approve option B: €2,485.65", "Yes, approve"]
+
+
+def test_a_compact_card_without_approve_option_is_inspected_to_reach_choose_option():
+    """The card that is live until the next deploy, and the new card once a person picked an
+    option: the main button approves the proposal's own basket, so the recorder opens Inspect
+    and takes option A there."""
+    clicks = []
+    _decide()(_Page(_compact_card(clicks, "Approve €2,326.75 incl VAT"), clicks))
+    assert clicks == ["Inspect (3 options)", "Option A: 51 L milk",
+                      "Choose option A: approve €131.07 incl VAT", "Yes, approve"]
+
+
+def test_an_option_a_that_inspect_shows_open_is_not_folded_again():
+    clicks = []
+    _decide()(_Page(_compact_card(clicks, "Approve €131.07 incl VAT", option_a_open=True), clicks))
+    assert clicks == ["Inspect (3 options)", "Choose option A: approve €131.07 incl VAT", "Yes, approve"]
+
+
+def test_an_open_inspect_is_not_folded_again():
+    clicks, buttons = [], []
+    choose = _Button("Choose option A: approve", clicks)
+    buttons += [_Button("Inspect (2 options)", clicks, expanded="true"),
+                _Button("Option A: 51 L milk", clicks, expanded="false", reveals=(buttons, choose)),
+                _Button("Approve €2,326.75 incl VAT", clicks)]
+    _decide()(_Page(buttons, clicks))
+    assert clicks == ["Option A: 51 L milk", "Choose option A: approve", "Yes, approve"]
+
+
+def test_a_card_without_options_is_approved_without_opening_inspect():
+    clicks = []
+    buttons = [_Button("Inspect", clicks, expanded="false"), _Button("Approve €98.10 incl VAT", clicks)]
+    _decide()(_Page(buttons, clicks))
+    assert clicks == ["Approve €98.10 incl VAT", "Yes, approve"]
+
+
+def test_a_disabled_approve_option_is_never_pressed():
+    clicks = []
+    buttons = [_Button("Inspect", clicks, expanded="false"),
+               _Button("Approve option A: €131.07", clicks, enabled=False)]
+    with pytest.raises(RuntimeError, match="200 L milk"):
+        _decide()(_Page(buttons, clicks))
+    assert clicks == []
 
 
 def test_an_open_option_a_is_not_folded_again():
@@ -286,6 +360,24 @@ def test_story_a_opens_a_folded_option_a_on_the_offer_card():
     page = _OfferPage([other, _Card("Offer from Valio Aimo: oat drink in place of milk", buttons)], clicks)
     _offer_decide()(page)
     assert clicks == ["Option A: 42 L", "Choose option A: approve", "Yes, approve"]
+
+
+def test_story_a_presses_approve_option_on_the_new_offer_card_only():
+    clicks = []
+    other = _Card("1,000 L lactose-free milk by Monday", _compact_card([], "Approve option A: other"))
+    offer = _Card("Offer from Valio Aimo: oat drink in place of milk",
+                  _compact_card(clicks, "Approve option A: €131.07"))
+    _offer_decide()(_OfferPage([other, offer], clicks))
+    assert clicks == ["Approve option A: €131.07", "Yes, approve"]
+
+
+def test_story_a_inspects_the_compact_offer_card_without_approve_option():
+    clicks = []
+    offer = _Card("Offer from Valio Aimo: oat drink in place of milk",
+                  _compact_card(clicks, "Approve €2,326.75 incl VAT"))
+    _offer_decide()(_OfferPage([offer], clicks))
+    assert clicks == ["Inspect (3 options)", "Option A: 51 L milk",
+                      "Choose option A: approve €131.07 incl VAT", "Yes, approve"]
 
 
 def test_story_a_approves_nothing_without_exactly_one_offer_card():
