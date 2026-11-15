@@ -30,7 +30,7 @@ export function TeamSection() {
         <Card>
           <CardHeader>
             <CardTitle>{t("Members and roles")}</CardTitle>
-            <CardDescription>{t("Roles are set by the people who run this tool. This list is read-only.")}</CardDescription>
+            <CardDescription>{t("Roles cannot be changed here. This list is read-only.")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="divide-y" aria-label={t("Kitchen team members")}>

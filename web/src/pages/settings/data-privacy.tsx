@@ -118,7 +118,7 @@ export function DataPrivacySection() {
               <Button type="button" variant="outline" disabled={exporting !== null} onClick={() => void exportData("json")}>{exporting === "json" ? t("Preparing…") : t("Download JSON")}</Button>
               <Button type="button" variant="outline" disabled={exporting !== null} onClick={() => void exportData("csv")}>{exporting === "csv" ? t("Preparing…") : t("Download CSV")}</Button>
             </div>
-            <p className="text-sm text-muted-foreground">{t("The file is safe to open in a spreadsheet: no cell in it runs as a formula.")}</p>
+            <p className="text-sm text-muted-foreground">{t("Cells that would start a spreadsheet formula (=, +, - or @) are saved as plain text.")}</p>
           </CardContent>
         </Card>
 

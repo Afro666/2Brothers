@@ -41,7 +41,7 @@ describe("settings area", () => {
 
   it("loads real content in a formerly placeholder section", async () => {
     renderApp("/settings/team");
-    expect(await screen.findByText(/Roles are set by the people who run this tool/)).toBeInTheDocument();
+    expect(await screen.findByText(/Roles cannot be changed here/)).toBeInTheDocument();
   });
 
   it("moves between sections from the nav", async () => {
