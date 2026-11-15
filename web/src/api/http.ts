@@ -254,10 +254,17 @@ export function createHttpApi(baseUrl: string): Api {
   const real = {
     async getSession() {
       try {
-        currentSession = toSession((await get("/v1/me")) as Json);
+        const next = toSession((await get("/v1/me")) as Json);
+        if (JSON.stringify(currentSession) !== JSON.stringify(next)) {
+          dropKeptAnswers();
+          dropReads();
+        }
+        currentSession = next;
         return currentSession;
       } catch (error) {
         if (error instanceof ApiError && (error.code === "UNAUTHENTICATED" || error.status === 401)) {
+          dropKeptAnswers();
+          dropReads();
           currentSession = null;
           return null;
         }

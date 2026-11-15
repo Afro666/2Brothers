@@ -45,7 +45,7 @@ describe("HomePage", () => {
   it("shows the count before slow approval details arrive", async () => {
     const api = createMockApi(); const rows = await api.listApprovals();
     let finish!: (value: typeof rows) => void;
-    api.listApprovals = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    api.listApprovals = vi.fn(() => new Promise<typeof rows>((resolve) => { finish = resolve; }));
     api.countPendingApprovals = vi.fn(async () => 7);
     renderApp(`/?now=${DEMO_NOW}`, api);
     const label = await screen.findByText("Loading approval details...");
@@ -60,7 +60,7 @@ describe("HomePage", () => {
     const { router } = renderApp(`/?now=${DEMO_NOW}`, api); await screen.findByText("Oldest waiting");
     await act(async () => { await router.navigate({ to: "/about" }); });
     let finish!: (value: typeof rows) => void;
-    api.listApprovals = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    api.listApprovals = vi.fn(() => new Promise<typeof rows>((resolve) => { finish = resolve; }));
     await act(async () => { await router.navigate({ to: "/" }); });
     expect(await screen.findByText("Showing previous results while refreshing...")).toBeInTheDocument();
     expect(screen.getByText("Oldest waiting")).toBeInTheDocument();

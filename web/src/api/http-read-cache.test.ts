@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { gatewayRequest } from "@/api/http";
+import { createHttpApi, gatewayRequest } from "@/api/http";
 import { dropKeptAnswers } from "@/lib/use-async";
 afterEach(() => { dropKeptAnswers(); vi.unstubAllGlobals(); });
 function deferredFetch() {
@@ -46,4 +46,22 @@ it("does not retain failures or share abortable requests", async () => {
   const a = gatewayRequest("/api", "/read", { signal: new AbortController().signal });
   const b = gatewayRequest("/api", "/read", { signal: new AbortController().signal });
   expect(d.fetch).toHaveBeenCalledTimes(2); d.answer(0, {}); d.answer(1, {}); await Promise.all([a, b]);
+});
+
+it("a detected account change or expired session invalidates existing reads", async () => {
+  const d = deferredFetch();
+  const api = createHttpApi("/api");
+  const old = gatewayRequest("/api", "/read");
+  const loginCheck = api.getSession();
+  d.answer(1, { kind: "human", name: "one@example.test", role: "chef", can_approve: false });
+  await loginCheck;
+  const after = gatewayRequest("/api", "/read");
+  expect(d.fetch).toHaveBeenCalledTimes(3);
+  const checkAgain = api.getSession();
+  d.answer(3, { kind: "human", name: "two@example.test", role: "viewer", can_approve: false });
+  await checkAgain;
+  const changed = gatewayRequest("/api", "/read");
+  expect(d.fetch).toHaveBeenCalledTimes(5);
+  d.answer(0, {}); d.answer(2, {}); d.answer(4, {});
+  await Promise.all([old, after, changed]);
 });

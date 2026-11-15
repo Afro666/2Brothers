@@ -211,7 +211,8 @@ describe("useAsync", () => {
       const second = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "same", scope }));
       expect(second.result.current.data).toBe("A");
       expect(second.result.current.refreshing).toBe(true);
-      const other = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "same", scope: {} }));
+      const otherScope = {};
+      const other = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "same", scope: otherScope }));
       expect(other.result.current.status).toBe("loading");
     });
 
