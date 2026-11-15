@@ -14,7 +14,7 @@ export function SampleData({ of }: { of: keyof Api }) {
   return (
     <Badge
       variant="outline"
-      title={t("The gateway does not serve this yet. These are sample figures, not the kitchen's own.")}
+      title={t("Sample figures, not your kitchen's own: this part of the demo is not connected yet.")}
     >
       {t("Sample data")}
     </Badge>

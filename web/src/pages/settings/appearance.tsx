@@ -144,7 +144,7 @@ export function AppearanceSection() {
             <Label htmlFor="week-starts-monday">{t("Week starts on Monday")}</Label>
           </div>
           <p className="text-xs text-muted-foreground">
-            {t("Planner and demand weeks are supplier weeks: they always run Monday to Sunday.")}
+            {t("This changes the calendar shown here only; planner and demand weeks are supplier weeks and always run Monday to Sunday.")}
           </p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t pt-4 text-sm">
             <dt className="text-muted-foreground">{t("Amount")}</dt>

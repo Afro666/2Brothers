@@ -14,7 +14,7 @@ describe("Team settings", () => {
     expect(within(list).getByText("approver")).toBeVisible();
     expect(within(list).getByText("chef")).toBeVisible();
     expect(within(list).getByText("viewer")).toBeVisible();
-    expect(screen.getByText("Roles are managed by the gateway. This list is read-only.")).toBeVisible();
+    expect(screen.getByText("Roles cannot be changed here. This list is read-only.")).toBeVisible();
   });
 
   it("never offers a viewer an approval or role-management action", async () => {

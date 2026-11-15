@@ -39,8 +39,8 @@ curl -s -X POST https://31-22-104-201.sslip.io/api/v1/kitchens/demo-kitchen/toke
 ```
 
 The `token` value is shown once. Keep it out of git. Revoke it with
-`DELETE /api/v1/kitchens/demo-kitchen/tokens/<token_id>`. The Settings page of the web
-app has a place for tokens, but it does not create them yet (#261): use the call above.
+`DELETE /api/v1/kitchens/demo-kitchen/tokens/<token_id>`. The web app does the same in
+Settings, API & MCP tokens: it creates a token (the secret is shown once) and revokes it.
 
 ```bash
 export BASE=https://31-22-104-201.sslip.io/gateway

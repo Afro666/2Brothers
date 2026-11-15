@@ -118,14 +118,14 @@ export function DataPrivacySection() {
               <Button type="button" variant="outline" disabled={exporting !== null} onClick={() => void exportData("json")}>{exporting === "json" ? t("Preparing…") : t("Download JSON")}</Button>
               <Button type="button" variant="outline" disabled={exporting !== null} onClick={() => void exportData("csv")}>{exporting === "csv" ? t("Preparing…") : t("Download CSV")}</Button>
             </div>
-            <p className="text-sm text-muted-foreground">{t("CSV cells are quoted. Cells beginning with =, +, - or @ are prefixed with an apostrophe to prevent spreadsheet formulas.")}</p>
+            <p className="text-sm text-muted-foreground">{t("Cells that would start a spreadsheet formula (=, +, - or @) are saved as plain text.")}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>{t("Data retention")}</CardTitle>
-            <CardDescription>{t("Retention period: unknown. Your gateway administrator controls storage and retention.")}</CardDescription>
+            <CardDescription>{t("Retention period: unknown. Ask the people who run this tool how long data is kept.")}</CardDescription>
           </CardHeader>
           <CardContent><p className="text-sm text-muted-foreground">{t("Exporting data or requesting deletion does not change stored records. Audit entries remain part of the kitchen's tamper-evident history.")}</p></CardContent>
         </Card>
@@ -163,7 +163,7 @@ export function DataPrivacySection() {
         </CardHeader>
         <CardContent className="space-y-3">
           {requestId ? <p className="text-sm">{t("Request")} <span className="font-mono">{requestId}</span> {t("was recorded. No data was deleted.")}</p> : null}
-          {api.live && !api.live.has("requestKitchenDeletion") ? <p className="text-sm text-muted-foreground">{t("The gateway has no deletion-request route, so this sample request form is unavailable.")}</p> : null}
+          {api.live && !api.live.has("requestKitchenDeletion") ? <p className="text-sm text-muted-foreground">{t("Sample details: deletion requests cannot be sent in this demo.")}</p> : null}
           {canRequestDeletion ? <Button type="button" variant="destructive" onClick={() => openDeleteDialog(true)}>{t("Request deletion")}</Button> : !canEdit ? <p className="text-sm text-muted-foreground">{t("Only an approver can request kitchen deletion.")}</p> : null}
         </CardContent>
       </Card>

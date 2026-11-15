@@ -9,7 +9,7 @@ export default {
   "A personal approval token needs your own signed-in account.":
     "Henkilökohtainen hyväksyntätunnus vaatii oman kirjautuneen tilin.",
   "Only an approver can create an approval token.": "Vain hyväksyjä voi luoda hyväksyntätunnuksen.",
-  "The gateway does not serve approval token creation.": "Yhdyskäytävä ei tarjoa hyväksyntätunnusten luontia.",
+  "Approval tokens cannot be created in this demo.": "Hyväksyntätunnisteita ei voi luoda tässä demossa.",
   "Only a person signed in to the web can do this.": "Vain verkkosovellukseen kirjautunut ihminen voi tehdä tämän.",
   "Only an approver can see the approval tokens.": "Vain hyväksyjä näkee hyväksyntätunnukset.",
   "Choose a whole number of hours from 1 to 24.": "Valitse kokonainen tuntimäärä väliltä 1–24.",

@@ -77,7 +77,7 @@ describe("Approve from chat settings", () => {
     const create = vi.spyOn(api, "createApprovalToken");
     renderApp("/settings/approve-chat", api);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("The gateway does not serve approval token creation.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Approval tokens cannot be created in this demo.");
     expect(screen.queryByRole("button", { name: "Create approval token" })).not.toBeInTheDocument();
     expect(create).not.toHaveBeenCalled();
   });

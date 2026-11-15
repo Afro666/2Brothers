@@ -131,7 +131,7 @@ export function EngineSection() {
           <Card>
             <CardHeader>
               <CardTitle>{t("Service level")}</CardTitle>
-              <CardDescription>{t("Target service level by demand class.")}</CardDescription>
+              <CardDescription>{t("How often an order should cover the whole demand, by how much the product matters.")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {DEMAND_CLASSES.map(({ key, description }) => (
@@ -260,7 +260,7 @@ export function EngineSection() {
           <Card>
             <CardHeader>
               <CardTitle>{t("Stock-out demand cap")}</CardTitle>
-              <CardDescription>{t("Maximum factor used to scale demand observed during a stock-out.")}</CardDescription>
+              <CardDescription>{t("Sales seen while a product was out of stock undercount demand; this caps how much the forecast scales them up.")}</CardDescription>
             </CardHeader>
             <CardContent className="max-w-xs">
               <div className="flex flex-wrap items-center gap-2">
