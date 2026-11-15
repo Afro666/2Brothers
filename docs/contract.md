@@ -2994,9 +2994,11 @@ reject or cancel tool; the hidden `approve_proposal` tool called by name is refu
 
 ### Model usage (#365)
 
-`GET /v1/kitchens/{kitchen_id}/model-usage` (`kitchen:read`) sums the `buyer_usage` of
-this kitchen's Buyer runs (`db.agent_runs`, one row per free-text `POST /proposals` that
-reached the Buyer worker):
+`GET /v1/kitchens/{kitchen_id}/model-usage` (`kitchen:read`) sums this kitchen's Buyer
+model usage (`db.agent_runs`, one row per free-text `POST /proposals` that reached the
+Buyer worker): `result.buyer_usage` from runs that ended with a proposal, plus `usage`
+stored on runs that ended without a proposal (state `RECONCILE`) when they made a
+model call:
 
 ```json
 {"model": "nemotron-3.5-super-vl", "since": "2026-11-14T18:02:11+00:00",
@@ -3008,10 +3010,11 @@ reached the Buyer worker):
 
 - `runs`: every Buyer run of the kitchen. `finished_runs`: the runs that ended with a
   proposal (state `READY`).
-- `runs_without_usage`: the runs that carry no `buyer_usage`: a run from before the
-  meter, a run that did not end with a proposal, a run that is not finished yet. The
-  five sums below count only the other runs, so `runs - runs_without_usage` is the
-  number of runs behind them.
+- `runs_without_usage`: the runs with no stored usage counts: a run from before the
+  meter, a run that is not finished yet, or a run that failed before any model call.
+  A run ending without a proposal (`RECONCILE`) still contributes its stored `usage`
+  when it made a model call. The five sums below count the runs with usage, so
+  `runs - runs_without_usage` is the number of runs behind them.
 - `model_calls`, `prompt_tokens`, `completion_tokens`, `reasoning_tokens`: integers.
   `reasoning_tokens` is a part of `completion_tokens`. A count that is missing or is not
   a whole number of 0 or more adds 0.
