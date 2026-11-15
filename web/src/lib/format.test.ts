@@ -77,6 +77,9 @@ describe("one unit word everywhere (#1982)", () => {
       "The Buyer's basket as proposed: 698 pieces confirmed, 302 pieces waits for stock confirmation.",
     );
     expect(plainUnits("1 ST and 2 KI and 1.5 KG")).toBe("1 piece and 2 cases and 1.5 kg");
+    // #1989: the whole number counts, with thousands separators or a decimal comma.
+    expect(plainUnits("1,001 ST and 1 ST")).toBe("1,001 pieces and 1 piece");
+    expect(plainUnits("2,1 ST and 1,000,000 ST and 1,000.5 KG")).toBe("2,1 pieces and 1,000,000 pieces and 1,000.5 kg");
     // Not a quantity: a code with no number before it, or letters that only start like a code.
     expect(plainUnits("ST is the sales unit; 5 STARS; 3 Stück")).toBe("ST is the sales unit; 5 STARS; 3 Stück");
   });
