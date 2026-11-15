@@ -240,6 +240,14 @@ def cooking_milk(text: str, plant: str) -> bool:
     return False
 
 
+# Words that mark a product as not food ("Coconut milk hand soap", "Kookosmaito shampoo"):
+# the cooking path keeps any category, so these are left out by name (#1841).
+_NON_FOOD = re.compile(
+    r"soap|saippua|tvål|shampoo|schampo|lotion|voide|hand ?wash|body ?wash|"
+    r"shower|suihku|conditioner|hoitoaine|deodorant",
+    re.IGNORECASE)
+
+
 def is_plant_drink(row: dict, plant: str, cooking: bool = False) -> bool:
     """A catalog plant drink (category 10402) whose name holds that plant; a product with no
     catalog category (a kitchen's own, another supplier's) when its name names that plant
@@ -251,7 +259,9 @@ def is_plant_drink(row: dict, plant: str, cooking: bool = False) -> bool:
         return False
     if cooking:
         names = row.get("names") if isinstance(row.get("names"), dict) else {}
-        if any(cooking_milk(str(name or ""), plant) for name in names.values()):
+        text = " ".join(str(v or "") for v in names.values())
+        if not _NON_FOOD.search(text) and any(cooking_milk(str(name or ""), plant)
+                                              for name in names.values()):
             return True
     category = str(row.get("category") or "")
     if category == PLANT_DRINK_CATEGORY:
