@@ -137,9 +137,12 @@ export function ModelTraceLine({ trace }: { trace: ModelTrace | null | undefined
 export function ModelTracePanel({
   trace,
   explanation,
+  defaultOpen = false,
 }: {
   trace: ModelTrace | null | undefined;
   explanation?: ProposalExplanation | null;
+  /** Open at first: on a card that waits for a decision, the model's steps are part of what the person checks (#2015). */
+  defaultOpen?: boolean;
 }) {
   const t = useT();
   if (!trace) return null;
@@ -183,7 +186,7 @@ export function ModelTracePanel({
   const calls = trace.calls + (text ? 1 : 0);
   const seconds = trace.seconds + (text?.seconds ?? 0);
   return (
-    <details className="text-sm" aria-label={t("What Nemotron did")}>
+    <details className="text-sm" aria-label={t("What Nemotron did")} open={defaultOpen || undefined}>
       <summary className="cursor-pointer">
         <NemotronMark />
         <span className="font-medium">{t("What Nemotron did")}</span>{" "}
