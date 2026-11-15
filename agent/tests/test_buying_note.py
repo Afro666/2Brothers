@@ -31,6 +31,19 @@ def test_one_structured_call_with_the_rows_and_the_language():
     assert 'by_kitchen' not in json.dumps(model.requests[0]['messages'])      # rows.json had it; pick() dropped it
 
 
+def test_the_prompt_describes_the_summed_row_shape():
+    """The gateway sends one row per product summed over its days, dated on the first (#1791)."""
+    from agent.buying_note import SYSTEM
+    from gateway.buying_note import by_product
+    day = {'product_id': 'p1', 'product_name': 'Milk', 'unit': 'L', 'risk': 'SHORT', 'kitchens': 1,
+           'demand': '10', 'available': '4', 'shortage': '6', 'suggested_buy': '6'}
+    rows = by_product([{**day, 'date': '2026-11-17'}, {**day, 'date': '2026-11-16'}])
+    assert len(rows) == 1 and rows[0]['date'] == '2026-11-16' and rows[0]['demand'] == '20'
+    assert 'one delivery day' not in SYSTEM
+    assert 'summed over the delivery days' in SYSTEM and 'first day' in SYSTEM
+    assert 'from that day' in SYSTEM and 'this week' in SYSTEM
+
+
 @pytest.mark.parametrize('content', ['not json', json.dumps({'lines': [{'row': 0}]}),
                                      json.dumps({'lines': [], 'extra': 1})])
 def test_a_reply_outside_the_schema_is_refused_whole(content):
