@@ -117,7 +117,7 @@ describe("energy on the planner", () => {
     renderApp("/planner?week=2026-W47", api);
 
     const monday = (await screen.findByRole("heading", { name: /Monday/ })).closest("[data-slot='card']") as HTMLElement;
-    expect(await within(monday).findByText("about 1,007 kcal per cover · partly counted")).toBeInTheDocument();
+    expect(await within(monday).findByText("at least 1,007 kcal per cover: some ingredients have no nutrition data")).toBeInTheDocument();
     // A day without menu entries has no energy line.
     const sunday = screen.getByRole("heading", { name: /Sunday/ }).closest("[data-slot='card']") as HTMLElement;
     expect(sunday).not.toHaveTextContent("kcal");
@@ -125,7 +125,7 @@ describe("energy on the planner", () => {
     const summary = await screen.findByText(/^Planned: /);
     expect(summary).toHaveTextContent(`Planned: ${formatNumber(nutrition.planned.kcal!)} kcal.`);
     expect(summary).toHaveTextContent(
-      `Ordered for this week so far: ${formatNumber(nutrition.ordered.kcal!)} kcal (62% of the plan).`,
+      `Ordered so far covers at least 62% of the plan's energy: ${formatNumber(nutrition.ordered.kcal!)} kcal.`,
     );
     expect(summary).toHaveTextContent("Counted from 3 of 4 order lines.");
   });
