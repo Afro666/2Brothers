@@ -151,3 +151,24 @@ def test_writer_is_single_call_closes_client_and_uses_short_json_budget(timeout)
             assert len(result['sentences']) == 2
     asyncio.run(run())
     assert model.calls == 1 and model.closed
+
+
+def test_writer_logs_which_step_refused_the_reply_and_no_model_text(caplog):
+    """The audit row could not say why a first call failed (#1973)."""
+    payload = context(PROPOSAL, {'milk': 'Milk'}, 'en')
+    class Model:
+        async def complete_json(self, messages, schema, name, **kw):
+            reply = reply_for(payload)
+            reply['sentences'][0]['text'] = reply['sentences'][0]['text'].replace('698', '700 secret words')
+            return {'content': json.dumps(reply)}
+        async def close(self):
+            pass
+    async def run():
+        with pytest.raises(WorkerError) as err:
+            await ExplanationWriter(WorkerError, model_factory=Model).write(payload)
+        assert err.value.code == 'EXPLANATION_INVALID_OR_UNAVAILABLE'
+    with caplog.at_level('WARNING', logger='agent.explanation_service'):
+        asyncio.run(run())
+    logged = [r.getMessage() for r in caplog.records if 'explanation refused' in r.getMessage()]
+    assert len(logged) == 1 and 'step=check' in logged[0]
+    assert 'reason=explanation sentence or numbers changed' in logged[0] and 'secret' not in logged[0]

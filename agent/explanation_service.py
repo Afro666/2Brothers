@@ -2,6 +2,7 @@
 import asyncio
 import hmac
 import json
+import logging
 import os
 import time
 
@@ -23,6 +24,7 @@ class ExplanationWriter:
             model = self.model_factory()
         except ValueError:
             raise self.error(503, 'EXPLANATION_NOT_CONFIGURED') from None
+        step = 'model'
         try:
             messages = [{'role': 'system', 'content':
                 'Compose a concise kitchen proposal explanation in the requested language. '
@@ -35,11 +37,18 @@ class ExplanationWriter:
             message = await asyncio.wait_for(model.complete_json(messages, SCHEMA, 'proposal_explanation',
                                         max_tokens=768, role='proposal_explanation'), self.timeout)
             reply = parse_reply(message, SCHEMA)
+            step = 'check'
             checked_reply(reply, payload['facts'], payload['language'])
             return {'sentences': reply['sentences'], 'duration_ms': round((time.monotonic()-started)*1000)}
         except asyncio.TimeoutError:
             raise self.error(504, 'EXPLANATION_TIMEOUT') from None
-        except Exception:
+        except Exception as exc:
+            # Which step refused the reply (#1973): the audit row alone could not say. The
+            # checker's reasons are our own fixed sentences; no model text is logged.
+            logging.getLogger(__name__).warning(
+                'explanation refused step=%s error=%s reason=%s duration_ms=%s', step, type(exc).__name__,
+                str(exc) if step == 'check' and type(exc) is ValueError else '',
+                round((time.monotonic()-started)*1000))
             raise self.error(503, 'EXPLANATION_INVALID_OR_UNAVAILABLE') from None
         finally:
             emit(getattr(model, 'meter', None), run='proposal_explanation')

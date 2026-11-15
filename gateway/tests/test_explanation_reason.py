@@ -26,17 +26,17 @@ def fact(payload, kind):
 
 def test_the_chosen_sentence_gives_the_unit_price_of_the_line():
     chosen = fact(context(MILK, NAMES, 'en'), 'chosen')
-    assert chosen['forms'][0] == ('The proposal includes 698 ST of Arla Café milk 1 L UHT lactose free '
-                                  'at EUR 2.65 per ST ex VAT; the supplier has confirmed availability.')
+    assert chosen['forms'][0] == ('The proposal includes 698 pieces of Arla Café milk 1 L UHT lactose free '
+                                  'at EUR 2.65 per piece ex VAT; the supplier has confirmed availability.')
     fi = fact(context(MILK, NAMES, 'fi'), 'chosen')
-    assert 'hintaan 2,65 EUR / ST ilman ALV:a' in fi['forms'][0]
+    assert 'hintaan 2,65 EUR / kpl ilman ALV:a' in fi['forms'][0]
 
 
 def test_a_line_with_no_price_in_the_record_gets_no_price():
     proposal = deepcopy(MILK)
     proposal['lines'][0]['unit_price'] = None
     text = fact(context(proposal, NAMES, 'en'), 'chosen')['forms'][0]
-    assert text == ('The proposal includes 698 ST of Arla Café milk 1 L UHT lactose free; '
+    assert text == ('The proposal includes 698 pieces of Arla Café milk 1 L UHT lactose free; '
                     'the supplier has confirmed availability.')
 
 
