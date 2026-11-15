@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ATLAS_INDEX_TYPES, ATLAS_LABELS, ATLAS_VERDICTS } from "@/components/purchasing/atlas-card";
+import { ATLAS_INDEX_TYPES, ATLAS_LABELS, ATLAS_SERIES_NAMES, ATLAS_VERDICTS } from "@/components/purchasing/atlas-card";
 import { MODEL_USAGE_LABELS } from "@/components/purchasing/model-usage-card";
 import { NEMOTRON_ALSO, NEMOTRON_JOBS } from "@/components/purchasing/nemotron-jobs-card";
 import { CHOOSE_ERRORS } from "@/components/purchasing/option-compare";
@@ -70,6 +70,7 @@ describe("part 2 translations", () => {
       ...Object.values(ATLAS_LABELS),
       ...Object.values(ATLAS_INDEX_TYPES),
       ...Object.values(ATLAS_VERDICTS),
+      ...Object.values(ATLAS_SERIES_NAMES),
       ...NEMOTRON_JOBS.flatMap((job) => [job.name, job.text, job.link]),
       ...NEMOTRON_ALSO.flatMap((row) => [row.text, row.link]),
     ];
