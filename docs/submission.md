@@ -7,8 +7,8 @@ path in this repo or a live URL. Checked against `main` on 2026-11-14. A line ma
 ## Form text, ready to paste (#1775)
 
 Copy each block as it is. Every sentence was checked on 2026-11-14 at about 21:50 UTC
-against the code on `main` and against GET calls on the live site; the sources are under
-the blocks. Do not add these claims by hand, because they are not true:
+against the code on `main` and against GET calls on the live site, and the changed
+sentences again on 2026-11-15 at 00:59 UTC (#1969); the sources are under the blocks. Do not add these claims by hand, because they are not true:
 
 - "Context.dev reads supplier price pages." It does not. Context.dev reads the food recall
   list, one manufacturer page, a producer register and brand data. The price list of
@@ -28,30 +28,33 @@ Buyer".
 Kitchen Buyer makes Valio Aimo readable for any purchasing agent: an agent looks up product, price and availability and gets a signed offer, and a person approves every order.
 ```
 
-**Description** (three short paragraphs, about 85 words)
+**Description** (three short paragraphs, about 90 words)
 
 ```
-Kitchen Buyer, by team 2BROTHERS, is for professional kitchens that buy from a wholesaler such as Valio Aimo. A chef types one sentence and sees one order proposal with live prices, stock and a total.
+Kitchen Buyer, by team 2BROTHERS, is for professional kitchens that buy from a wholesaler such as Valio Aimo: any agent can look up product, price and availability and get a signed offer, and a person approves every order. A chef types one sentence and gets one order proposal.
 
-Plain code sets every quantity and total. A person approves every order. A total can include lines whose stock the supplier has not confirmed; the card marks them.
+Code sets every quantity and total. When the supplier has not confirmed some stock, the card says how much waits.
 
-No order reaches Valio, because Valio's mock API has no order route. The gateway records the approved order with a signed receipt that says NOT_SENT.
+No order reaches Valio: its mock API has no order route. The gateway keeps the approved order with a signed receipt that says NOT_SENT.
 ```
 
 **Try it in one minute** (paste after the description, or in the demo field)
 
 ```
-Open https://31-22-104-201.sslip.io (no sign-in). Open "To approve". Open the lactose-free milk card. Open "What Nemotron did" on that card. Then open "Tamper check" in the menu and press "Verify audit chain".
+Open https://31-22-104-201.sslip.io (no sign-in). Open "Request an order", type "1,000 litres of lactose-free milk by Monday" and press "Ask the agent". Open "To approve" and the new card, then "What Nemotron did" on that card. Then open "Tamper check" in the menu and press "Verify audit chain". If no card comes, open "Order history" and the newest 698 L lactose-free milk order (EUR 2,099.41) to see its "Signed receipt".
 ```
 
-The milk card is there while a milk proposal waits. If none waits, open "Request an order",
-type `1,000 L lactose-free milk by Monday` and press "Ask the agent" first.
+The line starts with the request, so it does not need a card that already waits (on 15 Nov
+at 00:59 UTC no milk card waited). The fallback order exists: `GET .../orders` lists three
+698 L lactose-free milk orders of EUR 2,099.41 with a receipt, the newest of 14 Nov 22:18
+UTC. The two oldest (14 Nov 03:48 and 03:50 UTC) have no receipt, so the line says "newest".
 
 **Also in the product** (add these where the form has room; each is one true sentence)
 
 ```
 Any outside agent with a kitchen token can do the same over REST or MCP, and anyone can check a signed offer or receipt with one public key.
 Our Buyer agent (NVIDIA Nemotron 3.5 Super VL) picks the products; it sets no quantity, no price and no total, and an agent token cannot approve.
+The agent decides no order alone on the demo: auto-approve exists and is off, a kitchen must earn it (4 weeks and 20 human decisions, at most 10% of approved proposals edited), an approver sets its limit (at most EUR 2,000), and it never approves a line with unconfirmed stock.
 A Telegram bot takes a typed or spoken order, sends a brief of what waits, and shows the order as one message per supplier; approval stays on the site.
 A recall check flags a product on the shelf that may match an official food recall, and new proposals leave it out.
 The home page shows an offer written by Valio's selling agent; the kitchen's own forecast sets the quantity, and a person approves it like any order.
@@ -64,11 +67,11 @@ Valio Aimo is the only real supplier; the other suppliers in the demo kitchen ar
 ```
 Model: NVIDIA Nemotron 3.5 Super VL (nemotron-3.5-super-vl) on Verda's shared inference endpoint. We did not train or fine-tune it.
 
-What it does: it is the Buyer. For each request, code searches the catalog and gets a live offer. Then one Nemotron call picks up to three products from that shortlist and gives a short reason. Code does every tool step after that: a fresh offer for the picked products, the check against the guards, and the request for a person's approval. The same model also reads photos (a menu, a shelf, a delivery note, a supplier's price list) and picks the substitute in the offer from Valio's selling agent.
+What it does: it is the Buyer. For each request, code searches the catalog and gets a live offer. Then one Nemotron call picks up to three products from that shortlist. On the live site that call takes about 0.3 seconds. Code does every tool step after that: a fresh offer for the picked products, the check against the guards, and the request for a person's approval. The same model also reads photos (a menu, a shelf, a delivery note, a supplier's price list) and picks the substitute in the offer from Valio's selling agent.
 
-Why it matters: a chef writes a sentence, not product codes. A wrong model answer cannot become a wrong order, because the model sets no quantity, no price and no total, it has no approve tool, and a person approves every order. Each proposal the Buyer agent made has a panel "What Nemotron did" that shows the model call and the code steps.
+Why it matters: a chef writes a sentence, not product codes. A wrong model answer cannot become a wrong order, because the model sets no quantity, no price and no total, it has no approve tool, and a person approves every order. Each proposal the Buyer agent made has a panel "What Nemotron did" that shows the model call and the code steps. The card can also show a short explanation that Nemotron writes from the decision record; code checks it against the facts, and an explanation that fails the check is not shown.
 
-How we improved its outputs: we measured, then changed. The model replies in a strict JSON schema, and a reply outside the schema is refused. Thinking is off for the pick, with one call and no retry. The prompt ranks the rules in a fixed order (product kind, diet, arrival, confirmed stock, price). Code checks the reply after the model: a pick outside the shortlist is refused, and so is a reason with a number that is not in the data. If the model does not answer in time, a plain parser makes the proposal and the card says so.
+How we improved its outputs: we measured, then changed. On our development benchmark (30 synthetic requests, three repeats each, 90 replies) the pick was exactly the expected products in 27 of 90 replies at the start. With the live quote facts and the ranked prompt it was 54 of 90. With a code guard that keeps the model's first choice alone when confirmed stock covers the need, it is 69 of 90. This is a development set, not held-out evidence. The model replies in a strict JSON schema, and a reply outside the schema is refused. Thinking is off for the pick, with one call and no retry. The prompt ranks the rules in a fixed order (product kind, diet, arrival, confirmed stock, price). Code checks the reply after the model: a pick outside the shortlist is refused, and so is a reason with a number that is not in the data. If the model does not answer in time, a plain parser makes the proposal and the card says so.
 ```
 
 **Best Use of MongoDB Atlas** (one sentence)
@@ -104,9 +107,13 @@ All data is in MongoDB Atlas: Atlas Search and Atlas Vector Search over Valio's 
 | Atlas features and the 17,546 vectors | `GET /api/v1/kitchens/demo-kitchen/atlas`; `GET .../audit/verify` answers `ok: true` |
 | What Context.dev reads | `monitor/recalls.py`, `monitor/enrichment.py`, `monitor/labels.py`, `gateway/onboarding.py`, `gateway/brand_logos.py` |
 | The name "Kitchen Buyer" | `web/index.html:26` (the page title) |
-| The try-it line: "To approve", "What Nemotron did", "Tamper check", "Verify audit chain" | `web/src/components/purchasing/app-shell.tsx:63`, `:72`, `web/src/components/purchasing/model-trace-panel.tsx:116`, `web/src/pages/trust.tsx:136`; checked on 2026-11-14 at 22:55 UTC: a waiting milk proposal in `GET .../proposals` has `model_trace.made_by: model` with 1 call, and `GET .../audit/verify` answers `ok: true` |
+| The try-it line: "Request an order", "Ask the agent", "To approve", "What Nemotron did", "Tamper check", "Verify audit chain", "Order history", "Signed receipt" | `web/src/components/purchasing/app-shell.tsx:62-64`, `:72`, `web/src/components/purchasing/chef-request-box.tsx:169`, `web/src/components/purchasing/model-trace-panel.tsx:189`, `web/src/pages/trust.tsx:136`, `web/src/pages/order-detail.tsx:63`; "litres" is a unit the request reader knows (`gateway/parse.py:17`, `agent/service.py:37`); checked on 2026-11-15 at 00:59 UTC: a milk proposal in `GET .../proposals` has `model_trace.made_by: model` with 1 call, `GET .../audit/verify` answers `ok: true`, and `GET .../orders` has the 698 L order of 14 Nov 22:18 UTC with a receipt |
+| The pick takes about 0.3 seconds | `model_trace` of the live milk proposal `17dfba54…` in `GET .../proposals` (15 Nov 00:59 UTC): `calls: 1`, `seconds: 0.314`, `thinking: false`; the benchmark's median model round trip is 0.281 s ("Buyer read context" below). This is the model call, not the whole request |
+| 27, 54 and 69 of 90 | The table under "Buyer read context (#1605, 14 Nov)" in this file; `agent/benchmarks/pick-context-v1-report.json` |
+| The pick's reason is not shown; the card's explanation is a separate, checked Nemotron text | `agent/single_pick.py:263` ("The reason is never stored or shown"); `agent/explanation_service.py:1`, `agent/explanation.py` (`checked_reply`), `web/src/components/purchasing/approval-card.tsx:232-233`; the live audit log has `proposal_explanation_ready` and `proposal_explanation_failed` entries (`GET .../audit`, 15 Nov) |
+| Auto-approve: off, earned, limit | `gateway/autoapprove.py:23-27` (4 weeks, 20 decisions, 10% edit rate, EUR 2,000), `:93-94` (a higher limit is refused), `:28` (`STOCK_UNKNOWN`, `PARTIAL_STOCK` never); `GET .../auto-approve` on 15 Nov 00:59 UTC: `enabled: false`, `learning_done: false` |
 | "What Nemotron did" only on a proposal the Buyer agent made | A rule-made proposal has `model_trace.made_by: rule` and `calls: 0` (a waiting proposal in `GET .../proposals`); its card says "No model ran" (`model-trace-panel.tsx:105-106`) |
-| A total can include lines with unconfirmed stock, and the card marks them | The waiting milk proposal in `GET .../proposals` has a line with `unknown_stock: true` inside `expected_total`; `web/src/components/purchasing/proposal-lines.tsx:73` ("{supplier} must confirm") |
+| The card says how much waits for stock confirmation, beside the total | `web/src/components/purchasing/approval-card.tsx:632-638`: under the total of an option that holds such stock, "{quantity} {unit} waits for stock confirmation" (for the 1,000 L milk request with 698 L confirmed: "302 L waits for stock confirmation"); the line itself says "{supplier} must confirm" (`web/src/components/purchasing/proposal-lines.tsx:73`) |
 | The Telegram bot: typed or spoken order, brief, one message per supplier, no approve | `bot/README.md` ("Message rules", "What a person can do"), `bot/app.py:169-170` (voice), `deploy/compose.yaml` (services `bot` and `stt`) |
 | The recall check | `web/src/components/purchasing/recall-panel.tsx`, `gateway/service.py` (`BLOCKED_BY_RECALL`), rubric row D |
 | The offer from Valio's selling agent | `web/src/pages/home/offer.tsx:86`, `:110-111`, `gateway/supplier_offers.py:9-10`, rubric row E |
@@ -172,9 +179,9 @@ can see on the live site in under 2 minutes.
 
 | Criterion | What a judge sees, and where | Source |
 |---|---|---|
-| A. Working end-to-end demo (30%) | `/requests`: type `1,000 L lactose-free milk by Monday`, press "Ask the agent". The card opens in `/approvals` with live prices, each line's `why`, product names, and the total. Nemotron picks the products (the card's "What Nemotron did" shows one model call); the engine sizes the lines. The card has three options. On 14 Nov at 23:55 Helsinki they were, incl VAT: A, the 698 L confirmed now (the other 302 L waits for Valio to confirm stock): EUR 2,099.41; B, the Buyer's full 1,000 L basket, 302 L of it waiting for confirmation: EUR 2,545.01, which is EUR 2,242.30 ex VAT; C, a catalog alternative sized by the engine: EUR 2,651.38. Prices are live from Valio, so they move. "Approve", then "Yes, approve EUR ...". `/orders`: an approved order's page shows the "Signed receipt", for example the EUR 601.55 order of 14 Nov 13:32 UTC (the rehearsed 200 L milk request, not the 1,000 L one). No order reaches Valio: its challenge API has no order route, so the order and its receipt stay in our gateway. `/audit`: every step. | `docs/demo.md` (milk, "What was measured"), `gateway/README.md:100`, `web/src/pages/order-detail.tsx:58` |
-| B. Matches what the buyer asked (20%) | `/approvals`: each line shows its English and Finnish name, the brand when the catalog has one, a picture and a `why` sentence. The engine sizes each line; the model picks products only. Change a quantity, "Remove" a line or "Add products": the total is quoted again live. A request for several products is one proposal: on `/requests`, try `20 kg washed potatoes and 8 kg carrots for Tuesday lunch`. Do not add salmon, butter or eggs: as a free request those three still give the wrong kind of product (`docs/demo.md`). On 14 Nov a request with these two vegetables and a fish line became two purchase orders, the fish from Baltic Catch Fish Wholesale (a demo supplier, stock unknown, so it must confirm) and the vegetables from Valio, with VAT per line (EUR 347.74 incl VAT on 14 Nov, for the three lines). Each product name opens the product's page: allergens, VAT and every supplier's price. By hand in a webshop this order is a search, a comparison of several products, a stock check and a basket: we estimate 5 to 10 minutes, and it depends on the restaurant and the person. With the agent it is one sentence, about 15 seconds, and two taps. | `gateway/product_names.py:1-6`, `engine/README.md`, `gateway/change.py`, `web/src/components/purchasing/approval-card.tsx:377`, `:462`, `:480`, #1435, #1343, #1474 |
-| C. Autonomy and controls (20%) | `/approvals`: the confirm dialog says "You approve exactly EUR ... If the price or stock moves before it is placed, the gateway refuses it". A card with unknown stock says Valio must confirm it. `/settings/approve-chat`: in the open demo any tester can make a short-lived approve/reject-only token for the demo kitchen; it never proposes, and every use is audited with via: personal_token. Auto-approve is off by default and must be earned (4 weeks, 20 human decisions, at most 10% edited, a limit up to EUR 2,000). | `approval-card.tsx:551`, `:643`, `web/src/pages/settings/approve-chat.tsx:145-151`, `gateway/approval_tokens.py:1`, `gateway/mcp_http.py:9`, `gateway/autoapprove.py:21-25`, `gateway/service.py:1262-1290` |
+| A. Working end-to-end demo (30%) | `/requests`: type `1,000 L lactose-free milk by Monday`, press "Ask the agent". The card opens in `/approvals` with live prices, each line's `why`, product names, and the total. Nemotron picks the products (the card's "What Nemotron did" shows one model call); the engine sizes the lines. When Valio confirms only part of the stock, the card has options: A, the confirmed litres now (the rest waits for Valio to confirm stock); B, the Buyer's full 1,000 L basket, part of it waiting for confirmation; C, a catalog alternative sized by the engine. Read each option's total off the card: stock and prices are live from Valio, so the options and their totals move. The one figure that came back each time on 14 Nov is option A at 698 L confirmed, EUR 2,099.41 incl VAT (five orders in `/orders`). "Approve", then "Yes, approve EUR ...". `/orders`: an approved order's page shows the "Signed receipt", for example the EUR 601.55 order of 14 Nov 13:32 UTC (the rehearsed 200 L milk request, not the 1,000 L one). No order reaches Valio: its challenge API has no order route, so the order and its receipt stay in our gateway. `/audit`: every step. | `docs/demo.md` (milk, "What was measured"), `gateway/README.md:100`, `web/src/pages/order-detail.tsx:58` |
+| B. Matches what the buyer asked (20%) | `/approvals`: each line shows its English and Finnish name, the brand when the catalog has one, a picture and a `why` sentence. The engine sizes each line; the model picks products only. Change a quantity, "Remove" a line or "Add products": the total is quoted again live. A request for several products is one proposal: on `/requests`, try `20 kg washed potatoes and 8 kg carrots for Tuesday lunch`. On 14 Nov a request with these two vegetables and a fish line became two purchase orders, the fish from Baltic Catch Fish Wholesale (a demo supplier, stock unknown, so it must confirm) and the vegetables from Valio, with VAT per line (EUR 347.74 incl VAT on 14 Nov, for the three lines). Each product name opens the product's page: allergens, VAT and every supplier's price. By hand in a webshop this order is a search, a comparison of several products, a stock check and a basket: we estimate 5 to 10 minutes, and it depends on the restaurant and the person. With the agent it is one sentence, about 15 seconds, and two taps. | `gateway/product_names.py:1-6`, `engine/README.md`, `gateway/change.py`, `web/src/components/purchasing/approval-card.tsx:377`, `:462`, `:480`, #1435, #1343, #1474 |
+| C. Autonomy and controls (20%) | `/approvals`: the confirm dialog says "You approve exactly EUR ... If the price or stock moves before it is placed, the gateway refuses it". A card with unknown stock says Valio must confirm it. `/settings/approve-chat`: in the open demo any visitor can make a short-lived approve/reject-only token for the demo kitchen (8 hours by default, at most 24). It belongs to the shared demo approver, not to one person; it never proposes, and every use is audited with via: personal_token. A token of your own needs a signed-in approver account. Auto-approve is off by default and must be earned (4 weeks, 20 human decisions, at most 10% edited, a limit up to EUR 2,000). | `approval-card.tsx:551`, `:643`, `web/src/pages/settings/approve-chat.tsx:156-162`, `gateway/app.py:629-643`, `gateway/permissions.py:38-44`, `gateway/approval_tokens.py:1`, `gateway/mcp_http.py:9`, `gateway/autoapprove.py:21-25`, `gateway/service.py:1262-1290` |
 | D. Robustness to exceptions (15%) | `/approvals`: the recall panel flags the coffee on the shelf (3.253 kg) as a possible match to a Finnish Food Authority recall (only some batch dates); new proposals leave it out. `/requests`: `15 kg peanut butter` is refused in gateway code before the Buyer agent runs (#974). 13 golden scenarios, all PASS (table below). | `gateway/service.py:355`, `:428` (`BLOCKED_BY_RECALL`), `docs/demo.md` "Recall beat", `docs/decisions.md` (#974), `gateway/scenarios.py` |
 | E. Openness and path to production (15%) | `/llms.txt`, `/.well-known/agent-card.json`, `/api/.well-known/jwks.json`, `/gateway/openapi.json` all answer. Home (`/`): the tile "Offer from Valio Aimo", written by Valio's selling agent; the supplier sets no price: the quantity is the kitchen's own forecast demand, and the gateway prices it. `/trust`: "Verify audit chain". An outside agent is refused: `/llms.txt` says agent tokens get 403 `HUMAN_SESSION_REQUIRED` on approve, and `python -m demo.second_agent` shows it (needs a local run; it creates one waiting proposal). | `gateway/discovery.py`, `gateway/signing.py:99`, `:118`, `gateway/supplier_offers.py:9-10`, `web/src/pages/home/offer.tsx:85`, `web/src/pages/trust.tsx:126`, `demo/second_agent.py`, `gateway/conformance.py:204-205` |
 
@@ -235,8 +242,12 @@ The scenarios run on frozen test data, not the live site. S01's EUR 1,459.67 is 
   in our gateway and its receipt says `NOT_SENT` (`gateway/README.md:108`,
   `gateway/signing.py:33`).
 - A mandate as a verifiable credential (named in `docs/plan.md:33`, not in the code).
-- A personal approval token from the open demo: it needs a signed-in approver account
-  (`web/src/pages/settings/approve-chat.tsx:145-151`).
+- An approval token of your own in the open demo. A visitor can make a token there, but it
+  belongs to the shared demo approver and every visitor can revoke it; a token that stands
+  for one person needs a signed-in approver account (`gateway/app.py:629-643`,
+  `web/src/pages/settings/approve-chat.tsx:156-162`).
+- Known limit: a free request for butter, eggs or salmon still gives the wrong kind of
+  product (clarified butter, scrambled egg mix, salmon cubes) (`docs/demo.md:193-194`).
 - The last recorded conformance run on the server is 11 passed, 0 failed, 1 skipped
   (`docs/demo.md:338`). The code now has 13 checks (`gateway/conformance.py:193-205`); they
   were not re-run on the server for this text.
