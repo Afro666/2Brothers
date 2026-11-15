@@ -282,14 +282,15 @@ export function RecallPanel({
       >
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
           <ShieldAlert aria-hidden className={cn("size-4 shrink-0", tone === "danger" ? "text-danger" : "text-warning")} />
-          <p role="status" className="flex min-w-0 flex-[1_1_calc(100%-1.5rem)] font-semibold sm:flex-[0_1_auto]">
+          {/* #1978: on a phone the sentence is plain text that wraps, so the product name is not cut. */}
+          <p role="status" className="flex min-w-0 flex-[1_1_calc(100%-1.5rem)] font-semibold max-sm:block sm:flex-[0_1_auto]">
             {parts ? (
               <>
-                <span className="shrink-0 whitespace-pre">{parts[0]}</span>
-                <span className="min-w-[6ch] shrink-[10000] truncate" title={parts[1]}>
+                <span className="shrink-0 whitespace-pre max-sm:whitespace-pre-wrap">{parts[0]}</span>
+                <span className="min-w-[6ch] shrink-[10000] max-sm:[overflow-wrap:anywhere] sm:truncate" title={parts[1]}>
                   {parts[1]}
                 </span>
-                <span className="min-w-0 truncate whitespace-pre">{parts[2]}</span>
+                <span className="min-w-0 whitespace-pre max-sm:whitespace-pre-wrap sm:overflow-hidden sm:text-ellipsis">{parts[2]}</span>
               </>
             ) : (
               <span className="min-w-0 truncate">{headline}</span>

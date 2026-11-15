@@ -677,7 +677,7 @@ const TOOL_VERBS: Record<string, { started: string; done: string }> = {
  * `event-labels.test.ts` reads the kinds from the sources (#1776): a new kind needs a line
  * here and a Finnish text in `i18n/fi/audit-events.ts`.
  */
-export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> = {
+export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string; internal?: true }> = {
   // #899: kinds added on 14 Nov, with a plain-English label each.
   stock_photo_read: { kind: "stock", summary: "Shelf photo read by Nemotron VL" },
   audit_demo_tamper: { kind: "other", summary: "Tamper demo: a line was changed" },
@@ -686,13 +686,14 @@ export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string }> =
   order_lookup: { kind: "order", summary: "Order status checked" },
   order_resolved: { kind: "order", summary: "A person resolved an unknown send" },
   recall_check: { kind: "other", summary: "Recall check" },
-  demo_inbox_cleared: { kind: "other", summary: "Inbox cleared" },
+  // #1978: `internal` steps stay in the full activity log and are left out of Home's Latest steps.
+  demo_inbox_cleared: { kind: "other", summary: "Demo inbox reset before a rehearsal", internal: true },
   signed_in: { kind: "other", summary: "Signed in" },
   password_changed: { kind: "settings", summary: "Password changed" },
   kitchen_brief_read: { kind: "request", summary: "Kitchen brief read" },
   delivery_note_read: { kind: "order", summary: "Delivery note read" },
   proposal_created: { kind: "request", summary: "Proposal created" },
-  proposal_explanation_failed: { kind: "request", summary: "No model sentence for a proposal" },
+  proposal_explanation_failed: { kind: "request", summary: "No model sentence for a proposal", internal: true },
   approval_requested: { kind: "approval", summary: "Approval requested" },
   decision_summary: { kind: "mandate_check", summary: "Decision summary" },
   total_mismatch: { kind: "simulate", summary: "The total moved before placing: nothing was sent" },
@@ -896,6 +897,7 @@ function mapAuditEvent(event: Json): AuditEvent {
     ...base,
     // With sign-in on, the gateway's actor is the account's email: the log says who, not only "a person".
     ...(typeof actor === "string" && actor.includes("@") && !actor.includes(":") ? { actorName: actor } : {}),
+    ...(known?.internal ? { internal: true as const } : {}),
     kind: known?.kind ?? "other",
     actor:
       actor === "buyer-agent"

@@ -83,7 +83,7 @@ export default {
   "No audit steps match these filters": "Suodattimiin ei osunut lokivaiheita",
   "Clear filters": "Tyhjennä suodattimet",
   "No steps yet.": "Ei vielä vaiheita.",
-  "Inbox cleared": "Postilaatikko tyhjennetty",
+  "Demo inbox reset before a rehearsal": "Demopostilaatikko nollattu ennen harjoitusta",
   "Request refused by the gateway": "Yhdyskäytävä hylkäsi pyynnön",
   "Buyer is searching the catalog": "Ostaja etsii tuoteluettelosta",
   "Buyer searched the catalog": "Ostaja etsi tuoteluettelosta",

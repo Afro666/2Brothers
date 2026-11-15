@@ -744,6 +744,15 @@ describe("mapAudit", () => {
     expect(translate("fi", step.summary)).toBe("Tilauksen tila tarkistettu");
   });
 
+  it("marks the demo's own housekeeping steps as internal, and no other step (#1978)", () => {
+    const step = (kind: string) => mapAudit([{ event_id: `e-${kind}`, kind, actor: "system", at: "2026-11-14T10:00:00Z" }])[0];
+    expect(step("demo_inbox_cleared")).toMatchObject({ summary: "Demo inbox reset before a rehearsal", internal: true });
+    expect(step("proposal_explanation_failed")).toMatchObject({ summary: "No model sentence for a proposal", internal: true });
+    for (const kind of ["proposal_created", "option_chosen", "order_placed", "some_future_kind"]) {
+      expect(step(kind)).not.toHaveProperty("internal");
+    }
+  });
+
   it("gives known audit steps Finnish names", () => {
     const summaries: Record<string, [string, string]> = {
       stock_photo_read: ["Shelf photo read by Nemotron VL", "Hyllykuva luettu Nemotron VL:llä"],
@@ -753,7 +762,7 @@ describe("mapAudit", () => {
       order_lookup: ["Order status checked", "Tilauksen tila tarkistettu"],
       order_resolved: ["A person resolved an unknown send", "Henkilö selvitti tuntemattoman lähetyksen"],
       recall_check: ["Recall check", "Takaisinvetotarkistus"],
-      demo_inbox_cleared: ["Inbox cleared", "Postilaatikko tyhjennetty"],
+      demo_inbox_cleared: ["Demo inbox reset before a rehearsal", "Demopostilaatikko nollattu ennen harjoitusta"],
       signed_in: ["Signed in", "Kirjauduttu sisään"],
       password_changed: ["Password changed", "Salasana vaihdettu"],
       kitchen_brief_read: ["Kitchen brief read", "Keittiön ohjeet luettu"],

@@ -79,6 +79,14 @@ describe("AuditTimeline", () => {
     expect(screen.getAllByText(/^By /)).toHaveLength(1);
   });
 
+  it("calls a human actor a person, never Buyer: the Buyer is the agent (#1978)", () => {
+    const step = { id: "e1", at: "2026-11-14T10:00:00Z", kind: "approval", summary: "A person chose an option", reason: "" };
+    render(<AuditTimeline events={[{ ...step, actor: "human" }] as AuditEvent[]} />);
+    const row = screen.getByText("A person chose an option").closest("li")!;
+    expect(within(row).getByText("A person")).toBeInTheDocument();
+    expect(within(row).queryByText("Buyer")).not.toBeInTheDocument();
+  });
+
   it("groups the real sample into one readable request with six collapsed steps", () => {
     const groups = groupSteps(mapAudit(sample));
     expect(groups).toHaveLength(1);
@@ -205,7 +213,7 @@ describe("AuditTimeline", () => {
       expect(row).toHaveAttribute("data-kind", kind);
       expect(within(row).queryByText("Other")).not.toBeInTheDocument();
     }
-    for (const summary of ["Recall check", "Inbox cleared"]) {
+    for (const summary of ["Recall check", "Demo inbox reset before a rehearsal"]) {
       expect(within(screen.getByText(summary).closest("li")!).queryByText("Other")).not.toBeInTheDocument();
     }
     const refusal = screen.getByText("Request refused by the gateway").closest("li")!;

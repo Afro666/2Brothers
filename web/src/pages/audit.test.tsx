@@ -105,7 +105,7 @@ describe("audit page", () => {
       order_lookup: "Order status checked",
       order_resolved: "A person resolved an unknown send",
       recall_check: "Recall check",
-      demo_inbox_cleared: "Inbox cleared",
+      demo_inbox_cleared: "Demo inbox reset before a rehearsal",
       delivery_note_read: "Delivery note read",
       proposal_explanation_failed: "No model sentence for a proposal",
       kitchen_brief_read: "Kitchen brief read",

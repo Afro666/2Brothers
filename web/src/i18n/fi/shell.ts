@@ -32,6 +32,7 @@ export default {
   "Your role": "Roolisi",
   "Chef": "Kokki",
   "Buyer": "Ostaja",
+  "A person": "Henkilö",
   "Valio planner": "Valion suunnittelija",
   "Language": "Kieli",
   "Theme": "Teema",

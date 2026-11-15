@@ -128,6 +128,11 @@ describe("RecallPanel, folded and unfolded", () => {
     );
     expect(within(panel).getByTestId("recall-next")).toHaveTextContent(/^Do not use it until checked\.$/);
     expect(within(panel).getByTestId("recall-next")).toBeVisible();
+    // #1978: on a phone the product name wraps; it is cut to one line only from the `sm` width up.
+    const name = within(panel).getByTitle("Kulta Katriina Traditional fine ground filter coffee RAC 5x1kg");
+    expect(name.className.split(" ")).toContain("sm:truncate");
+    expect(name.className.split(" ")).not.toContain("truncate");
+    expect(within(panel).getByRole("status").className.split(" ")).toContain("max-sm:block");
     expect(toggle()).toHaveAttribute("aria-expanded", "false");
     expect(details()).not.toBeVisible();
     expect(within(panel).queryByRole("list")).not.toBeInTheDocument();

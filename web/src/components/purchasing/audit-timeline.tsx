@@ -24,7 +24,8 @@ export const ACTOR_LABEL: Record<AuditEvent["actor"], string> = {
   chef: "Chef",
   agent: "Agent",
   gateway: "Gateway",
-  human: "Buyer",
+  // #1978: in this app the Buyer is the agent; a human actor is a person.
+  human: "A person",
   valio: "Valio",
   system: "System",
 };
