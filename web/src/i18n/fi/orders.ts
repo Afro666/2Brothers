@@ -200,7 +200,7 @@ export default {
   "No replacement order has been proposed.": "Korvaavaa tilausta ei ole ehdotettu.",
   "No request yet": "Ei vielä pyyntöä",
   "No runs counted yet": "Ei vielä laskettuja ajoja",
-  "{runs} Buyer runs in all: {finished} ended with a proposal, {open} did not (an error, a time limit, or still running).": "Ostajan ajoja yhteensä {runs}: {finished} päättyi ehdotukseen, {open} ei päättynyt (virhe, aikaraja tai ajo on vielä kesken).",
+  "{runs} Buyer runs in all. {finished} ended with a proposal for a person to approve.": "Ostajan ajoja yhteensä {runs}. {finished} päättyi ehdotukseen, jonka ihminen hyväksyy.",
   "{without} runs carry no count: they ran before the meter, or they ended without a proposal before the count was kept for such runs.": "{without} ajolla ei ole lukuja: ne ajettiin ennen mittaria, tai ne päättyivät ilman ehdotusta ennen kuin tällaisten ajojen luvut tallennettiin.",
   "No safe replacement was found.": "Turvallista korviketta ei löytynyt.",
   "Not sent": "Ei lähetetty",
