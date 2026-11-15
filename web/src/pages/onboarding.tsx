@@ -15,7 +15,6 @@ import type { FieldSource, KitchenBrandLookup, KitchenBrandProfile, KitchenType,
 import { useT } from "@/lib/i18n";
 
 /** The endpoint the gateway calls for every brand field (docs/contract.md, "Onboarding lookup"). */
-export const LOOKUP_ENDPOINT = "POST /v1/brand/retrieve";
 
 export const KITCHEN_TYPES: { value: KitchenType; label: string }[] = [
   { value: "hotel", label: "Hotel" },
@@ -92,8 +91,8 @@ function FieldNote({ id, origin, current }: { id: string; origin: Origin | undef
       <>
         <Sparkles className="size-3.5 shrink-0" aria-hidden />
         <span>
-          {t("From your website via {provider} ", { provider: origin.source.provider })}
-          <span className="font-mono text-[0.7rem] whitespace-nowrap">{origin.source.endpoint}</span>
+          {/* #1839: no HTTP route on a page a new kitchen reads. */}
+          {t("From your website via {provider}", { provider: origin.source.provider })}
         </span>
       </>
     );
@@ -436,9 +435,18 @@ export function OnboardingPage() {
                 <Button type="submit" disabled={state.status === "looking" || query.trim() === ""}>
                   {state.status === "looking" ? t("Looking up...") : t("Look up")}
                 </Button>
+                {state.status === "idle" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setState({ status: "done", lookup: null, message: null })}
+                  >
+                    {t("Fill in the form by hand")}
+                  </Button>
+                ) : null}
               </div>
               <p className="text-xs text-muted-foreground">
-                {t("Powered by Context.dev")} <span className="font-mono">{LOOKUP_ENDPOINT}</span>. {t("Our server makes the call; your key never reaches the browser.")}
+                {t("Looked up with Context.dev. Nothing is saved until you check it.")}
               </p>
             </form>
 
@@ -446,16 +454,6 @@ export function OnboardingPage() {
               <p role="status" className="rounded-lg border p-3 text-sm">
                 {state.message}
               </p>
-            ) : null}
-
-            {state.status === "idle" ? (
-              <Button
-                variant="link"
-                className="h-auto px-0"
-                onClick={() => setState({ status: "done", lookup: null, message: null })}
-              >
-                {t("Fill in the form by hand")}
-              </Button>
             ) : null}
 
             {state.status === "done" ? (
