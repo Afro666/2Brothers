@@ -82,7 +82,8 @@ export const MEASURED_UNITS = new Set(["KG", "G", "L", "DL", "CL", "ML"]);
 const PEOPLE_UNITS: Record<string, { one: string; many: string }> = {
   KG: { one: "kg", many: "kg" },
   G: { one: "g", many: "g" },
-  L: { one: "l", many: "l" },
+  // #1982: litres read "L" everywhere, as the gateway and the catalog write them.
+  L: { one: "L", many: "L" },
   DL: { one: "dl", many: "dl" },
   CL: { one: "cl", many: "cl" },
   ML: { one: "ml", many: "ml" },
@@ -96,6 +97,17 @@ const PEOPLE_UNITS: Record<string, { one: string; many: string }> = {
 export function peopleUnit(unit: string, amount = 2): string {
   const words = PEOPLE_UNITS[unit.toUpperCase()];
   return words ? translate(getLanguage(), amount === 1 ? words.one : words.many) : unit;
+}
+
+/** A number and a raw unit code after it, as a gateway sentence writes them: "698 ST", "1.5 KG". */
+const QUANTITY_WITH_CODE = new RegExp(`(\\d+(?:\\.\\d+)?) (${Object.keys(PEOPLE_UNITS).join("|")})\\b`, "g");
+
+/**
+ * #1982: a gateway sentence shown as it is ("698 ST of ... = 698 L"), with each raw unit code after a
+ * number in the same words as the rest of the page ("698 pieces of ... = 698 L"). Nothing else changes.
+ */
+export function plainUnits(sentence: string): string {
+  return sentence.replace(QUANTITY_WITH_CODE, (_match, amount: string, code: string) => `${amount} ${peopleUnit(code, Number(amount))}`);
 }
 
 /**

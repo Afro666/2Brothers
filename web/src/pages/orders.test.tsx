@@ -133,7 +133,7 @@ describe("orders pages", () => {
     renderApp("/orders", api);
 
     const row = (await screen.findByText(/Arla 1 L lactose free/)).closest("li")!;
-    expect(within(row).getByText("Partial fill: 949 l of the request cannot be covered for this date.")).toBeVisible();
+    expect(within(row).getByText("Partial fill: 949 L of the request cannot be covered for this date.")).toBeVisible();
     expect(within(row).queryByText("ORD-1042")).not.toBeInTheDocument();
   });
 
@@ -248,7 +248,7 @@ describe("orders pages", () => {
     renderApp("/orders/ORD-1042", createMockApi());
 
     const lines = await screen.findByRole("list", { name: "Lines" });
-    expect(within(lines).getByText("Price per l").nextElementSibling).toHaveTextContent("/ l");
+    expect(within(lines).getByText("Price per L").nextElementSibling).toHaveTextContent("/ L");
     expect(within(lines).queryByText("Compare")).not.toBeInTheDocument();
   });
 
@@ -265,7 +265,7 @@ describe("orders pages", () => {
     renderApp("/orders/ORD-1043", api);
 
     const lines = await screen.findByRole("list", { name: "Lines" });
-    expect(within(lines).getByText("Price per l").nextElementSibling).toHaveTextContent("unknown");
+    expect(within(lines).getByText("Price per L").nextElementSibling).toHaveTextContent("unknown");
     expect(within(lines).getByText("Available").nextElementSibling).toHaveTextContent("unknown");
     expect(within(lines).getByText("Order by").nextElementSibling).toHaveTextContent("unknown");
   });

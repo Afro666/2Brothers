@@ -1480,9 +1480,9 @@ describe("the app on the gateway", () => {
       }),
     });
     renderApp("/stock", createHttpApi("/api"));
-    expect((await screen.findAllByText("12 l")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("12 L")).length).toBeGreaterThan(0);
     expect(screen.getAllByTitle("Open orders are not counted in kitchen units yet").length).toBeGreaterThan(0);
-    expect(screen.queryByText("0 l")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 L")).not.toBeInTheDocument();
     expect(screen.queryByText("Sample data")).not.toBeInTheDocument();
   });
 

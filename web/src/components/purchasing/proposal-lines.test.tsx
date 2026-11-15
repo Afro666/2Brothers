@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApprovalCard } from "@/components/purchasing/approval-card";
 import { ProposalLines } from "@/components/purchasing/proposal-lines";
-import { formatDateTime, formatEur } from "@/lib/format";
+import { formatDate, formatDateTime, formatEur } from "@/lib/format";
 import { LanguageProvider } from "@/lib/i18n";
 import { splitChecks, statusChips } from "@/lib/proposal-checks";
 import { MOCK_NOW } from "@/mocks/milk-case";
@@ -72,7 +72,29 @@ describe("ProposalLines: the lines of a proposal as a table", () => {
     expect(within(rowOf(byId("404933").product.names.en)).getAllByText("Cut-off passed").length).toBeGreaterThan(0);
     expect(within(rowOf(byId("404151").product.names.en)).queryByText("Cut-off passed")).toBeNull();
     const milk = byId("404151");
-    expect(within(rowOf(milk.product.names.en)).getAllByText(formatDateTime(milk.offer.closingTime)).length).toBeGreaterThan(0);
+    expect(within(rowOf(milk.product.names.en)).getAllByText(`order by ${formatDateTime(milk.offer.closingTime)}`).length).toBeGreaterThan(0);
+  });
+
+  it("shows the delivery day under Delivery, and the order-by time under its own label (#1982)", () => {
+    render(<ProposalLines lines={menuPlanLines} now={MOCK_NOW} confirmBy={() => null} checks={new Map()} />);
+    const milk = byId("404151");
+    const cell = deliveryCell(rowOf(milk.product.names.en));
+    expect(milk.offer.availableDate).not.toBeNull();
+    const day = within(cell).getByText(formatDate(milk.offer.availableDate));
+    const orderBy = within(cell).getByText(`order by ${formatDateTime(milk.offer.closingTime)}`);
+    // The day comes first; the order-by label is on screen at every width, not for screen readers only.
+    expect(day.compareDocumentPosition(orderBy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(orderBy.className).not.toMatch(/sr-only/);
+    expect(within(cell).queryByText("order by")).toBeNull();
+  });
+
+  it("says when a line arrives after the day that was asked, in place of the delivery day", () => {
+    const milk = byId("404151");
+    const late = { ...milk, offer: { ...milk.offer, availableDate: "2026-11-19", requestedDate: "2026-11-16" } };
+    render(<ProposalLines lines={[late]} now={MOCK_NOW} confirmBy={() => null} checks={new Map()} />);
+    const cell = deliveryCell(rowOf(milk.product.names.en));
+    expect(within(cell).getByText(`arrives ${formatDate("2026-11-19")}`)).toBeVisible();
+    expect(within(cell).getAllByText(new RegExp(formatDate("2026-11-19")))).toHaveLength(1);
   });
 
   it("shows lead time in days and reliability as a percentage, with (demo) only on demo values (#1453)", () => {

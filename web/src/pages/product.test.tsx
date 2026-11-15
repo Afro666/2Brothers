@@ -52,7 +52,7 @@ describe("product page", () => {
     renderApp("/catalog/464179");
 
     expect(await screen.findByRole("heading", { level: 1, name: "Arla lactose free milk drink 10 L novobox ESL" })).toBeInTheDocument();
-    expect(screen.getByText(/1 piece = 10 l/)).toBeInTheDocument();
+    expect(screen.getByText(/1 piece = 10 L/)).toBeInTheDocument();
     const price = section("Price, stock and VAT");
     expect(within(price).getByText("The catalog gives no VAT code for this product.")).toBeInTheDocument();
     expect(within(price).getByText("not confirmed; the approver checks it on the proposal")).toBeInTheDocument();

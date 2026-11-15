@@ -22,7 +22,7 @@ describe("StockPage", () => {
     await screen.findByText(/not counted: treated as unknown, not as zero/);
     expect(screen.getByText("4 of 8 not counted: treated as unknown, not as zero")).toBeInTheDocument();
     expect(rowFor("Valio Eila 3 % milk")).toHaveTextContent("not counted");
-    expect(rowFor("Valio Eila novobox milk")).toHaveTextContent("0 l");
+    expect(rowFor("Valio Eila novobox milk")).toHaveTextContent("0 L");
   });
 
   it("omits midnight from a date-only count but keeps a real count time", async () => {
@@ -51,7 +51,7 @@ describe("StockPage", () => {
 
     expect(await screen.findByTestId("stock-count-saved-toast")).toHaveTextContent("Count saved");
     expect(screen.getAllByText("Count saved")).toHaveLength(1);
-    await waitFor(() => expect(rowFor("Valio Eila 3 % milk")).toHaveTextContent("42 l"));
+    await waitFor(() => expect(rowFor("Valio Eila 3 % milk")).toHaveTextContent("42 L"));
     expect(screen.getByText("3 of 8 not counted: treated as unknown, not as zero")).toBeInTheDocument();
     const events = (await api.listAudit()).filter((event) => event.kind === "stock");
     expect(events.at(-1)).toMatchObject({ actor: "human", summary: "Stock count submitted for 1 products" });
@@ -64,7 +64,7 @@ describe("StockPage", () => {
 
     await screen.findByText(/not counted: treated as unknown, not as zero/);
     const row = rowFor("Arla lactose-free milk");
-    expect(row).toHaveTextContent("18 l");
+    expect(row).toHaveTextContent("18 L");
     await user.click(screen.getAllByRole("checkbox", { name: "Arla lactose-free milk not counted" })[0]);
     await user.click(screen.getByRole("button", { name: "Save count" }));
 
@@ -205,9 +205,10 @@ describe("StockPage", () => {
     renderApp("/stock", createMockApi());
 
     const row = await screen.findByRole("row", { name: /Valio Eila 3 % milk/ });
-    expect(row).toHaveTextContent("463335 · l");
-    expect(row).toHaveTextContent("950 l");
-    expect(row).not.toHaveTextContent("950 L");
+    expect(row).toHaveTextContent("463335 · L");
+    // #1982: litres read "L" on every page, never "l".
+    expect(row).toHaveTextContent("950 L");
+    expect(row).not.toHaveTextContent("950 l");
     expect(screen.queryByRole("columnheader", { name: "Unit" })).not.toBeInTheDocument();
   });
 

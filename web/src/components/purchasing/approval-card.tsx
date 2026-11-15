@@ -33,6 +33,7 @@ import {
   formatTime,
   isStockUnconfirmed,
   peopleUnit,
+  plainUnits,
 } from "@/lib/format";
 import { translateReason } from "@/lib/codes";
 import { useT } from "@/lib/i18n";
@@ -333,8 +334,9 @@ export function ApprovalCard({
   const suppliers = [...new Set(["Valio", ...request.suppliersToConfirm.map((supplier) => supplier.name)])];
   // Each line is confirmed by its own supplier block, found by the line's product id (#1864); a line
   // whose block is not known says "The supplier must confirm" rather than naming another supplier.
-  const lineSupplier = (line: OrderLine): string | null =>
-    request.cutoffs?.find((entry) => entry.productId != null && entry.productId === line.product.id)?.supplierName ?? null;
+  const supplierOf = (productId: string): string | null =>
+    request.cutoffs?.find((entry) => entry.productId != null && entry.productId === productId)?.supplierName ?? null;
+  const lineSupplier = (line: OrderLine): string | null => supplierOf(line.product.id);
   // One sentence on why: the checked Nemotron explanation (#1394) when there is one, else the
   // engine's own reason for a one-line order.
   const why = !explanation?.text && lines.length === 1 ? lines[0].why : null;
@@ -676,7 +678,7 @@ export function ApprovalCard({
             {why ? (
               <p data-slot="card-why" className="line-clamp-2 max-w-[80ch] text-sm text-muted-foreground" title={why}>
                 <span className="font-medium text-foreground">{t("Why: ")}</span>
-                {why}
+                {plainUnits(why)}
               </p>
             ) : null}
           </div>
@@ -948,6 +950,7 @@ export function ApprovalCard({
                   options={request.options}
                   disabled={busy || !!approvalBlockedReason}
                   onChoose={onChooseOption ? chooseOption : undefined}
+                  confirmBy={supplierOf}
                   onApprove={() => {
                     // The person asked for the proposal's own basket: the total and the button follow it.
                     setFollowBasket(true);

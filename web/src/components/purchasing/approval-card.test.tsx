@@ -862,7 +862,7 @@ describe("ApprovalCard", () => {
       expect(within(totals).getByText("€2,099.41")).toBeVisible();
       expect(within(totals).getByText("Option A, recommended by the Buyer")).toBeVisible();
       // #1970: the title says 1,000 L and this total is for 698 L: the card says so beside the total.
-      expect(within(totals).getByTestId("coverage")).toHaveTextContent(/^698 of 1,000 l · 302 l not covered$/i);
+      expect(within(totals).getByTestId("coverage")).toHaveTextContent(/^698 of 1,000 L · 302 L not covered$/);
       expect(within(totals).getByText("Option B, the basket proposed now: €2,634.13")).toBeVisible();
       expect(mainApprove()).toHaveAccessibleName("Approve option A: €2,099.41");
       expect(mainApprove()).toBeEnabled();
@@ -927,7 +927,7 @@ describe("ApprovalCard", () => {
         const totals = screen.getByTestId("card-totals");
         expect(within(totals).getByText("€2,099.41")).toBeVisible();
         expect(within(totals).getByText("Option A, recommended by the Buyer")).toBeVisible();
-        expect(within(totals).getByTestId("coverage")).toHaveTextContent(/^698 of 1,000 l · 302 l not covered$/i);
+        expect(within(totals).getByTestId("coverage")).toHaveTextContent(/^698 of 1,000 L · 302 L not covered$/);
         expect(mainApprove()).toHaveAccessibleName("Approve option A: €2,099.41");
       });
 
@@ -935,7 +935,7 @@ describe("ApprovalCard", () => {
         const request = { ...afterA, asked: { quantity: 1000, unit: "L", confirmedPartOnly: false } };
         const order = { ...confirmedOrder, shortfall: { amount: 302, unit: "L" } };
         render(<ApprovalCard request={request} order={order} onApprove={vi.fn()} onChooseOption={vi.fn()} />);
-        expect(screen.getByTestId("coverage")).toHaveTextContent(/^698 of 1,000 l · 302 l not covered$/i);
+        expect(screen.getByTestId("coverage")).toHaveTextContent(/^698 of 1,000 L · 302 L not covered$/);
       });
 
       it("says the basket covers all of it when nothing is left out, and names option B on the total and the button", async () => {
@@ -946,7 +946,7 @@ describe("ApprovalCard", () => {
         await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" }));
         const totals = screen.getByTestId("card-totals");
         expect(within(totals).getByText("Option B, the basket proposed now")).toBeVisible();
-        expect(within(totals).getByTestId("coverage")).toHaveTextContent(/^1,000 of 1,000 l$/i);
+        expect(within(totals).getByTestId("coverage")).toHaveTextContent(/^1,000 of 1,000 L$/);
         expect(mainApprove()).toHaveAccessibleName("Approve option B: €2,634.13");
       });
 
@@ -954,7 +954,7 @@ describe("ApprovalCard", () => {
         const request = { ...approval, asked: { quantity: 50, unit: "L", confirmedPartOnly: false } };
         const order = { ...confirmedOrder, shortfall: { amount: 10, unit: "L" } };
         const { unmount } = render(<ApprovalCard request={request} order={order} />);
-        expect(screen.getByTestId("coverage")).toHaveTextContent(/^40 of 50 l · 10 l not covered$/i);
+        expect(screen.getByTestId("coverage")).toHaveTextContent(/^40 of 50 L · 10 L not covered$/);
         unmount();
         render(<ApprovalCard request={{ ...approval, asked: null }} order={confirmedOrder} />);
         expect(screen.queryByTestId("coverage")).toBeNull();
@@ -963,7 +963,7 @@ describe("ApprovalCard", () => {
       it("never subtracts across units: it names only the part that is not covered", () => {
         const request = { ...approval, asked: { quantity: 50, unit: "KI", confirmedPartOnly: false } };
         render(<ApprovalCard request={request} order={{ ...confirmedOrder, shortfall: { amount: 10, unit: "L" } }} />);
-        expect(screen.getByTestId("coverage")).toHaveTextContent(/^10 l not covered$/i);
+        expect(screen.getByTestId("coverage")).toHaveTextContent(/^10 L not covered$/);
       });
 
       it("drops the line about the old basket as soon as the recommended option is chosen", async () => {

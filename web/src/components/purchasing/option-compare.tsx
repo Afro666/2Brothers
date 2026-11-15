@@ -6,10 +6,10 @@ import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { DemoNote, leadTimeText } from "@/components/purchasing/proposal-lines";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/api/types";
-import { formatDateTime, formatEur, formatNumber, formatPercent, peopleUnit } from "@/lib/format";
+import { formatDateTime, formatEur, formatNumber, formatPercent, formatQuantity, peopleUnit, plainUnits } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { OfferTier, ProposalOption } from "@/types";
+import type { OfferTier, ProposalOption, ProposalOptionLine } from "@/types";
 
 /** Thumbnails shown per option row before a "+N" chip, so a big basket keeps the title readable on a phone. */
 const MAX_THUMBS = 3;
@@ -57,6 +57,13 @@ function blockedReason(option: ProposalOption, t: (text: string) => string): str
   return null;
 }
 
+/** The quantities of some lines, added per unit: "698 pieces", or "132 pieces + 5 cases". */
+function quantityOf(lines: readonly ProposalOptionLine[]): string {
+  const perUnit = new Map<string, number>();
+  for (const line of lines) perUnit.set(line.unit, (perUnit.get(line.unit) ?? 0) + line.quantity);
+  return [...perUnit].map(([unit, quantity]) => formatQuantity(quantity, unit)).join(" + ");
+}
+
 function Fact({
   label,
   bad,
@@ -90,9 +97,12 @@ export function OptionCompare({
   disabled = false,
   onChoose,
   onApprove,
+  confirmBy,
 }: {
   options: ProposalOption[];
   disabled?: boolean;
+  /** #1982: the supplier that confirms a product's stock, from the proposal's own supplier blocks; null when not known. */
+  confirmBy?: (productId: string) => string | null;
   /** Re-simulates the proposal with this option. Absent: the API cannot switch baskets. */
   onChoose?: (optionId: string) => void | Promise<void>;
   /** Opens the existing approval for the basket the proposal holds now. */
@@ -197,6 +207,21 @@ export function OptionCompare({
             ),
           ];
           const priceLabel = prices.length === 1 ? prices[0] : prices.join(", ");
+          // #1982: each line says its own stock answer. Unknown for one line: the whole option stays "unknown".
+          const perLine = option.lines.every((line) => line.stockUnknown != null);
+          const waiting = option.lines.filter((line) => line.stockUnknown === true);
+          const confirmed = option.lines.filter((line) => line.stockUnknown === false);
+          const stockText = option.stockConfirmed
+            ? t("confirmed")
+            : perLine && waiting.length > 0 && confirmed.length > 0
+              ? t("{confirmed} confirmed, {waiting} waiting", { confirmed: quantityOf(confirmed), waiting: quantityOf(waiting) })
+              : "unknown";
+          // Who must confirm: the supplier of each unconfirmed line (the proposal's block, else Valio's own offer
+          // line). One line without a name: the plain sentence, never another supplier's name.
+          const confirmers = (perLine ? waiting : option.lines).map(
+            (line) => confirmBy?.(line.productId) ?? (line.fromValio ? "Valio" : null),
+          );
+          const confirmerNames = confirmers.every((name) => name != null) ? [...new Set(confirmers)].join(", ") : "";
           const co2 = option.co2KgPerKg;
           const open = openOptions.has(option.id);
           const contentId = `${headingId}-option-${index}`;
@@ -256,12 +281,17 @@ export function OptionCompare({
                     {option.chosen ? <span className={BADGE}>{t("Proposed now")}</span> : null}
                     {option.stockConfirmed ? null : (
                       <span className={cn(BADGE, "border-warning/40 bg-warning-surface text-warning")}>
-                        {t("The supplier must confirm stock")}
+                        {confirmerNames
+                          ? t("{supplier} must confirm stock", { supplier: confirmerNames })
+                          : t("The supplier must confirm stock")}
                       </span>
                     )}
-                    <span className="price-tag min-w-0 break-words text-xs font-normal">
-                      {priceLabel === "unknown" ? <span className="unknown-value">{t("unknown")}</span> : priceLabel}
-                    </span>
+                    {/* #1982: an open option prints its unit price once, under "Price ex VAT". */}
+                    {open ? null : (
+                      <span className="price-tag min-w-0 break-words text-xs font-normal">
+                        {priceLabel === "unknown" ? <span className="unknown-value">{t("unknown")}</span> : priceLabel}
+                      </span>
+                    )}
                   </span>
                   <ChevronDown
                     aria-hidden
@@ -288,7 +318,7 @@ export function OptionCompare({
                 </Fact>
               </dl>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-3">
-                <Fact label={t("Stock")}>{option.stockConfirmed ? t("confirmed") : "unknown"}</Fact>
+                <Fact label={t("Stock")}>{stockText}</Fact>
                 <Fact label={t("Order cut-off")} bad={option.cutoffPassed === true}>
                   {option.cutoffPassed == null && option.cutoffAt == null ? (
                     "unknown"
@@ -346,7 +376,7 @@ export function OptionCompare({
                   )}
                 </Fact>
               </dl>
-              <p className="max-w-[68ch] text-[15px] leading-[22px] sm:col-start-2">{option.tradeOff}</p>
+              <p className="max-w-[68ch] text-[15px] leading-[22px] sm:col-start-2">{plainUnits(option.tradeOff)}</p>
               {option.held ? (
                 <p className="hatch text-sm text-warning sm:col-start-2">
                   {t("{quantity} {unit} waits for stock confirmation", {
