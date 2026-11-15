@@ -5,6 +5,7 @@ import { createMockApi } from "@/api/mock";
 import { atlasFactsMock } from "@/api/mock-atlas";
 import type { AtlasFacts } from "@/api/types";
 import { ApiError } from "@/api/types";
+import { measuredBeforeRankingChange } from "@/components/purchasing/atlas-card";
 import comparison from "@/data/atlas-search-comparison.json";
 import { renderApp } from "@/test/render";
 
@@ -62,7 +63,11 @@ describe("the Atlas card on the About page", () => {
     const fold = table.closest("details")!;
     expect(fold).not.toHaveAttribute("open");
     expect(within(fold).getByText("Show the 10 searches").tagName).toBe("SUMMARY");
-    expect(view.getByText(/^Measured on the server on 2026-11-14, before the search ranking was changed/)).toBeInTheDocument();
+    expect(
+      view.getByText(
+        "Measured on the server on 2026-11-14, before the search ranking was changed on the evening of 2026-11-14: the Catalog can show other results now.",
+      ),
+    ).toBeInTheDocument();
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(10);
     expect(rows[0]).toHaveTextContent("lactose-free milk");
@@ -74,6 +79,13 @@ describe("the Atlas card on the About page", () => {
     expect(verdicts.filter((v) => v === "better")).toHaveLength(comparison.totals.better);
     expect(verdicts.filter((v) => v === "equal")).toHaveLength(comparison.totals.equal);
     expect(verdicts.filter((v) => v === "slightly_worse")).toHaveLength(comparison.totals.slightly_worse);
+  });
+
+  it("says the comparison predates the ranking change only while it does", () => {
+    // The checked-in file is still the 2026-11-14 one: the render test above sees the sentence.
+    expect(measuredBeforeRankingChange(comparison.measured_on)).toBe(true);
+    expect(measuredBeforeRankingChange("2026-11-13")).toBe(true);
+    expect(measuredBeforeRankingChange("2026-11-15")).toBe(false);
   });
 
   it("lists the other Atlas features with their live counts", async () => {
