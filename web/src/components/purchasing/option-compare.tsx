@@ -23,6 +23,17 @@ const TIER_ORDER: OfferTier[] = ["good", "better", "best"];
 export function inLetterOrder(options: readonly ProposalOption[]): ProposalOption[] {
   return [...options].sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
 }
+
+/**
+ * #1866: the recommended option a card leads with while the basket is still the Buyer's own,
+ * untouched one (`source: "original"`); undefined once a person chose or edited the basket.
+ */
+export function leadOption(options: readonly ProposalOption[]): ProposalOption | undefined {
+  if (options.find((option) => option.chosen)?.source !== "original") return undefined;
+  return inLetterOrder(options).find(
+    (option) => option.recommended && option.stockConfirmed && !option.chosen && option.cutoffPassed !== true,
+  );
+}
 const BADGE = "label-caps rounded-sm border border-input px-2 py-0.5 whitespace-nowrap";
 export const CHOOSE_ERRORS: Record<string, string> = {
   STOCK_UNKNOWN: "Stock is not confirmed for this option. The current basket is unchanged; wait for the supplier or choose another option. Nothing was approved.",

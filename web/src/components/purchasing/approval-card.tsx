@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { ModelTraceLine, ModelTracePanel } from "@/components/purchasing/model-trace-panel";
 import { MovProgress } from "@/components/purchasing/mov-progress";
-import { CHOOSE_ERRORS, CHOOSE_TIMEOUT_MS, OptionCompare, inLetterOrder } from "@/components/purchasing/option-compare";
+import { CHOOSE_ERRORS, CHOOSE_TIMEOUT_MS, OptionCompare, inLetterOrder, leadOption } from "@/components/purchasing/option-compare";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { ProposalExplanationBlock, useCardExplanation } from "@/components/purchasing/proposal-explanation";
 import { ProposalLines } from "@/components/purchasing/proposal-lines";
@@ -324,12 +324,7 @@ export function ApprovalCard({
   const basketOption = letterOrder.find((option) => option.chosen);
   // Only while the basket is still the Buyer's own, untouched one (`source: "original"`): a basket a
   // person chose or edited is theirs, and the card shows it.
-  const lead =
-    !followBasket && onChooseOption && basketOption?.source === "original"
-      ? letterOrder.find(
-          (option) => option.recommended && option.stockConfirmed && !option.chosen && option.cutoffPassed !== true,
-        )
-      : undefined;
+  const lead = !followBasket && onChooseOption ? leadOption(letterOrder) : undefined;
   const recommendedIsBasket = letterOrder.some((option) => option.chosen && option.recommended);
   useEffect(() => {
     if (!awaitingLead) return;
