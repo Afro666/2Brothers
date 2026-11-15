@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createHttpApi } from "@/api/http";
 import { mapBuyingNote } from "@/api/http-buying-note";
+import { ApiError } from "@/api/types";
 
 const ANSWER = {
   supplier_id: "sup-valio", from: "2026-11-16", to: "2026-11-22", lang: "en",
@@ -89,6 +90,36 @@ describe("Buying note gateway boundary", () => {
       await vi.advanceTimersByTimeAsync(6000);
       expect(await pending).not.toBeNull();
       expect(calls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up after six more tries while the note stays busy", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetch = gateway({ error: { code: "BUYING_NOTE_BUSY", message: "busy" } }, 429);
+      const pending = createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "fi")
+        .catch((reason: unknown) => reason);
+      await vi.advanceTimersByTimeAsync(6 * 6000);
+      const refused = await pending;
+      expect(refused).toBeInstanceOf(ApiError);
+      // A busy 429 reads as RATE_LIMITED; the gateway's own code stays in details for the retry.
+      expect(refused).toMatchObject({ status: 429, details: { code: "BUYING_NOTE_BUSY" } });
+      expect(fetch).toHaveBeenCalledTimes(7);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("throws a non-busy failure at once without asking again", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetch = gateway({ error: { code: "INTERNAL", message: "boom" } }, 500);
+      const refused = await createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "fi")
+        .catch((reason: unknown) => reason);
+      expect(refused).toMatchObject({ code: "INTERNAL", status: 500 });
+      expect(fetch).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
