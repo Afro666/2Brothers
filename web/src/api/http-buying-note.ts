@@ -39,9 +39,9 @@ export function mapBuyingNote(body: unknown): BuyingNote | null {
   return { model: raw.model, lines };
 }
 
-/** 6 x 6 s covers the gateway's 35 s limit for one note. */
-const BUSY_WAIT_MS = 6000;
-const BUSY_RETRIES = 6;
+/** 18 x 2 s covers the gateway's 35 s limit for one note; a note takes about 4 s. */
+const BUSY_WAIT_MS = 2000;
+const BUSY_RETRIES = 18;
 
 export function createBuyingNoteHttp(
   call: (path: string, init?: RequestInit) => Promise<unknown>,
