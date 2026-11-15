@@ -4162,7 +4162,9 @@ stock (`engine.demand.safety_stock`) to that line's need:
   five of them are in the last eight weeks (`evidence.scope: "product"`), else all of
   the supplier's deliveries (`"supplier"`). The lead time passed to the engine is the
   learned `mean_lead_time` when it differs from the supplier's term by one day or
-  more, else the term.
+  more, else the term. The engine call passes `sigma_daily = 0`, so the daily-demand
+  variance term is zero and the selected lead time has no effect on this safety-stock
+  result; the formula above follows exactly.
 - Caps: `sigma_lead_time` counts for at most 2 days, and the safety stock is at most
   25 % of the line's need (`capped: true` when a cap applied). Fewer than five
   deliveries: no fact, no safety stock.
