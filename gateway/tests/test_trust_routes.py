@@ -187,6 +187,16 @@ def test_tamper_replay_returns_the_stored_answer(env):
     assert db.audit_log.count_documents({"event.kind": "audit_demo_restore"}) == 1
 
 
+def test_tamper_replay_of_a_tampered_false_result_answers_false(env, monkeypatch):
+    # #1932: a restore that lands between tamper's two writes makes it answer tampered:false.
+    client, db, _ = env
+    monkeypatch.setattr(trust, "tamper", lambda db, kitchen_id: {"seq": 3, "tampered": False})
+    first = client.post(DEMO + "/audit/demo-tamper", headers=HUMAN, json={"idempotency_key": "t1"})
+    replay = client.post(DEMO + "/audit/demo-tamper", headers=HUMAN, json={"idempotency_key": "t1"})
+    assert first.json() == replay.json() == {"seq": 3, "tampered": False}
+    assert db.audit_log.count_documents({"event.kind": "audit_demo_tamper"}) == 1
+
+
 def test_tamper_without_audit_entries_is_409(env):
     client, db, _ = env
     db.audit_log.delete_many({"server.kitchen_id": "demo-kitchen"})

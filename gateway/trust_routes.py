@@ -91,10 +91,13 @@ def _stored(gw, kitchen_id: str, event_id: str) -> dict | None:
     return entry["event"] if entry else None
 
 
-def _record(gw, kitchen_id: str, event_id: str, kind: str, human: str, seq: int) -> None:
+def _record(gw, kitchen_id: str, event_id: str, kind: str, human: str, seq: int, **extra) -> None:
     """Who ran the demo, as an audit entry. It is written after the edit, so the edited
-    row is an older one and this entry never is the row that was tampered."""
-    audit.append_event(gw.db, {"event_id": event_id, "kind": kind, "actor": human, "tampered_seq": seq},
+    row is an older one and this entry never is the row that was tampered. `extra` keeps
+    what the replay must answer again: `tamper_applied` is the tamper's `tampered` answer
+    (not named `tampered`, which marks the edited row)."""
+    audit.append_event(gw.db, {"event_id": event_id, "kind": kind, "actor": human, "tampered_seq": seq,
+                               **extra},
                        {"kitchen_id": kitchen_id, "at": gw.now().isoformat()})
 
 
@@ -103,7 +106,8 @@ def demo_tamper(gw, kitchen_id: str, body: dict, *, human: str | None) -> dict:
     event_id = _event_id("audit-demo-tamper", kitchen_id, key)
     replay = _stored(gw, kitchen_id, event_id)
     if replay:
-        return {"seq": replay["tampered_seq"], "tampered": True}
+        # Entries written before the flag was stored were all real tampers.
+        return {"seq": replay["tampered_seq"], "tampered": replay.get("tamper_applied", True)}
     try:
         result = trust.tamper(gw.db, kitchen_id)
     except PermissionError:
@@ -113,7 +117,8 @@ def demo_tamper(gw, kitchen_id: str, body: dict, *, human: str | None) -> dict:
         if "already tampered" in str(exc):
             raise GatewayError(409, "ALREADY_TAMPERED", "a row is already tampered; restore it first") from None
         raise GatewayError(409, "NOTHING_TO_TAMPER", "the demo kitchen has no audit entries yet") from None
-    _record(gw, kitchen_id, event_id, "audit_demo_tamper", human, result["seq"])
+    _record(gw, kitchen_id, event_id, "audit_demo_tamper", human, result["seq"],
+            tamper_applied=result["tampered"])
     return result
 
 
