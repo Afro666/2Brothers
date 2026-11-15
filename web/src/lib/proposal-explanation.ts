@@ -3,14 +3,21 @@ import { useEffect, useRef, useState } from "react";
 import type { Api, ProposalExplanation } from "@/api/types";
 import { useLanguage } from "@/lib/i18n";
 
-/** How often the card asks again while the server has no explanation yet. */
-export const EXPLANATION_POLL_MS = 3000;
-/** Empty answers before the card stops asking; the next change or language still asks again. */
-export const EXPLANATION_POLL_LIMIT = 5;
+/**
+ * The waits between asks while the server has no explanation yet (#1399). The server runs one
+ * explanation job per kitchen and at most one new model attempt per 30 s, so with several
+ * waiting cards a later card's turn can take over a minute: back off and keep asking for about
+ * two minutes (3 + 5 + 10 + 7 × 15 = 123 s) instead of stopping after 15 s.
+ */
+export const EXPLANATION_POLL_DELAYS_MS: readonly number[] = [3000, 5000, 10000, 15000, 15000, 15000, 15000, 15000, 15000, 15000];
+/** The first wait: the card asks again this soon after an empty answer. */
+export const EXPLANATION_POLL_MS = EXPLANATION_POLL_DELAYS_MS[0];
+/** Asks before the card stops (the first one plus one per wait); the next change or language still asks again. */
+export const EXPLANATION_POLL_LIMIT = EXPLANATION_POLL_DELAYS_MS.length + 1;
 
 /**
  * The checked Nemotron explanation for a pending proposal (#1173). It asks once the card is
- * shown and polls while the answer is null, at most `EXPLANATION_POLL_LIMIT` times. It asks
+ * shown and polls with a backoff while the answer is null, at most `EXPLANATION_POLL_LIMIT` times. It asks
  * again when the offer (`source`) or the language changes, and never for a decided proposal.
  * Null means "no text": the card shows nothing and never waits for this.
  */
@@ -56,7 +63,9 @@ export function useProposalExplanation(
         setExplanation(found);
         return;
       }
-      if (answers < EXPLANATION_POLL_LIMIT) timer = window.setTimeout(() => void ask(), EXPLANATION_POLL_MS);
+      if (answers < EXPLANATION_POLL_LIMIT) {
+        timer = window.setTimeout(() => void ask(), EXPLANATION_POLL_DELAYS_MS[answers - 1]);
+      }
     };
     void ask();
     return () => {

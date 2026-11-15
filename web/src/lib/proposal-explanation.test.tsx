@@ -77,17 +77,32 @@ describe("useProposalExplanation (#1173)", () => {
     expect(api.getProposalExplanation).toHaveBeenCalledTimes(2);
   });
 
-  it("stops after five empty answers", async () => {
+  it("still asks after the server's 30 s turn, so a later card gets its text (#1399)", async () => {
+    // The server allows one model attempt per kitchen per 30 s: a second waiting card's text
+    // can arrive after a minute. Here the answer is there from the sixth ask on (~63 s in).
+    const api = apiWith([null, null, null, null, null, text]);
+    renderHarness({ api });
+    await act(async () => {});
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(64_000);
+    });
+    expect(screen.getByTestId("text")).toHaveTextContent(text.text);
+    expect(api.getProposalExplanation).toHaveBeenCalledTimes(6);
+  });
+
+  it("backs off and stops after about two minutes of empty answers", async () => {
     const api = apiWith([null]);
     renderHarness({ api });
     await act(async () => {});
-    for (let i = 0; i < EXPLANATION_POLL_LIMIT + 2; i += 1) {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(EXPLANATION_POLL_MS);
-      });
-    }
-    expect(EXPLANATION_POLL_LIMIT).toBe(5);
-    expect(api.getProposalExplanation).toHaveBeenCalledTimes(5);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);       // 3 s and 5 s waits: three asks so far
+    });
+    expect(api.getProposalExplanation).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000);   // long after the backoff ends
+    });
+    expect(EXPLANATION_POLL_LIMIT).toBe(11);
+    expect(api.getProposalExplanation).toHaveBeenCalledTimes(EXPLANATION_POLL_LIMIT);
   });
 
   it("stops on unmount", async () => {
