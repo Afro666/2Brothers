@@ -1,4 +1,6 @@
 export default {
+  "Showing previous results while refreshing...": "Näytetään aiemmat tulokset, kunnes päivitys valmistuu...",
+  "Loading approval details...": "Ladataan hyväksynnän tietoja...",
   "Loading": "Ladataan",
   "Loading dashboard tile": "Ladataan etusivun tietoja",
   "Nothing here yet": "Täällä ei ole vielä mitään",

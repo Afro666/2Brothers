@@ -1,5 +1,5 @@
-import { screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { act, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mapAudit } from "@/api/gateway-map";
 import { createMockApi } from "@/api/mock";
@@ -41,6 +41,32 @@ describe("oldestWaiting", () => {
 
 describe("HomePage", () => {
   beforeEach(() => localStorage.clear());
+
+  it("shows the count before slow approval details arrive", async () => {
+    const api = createMockApi(); const rows = await api.listApprovals();
+    let finish!: (value: typeof rows) => void;
+    api.listApprovals = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    api.countPendingApprovals = vi.fn(async () => 7);
+    renderApp(`/?now=${DEMO_NOW}`, api);
+    const label = await screen.findByText("Loading approval details...");
+    expect(label.parentElement).toHaveTextContent("7");
+    await act(async () => finish(rows)); await screen.findByText("Oldest waiting");
+    expect(screen.queryByText("Loading approval details...")).not.toBeInTheDocument();
+  });
+
+  it("shows a cached summary on return, labels it and replaces it after refresh", async () => {
+    const api = createMockApi(); api.countPendingApprovals = async () => 4;
+    const rows = await api.listApprovals(); api.listApprovals = vi.fn(async () => rows);
+    const { router } = renderApp(`/?now=${DEMO_NOW}`, api); await screen.findByText("Oldest waiting");
+    await act(async () => { await router.navigate({ to: "/about" }); });
+    let finish!: (value: typeof rows) => void;
+    api.listApprovals = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    await act(async () => { await router.navigate({ to: "/" }); });
+    expect(await screen.findByText("Showing previous results while refreshing...")).toBeInTheDocument();
+    expect(screen.getByText("Oldest waiting")).toBeInTheDocument();
+    await act(async () => finish([])); await screen.findByText("Nothing is waiting.");
+    await waitFor(() => expect(screen.queryByText("Showing previous results while refreshing...")).not.toBeInTheDocument());
+  });
 
   it("shows the kitchen dashboard for the demo timestamp", async () => {
     renderApp(`/?now=${DEMO_NOW}`, createMockApi());

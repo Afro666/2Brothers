@@ -38,7 +38,7 @@ import { createMockApi } from "@/api/mock";
 import type { Api, AuditActor, Session } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { formatEur } from "@/lib/format";
-import { dropKeptAnswers } from "@/lib/use-async";
+import { dropKeptAnswers, readCacheRevision } from "@/lib/use-async";
 import { randomBytes, randomHex, toHex } from "@/lib/random-id";
 
 function uuid(): string {
@@ -67,8 +67,25 @@ const BUSY_429 = new Map<unknown, string>([
 ]);
 
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
+const pendingReads = new Map<string, Promise<unknown>>();
+let pendingRevision = -1;
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
-  if ((init?.method ?? "GET").toUpperCase() === "GET") return send(baseUrl, path, init);
+  if ((init?.method ?? "GET").toUpperCase() === "GET") {
+    const revision = readCacheRevision();
+    if (pendingRevision !== revision) { pendingReads.clear(); pendingRevision = revision; }
+    // Aborting one subscriber must not cancel another's request. Custom RequestInit options bypass sharing.
+    if (init && Object.keys(init).some((key) => key !== "method" && key !== "headers")) return send(baseUrl, path, init);
+    const headers = [...new Headers(init?.headers).entries()].sort(([a], [b]) => a.localeCompare(b));
+    const key = JSON.stringify([baseUrl, path, headers]);
+    const existing = pendingReads.get(key);
+    if (existing) return existing;
+    if (pendingReads.size >= 64) return send(baseUrl, path, init);
+    const request = send(baseUrl, path, init);
+    pendingReads.set(key, request);
+    const forget = () => { if (pendingReads.get(key) === request) pendingReads.delete(key); };
+    void request.then(forget, forget);
+    return request;
+  }
   beforeWrite.forEach((drop) => drop());
   try {
     return await send(baseUrl, path, init);

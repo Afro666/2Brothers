@@ -202,6 +202,50 @@ describe("useAsync", () => {
       expect(second.result.current.data).toBe("second");
     });
 
+    it("isolates scopes and labels cached answers until refreshed", async () => {
+      const scope = {};
+      const first = renderHook(() => useAsync(() => Promise.resolve("A"), [], { keep: "same", scope }));
+      await waitFor(() => expect(first.result.current.data).toBe("A"));
+      expect(first.result.current.refreshing).toBe(false);
+      first.unmount();
+      const second = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "same", scope }));
+      expect(second.result.current.data).toBe("A");
+      expect(second.result.current.refreshing).toBe(true);
+      const other = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "same", scope: {} }));
+      expect(other.result.current.status).toBe("loading");
+    });
+
+    it("expires cached answers after one minute", async () => {
+      const first = renderHook(() => useAsync(() => Promise.resolve("old"), [], { keep: "ttl" }));
+      await waitFor(() => expect(first.result.current.data).toBe("old"));
+      first.unmount();
+      vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60_001);
+      const next = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "ttl" }));
+      expect(next.result.current.status).toBe("loading");
+      vi.restoreAllMocks();
+    });
+
+    it("bounds retained results to 64 views", async () => {
+      for (let i = 0; i < 65; i++) {
+        const view = renderHook(() => useAsync(() => Promise.resolve(i), [], { keep: `bounded-${i}` }));
+        await act(async () => {});
+        expect(view.result.current.data).toBe(i);
+        view.unmount();
+      }
+      const first = renderHook(() => useAsync(() => new Promise<number>(() => {}), [], { keep: "bounded-0" }));
+      expect(first.result.current.status).toBe("loading");
+      const last = renderHook(() => useAsync(() => new Promise<number>(() => {}), [], { keep: "bounded-64" }));
+      expect(last.result.current.data).toBe(64);
+    });
+
+    it("does not show the previous filter's result on a key change", async () => {
+      const view = renderHook(({ key }) => useAsync(() => key === "a" ? Promise.resolve("A") : new Promise<string>(() => {}), [key], { keep: key }), { initialProps: { key: "a" } });
+      await waitFor(() => expect(view.result.current.data).toBe("A"));
+      view.rerender({ key: "b" });
+      expect(view.result.current.status).toBe("loading");
+      expect(view.result.current.data).toBeNull();
+    });
+
     it("starts from loading without a key, and for another key", async () => {
       const first = renderHook(() => useAsync(() => Promise.resolve("first"), [], { keep: "list" }));
       await waitFor(() => expect(first.result.current.status).toBe("ready"));

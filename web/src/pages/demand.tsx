@@ -694,7 +694,7 @@ export function DemandPage() {
   const week = requestedWeek ?? defaultWeek;
   const weekIsValid = isValidWeek(week);
   const { language } = useLanguage();
-  const state = useAsync(() => (weekIsValid ? loadWeek(api, week) : noWeek()), [api, week, weekIsValid]);
+  const state = useAsync(() => (weekIsValid ? loadWeek(api, week) : noWeek()), [api, week, weekIsValid], { keep: `demand:${week}`, scope: api });
   // Written in the current language on every render: switching language does not ask the API again.
   const weekLabel = weekIsValid ? weekTitle(week, t) : "";
   const noteWindow = weekIsValid ? [weekDates(week)[0], weekDates(week)[6]] : null;
@@ -724,6 +724,7 @@ export function DemandPage() {
   return (
     <AppShell activeId="demand">
       <div className="mx-auto max-w-5xl space-y-6">
+        {state.refreshing ? <p role="status" className="text-sm text-muted-foreground">{t("Showing previous results while refreshing...")}</p> : null}
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold">{t("Demand")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">

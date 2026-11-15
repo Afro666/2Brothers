@@ -20,8 +20,8 @@ import { supplierName } from "@/lib/supplier-name";
 export function OrdersPage() {
   const t = useT();
   const api = useApi();
-  const state = useAsync(() => api.listOrders(), [], { keep: "orders" });
-  const suppliers = useAsync(() => api.listSuppliers(), [api], { keep: "suppliers" });
+  const state = useAsync(() => api.listOrders(), [], { keep: "orders", scope: api });
+  const suppliers = useAsync(() => api.listSuppliers(), [api], { keep: "suppliers", scope: api });
   const supplierNames = new Map(
     suppliers.status === "ready" ? suppliers.data.map((supplier) => [supplier.id, supplier.name]) : [],
   );
