@@ -50,16 +50,18 @@ it("does not retain failures or share abortable requests", async () => {
 });
 
 it("keeps first-session cold reads and invalidates a detected account change", async () => {
-  const d = deferredFetch(); const api = createHttpApi("/api");
+  const d = deferredFetch(); const api = createHttpApi("/api"); const revision = readCacheRevision();
   const old = gatewayRequest("/api", "/read");
   const loginCheck = api.getSession();
   d.answer(1, { kind: "human", name: "one@example.test", role: "chef", can_approve: false });
   await loginCheck;
+  expect(readCacheRevision()).toBe(revision);
   const same = gatewayRequest("/api", "/read");
   expect(d.fetch).toHaveBeenCalledTimes(2);
   const checkAgain = api.getSession();
   d.answer(2, { kind: "human", name: "two@example.test", role: "viewer", can_approve: false });
   await checkAgain;
+  expect(readCacheRevision()).toBeGreaterThan(revision);
   const changed = gatewayRequest("/api", "/read");
   expect(d.fetch).toHaveBeenCalledTimes(4);
   d.answer(0, {}); d.answer(3, {}); await Promise.all([old, same, changed]);
