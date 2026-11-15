@@ -152,13 +152,10 @@ function Terms({ supplier }: { supplier: Supplier }) {
   return (
     <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
       <div>
-        <dt className="text-xs text-muted-foreground">{t("Delivery fee, free from")}</dt>
+        <dt className="text-xs text-muted-foreground">{t("Delivery")}</dt>
         <dd>
-          {supplier.deliveryFeeEur == null ? (
-            `${t("Delivery fee not set")}, `
-          ) : (
-            <span className="tabular-nums">{`${formatEur(supplier.deliveryFeeEur)}, `}</span>
-          )}
+          {supplier.deliveryFeeEur == null ? t("fee not set") : <span className="tabular-nums">{formatEur(supplier.deliveryFeeEur)}</span>}
+          {", "}
           {supplier.freeDeliveryThresholdEur == null ? (
             <>
               {t("free from")} <NotSet />
@@ -431,6 +428,7 @@ function SupplierCard({
           <div className="flex items-start gap-2">
             <Checkbox
               id={shareId}
+              aria-describedby="sharing-note"
               checked={shared === true}
               disabled={shared === null || shareBusy || sharingPending}
               onCheckedChange={(checked) => void changeShared(checked === true)}
@@ -580,8 +578,8 @@ export function SuppliersPage() {
               <ErrorState message={sharing.message} onRetry={() => setSharingVersion((version) => version + 1)} />
             ) : null}
             {suppliers.data.length > 0 ? (
-              <p className="max-w-prose text-sm text-muted-foreground">
-                {t("They see our kitchen's name and what we expect to need, never our menus or prices. Every change is in the audit log.")}
+              <p id="sharing-note" className="max-w-prose text-sm text-muted-foreground">
+                {t("A supplier you share with sees our kitchen's name and what we expect to need, never our menus or prices. Every change is in the audit log.")}
               </p>
             ) : null}
             {suppliers.data.length === 0 ? (

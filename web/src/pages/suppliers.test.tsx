@@ -25,7 +25,7 @@ describe("SuppliersPage", () => {
     expect(valio).not.toBeNull();
     const valioCard = within(valio as HTMLElement);
     expect(valioCard.getByText("Live prices and stock from Valio Aimo")).toBeInTheDocument();
-    expect(valioCard.getByText("free from €250.00")).toBeInTheDocument();
+    expect(valioCard.getByText("Delivery").closest("div")).toHaveTextContent("€29.00, free from €250.00");
     expect(valioCard.getByText("Mon, Tue, Wed, Thu, Fri")).toBeInTheDocument();
     expect(valioCard.getByText("Order by 17:00")).toBeInTheDocument();
     expect(valioCard.getByText("1 day")).toBeInTheDocument();
@@ -35,24 +35,30 @@ describe("SuppliersPage", () => {
     const bakery = screen.getByRole("heading", { name: "Töölö Bakery" }).closest("[data-slot=card]");
     const bakeryCard = within(bakery as HTMLElement);
     expect(bakeryCard.getByText("Terms typed in by you")).toBeInTheDocument();
-    const feeRow = bakeryCard.getByText("Delivery fee, free from").closest("div");
+    const feeRow = bakeryCard.getByText("Delivery").closest("div");
     expect(feeRow).toHaveTextContent("€12.00, free from €80.00");
 
     const fish = screen.getByRole("heading", { name: "Hakaniemi Fish" }).closest("[data-slot=card]");
     const fishCard = within(fish as HTMLElement);
     expect(fishCard.getByText("CSV price list")).toBeInTheDocument();
     expect(fishCard.getAllByText("not set")).toHaveLength(4);
-    expect(fishCard.getByText("Delivery fee not set, free from")).toBeInTheDocument();
+    expect(fishCard.getByText("Delivery").closest("div")).toHaveTextContent("fee not set, free from not set");
   });
 
   it("says once what sharing shows suppliers and keeps the switch on every card", async () => {
     renderApp("/suppliers", createMockApi());
 
     await screen.findByRole("heading", { name: "Töölö Bakery" });
-    expect(screen.getAllByText(/^They see our kitchen's name and what we expect to need/)).toHaveLength(1);
-    expect(screen.getAllByRole("checkbox", { name: /^Share our forecast with / })).toHaveLength(
-      (await screen.findAllByRole("heading", { level: 3 })).length,
-    );
+    const note = screen.getAllByText(/^A supplier you share with sees our kitchen's name and what we expect to need/);
+    expect(note).toHaveLength(1);
+    // One labelled switch in every supplier card, each described by the one note.
+    const cards = (await screen.findAllByRole("heading", { level: 3 })).map((heading) => heading.closest("[data-slot=card]") as HTMLElement);
+    expect(cards.length).toBeGreaterThan(1);
+    for (const card of cards) {
+      const switches = within(card).getAllByRole("checkbox", { name: /^Share our forecast with / });
+      expect(switches).toHaveLength(1);
+      expect(switches[0]).toHaveAccessibleDescription(note[0].textContent ?? "");
+    }
   });
 
   it("names the cut-off as the last moment to order in Finnish", async () => {
