@@ -219,7 +219,7 @@ export function formatCount(value: number): string {
   return formatNumber(Math.round(value));
 }
 
-/** "KI 12 × 1 L": the pack a sales unit holds, from the catalog `units[]`. */
+/** "1 case = 3 l": the total content (`baseUnitsPerSalesUnit`, L/KG or a piece count) of one sales unit. */
 export function formatPack(salesUnit: string, baseUnitsPerSalesUnit: number | null, baseUnit: string): string {
   if (baseUnitsPerSalesUnit == null) return `${peopleUnit(salesUnit, 1)} (${translate(getLanguage(), "pack size unknown")})`;
   // No measure (no net content, not sold by weight): the count is pieces.
