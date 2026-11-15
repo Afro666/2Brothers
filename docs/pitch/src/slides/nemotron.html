@@ -1,0 +1,32 @@
+<section id="nemotron">
+<div class="rail"><p class="rail-l">TICKET 04 · BEST USE OF NEMOTRON</p><p>NVIDIA NEMOTRON 3.5 SUPER VL ON VERDA</p></div>
+<div class="cols c-nemo">
+<div class="stack">
+<h2>One model, five jobs.</h2>
+<h3 class="green">It never sets a number.</h3>
+<div class="docket tilt-s">
+<div class="dline"><p class="print-b">PLAN</p><p class="dtext">reads a menu photo</p></div>
+<div class="dline"><p class="print-b">BUY</p><p class="dtext">picks the products</p></div>
+<div class="dline"><p class="print-b">SELL</p><p class="dtext">offers a substitute, on Valio’s side</p></div>
+<div class="dline"><p class="print-b">COUNT</p><p class="dtext">counts a shelf from a photo</p></div>
+<div class="dline"><p class="print-b">RECEIVE</p><p class="dtext">reads a delivery note</p></div>
+<p class="print">THE BUY JOB: 1 MODEL CALL, 0.3 S, THINKING OFF</p>
+</div>
+</div>
+<div class="stack">
+<div class="taped tilt-r" style="width:640px;height:411px">
+<img class="snap" src="/_blob/5088f9995abf9035f62a63a66c1126bb" alt="The prepared test photo of a kitchen shelf that Nemotron counted: six red milk drink cartons, five blue cream cartons, four yellow oil bottles, three yoghurt tubs with a half-hidden cheese pack behind them, and four butter packs." style="width:640px;height:411px;object-fit:cover">
+<div class="tape tape-tl"></div>
+</div>
+<p class="hand hand-ochre">7 products read in 0.6 s.<br>The half-hidden pack? “please count”.</p>
+<img class="snap tilt-s" src="/_blob/bb021e0201b03415d8f1126e7bb9886b" alt="The line from the delivery check on the site: 3 cases short, €91.08 to claim from Valio Aimo." style="width:700px;height:63px;object-fit:contain">
+</div>
+</div>
+<aside>SAY (20 seconds): In the demo Nemotron bought, and on Valio’s side it sold. The same model does three more jobs. It reads a menu photo into a plan. It counts a shelf from one photo: seven products in under a second, and the pack it cannot see gets "please count", not a guess. And it reads a delivery note and finds ninety-one euros to claim. Five jobs, one model, and it never sets a quantity, a price or a total.
+
+CUE: for an NVIDIA judge with time, show one photo job live after the deck: Kitchen, Stock count, "Try with a sample shelf photo". First check that the model answers.
+
+IF ASKED: the menu, shelf and delivery-note photos are prepared test photos, not real phone photos (the shelf photo says SYNTHETIC TEST PHOTO). The delivery order DEMO-1198 was placed by the demo seed, so it has no signed receipt. We did not train or fine-tune the model. The product vectors are MongoDB’s voyage-4, not Nemotron. If the model does not answer, a plain parser makes the proposal and the card says so; code does every tool step, and the model has no approve tool.
+
+SOURCES: docs/submission.md, "NVIDIA: Best Use of Nemotron", jobs 1 to 5. The shelf: the Stock page’s own line "Nemotron 3.5 Super VL read 7 products in 0.6 s. 5 counts filled in below; 1 to count by hand" and the row "please count" for Valio Edam (video/public/shelf.png). The delivery note: "3 cases short: €91.08 to claim from Valio Aimo" (video/public/note.png). "1 model call, 0.3 s, thinking off": the live milk card of 15 Nov 00:03 (video/public/card2.png).</aside>
+</section>

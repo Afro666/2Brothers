@@ -17,6 +17,7 @@ order with a signed receipt that says `NOT_SENT`.
 - **For an outside agent:** [`docs/byoa.md`](docs/byoa.md) (curl and MCP), `/llms.txt`, `/gateway/docs`
 - **Why it is built this way:** [`docs/choices.md`](docs/choices.md)
 - **Demo script:** [`docs/demo.md`](docs/demo.md)
+- **Pitch deck:** [`docs/pitch/`](docs/pitch/README.md) (the slides, what to say, the PDF)
 - **Form text and the evidence per track:** [`docs/submission.md`](docs/submission.md)
 
 ## The flow

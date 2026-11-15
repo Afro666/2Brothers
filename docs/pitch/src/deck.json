@@ -1,0 +1,42 @@
+{
+  "v": 5,
+  "createdOnFiles": {"v": 1, "at": "2026-11-14T23:40:00Z"},
+  "lists": "css",
+  "format": {"v": 1, "shared": ["project/deck.css"]},
+  "title": "Kitchen Buyer pitch deck",
+  "cover": "cover",
+  "order": ["cover", "problem", "valio", "decides", "nemotron", "measured", "atlas", "channels", "limits", "close", "thirty", "proof"],
+  "sections": {
+    "open": {
+      "description": "Before the live demo: who we are and the problem, in Valio’s own example.",
+      "start": "cover"
+    },
+    "after": {
+      "description": "After the live demo: what Valio gets, the rule behind what the visitor saw, Nemotron’s other jobs and how its output was improved, MongoDB Atlas, MCP and the Telegram bot, the honest limits and the call to action.",
+      "start": "valio"
+    },
+    "backup": {
+      "description": "Backup: the milk request and the signed receipt as pictures for when the live demo fails.",
+      "start": "thirty"
+    }
+  },
+  "faces": {
+    "archivo": {
+      "family": "Archivo",
+      "href": "https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&display=swap"
+    },
+    "atkinson-hyperlegible-next": {
+      "family": "Atkinson Hyperlegible Next",
+      "href": "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;600;700&display=swap"
+    },
+    "atkinson-hyperlegible-mono": {
+      "family": "Atkinson Hyperlegible Mono",
+      "href": "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;600&display=swap"
+    },
+    "caveat": {
+      "family": "Caveat",
+      "href": "https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap"
+    }
+  },
+  "designSystems": []
+}
