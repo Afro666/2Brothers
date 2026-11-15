@@ -119,6 +119,45 @@ describe("StockPage: count from a photo", () => {
     expect(screen.getByRole("status")).toHaveTextContent("1 count filled in below; 2 to count by hand.");
   });
 
+  it("gives each row that is not counted a count box that fills the table's draft (#2011)", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    const fixture = await api.readShelfPhoto(PHOTO, "human");
+    const answer: ShelfPhotoRead = {
+      ...fixture,
+      rows: [
+        { ...fixture.rows[1], kind: "PLEASE_COUNT", confidence: "low", packs: null, count: null },
+        { ...fixture.rows[4], kind: "UNMATCHED", productId: null, productName: null, label: "bananas" },
+        { ...fixture.rows[4], kind: "UNMATCHED", productId: null, productName: null, label: "unknown" },
+      ],
+    };
+    api.readShelfPhoto = async () => answer;
+    renderApp("/stock", api);
+    await choosePhoto(user);
+
+    const list = await screen.findByRole("list", { name: "What was read from the photo" });
+    const [unsure, bananas, nameless] = within(list).getAllByRole("listitem");
+    // A product on the stock list: the box is there at once.
+    await user.type(within(unsure).getByRole("textbox", { name: "Count for Valio Eila 3 % milk from the photo, in L" }), "5");
+    expect(count("Valio Eila 3 % milk")).toHaveValue("5");
+    expect(screen.queryByText(MARK)).not.toBeInTheDocument(); // typed by a person, not read by the model
+
+    // No match: the name the model read is the title; the box comes after the person picks the product.
+    expect(within(bananas).getByText("bananas")).toHaveClass("font-medium");
+    expect(bananas).toHaveTextContent("No product on your stock list matches. (low confidence)");
+    expect(within(bananas).queryByRole("textbox")).not.toBeInTheDocument();
+    await user.selectOptions(
+      within(bananas).getByRole("combobox", { name: "Which product on your stock list is “bananas”?" }),
+      "Arla lactose-free milk",
+    );
+    await user.type(within(bananas).getByRole("textbox", { name: "Count for Arla lactose-free milk from the photo, in L" }), "3");
+    expect(count("Arla lactose-free milk")).toHaveValue("3");
+
+    // A label that names nothing keeps the old title.
+    expect(within(nameless).getByText("No product on your stock list matches")).toHaveClass("font-medium");
+    expect(nameless).toHaveTextContent("Read on the pack: “unknown”");
+  });
+
   it("keeps the mark on counts from an earlier photo when a second photo is read", async () => {
     const user = userEvent.setup();
     const api = createMockApi();

@@ -207,7 +207,14 @@ export function StockPage() {
 
             {deliveries === 0 ? <p className="text-sm text-muted-foreground">{t("No delivery recorded yet")}</p> : null}
 
-            <ShelfPhotoCount items={rows} actor={actor} disabled={saving} onCounts={fillFromPhoto} />
+            <ShelfPhotoCount
+              items={rows}
+              actor={actor}
+              disabled={saving}
+              values={Object.fromEntries(Object.entries(drafts).map(([id, draft]) => [id, draft.notCounted ? "" : draft.value]))}
+              onCounts={fillFromPhoto}
+              onValue={(productId, value) => updateDraft(productId, { value, notCounted: false })}
+            />
 
             <Card>
               <CardContent>

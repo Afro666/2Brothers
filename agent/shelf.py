@@ -40,11 +40,16 @@ SHELF_SCHEMA = {
         }}}}}
 
 INSTRUCTION = (
-    "This is a photo of a kitchen fridge shelf. List each distinct product you can see, once. "
-    "label: the product text exactly as printed on the pack (brand, name, size). count: how many "
-    "packs of that product are visible, as digits. confidence: high if every pack is fully "
+    "This is a photo of a kitchen fridge shelf. List each distinct product you can see, once: "
+    "never two items with the same label. "
+    "label: the product text exactly as printed on the pack (brand, name, size). A product with no "
+    "printed text you can read (loose fruit, vegetables, an unlabelled tub): name what it is in "
+    "plain English words, such as \"bananas\" or \"red apples\"; never \"unknown\" as a label. "
+    "count: how many packs of that product are visible, as digits; for loose produce, how many "
+    "crates or trays. confidence: high if every pack is fully "
     "visible and the label is readable, medium if you are fairly sure, low if packs are hidden, "
     "cut off or the label is partly unreadable. If you cannot count them, count is \"unknown\".")
+RANK = {"high": 0, "medium": 1, "low": 2}
 
 
 def _words(text: str) -> set[str]:
@@ -64,9 +69,30 @@ def match_product(label: str, products: list[dict]) -> dict | None:
     return scored[0][1]
 
 
+def one_per_label(items: list[dict]) -> list[dict]:
+    """One item per label (#2011): the model sometimes lists a product several times. The counts
+    add up, as two rows for one product do; one unknown count makes the sum unknown; the
+    lowest confidence stays. A label that names nothing ("unknown", empty) is never merged."""
+    merged: dict[str, dict] = {}
+    out = []
+    for item in items:
+        key = " ".join(item["label"].lower().split())
+        first = merged.get(key) if key and key != UNKNOWN else None
+        if first is None:
+            first = dict(item)
+            out.append(first)
+            merged[key] = first
+            continue
+        both = UNKNOWN not in (first["count"], item["count"])
+        total = int(first["count"]) + int(item["count"]) if both else None
+        first["count"] = str(total) if total is not None and total <= 9999 else UNKNOWN
+        first["confidence"] = max(first["confidence"], item["confidence"], key=RANK.__getitem__)
+    return out
+
+
 def count_rows(reply: dict, products: list[dict]) -> list[dict]:
     rows = []
-    for item in reply["items"]:
+    for item in one_per_label(reply["items"]):
         product = match_product(item["label"], products)
         count = None if item["count"] == UNKNOWN else int(item["count"])
         if product is None:
