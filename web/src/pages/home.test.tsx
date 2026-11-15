@@ -71,7 +71,9 @@ describe("HomePage", () => {
     api.listApprovals = async () => [{ ...approval, totalInclVat: 62.74, inclVat: 37.74 }];
     renderApp(`/?now=${DEMO_NOW}`, api);
 
-    expect(await screen.findByText("€62.74 incl VAT")).toBeInTheDocument();
+    // The figure holds a delivery fee, so it differs from the incl VAT total and is not called incl VAT (#1916).
+    expect(await screen.findByText("€62.74 in all")).toBeInTheDocument();
+    expect(screen.queryByText("€62.74 incl VAT")).not.toBeInTheDocument();
     expect(screen.queryByText("€37.74 incl VAT")).not.toBeInTheDocument();
   });
 

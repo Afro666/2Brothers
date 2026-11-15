@@ -191,7 +191,8 @@ function Replacement({ alert }: { alert: RecallAlert }) {
         ))}
       </ul>
       <p className="text-foreground">
-        {t("Separate order total:")} <strong>{t("{amount} incl VAT", { amount: formatEur(replacement.expectedTotal) })}</strong>.{" "}
+        {/* expected_total may hold a delivery fee, so it is not called incl VAT (#1916). */}
+        {t("Separate order total:")} <strong>{t("{amount} in all", { amount: formatEur(replacement.expectedTotal) })}</strong>.{" "}
         {t("Nothing is sent until a person approves that order.")}
       </p>
       <a

@@ -34,6 +34,16 @@ export function oldestWaiting(pending: ApprovalRequest[]): ApprovalRequest | und
   return [...pending].sort((a, b) => createdAt(a) - createdAt(b))[0];
 }
 
+/** The approve figure, called incl VAT only when it is the incl VAT total; a delivery fee makes it "in all" (#1916). */
+function approveLabel(request: ApprovalRequest, t: ReturnType<typeof useT>): string {
+  const amount = formatEur(request.totalInclVat);
+  const inclVat = inclVatOf(request);
+  if (inclVat === null) return t("Approve {amount}", { amount });
+  return Math.abs(inclVat - request.totalInclVat) < 0.005
+    ? t("{amount} incl VAT", { amount })
+    : t("{amount} in all", { amount });
+}
+
 export function ApprovalTile({ api }: { api: Api }) {
   const t = useT();
   const state = useAsync(() => api.listApprovals(), [api]);
@@ -73,9 +83,7 @@ export function ApprovalTile({ api }: { api: Api }) {
               </div>
               <p className="w-fit border-b-[3px] border-double border-foreground text-2xl font-bold tabular-nums sm:justify-self-end">
                 {oldest
-                  ? inclVatOf(oldest) === null
-                    ? t("Approve {amount}", { amount: formatEur(oldest.totalInclVat) })
-                    : t("{amount} incl VAT", { amount: formatEur(oldest.totalInclVat) })
+                  ? approveLabel(oldest, t)
                   : `${t(formatEur(null))} ${t("incl VAT")}`}
               </p>
             </div>
