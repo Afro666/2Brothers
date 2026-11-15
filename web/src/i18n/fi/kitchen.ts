@@ -60,7 +60,6 @@ export default {
   "Edit recipe": "Muokkaa reseptiä",
   "Edit {name}": "Muokkaa: {name}",
   "Edited by you": "Sinun muokkaama",
-  "Enter a count or mark a product as not counted.": "Syötä määrä tai merkitse tuote laskemattomaksi.",
   "Enter a count or mark the product as not counted.": "Syötä määrä tai merkitse tuote laskemattomaksi.",
   "Enter a meal name.": "Anna aterian nimi.",
   "Enter a number.": "Syötä numero.",
