@@ -31,7 +31,7 @@ export const PERMISSION_ACTIONS = [
   "API tokens and webhooks",
   "Approve from your own chat",
   "Approve or reject an order",
-  "Approve with the credential that proposed",
+  "Approve with the same token or session that proposed it",
   "Place an order nobody approved",
   "Cancel an order",
   "Change a quantity",
@@ -39,10 +39,14 @@ export const PERMISSION_ACTIONS = [
   "Approve routine orders up to {limit} EUR",
 ] as const;
 
+/** The gateway's auto-approve row (gateway/permissions.py) sits in `alone`; the Buyer never approves. */
+const AUTO_APPROVE_ROW = /^Approve routine orders up to (.+) EUR$/;
+
 /** A gateway row through the dictionary; a row not listed above is shown as sent (t() does that). */
 export function permissionText(action: string, t: (text: string, vars?: TranslationVariables) => string) {
-  const limit = /^Approve routine orders up to (.+) EUR$/.exec(action);
+  const limit = AUTO_APPROVE_ROW.exec(action);
   if (limit) return t("Approve routine orders up to {limit} EUR", { limit: limit[1] });
+  if (action === "Approve with the credential that proposed") return t("Approve with the same token or session that proposed it");
   // The catalog's field label uses the same text, so both share one Finnish entry ("Hae tuoteluettelosta").
   if (action === "Search the catalog") return t("Search the catalog");
   return t(action);
@@ -101,7 +105,10 @@ export function PermissionsSection() {
               </CardHeader>
               <CardContent>
                 <ul aria-labelledby={`permissions-${key}`} className="divide-y">
-                  {permissions.data[key].map((row) => (
+                  {/* #1844: auto-approve is not something the Buyer does: the card below says who approves. */}
+                  {permissions.data[key]
+                    .filter((row) => !(key === "alone" && AUTO_APPROVE_ROW.test(row.action)))
+                    .map((row) => (
                     <li key={row.action}>
                       <Link
                         to="/audit"
@@ -115,7 +122,7 @@ export function PermissionsSection() {
                         </span>
                       </Link>
                     </li>
-                  ))}
+                    ))}
                 </ul>
               </CardContent>
             </Card>
@@ -144,7 +151,7 @@ export function PermissionsSection() {
           </div>
           <CardDescription id="auto-approve-note">
             {t(
-              "Let the Buyer learn your kitchen first. After about 4 weeks of your approvals and corrections it can approve routine orders under your limit. Substitutes, unknown stock, allergens and anything over budget always come to you.",
+              "Let the Buyer learn your kitchen first. After about 4 weeks of your approvals and corrections, an approver can switch this on: the gateway then approves routine orders under the limit that person sets. The Buyer itself never approves. Substitutes, unknown stock, allergens and anything over budget always come to you.",
             )}
           </CardDescription>
         </CardHeader>
@@ -170,21 +177,21 @@ export function PermissionsSection() {
             <dl aria-label={t("Learning progress")} className="grid gap-3 text-sm sm:grid-cols-3">
               {[
                 {
-                  term: t("Weeks"),
+                  term: t("Weeks since your first decision"),
                   value: t("{value} of {needed}", {
                     value: formatNumber(learning.data.weeks),
                     needed: formatNumber(learning.data.weeksNeeded),
                   }),
                 },
                 {
-                  term: t("Decisions"),
+                  term: t("Your decisions to approve or reject"),
                   value: t("{value} of {needed}", {
                     value: formatNumber(learning.data.decisions),
                     needed: formatNumber(learning.data.decisionsNeeded),
                   }),
                 },
                 {
-                  term: t("Edit rate"),
+                  term: t("Approved orders you edited before approving"),
                   value: t("{rate} (needs {maximum} or less)", {
                     rate: formatPercent(learning.data.editRate),
                     maximum: formatPercent(learning.data.maxEditRate),
