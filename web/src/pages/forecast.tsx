@@ -1,3 +1,4 @@
+import { ReadRefresh } from "@/components/purchasing/read-refresh";
 import { useId, useState } from "react";
 
 import { useApi } from "@/api";
@@ -358,10 +359,11 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
 export function ForecastPage() {
   const t = useT();
   const api = useApi();
-  const state = useAsync(() => api.getForecastAccuracy(), [api], { keep: "forecast" });
+  const state = useAsync(() => api.getForecastAccuracy(), [api], { keep: "forecast", scope: api });
   return (
     <AppShell activeId="forecast">
       <div className="mx-auto max-w-5xl space-y-6">
+        <ReadRefresh refreshing={state.refreshing} outdated={state.outdated} reload={state.reload} />
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold">{t("Forecast vs actual")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">

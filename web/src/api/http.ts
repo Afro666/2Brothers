@@ -38,7 +38,7 @@ import { createMockApi } from "@/api/mock";
 import type { Api, AuditActor, Session } from "@/api/types";
 import { ApiError } from "@/api/types";
 import { formatEur } from "@/lib/format";
-import { dropKeptAnswers } from "@/lib/use-async";
+import { dropKeptAnswers, readCacheRevision } from "@/lib/use-async";
 import { randomBytes, randomHex, toHex } from "@/lib/random-id";
 
 function uuid(): string {
@@ -67,8 +67,40 @@ const BUSY_429 = new Map<unknown, string>([
 ]);
 
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
-export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit): Promise<unknown> {
-  if ((init?.method ?? "GET").toUpperCase() === "GET") return send(baseUrl, path, init);
+/** Dispatch and coalescing use exactly the same headers, including Headers/tuple inputs. */
+function requestHeaders(input?: HeadersInit): Record<string, string> {
+  const normalized = new Headers(input);
+  const entries = input instanceof Headers || Array.isArray(input) ? Object.fromEntries(normalized.entries()) : input;
+  return { ...(!normalized.has("Content-Type") ? { "Content-Type": "application/json" } : {}), ...entries };
+}
+const defaultReadScope = {};
+const readScopes = new WeakMap<object, { revision: number; pending: Map<string, Promise<unknown>> }>();
+export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit, scope: object = defaultReadScope): Promise<unknown> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  // This one POST tool is a lookup, not a mutation. Never generalize this to approval/order POSTs.
+  const search = method === "POST" && path === "/tools/search_products";
+  if (method === "GET" || search) {
+    const revision = readCacheRevision();
+    let reads = readScopes.get(scope);
+    if (!reads || reads.revision !== revision) {
+      reads = { revision, pending: new Map() };
+      readScopes.set(scope, reads);
+    }
+    const pendingReads = reads.pending;
+    // Aborting one subscriber must not cancel another's request. Custom RequestInit options bypass sharing.
+    if (init && Object.keys(init).some((key) => key !== "method" && key !== "headers" && !(search && key === "body"))) return send(baseUrl, path, init);
+    const headers = [...new Headers(requestHeaders(init?.headers)).entries()].sort(([a], [b]) => a.localeCompare(b));
+    const key = JSON.stringify([baseUrl, path, method, search ? init?.body : null, headers]);
+    const existing = pendingReads.get(key);
+    if (existing) return existing.then((value) => structuredClone(value));
+    if (pendingReads.size >= 64) return send(baseUrl, path, init);
+    const request = send(baseUrl, path, init);
+    pendingReads.set(key, request);
+    const forget = () => { if (pendingReads.get(key) === request) pendingReads.delete(key); };
+    void request.then(forget, forget);
+    // Share the network work, not mutable JSON owned by independent callers.
+    return request.then((value) => structuredClone(value));
+  }
   beforeWrite.forEach((drop) => drop());
   try {
     return await send(baseUrl, path, init);
@@ -83,7 +115,7 @@ async function send(baseUrl: string, path: string, init?: RequestInit): Promise<
     response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
       ...init,
       credentials: "same-origin",
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      headers: requestHeaders(init?.headers),
     });
   } catch {
     throw new ApiError("NETWORK", "Could not reach the gateway.");
@@ -156,14 +188,17 @@ export const AUDIT_LIMIT = 1000;
 
 export function createHttpApi(baseUrl: string): Api {
   let currentSession: Session | null = null;
+  let sessionKnown = false;
+  const requestScope = {};
+  const request = (path: string, init?: RequestInit) => gatewayRequest(baseUrl, path, init, requestScope);
   const mock = createMockApi();
   const kitchen = `/v1/kitchens/${encodeURIComponent(import.meta.env.VITE_GATEWAY_KITCHEN_ID || "demo-kitchen")}`;
   const proposalPath = (id: string) => `${kitchen}/proposals/${encodeURIComponent(id)}`;
-  const get = (path: string) => gatewayRequest(baseUrl, path);
+  const get = (path: string) => request(path);
   // X-User names the acting role only while there is no signed-in account; with an account,
   // the gateway takes the person from the session cookie.
   const post = (path: string, body: Json, actor?: AuditActor | string) =>
-    gatewayRequest(baseUrl, path, {
+    request(path, {
       method: "POST",
       headers: actor && !currentSession?.email ? { "X-User": actor } : undefined,
       body: JSON.stringify(body),
@@ -221,6 +256,8 @@ export function createHttpApi(baseUrl: string): Api {
   const proposals = () => proposalsRead.get();
   const auditEvents = () => auditRead.get();
   const dropReads = () => {
+    // Invalidate both layers: the 3 s proposal answer and any pre-event transport read.
+    dropKeptAnswers();
     proposalsRead.drop();
     auditRead.drop();
   };
@@ -237,11 +274,20 @@ export function createHttpApi(baseUrl: string): Api {
   const real = {
     async getSession() {
       try {
-        currentSession = toSession((await get("/v1/me")) as Json);
+        const next = toSession((await get("/v1/me")) as Json);
+        if (sessionKnown && JSON.stringify(currentSession) !== JSON.stringify(next)) {
+          dropKeptAnswers();
+          dropReads();
+        }
+        currentSession = next;
+        sessionKnown = true;
         return currentSession;
       } catch (error) {
         if (error instanceof ApiError && (error.code === "UNAUTHENTICATED" || error.status === 401)) {
+          dropKeptAnswers();
+          dropReads();
           currentSession = null;
+          sessionKnown = true;
           return null;
         }
         throw error;
@@ -249,6 +295,7 @@ export function createHttpApi(baseUrl: string): Api {
     },
     async signIn(email, password) {
       currentSession = toSession((await post("/v1/auth/login", { email, password })) as Json);
+      sessionKnown = true;
       window.dispatchEvent(new Event(SIGNED_IN_EVENT));
       return currentSession;
     },
@@ -258,31 +305,32 @@ export function createHttpApi(baseUrl: string): Api {
       } catch {
       } finally {
         currentSession = null;
+        sessionKnown = true;
       }
     },
     async changePassword(current, next) {
       await post("/v1/auth/change-password", { current_password: current, new_password: next });
     },
-    ...createPlanningHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createPlanningHttp((path, init) => request(path, init), kitchen),
     // GET/PUT /learned is not served yet (404): api/http-learned.ts stays out of `real` so the page keeps its "Sample data" mock. Add `...createLearnedHttp(call, kitchen)` here when the gateway serves it.
-    ...createBuyingNoteHttp((path, init) => gatewayRequest(baseUrl, path, init)),
-    ...createNutritionHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createOnboardingHttp((path, init) => gatewayRequest(baseUrl, path, init)),
-    ...createBrandLogosHttp((path, init) => gatewayRequest(baseUrl, path, init)),
-    ...createShelfHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createMenuPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createPriceListHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createDeliveryNoteHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createLabelPhotoHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createTrustHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createUsageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createAtlasHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createOffersHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createApprovalTokensHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createDeveloperHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createCatalogHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
-    ...createProductPageHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createBuyingNoteHttp((path, init) => request(path, init)),
+    ...createNutritionHttp((path, init) => request(path, init), kitchen),
+    ...createOnboardingHttp((path, init) => request(path, init)),
+    ...createBrandLogosHttp((path, init) => request(path, init)),
+    ...createShelfHttp((path, init) => request(path, init), kitchen),
+    ...createMenuPhotoHttp((path, init) => request(path, init), kitchen),
+    ...createPriceListHttp((path, init) => request(path, init), kitchen),
+    ...createDeliveryNoteHttp((path, init) => request(path, init), kitchen),
+    ...createLabelPhotoHttp((path, init) => request(path, init), kitchen),
+    ...createTrustHttp((path, init) => request(path, init), kitchen),
+    ...createUsageHttp((path, init) => request(path, init), kitchen),
+    ...createAtlasHttp((path, init) => request(path, init), kitchen),
+    ...createOffersHttp((path, init) => request(path, init), kitchen),
+    ...createTokensHttp((path, init) => request(path, init), kitchen),
+    ...createApprovalTokensHttp((path, init) => request(path, init), kitchen),
+    ...createDeveloperHttp((path, init) => request(path, init), kitchen),
+    ...createCatalogHttp((path, init) => request(path, init), kitchen),
+    ...createProductPageHttp((path, init) => request(path, init), kitchen),
     // A live event or a new connection means the lists may have changed since a request began.
     subscribeEvents: (onEvent, onStatus) =>
       events.subscribeEvents!(
@@ -295,7 +343,7 @@ export function createHttpApi(baseUrl: string): Api {
           onStatus?.(connected);
         },
       ),
-    ...createExplanationHttp((path, init) => gatewayRequest(baseUrl, path, init), kitchen),
+    ...createExplanationHttp((path, init) => request(path, init), kitchen),
     async listApprovals() {
       const [list, events] = await Promise.all([proposals(), auditEvents().catch(() => [])]);
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));

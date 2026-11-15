@@ -1,3 +1,4 @@
+import { ReadRefresh } from "@/components/purchasing/read-refresh";
 import { Link } from "@tanstack/react-router";
 
 import { useApi } from "@/api";
@@ -20,8 +21,8 @@ import { supplierName } from "@/lib/supplier-name";
 export function OrdersPage() {
   const t = useT();
   const api = useApi();
-  const state = useAsync(() => api.listOrders(), [], { keep: "orders" });
-  const suppliers = useAsync(() => api.listSuppliers(), [api], { keep: "suppliers" });
+  const state = useAsync(() => api.listOrders(), [], { keep: "orders", scope: api });
+  const suppliers = useAsync(() => api.listSuppliers(), [api], { keep: "suppliers", scope: api });
   const supplierNames = new Map(
     suppliers.status === "ready" ? suppliers.data.map((supplier) => [supplier.id, supplier.name]) : [],
   );
@@ -29,6 +30,7 @@ export function OrdersPage() {
   return (
     <AppShell activeId="orders">
       <div className="mx-auto max-w-5xl space-y-6">
+        <ReadRefresh refreshing={state.refreshing} outdated={state.outdated} reload={state.reload} />
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold">{t("Order history")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">

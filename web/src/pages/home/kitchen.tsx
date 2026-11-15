@@ -1,4 +1,6 @@
 import { formatDateTime, formatEur, formatShortfall } from "@/lib/format";
+import { useLiveEvents } from "@/lib/live-events";
+import { usePendingApprovals } from "@/lib/pending-approvals";
 import { useAsync } from "@/lib/use-async";
 import { Link } from "@tanstack/react-router";
 
@@ -37,7 +39,9 @@ export function oldestWaiting(pending: ApprovalRequest[]): ApprovalRequest | und
 
 export function ApprovalTile({ api }: { api: Api }) {
   const t = useT();
-  const state = useAsync(() => api.listApprovals(), [api]);
+  const state = useAsync(() => api.listApprovals(), [api], { keep: "home-approvals", scope: api });
+  const { count } = usePendingApprovals();
+  useLiveEvents(["proposal", "approval"], state.reload);
   return (
     <Tile
       title={t("Waiting for your approval")}
@@ -46,8 +50,15 @@ export function ApprovalTile({ api }: { api: Api }) {
       emphasis
       footer={<DecisionStrip />}
     >
-      <TileState
+      {state.status === "loading" && count !== null ? (
+        <div>
+          <p className="docket-figure text-3xl tabular-nums sm:text-[5.5rem] sm:leading-[0.8]">{count}</p>
+          <p role="status" className="text-sm text-muted-foreground">{t("Loading approval details...")}</p>
+        </div>
+      ) : <TileState
         status={state.status}
+        refreshing={state.refreshing}
+        outdated={state.outdated}
         error={state.error}
         reload={state.reload}
         data={state.status === "ready" ? state.data : null}
@@ -89,19 +100,21 @@ export function ApprovalTile({ api }: { api: Api }) {
             </div>
           );
         }}
-      </TileState>
+      </TileState>}
     </Tile>
   );
 }
 
 export function CutoffTile({ api, now }: { api: Api; now: Date }) {
   const t = useT();
-  const state = useAsync(() => api.listSuppliers(), [api], { keep: "suppliers" });
+  const state = useAsync(() => api.listSuppliers(), [api], { keep: "suppliers", scope: api });
   return (
     <Tile title={t("Next order cut-offs")} href="/suppliers" linkLabel={t("Review suppliers")}>
       <SampleData of="listSuppliers" />
       <TileState
         status={state.status}
+        refreshing={state.refreshing}
+        outdated={state.outdated}
         error={state.error}
         reload={state.reload}
         data={state.status === "ready" ? state.data : null}
@@ -140,12 +153,14 @@ export function CutoffTile({ api, now }: { api: Api; now: Date }) {
 
 export function StockTile({ api, now }: { api: Api; now: Date }) {
   const t = useT();
-  const state = useAsync(() => loadKitchenStock(api, now), [api, now.toISOString()], { keep: "home-stock" });
+  const state = useAsync(() => loadKitchenStock(api, now), [api, now.toISOString()], { keep: "home-stock", scope: api });
   return (
     <Tile title={t("Stock to check")} href="/stock" linkLabel={t("Count stock")}>
       <SampleData of="getStock" />
       <TileState
         status={state.status}
+        refreshing={state.refreshing}
+        outdated={state.outdated}
         error={state.error}
         reload={state.reload}
         data={state.status === "ready" ? state.data : null}
@@ -196,7 +211,7 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
 
 export function AuditTile({ api }: { api: Api }) {
   const t = useT();
-  const state = useAsync(() => api.listAudit(), [api], { keep: "audit" });
+  const state = useAsync(() => api.listAudit(), [api], { keep: "audit", scope: api });
   return (
     <Tile
       title={t("Latest steps")}
@@ -206,6 +221,8 @@ export function AuditTile({ api }: { api: Api }) {
     >
       <TileState
         status={state.status}
+        refreshing={state.refreshing}
+        outdated={state.outdated}
         error={state.error}
         reload={state.reload}
         data={state.status === "ready" ? state.data : null}

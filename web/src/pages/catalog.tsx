@@ -1,3 +1,4 @@
+import { ReadRefresh } from "@/components/purchasing/read-refresh";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -20,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EU_ALLERGENS } from "@/lib/allergens";
 import { formatEur, formatPack } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { useAsync } from "@/lib/use-async";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/use-media-query";
 import type { ProductLabel } from "@/types";
 
@@ -172,34 +174,9 @@ export function CatalogPage() {
   }
 
   const searchKey = JSON.stringify(search);
-  const [result, setResult] = useState<{
-    key: string;
-    status: "loading" | "ready" | "error";
-    data?: Awaited<ReturnType<typeof api.searchProducts>>;
-    error?: Error;
-  }>({ key: "", status: "loading" });
-  const [reloadVersion, setReloadVersion] = useState(0);
-  useEffect(() => {
-    let active = true;
-    setResult({ key: searchKey, status: "loading" });
-    api
-      .searchProducts(search.q, filtersOf(search))
-      .then((data) => {
-        if (active) setResult({ key: searchKey, status: "ready", data });
-      })
-      .catch((error: unknown) => {
-        if (active)
-          setResult({
-            key: searchKey,
-            status: "error",
-            error: error instanceof Error ? error : new Error(String(error)),
-          });
-      });
-    return () => {
-      active = false;
-    };
-  }, [api, searchKey, reloadVersion]);
-  const currentResult = result.key === searchKey ? result : { key: searchKey, status: "loading" as const };
+  const result = useAsync(() => api.searchProducts(search.q, filtersOf(search)), [api, searchKey],
+    { keep: `catalog:${searchKey}`, scope: api });
+  const currentResult = result;
   const active = latest.current;
   const excluding = active.exclude.length > 0;
   const results = currentResult.status === "ready" ? (currentResult.data ?? []) : [];
@@ -234,6 +211,7 @@ export function CatalogPage() {
           </p>
         </header>
 
+        <ReadRefresh refreshing={result.refreshing} outdated={result.outdated} reload={result.reload} />
         <form role="search" onSubmit={submit} className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="grid flex-1 gap-1 text-sm font-medium" htmlFor="catalog-query">
@@ -308,7 +286,7 @@ export function CatalogPage() {
         {currentResult.status === "error" ? (
           <ErrorState
             message={currentResult.error?.message ?? t("Search failed")}
-            onRetry={() => setReloadVersion((version) => version + 1)}
+            onRetry={result.reload}
           />
         ) : null}
         {currentResult.status === "ready" && results.length === 0 && unfiltered ? (

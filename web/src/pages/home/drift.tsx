@@ -98,7 +98,7 @@ function DriftTileBody({
         side === "kitchen" ? api.getDrift() : api.getSupplierDrift(),
       ),
     [api, side],
-    { keep: `drift-${side}` },
+    { keep: `drift-${side}`, scope: api },
   );
   const showKitchen = side === "supplier";
   if (state.status === "ready" && state.data === null) return null;
@@ -121,6 +121,8 @@ function DriftTileBody({
       <SampleData of={side === "kitchen" ? "getDrift" : "getSupplierDrift"} />
       <TileState<DriftReport>
         status={state.status}
+        refreshing={state.refreshing}
+        outdated={state.outdated}
         error={state.error}
         reload={state.reload}
         data={state.status === "ready" ? state.data : null}

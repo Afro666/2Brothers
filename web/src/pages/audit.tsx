@@ -1,3 +1,4 @@
+import { ReadRefresh } from "@/components/purchasing/read-refresh";
 import { useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
@@ -22,7 +23,7 @@ export const AUDIT_PAGE = 50;
 export function AuditPage() {
   const t = useT();
   const api = useApi();
-  const state = useAsync(() => api.listAudit(), [], { keep: "audit" });
+  const state = useAsync(() => api.listAudit(), [], { keep: "audit", scope: api });
   useLiveEvents(["audit"], state.reload);
   const [order, setOrder] = useState("all");
   // `/audit?kind=search` chooses that kind (the Permissions page links here). Follows later
@@ -64,6 +65,7 @@ export function AuditPage() {
   return (
     <AppShell activeId="audit">
       <div className="mx-auto max-w-5xl space-y-6">
+        <ReadRefresh refreshing={state.refreshing} outdated={state.outdated} reload={state.reload} />
         <header className="space-y-2">
           <h1 className="page-title">{t("Activity log")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
