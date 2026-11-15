@@ -184,16 +184,28 @@ export function createHttpApi(baseUrl: string): Api {
       canApprove: fromLogin ? role === "approver" : body.can_approve === true && body.kind === "human",
     };
   };
-  // One request in flight: the audit log is large and three places ask for it at once. No answer
-  // is kept: a call made after the request settled, after a write or after a live event asks again.
-  const shared = <T,>(load: () => Promise<T>) => {
+  // One request in flight: the audit log is large and three places ask for it at once. An answer
+  // is kept only for `keepMs` after it arrived (0: not at all): a call made after that, after a
+  // write or after a live event asks again.
+  const shared = <T,>(load: () => Promise<T>, keepMs = 0) => {
     let running: Promise<T> | null = null;
     return {
       get: () => {
         if (running) return running;
-        const mine: Promise<T> = load().finally(() => {
+        const forget = () => {
           if (running === mine) running = null;
-        });
+        };
+        const mine: Promise<T> = load().then(
+          (value) => {
+            if (keepMs > 0) setTimeout(forget, keepMs);
+            else forget();
+            return value;
+          },
+          (error: unknown) => {
+            forget();
+            throw error;
+          },
+        );
         return (running = mine);
       },
       drop: () => {
@@ -202,7 +214,9 @@ export function createHttpApi(baseUrl: string): Api {
     };
   };
   // The gateway lists at most its 100 newest proposals.
-  const proposalsRead = shared(async () => rows(await get(`${kitchen}/proposals`), "proposals"));
+  // Kept 3 s: one page load asks for the list three times in a row (the inbox, the waiting count,
+  // each approved card's order) and the gateway needs about a second for it.
+  const proposalsRead = shared(async () => rows(await get(`${kitchen}/proposals`), "proposals"), 3000);
   const auditRead = shared(async () => rows(await get(`${kitchen}/audit`), "events"));
   const proposals = () => proposalsRead.get();
   const auditEvents = () => auditRead.get();
