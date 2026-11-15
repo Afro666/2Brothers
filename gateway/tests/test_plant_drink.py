@@ -288,3 +288,16 @@ def test_coconut_milk_soap_is_not_a_cooking_product():
     shampoo = product("so1", "63112", "Kookosmaito shampoo 250 ml", "Kookosmaito shampoo 250 ml", unit="L")
     assert not is_plant_drink(shampoo, "coconut", cooking=True)
     assert is_plant_drink(CAN[0], "coconut", cooking=True)
+
+
+def test_plant_boundaries_keep_brands_without_confusing_pea_and_peanut():
+    def row(en, fi=""):
+        return {"category": "10402", "names": {"en": en, "fi": fi}}
+
+    assert not is_plant_drink(row("Peanut drink 1L"), "pea")
+    assert not is_plant_drink(row("Peach drink 1L"), "pea")
+    assert not is_plant_drink(row("Risotto drink 1L"), "rice")
+    assert is_plant_drink(row("Oatly iKaffe 1L"), "oat")
+    assert is_plant_drink(row("Oatly Oat Drink 1L"), "oat")
+    assert is_plant_drink(row("Alpro Mantelijuoma 1L", "Alpro Mantelijuoma 1L"), "almond")
+    assert is_plant_drink(row("Pea drink 1L"), "pea")

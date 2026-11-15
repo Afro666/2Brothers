@@ -209,12 +209,15 @@ def _is_form(word: str, form: str) -> bool:
     return word == form or (word.startswith(form) and _is_drink_word(word[len(form):]))
 
 
+_PLANT_BRANDS = {"oat": ("oatly",)}
+
+
 def _holds_plant(row: dict, plant: str) -> bool:
     forms = PLANTS[plant][0]
     names = row.get("names") if isinstance(row.get("names"), dict) else {}
     for name in names.values():
         for word in _PLANT_WORD.findall(str(name or "").lower()):
-            if any(_is_form(word, form) for form in forms):
+            if word in _PLANT_BRANDS.get(plant, ()) or any(_is_form(word, form) for form in forms):
                 return True
     return False
 
