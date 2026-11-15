@@ -1,6 +1,6 @@
 # Why it is built this way
 
-The choices behind the Trusted Kitchen Buyer gateway, in plain words. Field-level rules are
+The choices behind the Kitchen Buyer gateway, in plain words. Field-level rules are
 in [`contract.md`](contract.md); who decided what, and when, is in
 [`decisions.md`](decisions.md). The live API is at `/api/docs` on the demo site.
 

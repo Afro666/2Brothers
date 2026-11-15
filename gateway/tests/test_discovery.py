@@ -218,3 +218,12 @@ def test_llms_txt_says_how_to_get_a_kitchen_token(client, monkeypatch):
     monkeypatch.setenv("GATEWAY_REQUIRE_LOGIN", "true")
     text = client.get("/llms.txt", headers=PUBLIC).text
     assert "https://kitchen.example/settings/tokens" in text and "open demo" not in text.split("## The flow")[0]
+
+
+def test_the_gateway_uses_the_products_one_name(client):
+    """The product is "Kitchen Buyer" (docs/submission.md); no public file says "Trusted Kitchen Buyer" (#1966)."""
+    assert client.get("/llms.txt", headers=PUBLIC).text.splitlines()[0] == "# Kitchen Buyer gateway"
+    assert card(client).json()["name"] == "Kitchen Buyer gateway"
+    assert client.get("/openapi.json", headers=PUBLIC).json()["info"]["title"] == "Kitchen Buyer gateway"
+    for path in ("/llms.txt", CARD, "/openapi.json", "/docs"):
+        assert "Trusted Kitchen Buyer" not in client.get(path, headers=PUBLIC).text, path

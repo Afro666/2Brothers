@@ -126,7 +126,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     buyer_breaker = Breaker()        # one per app: a timeout skips the model for 2 minutes
     split_breaker = Breaker()        # the same for the split of several products (#1375), its own
     app = FastAPI(
-        title="Trusted Kitchen Buyer gateway", version="0.1.0",
+        title="Kitchen Buyer gateway", version="0.1.0",
         description=("REST and MCP gateway between a kitchen's Buyer agent and its suppliers. "
                      "The engine sizes every quantity, a person approves every order, every step is audited. "
                      "Why it is built this way: docs/choices.md. Field-level rules: docs/contract.md."),
@@ -139,7 +139,7 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     @app.get("/docs", include_in_schema=False)
     async def _docs() -> HTMLResponse:
         # A relative spec URL, so /api/docs loads /api/openapi.json and not the web app's /openapi.json (#278).
-        return get_swagger_ui_html(openapi_url="openapi.json", title="Trusted Kitchen Buyer gateway - API")
+        return get_swagger_ui_html(openapi_url="openapi.json", title="Kitchen Buyer gateway - API")
     state: dict[str, Gateway] = {}
 
     def gw() -> Gateway:
