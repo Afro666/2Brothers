@@ -39,13 +39,28 @@ export function mapBuyingNote(body: unknown): BuyingNote | null {
   return { model: raw.model, lines };
 }
 
+/** 6 x 6 s covers the gateway's 35 s limit for one note. */
+const BUSY_WAIT_MS = 6000;
+const BUSY_RETRIES = 6;
+
 export function createBuyingNoteHttp(
   call: (path: string, init?: RequestInit) => Promise<unknown>,
 ): Pick<Api, "getBuyingNote"> {
   return {
     async getBuyingNote(from, to, language) {
       const query = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&lang=${language}`;
-      return mapBuyingNote(await call(`/v1/suppliers/${encodeURIComponent(SUPPLIER_ID)}/demand/buying-note?${query}`));
+      const path = `/v1/suppliers/${encodeURIComponent(SUPPLIER_ID)}/demand/buying-note?${query}`;
+      // BUYING_NOTE_BUSY: one note per supplier is written at a time (another reader, or the other
+      // language). It takes at most 35 s and is cached after, so ask again instead of failing the page.
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          return mapBuyingNote(await call(path));
+        } catch (reason) {
+          const busy = (reason as { details?: { code?: unknown } } | null)?.details?.code === "BUYING_NOTE_BUSY";
+          if (!busy || attempt >= BUSY_RETRIES) throw reason;
+          await new Promise((resolve) => setTimeout(resolve, BUSY_WAIT_MS));
+        }
+      }
     },
   };
 }
