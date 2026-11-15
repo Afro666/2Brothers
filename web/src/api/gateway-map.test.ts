@@ -53,7 +53,7 @@ describe("mapApproval", () => {
       suppliersToConfirm: [],
       blockDeliveryFees: [],
       rejectReason: null,
-      cutoffs: [{ closingTime: null, supplierName: null }],
+      cutoffs: [{ closingTime: null, supplierName: null, productId: "900001" }],
       status: "PENDING",
       options: [],
       modelTrace: null, // no model_trace on this proposal (#1197)
@@ -113,7 +113,7 @@ describe("mapApproval", () => {
       lines: [{ ...proposal.lines[0], closing_time: closingTime }],
       blocks: [{ supplier_id: "sup-valio", name: "Valio Aimo", lines: proposal.lines }],
     });
-    expect(result.cutoffs).toEqual([{ closingTime, supplierName: "Valio" }]);
+    expect(result.cutoffs).toEqual([{ closingTime, supplierName: "Valio", productId: "900001" }]);
   });
 
   it("uses product names and plain sentences for known reason codes, leaving unknown codes alone", () => {

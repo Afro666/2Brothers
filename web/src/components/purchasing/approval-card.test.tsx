@@ -279,9 +279,10 @@ describe("ApprovalCard", () => {
   it("names each line's own supplier on an unknown-stock chip (#1819)", async () => {
     const order = structuredClone(confirmedOrder);
     order.lines[0].offer.availableAmount = 999999;
+    const productId = order.lines[0].product.id;
     const { rerender } = render(
       <ApprovalCard
-        request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: "Leipomo Demo" }] }}
+        request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: "Leipomo Demo", productId }] }}
         order={order}
       />,
     );
@@ -292,12 +293,39 @@ describe("ApprovalCard", () => {
     expect(screen.getByText("Leipomo Demo must confirm")).toBeVisible();
     expect(screen.queryByText("Valio must confirm")).toBeNull();
 
-    rerender(<ApprovalCard request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: null }] }} order={order} />);
+    rerender(<ApprovalCard request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: null, productId }] }} order={order} />);
     expect(screen.getByText("The supplier must confirm")).toBeVisible();
     expect(screen.queryByText("Valio must confirm")).toBeNull();
 
-    rerender(<ApprovalCard request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: "Valio" }] }} order={order} />);
+    rerender(<ApprovalCard request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: "Valio", productId }] }} order={order} />);
     expect(screen.getByText("Valio must confirm")).toBeVisible();
+
+    // A cut-off of another product never names this line's supplier.
+    rerender(<ApprovalCard request={{ ...approval, cutoffs: [{ closingTime: null, supplierName: "Valio", productId: "other" }] }} order={order} />);
+    expect(screen.getByText("The supplier must confirm")).toBeVisible();
+  });
+
+  it("finds each line's supplier by product id, not by position (#1864)", async () => {
+    const order = structuredClone(confirmedOrder);
+    const second = structuredClone(order.lines[0]);
+    second.product = { ...second.product, id: "bakery-bread" };
+    order.lines.push(second);
+    for (const line of order.lines) line.offer.availableAmount = 999999;
+    render(
+      <ApprovalCard
+        request={{
+          ...approval,
+          cutoffs: [
+            { closingTime: null, supplierName: "Leipomo Demo", productId: "bakery-bread" },
+            { closingTime: null, supplierName: "Valio", productId: order.lines[0].product.id },
+          ],
+        }}
+        order={order}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
+    const rows = screen.getAllByText(/^(Valio|Leipomo Demo) must confirm$/).map((chip) => chip.textContent);
+    expect(rows).toEqual(["Valio must confirm", "Leipomo Demo must confirm"]);
   });
 
   it("says the order is recorded and waits for the supplier, with no kitchen setting (Aron, 2026-11-14)", async () => {

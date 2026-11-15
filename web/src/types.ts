@@ -303,8 +303,8 @@ export interface ApprovalRequest {
   valioToConfirm?: number;
   /** The gateway's per-supplier fees (`blocks[].delivery_fee` above zero), for a proposal with no single fee (#1858). */
   blockDeliveryFees?: { supplierName: string; amount: number }[];
-  /** Proposal-line cut-offs and the supplier block each line belongs to. */
-  cutoffs?: { closingTime: OrderLine["offer"]["closingTime"]; supplierName: string | null }[];
+  /** Proposal-line cut-offs and the supplier block each line belongs to, keyed by the line's product id (#1864). */
+  cutoffs?: { closingTime: OrderLine["offer"]["closingTime"]; supplierName: string | null; productId?: string | null }[];
   /** Only PENDING can be approved; IN_PROGRESS and BLOCKED_BY_RECALL wait, they are not decided. */
   status: "PENDING" | "IN_PROGRESS" | "BLOCKED_BY_RECALL" | "APPROVED" | "REJECTED";
   /** The baskets the engine offers for this request; absent or empty when it offers one. */

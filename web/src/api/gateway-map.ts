@@ -630,6 +630,7 @@ export function mapApproval(proposal: Json, events: Json[] = []): ApprovalReques
       ? proposal.lines.map((line) => ({
           closingTime: nullableText(line?.closing_time, "closing_time"),
           supplierName: typeof line?.product_id === "string" ? supplierNames.get(line.product_id) ?? null : null,
+          productId: typeof line?.product_id === "string" ? line.product_id : null,
         }))
       : undefined,
     status: approvalStatus(proposal.status),
