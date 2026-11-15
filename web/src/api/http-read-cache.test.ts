@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { createHttpApi, gatewayRequest } from "@/api/http";
-import { dropKeptAnswers } from "@/lib/use-async";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { dropKeptAnswers, readCacheRevision, useAsync } from "@/lib/use-async";
 afterEach(() => { dropKeptAnswers(); vi.unstubAllGlobals(); });
 function deferredFetch() {
   const answers: ((r: Response) => void)[] = [];
@@ -93,4 +94,22 @@ it("gives each subscriber its own JSON object even when the network call is shar
   const b = await second as typeof a;
   a.rows[0].name = "changed";
   expect(b.rows[0].name).toBe("original");
+});
+
+it("loads cached catalog views through the real read-only POST adapter without invalidating itself", async () => {
+  const fetch = vi.fn(async () => new Response(JSON.stringify({ products: [] })));
+  vi.stubGlobal("fetch", fetch);
+  const api = createHttpApi("/api"); const revision = readCacheRevision();
+  const view = renderHook(() => useAsync(() => api.searchProducts("milk"), [api], { keep: "catalog:milk", scope: api }));
+  await waitFor(() => expect(view.result.current.status).toBe("ready"));
+  expect(view.result.current.data).toEqual([]);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(readCacheRevision()).toBe(revision);
+});
+it("shares identical catalog POST bodies but never joins a different search", async () => {
+  const d = deferredFetch(); const api = createHttpApi("/api");
+  const a = api.searchProducts("milk"), b = api.searchProducts("milk"), c = api.searchProducts("butter");
+  expect(d.fetch).toHaveBeenCalledTimes(2);
+  d.answer(0, { products: [] }); d.answer(1, { products: [] });
+  await act(async () => { await Promise.all([a, b, c]); });
 });

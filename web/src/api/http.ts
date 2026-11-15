@@ -76,7 +76,10 @@ function requestHeaders(input?: HeadersInit): Record<string, string> {
 const defaultReadScope = {};
 const readScopes = new WeakMap<object, { revision: number; pending: Map<string, Promise<unknown>> }>();
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit, scope: object = defaultReadScope): Promise<unknown> {
-  if ((init?.method ?? "GET").toUpperCase() === "GET") {
+  const method = (init?.method ?? "GET").toUpperCase();
+  // This one POST tool is a lookup, not a mutation. Never generalize this to approval/order POSTs.
+  const search = method === "POST" && path === "/tools/search_products";
+  if (method === "GET" || search) {
     const revision = readCacheRevision();
     let reads = readScopes.get(scope);
     if (!reads || reads.revision !== revision) {
@@ -85,9 +88,9 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
     }
     const pendingReads = reads.pending;
     // Aborting one subscriber must not cancel another's request. Custom RequestInit options bypass sharing.
-    if (init && Object.keys(init).some((key) => key !== "method" && key !== "headers")) return send(baseUrl, path, init);
+    if (init && Object.keys(init).some((key) => key !== "method" && key !== "headers" && !(search && key === "body"))) return send(baseUrl, path, init);
     const headers = [...new Headers(requestHeaders(init?.headers)).entries()].sort(([a], [b]) => a.localeCompare(b));
-    const key = JSON.stringify([baseUrl, path, headers]);
+    const key = JSON.stringify([baseUrl, path, method, search ? init?.body : null, headers]);
     const existing = pendingReads.get(key);
     if (existing) return existing.then((value) => structuredClone(value));
     if (pendingReads.size >= 64) return send(baseUrl, path, init);
