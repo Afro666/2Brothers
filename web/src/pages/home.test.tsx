@@ -71,7 +71,7 @@ describe("HomePage", () => {
     api.listApprovals = async () => [{ ...approval, totalInclVat: 62.74, inclVat: 37.74 }];
     renderApp(`/?now=${DEMO_NOW}`, api);
 
-    expect(await screen.findByText("€62.74 incl VAT")).toBeInTheDocument();
+    expect(await screen.findByText("€62.74 in all")).toBeInTheDocument();
     expect(screen.queryByText("€37.74 incl VAT")).not.toBeInTheDocument();
   });
 
@@ -85,8 +85,8 @@ describe("HomePage", () => {
     api.listApprovals = async () => [{ ...approval, totalInclVat: 2634.13, options }];
     renderApp(`/?now=${DEMO_NOW}`, api);
 
-    expect(await screen.findByText("€2,099.41 incl VAT")).toBeInTheDocument();
-    expect(screen.queryByText("€2,634.13 incl VAT")).not.toBeInTheDocument();
+    expect(await screen.findByText("€2,099.41 in all")).toBeInTheDocument();
+    expect(screen.queryByText(/€2,634\.13/)).not.toBeInTheDocument();
   });
 
   it("keeps the basket total once a person chose the basket (#1911)", async () => {
@@ -99,7 +99,7 @@ describe("HomePage", () => {
     api.listApprovals = async () => [{ ...approval, totalInclVat: 2634.13, options }];
     renderApp(`/?now=${DEMO_NOW}`, api);
 
-    expect(await screen.findByText("€2,634.13 incl VAT")).toBeInTheDocument();
+    expect(await screen.findByText("€2,634.13 in all")).toBeInTheDocument();
   });
 
   it.each<keyof Api>(["listAudit", "getDrift"])("marks only the tile fed by %s as MongoDB Atlas", async (method) => {
