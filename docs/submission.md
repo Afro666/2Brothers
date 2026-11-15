@@ -530,7 +530,7 @@ The database is MongoDB Atlas. `store/` is the only package that talks to it
 (`store/atlas.py:49`, `gateway/atlas_routes.py:3`, kept for 60 s,
 `gateway/atlas_routes.py:20`; `web/src/components/purchasing/atlas-card.tsx`). A part that
 cannot be read shows "unknown", never zero. The numbers below were read from that route
-(`GET https://31-22-104-201.sslip.io/api/v1/kitchens/demo-kitchen/atlas`) on 14 Nov at
+(`GET https://kitchenbuyer.pl/api/v1/kitchens/demo-kitchen/atlas`) on 14 Nov at
 21:46 UTC. They grow while people use the site, so the card can show more than this
 table: at about 15:45 UTC the same route gave 17,548 products, 1,491 audit entries and
 216 MB.

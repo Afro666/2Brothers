@@ -9,7 +9,7 @@ and beat 1 to 3 of the short version. The milk card is described as on `main` on
 (after #1905, #1971, #1972, #1976, #1977 and #1981); look at the live card first, because
 a change shows only after its deploy. Each beat ran on the live site on 14 Nov, but
 neither order was rehearsed as one run yet.
-Owner: Aron (presents). Site: `https://31-22-104-201.sslip.io`.
+Owner: Aron (presents). Site: `https://kitchenbuyer.pl`.
 
 Why this story: it shows the parts nobody else has (Valio's own agent, a refusal, an
 outside agent), and it runs the sponsor's own request from the sentence to the signed

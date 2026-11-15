@@ -72,7 +72,7 @@ One JSON POST per delivery (contract: docs/contract.md, "Webhooks"):
        return {
          subject: `Recall: ${d.product_name} (${body.kitchen_id})`,
          text: `Recall: ${d.product_name} is ${where || "listed"} in ${body.kitchen_id}.\n` +
-               `${d.next_step}\nNotice: ${d.notice_url}\nOpen the inbox: https://31-22-104-201.sslip.io/approvals`,
+               `${d.next_step}\nNotice: ${d.notice_url}\nOpen the inbox: https://kitchenbuyer.pl/approvals`,
        };
      },
    });

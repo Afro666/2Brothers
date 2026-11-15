@@ -4,13 +4,13 @@ The gateway works with any agent that has two things: the URL and a kitchen toke
 This page shows it twice: with `curl` only, and with an MCP client (Claude Desktop,
 Claude Code). Both end in a milk proposal that waits for a person.
 
-- Site: `https://31-22-104-201.sslip.io`
-- Gateway base URL (your own bearer token): `https://31-22-104-201.sslip.io/gateway`
+- Site: `https://kitchenbuyer.pl`
+- Gateway base URL (your own bearer token): `https://kitchenbuyer.pl/gateway`
 - For an agent to read first, no token needed:
-  - `https://31-22-104-201.sslip.io/llms.txt`
-  - `https://31-22-104-201.sslip.io/.well-known/agent-card.json`
-  - `https://31-22-104-201.sslip.io/gateway/openapi.json` (try it: `/gateway/docs`)
-- MCP endpoint: `https://31-22-104-201.sslip.io/gateway/mcp`
+  - `https://kitchenbuyer.pl/llms.txt`
+  - `https://kitchenbuyer.pl/.well-known/agent-card.json`
+  - `https://kitchenbuyer.pl/gateway/openapi.json` (try it: `/gateway/docs`)
+- MCP endpoint: `https://kitchenbuyer.pl/gateway/mcp`
 
 The two discovery files are written by the gateway from its own routes on every request
 (`gateway/discovery.py`). A skill is in them only when its route is served.
@@ -28,7 +28,7 @@ A signed-in person creates the token (`POST /v1/kitchens/{kitchen_id}/tokens`). 
 demo site everybody is the demo person, so this one call works without a password:
 
 ```bash
-curl -s -X POST https://31-22-104-201.sslip.io/api/v1/kitchens/demo-kitchen/tokens \
+curl -s -X POST https://kitchenbuyer.pl/api/v1/kitchens/demo-kitchen/tokens \
   -H 'Content-Type: application/json' \
   -d '{"name": "my-agent", "scopes": ["kitchen:read", "kitchen:propose"]}'
 ```
@@ -43,7 +43,7 @@ The `token` value is shown once. Keep it out of git. Revoke it with
 Settings, API & MCP tokens: it creates a token (the secret is shown once) and revokes it.
 
 ```bash
-export BASE=https://31-22-104-201.sslip.io/gateway
+export BASE=https://kitchenbuyer.pl/gateway
 export TOKEN=tkb_REPLACE_WITH_YOUR_TOKEN
 ```
 
@@ -165,7 +165,7 @@ curl -s $BASE/v1/kitchens/demo-kitchen/proposals/9f461e1ac2ba40ca834177ce3a3e1be
 
 ### A person approves
 
-Your agent stops here. A person opens `https://31-22-104-201.sslip.io/`, reads the card
+Your agent stops here. A person opens `https://kitchenbuyer.pl/`, reads the card
 and approves or rejects. A token that calls `.../approve` gets
 `403 HUMAN_SESSION_REQUIRED` (test: `gateway/tests/test_discovery.py`,
 `test_approval_is_human_only_and_not_a_skill`).
@@ -200,7 +200,7 @@ It answered 200 with seven tools when checked; `change_proposal` came later the 
 ### Claude Code
 
 ```bash
-claude mcp add --transport http kitchen-buyer https://31-22-104-201.sslip.io/gateway/mcp --header "Authorization: Bearer tkb_REPLACE_WITH_YOUR_TOKEN"
+claude mcp add --transport http kitchen-buyer https://kitchenbuyer.pl/gateway/mcp --header "Authorization: Bearer tkb_REPLACE_WITH_YOUR_TOKEN"
 ```
 
 ### Claude Desktop
@@ -217,7 +217,7 @@ Claude Desktop's config file starts local programs, so the small `mcp-remote` br
       "args": [
         "-y",
         "mcp-remote",
-        "https://31-22-104-201.sslip.io/gateway/mcp",
+        "https://kitchenbuyer.pl/gateway/mcp",
         "--header",
         "Authorization:${KITCHEN_AUTH}"
       ],
