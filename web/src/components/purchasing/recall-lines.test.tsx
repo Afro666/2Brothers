@@ -31,7 +31,7 @@ describe("RecallLines", () => {
     );
     expect(within(section).getByText("Replacement order")).toBeInTheDocument();
     expect(within(section).getByText(/Löfbergs Crescendo/)).toBeInTheDocument();
-    expect(within(section).getByText(/Separate order total:/)).toHaveTextContent("€147.10 incl VAT");
+    expect(within(section).getByText(/Separate order total:/)).toHaveTextContent("€147.10 in all");
     const link = within(section).getByRole("link", { name: /Review replacement order/ });
     expect(link).toHaveAttribute("href", "#proposal-ORD-1045-R");
   });

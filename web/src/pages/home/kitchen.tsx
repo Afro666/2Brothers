@@ -59,6 +59,7 @@ export function ApprovalTile({ api }: { api: Api }) {
           // The card on /approvals leads with the recommended option's total (#1866): Home names the same figure.
           const lead = leadOption(oldest?.options ?? []);
           const total = lead ? lead.totalInclVat : oldest?.totalInclVat;
+          const inclVat = oldest ? inclVatOf(oldest) : null;
           const byNemotron = oldest?.modelTrace?.madeBy === "model" && isNemotron(oldest.modelTrace.model);
           return pending.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("Nothing is waiting.")}</p>
@@ -77,9 +78,12 @@ export function ApprovalTile({ api }: { api: Api }) {
               </div>
               <p className="w-fit border-b-[3px] border-double border-foreground text-2xl font-bold tabular-nums sm:justify-self-end">
                 {oldest
-                  ? inclVatOf(oldest) === null
+                  ? inclVat == null
                     ? t("Approve {amount}", { amount: formatEur(total ?? null) })
-                    : t("{amount} incl VAT", { amount: formatEur(total ?? null) })
+                    : // #1916: "incl VAT" only for the incl VAT total itself; a figure with a fee is "in all".
+                      !lead && total != null && Math.abs(inclVat - total) < 0.005
+                      ? t("{amount} incl VAT", { amount: formatEur(total) })
+                      : t("{amount} in all", { amount: formatEur(total ?? null) })
                   : `${t(formatEur(null))} ${t("incl VAT")}`}
               </p>
             </div>
