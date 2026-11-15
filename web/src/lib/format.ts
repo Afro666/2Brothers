@@ -56,7 +56,7 @@ export function formatNumber(value: number): string {
   return num[numberFormat()].format(value);
 }
 
-const COUNTED_AMOUNT_UNITS = new Set(["PCS", "ST", "PC", "KPL", "CS", "BAG", "BOX", "PACK", "KI"]);
+export const COUNTED_AMOUNT_UNITS = new Set(["PCS", "ST", "PC", "KPL", "CS", "BAG", "BOX", "PACK", "KI"]);
 
 export function formatAmount(value: number, unit: string): string {
   const measured = !COUNTED_AMOUNT_UNITS.has(unit.toUpperCase());
@@ -205,6 +205,18 @@ export function isLater(availableDate: string | null, requestedDate: string): bo
 
 export function formatPercent(fraction: number | null): string {
   return fraction == null ? "unknown" : `${Math.round(fraction * 100)} %`;
+}
+
+/** One decimal in the viewer's number format: "4,9 %" in Finnish, "4.9 %" in English. */
+export function formatPercentDecimal(fraction: number | null, signed = false, missing = "unknown"): string {
+  if (fraction == null) return missing;
+  const percent = num[numberFormat()].format(Math.round(fraction * 1000) / 10);
+  return `${signed && fraction > 0 ? "+" : ""}${percent} %`;
+}
+
+/** A counted amount without decimals ("668 PCS"): a count of pieces is not 668.35 pieces. */
+export function formatCount(value: number): string {
+  return formatNumber(Math.round(value));
 }
 
 /** "KI 12 × 1 L": the pack a sales unit holds, from the catalog `units[]`. */

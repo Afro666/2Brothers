@@ -12,17 +12,26 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAsync } from "@/lib/use-async";
-import { formatEur } from "@/lib/format";
+import { COUNTED_AMOUNT_UNITS, formatCount, formatEur, formatPercentDecimal } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { weekRangeLabel } from "@/lib/week";
 import type { ForecastAccuracy, ForecastScore, ForecastSeries } from "@/types";
 
 const KITCHEN = "kitchen";
+
+/** What the engine wins and what it costs, said only when the gateway's own numbers show exactly that. */
+const EURO_SUMMARY =
+  "In total the engine misses less (weekly error {wape}) and wastes less, about {waste} against {baselineWaste}, but with a larger shortfall: about {short} against {baselineShort}.";
+
 export const GROUPS = ["Weekly error", "Stock-out days", "Waste"];
 
 function percent(fraction: number | null, signed = false, missing = "unknown"): string {
-  if (fraction == null) return missing;
-  return `${signed && fraction > 0 ? "+" : ""}${(fraction * 100).toFixed(1)} %`;
+  return formatPercentDecimal(fraction, signed, missing);
+}
+
+/** A line per unit; a counted unit is a whole count, never "668.35 PCS". */
+function unitLine(amount: number, unit: string | null): string {
+  return unit && COUNTED_AMOUNT_UNITS.has(unit.toUpperCase()) ? `${formatCount(amount)} ${unit}` : formatQuantity(amount, unit);
 }
 
 export const TILES: {
@@ -33,8 +42,9 @@ export const TILES: {
   units?: "short" | "waste";
 }[] = [
   {
-    label: "Weekly error (WAPE)",
+    label: "Weekly error",
     hint: "The share of the need the forecast missed. Lower is better.",
+    // The hint under the tile explains the error in words; the abbreviation on its own means nothing.
     value: (score, _unit, t) => percent(score.wape, false, t("unknown")),
   },
   {
@@ -66,16 +76,21 @@ function quantityOrEuros(score: ForecastScore, key: "short" | "waste", unit: str
   if (!score.byUnit) return formatQuantity(score[key], unit, t("unknown"));
   const eur = key === "short" ? score.shortEur : score.wasteEur;
   // Estimated: the latest order price per kitchen unit (gateway/forecast_value.py), never a booked figure.
+  // The tile keeps "about" and the amount on one line (whitespace-nowrap in Figure).
   return eur == null ? "" : t("about {value}", { value: formatEur(eur) });
 }
 
 function Figure({ score, unit, tile, main }: { score: ForecastScore; unit: string | null; tile: (typeof TILES)[number]; main: boolean }) {
   const t = useT();
   const value = tile.value(score, unit, t);
-  const lines = tile.units && score.byUnit ? score.byUnit.map((row) => formatQuantity(row[tile.units!], row.unit)) : [];
+  const lines = tile.units && score.byUnit ? score.byUnit.map((row) => unitLine(row[tile.units!], row.unit)) : [];
   return (
     <dd>
-      {value ? <span className={main ? "block text-2xl font-semibold" : "block text-sm font-medium"}>{value}</span> : null}
+      {value ? (
+        <span className={main ? "block text-xl leading-tight font-semibold break-words whitespace-nowrap" : "block text-sm font-medium whitespace-nowrap"}>
+          {value}
+        </span>
+      ) : null}
       {lines.length ? (
         <ul className={value ? "text-xs text-muted-foreground" : main ? "text-base font-semibold" : "text-sm font-medium"}>
           {lines.map((line) => (
@@ -108,6 +123,40 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
   }
 
   const past = series.weeks.filter((week) => !week.ahead).length;
+  // A tile that would only say "unknown" for both methods says nothing: it is left out.
+  const unknown = t("unknown");
+  const tiles = TILES.filter((tile) =>
+    [series.engine, series.baseline].some(
+      (score) => (tile.units && score.byUnit?.length) || (tile.value(score, series.unit, t) && tile.value(score, series.unit, t) !== unknown),
+    ),
+  );
+  const { engine, baseline } = series;
+  const engineWins =
+    engine.wape != null && baseline.wape != null && engine.wape < baseline.wape &&
+    engine.wasteEur != null && baseline.wasteEur != null && engine.wasteEur < baseline.wasteEur &&
+    engine.shortEur != null && baseline.shortEur != null && engine.shortEur > baseline.shortEur;
+  const summary = engineWins
+    ? t(EURO_SUMMARY, {
+        wape: percent(engine.wape, false, t("unknown")),
+        short: formatEur(engine.shortEur!),
+        baselineShort: formatEur(baseline.shortEur!),
+        waste: formatEur(engine.wasteEur!),
+        baselineWaste: formatEur(baseline.wasteEur!),
+      })
+    : null;
+  // A kitchen that mixes kg, l and pieces has no amount to plot: its chart is the weekly error, a share.
+  const mixed = series.productId == null;
+  const share = (fraction: number | null) => (fraction == null ? null : Math.round(fraction * 1000) / 10);
+  const errorWeeks = series.weeks
+    .filter((week) => !week.ahead)
+    .map((week) => ({
+      week: week.week,
+      ahead: false,
+      actual: null,
+      engine: share(week.engineWape),
+      baseline: share(week.baselineWape),
+    }));
+  const tableWeeks = mixed ? series.weeks.filter((week) => !week.ahead) : series.weeks;
   return (
     <>
       {data.products ? (
@@ -118,7 +167,7 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={KITCHEN}>{data.kitchen.name}</SelectItem>
+              <SelectItem value={KITCHEN}>{t(data.kitchen.name)}</SelectItem>
               {data.products.map((product) => (
                 <SelectItem key={product.productId} value={product.productId ?? KITCHEN}>
                   {/* The trigger copies this content, so the chosen product shows its picture too. */}
@@ -136,12 +185,12 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
           {series.productId ? <ProductThumb en={series.name} size="md" /> : null}
           <h2 id={`${selectId}-summary`} className="min-w-0 text-lg font-semibold break-words">
             {past === 1
-              ? t("{name}: the last week", { name: series.name })
-              : t("{name}: the last {count} weeks", { name: series.name, count: past })}
+              ? t("{name}: the last week", { name: series.productId ? series.name : t(series.name) })
+              : t("{name}: the last {count} weeks", { name: series.productId ? series.name : t(series.name), count: past })}
           </h2>
         </div>
         <ul className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          {TILES.map((tile) => (
+          {tiles.map((tile) => (
             <li key={tile.label} className="last:odd:col-span-2 lg:last:odd:col-span-1">
               <Card className="h-full gap-0 py-4">
                 <CardContent className="space-y-1 px-4">
@@ -158,21 +207,31 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
             </li>
           ))}
         </ul>
+        {summary ? <p className="max-w-prose text-sm text-muted-foreground">{summary}</p> : null}
       </section>
 
       <Card>
         <CardContent className="space-y-4">
           <div className="space-y-1">
-            <h2 className="text-lg font-semibold">{t("Needed and predicted per week")}</h2>
+            <h2 className="text-lg font-semibold">
+              {mixed
+                ? t("Weekly error per week")
+                : t("Needed and predicted per week, in {unit}", { unit: series.unit ?? "" })}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              {t("{past} past weeks, {future} future weeks with the forecast only.", {
-                past,
-                future: series.weeks.length - past,
-              })}{" "}
-              {series.unit ? t("In {unit}.", { unit: series.unit }) : t("Adds every product in its own unit.")}
+              {mixed
+                ? t("{past} past weeks. The whole kitchen mixes kilos, litres and pieces, so the chart shows the share of the need the forecast missed each week (lower is better), not an amount.", { past })
+                : `${t("{past} past weeks, {future} future weeks with the forecast only.", {
+                    past,
+                    future: series.weeks.length - past,
+                  })} ${t("In {unit}.", { unit: series.unit ?? "" })}`}
             </p>
           </div>
-          <ForecastChart weeks={series.weeks} unit={series.unit} />
+          {mixed ? (
+            <ForecastChart weeks={errorWeeks} unit={null} axis="percent" />
+          ) : (
+            <ForecastChart weeks={series.weeks} unit={series.unit} />
+          )}
           <details>
             <summary className="cursor-pointer rounded-sm text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
               {t("The weeks as a table")}
@@ -181,15 +240,19 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("Week")}</TableHead>
-                  <TableHead className="text-right">{t("Needed")}</TableHead>
-                  <TableHead className="text-right">{t("Our engine")}</TableHead>
-                  <TableHead className="text-right">{t("Weekday average")}</TableHead>
+                  {mixed ? null : (
+                    <>
+                      <TableHead className="text-right">{t("Needed")}</TableHead>
+                      <TableHead className="text-right">{t("Our engine")}</TableHead>
+                      <TableHead className="text-right">{t("Weekday average")}</TableHead>
+                    </>
+                  )}
                   <TableHead className="text-right">{t("Error, our engine")}</TableHead>
                   <TableHead className="text-right">{t("Error, weekday average")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {series.weeks.map((week) => {
+                {tableWeeks.map((week) => {
                   // A future week has nothing to compare with yet; any other gap is unknown.
                   const missing = week.ahead ? t("not yet") : t("unknown");
                   return (
@@ -200,15 +263,13 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
                           {week.ahead ? t("Forecast only") : weekRangeLabel(week.week)}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right">
-                        {formatQuantity(week.actual, series.unit, missing)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatQuantity(week.engine, series.unit, t("unknown"))}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatQuantity(week.baseline, series.unit, t("unknown"))}
-                      </TableCell>
+                      {mixed ? null : (
+                        <>
+                          <TableCell className="text-right">{formatQuantity(week.actual, series.unit, missing)}</TableCell>
+                          <TableCell className="text-right">{formatQuantity(week.engine, series.unit, t("unknown"))}</TableCell>
+                          <TableCell className="text-right">{formatQuantity(week.baseline, series.unit, t("unknown"))}</TableCell>
+                        </>
+                      )}
                       <TableCell className="text-right">{percent(week.engineWape, false, missing)}</TableCell>
                       <TableCell className="text-right">{percent(week.baselineWape, false, missing)}</TableCell>
                     </TableRow>
@@ -220,10 +281,11 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
         </CardContent>
       </Card>
 
-      <section aria-labelledby={`${selectId}-products`} className="space-y-3">
-        <h2 id={`${selectId}-products`} className="text-lg font-semibold">
-          {t("By product")}
-        </h2>
+      <section aria-label={t("By product")} className="space-y-3">
+        {/* Nothing under "By product": no heading over a single "unknown" line. */}
+        {data.products ? (
+          <h2 className="text-lg font-semibold">{t("By product")}</h2>
+        ) : null}
         {data.products ? (
           <Table className="tabular-nums">
             <TableHeader>
@@ -284,7 +346,8 @@ function ForecastView({ data }: { data: ForecastAccuracy }) {
           </Table>
         ) : (
           <p className="text-sm text-muted-foreground">
-            {t("Per product: unknown. The figures here are for the whole kitchen only.")}
+            {t("Per product: unknown. The figures here are for the whole kitchen only.")}{" "}
+            {t("The gateway sends one score for the whole kitchen, not one per product.")}
           </p>
         )}
       </section>
