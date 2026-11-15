@@ -1,4 +1,6 @@
 export default {
+  "Updates are still arriving. These are the last loaded results.": "Päivityksiä saapuu yhä. Nämä ovat viimeksi ladatut tulokset.",
+  "Refresh results": "Päivitä tulokset",
   "Showing previous results while refreshing...": "Näytetään aiemmat tulokset, kunnes päivitys valmistuu...",
   "Loading approval details...": "Ladataan hyväksynnän tietoja...",
   "Loading": "Ladataan",

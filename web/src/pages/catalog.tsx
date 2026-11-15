@@ -1,3 +1,4 @@
+import { ReadRefresh } from "@/components/purchasing/read-refresh";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -210,7 +211,7 @@ export function CatalogPage() {
           </p>
         </header>
 
-        {result.refreshing ? <p role="status" className="text-sm text-muted-foreground">{t("Showing previous results while refreshing...")}</p> : null}
+        <ReadRefresh refreshing={result.refreshing} outdated={result.outdated} reload={result.reload} />
         <form role="search" onSubmit={submit} className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="grid flex-1 gap-1 text-sm font-medium" htmlFor="catalog-query">

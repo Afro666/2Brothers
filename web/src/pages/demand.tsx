@@ -1,3 +1,4 @@
+import { ReadRefresh } from "@/components/purchasing/read-refresh";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from "react";
@@ -724,7 +725,7 @@ export function DemandPage() {
   return (
     <AppShell activeId="demand">
       <div className="mx-auto max-w-5xl space-y-6">
-        {state.refreshing ? <p role="status" className="text-sm text-muted-foreground">{t("Showing previous results while refreshing...")}</p> : null}
+        <ReadRefresh refreshing={state.refreshing} outdated={state.outdated} reload={state.reload} />
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold">{t("Demand")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">

@@ -3,9 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/api/types";
 
 export type AsyncState<T> =
-  | { status: "loading"; data: null; error: null; reload: () => Promise<void>; refreshing: boolean }
-  | { status: "error"; data: null; error: Error; reload: () => Promise<void>; refreshing: boolean }
-  | { status: "ready"; data: T; error: null; reload: () => Promise<void>; refreshing: boolean };
+  | { status: "loading"; data: null; error: null; reload: () => Promise<void>; refreshing: boolean; outdated?: boolean }
+  | { status: "error"; data: null; error: Error; reload: () => Promise<void>; refreshing: boolean; outdated?: boolean }
+  | { status: "ready"; data: T; error: null; reload: () => Promise<void>; refreshing: boolean; outdated?: boolean };
 /** Retry delays for a load whose request may have been lost in the venue wifi or a deploy restart. */
 const RETRY_DELAYS_MS = [500, 1500];
 
@@ -74,7 +74,7 @@ export function useAsync<T>(
   const requested = useRef(0);
   /** Each reload's promise and the version that answers it. */
   const reloadWaiters = useRef<{ version: number; resolve: () => void }[]>([]);
-  const [state, setState] = useState<{ status: "loading" | "error" | "ready"; data: T | null; error: Error | null; refreshing: boolean; key?: string }>(
+  const [state, setState] = useState<{ status: "loading" | "error" | "ready"; data: T | null; error: Error | null; refreshing: boolean; outdated?: boolean; key?: string }>(
     () =>
       cached
         ? { status: "ready", data: cached.data as T, error: null, refreshing: true, key: keep }
@@ -112,12 +112,9 @@ export function useAsync<T>(
       done.forEach((waiter) => waiter.resolve());
     };
     const restartInvalidated = (revision: number): boolean => {
-      if (keep === undefined || revision === drops) return false;
-      if (invalidationsLeft-- > 0) run(RETRY_DELAYS_MS.length);
-      else {
-        setState({ status: "error", data: null, error: new ApiError("DATA_CHANGED", "The data changed while loading. Try again."), refreshing: false, key: keep });
-        finishReload();
-      }
+      if (keep === undefined || revision === drops || invalidationsLeft <= 0) return false;
+      invalidationsLeft -= 1;
+      run(RETRY_DELAYS_MS.length);
       return true;
     };
     const run = (attemptsLeft: number) => {
@@ -140,7 +137,7 @@ export function useAsync<T>(
             kept.set(keep, { data, until: Date.now() + KEEP_MS });
           }
           if (active) {
-            setState({ status: "ready", data, error: null, refreshing: false, key: keep });
+            setState({ status: "ready", data, error: null, refreshing: false, outdated: keep !== undefined && revision !== drops, key: keep });
             finishReload();
           }
         })

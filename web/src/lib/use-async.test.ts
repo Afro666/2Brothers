@@ -313,7 +313,7 @@ describe("useAsync", () => {
       expect(second.result.current.data).toBe("after write");
     });
 
-    it("stops after two invalidation restarts and allows an explicit retry", async () => {
+    it("keeps an explicitly outdated snapshot after two restarts without retaining it for another visit", async () => {
       const answers: ((value: string) => void)[] = [];
       const load = vi.fn(() => new Promise<string>((resolve) => answers.push(resolve)));
       const view = renderHook(() => useAsync(load, [], { keep: "busy" }));
@@ -321,12 +321,16 @@ describe("useAsync", () => {
         dropKeptAnswers(); await act(async () => answers[i]("outdated"));
       }
       expect(load).toHaveBeenCalledTimes(3);
-      expect(view.result.current.status).toBe("error");
-      expect(view.result.current.data).toBeNull();
+      expect(view.result.current.status).toBe("ready");
+      expect(view.result.current.data).toBe("outdated");
+      expect(view.result.current.outdated).toBe(true);
+      const next = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "busy" }));
+      expect(next.result.current.status).toBe("loading");
       let retried!: Promise<void>;
       act(() => { retried = view.result.current.reload(); });
       await act(async () => answers[3]("current")); await retried;
       expect(view.result.current.data).toBe("current");
+      expect(view.result.current.outdated).toBe(false);
     });
 
     it("lets only the newest load for a key change the kept answer", async () => {
