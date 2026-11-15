@@ -68,7 +68,7 @@ export function NotificationsSection() {
           <CardContent>
             <form className="space-y-5" onSubmit={(event) => void save(event)}>
               {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-              {!canEdit ? <p className="text-sm text-muted-foreground">{canApprove ? t("Saving notification preferences is not available on this server yet; the choices below are sample data.") : t("Only an approver can change notification preferences.")}</p> : null}
+              {!canEdit ? <p className="text-sm text-muted-foreground">{canApprove ? t("Sample details: these choices cannot be saved in this demo.") : t("Only an approver can change notification preferences.")}</p> : null}
               {EVENTS.map(({ key, title, description }) => (
                 <div key={key} className="flex items-start gap-3">
                   <Checkbox

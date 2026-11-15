@@ -62,7 +62,7 @@ describe("Notification settings", () => {
     const api = Object.assign(createMockApi(), { live: new Set(["getNotificationPreferences" as const]) });
     renderApp("/settings/notifications", api);
 
-    expect(await screen.findByText("Saving notification preferences is not available on this server yet; the choices below are sample data.")).toBeVisible();
+    expect(await screen.findByText("Sample details: these choices cannot be saved in this demo.")).toBeVisible();
     expect(screen.getByRole("checkbox", { name: "Approval waiting" })).toBeDisabled();
     expect(screen.queryByText("Only an approver can change notification preferences.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save notifications" })).not.toBeInTheDocument();

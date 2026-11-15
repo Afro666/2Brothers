@@ -62,7 +62,7 @@ describe("Kitchen settings", () => {
     await user.clear(timezone);
     await user.type(timezone, "Mars/Olympus");
     await user.click(screen.getByRole("button", { name: "Save profile" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("valid IANA timezone");
+    expect(await screen.findByRole("alert")).toHaveTextContent("valid time zone");
     expect(save).not.toHaveBeenCalled();
   });
 

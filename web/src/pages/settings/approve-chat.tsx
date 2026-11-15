@@ -173,7 +173,7 @@ export function ApproveChatSection() {
           <p className="text-sm text-muted-foreground">{t("Only an approver can create an approval token.")}</p>
         ) : !createServed ? (
           <p role="alert" className="text-sm text-destructive">
-            {t("The gateway does not serve approval token creation.")}
+            {t("Approval tokens cannot be created in this demo.")}
           </p>
         ) : null}
 

@@ -25,12 +25,12 @@ export function TeamSection() {
       <SampleData of="listTeamMembers" />
       {state.status === "loading" ? <LoadingState label={t("Loading team")} /> : null}
       {state.status === "error" ? <ErrorState message={state.error.message} onRetry={state.reload} /> : null}
-      {state.status === "ready" && state.data.length === 0 ? <EmptyState title={t("No team members")}>{t("The gateway returned no members for this kitchen.")}</EmptyState> : null}
+      {state.status === "ready" && state.data.length === 0 ? <EmptyState title={t("No team members")}>{t("No members are listed for this kitchen.")}</EmptyState> : null}
       {state.status === "ready" && state.data.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>{t("Members and roles")}</CardTitle>
-            <CardDescription>{t("Roles are managed by the gateway. This list is read-only.")}</CardDescription>
+            <CardDescription>{t("Roles are set by the people who run this tool. This list is read-only.")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="divide-y" aria-label={t("Kitchen team members")}>

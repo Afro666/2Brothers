@@ -119,7 +119,7 @@ export function LearnedSection() {
                   {switching === fact.id ? t("Switching off…") : fact.active ? t("On") : t("Off")}
                 </Button>
                 {canSwitch && !fact.active ? (
-                  <span className="text-sm text-muted-foreground">{t("This fact is switched off.")}</span>
+                  <span className="text-sm text-muted-foreground">{t("Switched off. It comes back when the tool learns it again.")}</span>
                 ) : null}
               </div>
             </li>

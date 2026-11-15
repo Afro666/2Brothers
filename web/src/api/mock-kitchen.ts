@@ -36,7 +36,7 @@ export function createKitchenMock(recordAudit: AuditRecorder): KitchenApi {
       };
       if (!saved.name) throw new ApiError("INVALID", "Kitchen name is required.");
       if (!saved.address) throw new ApiError("INVALID", "Address is required for local weather and holidays.");
-      if (!validTimezone(saved.timezone)) throw new ApiError("INVALID", "Enter a valid IANA timezone.");
+      if (!validTimezone(saved.timezone)) throw new ApiError("INVALID", "Enter a valid time zone, for example Europe/Helsinki.");
       if (!saved.deliveryAddress) throw new ApiError("INVALID", "Delivery address is required.");
       profile = saved;
       recordAudit({

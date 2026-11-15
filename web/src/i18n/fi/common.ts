@@ -6,7 +6,7 @@ export default {
   "Could not load this tile.": "Tietojen lataus ei onnistunut.",
   "Try again": "Yritä uudelleen",
   "Sample data": "Esimerkkitiedot",
-  "The gateway does not serve this yet. These are sample figures, not the kitchen's own.": "Yhdyskäytävä ei vielä tarjoa näitä tietoja. Luvut ovat esimerkkejä, eivät keittiön omia.",
+  "Sample figures, not your kitchen's own: this part of the demo is not connected yet.": "Esimerkkilukuja, ei keittiösi omia: tätä demon osaa ei ole vielä kytketty.",
   "unknown": "tuntematon",
   "price unknown": "hinta tuntematon",
   "piece": "kpl",

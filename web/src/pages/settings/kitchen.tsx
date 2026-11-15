@@ -82,7 +82,7 @@ export function KitchenSection() {
     };
     if (!next.name) return setProfileError(t("Kitchen name is required."));
     if (!next.address) return setProfileError(t("Address is required for local weather and holidays."));
-    if (!validTimezone(next.timezone)) return setProfileError(t("Enter a valid IANA timezone, for example Europe/Helsinki."));
+    if (!validTimezone(next.timezone)) return setProfileError(t("Enter a valid time zone, for example Europe/Helsinki."));
     if (!next.deliveryAddress) return setProfileError(t("Delivery address is required."));
     setSavingProfile(true);
     setProfileError(null);
@@ -138,7 +138,7 @@ export function KitchenSection() {
                 {profileError ? <p role="alert" className="text-sm text-destructive">{profileError}</p> : null}
                 {!canEdit ? <p className="text-sm text-muted-foreground">{t("Only an approver can edit kitchen settings.")}</p> : null}
                 {api.live && !api.live.has("saveKitchenProfile") ? (
-                  <p className="text-sm text-muted-foreground">{t("The gateway has no kitchen-profile save route, so this sample profile is read-only.")}</p>
+                  <p className="text-sm text-muted-foreground">{t("Sample details: read-only in this demo.")}</p>
                 ) : null}
                 <div className="space-y-2">
                   <Label htmlFor="kitchen-name">{t("Kitchen name")}</Label>
@@ -160,7 +160,7 @@ export function KitchenSection() {
                 <div className="space-y-2">
                   <Label htmlFor="kitchen-timezone">{t("Timezone")}</Label>
                   <Input id="kitchen-timezone" value={profile.timezone} disabled={!canEditProfile || savingProfile} onChange={(event) => changeProfile("timezone", event.target.value)} />
-                  <p className="text-xs text-muted-foreground">{t("Use an IANA timezone such as Europe/Helsinki.")}</p>
+                  <p className="text-xs text-muted-foreground">{t("Time zone, for example Europe/Helsinki.")}</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="delivery-address">{t("Delivery address")}</Label>

@@ -165,7 +165,7 @@ export function TokensSection() {
     >
       <div className="min-w-0 space-y-5">
         <p className="max-w-prose text-sm text-muted-foreground">
-          {withScope(t("Tokens cannot have {scope}: only a signed-in person approves."), "kitchen:approve")}
+          {t("A token can never approve an order: only a signed-in person approves.")}
         </p>
 
         {actionError ? (
