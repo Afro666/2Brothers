@@ -82,4 +82,14 @@ describe("ChefRequestBox examples", () => {
       vi.useRealTimers();
     }
   });
+
+  it("a cleared Needed by shows no text under the field", async () => {
+    const user = userEvent.setup();
+    renderBox();
+    const field = screen.getByLabelText("Needed by");
+    await user.clear(field);
+    expect(field).toHaveValue("");
+    expect(field.parentElement?.querySelector("p")).toBeNull();
+    expect(screen.queryByText(/unknown/i)).toBeNull();
+  });
 });

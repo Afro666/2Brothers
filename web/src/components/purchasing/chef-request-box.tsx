@@ -157,7 +157,7 @@ export function ChefRequestBox({
         <div className="space-y-2">
           <Label htmlFor={dateId} className="label-caps text-[11px] leading-4 font-semibold">{t("Needed by")}</Label>
           <Input id={dateId} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <p className="text-sm text-muted-foreground">{formatDayAndDate(date || null)}</p>
+          {date ? <p className="text-sm text-muted-foreground">{formatDayAndDate(date)}</p> : null}
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
