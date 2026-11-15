@@ -114,8 +114,8 @@ export function groupByProduct(rows: SupplierDemandRow[]): ProductGroup[] {
 interface WeekSection {
   monday: string;
   sunday: string;
-  label: string;
-  summary: string;
+  /** The raw rows: the summary is written at render time, so a language toggle needs no new fetch (#1011). */
+  rows: SupplierDemandRow[];
   groups: ProductGroup[];
 }
 
@@ -174,14 +174,13 @@ function noWeek(): Promise<WeekSection> {
   return new Promise<WeekSection>(() => undefined);
 }
 
-async function loadWeek(api: Api, week: string, t: ReturnType<typeof useT>): Promise<WeekSection> {
+async function loadWeek(api: Api, week: string): Promise<WeekSection> {
   const [monday, sunday] = [weekDates(week)[0], weekDates(week)[6]];
   const rows = await api.getSupplierDemand(monday, sunday);
   return {
     monday,
     sunday,
-    label: weekTitle(week, t),
-    summary: riskSummary(rows, t),
+    rows,
     groups: groupByProduct(rows),
   };
 }
@@ -695,7 +694,9 @@ export function DemandPage() {
   const week = requestedWeek ?? defaultWeek;
   const weekIsValid = isValidWeek(week);
   const { language } = useLanguage();
-  const state = useAsync(() => (weekIsValid ? loadWeek(api, week, t) : noWeek()), [api, week, weekIsValid, t]);
+  const state = useAsync(() => (weekIsValid ? loadWeek(api, week) : noWeek()), [api, week, weekIsValid]);
+  // Written in the current language on every render: switching language does not ask the API again.
+  const weekLabel = weekIsValid ? weekTitle(week, t) : "";
   const noteWindow = weekIsValid ? [weekDates(week)[0], weekDates(week)[6]] : null;
   const note = useAsync(
     () => (noteWindow ? loadNote(api, noteWindow[0], noteWindow[1], language) : Promise.resolve(null)),
@@ -758,13 +759,13 @@ export function DemandPage() {
         {weekIsValid && state.status === "ready" ? (
           <div className="space-y-4">
             <p className="text-sm font-medium">
-              <span className="sr-only">{state.data.label}: </span>
-              {state.data.summary}
+              <span className="sr-only">{weekLabel}: </span>
+              {riskSummary(state.data.rows, t)}
             </p>
             {state.data.groups.length === 0 ? (
               <EmptyState title={t("No demand forecast for this week")}>
                 {t("Kitchens that share forecasts have nothing planned for {week}.", {
-                  week: state.data.label.toLowerCase(),
+                  week: weekLabel.toLowerCase(),
                 })}
               </EmptyState>
             ) : (
