@@ -12,14 +12,20 @@ def fixture():
 
 def test_comparison_changes_only_system_and_code_computed_hint():
     data = fixture()
-    assert len(data['cases']) == 19 and len(data['schedule']) == 90
-    assert len({(r['case'], r['repeat'], r['mode']) for r in data['schedule']}) == 90
+    assert len(data['cases']) == 31 and len(data['schedule']) == 114
+    assert len({(r['case'], r['repeat'], r['mode']) for r in data['schedule']}) == 114
     expected_flags = {'full-rounded': [True, False, False], 'full-exact': [True, False, False],
         'partial-rounding': [False, False, False], 'partial-declined': [False, False, False],
         'unknown-only': [False, False, False], 'late-full': [False, True, False],
         'passed-cutoff': [False, True, False], 'missing-arrival': [False, True, False],
-        'alias-before-full': [True, True, True], 'diet-before-full': [True, True, True],
-        'unit-price': [True, True, True], 'alias-partial': [False, False, True]}
+        'alias-before-full': [False, True, False], 'diet-before-full': [False, True, False],
+        'unit-price': [True, True, True], 'alias-partial': [False, False, False],
+        'validation-full': [True, False, False], 'validation-weighted': [True, False, False],
+        'validation-rounding': [False, False, False], 'validation-partial': [False, False, False],
+        'validation-alias-partial': [False, False, False], 'validation-alias-full': [False, True, False],
+        'validation-diet-partial': [False, False, False], 'validation-diet-full': [False, True, False],
+        'validation-cutoff': [False, True, False], 'validation-unknown': [False, False, False],
+        'validation-price': [True, True, True], 'validation-history': [True, True, True]}
     for case in data['cases']:
         before, old_messages = bench.inputs(data, case, 'before')
         after, new_messages = bench.inputs(data, case, 'after')

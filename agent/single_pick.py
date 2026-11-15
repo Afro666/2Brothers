@@ -9,6 +9,7 @@ from decimal import Decimal, DecimalException, InvalidOperation
 from jsonschema import validate
 
 from gateway.parse import parse_request
+from gateway.diet import asked as asked_diets
 from agent.vision import parse_reply
 from agent.memory import kitchen_memory, prompt_block
 from agent.memory_cache import KitchenFactsCache
@@ -48,6 +49,10 @@ SYSTEM = ('Pick a minimal purchase basket of up to three products from this numb
           'covers_need_alone is computed by code from timely confirmed stock for the rounded purchase '
           'requirement; it never overrides the ranking rules. False means coverage is not proven, '
           'not that the product is unsuitable. False does not require extra picks. '
+          'When an explicit alias match exists, a non-alias product cannot cover that request alone. '
+          'A row without proof of a requested diet also cannot cover the request alone. '
+          'Never replace or complement an alias match with a non-alias row merely because the '
+          'non-alias row is engine-selected; choose a suitable alias complement when available. '
           'When confirmed stock covers only part, include that product and the useful engine-selected '
           'complement. Never discard useful confirmed partial stock just because an unknown-stock '
           'product might cover the remainder or is cheaper: return BOTH the partial-stock product '
@@ -152,11 +157,16 @@ def checked_reason(reason, row, need=None):
         raise ValueError(f'Product-choice reason has an unsupported number ({rule})')
 
 
-def covers_need_alone(row, need):
+def covers_need_alone(row, need, *, alias_required=False, diets=()):
     """The shared quote proof used for both the model hint and deterministic pruning."""
     fact = row.get('selection') or {}
     if (not isinstance(fact, dict) or not isinstance(need, dict)
             or not isinstance(need.get('unit'), str) or not need['unit']):
+        return False
+    if alias_required and row.get('alias') is not True:
+        return False
+    claims = fact.get('diet_claims') or {}
+    if diets and (not isinstance(claims, dict) or any(claims.get(diet.key) is not True for diet in diets)):
         return False
     try:
         if (fact.get('stock_state') != 'confirmed' or fact.get('cutoff_passed') is not False
@@ -174,14 +184,19 @@ def covers_need_alone(row, need):
         return False
 
 
-def coverage_rows(rows, need):
+def coverage_rows(rows, need, *, request_text=''):
     """Expose a proof, not a new ranking signal; unknown or partial stock is never full."""
-    return [{**row, 'covers_need_alone': covers_need_alone(row, need)} for row in rows]
+    alias_required = any(row.get('alias') is True for row in rows)
+    diets = asked_diets(request_text)
+    return [{**row, 'covers_need_alone': covers_need_alone(row, need, alias_required=alias_required, diets=diets)}
+            for row in rows]
 
 
-def minimal_indices(indices, rows, need):
+def minimal_indices(indices, rows, need, *, request_text=''):
     """Keep the model's first preference alone only when the quote proves it is enough."""
-    return indices[:1] if covers_need_alone(rows[indices[0]], need) else indices
+    alias_required = any(row.get('alias') is True for row in rows)
+    return indices[:1] if covers_need_alone(rows[indices[0]], need, alias_required=alias_required,
+                                           diets=asked_diets(request_text)) else indices
 
 
 class SinglePickModel:
@@ -241,7 +256,8 @@ class SinglePickModel:
             entries = await self.memory_entries(rows, result)
             memory = prompt_block(entries)
             rows = feedback_rows(rows, entries)
-            rows = coverage_rows(rows, {'unit': self.need['unit'], 'needed_by': self.need['requested_date']})
+            rows = coverage_rows(rows, {'unit': self.need['unit'], 'needed_by': self.need['requested_date']},
+                                 request_text=self.need['text'])
             system = SYSTEM if not memory else SYSTEM + '\n' + MEMORY_NOTE + '\n' + memory
             # Prompt revisions must not reuse a choice made under an older ranking policy.
             key = buyer_picks.cache_key(self.kitchen, self.need, self.exclusions, rows, memory=system)
@@ -290,7 +306,8 @@ class SinglePickModel:
                             log.warning('Dropped an unsupported pick reason: %s', rule)
                     self.raw_pick_count = len(indices)
                     indices = minimal_indices(indices, rows, {
-                        'unit': self.need['unit'], 'needed_by': self.need['requested_date']})
+                        'unit': self.need['unit'], 'needed_by': self.need['requested_date']},
+                        request_text=self.need['text'])
                     self.pruned = len(indices) < self.raw_pick_count
                     ids = [rows[i]['product_id'] for i in indices]
                     owned = await asyncio.to_thread(buyer_picks.finish, self.db, key, token, ids)

@@ -14,7 +14,7 @@ from agent.single_pick import PICK_SCHEMA, SYSTEM, checked_reason, coverage_rows
 from agent.vision import parse_reply
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / 'agent/fixtures/coverage-pick-v1.json'
+FIXTURE = ROOT / 'agent/fixtures/coverage-pick-v2.json'
 
 
 def inputs(fixture, case, mode):
@@ -22,7 +22,7 @@ def inputs(fixture, case, mode):
         raise ValueError('unknown comparison arm')
     rows = copy.deepcopy(case['rows'])
     if mode == 'after':
-        rows = coverage_rows(rows, case['need'])
+        rows = coverage_rows(rows, case['need'], request_text=case['request'])
     system = fixture['before_system'] if mode == 'before' else SYSTEM
     return rows, [{'role': 'system', 'content': system + case['memory_tail']},
                   {'role': 'user', 'content': json.dumps({'request': case['request'],
@@ -42,7 +42,7 @@ def score(case, rows, answer):
             checked_reason(pick['reason'], rows[pick['index']], case['need'])
         except ValueError:
             reasons = False  # production drops the reason, not the selected products
-    guarded = [rows[i]['product_id'] for i in minimal_indices(indices, rows, case['need'])]
+    guarded = [rows[i]['product_id'] for i in minimal_indices(indices, rows, case['need'], request_text=case['request'])]
     return {'schema_valid': True, 'reasons_valid': reasons, 'raw_picks': ids,
             'guarded_picks': guarded, 'raw_exact': set(ids) == expected,
             'guarded_exact': set(guarded) == expected, 'first_correct': ids[0] == case['expected_first'],
@@ -51,7 +51,7 @@ def score(case, rows, answer):
 
 def summarize(results):
     summary = {}
-    for group in ('diagnostic', 'fresh'):
+    for group in sorted({r['group'] for r in results}):
         summary[group] = {}
         for mode in ('before', 'after'):
             rows = [r for r in results if r['group'] == group and r['mode'] == mode]
@@ -71,7 +71,7 @@ async def run(path, *, factory=Nemotron):
               'after_system_sha256': digest(SYSTEM.encode()), 'endpoint': endpoint, 'model': model_id,
               'thinking': False, 'temperature': 0, 'attempts_per_trial': 1, 'max_tokens': 512,
               'source_sha256': {name: digest((ROOT / name).read_bytes()) for name in
-                  ('agent/coverage_pick_bench.py', 'agent/single_pick.py', 'agent/model.py')}}
+                  ('agent/coverage_pick_bench.py', 'agent/single_pick.py', 'agent/model.py', 'gateway/diet.py')}}
     if path.exists():
         report = json.loads(path.read_text(encoding='utf-8'))
         if report['frozen'] != frozen:

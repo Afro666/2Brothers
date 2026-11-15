@@ -91,7 +91,7 @@ def test_coverage_hint_never_proves_full_coverage_from_ineligible_or_malformed_e
 def test_coverage_hint_uses_rounded_packs_without_mutating_evidence_or_overriding_rank():
     need = {'unit': 'L', 'needed_by': '2026-11-16'}
     fact = selection_facts([offer(size='10', stock='6')], D(53), 'L')['milk']
-    rows = [{'selection': fact, 'alias': False, 'kitchen_declined': True}, {'selection': None, 'alias': True}]
+    rows = [{'selection': fact, 'alias': False, 'kitchen_declined': True}, {'selection': None, 'alias': False}]
     enriched = coverage_rows(rows, need)
     assert enriched[0]['covers_need_alone'] is True and enriched[1]['covers_need_alone'] is False
     assert 'covers_need_alone' not in rows[0] and enriched[0]['selection'] is fact
@@ -104,6 +104,20 @@ def test_coverage_hint_uses_rounded_packs_without_mutating_evidence_or_overridin
     assert minimal_indices([0, 1], enriched, need) == [0]
 
 
+def test_full_stock_cannot_make_a_non_alias_cover_an_explicit_alias_request_alone():
+    need = {'unit': 'L', 'needed_by': '2026-11-16'}
+    full = selection_facts([offer(stock='100')], D(51), 'L')['milk']
+    partial = {**full, 'stock_quantity_base': '20'}
+    rows = [{'selection': partial, 'alias': True}, {'selection': None, 'alias': True},
+            {'selection': full, 'alias': False}]
+    assert [row['covers_need_alone'] for row in coverage_rows(rows, need)] == [False, False, False]
+    assert minimal_indices([0, 1], rows, need) == [0, 1]
+    assert minimal_indices([2, 0], rows, need) == [2, 0]  # no pruning away the actual alias
+    rows[0]['selection'] = full
+    assert coverage_rows(rows, need)[0]['covers_need_alone'] is True
+    assert minimal_indices([0, 1], rows, need) == [0]
+
+
 def test_fractional_weighted_sales_units_are_valid_and_missing_evidence_is_not():
     need = {'unit': 'KG', 'needed_by': '2026-11-16'}
     fact = {'stock_state': 'confirmed', 'cutoff_passed': False, 'first_arrival': '2026-11-16',
@@ -113,3 +127,13 @@ def test_fractional_weighted_sales_units_are_valid_and_missing_evidence_is_not()
     assert covers_need_alone({'selection': {**fact, 'stock_quantity_base': '3.49'}}, need) is False
     for malformed in (None, [], 'not-facts', 1):
         assert covers_need_alone({'selection': malformed}, need) is False
+
+
+def test_requested_diet_proof_is_required_before_a_full_stock_hint_or_pruning():
+    need = {'unit': 'L', 'needed_by': '2026-11-16'}
+    fact = selection_facts([offer(stock='100')], D(51), 'L')['milk']
+    rows = [{'selection': {**fact, 'diet_claims': {'lactose_free': claim}}} for claim in (False, None, True)]
+    hint = coverage_rows(rows, need, request_text='51 L lactose-free milk')
+    assert [row['covers_need_alone'] for row in hint] == [False, False, True]
+    assert minimal_indices([0, 2], rows, need, request_text='51 L lactose-free milk') == [0, 2]
+    assert minimal_indices([2, 0], rows, need, request_text='51 L lactose-free milk') == [2]
