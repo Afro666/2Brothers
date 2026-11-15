@@ -120,7 +120,6 @@ export function TokensSection() {
       setActionError(t("Select at least one token scope."));
       return;
     }
-    setCreated(null);
     setCreating(true);
     try {
       const next = await api.createApiToken({ name: trimmed, scopes });

@@ -44,6 +44,21 @@ describe("API & MCP token settings", () => {
     expect((await api.listApiTokens()).every((token) => !("token" in token))).toBe(true);
   });
 
+  it("keeps the previous secret on screen when a second create fails", async () => {
+    const user = userEvent.setup();
+    const api = createMockApi();
+    renderApp("/settings/tokens", api);
+
+    await createToken(user, "Claude one");
+    expect(await screen.findByText("tkb_demo_0001", { selector: "code" })).toBeVisible();
+
+    vi.spyOn(api, "createApiToken").mockRejectedValueOnce(new Error("Network down"));
+    await createToken(user, "Claude two");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Network down");
+    expect(screen.getByText("tkb_demo_0001", { selector: "code" })).toBeVisible();
+    expect(screen.getByLabelText("MCP: Claude Code")).toHaveTextContent("tkb_demo_0001");
+  });
+
   it("copies the token and each ready command with the clipboard", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
