@@ -130,7 +130,6 @@ export default {
   "Pack size": "Pakkauskoko",
   "Plan the week's menus and covers (guests per meal). The needs below come from this plan.": "Suunnittele viikon ruokalistat ja annosmäärät (ruokailijat ateriaa kohden). Alla oleva tarve perustuu tähän suunnitelmaan.",
   "Postal code": "Postinumero",
-  "Powered by Context.dev": "Palvelun tarjoaa Context.dev",
   "Previous week": "Edellinen viikko",
   "Price (EUR)": "Hinta (EUR)",
   "Product": "Tuote",
