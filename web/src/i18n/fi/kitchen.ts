@@ -299,6 +299,7 @@ export default {
   "Ordered for this week so far: energy not known.": "Tälle viikolle tähän mennessä tilattu: energia ei ole tiedossa.",
   "Ordered for this week so far: {kcal} kcal.": "Tälle viikolle tähän mennessä tilattu: {kcal} kcal.",
   "Ordered so far covers {percent}% of the plan's energy: {kcal} kcal.": "Tähän mennessä tehdyt tilaukset kattavat {percent} % suunnitelman energiasta: {kcal} kcal.",
+  "Ordered so far covers at least {percent}% of the plan's energy: {kcal} kcal.": "Tähän mennessä tehdyt tilaukset kattavat vähintään {percent} % suunnitelman energiasta: {kcal} kcal.",
   "Counted from {known} of {total} order lines.": "Laskettu {known} tilausrivistä {total}:sta.",
   "Energy per cover not known": "Energia per ruokailija ei ole tiedossa",
   "about {kcal} kcal per cover": "noin {kcal} kcal per ruokailija",

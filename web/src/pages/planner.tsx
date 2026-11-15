@@ -156,10 +156,16 @@ function EnergySummary({ nutrition }: { nutrition: KitchenNutrition }) {
         ? t("Ordered for this week so far: energy not known.")
         : orderedVsPlanned == null
           ? t("Ordered for this week so far: {kcal} kcal.", { kcal: formatNumber(ordered.kcal) })
-          : t("Ordered so far covers {percent}% of the plan's energy: {kcal} kcal.", {
-              kcal: formatNumber(ordered.kcal),
-              percent: formatNumber(Math.round(orderedVsPlanned * 100)),
-            });
+          : t(
+              // Lines without nutrition data are not in the sum: the share is then a floor, not the whole.
+              ordered.knownLines < ordered.lines
+                ? "Ordered so far covers at least {percent}% of the plan's energy: {kcal} kcal."
+                : "Ordered so far covers {percent}% of the plan's energy: {kcal} kcal.",
+              {
+                kcal: formatNumber(ordered.kcal),
+                percent: formatNumber(Math.round(orderedVsPlanned * 100)),
+              },
+            );
   return (
     <p className="text-sm tabular-nums text-muted-foreground">
       {plannedText}{" "}

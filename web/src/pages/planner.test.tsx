@@ -208,12 +208,27 @@ describe("PlannerPage", () => {
     renderApp("/planner?week=2026-W47", api);
 
     const ordered = await screen.findByRole("link", {
-      name: `Ordered so far covers 127% of the plan's energy: ${formatNumber(1779230)} kcal.`,
+      name: `Ordered so far covers at least 127% of the plan's energy: ${formatNumber(1779230)} kcal.`,
     });
     expect(ordered).toHaveAttribute("href", "/orders");
     expect(ordered.closest("p")).toHaveTextContent("Counted from 3 of 4 order lines.");
     const dailyToggle = screen.getAllByRole("button", { name: /Daily needs for/ })[0];
     expect(dailyToggle.compareDocumentPosition(ordered) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  it("says the plain share when every order line is counted", async () => {
+    const api = createMockApi();
+    const nutrition = await api.getNutrition("2026-11-16", "2026-11-22");
+    api.getNutrition = async () => ({
+      ...nutrition,
+      ordered: { ...nutrition.ordered, kcal: 1779230, knownLines: nutrition.ordered.lines },
+      orderedVsPlanned: 1.27,
+    });
+    renderApp("/planner?week=2026-W47", api);
+
+    expect(
+      await screen.findByRole("link", { name: `Ordered so far covers 127% of the plan's energy: ${formatNumber(1779230)} kcal.` }),
+    ).toHaveAttribute("href", "/orders");
   });
 
   it("explains what an incomplete energy-per-cover number is missing", async () => {
