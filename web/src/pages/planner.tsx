@@ -1,4 +1,5 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -15,7 +16,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAsync } from "@/lib/use-async";
-import { formatDate, formatEur, formatNumber } from "@/lib/format";
+import { formatAmount, formatDate, formatEur, formatNumber } from "@/lib/format";
 import { isoWeekOf, shiftWeek, weekDates, weekTitle } from "@/lib/week";
 import type { DemandLine, MenuPlanEntry, PlanProposal, Recipe } from "@/types";
 import { AppShell } from "@/components/purchasing/app-shell";
@@ -65,6 +66,7 @@ function sameEntries(left: MenuPlanEntry[], right: MenuPlanEntry[]): boolean {
 
 function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) {
   const t = useT();
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const products = new Map<string, DemandLine[]>();
   for (const line of lines) {
     const list = products.get(line.productId) ?? [];
@@ -80,26 +82,46 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
       {[...products.values()].map((productLines) => {
         const first = productLines[0];
         const total = productLines.reduce((sum, line) => sum + line.need, 0);
+        const open = expanded.has(first.productId);
+        const detailsId = `weekly-demand-${first.productId}`;
         return (
-          <Card key={first.productId}>
-            <CardContent className="space-y-2 pt-6">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <Card key={first.productId} className="gap-2 py-3">
+            <CardContent className="space-y-2">
+              <div className="flex items-center gap-3">
                 <div className="flex min-w-0 items-center gap-3">
                   <ProductThumb en={first.productName} size="md" />
                   <h3 className="min-w-0 font-medium break-words"><ProductLink productId={first.productId}>{first.productName}</ProductLink></h3>
                 </div>
-                <p className="text-sm font-medium tabular-nums">
-                  {t("{amount} {unit} total", { amount: formatNumber(total), unit: first.unit })}
+                <p className="ml-auto shrink-0 text-sm font-medium tabular-nums">
+                  {t("{amount} total", { amount: formatAmount(total, first.unit) })}
                 </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("Daily needs for {product}", { product: first.productName })}
+                  aria-expanded={open}
+                  aria-controls={detailsId}
+                  onClick={() =>
+                    setExpanded((current) => {
+                      const next = new Set(current);
+                      if (next.has(first.productId)) next.delete(first.productId);
+                      else next.add(first.productId);
+                      return next;
+                    })
+                  }
+                >
+                  <ChevronDown className={open ? "rotate-180" : ""} aria-hidden />
+                </Button>
               </div>
-              <ul className="space-y-1 text-sm tabular-nums text-muted-foreground">
+              <ul id={detailsId} hidden={!open} className="space-y-1 text-sm tabular-nums text-muted-foreground">
                 {dates.flatMap((date) =>
                   productLines
                     .filter((line) => line.date === date)
                     .map((line) => (
                       <li key={`${line.date}-${line.productId}`}>
                         <span className="font-medium text-foreground">{weekday(line.date)}:</span>{" "}
-                        {formatNumber(line.need)} {line.unit} — {line.why}
+                        {formatAmount(line.need, line.unit)} — {line.why}
                       </li>
                     )),
                 )}
@@ -119,34 +141,49 @@ function DemandList({ lines, dates }: { lines: DemandLine[]; dates: string[] }) 
 function EnergySummary({ nutrition }: { nutrition: KitchenNutrition }) {
   const t = useT();
   const { planned, ordered, orderedVsPlanned } = nutrition;
-  const parts: string[] = [];
-  if (nutrition.days.length === 0) parts.push(t("No energy planned for this week yet."));
-  else if (planned.kcal == null) parts.push(t("Planned: energy not known."));
-  else {
-    parts.push(t("Planned: {kcal} kcal.", { kcal: formatNumber(planned.kcal) }));
-    if (!planned.complete) parts.push(t("Partly counted: some ingredients have no nutrition table."));
-  }
-  if (ordered.lines === 0) parts.push(t("Nothing ordered for this week yet."));
-  else if (ordered.kcal == null) parts.push(t("Ordered for this week so far: energy not known."));
-  else {
-    parts.push(
-      orderedVsPlanned == null
-        ? t("Ordered for this week so far: {kcal} kcal.", { kcal: formatNumber(ordered.kcal) })
-        : t("Ordered for this week so far: {kcal} kcal ({percent}% of the plan).", {
-            kcal: formatNumber(ordered.kcal),
-            percent: formatNumber(Math.round(orderedVsPlanned * 100)),
-          }),
-    );
-    if (ordered.knownLines < ordered.lines) {
-      parts.push(
-        t("Counted from {known} of {total} order lines.", {
-          known: formatNumber(ordered.knownLines),
-          total: formatNumber(ordered.lines),
-        }),
-      );
-    }
-  }
-  return <p className="text-sm tabular-nums text-muted-foreground">{parts.join(" ")}</p>;
+  const plannedText =
+    nutrition.days.length === 0
+      ? t("No energy planned for this week yet.")
+      : planned.kcal == null
+        ? t("Planned: energy not known.")
+        : `${t("Planned: {kcal} kcal.", { kcal: formatNumber(planned.kcal) })}${
+            planned.complete ? "" : ` ${t("Partly counted: some ingredients have no nutrition table.")}`
+          }`;
+  const orderedText =
+    ordered.lines === 0
+      ? t("Nothing ordered for this week yet.")
+      : ordered.kcal == null
+        ? t("Ordered for this week so far: energy not known.")
+        : orderedVsPlanned == null
+          ? t("Ordered for this week so far: {kcal} kcal.", { kcal: formatNumber(ordered.kcal) })
+          : t(
+              // Lines without nutrition data are not in the sum: the share is then a floor, not the whole.
+              ordered.knownLines < ordered.lines
+                ? "Ordered so far covers at least {percent}% of the plan's energy: {kcal} kcal."
+                : "Ordered so far covers {percent}% of the plan's energy: {kcal} kcal.",
+              {
+                kcal: formatNumber(ordered.kcal),
+                percent: formatNumber(Math.round(orderedVsPlanned * 100)),
+              },
+            );
+  return (
+    <p className="text-sm tabular-nums text-muted-foreground">
+      {plannedText}{" "}
+      {ordered.lines === 0 ? (
+        orderedText
+      ) : (
+        <Link to="/orders" className="font-medium text-primary underline underline-offset-4">
+          {orderedText}
+        </Link>
+      )}
+      {ordered.knownLines < ordered.lines
+        ? ` ${t("Counted from {known} of {total} order lines.", {
+            known: formatNumber(ordered.knownLines),
+            total: formatNumber(ordered.lines),
+          })}`
+        : ""}
+    </p>
+  );
 }
 
 const products = (count: number, t: ReturnType<typeof useT>) =>
@@ -173,8 +210,8 @@ function ProposeMessage({ outcome }: { outcome: ProposeOutcome }) {
       {proposal.status === "APPROVED" ? (
         <p>
           {proposal.lineCount === 1
-            ? t("Order placed automatically: {count} line, {total}. See it in ", { count: formatNumber(proposal.lineCount), total: formatEur(proposal.totalInclVat) })
-            : t("Order placed automatically: {count} lines, {total}. See it in ", { count: formatNumber(proposal.lineCount), total: formatEur(proposal.totalInclVat) })}
+            ? t("Already approved: {count} line, {total}. See it in ", { count: formatNumber(proposal.lineCount), total: formatEur(proposal.totalInclVat) })
+            : t("Already approved: {count} lines, {total}. See it in ", { count: formatNumber(proposal.lineCount), total: formatEur(proposal.totalInclVat) })}
           <Link to="/orders" className="font-medium text-primary underline underline-offset-4">
             {t("Order history")}
           </Link>
@@ -351,7 +388,7 @@ export function PlannerPage() {
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold">{t("Menu plan")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
-            {t("Plan the week's menus and covers. The needs below come from this plan.")}
+            {t("Plan the week's menus and covers (guests per meal). The needs below come from this plan.")}
           </p>
         </header>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -369,6 +406,31 @@ export function PlannerPage() {
         {menu.status === "error" ? <ErrorState message={menu.error.message} onRetry={menu.reload} /> : null}
         {menu.status === "ready" ? (
           <>
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => void proposeOrder()}
+                  disabled={proposing || proposeBlocked !== ""}
+                  aria-describedby={proposeBlocked ? "propose-blocked" : undefined}
+                >
+                  {proposing ? t("Proposing…") : t("Propose order for this week")}
+                </Button>
+                <Button asChild variant="outline">
+                  <Link to="/stock">{t("Check stock")}</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link to="/requests">{t("Ask the Buyer for an order")}</Link>
+                </Button>
+              </div>
+              {proposeBlocked ? (
+                <p id="propose-blocked" className="text-sm text-muted-foreground">
+                  {proposeBlocked}
+                </p>
+              ) : null}
+              <div role="status" aria-live="polite" className="text-sm break-words">
+                {outcome && outcome.week === week ? <ProposeMessage outcome={outcome} /> : null}
+              </div>
+            </div>
             {dirty ? (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 p-4">
                 <p className="font-medium">{t("Unsaved changes")}</p>
@@ -423,7 +485,7 @@ export function PlannerPage() {
                           <div key={entry.id} className="space-y-2 rounded-md border p-3">
                             <div className="flex justify-between gap-2">
                               <div className="min-w-0">
-                                <p className="font-medium">{entry.meal}</p>
+                                <p className="font-medium">{t(entry.meal)}</p>
                                 <p className="text-sm tabular-nums text-muted-foreground">
                                   {recipe?.name ?? t("Recipe unavailable")} · {t("{count} covers", { count: formatNumber(entry.covers) })}
                                 </p>
@@ -451,8 +513,11 @@ export function PlannerPage() {
                         <p className="text-sm tabular-nums text-muted-foreground">
                           {energy.kcalPerCover == null
                             ? t("Energy per cover not known")
-                            : t("about {kcal} kcal per cover", { kcal: formatNumber(energy.kcalPerCover) })}
-                          {energy.kcalPerCover != null && !energy.complete ? ` · ${t("partly counted")}` : ""}
+                            : energy.complete
+                              ? t("about {kcal} kcal per cover", { kcal: formatNumber(energy.kcalPerCover) })
+                              : t("at least {kcal} kcal per cover: some ingredients have no nutrition data", {
+                                  kcal: formatNumber(energy.kcalPerCover),
+                                })}
                         </p>
                       ) : null}
                       <Button className="w-full" variant="outline" onClick={() => openAdd(date)}>
@@ -473,39 +538,13 @@ export function PlannerPage() {
                 </h2>
                 {dirty ? <p className="mt-1 text-sm text-muted-foreground">{t("This table shows the saved plan.")}</p> : null}
               </div>
-              {nutrition.status === "ready" ? <EnergySummary nutrition={nutrition.data} /> : null}
               {nutrition.status === "error" ? (
                 <p className="text-sm text-muted-foreground">{t("Energy numbers are not available right now.")}</p>
               ) : null}
               {demand.status === "loading" ? <LoadingState label={t("Loading weekly demand")} /> : null}
               {demand.status === "error" ? <ErrorState message={demand.error.message} onRetry={demand.reload} /> : null}
               {demand.status === "ready" ? <DemandList lines={demand.data} dates={dates} /> : null}
-              <div className="space-y-2">
-                <Button
-                  className="w-full sm:w-auto"
-                  onClick={() => void proposeOrder()}
-                  disabled={proposing || proposeBlocked !== ""}
-                  aria-describedby={proposeBlocked ? "propose-blocked" : undefined}
-                >
-                  {proposing ? t("Proposing…") : t("Propose order for this week")}
-                </Button>
-                {proposeBlocked ? (
-                  <p id="propose-blocked" className="text-sm text-muted-foreground">
-                    {proposeBlocked}
-                  </p>
-                ) : null}
-                <div role="status" aria-live="polite" className="text-sm break-words">
-                  {outcome && outcome.week === week ? <ProposeMessage outcome={outcome} /> : null}
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-4 text-sm">
-                <Link to="/stock" className="font-medium text-primary underline underline-offset-4">
-                  {t("Check stock")}
-                </Link>
-                <Link to="/requests" className="font-medium text-primary underline underline-offset-4">
-                  {t("Ask the Buyer for an order")}
-                </Link>
-              </div>
+              {nutrition.status === "ready" ? <EnergySummary nutrition={nutrition.data} /> : null}
             </section>
           </>
         ) : null}
