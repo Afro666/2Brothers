@@ -3,7 +3,7 @@
 <div class="cols c-meas">
 <div class="stack">
 <h2>We measured first, then changed.</h2>
-<p class="body muted">Thinking is on where the model decides numbers, and off where the engine does.</p>
+<p class="body muted">We also tested the model on setting the numbers. The engine won, so the engine keeps them.</p>
 <p class="hand hand-ochre">from a tool loop<br>to one pick</p>
 </div>
 <div class="docket tilt-sr">
@@ -11,13 +11,20 @@
 <p class="print">FROM THE OLD TOOL LOOP TO ONE PICK</p>
 <div class="mrow"><p class="print-b">MODEL CALLS PER REQUEST</p><p class="was">4</p><p class="now">1</p></div>
 <div class="mrow"><p class="print-b">PROMPT TOKENS PER REQUEST</p><p class="was">43,500</p><p class="now">742</p></div>
-<div class="mrow"><p class="print-b">EXACT PICKS, OF 90 TEST REPLIES</p><p class="was">27</p><p class="now">69</p></div>
+<div class="mrow"><p class="print-b">EXACT PICKS OF 90, THE MODEL ALONE</p><p class="was">27</p><p class="now">54</p></div>
+<div class="mrow"><p class="print-b">THE SAME REPLIES PLUS A CODE GUARD</p><p class="was">54</p><p class="now">69</p></div>
 <div class="mrow"><p class="print-b">CHEF CORRECTIONS A WEEK, SIMULATED</p><p class="was">9.94</p><p class="now">5.88</p></div>
-<p class="print">SMALL SAMPLES. THE STEP FROM 54 TO 69 PICKS IS A CODE GUARD, NOT THE MODEL.</p>
+<p class="print">SMALL SAMPLES: 3 LIVE REQUESTS PER ROW, 30 TEST REQUESTS × 3.</p>
 <p class="stamp stamp-s st-green pin-tr tilt-stamp">MEASURED</p>
 </div>
 </div>
-<aside>SAY (20 seconds): We measured before we tuned. The Buyer used to be a tool loop: about four model calls and 43,500 prompt tokens for one request. Now it is one call and 742 tokens. A ranked prompt and a code guard took exact picks from 27 to 69 out of 90 test replies. And when the kitchen’s own corrections go in as memory, a simulated chef corrects 41 percent less.
+<aside>SAY (20 seconds, one word to remember: MEASURED): We measured before we tuned. One request was four model calls and 43,500 prompt tokens. Now it is one call and 742. A better prompt took the model’s exact picks from 27 to 54 out of 90, and a code guard took them to 69. And a simulated chef corrects 41 percent less.
+
+TOKENS, SAID ONCE: this slide counts PROMPT tokens per request (43,500 to 742, tool loop to one pick). The video’s "almost eight times fewer tokens" counts COMPLETION tokens on the old loop (2,251 to 289). If someone asks, name which one.
+
+THINKING: in the product thinking is off, because the model sets no number. It was on only in our benchmark, where we let the model set numbers to compare it with the engine.
+
+TIP: point at each row of the bill as you say its number; you do not need to remember them.
 
 CUE: none of this is in the demo. It is the answer to NVIDIA’s question "how did you improve its outputs". The demo video says "almost eight times fewer tokens": that is another true pair, 2,251 completion tokens down to 289 on the old loop.
 

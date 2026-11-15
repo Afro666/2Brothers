@@ -11,7 +11,9 @@
 <div class="sticker st-pos-atlas tilt-r"><p class="sticker-big">17,546</p><p class="sticker-small">PRODUCTS</p></div>
 </div>
 <img class="snap tilt-s" src="/_blob/67e4cbdc126ad219267575dfff326b80" alt="The result line of the Tamper check on the live site: Audit log intact, each of the 1752 entries carries the hash of the one before it. Checked at 02:47." style="width:1100px;height:97px;object-fit:contain">
-<aside>SAY (20 seconds): All of it runs on MongoDB Atlas. Two parts you just saw: the inbox fills by itself over a change stream, and the log you verified is insert-only and hash-chained. Two you did not: Atlas Search finds the right milk in 17,546 products, even with a typo, and a unique index means no order is ever stored twice.
+<aside>SAY (20 seconds, one word to remember: ATLAS): All of it runs on MongoDB Atlas. The catalog search is Atlas Search over 17,546 products. The inbox fills live, over a change stream. The audit log is hash-chained. And no order is ever stored twice.
+
+TWO WORDS TO WATCH: say "stored twice", never "sent twice": nothing is ever sent. And say "even with a typo" only if you type the typo in front of them ("lactose fre milk" in the Catalog).
 
 CUE: for a MongoDB judge with time, open the Catalog and type "lactose fre milk" with the typo, then About, the card "The data lives in MongoDB Atlas". Check the Catalog loads before you do: on 15 Nov at 02:47 one load of it answered "Could not reach the gateway".
 

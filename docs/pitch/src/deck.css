@@ -124,8 +124,9 @@ h3 { font-size: 44px; font-weight: 700; line-height: 1.15; }
 /* close: the picture, the caption, the cauldron */
 .bleed { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; object-fit: cover; }
 .shade { position: absolute; left: 0; top: 430px; width: 1920px; height: 650px; background: linear-gradient(180deg, rgba(21,20,16,0) 0%, rgba(21,20,16,0.88) 38%, rgba(21,20,16,0.97) 100%); }
-.close-h { position: absolute; left: 128px; top: 610px; width: 1000px; }
-.close-cta { position: absolute; left: 128px; top: 868px; width: 1000px; font-size: 32px; font-weight: 600; line-height: 1.4; }
+.close-h { position: absolute; left: 128px; top: 580px; width: 1000px; }
+.close-cta { position: absolute; left: 128px; top: 836px; width: 1090px; font-size: 32px; font-weight: 600; line-height: 1.4; }
+.close-try { position: absolute; left: 128px; top: 884px; width: 1090px; font-size: 32px; line-height: 1.4; color: #ede9df; }
 .link { color: #7fc08a; }
 .pot { position: absolute; left: 1240px; top: 570px; }
 .potnum { position: absolute; left: 1300px; top: 676px; width: 400px; text-align: center; font-family: 'Archivo', 'Arial Narrow', Arial, sans-serif; font-size: 120px; font-weight: 800; line-height: 1.02; color: #7fc08a; }
