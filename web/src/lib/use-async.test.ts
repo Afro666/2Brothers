@@ -298,18 +298,19 @@ describe("useAsync", () => {
       expect(second.result.current.data).toBe("first");
     });
 
-    it("does not put back the answer of a load that began before the drop", async () => {
-      let answer: (value: string) => void = () => {};
-      const first = renderHook(() =>
-        useAsync(() => new Promise<string>((resolve) => (answer = resolve)), [], { keep: "list" }),
-      );
+    it("restarts an invalidated mounted read instead of showing its pre-change result", async () => {
+      const answers: ((value: string) => void)[] = [];
+      const load = vi.fn(() => new Promise<string>((resolve) => answers.push(resolve)));
+      const first = renderHook(() => useAsync(load, [], { keep: "list" }));
       dropKeptAnswers();
-      await act(async () => answer("from before the write"));
-      expect(first.result.current.data).toBe("from before the write");
+      await act(async () => answers[0]("before write"));
+      expect(first.result.current.status).toBe("loading");
+      expect(load).toHaveBeenCalledTimes(2);
+      await act(async () => answers[1]("after write"));
+      expect(first.result.current.data).toBe("after write");
       first.unmount();
-
       const second = renderHook(() => useAsync(() => new Promise<string>(() => {}), [], { keep: "list" }));
-      expect(second.result.current.status).toBe("loading");
+      expect(second.result.current.data).toBe("after write");
     });
 
     it("lets only the newest load for a key change the kept answer", async () => {

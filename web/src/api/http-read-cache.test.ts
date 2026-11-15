@@ -74,3 +74,14 @@ it("never coalesces reads across different API instances", async () => {
   d.answer(0, { proposals: [] }); d.answer(1, { proposals: [] });
   await Promise.all([first, second]);
 });
+
+it("uses the same effective headers for Headers, tuples and plain objects", async () => {
+  const d = deferredFetch();
+  const first = gatewayRequest("/api", "/read", { headers: new Headers({ "X-User": "chef" }) });
+  const second = gatewayRequest("/api", "/read", { headers: { "X-User": "chef" } });
+  const third = gatewayRequest("/api", "/read", { headers: [["X-User", "chef"]] });
+  expect(d.fetch).toHaveBeenCalledTimes(1);
+  const init = (d.fetch.mock.calls[0] as unknown as [string, RequestInit])[1];
+  expect(new Headers(init.headers).get("X-User")).toBe("chef");
+  d.answer(0, {}); await Promise.all([first, second, third]);
+});

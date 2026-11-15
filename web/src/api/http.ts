@@ -67,6 +67,12 @@ const BUSY_429 = new Map<unknown, string>([
 ]);
 
 /** One JSON call to the gateway. Gateway errors (`{"error": {code, message}}`) become `ApiError`. */
+/** Dispatch and coalescing use exactly the same headers, including Headers/tuple inputs. */
+function requestHeaders(input?: HeadersInit): Record<string, string> {
+  const normalized = new Headers(input);
+  const entries = input instanceof Headers || Array.isArray(input) ? Object.fromEntries(normalized.entries()) : input;
+  return { ...(!normalized.has("Content-Type") ? { "Content-Type": "application/json" } : {}), ...entries };
+}
 const defaultReadScope = {};
 const readScopes = new WeakMap<object, { revision: number; pending: Map<string, Promise<unknown>> }>();
 export async function gatewayRequest(baseUrl: string, path: string, init?: RequestInit, scope: object = defaultReadScope): Promise<unknown> {
@@ -80,7 +86,7 @@ export async function gatewayRequest(baseUrl: string, path: string, init?: Reque
     const pendingReads = reads.pending;
     // Aborting one subscriber must not cancel another's request. Custom RequestInit options bypass sharing.
     if (init && Object.keys(init).some((key) => key !== "method" && key !== "headers")) return send(baseUrl, path, init);
-    const headers = [...new Headers(init?.headers).entries()].sort(([a], [b]) => a.localeCompare(b));
+    const headers = [...new Headers(requestHeaders(init?.headers)).entries()].sort(([a], [b]) => a.localeCompare(b));
     const key = JSON.stringify([baseUrl, path, headers]);
     const existing = pendingReads.get(key);
     if (existing) return existing;
@@ -105,7 +111,7 @@ async function send(baseUrl: string, path: string, init?: RequestInit): Promise<
     response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
       ...init,
       credentials: "same-origin",
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      headers: requestHeaders(init?.headers),
     });
   } catch {
     throw new ApiError("NETWORK", "Could not reach the gateway.");

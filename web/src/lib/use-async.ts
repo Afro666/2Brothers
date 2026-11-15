@@ -100,12 +100,8 @@ export function useAsync<T>(
       if (answer) return { status: "ready", data: answer.data as T, error: null, refreshing: true, key: keep };
       return { status: "loading", data: null, error: null, refreshing: false, key: keep };
     });
-    const dropsAtStart = drops;
-    const mine = ++requestId;
-    if (keep !== undefined) {
-      if (newest.size >= MAX_KEPT) newest.delete(newest.keys().next().value!);
-      newest.set(keep, mine);
-    }
+    let dropsAtStart = drops;
+    let mine = 0;
     const current = () => keep !== undefined && drops === dropsAtStart && newest.get(keep) === mine;
     // Only the reloads this load answers: a load that began earlier and lands late must not end a newer one.
     const finishReload = () => {
@@ -115,8 +111,22 @@ export function useAsync<T>(
       done.forEach((waiter) => waiter.resolve());
     };
     const run = (attemptsLeft: number) => {
+      if (!active) return;
+      dropsAtStart = drops;
+      mine = ++requestId;
+      if (keep !== undefined) {
+        newest.delete(keep);
+        if (newest.size >= MAX_KEPT) newest.delete(newest.keys().next().value!);
+        newest.set(keep, mine);
+      }
+      const revision = dropsAtStart;
       load()
         .then((data) => {
+          // An invalidated display read must ask again, not present a pre-change answer as current.
+          if (active && keep !== undefined && revision !== drops) {
+            run(RETRY_DELAYS_MS.length);
+            return;
+          }
           if (keep !== undefined && current()) {
             kept.delete(keep);
             if (kept.size >= MAX_KEPT) kept.delete(kept.keys().next().value!);
@@ -129,6 +139,10 @@ export function useAsync<T>(
         })
         .catch((error: unknown) => {
           if (!active) return;
+          if (keep !== undefined && revision !== drops) {
+            run(RETRY_DELAYS_MS.length);
+            return;
+          }
           if (attemptsLeft > 0 && isUnreachable(error)) {
             timer = setTimeout(() => run(attemptsLeft - 1), RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - attemptsLeft]);
             return;
