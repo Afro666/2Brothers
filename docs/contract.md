@@ -1533,7 +1533,7 @@ supplier `blocks`, one approval, signed) with these additions:
 
 | Status | Code | When |
 |---|---|---|
-| 422 | `NOTHING_NEEDED` | Counted stock covers the plan in this window. `error.problems` lists menu entries that could not be counted. |
+| 422 | `NOTHING_NEEDED` | Counted stock covers the plan in this window, or every remaining need was left out as learned-declined (see "Declined products in a plan proposal (#1307)"). `error.problems` lists menu entries that could not be counted and, in the all-declined case, the per-product `LEARNED_DECLINED` explanations. |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was used with another window. |
 
 Recall holds and the kitchen's `excluded_allergens` apply per product, as for any quote.
@@ -2761,7 +2761,7 @@ Answer:
 | `dishes[].status` | `MATCHED`, `NOT_KNOWN` | `MATCHED`: one recipe of this kitchen matches the name. `NOT_KNOWN`: none or two match; a person adds the recipe or plans the day by hand. |
 | `dishes[].in_proposal` | boolean | True only for a `MATCHED` dish with a `day` and `covers`: its ingredients are in the proposal. |
 | `proposal` | object or null | `{proposal_id, status}` of the proposal made (`status` as in `GET /proposals/{id}`, normally `READY`; read the rest there). Null when none was made. |
-| `no_proposal_reason` | string or null | Why `proposal` is null: `NOTHING_NEEDED` (counted stock covers the matched dishes) or `NOT_SIZED` (no matched dish has a day and covers). Null when a proposal was made. |
+| `no_proposal_reason` | string or null | Why `proposal` is null: `NOTHING_NEEDED` (counted stock covers the matched dishes, or every remaining plan need was left out as learned-declined) or `NOT_SIZED` (no matched dish has a day and covers). The menu-photo answer carries this reason, not the plan error's `problems` list. Null when a proposal was made. |
 
 The proposal is a normal menu-plan proposal (`request.made_by: menu_plan`,
 `request.window`, `request.needs`, one approval, signed). Approve, reject, the live
