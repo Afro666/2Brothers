@@ -34,7 +34,7 @@ The database is the one named in the URI, else `two_brothers`.
 | `products` | `store.products` | `_id` is the product code (a string). One collection and one search index for every source: `source` is `valio` (the catalog) or `own` (a kitchen's own product, with its `kitchen_id`). |
 | `offers` | `store.orders` | Price and availability snapshots with `fetched_at`. Never updated, never expired. |
 | `orders` | `store.orders` | The attempt row is written before any send. Unique `(kitchen_id, idempotency_key)`. |
-| `approvals` | `store.orders` | `PENDING` until a human decides, once. There is no auto-approve. |
+| `approvals` | `store.orders` | `PENDING` until a human decides, once. Auto-approve of routine orders is off by default; an approver can switch it on under a limit (`docs/contract.md`, "Earned auto-approve"). |
 | `audit_log` | `store.audit` | Insert-only and hash-chained. `_id` is the sequence number. |
 | `kitchen_stock`, `covers`, `orders_history`, `deliveries`, `forecasts`, `kitchens`, `sharing` | `store.history` | Time series and consent; see below. |
 | `suppliers`, `recipes`, `menu_plans` | `store.repository` | Kitchen data in the contract's data shapes; see below. Own products are rows in `products`. |
