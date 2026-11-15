@@ -110,6 +110,8 @@ export function mapProposalOptions(
     );
     const labels = everyLine(rawLines, (line) => (Array.isArray(line.labels) ? (line.labels as unknown[]) : null));
     const held = option.held == null ? null : row(option.held, "held");
+    // #1970: an option has no ex VAT total of its own; its lines have. Unknown when one line has none.
+    const lineTotals = everyLine(rawLines, (line) => (line.total == null ? null : mapMoney(line.total, "line total")));
     return {
       id: text(option.offer_id, "offer_id"),
       tier: option.tier as OfferTier,
@@ -119,6 +121,7 @@ export function mapProposalOptions(
         : "FULL",
       lines,
       totalInclVat: mapMoney(option.expected_total, "expected_total"),
+      totalExVat: lineTotals && Math.round(lineTotals.reduce((sum, total) => sum + total, 0) * 100) / 100,
       stockConfirmed: option.stock_confirmed === true && rawLines.every((line) => line.unknown_stock === false),
       cutoffPassed: rawLines.some((line) => line.cutoff_passed === true)
         ? true

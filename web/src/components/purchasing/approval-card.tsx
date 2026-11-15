@@ -27,6 +27,8 @@ import {
   formatDateTime,
   formatEur,
   formatNumber,
+  formatQuantity,
+  formatShortfall,
   formatStock,
   formatTime,
   isStockUnconfirmed,
@@ -126,6 +128,30 @@ export function earliestCutoff(lines: readonly CutoffLine[], now: Date): Earlies
     warning: passed || millisecondsLeft < 2 * 60 * 60 * 1000,
     minutesLeft: Math.max(0, Math.floor(millisecondsLeft / 60_000)),
   };
+}
+
+type Amount = { quantity: number; unit: string };
+
+/**
+ * #1970: what was asked and what the option on screen covers, from the gateway's own figures only: the
+ * request's quantity, the option's `held` part and the proposal's `shortfall`. One subtraction, within one
+ * unit; no stock is worked out here. Null when the gateway gives none of them.
+ */
+function coverage(
+  asked: ApprovalRequest["asked"] | null,
+  held: Amount | null,
+  shortfall: Amount | null,
+): { covered: number; asked: Amount; gap: Amount | null } | { covered: null; gap: Amount } | null {
+  const gap = [shortfall, held].find((amount) => amount != null && amount.quantity > 0) ?? null;
+  if (!asked) return gap && { covered: null, gap };
+  if (gap && gap.unit.toUpperCase() !== asked.unit.toUpperCase()) return { covered: null, gap };
+  // After the confirmed-stock option is chosen the gateway's request is the confirmed part alone (#1915):
+  // its quantity is what the basket covers, and the option's held part is the rest of what was asked.
+  const rewritten = asked.confirmedPartOnly && gap != null && gap === held;
+  const total = rewritten ? asked.quantity + gap.quantity : asked.quantity;
+  const covered = Math.round((rewritten ? asked.quantity : asked.quantity - (gap?.quantity ?? 0)) * 10) / 10;
+  if (covered < 0) return gap && { covered: null, gap };
+  return { covered, asked: { quantity: total, unit: asked.unit }, gap };
 }
 
 /** Product pictures in the compact card before "+N". */
@@ -338,8 +364,49 @@ export function ApprovalCard({
     }, CHOOSE_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
   }, [awaitingLead, recommendedIsBasket, t]);
-  // "Must confirm" is about the proposal's own basket; the recommended option has confirmed stock only.
-  const shownChips = lead ? chips.filter((chip) => !chip.key.startsWith("confirm")) : chips;
+  // The option whose total the card shows: the recommended one while it leads, else the basket's own.
+  const shownOption = lead ?? basketOption;
+  // #1970: "Over budget" is about that option. The proposal's own budget warning is about its basket, so
+  // while the recommended option leads, that option's ex VAT total is held against the kitchen's limit.
+  const leadOverBudget =
+    lead?.totalExVat != null && budgetWarningExVat != null && lead.totalExVat > budgetWarningExVat;
+  // "Must confirm" is about the proposal's own basket too; the recommended option has confirmed stock only.
+  const leadChips = chips.filter((chip) => chip.key !== "budget" && !chip.key.startsWith("confirm"));
+  if (leadOverBudget) {
+    const afterSerious = leadChips.findIndex((chip) => chip.tone !== "danger");
+    leadChips.splice(afterSerious < 0 ? leadChips.length : afterSerious, 0, { key: "budget", tone: "warning", text: "Over budget" });
+  }
+  const shownChips = lead ? leadChips : chips;
+  const budgetTotalExVat = lead ? (lead.totalExVat ?? null) : request.totalExVat;
+  // #1970: what was asked and what the option on screen covers. The basket's gap is the proposal's own
+  // `shortfall`, else its option's `held` part; a leading option's gap is its `held` part.
+  const covers = coverage(
+    request.asked ?? null,
+    (lead ?? request.options?.find((option) => option.chosen))?.held ?? null,
+    lead || !order?.shortfall ? null : { quantity: order.shortfall.amount, unit: order.shortfall.unit },
+  );
+  const coverageRow =
+    covers && (covers.gap || shownOption) ? (
+      <>
+        <dt className="sr-only">{t("Asked and covered")}</dt>
+        <dd
+          data-testid="coverage"
+          className={cn("w-full text-xs font-medium tabular-nums", covers.gap ? "text-warning" : "text-muted-foreground")}
+        >
+          {[
+            covers.covered == null
+              ? null
+              : t("{covered} of {asked}", {
+                  covered: formatNumber(covers.covered),
+                  asked: formatQuantity(covers.asked.quantity, covers.asked.unit),
+                }),
+            covers.gap ? t("{amount} not covered", { amount: formatShortfall(covers.gap.quantity, covers.gap.unit) }) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </dd>
+      </>
+    ) : null;
   // #1865: the lines inside the total whose stock nobody confirmed. The gateway gives no
   // confirmed / waiting split of the total, so each line shows its own quantity and line total.
   const waitingLines = pending ? lines.filter((line) => !line.offer.salesBlock && isStockUnconfirmed(line.offer)) : [];
@@ -355,10 +422,10 @@ export function ApprovalCard({
   const overBudget = shownChips.some((chip) => chip.key === "budget");
   const budgetLine = !overBudget
     ? null
-    : budgetWarningExVat != null && request.totalExVat > budgetWarningExVat
+    : budgetWarningExVat != null && budgetTotalExVat != null && budgetTotalExVat > budgetWarningExVat
       ? t("{total} ex VAT is {over} above your kitchen's budget warning of {limit} per order. A warning only.", {
-          total: formatEur(request.totalExVat),
-          over: formatEur(Math.round((request.totalExVat - budgetWarningExVat) * 100) / 100),
+          total: formatEur(budgetTotalExVat),
+          over: formatEur(Math.round((budgetTotalExVat - budgetWarningExVat) * 100) / 100),
           limit: formatEur(budgetWarningExVat),
         })
       : t("The total is above your kitchen's budget warning per order. A warning only.");
@@ -629,15 +696,9 @@ export function ApprovalCard({
             <dd className="w-full text-xs font-semibold">
               {t("Option {letter}, recommended by the Buyer", { letter: letterOf(lead) })}
             </dd>
-            {lead.held ? (
-              <dd className="w-full text-xs font-medium text-warning">
-                {t("{quantity} {unit} waits for stock confirmation", {
-                  quantity: formatNumber(lead.held.quantity),
-                  unit: peopleUnit(lead.held.unit, lead.held.quantity),
-                })}
-              </dd>
-            ) : null}
-            {basketOption ? (
+            {coverageRow}
+            {/* #1970: once the recommended option is chosen, the gateway's basket is no longer this one. */}
+            {basketOption && !awaitingLead ? (
               <dd className="w-full font-mono text-xs text-muted-foreground tabular-nums">
                 {t("Option {letter}, the basket proposed now: {amount}", {
                   letter: letterOf(basketOption),
@@ -654,6 +715,15 @@ export function ApprovalCard({
             <dd className="inline-block border-b-[3px] border-double border-foreground text-xl leading-7 font-bold tabular-nums">
               {inclVat !== null ? formatEur(inclVat) : inclVatText(request, t, formatEur)}
             </dd>
+            {/* #1970: the basket keeps its option's name after the choice, in the words used before it. */}
+            {basketOption ? (
+              <dd className="w-full text-xs font-semibold">
+                {basketOption.recommended && basketOption.stockConfirmed
+                  ? t("Option {letter}, recommended by the Buyer", { letter: letterOf(basketOption) })
+                  : t("Option {letter}, the basket proposed now", { letter: letterOf(basketOption) })}
+              </dd>
+            ) : null}
+            {coverageRow}
             <dt className="sr-only">{t("Total ex VAT")}</dt>
             <dd className="font-mono text-xs text-muted-foreground tabular-nums">
               {t("{amount} ex VAT", { amount: formatEur(request.totalExVat) })}
@@ -733,8 +803,8 @@ export function ApprovalCard({
         ) : null}
         {budgetLine ? (
           <p className="text-sm text-muted-foreground">
-            {/* Beside the recommended option's total, the budget figures say whose they are. */}
-            {lead && basketOption ? `${t("Option {letter}:", { letter: letterOf(basketOption) })} ` : null}
+            {/* The budget figures say whose they are: the option whose total the card shows (#1970). */}
+            {shownOption ? `${t("Option {letter}:", { letter: letterOf(shownOption) })} ` : null}
             {budgetLine}
           </p>
         ) : null}
@@ -769,7 +839,7 @@ export function ApprovalCard({
                       {changeError}
                     </p>
                   ) : null}
-                  {lead && basketOption ? (
+                  {lead && basketOption && !awaitingLead ? (
                     <p className="text-sm text-muted-foreground">
                       {t("These lines are option {letter}, the basket proposed now. Option {lead} orders only its own lines.", {
                         letter: letterOf(basketOption),
@@ -956,7 +1026,7 @@ export function ApprovalCard({
               </Button>
             ) : pending ? (
               <Button
-                className="w-full sm:w-auto"
+                className="h-auto min-h-9 w-full whitespace-normal sm:w-auto"
                 disabled={busy || !!stockMessage || !!approvalBlockedReason}
                 aria-describedby={approveBlockDescription}
                 onClick={() => setOpen("approve")}
@@ -964,7 +1034,10 @@ export function ApprovalCard({
                 <Check aria-hidden />
                 {stockMessage || approvalBlockedReason
                   ? t("Approve")
-                  : t("Approve {amount}", { amount: formatEur(request.totalInclVat) })}
+                  : basketOption
+                    ? // #1970: the same words as before the choice; an edited basket is no option and has no letter.
+                      t("Approve option {letter}: {amount}", { letter: letterOf(basketOption), amount: formatEur(request.totalInclVat) })
+                    : t("Approve {amount}", { amount: formatEur(request.totalInclVat) })}
               </Button>
             ) : null}
           </>

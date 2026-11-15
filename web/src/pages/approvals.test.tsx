@@ -77,7 +77,7 @@ describe("ApprovalsPage", () => {
     const card = document.getElementById("proposal-ORD-1044");
     expect(card).not.toBeNull();
     expect(heading.closest("section")?.querySelector('[id^="proposal-"]')).toBe(card);
-    expect(within(card!).getByRole("button", { name: "Approve €148.76" })).toBeVisible();
+    expect(within(card!).getByRole("button", { name: "Approve option A: €148.76" })).toBeVisible();
     await waitFor(() => expect(card).toHaveFocus());
     expect(scroll.mock.contexts).toContain(card);
   });
@@ -115,7 +115,7 @@ describe("ApprovalsPage", () => {
     const user = userEvent.setup();
     const { api } = renderApp("/approvals?proposal=APR-312", withConfirmedStock());
 
-    await user.click(await screen.findByRole("button", { name: "Approve €148.76" }));
+    await user.click(await screen.findByRole("button", { name: "Approve option A: €148.76" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
@@ -132,7 +132,7 @@ describe("ApprovalsPage", () => {
     window.Telegram = { WebApp: { ready, expand, close } };
     renderApp("/approvals?proposal=APR-312", withConfirmedStock());
 
-    const approve = await screen.findByRole("button", { name: "Approve €148.76" });
+    const approve = await screen.findByRole("button", { name: "Approve option A: €148.76" });
     expect(ready).toHaveBeenCalledTimes(1);
     expect(expand).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Open menu" })).not.toBeInTheDocument();
@@ -160,7 +160,7 @@ describe("ApprovalsPage", () => {
     window.TelegramWebviewProxy = { postEvent };
     renderApp("/approvals?proposal=APR-312", withConfirmedStock());
 
-    fireEvent.click(await screen.findByRole("button", { name: "Approve €148.76" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve option A: €148.76" }));
     expect(screen.queryByRole("button", { name: "Open menu" })).not.toBeInTheDocument();
     expect(postEvent).toHaveBeenCalledWith("web_app_ready", "{}");
     vi.useFakeTimers();
@@ -179,7 +179,7 @@ describe("ApprovalsPage", () => {
     window.TelegramWebviewProxy = { postEvent };
     renderApp("/approvals?proposal=APR-312", withConfirmedStock());
 
-    fireEvent.click(await screen.findByRole("button", { name: "Approve €148.76" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve option A: €148.76" }));
     expect(postEvent).toHaveBeenCalledWith("web_app_ready", "{}");
     vi.useFakeTimers();
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Yes, approve €148.76" }));
@@ -198,7 +198,7 @@ describe("ApprovalsPage", () => {
     api.failNextApprove("TOTAL_MISMATCH", "The total moved.");
     renderApp("/approvals?proposal=APR-312", api);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Approve €148.76" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve option A: €148.76" }));
     const dialog = screen.getByRole("dialog", { name: "Approve this order?" });
     vi.useFakeTimers();
     fireEvent.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
@@ -216,7 +216,7 @@ describe("ApprovalsPage", () => {
     const approved = async () => (await api.listApprovals()).filter(({ status }) => status === "APPROVED").length;
     const approvedBefore = await approved();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Approve €148.76" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve option A: €148.76" }));
     vi.useFakeTimers();
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Yes, approve €148.76" }));
     await act(async () => {
@@ -247,7 +247,7 @@ describe("ApprovalsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Waiting for you (4)" })).toBeInTheDocument();
     expect(screen.getByText("€148.76")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Approve €148.76" }));
+    await user.click(screen.getByRole("button", { name: "Approve option A: €148.76" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
@@ -274,7 +274,7 @@ describe("ApprovalsPage", () => {
     });
     renderApp("/approvals", api);
 
-    await user.click(await screen.findByRole("button", { name: "Approve €148.76" }));
+    await user.click(await screen.findByRole("button", { name: "Approve option A: €148.76" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
@@ -289,7 +289,7 @@ describe("ApprovalsPage", () => {
     api.failNextApprove("TOTAL_MISMATCH", "The total moved.");
     renderApp("/approvals", api);
 
-    await user.click(await screen.findByRole("button", { name: "Approve €148.76" }));
+    await user.click(await screen.findByRole("button", { name: "Approve option A: €148.76" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve this order?" });
     await user.click(within(dialog).getByRole("button", { name: "Yes, approve €148.76" }));
 
@@ -380,7 +380,7 @@ describe("ApprovalsPage", () => {
     holdReload = true;
     await user.click(screen.getByRole("button", { name: "Update Arla 1 L lactose free fat free UHT milk drink" }));
 
-    expect(screen.getByRole("button", { name: "Approve €148.76" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve option A: €148.76" })).toBeDisabled();
     expect(quantity).toBeDisabled();
 
     reload.resolve();
@@ -409,7 +409,7 @@ describe("ApprovalsPage", () => {
     holdReload = true;
     await user.click(screen.getByRole("button", { name: "Choose option C: approve €2,326.75" }));
 
-    expect(screen.getByRole("button", { name: "Approve €148.76" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve option A: €148.76" })).toBeDisabled();
     expect(quantity).toBeDisabled();
 
     reload.resolve();
