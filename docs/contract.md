@@ -2924,6 +2924,10 @@ Audit: `price_list_photo_read` (actor the person, `supplier_id`, the count of `R
 `idempotency_key` like every mutation (422 `INVALID_REQUEST` without it); the same key
 answers the stored result again.
 
+If a Restore lands between Tamper's two writes, Tamper undoes its own edit and
+answers `{"seq": n, "tampered": false}`. The row is unchanged; this request leaves
+no additional break for `/audit/verify` to report.
+
 - Only a person with the role `approver` can call them: 403 `HUMAN_SESSION_REQUIRED` for
   a token or the agent, 403 `ROLE_REQUIRED` for another role.
 - Each tamper, and each restore that put a row back, writes an audit entry after the
