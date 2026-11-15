@@ -64,8 +64,8 @@ export function AuditPage() {
 
   return (
     <AppShell activeId="audit">
-      <ReadRefresh refreshing={state.refreshing} outdated={state.outdated} reload={state.reload} />
       <div className="mx-auto max-w-5xl space-y-6">
+        <ReadRefresh refreshing={state.refreshing} outdated={state.outdated} reload={state.reload} />
         <header className="space-y-2">
           <h1 className="page-title">{t("Activity log")}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">
