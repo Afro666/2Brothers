@@ -41,7 +41,7 @@ No order reaches Valio: its mock API has no order route. The gateway keeps the a
 **Try it in one minute** (paste after the description, or in the demo field)
 
 ```
-Open https://31-22-104-201.sslip.io (no sign-in). Open "Request an order", type "1,000 litres of lactose-free milk by Monday" and press "Ask the agent". Open "To approve" and the new card, then "What Nemotron did" on that card. Then open "Tamper check" in the menu and press "Verify audit chain". If no card comes, open "Order history" and the newest 698 L lactose-free milk order (EUR 2,099.41) to see its "Signed receipt".
+Open https://kitchenbuyer.pl (no sign-in). Open "Request an order", type "1,000 litres of lactose-free milk by Monday" and press "Ask the agent". Open "To approve" and the new card, then "What Nemotron did" on that card. Then open "Tamper check" in the menu and press "Verify audit chain". If no card comes, open "Order history" and the newest 698 L lactose-free milk order (EUR 2,099.41) to see its "Signed receipt".
 ```
 
 The line starts with the request, so it does not need a card that already waits (on 15 Nov
@@ -79,13 +79,13 @@ How we improved its outputs: we measured, then changed. On our development bench
 **Best Use of MongoDB Atlas** (one sentence)
 
 ```
-All data is in MongoDB Atlas: Atlas Search and Atlas Vector Search over Valio's catalog (17,546 product vectors), time-series collections for stock, deliveries and forecasts, change streams for the live inbox, and an insert-only, hash-chained audit log that the Trust page checks.
+Every order, proposal, approval and audit entry is in MongoDB Atlas. Search, vectors, time series and the change stream sit in one place, so the Buyer, the live inbox and the log share one store: Atlas Search and Atlas Vector Search over Valio's catalog (17,546 product vectors), time-series collections for stock, deliveries and forecasts, change streams for the live inbox, and an insert-only, hash-chained audit log that the Trust page checks.
 ```
 
 **Still to do by hand in the form**
 
-- [ ] Demo link: `https://31-22-104-201.sslip.io`
-- [ ] Video link: paste it after the recording is uploaded.
+- [ ] Demo link: `https://kitchenbuyer.pl`
+- [ ] Video link: `https://youtu.be/7Wu0xuCiUHI` (if the video is uploaded again, paste the new link instead; open it once signed out to check it plays).
 - [ ] Table number: read it from the table at the venue.
 - [ ] Side challenges: tick two only, **Best Use of Nemotron** and **Best Use of MongoDB
       Atlas** (#1388). Leave Context.dev, Codex and the others unticked.
@@ -134,13 +134,13 @@ All data is in MongoDB Atlas: Atlas Search and Atlas Vector Search over Valio's 
 
 Team 2Brothers: Aron (gateway, engine), Tymon (web, store), Maciek (agent, env, signals).
 
-Live site: <https://31-22-104-201.sslip.io>. Sign-in is off for judging: open it and use it.
+Live site: <https://kitchenbuyer.pl>. Sign-in is off for judging: open it and use it.
 For agents:
-[`/llms.txt`](https://31-22-104-201.sslip.io/llms.txt),
-[`/.well-known/agent-card.json`](https://31-22-104-201.sslip.io/.well-known/agent-card.json),
-[`/api/.well-known/jwks.json`](https://31-22-104-201.sslip.io/api/.well-known/jwks.json),
-[`/gateway/openapi.json`](https://31-22-104-201.sslip.io/gateway/openapi.json),
-[`/api/docs`](https://31-22-104-201.sslip.io/api/docs).
+[`/llms.txt`](https://kitchenbuyer.pl/llms.txt),
+[`/.well-known/agent-card.json`](https://kitchenbuyer.pl/.well-known/agent-card.json),
+[`/api/.well-known/jwks.json`](https://kitchenbuyer.pl/api/.well-known/jwks.json),
+[`/gateway/openapi.json`](https://kitchenbuyer.pl/gateway/openapi.json),
+[`/api/docs`](https://kitchenbuyer.pl/api/docs).
 
 ## Main track: Valio Aimo, Trusted Trade Agents
 
