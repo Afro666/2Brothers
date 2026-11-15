@@ -3,7 +3,7 @@
 <div class="cols c-nemo">
 <div class="stack">
 <h2>One model, five jobs.</h2>
-<h3 class="green">It never sets a number.</h3>
+<h3 class="green">It never sets an order quantity, a price or a total.</h3>
 <div class="docket tilt-s">
 <div class="dline"><p class="print-b">PLAN</p><p class="dtext">reads a menu photo</p></div>
 <div class="dline"><p class="print-b">BUY</p><p class="dtext">picks the products</p></div>
@@ -22,13 +22,10 @@
 <img class="snap tilt-s" src="/_blob/bb021e0201b03415d8f1126e7bb9886b" alt="The line from the delivery check on the site: 3 cases short, €91.08 to claim from Valio Aimo." style="width:700px;height:63px;object-fit:contain">
 </div>
 </div>
-<aside>SAY (20 seconds, one word to remember: FIVE): One model, five jobs. It plans from a menu photo. It buys. It sells, on Valio’s side. It counts a shelf from a photo. And it reads a delivery note. What it cannot match, it does not guess. And it never sets a quantity or a price.
+<aside>SAY:
+One model, five jobs. It plans from a menu photo. It buys. It sells, on Valio’s side. It counts a shelf from a photo. And it reads a delivery note. What it cannot match, it does not guess. And it never sets a quantity or a price.
 
-WHAT THE SCREEN SHOWS, so say only this: the model read seven packs; five counts were filled in; one pack it read as "Valio Edam 17 %" matched nothing on the stock list, so its row says "please count". The time on the screen (0.6 s) is the model’s part; end to end it was about 2 s (docs/submission.md), so name no time unless asked.
+TO NVIDIA, ADD: The buy job is one model call, thinking off, with a strict JSON reply. Code does every tool step, and the model has no approve tool. If it does not answer, a plain parser makes the proposal and the card says so. We did not fine-tune it, and the photos are prepared test photos.
 
-CUE: for an NVIDIA judge with time, show one photo job live after the deck: Kitchen, Stock count, "Try with a sample shelf photo". First check that the model answers.
-
-IF ASKED: the menu, shelf and delivery-note photos are prepared test photos, not real phone photos (the shelf photo says SYNTHETIC TEST PHOTO). The delivery order DEMO-1198 was placed by the demo seed, so it has no signed receipt. We did not train or fine-tune the model. The product vectors are MongoDB’s voyage-4, not Nemotron. If the model does not answer, a plain parser makes the proposal and the card says so; code does every tool step, and the model has no approve tool.
-
-SOURCES: docs/submission.md, "NVIDIA: Best Use of Nemotron", jobs 1 to 5. The shelf: the Stock page’s own line "Nemotron 3.5 Super VL read 7 products in 0.6 s. 5 counts filled in below; 1 to count by hand" and the row "please count" for Valio Edam (video/public/shelf.png). The delivery note: "3 cases short: €91.08 to claim from Valio Aimo" (video/public/note.png). "1 model call, 0.3 s, thinking off": the live milk card of 15 Nov 00:03 (video/public/card2.png).</aside>
+TO VALIO, ADD: The selling agent on your side is the same model. It reads your shortage view and offers a substitute. It sends no price and no quantity.</aside>
 </section>

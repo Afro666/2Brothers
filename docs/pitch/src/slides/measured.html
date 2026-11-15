@@ -18,17 +18,10 @@
 <p class="stamp stamp-s st-green pin-tr tilt-stamp">MEASURED</p>
 </div>
 </div>
-<aside>SAY (20 seconds, one word to remember: MEASURED): We measured before we tuned. One request was four model calls and 43,500 prompt tokens. Now it is one call and 742. A better prompt took the model’s exact picks from 27 to 54 out of 90, and a code guard took them to 69. And a simulated chef corrects 41 percent less.
+<aside>SAY:
+We measured before we tuned. One request was four model calls and 43,500 prompt tokens. Now it is one call and 742. A better prompt took the model’s exact picks from 27 to 54 out of 90, and a code guard took them to 69. And a simulated chef corrects 41 percent less.
 
-TOKENS, SAID ONCE: this slide counts PROMPT tokens per request (43,500 to 742, tool loop to one pick). The video’s "almost eight times fewer tokens" counts COMPLETION tokens on the old loop (2,251 to 289). If someone asks, name which one.
+TO NVIDIA, ADD: These are prompt tokens per request. The samples are small: three live requests per row, and thirty test requests run three times. The step from 54 to 69 is code, not the model. And the kitchen memory is computed facts in the prompt, not fine-tuning.
 
-THINKING: in the product thinking is off, because the model sets no number. It was on only in our benchmark, where we let the model set numbers to compare it with the engine.
-
-TIP: point at each row of the bill as you say its number; you do not need to remember them.
-
-CUE: none of this is in the demo. It is the answer to NVIDIA’s question "how did you improve its outputs". The demo video says "almost eight times fewer tokens": that is another true pair, 2,251 completion tokens down to 289 on the old loop.
-
-SAY THE LIMITS IF ASKED: the calls and tokens are from three live requests per row. The 30-request set is an exploratory development set, not held-out evidence; 54 of 90 is the model alone, and the step to 69 is code. The chef is synthetic and each cell is 8 kitchen-weeks. No fine-tuning: the gate decided no-go.
-
-SOURCES: docs/submission.md, "How we improved its outputs": "the loop took 4 model calls and about 43,500 prompt tokens per request; the single pick took 1 call and 741 to 742 prompt tokens" (agent/README.md, "Live measurements, 14 November 2026"). "Buyer read context (#1605, 14 Nov)": 27/90, 54/90 and 69/90 exact expected product sets. "It learns from the kitchen, without fine-tuning": 9.94 to 5.88 chef corrections a week, −41% (env/README.md). Thinking on and off: the Kitchen Week table in the same section.</aside>
+TO VALIO, ADD: This is why code sets your quantities: we tested the model on numbers, and the engine won.</aside>
 </section>

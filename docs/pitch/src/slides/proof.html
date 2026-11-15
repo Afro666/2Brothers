@@ -10,11 +10,10 @@
 </div>
 <img class="shot" src="/_blob/b32bdeac763cda418bc9abdc2b1a1c7b" alt="The signed receipt on the order page: Signed. Signed by the gateway, anyone can check it with the public key. Approved by a person. Signed at Sun 15 Nov, 00:18. Signed total €2,099.41. Supplier: nothing sent to the supplier yet, its API has no order endpoint." style="width:800px;height:369px;object-fit:contain">
 </div>
-<aside>BACKUP SLIDE: the demo’s beat 5 as one picture, and the answer when a technical judge asks "what if someone cuts lines off the end of the log?".
+<aside>SAY (backup, for a question about proof):
+Every approved order gets a signed receipt: the offer, the exact total, the lines, and who approved. Anyone can check it with one public key. And every step is in a hash-chained log: a changed entry or a truncated end is detected. The receipt also says plainly that nothing was sent to the supplier.
 
-SAY: Every approved order gets a signed receipt: the offer, the exact total, the lines, who approved. Anyone can check it with one public key. And every step is in a hash-chained log in MongoDB Atlas: change a line and the chain breaks, and a cut or rewritten end is detected against a head record. The receipt also says plainly that nothing was sent to the supplier.
+TO VALIO, ADD: This is the trust protocol you asked about: a signed offer and a signed receipt that your side or the buyer’s side can check without us.
 
-DO NOT SAY "anchored": the head record is not signed yet (issue #1886, open). Say "a cut or rewritten end is detected against a head record".
-
-SOURCES: the picture is the receipt of the €2,099.41 milk order on the live site, signed Sun 15 Nov 00:18 Helsinki (video/public/receipt2.png). What the receipt names, and that it is a JWS (EdDSA) checkable with the one public key at /api/.well-known/jwks.json: docs/submission.md, "Trust protocol", and gateway/signing.py. "Change one number and the check fails": README, "An order has a signed receipt" (python -m gateway.verify_offer). The audit log: docs/submission.md "Traceability", store/audit.py. The cut or rewritten end: PR #1882, merged 14 Nov 23:07 UTC, with successful deploys after it; the live check GET /api/v1/kitchens/demo-kitchen/audit/verify answered ok: true for 1,726 lines on 15 Nov at 01:35 Helsinki. On the site: Reports, Tamper check, "Verify audit chain".</aside>
+TO MONGODB, ADD: The log is insert-only in Atlas. Change one line and the chain breaks at that line.</aside>
 </section>

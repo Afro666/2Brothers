@@ -1,6 +1,6 @@
 <section id="decides">
 <div class="rail"><p class="rail-l">TICKET 03 · WHAT YOU JUST SAW</p><p>THE STRIP IS FROM OUR HOME PAGE</p></div>
-<h2>The model sets no number.<br>No agent can approve.</h2>
+<h2>The model sets no quantity or price.<br>No agent can approve.</h2>
 <img class="snap" src="/_blob/a0cc9bb49cfa1432562c0f5a556081fa" alt="The strip Who decides what from the Home page: the Buyer agent, Nemotron 3.5 Super VL, chooses the products; the ordering engine sets the quantities, fixed rules, no model; you approve the exact total, nothing is sent before that." style="width:1664px;height:112px;object-fit:contain">
 <div class="row3 tickets">
 <div class="docket ticket-pad tilt-s">
@@ -22,11 +22,12 @@
 <p class="stamp stamp-s st-red pin-br tilt-stamp">REFUSED</p>
 </div>
 </div>
-<aside>SAY (20 seconds, one word to remember: RULE): The rule behind everything you saw. The model picks the products. Code sets every number. A person approves the exact total. And code refuses three things: an agent approving its own order, a price that moved, and peanuts in a peanut-free kitchen.
+<aside>SAY:
+The rule behind everything you saw. The model picks the products. Code sets every quantity and every total. A person approves the exact total. And code refuses three things: an agent approving its own order, a price that moved, and peanuts in a peanut-free kitchen.
 
-CUE: the strip is the real "Who decides what" line from our Home page. The middle ticket, 409, is the one thing here the demo does not show.
+TO VALIO, ADD: This is the guardrails model you asked for. Today the agent decides nothing alone. Auto-approve exists and is off: a kitchen has to earn it with four weeks and twenty of its own decisions.
 
-IF ASKED "who is the approver?": sign-in with roles is built and switched off for judging, so every visitor is the demo approver (slide 10). Say it before a judge finds it.
+TO NVIDIA, ADD: Nemotron gets a numbered shortlist and answers in a strict JSON schema. A pick outside the shortlist is refused, and so is a reason with a number that is not in the data.
 
-SOURCES: docs/submission.md, "Core requirements" point 3 and the rubric rows C and D. The 403: /llms.txt on the live site and python -m demo.second_agent (docs/demo.md, beat 8). The 409 TOTAL_MISMATCH: golden scenario S07 in docs/submission.md ("old yes is refused = (409, 'TOTAL_MISMATCH')"). The peanut refusal: docs/demo.md beat 7; the page says "The gateway's request parser answered. No model ran." and "Verdict: REFUSED" (video/public/peanut.png). One model call per request: agent/single_pick.py. Auto-approve exists and is off by default: gateway/autoapprove.py:21-25. The strip: video/public/home.png.</aside>
+TO MONGODB, ADD: One yes covers exactly one order: a unique index in Atlas returns the stored order when the same request comes twice.</aside>
 </section>
