@@ -38,6 +38,13 @@ export const ADAPTER_LABEL: Record<SupplierAdapter, string> = {
   csv: "CSV price list",
 };
 
+/** What each adapter means for a buyer, named by the supplier where it matters. */
+export const ADAPTER_BUYER_LABEL: Record<SupplierAdapter, string> = {
+  valio_api: "Live prices and stock from {supplier}",
+  manual: "Terms typed in by you",
+  csv: "CSV price list",
+};
+
 const ADAPTERS: SupplierAdapter[] = ["valio_api", "manual", "csv"];
 
 export const DAY_LABEL: Record<number, string> = {
@@ -139,22 +146,24 @@ function NotSet() {
   return <span className="text-muted-foreground">{t("not set")}</span>;
 }
 
-function eur(value: number | null) {
-  return value == null ? <NotSet /> : <span className="tabular-nums">{formatEur(value)}</span>;
-}
-
 function Terms({ supplier }: { supplier: Supplier }) {
   const t = useT();
   const days = supplier.orderDays;
   return (
     <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
       <div>
-        <dt className="text-xs text-muted-foreground">{t("Free delivery from")}</dt>
-        <dd>{eur(supplier.freeDeliveryThresholdEur)}</dd>
-      </div>
-      <div>
-        <dt className="text-xs text-muted-foreground">{t("Delivery fee")}</dt>
-        <dd>{eur(supplier.deliveryFeeEur)}</dd>
+        <dt className="text-xs text-muted-foreground">{t("Delivery")}</dt>
+        <dd>
+          {supplier.deliveryFeeEur == null ? t("fee not set") : <span className="tabular-nums">{formatEur(supplier.deliveryFeeEur)}</span>}
+          {", "}
+          {supplier.freeDeliveryThresholdEur == null ? (
+            <>
+              {t("free from")} <NotSet />
+            </>
+          ) : (
+            t("free from {amount}", { amount: formatEur(supplier.freeDeliveryThresholdEur) })
+          )}
+        </dd>
       </div>
       <div>
         <dt className="text-xs text-muted-foreground">{t("Order days")}</dt>
@@ -162,7 +171,11 @@ function Terms({ supplier }: { supplier: Supplier }) {
       </div>
       <div>
         <dt className="text-xs text-muted-foreground">{t("Order cut-off")}</dt>
-        <dd>{supplier.cutoffTime ?? <NotSet />}</dd>
+        <dd>
+          {supplier.cutoffTime
+            ? t("Order by {time}", { time: supplier.cutoffTime })
+            : <NotSet />}
+        </dd>
       </div>
       <div>
         <dt className="text-xs text-muted-foreground">{t("Lead time")}</dt>
@@ -406,7 +419,7 @@ function SupplierCard({
           <h3 className="text-base font-semibold">{supplier.name}</h3>
         </CardTitle>
         <CardAction>
-          <Badge variant="secondary">{t(ADAPTER_LABEL[supplier.adapter])}</Badge>
+          <Badge variant="secondary">{t(ADAPTER_BUYER_LABEL[supplier.adapter], { supplier: supplier.name })}</Badge>
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -415,18 +428,14 @@ function SupplierCard({
           <div className="flex items-start gap-2">
             <Checkbox
               id={shareId}
+              aria-describedby="sharing-note"
               checked={shared === true}
               disabled={shared === null || shareBusy || sharingPending}
               onCheckedChange={(checked) => void changeShared(checked === true)}
             />
-            <div className="grid gap-1">
-              <Label htmlFor={shareId} className="leading-snug">
-                {t("Share our forecast with {supplier}", { supplier: supplier.name })}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("They see our kitchen's name and what we expect to need, never our menus or prices. Every change is in the audit log.")}
-              </p>
-            </div>
+            <Label htmlFor={shareId} className="leading-snug">
+              {t("Share our forecast with {supplier}", { supplier: supplier.name })}
+            </Label>
           </div>
           {shareError ? (
             <p role="alert" className={`rounded-md border px-3 py-2 text-sm ${TONE_CLASSES.danger}`}>
@@ -567,6 +576,11 @@ export function SuppliersPage() {
             </div>
             {sharing.status === "error" ? (
               <ErrorState message={sharing.message} onRetry={() => setSharingVersion((version) => version + 1)} />
+            ) : null}
+            {suppliers.data.length > 0 ? (
+              <p id="sharing-note" className="max-w-prose text-sm text-muted-foreground">
+                {t("A supplier you share with sees our kitchen's name and what we expect to need, never our menus or prices. Every change is in the audit log.")}
+              </p>
             ) : null}
             {suppliers.data.length === 0 ? (
               <EmptyState title={t("No suppliers yet")}>

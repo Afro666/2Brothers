@@ -10,7 +10,7 @@ import { ALLERGENS as CATALOG_ALLERGENS, TEMPERATURE_LABELS } from "@/pages/cata
 import { KITCHEN_TYPES } from "@/pages/onboarding";
 import { ALLERGENS as PRODUCT_ALLERGENS } from "@/pages/products";
 import { MACROS } from "@/pages/products/recipe-nutrition";
-import { ADAPTER_LABEL, DAY_LABEL } from "@/pages/suppliers";
+import { ADAPTER_BUYER_LABEL, ADAPTER_LABEL, DAY_LABEL } from "@/pages/suppliers";
 
 const TRANSLATED_FILES = [
   "pages/planner.tsx",
@@ -69,6 +69,7 @@ describe("part 3 Finnish coverage", () => {
       ...Object.values(LABEL_META).map((meta) => meta.text),
       ...Object.values(TEMPERATURE_LABELS),
       ...Object.values(ADAPTER_LABEL),
+      ...Object.values(ADAPTER_BUYER_LABEL),
       ...Object.values(DAY_LABEL),
       ...KITCHEN_TYPES.map((type) => type.label),
       ...CATALOG_ALLERGENS.map((allergen) => allergen.name),
