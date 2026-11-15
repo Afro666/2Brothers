@@ -5,6 +5,7 @@ import { useApi } from "@/api";
 import type { AuditActor, ShelfPhotoRead, ShelfPhotoRow } from "@/api/types";
 import { ProductThumb } from "@/components/purchasing/product-thumb";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { downscalePhoto, suggestedCounts } from "@/lib/shelf-photo";
@@ -27,9 +28,33 @@ export function PhotoMark() {
 
 const unitLabel = (unit: string | null) => (unit === "PCS" ? "pcs" : (unit ?? ""));
 
-function RowLine({ row, name, onList }: { row: ShelfPhotoRow; name: string | null; onList: boolean }) {
+/** A label that names something: not empty and not the model's own "unknown". */
+const named = (label: string) => label.trim() !== "" && label.trim().toLowerCase() !== "unknown";
+
+function RowLine({
+  row,
+  name,
+  onList,
+  items,
+  values,
+  disabled,
+  onValue,
+}: {
+  row: ShelfPhotoRow;
+  name: string | null;
+  onList: boolean;
+  items: StockItem[];
+  values: Record<string, string>;
+  disabled?: boolean;
+  onValue: (productId: string, value: string) => void;
+}) {
   const t = useT();
   const counted = row.kind === "COUNTED" && row.count != null;
+  // A row with no product on the stock list: the person says which product it is (#2011).
+  const [picked, setPicked] = useState("");
+  const target = counted ? null : onList ? row.productId : picked || null;
+  const item = target ? items.find((candidate) => candidate.productId === target) : undefined;
+  const title = name ?? (named(row.label) ? row.label : t("No product on your stock list matches"));
   return (
     <li className="flex flex-col gap-0.5 py-2 text-sm sm:flex-row sm:items-baseline sm:gap-3">
       {counted ? (
@@ -39,10 +64,10 @@ function RowLine({ row, name, onList }: { row: ShelfPhotoRow; name: string | nul
       ) : (
         <span className="shrink-0 font-semibold text-warning sm:w-28">{t("please count")}</span>
       )}
-      <span className="flex min-w-0 items-start gap-2">
+      <span className="flex min-w-0 flex-1 items-start gap-2">
         <ProductThumb en={name ?? row.label} size="sm" />
         <span className="min-w-0 break-words">
-          <span className="font-medium">{name ?? t("No product on your stock list matches")}</span>
+          <span className="font-medium">{title}</span>
           <span className="block text-xs text-muted-foreground">
             {counted && row.packs != null && row.packSize != null
               ? `${row.packs === 1
@@ -51,10 +76,50 @@ function RowLine({ row, name, onList }: { row: ShelfPhotoRow; name: string | nul
                 }`
               : null}
             {counted && !onList ? t("Not on this stock list, so no count was filled in. ") : null}
-            {t("Read on the pack:")} “{row.label}” {t("({confidence} confidence)", { confidence: row.confidence })}
+            {name == null && title === row.label ? (
+              <>{t("No product on your stock list matches")}. </>
+            ) : (
+              <>{t("Read on the pack:")} “{row.label}” </>
+            )}
+            {t("({confidence} confidence)", { confidence: row.confidence })}
           </span>
         </span>
       </span>
+      {counted ? null : (
+        <span className="flex shrink-0 flex-wrap items-center gap-2 pt-1 sm:pt-0">
+          {onList ? null : (
+            <select
+              className="h-8 max-w-56 rounded-md border bg-background px-2 text-xs"
+              aria-label={t("Which product on your stock list is “{label}”?", { label: title })}
+              value={picked}
+              disabled={disabled}
+              onChange={(event) => setPicked(event.currentTarget.value)}
+            >
+              <option value="">{t("Not on my stock list")}</option>
+              {items.map((candidate) => (
+                <option key={candidate.productId} value={candidate.productId}>
+                  {candidate.productName}
+                </option>
+              ))}
+            </select>
+          )}
+          {item ? (
+            <label className="flex items-center gap-1 text-xs font-medium">
+              <Input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                className="h-8 w-20"
+                aria-label={t("Count for {product} from the photo, in {unit}", { product: item.productName, unit: item.unit })}
+                value={values[item.productId] ?? ""}
+                disabled={disabled}
+                onChange={(event) => onValue(item.productId, event.currentTarget.value)}
+              />
+              {unitLabel(item.unit)}
+            </label>
+          ) : null}
+        </span>
+      )}
     </li>
   );
 }
@@ -82,18 +147,25 @@ function summary(read: ShelfPhotoRead, filled: number, t: ReturnType<typeof useT
 /**
  * "Count from a photo" on the Stock page (#373). The person takes or picks a photo of a
  * shelf; the browser scales it down; the gateway has Nemotron 3.5 Super VL read it. The
- * counts it read go to `onCounts` as suggestions. This component saves nothing.
+ * counts it read go to `onCounts` as suggestions. A row the model did not count has a count
+ * box: what the person types goes to `onValue`, the same draft as the table (`values`).
+ * This component saves nothing.
  */
 export function ShelfPhotoCount({
   items,
   actor,
   disabled,
+  values,
   onCounts,
+  onValue,
 }: {
   items: StockItem[];
   actor: AuditActor;
   disabled?: boolean;
+  /** The Stock page's draft counts by product id, as typed. */
+  values: Record<string, string>;
   onCounts: (counts: Record<string, number>) => void;
+  onValue: (productId: string, value: string) => void;
 }) {
   const t = useT();
   const api = useApi();
@@ -223,6 +295,10 @@ export function ShelfPhotoCount({
               row={row}
               name={(row.productId && names.get(row.productId)) || row.productName}
               onList={row.productId != null && names.has(row.productId)}
+              items={items}
+              values={values}
+              disabled={disabled}
+              onValue={onValue}
             />
           ))}
         </ul>

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agent.shelf import (FIXTURES, SHELF_SCHEMA, RecordedModel, confirm_all, count_rows, main, match_product,
+from agent.shelf import (FIXTURES, INSTRUCTION, SHELF_SCHEMA, RecordedModel, confirm_all, count_rows, main, match_product,
                          read_shelf, stock_count_body)
 from agent.vision import VisionError
 
@@ -69,6 +69,28 @@ def test_two_rows_for_one_product_add_up_or_stay_unknown():
     rows = count_rows(mixed, PRODUCTS)
     body = stock_count_body(rows, PRODUCTS, confirm_all(rows), AT, "shelf-mixed")
     assert body["counts"] == [{"product_id": "463335", "on_hand": None, "unit": "L"}]
+
+
+def test_the_same_label_twice_is_one_row():
+    """#2011: 40 rows with the same label several times. Counts add up, the lowest confidence stays."""
+    reply = {"items": [{"label": "Valio Eila 3% 1L", "count": "6", "confidence": "high"},
+                       {"label": "valio  eila 3% 1l", "count": "3", "confidence": "medium"},
+                       {"label": "Oat biscuit", "count": "2", "confidence": "high"},
+                       {"label": "Oat biscuit", "count": "unknown", "confidence": "high"}]}
+    rows = count_rows(reply, PRODUCTS)
+    assert [(r["label"], r["packs"], r["confidence"], r["status"]) for r in rows] == [
+        ("Valio Eila 3% 1L", 9, "medium", "COUNTED"), ("Oat biscuit", None, "high", "UNMATCHED")]
+    assert reply["items"][0]["count"] == "6"            # the reply itself is not changed
+
+
+def test_a_label_that_names_nothing_is_never_merged():
+    reply = {"items": [{"label": "unknown", "count": "1", "confidence": "low"}] * 3}
+    assert len(count_rows(reply, PRODUCTS)) == 3
+
+
+def test_the_prompt_asks_for_a_name_when_the_pack_has_no_text():
+    assert "no printed text" in INSTRUCTION and "bananas" in INSTRUCTION
+    assert "never two items with the same label" in INSTRUCTION
 
 
 def test_reply_outside_schema_is_refused():

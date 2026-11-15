@@ -87,7 +87,7 @@ def test_low_confidence_row_has_no_number():
 
 
 def test_one_unsure_row_makes_the_whole_product_unknown():
-    reply = reply_of(("Valio Eila 3% 1 L", "6", "high"), ("Valio Eila 3% 1 L", "2", "low"),
+    reply = reply_of(("Valio Eila 3% 1 L", "6", "high"), ("Valio Eila 3% 1L", "2", "low"),
                      ("Valio Eila organic 1 L", "4", "high"))
     rows = read(kitchen_db(), reply)[0]["rows"]
     assert [(r["row"], r["count"]) for r in rows] == [("PLEASE_COUNT", None), ("PLEASE_COUNT", None), ("COUNTED", "4")]
