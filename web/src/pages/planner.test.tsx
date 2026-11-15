@@ -251,13 +251,17 @@ describe("PlannerPage", () => {
     updateLanguage("fi", false);
     const api = createMockApi();
     const menu = await api.getMenuPlan("2026-W47");
-    api.getMenuPlan = async () => menu.map((entry, index) => (index === 0 ? { ...entry, meal: "Dinner" } : entry));
+    // "Delete" is also a button's text with a Finnish entry: a meal with that name stays as typed (#1948).
+    api.getMenuPlan = async () =>
+      menu.map((entry, index) => (index === 0 ? { ...entry, meal: "Dinner" } : index === 1 ? { ...entry, meal: "Delete" } : entry));
     renderApp("/planner?week=2026-W47", api);
 
     expect(await screen.findByText("Päivällinen")).toBeInTheDocument();
+    expect(screen.getByText("Delete")).toBeInTheDocument();
     expect(screen.getAllByText("Aamiainen")).toHaveLength(2);
     expect(screen.getAllByText("Lounas")).toHaveLength(2);
-    expect(screen.getAllByText("Jälkiruoka")).toHaveLength(3);
+    expect(screen.getAllByText("Jälkiruoka")).toHaveLength(2);
+    expect(screen.queryByText("Poista", { selector: "p" })).not.toBeInTheDocument();
     expect(screen.queryByText("Dinner")).not.toBeInTheDocument();
     expect(screen.queryByText("Breakfast")).not.toBeInTheDocument();
     expect(screen.getAllByText(/Rice pudding/).length).toBeGreaterThan(0);

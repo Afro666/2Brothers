@@ -26,6 +26,9 @@ import { MenuPhotoPlan } from "@/components/purchasing/menu-photo-plan";
 import { auditActorForRole, useRole } from "@/lib/role";
 import { ProductLink } from "@/components/purchasing/product-link";
 
+/** #1948: a meal name is free text. Only these are translated; any other name is shown as typed. */
+const MEAL_NAMES = new Set(["Breakfast", "Lunch", "Dinner", "Dessert"]);
+
 function todayIso(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(
@@ -485,7 +488,7 @@ export function PlannerPage() {
                           <div key={entry.id} className="space-y-2 rounded-md border p-3">
                             <div className="flex justify-between gap-2">
                               <div className="min-w-0">
-                                <p className="font-medium">{t(entry.meal)}</p>
+                                <p className="font-medium">{MEAL_NAMES.has(entry.meal) ? t(entry.meal) : entry.meal}</p>
                                 <p className="text-sm tabular-nums text-muted-foreground">
                                   {recipe?.name ?? t("Recipe unavailable")} · {t("{count} covers", { count: formatNumber(entry.covers) })}
                                 </p>
