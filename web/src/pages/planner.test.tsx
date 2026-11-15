@@ -263,6 +263,22 @@ describe("PlannerPage", () => {
     expect(screen.getAllByText(/Rice pudding/).length).toBeGreaterThan(0);
   });
 
+  it("shows a meal name that is not a known meal unchanged in Finnish", async () => {
+    localStorage.setItem("purchasing-language", "fi");
+    updateLanguage("fi", false);
+    const api = createMockApi();
+    const menu = await api.getMenuPlan("2026-W47");
+    api.getMenuPlan = async () =>
+      menu.map((entry, index) =>
+        index === 0 ? { ...entry, meal: "Delete" } : index === 1 ? { ...entry, meal: "Cancel {x}" } : entry,
+      );
+    renderApp("/planner?week=2026-W47", api);
+
+    expect(await screen.findByText("Delete")).toBeInTheDocument();
+    expect(screen.getByText("Cancel {x}")).toBeInTheDocument();
+    expect(screen.queryByText("Poista", { selector: "p" })).not.toBeInTheDocument();
+  });
+
   it("opens on next week when no week is asked for", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-13T12:00:00Z"));

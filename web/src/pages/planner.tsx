@@ -43,6 +43,13 @@ function weekday(date: string): string {
   return new Intl.DateTimeFormat(getLanguage() === "fi" ? "fi-FI" : "en-GB", { weekday: "long", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
 }
 
+/** The meal names the dictionary knows; any other meal name is free text and is shown as typed. */
+const KNOWN_MEALS = new Set(["Breakfast", "Lunch", "Dinner", "Dessert"]);
+
+function mealLabel(meal: string, t: (text: string) => string): string {
+  return KNOWN_MEALS.has(meal) ? t(meal) : meal;
+}
+
 function dateRange(date: string): string {
   return formatDate(date);
 }
@@ -485,7 +492,7 @@ export function PlannerPage() {
                           <div key={entry.id} className="space-y-2 rounded-md border p-3">
                             <div className="flex justify-between gap-2">
                               <div className="min-w-0">
-                                <p className="font-medium">{t(entry.meal)}</p>
+                                <p className="font-medium">{mealLabel(entry.meal, t)}</p>
                                 <p className="text-sm tabular-nums text-muted-foreground">
                                   {recipe?.name ?? t("Recipe unavailable")} · {t("{count} covers", { count: formatNumber(entry.covers) })}
                                 </p>
