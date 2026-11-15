@@ -27,7 +27,7 @@ export default {
   "Per product: unknown. The figures here are for the whole kitchen only.": "Tuotteittain: tuntematon. Luvut koskevat vain koko keittiötä.",
   "The gateway sends one score for the whole kitchen, not one per product.": "Yhdyskäytävä lähettää yhden tuloksen koko keittiölle, ei tuotekohtaisia tuloksia.",
   "Loading the forecast check": "Ladataan ennusteen tarkistusta",
-  "What the kitchen needed each week against what was predicted. Our engine (menu x covers x recipe) is next to the plain weekday average. Future weeks show the forecast only.": "Keittiön viikoittainen tarve verrattuna ennusteeseen. Oma moottori (ruokalista x kuverdit x resepti) näkyy tavallisen viikonpäiväkeskiarvon vieressä. Tulevilla viikoilla näkyy vain ennuste.",
+  "What the kitchen needed each week against what was predicted. Our engine (menu x covers x recipe) is next to the plain weekday average.": "Keittiön viikoittainen tarve verrattuna ennusteeseen. Oma moottori (ruokalista x kuverdit x resepti) näkyy tavallisen viikonpäiväkeskiarvon vieressä.",
   "Needed (actual)": "Tarve (toteuma)",
   "Needed and predicted per week, in {unit}": "Tarve ja ennuste viikoittain, yksikkönä {unit}",
   "{past} past weeks with what the kitchen needed and both forecasts. {future} future weeks with the forecast only. The table below has the same numbers.": "{past} mennyttä viikkoa keittiön tarpeen ja molempien ennusteiden kanssa. {future} tulevaa viikkoa vain ennusteella. Alla olevassa taulukossa ovat samat luvut.",
