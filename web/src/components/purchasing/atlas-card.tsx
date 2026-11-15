@@ -30,6 +30,16 @@ export const ATLAS_LABELS = {
   version: "MongoDB version",
 };
 
+/** Plain names for the time-series collections; one the page does not know keeps its own name. */
+export const ATLAS_SERIES_NAMES: Record<string, string> = {
+  covers: "covers",
+  deliveries: "deliveries",
+  feedback: "feedback",
+  forecasts: "forecasts",
+  kitchen_stock: "stock counts",
+  orders_history: "order history",
+};
+
 const number = (value: number | null, t: T) => (value === null ? t("unknown") : formatNumber(value));
 
 function models(facts: AtlasFacts, t: T): string {
@@ -45,8 +55,25 @@ function models(facts: AtlasFacts, t: T): string {
     .join("; ");
 }
 
+const vectorCount = (facts: AtlasFacts) =>
+  facts.vectors === null ? null : facts.vectors.reduce((sum, row) => sum + row.count, 0);
+
+/** The sentence under the counts says the same two numbers, or says that it does not know. */
+function vectorSentence(facts: AtlasFacts | null, t: T): string {
+  const vectors = facts ? vectorCount(facts) : null;
+  const products = facts ? facts.products : null;
+  // Two models during a replacement: the sum of their vectors does not say how many products have one.
+  if (vectors === null || products === null || vectors > products || (facts?.vectors?.length ?? 0) > 1) {
+    return t("Product vectors come from MongoDB's own embedding API; how many products have one is unknown right now.");
+  }
+  return t("{vectors} of {products} products have a vector from MongoDB's own embedding API.", {
+    vectors: formatNumber(vectors),
+    products: formatNumber(products),
+  });
+}
+
 function figures(facts: AtlasFacts, t: T): [string, string][] {
-  const vectors = facts.vectors === null ? null : facts.vectors.reduce((sum, row) => sum + row.count, 0);
+  const vectors = vectorCount(facts);
   return [
     [ATLAS_LABELS.vectors, number(vectors, t)],
     [ATLAS_LABELS.model, models(facts, t)],
@@ -94,8 +121,12 @@ function Live({ facts }: { facts: AtlasFacts }) {
 
 function series(facts: AtlasFacts, t: T): string {
   if (facts.timeSeries === null) return t("unknown");
-  if (facts.timeSeries.length === 0) return t("none yet");
-  return facts.timeSeries.map((row) => `${row.collection} (${formatNumber(row.documents)})`).join(", ");
+  // An empty collection is left out: it has nothing to show yet.
+  const filled = facts.timeSeries.filter((row) => row.documents > 0);
+  if (filled.length === 0) return t("none yet");
+  return filled
+    .map((row) => `${t(ATLAS_SERIES_NAMES[row.collection] ?? row.collection)} ${formatNumber(row.documents)}`)
+    .join(" · ");
 }
 
 /**
@@ -129,9 +160,8 @@ export function AtlasCard() {
         <div className="space-y-2">
           <h3 className="font-medium">{t("Search by words and by meaning")}</h3>
           <p>
-            {t(
-              "Every product has a vector from MongoDB's own embedding API. Hybrid search joins Atlas Search (words) and Atlas Vector Search (meaning) with $rankFusion.",
-            )}
+            {vectorSentence(live, t)}{" "}
+            {t("Hybrid search joins Atlas Search (words) and Atlas Vector Search (meaning) with $rankFusion.")}
           </p>
           <p>{t("The Buyer searches by words on stage; the Catalog page can search by meaning")}</p>
           <p>
@@ -141,33 +171,43 @@ export function AtlasCard() {
               worse: totals.slightly_worse,
             })}
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-left text-xs">
-              <caption className="pb-1 text-left text-muted-foreground">
-                {t("The top 8 results for 10 searches, measured on the server on {date}.", {
-                  date: comparison.measured_on,
-                })}
-              </caption>
-              <thead>
-                <tr className="border-b">
-                  <th scope="col" className="py-1 pr-2">{t("Search")}</th>
-                  <th scope="col" className="py-1 pr-2">{t("Words find")}</th>
-                  <th scope="col" className="py-1 pr-2">{t("Hybrid finds")}</th>
-                  <th scope="col" className="py-1">{t("Hybrid is")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparison.queries.map((row) => (
-                  <tr key={row.query} className="border-b align-top last:border-0">
-                    <th scope="row" className="py-1 pr-2 font-medium">{row.query}</th>
-                    <td className="py-1 pr-2">{row.words}</td>
-                    <td className="py-1 pr-2">{row.hybrid}</td>
-                    <td className="py-1">{t(ATLAS_VERDICTS[row.verdict] ?? row.verdict)}</td>
+          <p className="text-muted-foreground">
+            {t("Measured on the server on {date}, before the search ranking was changed later that day: the Catalog can show other results now.", {
+              date: comparison.measured_on,
+            })}
+          </p>
+          <details>
+            <summary className="cursor-pointer font-medium text-primary underline underline-offset-4">
+              {t("Show the {count} searches", { count: comparison.queries.length })}
+            </summary>
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full min-w-[36rem] text-left text-xs">
+                <caption className="pb-1 text-left text-muted-foreground">
+                  {t("The top 8 results for 10 searches, measured on the server on {date}.", {
+                    date: comparison.measured_on,
+                  })}
+                </caption>
+                <thead>
+                  <tr className="border-b">
+                    <th scope="col" className="py-1 pr-2">{t("Search")}</th>
+                    <th scope="col" className="py-1 pr-2">{t("Words find")}</th>
+                    <th scope="col" className="py-1 pr-2">{t("Hybrid finds")}</th>
+                    <th scope="col" className="py-1">{t("Hybrid is")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {comparison.queries.map((row) => (
+                    <tr key={row.query} className="border-b align-top last:border-0">
+                      <th scope="row" className="py-1 pr-2 font-medium">{row.query}</th>
+                      <td className="py-1 pr-2">{row.words}</td>
+                      <td className="py-1 pr-2">{row.hybrid}</td>
+                      <td className="py-1">{t(ATLAS_VERDICTS[row.verdict] ?? row.verdict)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
         </div>
 
         <div>
@@ -177,7 +217,7 @@ export function AtlasCard() {
           <ul aria-labelledby="atlas-features" className="list-disc space-y-1 pl-5">
             <li>{t("Atlas Search: one index over the English, Finnish and Swedish product names.")}</li>
             <li>
-              {t("Time-series collections: {list}", { list: live ? series(live, t) : t("unknown") })}
+              {t("Time-series collections: {list}.", { list: live ? series(live, t) : t("unknown") })}
               {" "}
               {t("The weekly drift check is one aggregation over them.")}
             </li>

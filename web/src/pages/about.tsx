@@ -68,7 +68,7 @@ const BUILT_WITH = [
         to: "/",
       },
       {
-        text: "Every order stored once, money that never rounds, and a log nobody can change unnoticed (unique index, Decimal128, hash-chained audit log)",
+        text: "Every order stored once, money stored as exact decimals, never as floating point (Decimal128), and a log nobody can change unnoticed (unique index, hash-chained audit log)",
         link: "Run the tamper check",
         to: "/trust",
       },
