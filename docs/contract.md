@@ -1756,6 +1756,9 @@ product and day, oldest first. A future day is the forecast made today.
 made the Monday before) with what the kitchen really needed. It compares two methods:
 the engine and a plain weekday average.
 
+The example shows one representative week per method; the other weeks contributing
+to each window total are omitted here.
+
 ```json
 {"kitchen_id": "demo-kitchen", "from": "2026-09-01", "to": "2026-11-09", "methods": {
   "engine": {
@@ -1767,11 +1770,24 @@ the engine and a plain weekday average.
                           {"unit": "L", "under": 15.0, "over": 30.0, "series": 18,
                            "under_eur": "42.20", "over_eur": "56.40"}]},
     "weeks": [{"week": "2026-W36", "predicted": 120.0, "actual": 115.0, "wape": 0.0957,
-               "bias": 0.0435, "under": 3.0, "over": 8.0, "series": 5}]
+               "bias": 0.0435, "under": 3.0, "over": 8.0, "series": 5,
+               "under_eur": "12.00", "over_eur": "32.00", "unpriced_series": 0,
+               "by_unit": [{"unit": "KG", "under": 3.0, "over": 8.0, "series": 5,
+                            "under_eur": "12.00", "over_eur": "32.00"}]}]
   },
   "weekday-average": {"total": {"predicted": 1180.0, "actual": 1150.0, "wape": 0.1913,
-                                "bias": 0.0261, "under": 95.0, "over": 125.0, "series": 48},
-                      "weeks": []}
+                                "bias": 0.0261, "under": null, "over": null, "series": 48,
+                                "under_eur": "380.00", "over_eur": "500.00", "unpriced_series": 0,
+                                "by_unit": [{"unit": "KG", "under": 60.0, "over": 80.0, "series": 30,
+                                             "under_eur": "240.00", "over_eur": "320.00"},
+                                            {"unit": "L", "under": 35.0, "over": 45.0, "series": 18,
+                                             "under_eur": "140.00", "over_eur": "180.00"}]},
+                      "weeks": [{"week": "2026-W36", "predicted": 118.0, "actual": 115.0,
+                                 "wape": 0.1826, "bias": 0.0261, "under": 9.0, "over": 12.0,
+                                 "series": 5, "under_eur": "36.00", "over_eur": "48.00",
+                                 "unpriced_series": 0,
+                                 "by_unit": [{"unit": "KG", "under": 9.0, "over": 12.0, "series": 5,
+                                              "under_eur": "36.00", "over_eur": "48.00"}]}]}
 }}
 ```
 
