@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 
 import pytest
@@ -89,3 +90,36 @@ def test_comparison_checkpoints_failures_and_never_repeats_an_attempt(tmp_path, 
     output.write_text(json.dumps(report))
     with pytest.raises(ValueError, match='Refusing to mix'):
         asyncio.run(bench.run(output, factory=Fake))
+
+
+def test_saved_final_trial_retains_the_residual_failure_and_paired_control():
+    report = json.loads((bench.ROOT / 'agent/benchmarks/coverage-pick-v3-report.json')
+                        .read_text(encoding='utf-8'))
+    data = fixture()
+    canonical = json.dumps(data, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
+    assert hashlib.sha256(canonical).hexdigest() == report['fixture_canonical_sha256']
+    assert report['frozen']['before_system_sha256'] == report['frozen']['after_system_sha256']
+    assert report['summary'] == bench.summarize(report['results'])
+    cases = {case['id']: case for case in data['cases']}
+    pairs = {}
+    for row in report['results']:
+        assert row['attempt_state'] == 'completed' and row['usage']['calls'] == 1
+        expected = set(cases[row['case']]['expected_includes'])
+        assert row['raw_exact'] == (set(row['raw_picks']) == expected)
+        assert row['guarded_exact'] == (set(row['guarded_picks']) == expected)
+        pairs.setdefault((row['case'], row['repeat']), {})[row['mode']] = row
+    assert len(pairs) == 69
+    for pair in pairs.values():
+        before, after = pair['before'], pair['after']
+        if not after['input_changed']:
+            assert before['input_sha256'] == after['input_sha256']
+        else:
+            assert before['first_correct'] and after['first_correct']
+            assert after['guarded_exact']
+        assert not (before['guarded_exact'] and not after['guarded_exact'])
+    diagnostic = report['summary']['diagnostic']
+    assert diagnostic['before']['redundant'] == 14 and diagnostic['after']['redundant'] == 0
+    misses = [row for row in report['results']
+              if row['mode'] == 'after' and row['input_changed'] and not row['raw_exact']]
+    assert len(misses) == 1 and misses[0]['case'] == 'verify-validation-full'
+    assert misses[0]['guarded_exact']
