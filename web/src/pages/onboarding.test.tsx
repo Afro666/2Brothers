@@ -56,10 +56,13 @@ describe("safeLogoUrl", () => {
 describe("OnboardingPage", () => {
   beforeEach(() => localStorage.clear());
 
-  it("names the Context.dev endpoint and saves nothing before a lookup", async () => {
+  it("names Context.dev without an HTTP route, offers the form by hand and saves nothing before a lookup", async () => {
     renderApp("/onboarding");
     expect(await screen.findByRole("heading", { level: 1, name: "Set up your kitchen" })).toBeVisible();
-    expect(screen.getByText(/Powered by Context\.dev/)).toHaveTextContent("POST /v1/brand/retrieve");
+    expect(screen.getByText("Looked up with Context.dev. Nothing is saved until you check it.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Fill in the form by hand" })).toBeVisible();
+    // #1839: no HTTP method or route anywhere on the page.
+    expect(document.body.textContent).not.toMatch(/\b(GET|POST)\b|\/v1\//);
     expect(screen.queryByRole("form", { name: "Kitchen profile" })).not.toBeInTheDocument();
     expect(localStorage.getItem("kitchen-brand")).toBeNull();
   });
@@ -75,9 +78,10 @@ describe("OnboardingPage", () => {
     expect(screen.getByRole("combobox", { name: "Kitchen type" })).toHaveTextContent("Hotel");
     expect(within(field("logoUrl")).getByRole("img", { name: "Hotel Kuusi logo" })).toBeVisible();
     for (const name of ["name", "logoUrl", "colors", "street", "city", "kitchenType"]) {
-      expect(within(field(name)).getByText(FROM_CONTEXT)).toHaveTextContent("POST /v1/brand/retrieve");
+      expect(within(field(name)).getByText(FROM_CONTEXT)).toBeVisible();
     }
-    expect(within(field("openingHours")).getByText(FROM_CONTEXT)).toHaveTextContent("POST /v1/web/scrape");
+    expect(within(field("openingHours")).getByText(FROM_CONTEXT)).toBeVisible();
+    expect(document.body.textContent).not.toMatch(/\b(GET|POST)\b|\/v1\//);
     expect(screen.getByLabelText("Kitchen name")).toHaveAccessibleDescription(/From your website via Context\.dev/);
     // Nothing is stored until the person confirms.
     expect(localStorage.getItem("kitchen-brand")).toBeNull();
