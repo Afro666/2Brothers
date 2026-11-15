@@ -1,4 +1,4 @@
-import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useSyncExternalStore } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useSyncExternalStore } from "react";
 
 export type Language = "en" | "fi";
 export type TranslationVariables = Record<string, string | number>;
@@ -94,8 +94,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage: updateLanguage }}>
-      {/* Remount the subtree so non-reactive formatters use the new language immediately. */}
-      <Fragment key={language}>{children}</Fragment>
+      {children}
     </LanguageContext.Provider>
   );
 }
