@@ -14,8 +14,6 @@ import { safeLogoUrl, saveKitchenBrand, useKitchenBrand } from "@/lib/kitchen-br
 import type { FieldSource, KitchenBrandLookup, KitchenBrandProfile, KitchenType, LookedUpField } from "@/types";
 import { useT } from "@/lib/i18n";
 
-/** The endpoint the gateway calls for every brand field (docs/contract.md, "Onboarding lookup"). */
-
 export const KITCHEN_TYPES: { value: KitchenType; label: string }[] = [
   { value: "hotel", label: "Hotel" },
   { value: "school", label: "School" },
