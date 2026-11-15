@@ -6,7 +6,7 @@ import { createMockApi } from "@/api/mock";
 import { updateLanguage } from "@/lib/i18n";
 import type { Api } from "@/api/types";
 import type { Supplier } from "@/types";
-import { approval } from "@/mocks/milk-case";
+import { approval, milkOptions } from "@/mocks/milk-case";
 import { renderApp } from "@/test/render";
 import { nextCutoff } from "@/pages/home/cutoff";
 import { oldestWaiting } from "@/pages/home/kitchen";
@@ -76,7 +76,7 @@ describe("HomePage", () => {
   });
 
   it("names the recommended option's total while the basket is still the Buyer's own, as the card does (#1911)", async () => {
-    const [a, b] = approval.options!;
+    const [a, b] = milkOptions;
     const options = [
       { ...a!, recommended: true, stockConfirmed: true, chosen: false, cutoffPassed: false, totalInclVat: 2099.41 },
       { ...b!, recommended: false, chosen: true, source: "original" as const, totalInclVat: 2634.13 },
@@ -90,7 +90,7 @@ describe("HomePage", () => {
   });
 
   it("keeps the basket total once a person chose the basket (#1911)", async () => {
-    const [a, b] = approval.options!;
+    const [a, b] = milkOptions;
     const options = [
       { ...a!, recommended: true, stockConfirmed: true, chosen: false, cutoffPassed: false, totalInclVat: 2099.41 },
       { ...b!, recommended: false, chosen: true, source: "supplier" as const, totalInclVat: 2634.13 },

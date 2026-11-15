@@ -57,7 +57,8 @@ export function ApprovalTile({ api }: { api: Api }) {
           const pending = approvals.filter((approval) => approval.status === "PENDING");
           const oldest = oldestWaiting(pending);
           // The card on /approvals leads with the recommended option's total (#1866): Home names the same figure.
-          const total = leadOption(oldest?.options ?? [])?.totalInclVat ?? oldest?.totalInclVat;
+          const lead = leadOption(oldest?.options ?? []);
+          const total = lead ? lead.totalInclVat : oldest?.totalInclVat;
           const byNemotron = oldest?.modelTrace?.madeBy === "model" && isNemotron(oldest.modelTrace.model);
           return pending.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("Nothing is waiting.")}</p>
