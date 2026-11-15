@@ -288,7 +288,7 @@ describe("mapCatalogProduct", () => {
       temperature: { code: 3, label: "Chilled, +2 to +6 °C" },
       allergens: [
         { code: "AM", name: "Milk", presence: "CONTAINS" },
-        { code: "AW", name: "Gluten", presence: "MAY_CONTAIN" },
+        { code: "AW", name: "Gluten cereals", presence: "MAY_CONTAIN" },
       ],
       labels: ["GOODS_FROM_FINLAND_BLUE_SWAN"],
       co2KgPerKg: 1.2,

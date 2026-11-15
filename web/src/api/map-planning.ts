@@ -1,5 +1,6 @@
 import { type Json, decimal, object, rows, text } from "@/api/gateway-map";
 import { mapMoney } from "@/api/map";
+import { allergenEnglishName } from "@/lib/allergens";
 import { ApiError, type Draft, type OwnProductSaveExtras, type StockCount } from "@/api/types";
 import type {
   Allergen,
@@ -129,18 +130,6 @@ export function supplierBody(supplier: Draft<Supplier>): Json {
 
 // ---- own products ---------------------------------------------------------------------
 
-/** The gateway sends an allergen as its GS1 code only; these are the codes the product form offers. */
-const ALLERGEN_NAMES: Record<string, string> = {
-  AM: "Milk",
-  AW: "Gluten cereals",
-  AE: "Egg",
-  AF: "Fish",
-  AN: "Tree nuts",
-  AP: "Peanuts",
-  AS: "Sesame",
-  AY: "Soy",
-};
-
 /** One own product. `allergen_data: "UNKNOWN"` is null (unknown), not an empty list. */
 export function mapOwnProduct(body: unknown): OwnProduct {
   const row = object(body, "an own product");
@@ -150,7 +139,7 @@ export function mapOwnProduct(body: unknown): OwnProduct {
           const allergen = object(item, "an allergen");
           const code = text(allergen.code, "an allergen code");
           if (allergen.level !== "CONTAINS" && allergen.level !== "MAY_CONTAIN") invalid("an allergen level");
-          return { code, name: ALLERGEN_NAMES[code] ?? code, presence: allergen.level };
+          return { code, name: allergenEnglishName(code), presence: allergen.level };
         })
       : null;
   return {

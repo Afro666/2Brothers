@@ -43,6 +43,11 @@ const ALLERGEN_NAMES: Record<string, string> = {
   ...MEMBER_ALLERGENS,
 };
 
+/** The English name of a GS1 allergen code, or the code itself when no table has it. The API mappers fill `Allergen.name` with this. */
+export function allergenEnglishName(code: string): string {
+  return Object.hasOwn(ALLERGEN_NAMES, code) ? ALLERGEN_NAMES[code] : code;
+}
+
 /** Every allergen chip's name, from the code. A code in no table reads "Other allergen (<code>)", never the sender's word. */
 export function allergenName(
   code: string,
