@@ -99,15 +99,25 @@ export function peopleUnit(unit: string, amount = 2): string {
   return words ? translate(getLanguage(), amount === 1 ? words.one : words.many) : unit;
 }
 
-/** A number and a raw unit code after it, as a gateway sentence writes them: "698 ST", "1.5 KG". */
-const QUANTITY_WITH_CODE = new RegExp(`(\\d+(?:\\.\\d+)?) (${Object.keys(PEOPLE_UNITS).join("|")})\\b`, "g");
+/**
+ * A number and a raw unit code after it, as a gateway sentence writes them: "698 ST", "1.5 KG",
+ * "1,001 ST" (#1989). A comma before exactly three digits groups thousands; any other comma is a decimal comma.
+ */
+const QUANTITY_WITH_CODE = new RegExp(
+  `(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:[.,]\\d+)?) (${Object.keys(PEOPLE_UNITS).join("|")})\\b`,
+  "g",
+);
+const THOUSANDS = /^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/;
 
 /**
  * #1982: a gateway sentence shown as it is ("698 ST of ... = 698 L"), with each raw unit code after a
  * number in the same words as the rest of the page ("698 pieces of ... = 698 L"). Nothing else changes.
  */
 export function plainUnits(sentence: string): string {
-  return sentence.replace(QUANTITY_WITH_CODE, (_match, amount: string, code: string) => `${amount} ${peopleUnit(code, Number(amount))}`);
+  return sentence.replace(QUANTITY_WITH_CODE, (_match, amount: string, code: string) => {
+    const value = Number(THOUSANDS.test(amount) ? amount.replaceAll(",", "") : amount.replace(",", "."));
+    return `${amount} ${peopleUnit(code, value)}`;
+  });
 }
 
 /**
