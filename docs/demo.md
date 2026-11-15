@@ -1,12 +1,14 @@
 # Demo script: three minutes
 
-Status: story A, chosen by Aron on 2026-11-14 at 09:55 Helsinki: the offer tile comes first.
-The sponsor's own example, `1,000 L lactose-free milk by Monday`, is beat 2 to 4 (added
-after the first mock jury of 14 Nov). After the second mock jury the taps, the on-screen
-labels and a shot list were added; the beats and their order did not change. The milk card
-is described as on `main` after #1877, #1890, #1894, #1897 and #1905 (15 Nov); look at the
-live card first, because these show only after the next deploy. Each beat ran on the live
-site on 14 Nov, but the beats were not rehearsed as one run in this order yet.
+Status: **two running orders exist, and Aron's choice between them is open.** Story A (nine
+beats, the offer tile first) was chosen by Aron on 2026-11-14 at 09:55 Helsinki and stays
+the default until he says otherwise. The "Short version: milk first, six beats" below is
+the order three mock jury rounds asked for; it is ready, and it replaces nothing.
+The sponsor's own example, `1,000 L lactose-free milk by Monday`, is beat 2 to 4 of story A
+and beat 1 to 3 of the short version. The milk card is described as on `main` on 15 Nov
+(after #1905, #1971, #1972, #1976, #1977 and #1981); look at the live card first, because
+a change shows only after its deploy. Each beat ran on the live site on 14 Nov, but
+neither order was rehearsed as one run yet.
 Owner: Aron (presents). Site: `https://31-22-104-201.sslip.io`.
 
 Why this story: it shows the parts nobody else has (Valio's own agent, a refusal, an
@@ -56,11 +58,13 @@ fallback. On 14 Nov at 09:45 Helsinki the model endpoint did not answer for a wh
 8. **The pick cache: ten minutes.** The same request within ten minutes reuses the stored
    pick (`store/buyer_picks.py:10-14` and `:40`: the key holds the kitchen, the typed text,
    the day, the amount and the shortlist; a pick lives 600 seconds). The pick is then a
-   "Code:" step in the "What Nemotron did" panel, with the words "The rule picked the
-   first product", and no model call is counted for it (`agent/service.py:134-137`,
-   `web/src/components/purchasing/model-trace-panel.tsx:59`). The line on the folded card
-   then does not say "1 call", and the panel counts only the explanation call. Beat 3
-   names the pick as a model call, so do one of these two:
+   "Code:" step in the "What Nemotron did" panel, with the words "Reused Nemotron’s pick
+   for the same request from a few minutes ago", and no model call is counted for it
+   (`agent/service.py:134-137`, `web/src/components/purchasing/model-trace-panel.tsx:60`).
+   The line on the folded card then does not say "1 call". The panel counts only the
+   explanation call ("1 model call, ..."), or says "0 model calls (pick reused)" when
+   the card has no explanation (`:88-89`). The script names the pick as a model call, so
+   do one of these two:
    - wait ten minutes between the last rehearsal (or recording) and the real run; or
    - in rehearsal type `1000 litres of lactose-free milk for Monday`, and on stage type
      `1,000 L lactose-free milk by Monday`. Both read as 1000 L of "lactose free milk" for
@@ -72,23 +76,60 @@ fallback. On 14 Nov at 09:45 Helsinki the model endpoint did not answer for a wh
    option; a new request never does (`gateway/diet.py`, `gateway/service.py:399`). So
    after the last deploy: clear the inbox (step 2), then make the milk request again. Do
    not present an old milk card. Then look at the live card once: if its main button
-   says "Approve option A: ...", the taps of beat 4 hold. If it says "Approve ... incl
-   VAT", the new card is not deployed yet: use the older taps in "The taps on the milk
-   card" below.
+   says "Approve option A: ..." and the card has the line "... of ... · ... not covered",
+   the texts of this file hold. If the button says "Approve ... incl VAT", the new card is
+   not deployed yet: use the older taps in "The taps on the milk card" below.
 
 ## The script (story A: Valio sees it first)
 
 | Time | Beat | What you do | What you say | Criterion |
 |---|---|---|---|---|
 | 0:00 | 1. Valio sees it first | Home on the phone. Point at the open offer on the Home tile "Offer from Valio Aimo": the offered product, "in place of ..., which is predicted short on ...", the amount "from your own forecast", the sentence "written by Valio's selling agent (Nemotron 3.5 Super VL)". Read the product and the day from the tile. Press "Make a proposal": the card waits in the inbox. Do not approve it. | "This kitchen shares its forecast with Valio. Valio's own agent, Nemotron, saw that this product will run short, and offers a substitute before anyone orders. The supplier sends no price and no quantity: the amount is the kitchen's own forecast, and the price comes live from Valio when we ask. It is a normal proposal now, and it waits for a person." | B, E, bonus |
-| 0:25 | 2. The sponsor's request | `/requests`: type `1,000 L lactose-free milk by Monday`, press "Ask the agent". The card opens in `/approvals`, folded. Point at the label beside the heading "To approve": "Live" and "MongoDB Atlas change stream". On the card, point at: the line "Picked by Nemotron 3.5 Super VL · 1 call · ... s"; the short explanation, signed "Written by Nemotron 3.5 Super VL from the checked decision record"; the total with "Option A, recommended by the Buyer" and "... waits for stock confirmation" under it; the chip "Over budget" and the line under the chips. | "This is Valio's own example. A chef writes one sentence, not product codes. New proposals reach this inbox without a refresh, over a MongoDB Atlas change stream. Valio does not have 1,000 litres confirmed in stock, so the card does not pretend: it leads with option A, which orders the confirmed litres now and holds the rest. The explanation gives the price, and says why the cheaper option was not picked: its stock is not confirmed. 'Over budget': the line names the total, how far it is above this kitchen's own warning limit for one order, and the limit. It is a warning, not a block: the money is the kitchen's, so a person decides, not the agent." | A, B |
+| 0:25 | 2. The sponsor's request | `/requests`: type `1,000 L lactose-free milk by Monday`, press "Ask the agent". The card opens in `/approvals`, folded. Point at the label beside the heading "To approve": "Live" and "MongoDB Atlas change stream". On the card, point at: the line "Picked by Nemotron 3.5 Super VL · 1 call · ... s"; the short explanation, signed "Written by Nemotron 3.5 Super VL from the checked decision record" (point at it now: it is gone after the approval); the total with "Option A, recommended by the Buyer" and the coverage line "... of ... · ... not covered" under it; the chip "Over budget" and the line under the chips, "Option A: ... ex VAT is ... above your kitchen's budget warning of ... per order. A warning only." | "This is Valio's own example. A chef writes one sentence, not product codes. New proposals reach this inbox without a refresh, over a MongoDB Atlas change stream. Valio does not have 1,000 litres confirmed in stock, so the card does not pretend: it leads with option A, the confirmed litres, and this line says how much is not covered. Nemotron wrote this short explanation from the checked record. 'Over budget': the line names option A's total, how far it is above this kitchen's own warning limit for one order, and the limit. It is a warning, not a block: the money is the kitchen's, so a person decides, not the agent." | A, B |
 | 0:45 | 3. What Nemotron did | The panel is inside the folded part. On the milk card, press "Inspect (... options)" (or the link "Open the full decision record" under the explanation): the card unfolds. Scroll to the end of the open part and press "What Nemotron did": the panel opens. Folded it says "2 model calls, ... s, thinking off" ("1 model call, ..." when the card has no explanation). Unfolded, each step says "Model:" or "Code:"; the pick is "Model: Picked one product from the shortlist", the last step is "Model: Wrote the explanation on this card from the checked decision record: ... s", and the last line says "Quantities and prices: the engine. Approval: you." | "Two model calls, and neither sets a number. In the first, Nemotron picked the products from a shortlist. In the second, it wrote the short explanation on the card, from the checked record. Code did every other step: the search, the offer, the check against the guards, the request for approval. The model sets no quantity and no price, and it has no approve tool." If the panel says "1 model call", say "One model call: Nemotron picked the products from a shortlist", and leave the second call out. | A, C |
-| 1:05 | 4. A person decides | Two taps. 1: the main button "Approve option A: ..." at the foot of the card (Inspect can stay open or closed). The card chooses option A and loads the new total; wait, do not press twice. 2: the dialog "Approve this order?" opens by itself: press "Yes, approve ...". Read the letter and the total from the screen. The card then says "Approved and recorded: ... Nothing is sent to the supplier." If the main button says "Approve ... incl VAT" with no option letter, see "The taps on the milk card" below. | "A suggestion never becomes an order by itself. I approve the exact total I see: if the price or the stock moves before the order is placed, this yes is refused." | A, C |
+| 1:05 | 4. A person decides | Two taps. 1: the main button "Approve option A: ..." at the foot of the card (Inspect can stay open or closed). The card chooses option A and loads the new total; wait, do not press twice. 2: the dialog "Approve this order?" opens by itself: press "Yes, approve ...". Read the letter and the total from the screen. The card then says "Approved and recorded: ... Nothing is sent to the supplier." The explanation is not on the card after this: do not go back to point at it. | "A suggestion never becomes an order by itself. I approve the exact total I see: if the price or the stock moves before the order is placed, this yes is refused." | A, C |
 | 1:25 | 5. Proof | `/orders`: open the milk order you just approved. Point at the block "Signed receipt": "Approved by", "Signed at", "Signed total", and under "Supplier" the words "Nothing sent to the supplier yet". Then `/trust` (the page "Tamper check"): point at the badge "Audit log stored in MongoDB Atlas", press "Verify audit chain", and point at the result line "Audit log intact: each of the ... entries carries the hash of the one before it". If a judge asks more about MongoDB: `/about`, the card "The data lives in MongoDB Atlas". | "An order that a person approves gets a signed receipt. Anyone can check it with our public key; change one number and the check fails. It also says plainly that Valio's test API has no order endpoint, so nothing was sent. And every step is in this log, in MongoDB Atlas, each line hashed with the one before." | C, E |
 | 1:50 | 6. A recall | `/approvals`, the recall panel. Point at the stored alert. Do not press "Check recalls now". | "The Finnish Food Authority recalled batches of this coffee. It is on our shelf and in three of our recipes. New orders leave it out, and a person checks the packs." | D |
 | 2:00 | 7. A rule the agent cannot break | `/requests`: type `15 kg peanut butter`, press "Ask the agent". | "This kitchen excludes peanuts. The request is refused in under a second, before any model runs, and nothing else is swapped in. An agent that 'helps' with plain butter would be worse than no agent." | C, D |
 | 2:20 | 8. Any agent | Terminal: `python -m demo.second_agent --make-token`. It prints ten lines. Point at line 9: "the agent tries to approve its own proposal: HTTP 403 HUMAN_SESSION_REQUIRED". | "This is not our agent's door. An outside client reads our public agent card, connects over MCP, searches, gets an offer and asks for approval. Then it tries to approve its own proposal: 403. Only a person approves." | E |
 | 2:45 | 9. Close | `/demand`: the Valio planner view. | "Valio sees the demand of every kitchen that agreed to share, and which lines will be short. That is how its agent knew about the shortage on the tile. Open interface, a person signs, and every step is in a hash-chained log." | bonus |
+
+## Short version: milk first, six beats (the mock jury's order; Aron chooses which to present)
+
+Three mock jury rounds (four judges in the last two) said the same: open with the sponsor's
+sentence, six beats, no terminal on stage. Aron has not chosen yet, so story A above stays;
+this is the ready alternative. About 2:30 in all. The spoken lines are story A's, shortened.
+The numbers come from the screen. "Before you go on stage" counts for this order too, and
+one thing more: record the clip of beat 6 before the stage.
+
+| Time | Beat | What you do | What you say | Criterion |
+|---|---|---|---|---|
+| 0:00 | 1. The sponsor's request | `/requests`: type `1,000 L lactose-free milk by Monday`, press "Ask the agent". The card opens in `/approvals`, folded. Point at: the line "Picked by Nemotron 3.5 Super VL · 1 call · ... s"; the total with "Option A, recommended by the Buyer"; the coverage line "... of ... · ... not covered"; the chip "Over budget" and its line "Option A: ... ex VAT is ... above your kitchen's budget warning of ... per order. A warning only." | "This is Valio's own example. A chef writes one sentence, not product codes. Valio does not have 1,000 litres confirmed in stock, so the card does not pretend: it leads with the confirmed litres, and says how much is not covered. 'Over budget' is this kitchen's own warning limit for one order: a warning, not a block. The money is the kitchen's, so a person decides." | A, B |
+| 0:30 | 2. What Nemotron did | Point at the short explanation on the card, signed "Written by Nemotron 3.5 Super VL from the checked decision record" (now: it is gone after the approval). Press "Inspect (... options)", scroll to the end of the open part, press "What Nemotron did". It says "2 model calls, ... s, thinking off"; the last line says "Quantities and prices: the engine. Approval: you." | "Two model calls, and neither sets a number. First Nemotron picked the products from a shortlist. Then it wrote this explanation from the checked record. Code did the search, the offer, the check and the request for approval. The model has no approve tool." If the panel says "1 model call", say only the pick. | A, C |
+| 0:55 | 3. A person decides | The main button "Approve option A: ..."; wait; in the dialog "Approve this order?" press "Yes, approve ...". The card then says "Approved and recorded: ... Nothing is sent to the supplier." | "A suggestion never becomes an order by itself. I approve the exact total I see: if the price or the stock moves, this yes is refused." | A, C |
+| 1:10 | 4. Proof | `/orders`: open the milk order. Point at the block "Signed receipt" and, under "Supplier", the words "Nothing sent to the supplier yet". Then `/trust`: the badge "Audit log stored in MongoDB Atlas", press "Verify audit chain", point at "Audit log intact: each of the ... entries carries the hash of the one before it". | "A person's yes gets a signed receipt. Anyone can check it with our public key; change one number and the check fails. It says plainly that Valio's test API has no order endpoint, so nothing was sent. And every step is in this log, in MongoDB Atlas, each line hashed with the one before." | C, E |
+| 1:40 | 5. Two guards | `/requests`: type `15 kg peanut butter`, press "Ask the agent": refused. Then `/approvals`: point at the folded recall row, "1 recall: ... is in your stock (...)." Do not unfold it and do not press "Check recalls now". | "This kitchen excludes peanuts: refused in under a second, before any model runs, and nothing is swapped in. And a recall: the Finnish Food Authority recalled this coffee, it is on our shelf, and new orders leave it out." | C, D |
+| 2:00 | 6. Valio's side | Home: the tile "Offer from Valio Aimo"; point at "written by Valio's selling agent (Nemotron 3.5 Super VL)". Do not press "Make a proposal". Then play the 10-second clip: an outside agent's run that ends with "the agent tries to approve its own proposal: HTTP 403 HUMAN_SESSION_REQUIRED". No terminal on stage. | "Valio's own agent saw the shortage first: this kitchen shares its forecast, and Valio offers a substitute before anyone orders, with no price and no quantity from the supplier. And the door is open to any agent: this outside client connected over MCP, asked for approval, then tried to approve its own proposal. 403. Only a person approves." | B, E, bonus |
+
+**The clip of beat 6.** Record it before the stage, in a terminal in the repo:
+`python -m demo.second_agent --make-token`. Record the screen while it runs, and cut to about
+10 seconds that end on line 9 ("9. the agent tries to approve its own proposal: HTTP 403
+HUMAN_SESSION_REQUIRED") and the line that starts with "RESULT:". The run leaves one
+waiting proposal in the inbox: clear the inbox after it (step 2). Say "recorded before the
+stage" if a judge asks; the command runs live on request.
+
+**If a judge asks:** `/demand`, the Valio planner view ("Valio sees the demand of every
+kitchen that agreed to share, and which lines will be short"); `/about`, the card "The
+data lives in MongoDB Atlas". Neither is a beat here.
+
+**The recall row** is one folded line since #1629
+(`web/src/components/purchasing/recall-panel.tsx:83-97`). Its words depend on the stored
+alert; read them in rehearsal.
+
+## Notes for both orders
+
+The beat numbers in these notes are story A's. In the short version the milk card is beat
+1 to 3, the proof is beat 4, the two guards are beat 5.
 
 **The numbers of the milk beat come from the screen, not from this file.** Valio's stock
 moves, so the confirmed litres and the total of option A change:
@@ -101,61 +142,77 @@ moves, so the confirmed litres and the total of option A change:
 - Today's values were not read for this text: reading them needs a live request, which
   writes a need and a proposal. Read them off the card in rehearsal and say those.
 
-**The taps on the milk card** (beat 3 and 4). This is the card on `main` after #1897 and
-#1905; it shows live only after the next deploy, so look at the live card first (step 9).
+**The taps on the milk card** (beat 3 and 4). This is the card on `main` on 15 Nov; a
+change shows live only after its deploy, so look at the live card first (step 9).
 
-- Every card starts folded (`web/src/components/purchasing/approval-card.tsx:225`). The
-  folded card shows the line "Picked by Nemotron 3.5 Super VL · 1 call · ... s" (`:611`,
-  `model-trace-panel.tsx:108-125`, #1890) and the short explanation. No tap is needed to
-  read who picked.
+- Every card starts folded (`web/src/components/purchasing/approval-card.tsx:251`). The
+  folded card shows the line "Picked by Nemotron 3.5 Super VL · 1 call · ... s" (`:671`,
+  `model-trace-panel.tsx:112-128`) and the short explanation. No tap is needed to read
+  who picked.
 - The "What Nemotron did" panel is still inside the part that "Inspect (... options)"
-  opens (`approval-card.tsx:916`, the button `:930`), and the panel itself is folded. So
+  opens (`approval-card.tsx:979`, the button `:993`), and the panel itself is folded. So
   beat 3 needs two taps: Inspect, then "What Nemotron did". The number in the Inspect
   label is the count of options on the card. The panel counts the pick and the explanation:
-  "2 model calls" (`model-trace-panel.tsx:179`).
+  "2 model calls" (`model-trace-panel.tsx:183`).
 - The card leads with the recommended option while nobody changed the basket: the total is
   that option's, with "Option A, recommended by the Buyer" under it, and the main button
-  says "Approve option A: ..." (`approval-card.tsx:327-332`, `:962`). One press chooses
+  says "Approve option A: ..." (`approval-card.tsx:351`, `:1025`). One press chooses
   option A, the gateway works the order out again, and the dialog "Approve this order?"
-  opens by itself (`:422-426`, `:334-339`). "Open Inspect first" is not needed for the
-  approval any more.
-- The line "Option ..., the basket proposed now: ..." under the total is the Buyer's own
-  basket, another option than the one the card leads with. Do not read that amount as
-  the total you approve.
-- The main button says "Approve ... incl VAT" with no letter (`:976`) in three cases: a
-  person already picked an option or changed a line on this card; the recommended option
-  is already the basket; or the site still runs the older card. Then: if the option
-  marked "Recommended by the Buyer" is also marked "Proposed now" in the list, press
-  the main button and "Yes, approve ...". Else open "Inspect (... options)", and under
-  "Your options" press "Choose option A: approve ... incl VAT"; the dialog opens after a
-  moment (`web/src/components/purchasing/option-compare.tsx:148-152`).
+  opens by itself (`:482`).
+- The words stay the same after the choice: the card still says "Option A, recommended by
+  the Buyer" and the button still says "Approve option A: ..." (`:722`, `:1039`). So if
+  the dialog was closed with "Cancel", press the same button again.
+- Under the total, the coverage line says what was asked and what option A covers: "... of
+  ... · ... not covered" (`:383-405`, #1970). It took the place of "... waits for stock
+  confirmation" on the folded card; that sentence is now only inside Inspect, under the
+  option.
+- Before the choice, the line "Option ..., the basket proposed now: ..." under the total is
+  the Buyer's own basket, another option than the one the card leads with. Do not read
+  that amount as the total you approve.
+- A basket a person edited is no option: its button says "Approve ..." with no letter
+  (`:1040`). Change no line on the milk card before the approval. A button "Approve ...
+  incl VAT" means the site still runs the older card: then open "Inspect (... options)",
+  and under "Your options" press the button that starts with "Choose option A: approve";
+  the dialog opens after a moment.
 - In beat 3, press nothing under "Your options": a press there makes the total and the
-  main button follow that pick (`approval-card.tsx:412`, `:890`).
+  main button follow that pick (`approval-card.tsx:472`, `:953`). The option button on
+  `main` reads "Choose option A: approve ..." (`option-compare.tsx:371`).
+- The options view inside Inspect, on `main` today: the badges "Recommended by the Buyer",
+  "Part now, the rest later", "Proposed now" and "The supplier must confirm stock"; the
+  facts "Total" ("... in all"), "Stock" ("confirmed") and "Order cut-off" ("order by ..."
+  or "met (order by ...)"); and "... waits for stock confirmation"
+  (`option-compare.tsx:252-259`, `:285-305`, `:352`). PR #1988 (open on 15 Nov) changes this
+  view: the supplier's name in the badge, how much is confirmed and how much waits, and
+  the delivery day. Do not quote a label of the options view on stage before you saw it
+  on the live card.
 
-**The chip "Over budget" and its line** (beat 2). The chip shows when the order total is
-above the kitchen's budget warning for one order (`gateway/service.py`
-`OVER_BUDGET_WARNING`, `engine/offers.py:220-221`; the chip:
-`web/src/lib/proposal-checks.ts:104-105`). Under the chips, one line says it in numbers:
-"... ex VAT is ... above your kitchen's budget warning of ... per order. A warning only."
-(`approval-card.tsx:363-371`, #1897). When the kitchen's limit is not known to the page it
-says "The total is above your kitchen's budget warning per order. A warning only." The
-limit is the kitchen's own setting (Settings, "Per order (ex VAT, €)"); the engine default
-is EUR 1,500 (`engine/params.py:24`). **The line can be about another option than A.**
-While the card leads with option A, the line starts with "Option B:" (or another
-letter): its numbers are for the basket proposed now, not for option A (`:744`). Then say
-"the Buyer's own basket is over the limit" and do not say option A is over budget. If
-the chip is not on the card, skip its sentence.
+**The chip "Over budget" and its line** (beat 2). The chip shows when the total of the
+option on the card is above the kitchen's budget warning for one order
+(`gateway/service.py` `OVER_BUDGET_WARNING`, `engine/offers.py:220-221`;
+`approval-card.tsx:368-381`). Under the chips, one line says it in numbers and names its
+option: "Option A: ... ex VAT is ... above your kitchen's budget warning of ... per order. A
+warning only." (`:423-431`, `:807`). The numbers are for the option whose total the card
+shows, so while the card leads with option A they are option A's (#1970). When the
+kitchen's limit is not known to the page it says "The total is above your kitchen's
+budget warning per order. A warning only." The limit is the kitchen's own setting
+(Settings, "Per order (ex VAT, €)"); the engine default is EUR 1,500
+(`engine/params.py:24`). If option A is under the limit, the chip and the line are not on
+the card: skip the sentence.
 
 **The explanation on the card** (beat 2). Nemotron writes it from the checked decision
 record, in its own model call; the line under it says "Written by Nemotron 3.5 Super VL
 from the checked decision record · 1 call · ... s"
-(`web/src/components/purchasing/proposal-explanation.tsx:51-56`). After #1877 it states
-the price, and why the cheaper option was not picked when the record says so: "a cheaper
-option was found, EUR ... ex VAT instead of EUR ... ex VAT, ... but its stock is not
-confirmed and the purchasing engine uses confirmed stock before price" is the fact the
-model gets (`gateway/explanation_facts.py:11-39`); the model's own words can differ. The text changes with the stock: read it in
-rehearsal, and say the sentence about the cheaper option only if the card has it. The
-explanation is asked after the card is drawn, so it can come a moment later, or not at
+(`web/src/components/purchasing/proposal-explanation.tsx`). Two rules for the stage:
+
+- **Point at it before the approve tap.** The card asks for the explanation only while
+  the proposal waits (`approval-card.tsx:259-261`), so after the approval it is not on
+  the card, and the panel then counts one call less.
+- **Do not promise a sentence about a cheaper option.** The model gets that fact only when
+  the decision record holds a cheaper alternative (`gateway/explanation_facts.py:11-39`).
+  The proposal with confirmed stock only has none, so its explanation does not name one.
+  Say what the text on the card says, not more.
+
+The explanation is asked after the card is drawn, so it can come a moment later, or not at
 all when the model is slow; the panel then says "1 model call".
 
 **Where MongoDB Atlas shows on screen.** Three places, all in beats that exist:
@@ -174,8 +231,9 @@ all when the model is slow; the panel then says "1 model call".
 Nemotron picks the products, and code makes every tool step (`deploy/compose.yaml:86`,
 `agent/service.py:65`, `agent/single_pick.py`; #1257). The explanation on the card is one
 more model call, made after the proposal exists; the panel counts both. A pick that
-repeats within ten minutes comes from a cache: the panel then shows the pick as a "Code:"
-step and counts no model call for it (`agent/service.py:134-137`). So type the request
+repeats within ten minutes comes from a cache: the panel then shows the pick as the step
+"Code: Reused Nemotron’s pick for the same request from a few minutes ago" and counts no
+model call for it (`agent/service.py:134-137`). So type the request
 once in rehearsal and once on stage, at least ten minutes apart, or use the second wording
 of "Before you go on stage", step 8. If the panel still shows it, say "the pick was
 cached".
@@ -204,7 +262,7 @@ approved order (shots 1 to 4), is inside the first 60 seconds. Each shot stays u
 text can be read. The numbers come from the screen.
 
 1. `/requests`: the typed sentence `1,000 L lactose-free milk by Monday` in the box, and the button "Ask the agent".
-2. `/approvals`, the milk card, folded: the line "Picked by Nemotron 3.5 Super VL · 1 call · ... s", the total with "Option A, recommended by the Buyer", and the line "... waits for stock confirmation" (the litres that wait). Then "Inspect (... options)" open: option A under "Your options", with the confirmed litres on its line.
+2. `/approvals`, the milk card, folded: the line "Picked by Nemotron 3.5 Super VL · 1 call · ... s", the short explanation, the total with "Option A, recommended by the Buyer", and the coverage line "... of ... · ... not covered" (the litres confirmed and the litres that wait).
 3. The same card after "Inspect (... options)": the "What Nemotron did" panel open, with "2 model calls, ... s, thinking off", the "Model:" and "Code:" steps and the line "Quantities and prices: the engine. Approval: you."
 4. The same card: the main button "Approve option A: ...", the dialog "Approve this order?" with "Yes, approve ...", then the card with "Approved and recorded: ... Nothing is sent to the supplier."
 5. `/orders`, the milk order: the block "Signed receipt" with "Approved by", "Signed total", and under "Supplier" the words "Nothing sent to the supplier yet" and the note "Recorded by the gateway. Nothing was sent to the supplier: its API has no order endpoint. The supplier has not accepted this order."
@@ -215,7 +273,8 @@ The receipt's own claim is `supplier_outcome: NOT_SENT` (`gateway/signing.py:132
 shows it as "Nothing sent to the supplier yet" (`web/src/pages/order-detail.tsx:88-89`).
 Before the recording, mind the pick cache ("Before you go on stage", step 8): shot 3 must
 show a "Model:" pick step. Make the milk request fresh after the last deploy (step 9), and
-check the live card first: these labels show only after the deploy of #1905.
+check the live card first: these labels show only after their deploy. The explanation is
+on the card only before the approval, so shot 2 comes before shot 4.
 
 ## NVIDIA demo: five Nemotron jobs in 90 seconds (#1196)
 
