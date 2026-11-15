@@ -90,6 +90,7 @@ export default {
   "Chef substitute choices": "Kokin korvikevaihtoehdot",
   "Choose option {letter}: approve {amount}": "Valitse vaihtoehto {letter}: hyväksy {amount}",
   "{amount} in all": "{amount} yhteensä",
+  "You approve exactly {exVat} ex VAT ({inclVat} incl VAT). If the price or stock moves before it is placed, the gateway refuses it and asks again.": "Hyväksyt tasan {exVat} ilman alv ({inclVat} sis. alv). Jos hinta tai varasto muuttuu ennen tilaamista, yhdyskäytävä hylkää sen ja pyytää uuden hyväksynnän.",
   "Close this proposal? Its recall notices continue blocking future quotes until a person checks and dismisses them.": "Suljetaanko ehdotus? Sen takaisinvetoilmoitukset estävät tulevat tarjoukset, kunnes ihminen tarkistaa ja ohittaa ne.",
   "Compare": "Vertailuhinta",
   "Confirm and record order": "Vahvista ja kirjaa tilaus",

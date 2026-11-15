@@ -1015,12 +1015,17 @@ export function ApprovalCard({
           <DialogHeader>
             <DialogTitle>{t("Approve this order?")}</DialogTitle>
             <DialogDescription>
-              {/* #1738: the approve figure may hold a delivery fee, so it is never called incl VAT. */}
-              {t("You approve exactly {exVat} ex VAT, {amount} in all ({total}). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
-                exVat: formatEur(request.totalExVat),
-                amount: formatEur(request.totalInclVat),
-                total: inclVatText(request, t, formatEur),
-              })}
+              {/* #1738: an approve figure unlike the incl VAT total may hold a delivery fee: never called incl VAT. */}
+              {approveDiffers
+                ? t("You approve exactly {exVat} ex VAT, {amount} in all ({total}). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
+                    exVat: formatEur(request.totalExVat),
+                    amount: formatEur(request.totalInclVat),
+                    total: inclVatText(request, t, formatEur),
+                  })
+                : t("You approve exactly {exVat} ex VAT ({inclVat} incl VAT). If the price or stock moves before it is placed, the gateway refuses it and asks again.", {
+                    exVat: formatEur(request.totalExVat),
+                    inclVat: formatEur(request.totalInclVat),
+                  })}
             </DialogDescription>
           </DialogHeader>
           {waitingNotice ? <p className="hatch text-sm text-warning">{waitingNotice}</p> : null}
