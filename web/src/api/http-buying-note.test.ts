@@ -75,6 +75,25 @@ describe("Buying note gateway boundary", () => {
     expect(refused).toMatchObject({ code: "RATE_LIMITED", status: 429, retryAfterS: 2 });
   });
 
+  it("asks again while another note is being written, then gives the note", async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      vi.stubGlobal("fetch", async () => {
+        calls += 1;
+        return calls === 1
+          ? new Response(JSON.stringify({ error: { code: "BUYING_NOTE_BUSY", message: "busy" } }), { status: 429 })
+          : new Response(JSON.stringify(ANSWER), { status: 200 });
+      });
+      const pending = createHttpApi("/api").getBuyingNote("2026-11-16", "2026-11-22", "fi");
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(await pending).not.toBeNull();
+      expect(calls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rejects a malformed answer instead of hiding the failed note", async () => {
     for (const body of [
       { ...ANSWER, model: 3 },
