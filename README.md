@@ -1,8 +1,8 @@
-# Trusted Kitchen Buyer
+# Kitchen Buyer
 
 Junction 2026, team 2Brothers (Aron, Tymon, Maciek). Challenge: **Valio Aimo, Trusted Trade Agents**.
 
-Trusted Kitchen Buyer makes Valio Aimo readable for any purchasing agent: an agent looks up
+Kitchen Buyer makes Valio Aimo readable for any purchasing agent: an agent looks up
 product, price and availability and gets a signed offer, and a person approves every order.
 
 The kitchen says what it needs, or plans its menus. Our own agent (the **Buyer**) finds
