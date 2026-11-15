@@ -21,6 +21,7 @@ export default {
   "{calls} model calls, {seconds} s, thinking on": "{calls} mallikutsua, {seconds} s, ajattelu päällä",
   "1 model call, {seconds} s, thinking off": "1 mallikutsu, {seconds} s, ajattelu pois",
   "{calls} model calls, {seconds} s, thinking off": "{calls} mallikutsua, {seconds} s, ajattelu pois",
+  "0 model calls (pick reused)": "0 mallikutsua (valinta käytetty uudelleen)",
   "1 model call, {seconds} s": "1 mallikutsu, {seconds} s",
   "{calls} model calls, {seconds} s": "{calls} mallikutsua, {seconds} s",
   "Quantities and prices: the engine. Approval: you.": "Määrät ja hinnat: moottori. Hyväksyntä: sinä.",
@@ -49,6 +50,8 @@ export default {
   "Built a shortlist of {count} products from the catalog": "Kokosi tuoteluettelosta {count} tuotteen lyhytlistan",
   "Picked one product from the shortlist": "Valitsi lyhytlistalta yhden tuotteen",
   "The rule picked the first product": "Sääntö valitsi ensimmäisen tuotteen",
+  "Reused Nemotron’s pick for the same request from a few minutes ago":
+    "Käytti uudelleen Nemotronin valintaa samaan pyyntöön muutaman minuutin takaa",
   "Made a call the policy could not read": "Teki kutsun, jota sääntö ei pystynyt lukemaan",
   "{action} — refused by the policy ({code})": "{action} – sääntö hylkäsi ({code})",
   "{action} — the tool failed": "{action} – työkalu epäonnistui",
