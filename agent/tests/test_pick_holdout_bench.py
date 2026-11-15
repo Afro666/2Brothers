@@ -67,6 +67,7 @@ def test_one_pass_persists_failures_resumes_without_reruns_and_rejects_changed_i
 
         async def complete_json(self, messages, schema, name, **kwargs):
             self.calls += 1
+            assert json.loads(path.read_text())['results'][-1]['attempt_state'] == 'started'
             if len(instances) == 1:
                 raise RuntimeError('PRIVATE_PROVIDER_TEXT')
             return {'content': '{"picks":[{"index":0,"reason":"Matches the request"}]}'}
@@ -84,8 +85,11 @@ def test_one_pass_persists_failures_resumes_without_reruns_and_rejects_changed_i
     assert len(report['results']) == 20 and report['summary']['usage']['calls'] == 20
     assert report['results'][0]['error_type'] == 'RuntimeError'
     assert 'PRIVATE_PROVIDER_TEXT' not in path.read_text() and 'test-only-placeholder' not in path.read_text()
+    # An uncertain interrupted attempt is also never reissued on resume.
+    report['results'][1]['attempt_state'] = 'started'
+    path.write_text(json.dumps(report))
     asyncio.run(bench.run(path, factory=Fake))
-    assert len(instances) == 20  # even the failed first call is not retried
+    assert len(instances) == 20  # neither failures nor interrupted attempts are retried
     report['frozen']['fixture_sha256'] = 'changed'
     path.write_text(json.dumps(report))
     with pytest.raises(ValueError, match='refuse to mix'):

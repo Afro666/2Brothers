@@ -71,6 +71,7 @@ def engine_result(case, rows):
 
 
 def summarize(results):
+    finished_seconds = [r['seconds'] for r in results if 'seconds' in r]
     usage = {key: sum(r.get('usage', {}).get(key, 0) for r in results)
              for key in ('calls', 'failed', 'prompt_tokens', 'completion_tokens')}
     return {'cases': len(results), 'schema_valid': sum(r['schema_valid'] for r in results),
@@ -79,8 +80,8 @@ def summarize(results):
             'guarded_exact': sum(r['guarded_exact'] for r in results),
             'engine_exact': sum(r['engine']['exact'] for r in results),
             'incomplete_attempts': sum(r.get('attempt_state') == 'started' for r in results),
-            'median_model_roundtrip_seconds': round(statistics.median(r['seconds'] for r in results), 3)
-                if results else None, 'usage': usage,
+            'median_model_roundtrip_seconds': round(statistics.median(finished_seconds), 3)
+                if finished_seconds else None, 'usage': usage,
             'by_family': {family: {'cases': len(group),
                 'raw_exact': sum(r['raw_exact'] for r in group),
                 'guarded_exact': sum(r['guarded_exact'] for r in group),
