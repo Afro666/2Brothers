@@ -1,4 +1,3 @@
-import { ReadRefresh } from "@/components/purchasing/read-refresh";
 import { formatDateTime, formatEur, formatShortfall } from "@/lib/format";
 import { useLiveEvents } from "@/lib/live-events";
 import { usePendingApprovals } from "@/lib/pending-approvals";
@@ -51,7 +50,6 @@ export function ApprovalTile({ api }: { api: Api }) {
       emphasis
       footer={<DecisionStrip />}
     >
-      <ReadRefresh refreshing={state.refreshing} outdated={state.outdated} reload={state.reload} />
       {state.status === "loading" && count !== null ? (
         <div>
           <p className="docket-figure text-3xl tabular-nums sm:text-[5.5rem] sm:leading-[0.8]">{count}</p>
@@ -59,6 +57,8 @@ export function ApprovalTile({ api }: { api: Api }) {
         </div>
       ) : <TileState
         status={state.status}
+        refreshing={state.refreshing}
+        outdated={state.outdated}
         error={state.error}
         reload={state.reload}
         data={state.status === "ready" ? state.data : null}
@@ -113,6 +113,8 @@ export function CutoffTile({ api, now }: { api: Api; now: Date }) {
       <SampleData of="listSuppliers" />
       <TileState
         status={state.status}
+        refreshing={state.refreshing}
+        outdated={state.outdated}
         error={state.error}
         reload={state.reload}
         data={state.status === "ready" ? state.data : null}
@@ -157,6 +159,8 @@ export function StockTile({ api, now }: { api: Api; now: Date }) {
       <SampleData of="getStock" />
       <TileState
         status={state.status}
+        refreshing={state.refreshing}
+        outdated={state.outdated}
         error={state.error}
         reload={state.reload}
         data={state.status === "ready" ? state.data : null}
@@ -217,6 +221,8 @@ export function AuditTile({ api }: { api: Api }) {
     >
       <TileState
         status={state.status}
+        refreshing={state.refreshing}
+        outdated={state.outdated}
         error={state.error}
         reload={state.reload}
         data={state.status === "ready" ? state.data : null}

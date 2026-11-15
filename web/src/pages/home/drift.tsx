@@ -121,6 +121,8 @@ function DriftTileBody({
       <SampleData of={side === "kitchen" ? "getDrift" : "getSupplierDrift"} />
       <TileState<DriftReport>
         status={state.status}
+        refreshing={state.refreshing}
+        outdated={state.outdated}
         error={state.error}
         reload={state.reload}
         data={state.status === "ready" ? state.data : null}

@@ -1,3 +1,4 @@
+import { ReadRefresh } from "@/components/purchasing/read-refresh";
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
@@ -55,6 +56,8 @@ export function Tile({
 
 export function TileState<T>({
   status,
+  refreshing = false,
+  outdated = false,
   error,
   reload,
   data,
@@ -62,6 +65,8 @@ export function TileState<T>({
   children,
 }: {
   status: "loading" | "error" | "ready";
+  refreshing?: boolean;
+  outdated?: boolean;
   error: Error | null;
   reload: () => void;
   data: T | null;
@@ -73,5 +78,5 @@ export function TileState<T>({
   if (status === "error")
     return <ErrorState message={error?.message ?? t("Could not load this tile.")} onRetry={reload} />;
   if (empty || data === null) return <EmptyState title={t("No data yet")} />;
-  return children(data);
+  return <><ReadRefresh refreshing={refreshing} outdated={outdated} reload={reload} />{children(data)}</>;
 }
