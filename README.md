@@ -13,7 +13,8 @@ forecast demand of all its customers before the orders come in.
 No order reaches Valio: Valio's mock API has no order route. The gateway records the approved
 order with a signed receipt that says `NOT_SENT`.
 
-- **Live demo:** https://31-22-104-201.sslip.io (no password; anyone with the link is the demo person)
+- **Demo video (1:57):** https://youtu.be/7Wu0xuCiUHI
+- **Live demo:** https://kitchenbuyer.pl (no password; anyone with the link is the demo person). The old address https://31-22-104-201.sslip.io keeps working.
 - **For an outside agent:** [`docs/byoa.md`](docs/byoa.md) (curl and MCP), `/llms.txt`, `/gateway/docs`
 - **Why it is built this way:** [`docs/choices.md`](docs/choices.md)
 - **Demo script:** [`docs/demo.md`](docs/demo.md)
