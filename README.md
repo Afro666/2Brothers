@@ -1,5 +1,10 @@
 # Kitchen Buyer
 
+> 🏆 **Winner, Best Use of MongoDB Atlas, Junction 2026** (Espoo, 13 to 15 November 2026).
+>
+> Built at the hackathon by team 2Brothers: Aron, Tymon and Maciek. The project is closed and this
+> repository is archived (read-only) since 16 November 2026. The live demo stays up; the Telegram bot is off.
+
 Junction 2026, team 2Brothers (Aron, Tymon, Maciek). Challenge: **Valio Aimo, Trusted Trade Agents**.
 
 Kitchen Buyer makes Valio Aimo readable for any purchasing agent: an agent looks up

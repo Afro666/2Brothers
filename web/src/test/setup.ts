@@ -1,9 +1,19 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { toast } from "sonner";
-import { afterEach } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 
 import { dropKeptAnswers } from "@/lib/use-async";
+
+// The fixtures are written around the weekend of the event (cut-offs on 15 Nov 2026, deliveries on
+// Mon 16 Nov). With the real clock the suite went red on 16 Nov: cut-offs were in the past and
+// "today" printed the same day as a fixture. Each test starts at the same moment; a test that
+// needs another one sets its own (vi.setSystemTime, or the `now` prop). Only Date is faked, and
+// it keeps ticking: code that waits for a Date.now() deadline (products.tsx) must still reach it.
+export const TEST_NOW = new Date("2026-11-14T12:00:00+02:00");
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now: TEST_NOW, shouldAdvanceTime: true });
+});
 
 afterEach(() => {
   cleanup();

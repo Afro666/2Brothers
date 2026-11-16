@@ -11,14 +11,10 @@ The stack is two containers. `web` is Caddy: it serves the built web app and is 
 thing reachable from outside. `gateway` is the FastAPI gateway (`gateway/Dockerfile`),
 reached only through Caddy. MongoDB stays on Atlas.
 
-`stt` is the speech-to-text service for the Telegram bot (#1331): Whisper, on this server,
-reached only inside the compose network. Its first start downloads the model (about 0.5 GB
-for `small`) into the `stt_models` volume. Check it on the server:
-`docker compose -f deploy/compose.yaml exec stt python -m bot.stt_service --check <audio file>`.
-
-`bot` is the kitchen's Telegram bot (#1330), a client of the gateway. It needs `TELEGRAM_BOT`,
-`BOT_KITCHEN_TOKEN` and `BOT_SITE_URL` in `.env`; without the first two it stays idle. Link a chat:
-`docker compose -f deploy/compose.yaml exec bot python -m bot.links <bot username>`.
+The Telegram bot (`bot`) and its speech-to-text service (`stt`) do not run since 2026-11-16
+(the project closed, #2026). Both services are out of `deploy/compose.yaml`; the code stays in
+`bot/`. Their volumes (`two-brothers_bot_data`, `two-brothers_stt_models`) stay on the server
+until someone removes them.
 
 | Path | Who | Protection |
 |---|---|---|
