@@ -1,5 +1,8 @@
 # bot: Kitchen Buyer in Telegram
 
+> Switched off on 2026-11-16, when the project closed (#2026): the bot and the speech-to-text
+> service are no longer in `deploy/compose.yaml`, so no Telegram message is sent. The code is unchanged.
+
 A chef says or types what the kitchen needs. The bot shows the order as a summary message
 and one message per supplier, takes changes, and opens our approval card for the approval.
 It is a client of the gateway API (`docs/contract.md`) with a kitchen token: it has no

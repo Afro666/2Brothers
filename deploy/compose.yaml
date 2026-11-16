@@ -93,61 +93,10 @@ services:
       GATEWAY_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}
       GATEWAY_BASE_URL: http://gateway:8000
 
-  # Speech to text for the Telegram bot (#1331): Whisper on our own server. Internal only:
-  # no published port and no Caddy route. It holds no key and stores no audio or text.
-  # The limits keep a transcription from taking memory or cores from the gateway.
-  stt:
-    build:
-      context: ..
-      dockerfile: bot/Dockerfile.stt
-    restart: unless-stopped
-    environment:
-      # tiny, base, small or medium. small reads Finnish well enough and needs about 1 GB.
-      WHISPER_MODEL: ${WHISPER_MODEL:-small}
-      WHISPER_THREADS: ${WHISPER_THREADS:-2}
-    volumes:
-      # The model file, downloaded once at the first start.
-      - stt_models:/models
-    mem_limit: 2g
-    cpus: 2.0
-    # Healthy only once the model is loaded (/health says "ready": true). The image has no curl.
-    # A failed download or load leaves the container running but unhealthy in `docker compose ps`.
-    healthcheck:
-      test: ["CMD", "python", "-c", "import json,sys,urllib.request; sys.exit(0 if json.load(urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=5)).get('ready') is True else 1)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      # The first start downloads the model.
-      start_period: 300s
-
-  # The Telegram bot of the kitchen (#1330): a client of the gateway with a kitchen token, which
-  # never approves. No published port: it asks Telegram for new messages (long polling).
-  # Without TELEGRAM_BOT or BOT_KITCHEN_TOKEN in .env it stays idle and says so once in its log.
-  # Only one running bot may use a token: stop a laptop test before this one starts.
-  bot:
-    build:
-      context: ..
-      dockerfile: bot/Dockerfile
-    restart: unless-stopped
-    depends_on:
-      - gateway
-    environment:
-      TELEGRAM_BOT: ${TELEGRAM_BOT:-}
-      # A kitchen API token with read and propose (Settings > API & MCP tokens).
-      BOT_KITCHEN_TOKEN: ${BOT_KITCHEN_TOKEN:-}
-      BOT_KITCHEN_ID: ${GATEWAY_KITCHEN_ID:-demo-kitchen}
-      BOT_GATEWAY_URL: http://gateway:8000
-      # The public address of the site, for the "Open to approve" button (https://...).
-      BOT_SITE_URL: ${BOT_SITE_URL:-}
-      BOT_STT_URL: http://stt:8002
-      BOT_BRIEF_TIMES: ${BOT_BRIEF_TIMES:-}
-    volumes:
-      # The list of linked chats.
-      - bot_data:/data
-    mem_limit: 256m
+  # The Telegram bot (`bot`) and its speech-to-text service (`stt`) were removed on 2026-11-16,
+  # when the project closed: the deploy stops and removes both containers (--remove-orphans).
+  # The code stays in bot/; the services are in git history (deploy/compose.yaml before #2026).
 
 volumes:
   caddy_data:
   caddy_config:
-  stt_models:
-  bot_data:
