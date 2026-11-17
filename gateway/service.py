@@ -1261,11 +1261,12 @@ class Gateway:
             traces = agent_runs.traces(self.db, doc["kitchen_id"], [doc["_id"]])
         return model_trace.stored(traces.get(doc["_id"]))
 
-    def _proposal_out(self, doc: dict, traces: dict | None = None) -> dict:
-        offer = orders.get_offer(self.db, doc["offer_id"])
+    def _proposal_out(self, doc: dict, traces: dict | None = None, batch=None) -> dict:
+        offer = orders.get_offer(self.db, doc["offer_id"]) if batch is None else batch['offers'][doc['offer_id']]
         substitutes = options.merged(doc)
-        found = product_names.labels(self.db, product_names.proposal_ids(
+        found = (product_names.labels(self.db, product_names.proposal_ids(
             {**offer["simulation"], "substitute_options": substitutes}), doc["kitchen_id"])
+                 if batch is None else batch['names'])
         request_out = dict(doc["request"])
         if request_out.get("needs"):
             request_out["needs"] = [{**need, "learned": _learned_out(need["learned"])}
@@ -1279,7 +1280,8 @@ class Gateway:
                 "decision_summary": self._summary(doc["request"], offer["simulation"], doc["kitchen_id"], found),
                 "signature": offer.get("signature"), "offer_hash": offer.get("offer_hash")}
         result.update({key: doc.get(key) for key in ('recall_alerts', 'replacement_proposal_id', 'recall_replan_error', 'product_evidence')})
-        result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []))
+        result['recall_alerts'] = recalls.visible_alerts(self.db, doc['kitchen_id'], doc.get('recall_alerts', []),
+                                                       saved=None if batch is None else batch['alerts'])
         blocked = {a['product_id'] for a in doc.get('recall_alerts', []) if a['match'] in ('exact', 'possible')}
         learned = {need['product_id']: _learned_out(need['learned']) for need in doc['request'].get('needs') or []
                    if need.get('learned')}
@@ -1289,8 +1291,10 @@ class Gateway:
         result['blocks'] = _blocks_out(result, result['lines'])
         from monitor.labels import checks
         from store.products import get_products
-        result['label_checks'] = checks(get_products(self.db,
-            [line['product_id'] for line in result['lines']], doc['kitchen_id']), now=self.now())
+        ids = [line['product_id'] for line in result['lines']]
+        products = (get_products(self.db, ids, doc['kitchen_id']) if batch is None
+                    else [batch['products'][pid] for pid in ids if pid in batch['products']])
+        result['label_checks'] = checks(products, now=self.now())
         result['model_trace'] = self._trace(doc, traces)
         # #1130: names on every line kind, read in one query for the whole proposal.
         return product_names.name_proposal(result, found)
@@ -1310,10 +1314,28 @@ class Gateway:
         return self._proposal_out(doc)
 
     def list_proposals(self, kitchen_id: str) -> list[dict]:
+        return self.proposal_page(kitchen_id)['proposals']
+
+    def proposal_page(self, kitchen_id: str, *, cursor=None) -> dict:
         from store import agent_runs
-        docs = list(self.db.proposals.find({"kitchen_id": kitchen_id}).sort("created_at", -1).limit(100))
+        from store import proposals
+        from store.products import get_products
+        try:
+            docs, next_cursor = proposals.page(self.db, kitchen_id, cursor=cursor)
+        except ValueError:
+            raise GatewayError(422, 'INVALID_REQUEST', 'invalid proposal cursor') from None
         traces = agent_runs.traces(self.db, kitchen_id, [d["_id"] for d in docs])     # one read for all
-        return [self._proposal_out(d, traces) for d in docs]
+        offers = orders.get_offers(self.db, [d['offer_id'] for d in docs])
+        ids = set()
+        for doc in docs:
+            ids |= product_names.proposal_ids({**offers[doc['offer_id']]['simulation'],
+                                              'substitute_options': options.merged(doc)})
+        batch = {'offers': offers, 'names': product_names.labels(self.db, ids, kitchen_id),
+                 'products': {p['product_id']: p for p in get_products(self.db, list(ids), kitchen_id)},
+                 'alerts': recalls.alert_rows(self.db, kitchen_id,
+                     [a['event_id'] for d in docs for a in d.get('recall_alerts', [])])}
+        return {'proposals': [self._proposal_out(d, traces, batch) for d in docs],
+                'next_cursor': next_cursor, 'pending_count': proposals.pending_count(self.db, kitchen_id)}
 
     def approve(self, kitchen_id: str, proposal_id: str, body: dict, *, human: str | None,
                 via: dict | None = None) -> dict:
