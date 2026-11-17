@@ -109,3 +109,32 @@ def test_repeated_cancellation_does_not_interrupt_durable_cleanup():
                 await task
             assert db.agent_runs.find_one()['state'] == 'RECONCILE'
     asyncio.run(check())
+
+
+@pytest.mark.parametrize('failure', ['timeout', 'error'])
+def test_cancellation_while_finalizing_failure_cannot_skip_reconciliation(failure):
+    async def check():
+        db = mongomock.MongoClient().test
+        entered, release = Event(), Event()
+        original = agent_runs.finish
+        def finish(*args, **kwargs):
+            entered.set()
+            assert release.wait(2)
+            return original(*args, **kwargs)
+        class ErrorGateway:
+            async def request(self, *args, **kwargs):
+                raise RuntimeError('fixture error before model initialization')
+        worker = BuyerWorker(db, WaitingGateway() if failure == 'timeout' else ErrorGateway(), timeout=0.01)
+        with patch('agent.service.buyer_context.excluded_allergens', return_value=[]), patch('agent.service.agent_runs.finish', finish):
+            task = asyncio.create_task(worker.run('k', BODY))
+            try:
+                assert await asyncio.to_thread(entered.wait, 1)
+                task.cancel()
+                await asyncio.sleep(0)
+                task.cancel()
+            finally:
+                release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert db.agent_runs.find_one()['state'] == 'RECONCILE'
+    asyncio.run(check())

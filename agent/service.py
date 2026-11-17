@@ -40,6 +40,16 @@ async def _settle_cleanup(awaitable):
                 return task.result()
 
 
+async def _finish_run(db, run_id, **fields):
+    """Do not cancel a queued durable write; propagate cancellation after it finishes."""
+    task = asyncio.create_task(asyncio.to_thread(agent_runs.finish, db, run_id, **fields))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        await _settle_cleanup(task)
+        raise
+
+
 def parse_need(body, *, today=None):
     """Extract only an unambiguous explicit quantity; never ask a model to size it."""
     text = body.get('text')
@@ -198,7 +208,7 @@ class BuyerWorker:
             return result
         try:
             result = await asyncio.wait_for(execute(), timeout=self.timeout)
-            await asyncio.to_thread(agent_runs.finish, self.db, row['_id'], state='READY', result=result)
+            await _finish_run(self.db, row['_id'], state='READY', result=result)
             status = 'READY'
             return result
         except asyncio.CancelledError:
@@ -206,10 +216,10 @@ class BuyerWorker:
                                                   state='RECONCILE', result=None, usage=used(model)))
             raise
         except asyncio.TimeoutError:
-            await asyncio.to_thread(agent_runs.finish, self.db, row['_id'], state='RECONCILE', result=None, usage=used(model))
+            await _finish_run(self.db, row['_id'], state='RECONCILE', result=None, usage=used(model))
             raise WorkerError(504, 'BUYER_TIMEOUT', fallback_safe=buyer is None or not buyer.mutations) from None
         except Exception as exc:
-            await asyncio.to_thread(agent_runs.finish, self.db, row['_id'], state='RECONCILE', result=None, usage=used(model))
+            await _finish_run(self.db, row['_id'], state='RECONCILE', result=None, usage=used(model))
             if isinstance(exc, WorkerError):
                 raise
             raise WorkerError(503, 'BUYER_UNAVAILABLE', fallback_safe=buyer is None or not buyer.mutations) from None
