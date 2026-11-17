@@ -66,7 +66,7 @@ describe("HTTP event stream", () => {
     stop();
   });
 
-  it.each([401, 403, 503])("stops after HTTP %s", async (status) => {
+  it.each([401, 403])("stops after HTTP %s", async (status) => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status })));
     const onStatus = vi.fn();
@@ -78,10 +78,21 @@ describe("HTTP event stream", () => {
     stop();
   });
 
+  it("stops after a permanent 503", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      error: { code: "EVENTS_UNAVAILABLE", message: "the event stream needs MongoDB change streams (a replica set)" },
+    }), { status: 503 })));
+    const stop = subscribe();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
   it.each([
     [401, 2],
     [403, 2],
-    [503, 1],
   ])("after HTTP %s a sign-in leaves %s request(s) in total", async (status, calls) => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status })));

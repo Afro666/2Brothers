@@ -25,20 +25,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const api = useApi();
   const navigate = useNavigate();
   const initialLoadStarted = useRef(false);
+  // A lookup that started before a newer sign-in or sign-out must not overwrite it.
+  const reloadGeneration = useRef(0);
   const [status, setStatus] = useState<SessionContextValue["status"]>("loading");
   const [session, setSession] = useState<Session | null>(null);
   const [signInRevision, setSignInRevision] = useState(0);
   const [failure, setFailure] = useState<Error | null>(null);
 
   const reload = useCallback(async () => {
+    const generation = ++reloadGeneration.current;
     setStatus("loading");
     setFailure(null);
     try {
       const next = await api.getSession();
+      if (generation !== reloadGeneration.current) return undefined;
       setSession(next);
       setStatus(next ? "signed-in" : "signed-out");
       return next;
     } catch (cause) {
+      if (generation !== reloadGeneration.current) return undefined;
       if (cause instanceof ApiError && (cause.code === "UNAUTHENTICATED" || cause.status === 401)) {
         setSession(null);
         setStatus("signed-out");
@@ -67,6 +72,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   async function signIn(email: string, password: string) {
     const next = await api.signIn(email, password);
+    reloadGeneration.current += 1;
     setSession(next);
     setSignInRevision((revision) => revision + 1);
     setStatus("signed-in");
@@ -74,6 +80,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    reloadGeneration.current += 1;
     // Also for an api that signs out without a gateway write (the mock): nothing kept outlives the session.
     dropKeptAnswers();
     try {

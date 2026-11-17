@@ -3,6 +3,20 @@ import type { Api, LiveEvent, Session } from "@/api/types";
 /** Same name as `SIGNED_IN_EVENT` in http.ts (not imported: http.ts imports this file). */
 const SIGNED_IN_EVENT = "kitchen-buyer:signed-in";
 const RETRY_MS = 2_000;
+const UNAVAILABLE_RETRY_MS = 5_000;
+const MAX_UNAVAILABLE_RETRY_MS = 60_000;
+
+/** The gateway answers 503 `EVENTS_UNAVAILABLE` both when the stream cap is full and when
+ * MongoDB has no change streams. Only the message tells a temporary outage from a permanent one. */
+function permanentlyUnavailable(body: string): boolean {
+  try {
+    const error = (JSON.parse(body) as { error?: { message?: unknown } } | null)?.error;
+    const message = typeof error?.message === "string" ? error.message : "";
+    return /change stream|replica set/i.test(message);
+  } catch {
+    return false;
+  }
+}
 
 function publish(raw: string, onEvent: (event: LiveEvent) => void) {
   let name = "";
@@ -36,18 +50,22 @@ export function createEventsHttp(
       let refused = false;
       let controller: AbortController | null = null;
       let retry: ReturnType<typeof setTimeout> | undefined;
+      let unavailableRetryMs = UNAVAILABLE_RETRY_MS;
+
+      const retryLater = (delayMs: number) => {
+        if (stopped || unavailable || document.hidden || retry !== undefined) return;
+        retry = setTimeout(() => {
+          retry = undefined;
+          open();
+        }, delayMs);
+      };
 
       const drop = (connection: AbortController | null) => {
         if (stopped || unavailable) return;
         if (connection && controller !== connection) return;
         controller = null;
         onStatus?.(false);
-        if (!document.hidden && retry === undefined) {
-          retry = setTimeout(() => {
-            retry = undefined;
-            open();
-          }, RETRY_MS);
-        }
+        retryLater(RETRY_MS);
       };
 
       const open = () => {
@@ -62,10 +80,30 @@ export function createEventsHttp(
         })
           .then(async (response) => {
             if (stopped || controller !== connection) return;
-            if (response.status === 503 || response.status === 401 || response.status === 403) {
+            if (response.status === 503) {
+              let permanent = false;
+              try {
+                permanent = permanentlyUnavailable(await response.text());
+              } catch {
+                permanent = false;
+              }
+              if (stopped || controller !== connection) return;
+              controller = null;
+              onStatus?.(false);
+              if (permanent) {
+                unavailable = true;
+                refused = false;
+                return;
+              }
+              const delay = unavailableRetryMs;
+              unavailableRetryMs = Math.min(unavailableRetryMs * 2, MAX_UNAVAILABLE_RETRY_MS);
+              retryLater(delay);
+              return;
+            }
+            if (response.status === 401 || response.status === 403) {
               unavailable = true;
-              // 503 is for good; a refused session ends when someone signs in.
-              refused = response.status !== 503;
+              // A refused session ends when someone signs in.
+              refused = true;
               controller = null;
               onStatus?.(false);
               return;
@@ -75,6 +113,7 @@ export function createEventsHttp(
               return;
             }
             onStatus?.(true);
+            unavailableRetryMs = UNAVAILABLE_RETRY_MS;
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = "";
