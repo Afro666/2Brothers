@@ -9,9 +9,10 @@ from __future__ import annotations
 from decimal import Decimal
 
 from fastapi import Depends, Request
+from starlette.concurrency import run_in_threadpool
 
 from engine.learning import correction_ratio_fact, declined_product_fact, supplier_facts
-from gateway.service import GatewayError
+from gateway.service import GatewayError, _hash
 from store import learned as learned_store
 from store.delivery_results import delivery_history
 from store.feedback import changes_for
@@ -159,6 +160,25 @@ def plan_problems(gw, kitchen_id: str, facts: list[dict], product_ids: list[str]
     return problems
 
 
+def _switch_off(gw, kitchen_id: str, fact_id: str, person: str, at) -> dict:
+    """Persist and audit one disable; every successful retry makes sure its event exists."""
+    facts = compute_facts(gw, kitchen_id, at.date())
+    fact = next((row for row in facts if row.get("id") == fact_id), None)
+    if fact is None:
+        raise GatewayError(404, "LEARNED_FACT_NOT_FOUND", "no such learned fact")
+    learned_store.disable(gw.db, kitchen_id, fact_id, person, at.isoformat())
+    override = learned_store.get(gw.db, kitchen_id, fact_id)
+    if override is None:
+        raise RuntimeError("a learned override disappeared after it was written")
+    kind = ("learned_fact_switched_off" if override.get("active") is False
+            else "learned_fact_switched_on")
+    event_id = kind + ":" + _hash([kitchen_id, fact_id, override.get("active"),
+                                   override.get("at")])
+    gw._audit(kitchen_id, kind, override.get("by") or person, event_id=event_id,
+              at=override.get("at"), fact_id=fact_id)
+    return {"fact": {**fact, "active": False}}
+
+
 def mount_learned(app, gw, principal, body) -> None:
     """GET the current facts and PUT exactly {"active": false} to switch one off."""
     prefix = "/v1/kitchens/{kitchen_id}"
@@ -177,12 +197,5 @@ def mount_learned(app, gw, principal, body) -> None:
         data = await body(request)
         if set(data) != {"active"} or data["active"] is not False:
             raise GatewayError(422, "INVALID_REQUEST", 'body must be exactly {"active": false}')
-        facts = compute_facts(gw(), kitchen_id, gw().now().date())
-        fact = next((row for row in facts if row.get("id") == fact_id), None)
-        if fact is None:
-            raise GatewayError(404, "LEARNED_FACT_NOT_FOUND", "no such learned fact")
-        changed = learned_store.disable(gw().db, kitchen_id, fact_id, person,
-                                        gw().now().isoformat())
-        if changed:
-            gw()._audit(kitchen_id, "learned_fact_switched_off", person, fact_id=fact_id)
-        return {"fact": {**fact, "active": False}}
+        gateway, now = gw(), gw().now()
+        return await run_in_threadpool(_switch_off, gateway, kitchen_id, fact_id, person, now)

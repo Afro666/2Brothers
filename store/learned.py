@@ -24,6 +24,11 @@ def disabled_ids(db, kitchen_id: str) -> set[str]:
         {"kitchen_id": kitchen_id, "active": False}, {"fact_id": 1})}
 
 
+def get(db, kitchen_id: str, fact_id: str) -> dict | None:
+    """The persisted override for one fact version, if this kitchen has one."""
+    return db[COLLECTION].find_one({"kitchen_id": kitchen_id, "fact_id": fact_id})
+
+
 def disable(db, kitchen_id: str, fact_id: str, by: str, at) -> bool:
     """Switch a fact off once; True only when this call changed its state."""
     ensure_indexes(db)

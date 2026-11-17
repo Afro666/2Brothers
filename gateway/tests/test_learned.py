@@ -1,6 +1,11 @@
 """Learned facts (#1305-#1307): computed from a kitchen's changes and deliveries."""
 
+import asyncio
 from datetime import date, datetime, timedelta, timezone
+import threading
+import time
+
+import pytest
 
 from gateway.tests.test_gateway_app import AGENT, HUMAN, K, NOW, env  # noqa: F401 (fixture)
 from gateway.tests.test_plan_proposal import PLAN, setup  # noqa: F401 (setup helper)
@@ -86,6 +91,73 @@ def test_put_switches_a_fact_off_once_and_is_idempotent(env):
     assert db.learned_overrides.count_documents({}) == 1
     assert len(audit(db, "learned_fact_switched_off")) == 1
     assert client.get(K + "/learned", headers=AGENT).json()["facts"][0]["active"] is False
+
+
+def test_a_failed_audit_is_repaired_by_a_retry_without_a_duplicate(env, monkeypatch):
+    client, _, db = env
+    seed_corrections(db)
+    fact = client.get(K + "/learned", headers=AGENT).json()["facts"][0]
+    url = f"{K}/learned/{fact['id']}"
+
+    from gateway.service import Gateway
+    real_audit = Gateway._audit
+    calls = []
+
+    def audit_once_unavailable(self, *args, **kwargs):
+        calls.append((args, kwargs))
+        if len(calls) == 1:
+            raise RuntimeError("audit store unavailable")
+        return real_audit(self, *args, **kwargs)
+
+    monkeypatch.setattr(Gateway, "_audit", audit_once_unavailable)
+    with pytest.raises(RuntimeError):
+        client.put(url, headers=HUMAN, json={"active": False})
+    assert db.learned_overrides.count_documents({}) == 1
+    assert audit(db, "learned_fact_switched_off") == []
+
+    retried = client.put(url, headers=HUMAN, json={"active": False})
+    assert retried.status_code == 200, retried.text
+    assert len(audit(db, "learned_fact_switched_off")) == 1
+    assert client.put(url, headers=HUMAN, json={"active": False}).status_code == 200
+    assert len(audit(db, "learned_fact_switched_off")) == 1
+
+
+def test_put_learned_does_not_block_the_event_loop(env, monkeypatch):
+    client, _, db = env
+    seed_corrections(db)
+    fact = client.get(K + "/learned", headers=AGENT).json()["facts"][0]
+    url = f"{K}/learned/{fact['id']}"
+    entered = threading.Event()
+
+    def slow_compute(*args, **kwargs):
+        entered.set()
+        time.sleep(0.2)
+        return []
+
+    monkeypatch.setattr("gateway.learned.compute_facts", slow_compute)
+
+    async def race():
+        import httpx
+
+        transport = httpx.ASGITransport(app=client.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+            started = time.perf_counter()
+
+            async def pulse():
+                await asyncio.sleep(0.02)
+                return time.perf_counter()
+
+            pulse_task = asyncio.create_task(pulse())
+            put_task = asyncio.create_task(
+                http.put(url, headers=HUMAN, json={"active": False}))
+            while not entered.is_set():
+                await asyncio.sleep(0.001)
+            response, pulse_at = await asyncio.gather(put_task, pulse_task)
+            return response, pulse_at - started
+
+    response, elapsed = asyncio.run(race())
+    assert response.status_code == 404, response.text
+    assert elapsed < 0.1, f"the 20 ms pulse waited {elapsed * 1000:.0f} ms for the learned PUT"
 
 
 def test_put_refuses_other_bodies_and_unknown_facts(env):
