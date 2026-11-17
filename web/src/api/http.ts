@@ -190,6 +190,14 @@ export const AUDIT_LIMIT = 1000;
 export function createHttpApi(baseUrl: string): Api {
   let currentSession: Session | null = null;
   let sessionKnown = false;
+  // Bumped whenever the session is set or cleared: an older `/v1/me` answer must not
+  // overwrite a newer sign-in (or sign-out) that finished while it was in flight.
+  let authGeneration = 0;
+  const setSession = (next: Session | null) => {
+    currentSession = next;
+    sessionKnown = true;
+    authGeneration += 1;
+  };
   const requestScope = {};
   const request = (path: string, init?: RequestInit) => gatewayRequest(baseUrl, path, init, requestScope);
   const mock = createMockApi();
@@ -289,39 +297,39 @@ export function createHttpApi(baseUrl: string): Api {
 
   const real = {
     async getSession() {
+      const startedAt = authGeneration;
       try {
         const next = toSession((await get("/v1/me")) as Json);
+        if (startedAt !== authGeneration) return currentSession;
         if (sessionKnown && JSON.stringify(currentSession) !== JSON.stringify(next)) {
           dropKeptAnswers();
           dropReads();
         }
-        currentSession = next;
-        sessionKnown = true;
+        setSession(next);
         return currentSession;
       } catch (error) {
+        if (startedAt !== authGeneration) return currentSession;
         if (error instanceof ApiError && (error.code === "UNAUTHENTICATED" || error.status === 401)) {
           dropKeptAnswers();
           dropReads();
-          currentSession = null;
-          sessionKnown = true;
+          setSession(null);
           return null;
         }
         throw error;
       }
     },
     async signIn(email, password) {
-      currentSession = toSession((await post("/v1/auth/login", { email, password })) as Json);
-      sessionKnown = true;
+      const session = toSession((await post("/v1/auth/login", { email, password })) as Json);
+      setSession(session);
       window.dispatchEvent(new Event(SIGNED_IN_EVENT));
-      return currentSession;
+      return session;
     },
     async signOut() {
       try {
         await post("/v1/auth/logout", {});
       } catch {
       } finally {
-        currentSession = null;
-        sessionKnown = true;
+        setSession(null);
       }
     },
     async changePassword(current, next) {
@@ -456,11 +464,23 @@ export function createHttpApi(baseUrl: string): Api {
       const identity = `change:${orderId}:${JSON.stringify(body)}`;
       const key = requestKeys.get(identity) ?? `web-change:${uuid()}`;
       requestKeys.set(identity, key);
-      const answered = (await post(`${proposalPath(orderId)}/change`, { ...body, idempotency_key: key }, actor)) as Json;
-      requestKeys.delete(identity);
+      let answered: Json;
+      try {
+        answered = (await post(`${proposalPath(orderId)}/change`, { ...body, idempotency_key: key }, actor)) as Json;
+      } catch (error) {
+        // A definite refusal means nothing was applied: the next try is a new change.
+        const status = error instanceof ApiError ? error.status : undefined;
+        if (status !== undefined && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+          requestKeys.delete(identity);
+        }
+        throw error;
+      }
       // The change is made: an unreadable audit log only loses who asked, never the new total.
       const events = await auditEvents().catch(() => []);
-      return { order: mapOrder(answered, null), approval: mapApproval(answered, events) };
+      const result = { order: mapOrder(answered, null), approval: mapApproval(answered, events) };
+      // Keep the key until the answer is mapped: a mapper failure must repeat the same key.
+      requestKeys.delete(identity);
+      return result;
     },
     async listOrders() {
       const [placed, list] = await Promise.all([get(`${kitchen}/orders`), proposals()]);
