@@ -596,6 +596,7 @@ export default {
   "Offer received from the supplier's selling agent": "Tarjous vastaanotettu toimittajan myyntiagentilta",
   "Supplier offer accepted: a proposal was made from it": "Toimittajan tarjous hyväksytty: siitä tehtiin ehdotus",
   "Supplier offer declined": "Toimittajan tarjous hylätty",
+  "Proposal withdrawn: the supplier offer was declined meanwhile": "Ehdotus peruttiin: toimittajan tarjous hylättiin sillä välin",
   "Delivery note read": "Lähetyslista luettu",
   "The delivery note was read and compared with the order.": "Lähetyslista luettiin ja sitä verrattiin tilaukseen.",
   "Explanation unavailable": "Selitys ei ole saatavilla",

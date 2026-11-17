@@ -10,6 +10,9 @@ ROUTINE = {"product_ids": ["462775"], "quantity": "40", "unit": "L", "requested_
 def history(db, *, weeks=5, decisions=24, edited=0, orders_with_product=4):
     """A kitchen that has decided `decisions` proposals over `weeks` weeks."""
     db.products.update_one({"_id": "462775"}, {"$set": {"allergen_data_known": True}})
+    # The passing baseline has known delivery terms: an unknown fee is never auto-approved.
+    db.suppliers.insert_one({"kitchen_id": "demo-kitchen", "supplier_id": "sup-valio", "adapter": "valio_api",
+                             "terms": {"free_delivery_threshold_eur": "0", "delivery_fee_eur": "0"}})
     for i in range(decisions):
         when = NOW - timedelta(weeks=weeks) + timedelta(hours=i)
         db.approvals.insert_one({"_id": f"a{i}", "kitchen_id": "demo-kitchen", "idempotency_key": f"h{i}",
@@ -144,3 +147,44 @@ def test_menu_plan_with_uncounted_kitchen_stock_is_never_auto_approved(env):
     uncounted = {"made_by": "menu_plan", "needs": [{**need, "stock_counted": False}]}
     ok, why, _ = autoapprove.decide(db, "demo-kitchen", sim, uncounted, NOW)
     assert ok is False and "needs a person: kitchen stock not counted" in why
+
+
+def _passing_case(db, client):
+    history(db)
+    assert switch_on(client, "500").status_code == 200
+    simulation = {"mandate": {"verdict": "NEEDS_APPROVAL", "reason_codes": [], "warnings": []},
+                  "expected_total": "50", "shortfall": "0", "excluded": [], "vat_unknown": [],
+                  "blocks": [{"supplier_id": "sup-valio", "fee": "0", "mov_gap": "0", "vat_unknown": []}],
+                  "lines": [{"product_id": "462775", "reason_codes": [], "unknown_stock": False}]}
+    request = {"needs": [{"product_id": "462775", "stock_counted": True}]}
+    return simulation, request
+
+
+def test_unknown_vat_is_never_auto_approved(env):
+    from gateway import autoapprove
+    client, _, db = env
+    simulation, request = _passing_case(db, client)
+    assert autoapprove.decide(db, "demo-kitchen", simulation, request, NOW)[0] is True
+    simulation["vat_unknown"] = ["462775"]
+    ok, why, _ = autoapprove.decide(db, "demo-kitchen", simulation, request, NOW)
+    assert ok is False and "VAT is not known for every line" in why
+
+
+def test_unknown_delivery_fee_is_never_auto_approved(env):
+    from gateway import autoapprove
+    client, _, db = env
+    simulation, request = _passing_case(db, client)
+    for block in ({"supplier_id": "sup-valio", "fee": None, "mov_gap": "0", "vat_unknown": []},
+                  {"supplier_id": "sup-valio", "fee": "0", "mov_gap": None, "vat_unknown": []}):
+        simulation["blocks"] = [block]
+        ok, why, _ = autoapprove.decide(db, "demo-kitchen", simulation, request, NOW)
+        assert ok is False and "the delivery fee is not known" in why
+
+
+def test_a_plan_with_problems_is_never_auto_approved(env):
+    from gateway import autoapprove
+    client, _, db = env
+    simulation, request = _passing_case(db, client)
+    request["problems"] = ["two needs use the same product"]
+    ok, why, _ = autoapprove.decide(db, "demo-kitchen", simulation, request, NOW)
+    assert ok is False and "the plan has problems: two needs use the same product" in why

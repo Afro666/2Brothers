@@ -134,6 +134,13 @@ def decide(db, kitchen_id: str, simulation: dict, request: dict, now: datetime) 
         why.append("a warning: " + ", ".join(mandate["warnings"]))
     if codes & NEVER_CODES:
         why.append("needs a person: " + ", ".join(sorted(codes & NEVER_CODES)))
+    if simulation.get("vat_unknown"):
+        why.append("VAT is not known for every line")
+    if any((b.get("delivery_fee") if "delivery_fee" in b else b.get("fee")) is None
+           or b.get("mov_gap") is None for b in simulation.get("blocks") or []):
+        why.append("the delivery fee is not known")
+    if request.get("problems"):
+        why.append("the plan has problems: " + str(request["problems"][0]))
     if simulation.get("excluded"):
         why.append("a product was excluded")
     if any(ln.get("unknown_stock") is not False for ln in lines):

@@ -245,6 +245,34 @@ def test_only_a_person_accepts_and_it_becomes_a_normal_proposal_that_still_waits
     assert code(w.client.post(f"{K1}/{offer['offer_id']}/decline", headers=HUMAN)) == (409, "OFFER_NOT_OPEN")
 
 
+def test_a_lost_offer_race_withdraws_the_proposal_it_just_built(w, monkeypatch):
+    from gateway import supplier_offers
+    from store import supplier_offers as offers
+
+    offer = w.offer().json()
+
+    def lose_race(db, kitchen_id, offer_id, status, **fields):
+        db.supplier_offers.update_one({"_id": offer_id, "kitchen_id": kitchen_id},
+                                      {"$set": {"status": offers.DECLINED, "decided_by": "someone else",
+                                                "decided_at": w.at.isoformat()}})
+        return None
+
+    monkeypatch.setattr(supplier_offers.offers, "decide", lose_race)
+    r = w.client.post(f"{K1}/{offer['offer_id']}/accept", headers=HUMAN)
+    assert code(r) == (409, "OFFER_NOT_OPEN")
+
+    proposal = w.db.proposals.find_one({"kitchen_id": "K1"})
+    assert proposal["status"] == "REJECTED"
+    assert proposal["reject_reason"] == "the supplier offer was declined meanwhile"
+    assert proposal["rejected_by"] == "system"
+    approval = w.db.approvals.find_one({"_id": proposal["approval_id"]})
+    assert approval["status"] == "REJECTED" and approval["decided_by"] == "system"
+    events = w.client.get("/v1/kitchens/K1/audit", headers=HUMAN).json()["events"]
+    withdrawn = [e for e in events if e.get("kind") == "proposal_withdrawn"]
+    assert len(withdrawn) == 1
+    assert withdrawn[0]["proposal_id"] == proposal["_id"] and withdrawn[0]["offer_id"] == offer["offer_id"]
+
+
 def test_a_normal_proposal_still_reaches_the_auto_approve_rule(w, monkeypatch):
     auto = []
     monkeypatch.setattr(w.gw, "_maybe_auto_approve", lambda *a, **k: auto.append(a))

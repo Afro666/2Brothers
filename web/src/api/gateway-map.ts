@@ -706,6 +706,7 @@ export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string; int
   supplier_offer_received: { kind: "offer", summary: "Offer received from the supplier's selling agent" },
   supplier_offer_accepted: { kind: "offer", summary: "Supplier offer accepted: a proposal was made from it" },
   supplier_offer_declined: { kind: "offer", summary: "Supplier offer declined" },
+  proposal_withdrawn: { kind: "approval", summary: "Proposal withdrawn: the supplier offer was declined meanwhile" },
   // Mock jury, 14 Nov: Home showed raw kinds such as `approval_token_created`.
   approval_token_created: { kind: "settings", summary: "Personal approval token created" },
   approval_token_revoked: { kind: "settings", summary: "Personal approval token revoked" },
