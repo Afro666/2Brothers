@@ -108,7 +108,7 @@ def test_names_are_read_in_one_query_per_proposal(env, monkeypatch):  # noqa: F8
     assert set(calls[0]) >= {"462775", "463335"}
     calls.clear()
     client.get(f"{K}/proposals", headers=AGENT)
-    assert len(calls) == 2                        # one per proposal, never one per line
+    assert len(calls) == 1                        # one batch across the whole page
 
 
 def test_another_kitchens_own_product_name_is_never_shown(env):  # noqa: F811

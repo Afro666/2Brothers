@@ -105,6 +105,11 @@ def get_offer(db, offer_id: str) -> dict | None:
     return _out(db.offers.find_one({"_id": offer_id}), "offer_id")
 
 
+def get_offers(db, offer_ids):
+    return {doc['_id']: _out(doc, 'offer_id')
+            for doc in db.offers.find({'_id': {'$in': list(set(offer_ids))}})}
+
+
 # Orders
 
 def attempt_for_key(db, kitchen_id: str, idempotency_key: str) -> dict | None:

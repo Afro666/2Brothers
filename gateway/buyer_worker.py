@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from gateway.parse import ParseError, named_day
 from gateway.service import GatewayError
+from gateway.model_availability import model_enabled
 
 
 BREAKER_SECONDS = 120
@@ -64,6 +65,8 @@ async def run_split(kitchen_id, text):
     """Nemotron's split of a text with several products: the `needs` list of the worker's
     answer, unchecked (gateway/split.py checks it). None when the worker is not configured.
     Any failure raises; the caller then splits with plain code."""
+    if not model_enabled():
+        return None
     url = os.environ.get('BUYER_WORKER_URL', '')
     token = os.environ.get('GATEWAY_AGENT_TOKEN', '')
     if not url or not token:
@@ -79,6 +82,8 @@ async def run_split(kitchen_id, text):
 
 
 async def run_buyer(kitchen_id, body):
+    if not model_enabled():
+        raise GatewayError(503, 'BUYER_UNAVAILABLE', 'Buyer model is disabled', fallback_safe=True)
     url = os.environ.get('BUYER_WORKER_URL', '')
     token = os.environ.get('GATEWAY_AGENT_TOKEN', '')
     if not url or not token:

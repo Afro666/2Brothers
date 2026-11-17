@@ -16,6 +16,7 @@ from agent.memory_cache import KitchenFactsCache
 from gateway.learned import compute_facts
 from store import buyer_picks
 from store import buyer_context
+from store.learning_revision import revision as facts_revision
 from gateway.claim_check import check_sentence, numbers_in
 
 PICK_SCHEMA = {'type': 'object', 'additionalProperties': False, 'required': ['picks'], 'properties': {
@@ -214,7 +215,8 @@ class SinglePickModel:
         try:
             def read():
                 facts = self.memory_cache.get(self.kitchen, self.today, lambda: compute_facts(
-                    _FactsGateway(self.db, datetime.now(timezone.utc)), self.kitchen, self.today))
+                    _FactsGateway(self.db, datetime.now(timezone.utc)), self.kitchen, self.today),
+                    revision=facts_revision(self.db, self.kitchen))
                 entries = kitchen_memory(facts, [str(row['product_id']) for row in rows],
                                          _suppliers(self.products, quote))
                 return choice_memory(entries, rows)

@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from agent.usage import Meter
+from gateway.model_availability import model_enabled
 
 
 class ModelError(RuntimeError):
@@ -28,6 +29,8 @@ DEFAULT_MODEL = 'nemotron-3.5-super-vl'
 def provider_settings(environ=None):
     """The shared Nemotron route; operator overrides never trigger a fallback."""
     environ = os.environ if environ is None else environ
+    if not model_enabled(environ):
+        raise ValueError('Nemotron is disabled by NEMOTRON_ENABLED')
     key = environ.get('VERDA_INFERENCE_KEY', '')
     if not key:
         raise ValueError('VERDA_INFERENCE_KEY is required')

@@ -97,9 +97,14 @@ def dismiss(db, kitchen_id, event_id, *, human, reason, at):
     return row or db.recall_alerts.find_one(query)
 
 
-def visible_alerts(db, kitchen_id, alerts):
+def alert_rows(db, kitchen_id, ids):
+    return {row['_id']: row for row in db.recall_alerts.find({'kitchen_id': kitchen_id, '_id': {'$in': list(set(ids))}})} if ids else {}
+
+
+def visible_alerts(db, kitchen_id, alerts, *, saved=None):
     ids = [a['event_id'] for a in alerts]
-    saved = {row['_id']: row for row in db.recall_alerts.find({'kitchen_id': kitchen_id, '_id': {'$in': ids}})}
+    if saved is None:
+        saved = alert_rows(db, kitchen_id, ids)
     out = []
     for alert in alerts:
         latest = saved.get(alert['event_id'], alert)

@@ -129,6 +129,8 @@ describe("createHttpApi", () => {
         "getKitchenSettings",
         "saveKitchenSettings",
         "getAutoApproveLearning",
+        "listLearnedFacts",
+        "setLearnedFactActive",
         "getBuyingNote",
         // Standing-order drift (store/drift.py behind the gateway).
         "getDrift",

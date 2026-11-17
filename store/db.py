@@ -58,6 +58,8 @@ def ensure_indexes(db: Database) -> None:
                   "allergens.may_contain", "temperature", "supplier_id"):
         db.products.create_index(field)
     db.offers.create_index("fetched_at")
+    db.proposals.create_index([('kitchen_id', 1), ('created_at', -1), ('_id', -1)])
+    db.proposals.create_index([('kitchen_id', 1), ('status', 1)])
     # The contract scopes idempotency keys to the kitchen and the operation.
     for collection in (db.orders, db.approvals):
         collection.create_index([("kitchen_id", 1), ("idempotency_key", 1)], unique=True)

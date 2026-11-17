@@ -400,9 +400,9 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
         return await run_in_threadpool(gw()._create_list, kitchen_id, body, actor, split_by=split_by)
 
     @app.get(k + "/proposals")
-    def list_proposals(kitchen_id: str, who: Principal = Depends(principal)):
+    def list_proposals(kitchen_id: str, cursor: str | None = None, who: Principal = Depends(principal)):
         who.need("kitchen:read", kitchen_id)
-        return {"proposals": gw().list_proposals(kitchen_id)}
+        return gw().proposal_page(kitchen_id, cursor=cursor)
 
     @app.get(k + "/catalog/products")
     def catalog_products(kitchen_id: str, ids: str = "", who: Principal = Depends(principal)):

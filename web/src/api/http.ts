@@ -19,6 +19,7 @@ import { createApprovalTokensHttp } from "@/api/http-approval-tokens";
 import { createDeveloperHttp } from "@/api/http-developer";
 import { createEventsHttp } from "@/api/http-events";
 import { createExplanationHttp } from "@/api/http-explanation";
+import { createLearnedHttp } from "@/api/http-learned";
 import {
   type Json,
   mapAddable,
@@ -248,10 +249,24 @@ export function createHttpApi(baseUrl: string): Api {
       },
     };
   };
-  // The gateway lists at most its 100 newest proposals.
+  // The gateway returns at most 100 proposals per page. The badge needs only
+  // the first page's kitchen-wide count; history readers follow older pages.
   // Kept 3 s: one page load asks for the list three times in a row (the inbox, the waiting count,
   // each approved card's order) and the gateway needs about a second for it.
-  const proposalsRead = shared(async () => rows(await get(`${kitchen}/proposals`), "proposals"), 3000);
+  const firstProposalPage = shared(async () => await get(`${kitchen}/proposals`) as Json, 3000);
+  const proposalsRead = shared(async () => {
+    let page = await firstProposalPage.get();
+    const result = [...rows(page, "proposals")];
+    const seen = new Set<string>();
+    while (typeof page.next_cursor === "string") {
+      if (seen.size >= 99) throw new ApiError("INVALID_RESPONSE", "The approval history is too large to load at once.");
+      if (seen.has(page.next_cursor)) throw new ApiError("INVALID_RESPONSE", "The gateway repeated a proposal page.");
+      seen.add(page.next_cursor);
+      page = await get(`${kitchen}/proposals?cursor=${encodeURIComponent(page.next_cursor)}`) as Json;
+      result.push(...rows(page, "proposals"));
+    }
+    return result;
+  }, 3000);
   const auditRead = shared(async () => rows(await get(`${kitchen}/audit`), "events"));
   const proposals = () => proposalsRead.get();
   const auditEvents = () => auditRead.get();
@@ -259,6 +274,7 @@ export function createHttpApi(baseUrl: string): Api {
     // Invalidate both layers: the 3 s proposal answer and any pre-event transport read.
     dropKeptAnswers();
     proposalsRead.drop();
+    firstProposalPage.drop();
     auditRead.drop();
   };
   beforeWrite.add(dropReads);
@@ -312,7 +328,7 @@ export function createHttpApi(baseUrl: string): Api {
       await post("/v1/auth/change-password", { current_password: current, new_password: next });
     },
     ...createPlanningHttp((path, init) => request(path, init), kitchen),
-    // GET/PUT /learned is not served yet (404): api/http-learned.ts stays out of `real` so the page keeps its "Sample data" mock. Add `...createLearnedHttp(call, kitchen)` here when the gateway serves it.
+    ...createLearnedHttp((path, init) => request(path, init), kitchen),
     ...createBuyingNoteHttp((path, init) => request(path, init)),
     ...createNutritionHttp((path, init) => request(path, init), kitchen),
     ...createOnboardingHttp((path, init) => request(path, init)),
@@ -349,7 +365,9 @@ export function createHttpApi(baseUrl: string): Api {
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal, events));
     },
     async countPendingApprovals() {
-      const list = await proposals();
+      const page = await firstProposalPage.get();
+      if (typeof page.pending_count === "number" && Number.isSafeInteger(page.pending_count) && page.pending_count >= 0) return page.pending_count;
+      const list = await proposals(); // Compatibility with older gateways without count metadata.
       return mapEach(list, "proposal", "proposal_id", (proposal) => mapApproval(proposal)).filter(
         (approval) => approval.status === "PENDING",
       ).length;

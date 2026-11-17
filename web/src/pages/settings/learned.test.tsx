@@ -108,7 +108,7 @@ describe("What the tool learned settings", () => {
     expect(await screen.findByText("Not applied: this ratio is outside the range the tool trusts.")).toBeVisible();
   });
 
-  it("runs on the sample facts while the gateway does not serve the route", async () => {
+  it("shows a live-route failure instead of substituting sample learning", async () => {
     const fetch = vi.fn(async (url: string) =>
       url.endsWith("/v1/me")
         ? new Response(JSON.stringify({ kind: "human", name: "Demo approver", role: "approver", can_approve: true }))
@@ -118,8 +118,9 @@ describe("What the tool learned settings", () => {
     const api = createHttpApi("/api");
     renderApp("/settings/learned", api);
 
-    expect(await screen.findByText("Washed potato 10 kg")).toBeVisible();
-    expect(screen.getByText("Sample data")).toBeVisible();
-    expect(fetch.mock.calls.some(([url]) => String(url).includes("/learned"))).toBe(false);
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes("/learned"))).toBe(true));
+    expect(await screen.findByText("no")).toBeVisible();
+    expect(screen.queryByText("Sample data")).not.toBeInTheDocument();
+    expect(screen.queryByText("Washed potato 10 kg")).not.toBeInTheDocument();
   });
 });

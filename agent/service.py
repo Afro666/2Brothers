@@ -29,6 +29,27 @@ class WorkerError(Exception):
         self.status, self.code, self.fallback_safe = status, code, fallback_safe
 
 
+async def _settle_cleanup(awaitable):
+    """Finish durable cleanup even if shutdown sends another cancellation."""
+    task = asyncio.ensure_future(awaitable)
+    while True:
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.done():
+                return task.result()
+
+
+async def _finish_run(db, run_id, **fields):
+    """Do not cancel a queued durable write; propagate cancellation after it finishes."""
+    task = asyncio.create_task(asyncio.to_thread(agent_runs.finish, db, run_id, **fields))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        await _settle_cleanup(task)
+        raise
+
+
 def parse_need(body, *, today=None):
     """Extract only an unambiguous explicit quantity; never ask a model to size it."""
     text = body.get('text')
@@ -85,14 +106,24 @@ class BuyerWorker:
         key = body.get('idempotency_key')
         if not isinstance(key, str) or not 1 <= len(key.strip()) <= 200:
             raise WorkerError(422, 'MISSING_IDEMPOTENCY_KEY')
-        exclusions = buyer_context.excluded_allergens(self.db, kitchen_id)
+        exclusions = await asyncio.to_thread(buyer_context.excluded_allergens, self.db, kitchen_id)
         try:
             policy = AllergenPolicy(tuple(exclusions)) if exclusions is not None else None
         except ValueError:
             # A misspelt allergen code must never silently widen what is safe: fail closed.
             raise WorkerError(503, 'KITCHEN_POLICY_INVALID', fallback_safe=True) from None
         try:
-            row, created = agent_runs.claim(self.db, kitchen_id, key, need)
+            # A cancelled thread cannot be stopped: wait for the claim's result so
+            # a newly inserted run is durably marked for reconciliation.
+            claim = asyncio.create_task(asyncio.to_thread(agent_runs.claim, self.db, kitchen_id, key, need))
+            try:
+                row, created = await asyncio.shield(claim)
+            except asyncio.CancelledError:
+                row, created = await _settle_cleanup(claim)
+                if created:
+                    await _settle_cleanup(asyncio.to_thread(agent_runs.finish, self.db, row['_id'],
+                                                           state='RECONCILE', result=None))
+                raise
         except IdempotencyConflict:
             raise WorkerError(409, 'IDEMPOTENCY_KEY_REUSED') from None
         if not created:
@@ -161,7 +192,8 @@ class BuyerWorker:
             if result is None:
                 raise WorkerError(503, 'BUYER_RECONCILIATION_REQUIRED')
             if outcome.get('substitute_options'):
-                buyer_context.save_options(self.db, kitchen_id, result['proposal_id'], outcome['substitute_options'])
+                await asyncio.to_thread(buyer_context.save_options, self.db, kitchen_id,
+                                        result['proposal_id'], outcome['substitute_options'])
                 result['substitute_options'] = outcome['substitute_options']
             result = {**result, 'buyer_run_id': run_id, 'buyer_model': 'nemotron-3.5-super-vl'}
             meter = getattr(model, 'meter', None)
@@ -176,14 +208,18 @@ class BuyerWorker:
             return result
         try:
             result = await asyncio.wait_for(execute(), timeout=self.timeout)
-            agent_runs.finish(self.db, row['_id'], state='READY', result=result)
+            await _finish_run(self.db, row['_id'], state='READY', result=result)
             status = 'READY'
             return result
+        except asyncio.CancelledError:
+            await _settle_cleanup(asyncio.to_thread(agent_runs.finish, self.db, row['_id'],
+                                                  state='RECONCILE', result=None, usage=used(model)))
+            raise
         except asyncio.TimeoutError:
-            agent_runs.finish(self.db, row['_id'], state='RECONCILE', result=None, usage=used(model))
+            await _finish_run(self.db, row['_id'], state='RECONCILE', result=None, usage=used(model))
             raise WorkerError(504, 'BUYER_TIMEOUT', fallback_safe=buyer is None or not buyer.mutations) from None
         except Exception as exc:
-            agent_runs.finish(self.db, row['_id'], state='RECONCILE', result=None, usage=used(model))
+            await _finish_run(self.db, row['_id'], state='RECONCILE', result=None, usage=used(model))
             if isinstance(exc, WorkerError):
                 raise
             raise WorkerError(503, 'BUYER_UNAVAILABLE', fallback_safe=buyer is None or not buyer.mutations) from None
@@ -209,7 +245,8 @@ def create_app(worker=None, shelf=None, delivery_note=None, menu_photo=None, buy
 
     @app.get('/health')
     def health():
-        return {'status': 'ok'}
+        from gateway.model_availability import capabilities
+        return {'status': 'ok', **capabilities()}
 
     @app.exception_handler(WorkerError)
     async def error(request, exc):
