@@ -235,7 +235,8 @@ def create_app(worker=None, shelf=None, delivery_note=None, menu_photo=None, buy
 
     @app.get('/health')
     def health():
-        return {'status': 'ok'}
+        from gateway.model_availability import capabilities
+        return {'status': 'ok', **capabilities()}
 
     @app.exception_handler(WorkerError)
     async def error(request, exc):
