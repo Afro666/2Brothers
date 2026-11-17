@@ -13,6 +13,8 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 import re
 
+from gateway.quantity import too_many_places
+
 UNITS = {
     "l": "L", "ltr": "L", "litre": "L", "litres": "L", "liter": "L", "liters": "L",
     "litra": "L", "litraa": "L", "litran": "L",
@@ -118,6 +120,8 @@ def _number(raw: str, language: str = "en") -> Decimal:
         raise ParseError(f"cannot read the number {raw!r}") from None
     if value <= 0:
         raise ParseError("the quantity must be positive")
+    if too_many_places(value):
+        raise ParseError("the quantity has too many decimal places")
     return value
 
 
