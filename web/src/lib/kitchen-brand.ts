@@ -26,8 +26,20 @@ function read(): KitchenBrandProfile | null {
   let profile: KitchenBrandProfile | null = null;
   try {
     const parsed: unknown = raw ? JSON.parse(raw) : null;
-    if (parsed && typeof parsed === "object" && typeof (parsed as KitchenBrandProfile).name === "string") {
-      profile = parsed as KitchenBrandProfile;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const value = parsed as Record<string, unknown>;
+      // Browser storage can contain old or malformed profiles; never cast it
+      // straight into fields rendered by the app shell and onboarding form.
+      const address = value.address as Record<string, unknown> | null;
+      if (typeof value.name === "string" && typeof value.domain === "string"
+          && (value.logoUrl === null || typeof value.logoUrl === "string")
+          && Array.isArray(value.colors) && value.colors.every((color) => typeof color === "string")
+          && address && typeof address === "object" && !Array.isArray(address)
+          && ["street", "postalCode", "city", "country"].every((key) => address[key] === null || typeof address[key] === "string")
+          && (value.kitchenType === null || (typeof value.kitchenType === "string" && ["hotel", "school", "hospital", "restaurant"].includes(value.kitchenType)))
+          && (value.openingHours === null || typeof value.openingHours === "string")) {
+        profile = parsed as KitchenBrandProfile;
+      }
     }
   } catch {
     // Not JSON: no profile.
@@ -37,8 +49,8 @@ function read(): KitchenBrandProfile | null {
 }
 
 /** A logo URL the app may show: only `https://` or an inline `data:image/`; anything else is no logo. */
-export function safeLogoUrl(url: string | null | undefined): string | null {
-  const value = url?.trim() ?? "";
+export function safeLogoUrl(url: unknown): string | null {
+  const value = typeof url === "string" ? url.trim() : "";
   return /^(https:\/\/|data:image\/)/i.test(value) ? value : null;
 }
 
@@ -46,6 +58,7 @@ export function saveKitchenBrand(profile: KitchenBrandProfile) {
   const raw = JSON.stringify(profile);
   try {
     localStorage.setItem(STORAGE_KEY, raw);
+    memory = null;
   } catch {
     memory = raw;
   }
