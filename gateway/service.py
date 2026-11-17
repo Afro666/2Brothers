@@ -143,9 +143,11 @@ class Gateway:
 
     # ---- helpers ------------------------------------------------------------------
 
-    def _audit(self, kitchen_id: str, kind: str, actor: str, **data) -> None:
-        event = {"event_id": uuid4().hex, "kind": kind, "actor": actor, **data}
-        audit.append_event(self.db, event, {"kitchen_id": kitchen_id, "at": self.now().isoformat()})
+    def _audit(self, kitchen_id: str, kind: str, actor: str, *, event_id: str | None = None,
+               at: str | None = None, **data) -> None:
+        event = {"event_id": event_id or uuid4().hex, "kind": kind, "actor": actor, **data}
+        audit.append_event(self.db, event,
+                           {"kitchen_id": kitchen_id, "at": at or self.now().isoformat()})
         try:    # webhooks (#277): after the event is stored; a receiver can never break an order
             from gateway import webhooks
             webhooks.dispatch(self.db, kitchen_id, kind, data, actor=actor)
@@ -744,7 +746,7 @@ class Gateway:
             same = (stored["request"].get("text") == text) if split_by else stored.get("payload_hash") == payload_hash
             if not same:
                 raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
-            return self._proposal_out(stored)
+            return self._proposal_out(self._finish_pending(kitchen_id, stored))
         rule = self._allergen_rule(kitchen_id)        # a misspelt rule fails the whole request (409)
         for item in items:
             self._read_need(kitchen_id, item, rule)
@@ -776,7 +778,7 @@ class Gateway:
         if stored is not None:
             if stored["request"].get("text") != text:
                 raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
-            return {"replay": self._proposal_out(stored)}
+            return {"replay": self._proposal_out(self._finish_pending(kitchen_id, stored))}
         if len(text) > 500:
             raise GatewayError(422, "CANNOT_READ_REQUEST", "the request is too long (500 characters at most)")
         today = self.now().date()
@@ -1005,7 +1007,7 @@ class Gateway:
                 return None             # a Buyer or parser proposal: its own replay rules apply
             if stored["request"].get("text") != text:
                 raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
-            return self._proposal_out(stored)
+            return self._proposal_out(self._finish_pending(kitchen_id, stored))
         from gateway.parse import ONE_PRODUCT, asks_for_two
         if asks_for_two(text):
             # Before any model call: the Buyer would take one of the two, or neither.
@@ -1127,7 +1129,7 @@ class Gateway:
                     raise GatewayError(409, 'IDEMPOTENCY_KEY_REUSED', 'key used with another request')
                 if (stored["request"].get("window") or {}) != {"from": str(body["from"]), "to": str(body["to"])}:
                     raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
-                return self._proposal_out(stored)
+                return self._proposal_out(self._finish_pending(kitchen_id, stored))
             body = self._from_plan(kitchen_id, body, entries=plan_entries)
             if menu_photo is not None:
                 unsized = sum(not dish['in_proposal'] for dish in menu_photo['response']['dishes'])
@@ -1141,7 +1143,7 @@ class Gateway:
             if stored:
                 if stored["request"].get("text") != body["text"]:
                     raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
-                return self._proposal_out(stored)
+                return self._proposal_out(self._finish_pending(kitchen_id, stored))
             body = read or self._from_text(kitchen_id, body, _form_day(body))
             parsed = True
         else:
@@ -1172,7 +1174,7 @@ class Gateway:
         if stored:
             if stored["payload_hash"] != _hash(request):
                 raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "key used with another request")
-            return self._proposal_out(stored)
+            return self._proposal_out(self._finish_pending(kitchen_id, stored))
         return self._store_proposal(
             kitchen_id, request, key, _hash(request), actor, auto_approve=auto_approve, menu_photo=menu_photo,
             retry=lambda: self.create_proposal(kitchen_id, original_body, actor, auto_approve=auto_approve,
@@ -1187,7 +1189,7 @@ class Gateway:
         sim = offer["simulation"]
         doc = {"_id": uuid4().hex, "kitchen_id": kitchen_id, "idempotency_key": key,
                "payload_hash": payload_hash, "request": request, "offer_id": offer["offer_id"],
-               "status": "READY" if sim["lines"] else "REJECTED", "created_by": actor,
+               "status": "PENDING" if sim["lines"] else "REJECTED", "created_by": actor,
                "created_at": self.now(), "approval_id": None, "order_id": None}
         if menu_photo is not None:
             doc['menu_photo'] = menu_photo    # replay result only; never image bytes
@@ -1199,7 +1201,10 @@ class Gateway:
             approval, _ = orders.request_approval(
                 self.db, kitchen_id=kitchen_id, idempotency_key=f"proposal:{doc['_id']}",
                 offer_id=offer["offer_id"], reasons=sim["mandate"]["reasons"])
-            self.db.proposals.update_one({"_id": doc["_id"]}, {"$set": {"approval_id": approval["approval_id"]}})
+            self.db.proposals.update_one(
+                {"_id": doc["_id"], "kitchen_id": kitchen_id, "status": "PENDING"},
+                {"$set": {"status": "READY", "approval_id": approval["approval_id"]}})
+            doc["status"] = "READY"
             doc["approval_id"] = approval["approval_id"]
             options.attach_confirmed(self, kitchen_id, doc["_id"], request, sim)   # never raises
         self._audit(kitchen_id, "proposal_created", actor, proposal_id=doc["_id"],
@@ -1221,6 +1226,31 @@ class Gateway:
         if auto_approve:
             self._maybe_auto_approve(kitchen_id, doc, sim, request)
         return self._proposal_out(self.db.proposals.find_one({"_id": doc["_id"]}) or doc)
+
+    def _finish_pending(self, kitchen_id: str, doc: dict) -> dict:
+        """Finish a proposal staged before its approval row was linked.
+
+        The insert puts a proposal with lines in PENDING; only after its approval row
+        exists does a conditional update make it READY. A replay of the same request
+        finds the staged row and finishes it here. `request_approval` is idempotent on
+        ``proposal:<id>``, so a retry returns the approval row the failed attempt may
+        already have written instead of opening a second one.
+        """
+        if doc.get("status") != "PENDING":
+            return doc
+        offer = orders.get_offer(self.db, doc["offer_id"])
+        if offer is None:
+            raise GatewayError(404, "OFFER_NOT_FOUND", "no such offer")
+        approval, _ = orders.request_approval(
+            self.db, kitchen_id=kitchen_id, idempotency_key=f"proposal:{doc['_id']}",
+            offer_id=doc["offer_id"], reasons=offer["simulation"]["mandate"]["reasons"])
+        self.db.proposals.update_one(
+            {"_id": doc["_id"], "kitchen_id": kitchen_id, "status": "PENDING"},
+            {"$set": {"status": "READY", "approval_id": approval["approval_id"]}})
+        doc["status"] = "READY"
+        doc["approval_id"] = approval["approval_id"]
+        options.attach_confirmed(self, kitchen_id, doc["_id"], offer["request"], offer["simulation"])
+        return self.db.proposals.find_one({"_id": doc["_id"]}) or doc
 
     def _maybe_auto_approve(self, kitchen_id: str, doc: dict, sim: dict, request: dict) -> None:
         """Earned auto-approve (#299): off unless an approver switched it on after the learning
@@ -1360,6 +1390,10 @@ class Gateway:
         if Decimal(str(seen)) - Decimal(stored["simulation"]["expected_total"]) != 0:
             raise GatewayError(409, "TOTAL_MISMATCH", "this is not the total of the proposal",
                                expected_total=stored["simulation"]["expected_total"])
+        existing = orders.attempt_for_key(self.db, kitchen_id, key)
+        if existing is not None and existing.get("proposal_id") != proposal_id:
+            raise GatewayError(409, "IDEMPOTENCY_CONFLICT",
+                               "this idempotency key was already used for another proposal")
         # Claim the proposal atomically: one proposal places at most one order, even when
         # two approvals with different keys arrive together (double click, two tabs).
         claimed = self.db.proposals.find_one_and_update(
@@ -1372,31 +1406,35 @@ class Gateway:
             return result
         try:
             placed = self._place(kitchen_id, proposal_id, doc, stored, seen, key, human, via)
-        except BaseException:
+        except BaseException as exc:
             # A write may have succeeded before its response failed. Only a
             # confirmed absence permits releasing the post-quote commit claim.
             try:
                 self.db.proposals.update_one({"_id": proposal_id, "status": "APPROVING", "approving_key": key},
                                              {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
                 attempt = orders.attempt_for_key(self.db, kitchen_id, key)
-                if attempt is None:
+                if attempt is None or attempt.get('proposal_id') != proposal_id:
                     blocked = recalls.blocked_ids(self.db, kitchen_id)
                     state = 'BLOCKED_BY_RECALL' if any(l['product_id'] in blocked for l in stored['simulation']['lines']) else 'READY'
                     self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
                         'status': 'COMMITTING', 'approving_key': key},
-                        {'$set': {'status': state}, '$unset': {'approving_key': ''}})
+                        {'$set': {'status': state},
+                         '$unset': {'approving_key': '', 'commit_token': '', 'committing_at': ''}})
                 elif attempt.get('proposal_id') == proposal_id and attempt['outcome'] is None:
                     # The attempt never ended: the send result is unknown. The proposal stays
                     # held; a person resolves the order (gateway/resolve.py, #291).
                     orders.set_outcome(self.db, attempt['order_id'], outcome='UNCONFIRMED', status=None)
-            except Exception as exc:
+            except Exception as rollback_exc:
                 # Cannot prove absence while the database is unavailable. A later approve
                 # releases a stale COMMITTING claim that has no attempt row (#715).
                 try:
                     self._audit(kitchen_id, "approve_rollback_failed", human, proposal_id=proposal_id,
-                                reason=type(exc).__name__)
+                                reason=type(rollback_exc).__name__)
                 except Exception:
                     pass
+            if isinstance(exc, orders.IdempotencyConflict):
+                raise GatewayError(409, "IDEMPOTENCY_CONFLICT",
+                                   "this idempotency key was already used for another proposal") from exc
             raise
         self._decision_feedback(kitchen_id, proposal_id, "approved", human,
                                 total=placed.get("expected_total"))
@@ -1432,14 +1470,16 @@ class Gateway:
             if self.now() - since < COMMIT_STALE:
                 return False
         claim = doc.get("approving_key")
-        if claim and orders.attempt_for_key(self.db, kitchen_id, claim) is not None:
+        attempt = orders.attempt_for_key(self.db, kitchen_id, claim) if claim else None
+        if attempt is not None and attempt.get("proposal_id") == doc["_id"]:
             return False   # an attempt exists: resolve the order instead (gateway/resolve.py)
         stored = orders.get_offer(self.db, doc["offer_id"])
         blocked = recalls.blocked_ids(self.db, kitchen_id)
         state = 'BLOCKED_BY_RECALL' if any(l['product_id'] in blocked for l in stored['simulation']['lines']) else 'READY'
         released = self.db.proposals.update_one(
             {"_id": doc["_id"], "kitchen_id": kitchen_id, "status": "COMMITTING", "approving_key": claim},
-            {"$set": {"status": state}, "$unset": {"approving_key": "", "committing_at": ""}})
+            {"$set": {"status": state},
+             "$unset": {"approving_key": "", "committing_at": "", "commit_token": ""}})
         if not released.modified_count:
             return False
         self._audit(kitchen_id, "stuck_commit_released", human, proposal_id=doc["_id"], status=state)
@@ -1488,9 +1528,11 @@ class Gateway:
         must_confirm = sorted({supplier.get(ln["product_id"], VALIO) for ln in unknown})
         # Atomic commit point shared with the recall monitor. A notice arriving
         # during the live quote can still claim APPROVING and prevent this order.
+        token = uuid4().hex
         committed = self.db.proposals.update_one({'_id': proposal_id, 'kitchen_id': kitchen_id,
             'status': 'APPROVING', 'approving_key': key},
-            {'$set': {'status': 'COMMITTING', 'offer_id': stored['offer_id'], 'committing_at': self.now()}})
+            {'$set': {'status': 'COMMITTING', 'offer_id': stored['offer_id'],
+                      'committing_at': self.now(), 'commit_token': token}})
         if not committed.modified_count:
             return self._approved_or_conflict(kitchen_id, proposal_id, key)
         order, created = orders.record_attempt(
@@ -1505,16 +1547,25 @@ class Gateway:
                     | {"product_ids": [ln["product_id"] for ln in b.get("lines", [])]} for b in blocks],
             supplier_must_confirm=must_confirm)
         if created:
-            if doc.get("approval_id"):
-                orders.decide_approval(self.db, doc["approval_id"], status="APPROVED", decided_by=human)
-            # No upstream order endpoint: the order is recorded in our gateway, nothing is sent.
-            order = orders.set_outcome(self.db, order["order_id"], outcome="CONFIRMED", status=orders.RECORDED,
-                                       **self._receipt(kitchen_id, order))
-            self.db.proposals.update_one({"_id": proposal_id},
-                                         {"$set": {"status": "APPROVED", "order_id": order["order_id"]}})
-            self._audit(kitchen_id, "order_placed", human, proposal_id=proposal_id,
-                        order_id=order["order_id"], expected_total=sim["expected_total"],
-                        supplier_must_confirm=must_confirm, **via)
+            won = self.db.proposals.update_one(
+                {'_id': proposal_id, 'kitchen_id': kitchen_id, 'status': 'COMMITTING',
+                 'approving_key': key, 'commit_token': token},
+                {'$set': {'status': 'APPROVED', 'order_id': order['order_id']},
+                 '$unset': {'commit_token': ''}})
+            if won.modified_count == 1:
+                if doc.get("approval_id"):
+                    orders.decide_approval(self.db, doc["approval_id"], status="APPROVED", decided_by=human)
+                # No upstream order endpoint: the order is recorded in our gateway, nothing is sent.
+                order = orders.set_outcome(self.db, order["order_id"], outcome="CONFIRMED",
+                                           status=orders.RECORDED, **self._receipt(kitchen_id, order))
+                self._audit(kitchen_id, "order_placed", human, proposal_id=proposal_id,
+                            order_id=order["order_id"], expected_total=sim["expected_total"],
+                            supplier_must_confirm=must_confirm, **via)
+            else:
+                self.db.orders.delete_one({'_id': order['order_id'], 'outcome': None})
+                self._audit(kitchen_id, 'superseded_commit_discarded', human,
+                            proposal_id=proposal_id, idempotency_key=key, **via)
+                return self._approved_or_conflict(kitchen_id, proposal_id, key)
         else:   # the key already placed an order: nothing new placed here, release the claim
             self.db.proposals.update_one({"_id": proposal_id, "status": "COMMITTING", "approving_key": key},
                                          {"$set": {"status": "READY"}, "$unset": {"approving_key": ""}})
@@ -1862,13 +1913,14 @@ class Gateway:
         if existing:
             if existing["idempotency_key"] != key:
                 raise GatewayError(409, "IDEMPOTENCY_KEY_REUSED", "this offer already has an approval request")
+            existing = self._finish_pending(kitchen_id, existing)
             return {"approval_id": existing["approval_id"], "proposal_id": existing["_id"], "status": "PENDING"}
         sim = offer["simulation"]
         if not sim["lines"]:
             raise GatewayError(422, "NOTHING_TO_APPROVE", "the offer has no lines")
         doc = {"_id": uuid4().hex, "kitchen_id": kitchen_id, "idempotency_key": key,
                "payload_hash": _hash(offer["request"]), "request": offer["request"],
-               "offer_id": offer["offer_id"], "status": "READY", "created_by": actor,
+               "offer_id": offer["offer_id"], "status": "PENDING", "created_by": actor,
                "created_at": self.now(), "approval_id": None, "order_id": None}
         try:
             self.db.proposals.insert_one(doc)
@@ -1877,7 +1929,11 @@ class Gateway:
         approval, _ = orders.request_approval(
             self.db, kitchen_id=kitchen_id, idempotency_key=f"proposal:{doc['_id']}",
             offer_id=offer["offer_id"], reasons=sim["mandate"]["reasons"])
-        self.db.proposals.update_one({"_id": doc["_id"]}, {"$set": {"approval_id": approval["approval_id"]}})
+        self.db.proposals.update_one(
+            {"_id": doc["_id"], "kitchen_id": kitchen_id, "status": "PENDING"},
+            {"$set": {"status": "READY", "approval_id": approval["approval_id"]}})
+        doc["status"] = "READY"
+        doc["approval_id"] = approval["approval_id"]
         options.attach_confirmed(self, kitchen_id, doc["_id"], offer["request"], sim)   # never raises
         self._audit(kitchen_id, "approval_requested", actor, proposal_id=doc["_id"],
                     offer_id=offer["offer_id"], expected_total=sim["expected_total"])
