@@ -24,6 +24,7 @@ export default {
   "Delivery check saved": "Toimituksen tarkistus tallennettu",
   "An approval could not be undone after a failed send": "Hyväksyntää ei voitu perua epäonnistuneen lähetyksen jälkeen",
   "A stuck order send was released": "Jumiin jäänyt tilauksen lähetys vapautettiin",
+  "A late duplicate approval was discarded; no second order": "Myöhässä tullut kaksoishyväksyntä hylättiin; toista tilausta ei tehty",
   "Demo delivery order placed by the demo seed": "Demon alkutiedot tekivät demon toimitustilauksen",
   "Demo supplier offers reset": "Demon toimittajatarjoukset nollattu",
   "A learned fact changed a proposal": "Opittu tieto muutti ehdotusta",

@@ -734,6 +734,7 @@ export const EVENT_KINDS: Record<string, { kind: AuditKind; summary: string; int
   delivery_result_saved: { kind: "order", summary: "Delivery check saved" },
   approve_rollback_failed: { kind: "order", summary: "An approval could not be undone after a failed send" },
   stuck_commit_released: { kind: "order", summary: "A stuck order send was released" },
+  superseded_commit_discarded: { kind: "order", summary: "A late duplicate approval was discarded; no second order" },
   demo_delivery_order_placed: { kind: "order", summary: "Demo delivery order placed by the demo seed" },
   demo_offers_reset: { kind: "other", summary: "Demo supplier offers reset" },
   learned_fact_applied: { kind: "other", summary: "A learned fact changed a proposal" },
