@@ -11,3 +11,4 @@ __pycache__/
 /vendor/valio/
 /.claude/worktrees/
 /demo/out/
+nemotron_test
