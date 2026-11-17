@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal, InvalidOperation
 
+from gateway.quantity import too_many_places
 from store import orders
 
 MAX_LINES = 200
@@ -66,6 +67,8 @@ def _entries(body: dict, field: str) -> list[dict]:
             quantity = Decimal(str(value))
         except InvalidOperation:
             raise GatewayError(422, "INVALID_REQUEST", f"{pid}: quantity must be a number") from None
+        if too_many_places(quantity):
+            raise GatewayError(422, "INVALID_REQUEST", f"{pid}: quantity has too many decimal places")
         if not quantity.is_finite() or quantity < 0 or quantity > MAX_QUANTITY:
             raise GatewayError(422, "INVALID_REQUEST", f"{pid}: quantity must be 0 or more")
         if field == "add" and quantity == 0:

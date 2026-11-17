@@ -237,3 +237,20 @@ def test_a_proposal_changed_between_the_read_and_the_claim_is_refused(env, monke
     assert events(db, "proposal_changed") == []
     doc = db.proposals.find_one({"_id": p["proposal_id"]})
     assert doc["offer_id"] == "someone-else" and not doc.get("changes")
+
+
+def test_a_quantity_with_a_tiny_exponent_is_refused_quickly(env):
+    """Decimal('1e-50000000') is valid, and f"{x.normalize():f}" expands it into a
+    huge string. A request quantity must be refused before anything formats it."""
+    import time
+
+    client, _, db = env
+    p = milk(client, quantity="51")
+    started = time.monotonic()
+    r = change(client, p, lines=[{"product_id": "462775", "quantity": "1e-50000000"}])
+    elapsed = time.monotonic() - started
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "INVALID_REQUEST"
+    assert "too many decimal places" in r.json()["error"]["message"]
+    assert elapsed < 2.0
+    assert client.get(f"{K}/proposals/{p['proposal_id']}", headers=HUMAN).json()["offer_id"] == p["offer_id"]

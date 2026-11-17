@@ -16,6 +16,7 @@ import hashlib
 import hmac
 import secrets
 
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 ROLES = ("approver", "chef", "viewer")
@@ -95,11 +96,15 @@ def _password_ok(user: dict, password) -> bool:
 
 
 def _count_fail(db, user: dict, now: datetime) -> None:
-    fails = user.get("fails", 0) + 1
-    change = {"fails": fails}
-    if fails >= MAX_FAILS:
-        change = {"fails": 0, "locked_until": now + LOCK}
-    db.users.update_one({"_id": user["_id"]}, {"$set": change})
+    updated = db.users.find_one_and_update(
+        {"_id": user["_id"]}, {"$inc": {"fails": 1}},
+        return_document=ReturnDocument.AFTER)
+    if (updated or {}).get("fails", 0) >= MAX_FAILS:
+        # Two failures can both reach the threshold. Only one may reset the count; the
+        # filter makes the second a no-op instead of a second five-minute lock.
+        db.users.update_one(
+            {"_id": user["_id"], "fails": {"$gte": MAX_FAILS}},
+            {"$set": {"fails": 0, "locked_until": now + LOCK}})
 
 
 def login(db, email: str, password: str, now: datetime | None = None) -> tuple[dict, str]:

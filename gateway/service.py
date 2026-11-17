@@ -27,6 +27,7 @@ from engine.packs import PackDataError
 from gateway import options, product_names, seeded
 from gateway.decision import FOUND_BY_MEANING, decision_summary
 from gateway.partial_fill import partial_out
+from gateway.quantity import too_many_places
 from gateway.suppliers import (UNKNOWN_FACTS, VALIO, ManualAdapter, ValioAdapter, apply_discount_tiers,
                                delivery_facts)
 from store import audit, demo_delivery, orders, recalls, supplier_offers
@@ -393,6 +394,8 @@ class Gateway:
         requested = date.fromisoformat(request["requested_date"])
         measure = request["unit"]
         need = Decimal(str(request["quantity"]))
+        if too_many_places(need):
+            raise GatewayError(422, "INVALID_REQUEST", "quantity has too many decimal places")
         if need <= 0:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
         blocked = recalls.blocked_ids(self.db, kitchen_id)
@@ -521,7 +524,11 @@ class Gateway:
                 mine = [o for o in offers if o.product_id == n["product_id"]]
                 if not mine:
                     continue
-                plan = plan_request(Decimal(str(n["quantity"])), measure, mine, requested, None,
+                quantity = Decimal(str(n["quantity"]))
+                if too_many_places(quantity):
+                    raise GatewayError(422, "INVALID_REQUEST",
+                                       f"{n['product_id']}: quantity has too many decimal places")
+                plan = plan_request(quantity, measure, mine, requested, None,
                                     event=bool(request.get("event")))
                 lines += [_learned_why(_set_by(ln, n, mine[0].pack.lot_size), n) for ln in plan.lines]
                 owners += [(n["product_id"], n["unit"])] * len(plan.lines)
@@ -681,6 +688,9 @@ class Gateway:
                 quantity = Decimal(str(raw).strip())
             except InvalidOperation:
                 raise GatewayError(422, "INVALID_REQUEST", f"need {number}: quantity must be a number") from None
+            if too_many_places(quantity):
+                raise GatewayError(422, "INVALID_REQUEST",
+                                   f"need {number}: quantity has too many decimal places")
             if not quantity.is_finite() or quantity <= 0 or quantity > MAX_NEED_QUANTITY:
                 raise GatewayError(422, "INVALID_REQUEST",
                                    f"need {number}: quantity must be above 0 and at most {MAX_NEED_QUANTITY}")
@@ -1692,7 +1702,10 @@ class Gateway:
             if not body.get(field):
                 raise GatewayError(422, "INVALID_REQUEST", f"{field} is required")
         date.fromisoformat(body["requested_date"])
-        if Decimal(str(body["quantity"])) <= 0:
+        quantity = Decimal(str(body["quantity"]))
+        if too_many_places(quantity):
+            raise GatewayError(422, "INVALID_REQUEST", "quantity has too many decimal places")
+        if quantity <= 0:
             raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
         need = {"_id": uuid4().hex, "kitchen_id": kitchen_id, "quantity": str(body["quantity"]),
                 "unit": body["unit"], "requested_date": body["requested_date"],

@@ -36,6 +36,37 @@ DEFAULT_KITCHEN = "demo-kitchen"
 
 ALL_SCOPES = frozenset({"kitchen:read", "kitchen:propose"})
 
+_AUDIT_FIELDS = frozenset({"event_id", "run_id", "type", "tool", "arguments", "result"})
+_AUDIT_TYPES = frozenset({"tool_call_started", "tool_call_finished"})
+_AUDIT_ID = 200
+
+
+def _client_audit_event(raw) -> dict:
+    """The agent's audit event, checked against the contract's six fields."""
+    if not isinstance(raw, dict):
+        raise GatewayError(422, "INVALID_REQUEST", "body must be a JSON object")
+    unknown = set(raw) - _AUDIT_FIELDS
+    if unknown:
+        raise GatewayError(422, "INVALID_REQUEST", "unknown audit field: " + ", ".join(sorted(unknown)))
+    event_id = raw.get("event_id")
+    if not isinstance(event_id, str) or not event_id or len(event_id) > _AUDIT_ID:
+        raise GatewayError(422, "INVALID_REQUEST",
+                           f"event_id must be a nonempty string of at most {_AUDIT_ID} characters")
+    kind = raw.get("type")
+    if not isinstance(kind, str) or kind not in _AUDIT_TYPES:
+        raise GatewayError(422, "INVALID_REQUEST",
+                           "type must be tool_call_started or tool_call_finished")
+    for field in ("run_id", "tool"):
+        if field in raw:
+            value = raw[field]
+            if not isinstance(value, str) or len(value) > _AUDIT_ID:
+                raise GatewayError(422, "INVALID_REQUEST",
+                                   f"{field} must be a string of at most {_AUDIT_ID} characters")
+    for field in ("arguments", "result"):
+        if field in raw and raw[field] is not None and not isinstance(raw[field], dict):
+            raise GatewayError(422, "INVALID_REQUEST", f"{field} must be an object")
+    return raw
+
 
 class Principal:
     """kind: human | agent | token | personal. `kitchen_id` None = any kitchen (server env tokens).
@@ -800,13 +831,16 @@ def create_app(gateway: Gateway | None = None, *, buyer_worker=None, shelf_worke
     async def audit_ingest(request: Request, who: Principal = Depends(principal)):
         who.need("kitchen:propose")
         from store.audit import AuditConflict, append_event
-        event = await body(request)
+        event = _client_audit_event(await body(request))
+        kitchen_id = kitchen(who)
+        client_event_id = event["event_id"]
+        stored_event = {**event, "event_id": f"agent:{kitchen_id}:{client_event_id}"}
         try:
-            entry = append_event(gw().db, event, {"kitchen_id": kitchen(who), "principal": who.name,
-                                                      "at": gw().now().isoformat()})
+            append_event(gw().db, stored_event, {"kitchen_id": kitchen_id, "principal": who.name,
+                                                 "at": gw().now().isoformat()})
         except AuditConflict:
             raise GatewayError(409, "IDEMPOTENCY_CONFLICT", "event_id reused with other content") from None
-        return {"event_id": entry["event"]["event_id"], "stored": True}
+        return {"event_id": client_event_id, "stored": True}
 
     # Standing-order drift (#377): kitchen and supplier views.
     from gateway.product_page import mount_product_page   # one product's page (#1603)
