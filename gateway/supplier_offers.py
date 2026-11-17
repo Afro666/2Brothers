@@ -28,6 +28,7 @@ from gateway.service import GatewayError, _hash
 from gateway.suppliers import VALIO
 from gateway.supplier_routes import supplier_demand
 from store import audit
+from store import orders
 from store import supplier_offers as offers
 from store.history import consenting_kitchens
 from store.products import get_products
@@ -275,6 +276,20 @@ def accept(gw, kitchen_id: str, offer_id: str, *, human: str | None) -> dict:
     if updated is None:                         # another click decided it in the meantime
         updated = offers.get(gw.db, kitchen_id, offer_id) or doc
         if updated["status"] != offers.ACCEPTED:
+            reason = "the supplier offer was declined meanwhile"
+            withdrawn = gw.db.proposals.find_one_and_update(
+                {"_id": proposal["proposal_id"], "kitchen_id": kitchen_id, "status": "READY"},
+                {"$set": {"status": "REJECTED", "reject_reason": reason,
+                          "rejected_by": "system", "rejected_at": now}})
+            if withdrawn and withdrawn.get("approval_id"):
+                try:
+                    orders.decide_approval(gw.db, withdrawn["approval_id"], status="REJECTED",
+                                           decided_by="system", reason=reason)
+                except orders.NotPending:
+                    pass
+            if withdrawn:
+                gw._audit(kitchen_id, "proposal_withdrawn", "system",
+                          proposal_id=proposal["proposal_id"], offer_id=offer_id, reason=reason)
             raise GatewayError(409, "OFFER_NOT_OPEN", f"this offer is {updated['status']}",
                                proposal_id=proposal["proposal_id"])
     _audit_once(gw, kitchen_id, "supplier_offer_accepted", offer_id, updated["decided_by"],
