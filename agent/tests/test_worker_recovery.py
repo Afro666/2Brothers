@@ -82,3 +82,30 @@ def test_policy_read_does_not_block_event_loop():
             with pytest.raises(RuntimeError):
                 await task
     asyncio.run(check())
+
+
+def test_repeated_cancellation_does_not_interrupt_durable_cleanup():
+    async def check():
+        db = mongomock.MongoClient().test
+        entered, release = Event(), Event()
+        original = agent_runs.finish
+        def finish(*args, **kwargs):
+            entered.set()
+            assert release.wait(2)
+            return original(*args, **kwargs)
+        gateway = WaitingGateway()
+        worker = BuyerWorker(db, gateway)
+        with patch('agent.service.buyer_context.excluded_allergens', return_value=[]), patch('agent.service.agent_runs.finish', finish):
+            task = asyncio.create_task(worker.run('k', BODY))
+            await gateway.started.wait()
+            task.cancel()
+            try:
+                assert await asyncio.to_thread(entered.wait, 1)
+                task.cancel()
+                await asyncio.sleep(0)
+            finally:
+                release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert db.agent_runs.find_one()['state'] == 'RECONCILE'
+    asyncio.run(check())
