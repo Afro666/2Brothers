@@ -21,9 +21,9 @@ class KitchenFactsCache:
             self._entries.pop(key, None)
             return False, None
 
-    def get(self, kitchen, day, load):
+    def get(self, kitchen, day, load, *, revision=None):
         """Coalesce reads per kitchen/day in worker threads; failed reads are never kept."""
-        key = (kitchen, day)
+        key = (kitchen, day, revision)
         hit, facts = self._cached(key)
         if hit:
             return facts

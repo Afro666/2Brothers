@@ -2,6 +2,7 @@
 import asyncio
 import json
 from threading import Event
+import mongomock
 
 from agent.service import BuyerWorker
 from agent.tests.test_service import environment
@@ -70,7 +71,7 @@ def test_a_slow_memory_read_does_not_block_the_async_loop(monkeypatch):
         return [FACT]
     monkeypatch.setattr(single_pick, 'compute_facts', slow)
     async def run():
-        model = single_pick.SinglePickModel(None, None, 'demo-kitchen',
+        model = single_pick.SinglePickModel(None, mongomock.MongoClient().test, 'demo-kitchen',
             {'text': NEED['text']}, 'need', [], today=NOW.date())
         task = asyncio.create_task(model.memory([{'product_id': FACT['product_id']}], {}))
         try:
@@ -109,7 +110,7 @@ def test_feedback_refresh_and_undo_change_cached_product_choice(monkeypatch):
                                                'demo-kitchen', NOW.date())
             fact = next(f for f in facts if f['kind'] == 'CORRECTION_RATIO')
             learned.disable(db, 'demo-kitchen', fact['id'], 'chef-1', NOW)
-            clock[0] = 122
+            # Undo must invalidate cached facts immediately, before the TTL.
             await worker.run('demo-kitchen', {**NEED, 'idempotency_key': 'undo-memory'})
             assert model.calls == 3
             assert model.prompts[2][0] == {'role': 'system', 'content': single_pick.SYSTEM}
@@ -143,7 +144,6 @@ def test_decline_flag_uses_active_scoped_memory_and_disappears_after_undo(monkey
             fact = next(f for f in single_pick.compute_facts(single_pick._FactsGateway(db, NOW),
                 'demo-kitchen', NOW.date()) if f['product_id'] == '462775')
             learned.disable(db, 'demo-kitchen', fact['id'], 'chef-1', NOW)
-            clock[0] = 61
             await worker.run('demo-kitchen', {**NEED, 'idempotency_key': 'undo-decline'})
             assert model.calls == 2
             sent = json.loads(model.prompts[1][1]['content'])
@@ -176,7 +176,7 @@ def test_explicit_alias_ignores_removal_preference_but_keeps_other_memory(monkey
     monkeypatch.setattr(single_pick, 'compute_facts', lambda *args: [FACT, ratio])
 
     async def run():
-        model = single_pick.SinglePickModel(None, None, 'demo-kitchen',
+        model = single_pick.SinglePickModel(None, mongomock.MongoClient().test, 'demo-kitchen',
             {'text': NEED['text']}, 'need', [], today=NOW.date())
         rows = [{'product_id': FACT['product_id'], 'alias': True}]
         entries = await model.memory_entries(rows, {})
@@ -193,7 +193,7 @@ def test_alias_request_keeps_declines_for_the_non_alias_fallback_rows(monkeypatc
     monkeypatch.setattr(single_pick, 'compute_facts', lambda *args: [FACT, other])
 
     async def run():
-        model = single_pick.SinglePickModel(None, None, 'demo-kitchen',
+        model = single_pick.SinglePickModel(None, mongomock.MongoClient().test, 'demo-kitchen',
             {'text': NEED['text']}, 'need', [], today=NOW.date())
         rows = [{'product_id': FACT['product_id'], 'alias': True},
                 {'product_id': 'other-milk', 'alias': False}]
