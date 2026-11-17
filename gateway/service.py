@@ -143,9 +143,11 @@ class Gateway:
 
     # ---- helpers ------------------------------------------------------------------
 
-    def _audit(self, kitchen_id: str, kind: str, actor: str, **data) -> None:
-        event = {"event_id": uuid4().hex, "kind": kind, "actor": actor, **data}
-        audit.append_event(self.db, event, {"kitchen_id": kitchen_id, "at": self.now().isoformat()})
+    def _audit(self, kitchen_id: str, kind: str, actor: str, *, event_id: str | None = None,
+               at: str | None = None, **data) -> None:
+        event = {"event_id": event_id or uuid4().hex, "kind": kind, "actor": actor, **data}
+        audit.append_event(self.db, event,
+                           {"kitchen_id": kitchen_id, "at": at or self.now().isoformat()})
         try:    # webhooks (#277): after the event is stored; a receiver can never break an order
             from gateway import webhooks
             webhooks.dispatch(self.db, kitchen_id, kind, data, actor=actor)
