@@ -65,15 +65,16 @@ class GatewayError(Exception):
         self.status, self.code, self.message, self.extra = status, code, message, extra
 
 
-def _request_quantity(value: object) -> Decimal:
+def _request_quantity(value: object, *, label: str | None = None) -> Decimal:
     """Bound requests before planning, formatting, or persistence."""
     quantity = Decimal(str(value))
+    prefix = f"{label}: " if label else ""
     if not quantity.is_finite():
-        raise GatewayError(422, "INVALID_REQUEST", "quantity must be finite")
+        raise GatewayError(422, "INVALID_REQUEST", prefix + "quantity must be finite")
     if too_many_places(quantity):
-        raise GatewayError(422, "INVALID_REQUEST", "quantity has too many decimal places")
+        raise GatewayError(422, "INVALID_REQUEST", prefix + "quantity has too many decimal places")
     if quantity <= 0 or quantity > MAX_NEED_QUANTITY:
-        raise GatewayError(422, "INVALID_REQUEST", "quantity must be above 0 and at most 1000000")
+        raise GatewayError(422, "INVALID_REQUEST", prefix + "quantity must be above 0 and at most 1000000")
     return quantity
 
 
@@ -509,7 +510,7 @@ class Gateway:
         requested = date.fromisoformat(request["requested_date"])
         needs = request["needs"]
         for need in needs:
-            _request_quantity(need["quantity"])
+            _request_quantity(need["quantity"], label=need["product_id"])
         ids = [n["product_id"] for n in needs]
         blocked = recalls.blocked_ids(self.db, kitchen_id)
         refused = self._allergen_refusals(kitchen_id, ids)
