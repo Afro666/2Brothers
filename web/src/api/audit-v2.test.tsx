@@ -51,7 +51,7 @@ it("retries a temporary 503 from the event stream with the backoff", async () =>
   vi.useFakeTimers();
   vi.spyOn(document, "hidden", "get").mockReturnValue(false);
   const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-    error: { code: "EVENTS_UNAVAILABLE", message: "too many open event streams; try again later" },
+    error: { code: "EVENTS_BUSY", message: "too many open event streams; try again later" },
   }), { status: 503 }));
   vi.stubGlobal("fetch", fetchMock);
   const api = createEventsHttp("/api", "/v1/kitchens/k", () => null);

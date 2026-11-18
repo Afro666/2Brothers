@@ -78,15 +78,32 @@ describe("HTTP event stream", () => {
     stop();
   });
 
-  it("stops after a permanent 503", async () => {
+  it.each(["change streams need a replica set", "unavailable", ""])("stops for EVENTS_UNAVAILABLE with message %s", async (message) => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
-      error: { code: "EVENTS_UNAVAILABLE", message: "the event stream needs MongoDB change streams (a replica set)" },
+      error: { code: "EVENTS_UNAVAILABLE", message },
     }), { status: 503 })));
     const stop = subscribe();
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(fetch).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it.each(["EVENTS_BUSY", undefined])("retries temporary 503 code %s despite replica-set wording", async (code) => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      error: { code, message: "change streams need a replica set" },
+    }), { status: 503 })));
+    const stop = subscribe();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetch).toHaveBeenCalledTimes(3);
     stop();
   });
 

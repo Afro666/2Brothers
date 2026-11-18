@@ -179,7 +179,7 @@ class Streams:
     def take(self) -> None:
         with self._lock:
             if self.open >= MAX_STREAMS:
-                raise GatewayError(503, "EVENTS_UNAVAILABLE", "too many open event streams; try again later")
+                raise GatewayError(503, "EVENTS_BUSY", "too many open event streams; try again later")
             self.open += 1
 
     def give_back(self) -> None:
