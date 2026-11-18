@@ -3005,9 +3005,12 @@ data: {"operation": "insert", "document": {"proposal_id": "...", "status": "READ
 - The gateway ends a stream after 10 minutes. That is not an error: the client connects
   again, as after any drop.
 - 503 `EVENTS_UNAVAILABLE` instead of a stream: the database does not support change
-  streams (a standalone MongoDB; Atlas has them). The client stops retrying and the
-  screens work without live updates.
-- 503 `EVENTS_BUSY` instead of a stream: 16 streams are already open on the gateway.
+  streams (a standalone MongoDB; Atlas has them), or opening the stream failed with
+  a non-retryable database error requiring an operator's fix (for example, missing
+  database permissions). The client stops retrying and the screens work without live updates.
+- 503 `EVENTS_BUSY` instead of a stream: 16 streams are already open on the gateway,
+  or opening the database stream failed with a connection/cursor failure, timeout,
+  or an error labelled `ResumableChangeStreamError` by MongoDB.
   The client retries with bounded backoff (5 seconds, doubling up to 60 seconds).
 - Clients choose retry or fallback from the error `code`, never from the wording
   of the human-readable `message`. Generic or unrecognized 503 responses also retry.
