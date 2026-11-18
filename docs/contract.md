@@ -956,7 +956,7 @@ Proposal `status`, as the gateway returns it (#529):
 | Status | Approvable | Meaning |
 |---|---|---|
 | `READY` | yes | A fully staged proposal with at least one line. It waits for a person. |
-| `REJECTED` | no | A person rejected it, or it was created with no line left. |
+| `REJECTED` | no | A person rejected it, it was withdrawn after losing a supplier-offer decision race, or it was created with no line left. |
 | `APPROVED` | no | A person approved it; `order_id` names the order. |
 | `BLOCKED_BY_RECALL` | no | A recall holds a line of it. Approve answers 409 `BLOCKED_BY_RECALL`. See [recall-contract.md](recall-contract.md). |
 | `APPROVING` | no | An approve call claimed it and runs the live re-check; no attempt row yet. It goes on to `COMMITTING`, or back to `READY`. |
@@ -2478,8 +2478,14 @@ inside the gateway image (`python -m agent.seller --dry-run`, then `--apply`), n
 not add a line): `supplier_offer_received` (actor `supplier:<supplier_id>`, with `offer_id`,
 `supplier_id`, `product_id`, `replaces_product_id`, `requested_date`, `quantity`, `unit`,
 `made_by`), `supplier_offer_accepted` (the person, `offer_id`, `proposal_id`) and
-`supplier_offer_declined` (the person, `offer_id`, `reason`). The supplier's `reason` text
-is stored on the offer only, not in the audit entry.
+`supplier_offer_declined` (the person, `offer_id`, `reason`, the cleaned decline text).
+If a decline wins while an accept is building a proposal, the gateway withdraws
+the still-`READY` proposal with `proposal_withdrawn` (actor `system`, fields `proposal_id`,
+`offer_id`, `reason`). The reason is "the supplier offer was declined meanwhile".
+The proposal becomes `REJECTED` with `rejected_by: "system"`, and any pending
+approval is rejected. A withdrawn proposal cannot subsequently be approved into an order.
+The supplier's original offer-reason text stays on the offer; it is not included
+in these audit entries.
 
 ### Count from a shelf photo (#373)
 
