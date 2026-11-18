@@ -574,7 +574,10 @@ Valio: monitors call it often. Answer:
 
 POST `/audit/events` allows only six top-level fields: `event_id`, `run_id`, `type`,
 `tool`, `arguments`, and `result`. Additional fields return 422 `INVALID_REQUEST`.
-`event_id` and `type` are required; `arguments` and `result`, when present and not
+`event_id` and `type` are required. `event_id` must be a nonempty string of at most
+200 characters. Optional `run_id` and `tool` must be strings of at most 200 characters
+when present (an empty string is allowed). A wrong type or length returns 422
+`INVALID_REQUEST`. `arguments` and `result`, when present and not
 null, must be JSON objects. Types are `tool_call_started` and `tool_call_finished`.
 The client-supplied `event_id` is an idempotency key within the authenticated kitchen:
 exact replays do not append twice; different content under the same key returns
