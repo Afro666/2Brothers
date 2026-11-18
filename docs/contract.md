@@ -572,13 +572,18 @@ Valio: monitors call it often. Answer:
 
 ### Agent audit ingestion
 
-POST `/audit/events` accepts `event_id`, `run_id`, `type`, `tool`, `arguments`,
-and `result` (JSON object fields). Types are `tool_call_started` and
-`tool_call_finished`. `event_id` is an idempotency key: exact replays do not append
-twice; different content under the same key is rejected. The gateway adds its own
-timestamp, authenticated principal and kitchen scope, and returns
-`{"event_id": "...", "stored": true}` only after durable storage through the
-shared repository module. Never accept the model's identity or timestamp as fact.
+POST `/audit/events` allows only six top-level fields: `event_id`, `run_id`, `type`,
+`tool`, `arguments`, and `result`. Additional fields return 422 `INVALID_REQUEST`.
+`event_id` and `type` are required; `arguments` and `result`, when present and not
+null, must be JSON objects. Types are `tool_call_started` and `tool_call_finished`.
+The client-supplied `event_id` is an idempotency key within the authenticated kitchen:
+exact replays do not append twice; different content under the same key returns
+409 `IDEMPOTENCY_CONFLICT`. The stored audit ID is `agent:<kitchen_id>:<event_id>`;
+audit readback exposes this namespaced ID. The POST response echoes the original
+client ID unchanged as `{"event_id": "...", "stored": true}`, only after durable
+storage through the shared repository module. The gateway adds its own timestamp,
+authenticated principal and kitchen scope. Never accept the model's identity or
+timestamp as fact.
 
 The buyer records a start event before dispatch and a finish event after every
 attempt, including errors. Audit failure stops the agent; no new tool is called.
@@ -947,18 +952,22 @@ Proposal `status`, as the gateway returns it (#529):
 
 | Status | Approvable | Meaning |
 |---|---|---|
-| `READY` | yes | A new proposal with at least one line. It waits for a person. |
+| `READY` | yes | A fully staged proposal with at least one line. It waits for a person. |
 | `REJECTED` | no | A person rejected it, it was withdrawn after losing a supplier-offer decision race, or it was created with no line left. |
 | `APPROVED` | no | A person approved it; `order_id` names the order. |
 | `BLOCKED_BY_RECALL` | no | A recall holds a line of it. Approve answers 409 `BLOCKED_BY_RECALL`. See [recall-contract.md](recall-contract.md). |
 | `APPROVING` | no | An approve call claimed it and runs the live re-check; no attempt row yet. It goes on to `COMMITTING`, or back to `READY`. |
 | `COMMITTING` | no | The attempt row is being written or the send result is unknown; the proposal is held. It ends as `APPROVED`, or goes back to `READY` (or `BLOCKED_BY_RECALL`). When its order is `UNCONFIRMED` or `SENT_READ_FAILED`, it stays `COMMITTING` until a person uses "Resolving an unknown send"; nothing else releases it. |
-| `PENDING` | no | Kept for a proposal the Buyer worker is still building. The gateway does not set it yet. |
+| `PENDING` | no | The gateway is staging a proposal and its approval row. It becomes `READY` only after staging completes. |
 | `EXPIRED` | no | Kept for later. The gateway does not set it yet. |
 
-A client treats an unknown status as not approvable. An approval row (`approval_id`)
-has its own status, `PENDING` until a person decides; `request_approval` returns that
-one.
+Until staging completes, a proposal remains `PENDING` and is not approvable.
+Replaying the request with the same idempotency key repairs the same staged proposal
+instead of creating another one. Approving a `PENDING` proposal returns 409
+`NOT_PENDING`. The web client displays `PENDING` as `IN_PROGRESS`; that label is
+not a gateway status. A client treats an unknown status as not approvable.
+An approval row (`approval_id`) has its own status, `PENDING` until a person
+decides; `request_approval` returns that one.
 
 The approve body has one top-level `expected_total`, because one supplier places orders
 today (Valio). An approved proposal places one order. When a second supplier adapter
@@ -3001,9 +3010,13 @@ data: {"operation": "insert", "document": {"proposal_id": "...", "status": "READ
   the client loads the rest with `GET /proposals/{id}`.
 - The gateway ends a stream after 10 minutes. That is not an error: the client connects
   again, as after any drop.
-- 503 `EVENTS_UNAVAILABLE` instead of a stream: the database has no change streams (a
-  standalone MongoDB; Atlas has them), or 16 streams are open on the gateway already.
-  The screens then work without live updates.
+- 503 `EVENTS_UNAVAILABLE` instead of a stream: the database does not support change
+  streams (a standalone MongoDB; Atlas has them). The client stops retrying and the
+  screens work without live updates.
+- 503 `EVENTS_BUSY` instead of a stream: 16 streams are already open on the gateway.
+  The client retries with bounded backoff (5 seconds, doubling up to 60 seconds).
+- Clients choose retry or fallback from the error `code`, never from the wording
+  of the human-readable `message`. Generic or unrecognized 503 responses also retry.
 - The tamper demo shows on the stream: the tamper is an `audit` message with
   `operation: "update"`, the restore one with `operation: "replace"`.
 - Nothing is replayed after a reconnect: the client loads the lists again, then listens.
