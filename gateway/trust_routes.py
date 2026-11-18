@@ -30,7 +30,7 @@ import anyio
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
-from pymongo.errors import PyMongoError
+from pymongo.errors import ConnectionFailure, CursorNotFound, OperationFailure, PyMongoError
 
 from gateway.service import GatewayError
 from store import audit, trust
@@ -273,12 +273,23 @@ def open_events(gw, streams: Streams, kitchen_id: str) -> EventStreamResponse:
     streams.take()
     try:
         events = trust.watch_kitchen(gw.db, kitchen_id, max_await_ms=POLL_MS)
-    except (PyMongoError, NotImplementedError, TypeError):
-        # A standalone MongoDB (and mongomock) has no change streams; Atlas has them.
+    except (PyMongoError, NotImplementedError, TypeError) as exc:
         # Never the driver's message: it can name hosts and collections.
         streams.give_back()
+        unsupported = isinstance(exc, (NotImplementedError, TypeError)) or (
+            isinstance(exc, OperationFailure) and exc.code == 40573)
+        if unsupported:
+            raise GatewayError(503, "EVENTS_UNAVAILABLE",
+                               "the event stream needs MongoDB change streams (a replica set)") from None
+        # Match the driver's public resumability signals; authentication and malformed
+        # command errors need an operator's fix, not an endless reconnect loop.
+        retryable = isinstance(exc, (ConnectionFailure, CursorNotFound)) or exc.timeout or (
+            exc.has_error_label("ResumableChangeStreamError"))
+        if retryable:
+            raise GatewayError(503, "EVENTS_BUSY",
+                               "the event stream is temporarily unavailable; try again later") from None
         raise GatewayError(503, "EVENTS_UNAVAILABLE",
-                           "the event stream needs MongoDB change streams (a replica set)") from None
+                           "the event stream is unavailable; check database configuration and permissions") from None
     except BaseException:
         streams.give_back()
         raise

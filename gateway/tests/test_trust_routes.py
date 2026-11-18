@@ -17,7 +17,10 @@ mongomock = pytest.importorskip("mongomock")
 pytest.importorskip("fastapi")
 import httpx  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from pymongo.errors import OperationFailure  # noqa: E402
+from pymongo.errors import (  # noqa: E402
+    AutoReconnect, ConnectionFailure, CursorNotFound, ExecutionTimeout, NetworkTimeout,
+    OperationFailure, ServerSelectionTimeoutError,
+)
 
 from gateway import tokens, trust_routes  # noqa: E402
 from gateway.app import create_app  # noqa: E402
@@ -257,6 +260,50 @@ def test_events_is_503_without_change_streams(env, monkeypatch):
     assert r.status_code == 503 and code(r) == "EVENTS_UNAVAILABLE"
     assert "$changeStream" not in r.text and "40573" not in r.text      # never the driver's message
     assert app.state.trust_streams.open == 0
+
+
+@pytest.mark.parametrize('failure', [
+    ConnectionFailure('private-host.example.net'),
+    AutoReconnect('private-host.example.net'),
+    NetworkTimeout('private-host.example.net'),
+    ServerSelectionTimeoutError('private-host.example.net'),
+    CursorNotFound('private-host.example.net', 43),
+    ExecutionTimeout('private-host.example.net', 50),
+    OperationFailure('private-host.example.net', 11600,
+                     details={'errorLabels': ['ResumableChangeStreamError']}),
+])
+def test_events_temporary_mongodb_failure_retries_without_leaking_slots(env, monkeypatch, failure):
+    client, _, app = env
+    app.state.trust_streams.open = 3  # Other tabs must keep their slots.
+
+    def outage(*_, **__):
+        raise failure
+
+    monkeypatch.setattr(trust, 'watch_kitchen', outage)
+    for _ in range(2):
+        response = client.get(DEMO + '/events', headers=AGENT)
+        assert response.status_code == 503 and code(response) == 'EVENTS_BUSY'
+        assert 'private-host' not in response.text
+        assert app.state.trust_streams.open == 3
+    monkeypatch.setattr(trust, 'watch_kitchen', lambda *_, **__: FakeEvents())
+    assert client.get(DEMO + '/events', headers=AGENT).status_code == 200
+    assert app.state.trust_streams.open == 3
+
+
+@pytest.mark.parametrize('error_code', [2, 13, 18, 73, 99999])
+def test_events_permanent_database_failures_use_fallback(env, monkeypatch, error_code):
+    client, _, app = env
+    app.state.trust_streams.open = 3
+
+    def refused(*_, **__):
+        raise OperationFailure('private-host.example.net', error_code)
+
+    monkeypatch.setattr(trust, 'watch_kitchen', refused)
+    response = client.get(DEMO + '/events', headers=AGENT)
+    assert response.status_code == 503 and code(response) == 'EVENTS_UNAVAILABLE'
+    assert 'private-host' not in response.text
+    assert 'database configuration' in response.text
+    assert app.state.trust_streams.open == 3
 
 
 def test_events_sends_each_change_in_the_contract_shape(env, monkeypatch):
