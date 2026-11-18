@@ -6,13 +6,11 @@ const RETRY_MS = 2_000;
 const UNAVAILABLE_RETRY_MS = 5_000;
 const MAX_UNAVAILABLE_RETRY_MS = 60_000;
 
-/** The gateway answers 503 `EVENTS_UNAVAILABLE` both when the stream cap is full and when
- * MongoDB has no change streams. Only the message tells a temporary outage from a permanent one. */
+/** Only EVENTS_UNAVAILABLE is permanent. Busy and generic 503 responses retry with backoff. */
 function permanentlyUnavailable(body: string): boolean {
   try {
-    const error = (JSON.parse(body) as { error?: { message?: unknown } } | null)?.error;
-    const message = typeof error?.message === "string" ? error.message : "";
-    return /change stream|replica set/i.test(message);
+    const error = (JSON.parse(body) as { error?: { code?: unknown } } | null)?.error;
+    return error?.code === "EVENTS_UNAVAILABLE";
   } catch {
     return false;
   }

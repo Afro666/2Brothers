@@ -322,7 +322,7 @@ def test_events_refuses_more_streams_than_the_cap(env, monkeypatch):
     monkeypatch.setattr(trust, "watch_kitchen", lambda *_, **__: opened.append(1) or FakeEvents())
     app.state.trust_streams.open = trust_routes.MAX_STREAMS      # as if that many tabs were open
     r = client.get(DEMO + "/events", headers=AGENT)
-    assert r.status_code == 503 and code(r) == "EVENTS_UNAVAILABLE"
+    assert r.status_code == 503 and code(r) == "EVENTS_BUSY"
     assert opened == [] and app.state.trust_streams.open == trust_routes.MAX_STREAMS
 
 
