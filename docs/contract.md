@@ -2995,9 +2995,13 @@ data: {"operation": "insert", "document": {"proposal_id": "...", "status": "READ
   the client loads the rest with `GET /proposals/{id}`.
 - The gateway ends a stream after 10 minutes. That is not an error: the client connects
   again, as after any drop.
-- 503 `EVENTS_UNAVAILABLE` instead of a stream: the database has no change streams (a
-  standalone MongoDB; Atlas has them), or 16 streams are open on the gateway already.
-  The screens then work without live updates.
+- 503 `EVENTS_UNAVAILABLE` instead of a stream: the database does not support change
+  streams (a standalone MongoDB; Atlas has them). The client stops retrying and the
+  screens work without live updates.
+- 503 `EVENTS_BUSY` instead of a stream: 16 streams are already open on the gateway.
+  The client retries with bounded backoff (5 seconds, doubling up to 60 seconds).
+- Clients choose retry or fallback from the error `code`, never from the wording
+  of the human-readable `message`. Generic or unrecognized 503 responses also retry.
 - The tamper demo shows on the stream: the tamper is an `audit` message with
   `operation: "update"`, the restore one with `operation: "replace"`.
 - Nothing is replayed after a reconnect: the client loads the lists again, then listens.
