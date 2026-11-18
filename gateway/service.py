@@ -65,6 +65,18 @@ class GatewayError(Exception):
         self.status, self.code, self.message, self.extra = status, code, message, extra
 
 
+def _request_quantity(value: object) -> Decimal:
+    """Bound requests before planning, formatting, or persistence."""
+    quantity = Decimal(str(value))
+    if not quantity.is_finite():
+        raise GatewayError(422, "INVALID_REQUEST", "quantity must be finite")
+    if too_many_places(quantity):
+        raise GatewayError(422, "INVALID_REQUEST", "quantity has too many decimal places")
+    if quantity <= 0 or quantity > MAX_NEED_QUANTITY:
+        raise GatewayError(422, "INVALID_REQUEST", "quantity must be above 0 and at most 1000000")
+    return quantity
+
+
 def _no_products(query: str) -> str:
     """The NO_PRODUCTS_FOUND message; for a plant drink it also says that no cow's milk
     is proposed in its place (#1700)."""
@@ -147,8 +159,10 @@ class Gateway:
     def _audit(self, kitchen_id: str, kind: str, actor: str, *, event_id: str | None = None,
                at: str | None = None, **data) -> None:
         event = {"event_id": event_id or uuid4().hex, "kind": kind, "actor": actor, **data}
-        audit.append_event(self.db, event,
-                           {"kitchen_id": kitchen_id, "at": at or self.now().isoformat()})
+        _, appended = audit.append_event_new(self.db, event,
+                                            {"kitchen_id": kitchen_id, "at": at or self.now().isoformat()})
+        if not appended:
+            return
         try:    # webhooks (#277): after the event is stored; a receiver can never break an order
             from gateway import webhooks
             webhooks.dispatch(self.db, kitchen_id, kind, data, actor=actor)
@@ -393,11 +407,7 @@ class Gateway:
         no discount tier yet, nothing saved. The single request and each need of a list."""
         requested = date.fromisoformat(request["requested_date"])
         measure = request["unit"]
-        need = Decimal(str(request["quantity"]))
-        if too_many_places(need):
-            raise GatewayError(422, "INVALID_REQUEST", "quantity has too many decimal places")
-        if need <= 0:
-            raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
+        need = _request_quantity(request["quantity"])
         blocked = recalls.blocked_ids(self.db, kitchen_id)
         refused = self._allergen_refusals(kitchen_id, request["product_ids"])
         other_kind = self._not_the_plant_drink(kitchen_id, request)      # #1700: never cow's milk for oat milk
@@ -498,6 +508,8 @@ class Gateway:
         from engine.offers import RequestPlan
         requested = date.fromisoformat(request["requested_date"])
         needs = request["needs"]
+        for need in needs:
+            _request_quantity(need["quantity"])
         ids = [n["product_id"] for n in needs]
         blocked = recalls.blocked_ids(self.db, kitchen_id)
         refused = self._allergen_refusals(kitchen_id, ids)
@@ -1702,11 +1714,7 @@ class Gateway:
             if not body.get(field):
                 raise GatewayError(422, "INVALID_REQUEST", f"{field} is required")
         date.fromisoformat(body["requested_date"])
-        quantity = Decimal(str(body["quantity"]))
-        if too_many_places(quantity):
-            raise GatewayError(422, "INVALID_REQUEST", "quantity has too many decimal places")
-        if quantity <= 0:
-            raise GatewayError(422, "INVALID_REQUEST", "quantity must be positive")
+        _request_quantity(body["quantity"])
         need = {"_id": uuid4().hex, "kitchen_id": kitchen_id, "quantity": str(body["quantity"]),
                 "unit": body["unit"], "requested_date": body["requested_date"],
                 "text": body.get("text") or "", "created_by": actor, "created_at": self.now()}
