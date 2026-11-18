@@ -25,6 +25,8 @@ def test_invalid_quantity_stops_before_side_effects(env, monkeypatch, quantity, 
         else:
             gateway.create_need('demo-kitchen', request, 'chef')
     assert error.value.code == 'INVALID_REQUEST'
+    if path == 'basket':
+        assert error.value.message.startswith('462775: quantity ')
     sentinel.assert_not_called()
 
 
