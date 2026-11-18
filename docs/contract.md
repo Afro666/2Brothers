@@ -572,13 +572,18 @@ Valio: monitors call it often. Answer:
 
 ### Agent audit ingestion
 
-POST `/audit/events` accepts `event_id`, `run_id`, `type`, `tool`, `arguments`,
-and `result` (JSON object fields). Types are `tool_call_started` and
-`tool_call_finished`. `event_id` is an idempotency key: exact replays do not append
-twice; different content under the same key is rejected. The gateway adds its own
-timestamp, authenticated principal and kitchen scope, and returns
-`{"event_id": "...", "stored": true}` only after durable storage through the
-shared repository module. Never accept the model's identity or timestamp as fact.
+POST `/audit/events` allows only six top-level fields: `event_id`, `run_id`, `type`,
+`tool`, `arguments`, and `result`. Additional fields return 422 `INVALID_REQUEST`.
+`event_id` and `type` are required; `arguments` and `result`, when present and not
+null, must be JSON objects. Types are `tool_call_started` and `tool_call_finished`.
+The client-supplied `event_id` is an idempotency key within the authenticated kitchen:
+exact replays do not append twice; different content under the same key returns
+409 `IDEMPOTENCY_CONFLICT`. The stored audit ID is `agent:<kitchen_id>:<event_id>`;
+audit readback exposes this namespaced ID. The POST response echoes the original
+client ID unchanged as `{"event_id": "...", "stored": true}`, only after durable
+storage through the shared repository module. The gateway adds its own timestamp,
+authenticated principal and kitchen scope. Never accept the model's identity or
+timestamp as fact.
 
 The buyer records a start event before dispatch and a finish event after every
 attempt, including errors. Audit failure stops the agent; no new tool is called.
