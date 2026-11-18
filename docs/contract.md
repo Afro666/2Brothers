@@ -952,18 +952,22 @@ Proposal `status`, as the gateway returns it (#529):
 
 | Status | Approvable | Meaning |
 |---|---|---|
-| `READY` | yes | A new proposal with at least one line. It waits for a person. |
+| `READY` | yes | A fully staged proposal with at least one line. It waits for a person. |
 | `REJECTED` | no | A person rejected it, or it was created with no line left. |
 | `APPROVED` | no | A person approved it; `order_id` names the order. |
 | `BLOCKED_BY_RECALL` | no | A recall holds a line of it. Approve answers 409 `BLOCKED_BY_RECALL`. See [recall-contract.md](recall-contract.md). |
 | `APPROVING` | no | An approve call claimed it and runs the live re-check; no attempt row yet. It goes on to `COMMITTING`, or back to `READY`. |
 | `COMMITTING` | no | The attempt row is being written or the send result is unknown; the proposal is held. It ends as `APPROVED`, or goes back to `READY` (or `BLOCKED_BY_RECALL`). When its order is `UNCONFIRMED` or `SENT_READ_FAILED`, it stays `COMMITTING` until a person uses "Resolving an unknown send"; nothing else releases it. |
-| `PENDING` | no | Kept for a proposal the Buyer worker is still building. The gateway does not set it yet. |
+| `PENDING` | no | The gateway is staging a proposal and its approval row. It becomes `READY` only after staging completes. |
 | `EXPIRED` | no | Kept for later. The gateway does not set it yet. |
 
-A client treats an unknown status as not approvable. An approval row (`approval_id`)
-has its own status, `PENDING` until a person decides; `request_approval` returns that
-one.
+Until staging completes, a proposal remains `PENDING` and is not approvable.
+Replaying the request with the same idempotency key repairs the same staged proposal
+instead of creating another one. Approving a `PENDING` proposal returns 409
+`NOT_PENDING`. The web client displays `PENDING` as `IN_PROGRESS`; that label is
+not a gateway status. A client treats an unknown status as not approvable.
+An approval row (`approval_id`) has its own status, `PENDING` until a person
+decides; `request_approval` returns that one.
 
 The approve body has one top-level `expected_total`, because one supplier places orders
 today (Valio). An approved proposal places one order. When a second supplier adapter
