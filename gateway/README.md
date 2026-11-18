@@ -240,8 +240,10 @@ The aggregation needs Atlas or MongoDB 7; the tests replace it
   stream per connection. `: connected` at once, `: ping` after 5 s without a message.
   The stream ends after 10 minutes (the client connects again) and at most 16 are open
   per gateway process. The change stream is closed when the client leaves.
-- A change stream needs a replica set (Atlas has one). On a standalone MongoDB, and when
-  16 streams are open, the answer is 503 `EVENTS_UNAVAILABLE`.
+- A change stream needs a replica set (Atlas has one). On a standalone MongoDB,
+  the answer is 503 `EVENTS_UNAVAILABLE`; the web client stops retrying.
+  When 16 streams are already open, the answer is 503 `EVENTS_BUSY`; the web client
+  retries with backoff as stream slots become free.
 - Caddy needs no setting: `reverse_proxy` flushes a `text/event-stream` at once, also with
   `encode` on (checked with caddy:2 in front of a local gateway).
 
