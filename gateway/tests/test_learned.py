@@ -93,6 +93,35 @@ def test_put_switches_a_fact_off_once_and_is_idempotent(env):
     assert client.get(K + "/learned", headers=AGENT).json()["facts"][0]["active"] is False
 
 
+def test_replayed_switch_sends_one_webhook_for_one_audit_event(env, monkeypatch):
+    from unittest.mock import Mock
+    from gateway import webhooks
+    client, _, db = env
+    seed_corrections(db)
+    fact = client.get(K + '/learned', headers=AGENT).json()['facts'][0]
+    dispatch = Mock()
+    monkeypatch.setattr(webhooks, 'dispatch', dispatch)
+    url = f"{K}/learned/{fact['id']}"
+    assert client.put(url, headers=HUMAN, json={'active': False}).status_code == 200
+    assert client.put(url, headers=HUMAN, json={'active': False}).status_code == 200
+    assert len(audit(db, 'learned_fact_switched_off')) == 1
+    assert dispatch.call_count == 1
+
+
+def test_distinct_audit_events_still_dispatch_separately(env, monkeypatch):
+    from unittest.mock import Mock
+    from gateway import webhooks
+    from gateway.service import Gateway
+    _, _, db = env
+    gateway = Gateway(db, None, now=lambda: NOW)
+    dispatch = Mock()
+    monkeypatch.setattr(webhooks, 'dispatch', dispatch)
+    for event_id in ('first', 'second', 'first'):
+        gateway._audit('demo-kitchen', 'learned_fact_switched_off', 'chef', event_id=event_id, fact_id='fact')
+    assert len(audit(db, 'learned_fact_switched_off')) == 2
+    assert dispatch.call_count == 2
+
+
 def test_a_failed_audit_is_repaired_by_a_retry_without_a_duplicate(env, monkeypatch):
     client, _, db = env
     seed_corrections(db)
